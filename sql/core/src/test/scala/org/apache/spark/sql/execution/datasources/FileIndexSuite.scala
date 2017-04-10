@@ -29,6 +29,7 @@ import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
 
 class FileIndexSuite extends SharedSQLContext {
 
@@ -219,6 +220,32 @@ class FileIndexSuite extends SharedSQLContext {
       assert(catalog.leafDirPaths.size == 1)
       assert(catalog.leafDirPaths.head == fs.makeQualified(dirPath))
     }
+  }
+
+  test("SPARK-20280 - FileStatusCache with a partition with very many files") {
+    /* fake the size, otherwise we need to allocate 2GB of data to trigger this bug */
+    class MyFileStatus extends FileStatus with KnownSizeEstimation {
+      override def estimatedSize: Long = 1000 * 1000 * 1000
+    }
+    /* files * MyFileStatus.estimatedSize should overflow to negative integer
+     * so, make it between 2bn and 4bn
+     */
+    val files = (1 to 3).map { i =>
+      new MyFileStatus()
+    }
+    val fileStatusCache = FileStatusCache.getOrCreate(spark)
+    fileStatusCache.putLeafFiles(new Path("/tmp", "abc"), files.toArray)
+    // scalastyle:off
+    /* this would fail with:
+     * [info]   java.lang.IllegalStateException: Weights must be non-negative
+     * [info]   at com.google.common.base.Preconditions.checkState(Preconditions.java:149)
+     * [info]   at com.google.common.cache.LocalCache$Segment.setValue(LocalCache.java:2223)
+     * [info]   at com.google.common.cache.LocalCache$Segment.put(LocalCache.java:2944)
+     * [info]   at com.google.common.cache.LocalCache.put(LocalCache.java:4212)
+     * [info]   at com.google.common.cache.LocalCache$LocalManualCache.put(LocalCache.java:4804)
+     * [info]   at org.apache.spark.sql.execution.datasources.SharedInMemoryCache$$anon$3.putLeafFiles(FileStatusCache.scala:131)
+     */
+    // scalastyle:on
   }
 }
 

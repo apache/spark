@@ -94,13 +94,25 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
   // Opaque object that uniquely identifies a shared cache user
   private type ClientId = Object
 
+  /* [[Weigher]].weigh returns Int so we could only cache objects < 2GB
+   * instead, the weight is divided by this factor (which is smaller
+   * than the size of one [[FileStatus]]).
+   * so it will support objects up to 64GB in size.
+   */
+  private val weightScale = 32
+
   private val warnedAboutEviction = new AtomicBoolean(false)
 
   // we use a composite cache key in order to distinguish entries inserted by different clients
   private val cache: Cache[(ClientId, Path), Array[FileStatus]] = CacheBuilder.newBuilder()
     .weigher(new Weigher[(ClientId, Path), Array[FileStatus]] {
       override def weigh(key: (ClientId, Path), value: Array[FileStatus]): Int = {
-        (SizeEstimator.estimate(key) + SizeEstimator.estimate(value)).toInt
+        val estimate = (SizeEstimator.estimate(key) + SizeEstimator.estimate(value)) / weightScale
+        if (estimate > Int.MaxValue) {
+          throw new IllegalStateException(
+            s"Scaled weight of object is bigger than ${Int.MaxValue}")
+        }
+        estimate.toInt
       }})
     .removalListener(new RemovalListener[(ClientId, Path), Array[FileStatus]]() {
       override def onRemoval(removed: RemovalNotification[(ClientId, Path), Array[FileStatus]])
@@ -113,7 +125,7 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
             "This may impact query planning performance.")
         }
       }})
-    .maximumWeight(maxSizeInBytes)
+    .maximumWeight(maxSizeInBytes / weightScale)
     .build[(ClientId, Path), Array[FileStatus]]()
 
   /**
