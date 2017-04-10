@@ -359,9 +359,59 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   override protected def innerChildren: Seq[QueryPlan[_]] = subqueries
 
   /**
-   * Canonicalized copy of this query plan.
+   * Returns a plan where a best effort attempt has been made to transform `this` in a way
+   * that preserves the result but removes cosmetic variations (case sensitivity, ordering for
+   * commutative operations, expression id, etc.)
+   *
+   * Plans where `this.canonicalized == other.canonicalized` will always evaluate to the same
+   * result.
+   *
+   * Some nodes should overwrite this to provide proper canonicalize logic.
    */
-  protected lazy val canonicalized: PlanType = this
+  lazy val canonicalized: PlanType = {
+    val canonicalizedChildren = children.map(_.canonicalized)
+    var id = -1
+    preCanonicalized.mapExpressions {
+      case a: Alias =>
+        id += 1
+        // As the root of the expression, Alias will always take an arbitrary exprId, we need to
+        // normalize that for equality testing, by assigning expr id from 0 incrementally. The
+        // alias name doesn't matter and should be erased.
+        Alias(normalizeExprId(a.child), "")(ExprId(id), a.qualifier, isGenerated = a.isGenerated)
+
+      case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
+        // Top level `AttributeReference` may also be used for output like `Alias`, we should
+        // normalize the epxrId too.
+        id += 1
+        ar.withExprId(ExprId(id))
+
+      case other => normalizeExprId(other)
+    }.withNewChildren(canonicalizedChildren)
+  }
+
+  /**
+   * Do some simple transformation on this plan before canonicalizing. Implementations can override
+   * this method to provide customized canonicalize logic without rewriting the whole logic.
+   */
+  protected def preCanonicalized: PlanType = this
+
+  /**
+   * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
+   * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we
+   * do not use `BindReferences` here as the plan may take the expression as a parameter with type
+   * `Attribute`, and replace it with `BoundReference` will cause error.
+   */
+  protected def normalizeExprId[T <: Expression](e: T, input: AttributeSeq = allAttributes): T = {
+    e.transformUp {
+      case ar: AttributeReference =>
+        val ordinal = input.indexOf(ar.exprId)
+        if (ordinal == -1) {
+          ar
+        } else {
+          ar.withExprId(ExprId(ordinal))
+        }
+    }.canonicalized.asInstanceOf[T]
+  }
 
   /**
    * Returns true when the given query plan will return the same results as this query plan.
@@ -372,49 +422,19 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * enhancements like caching.  However, it is not acceptable to return true if the results could
    * possibly be different.
    *
-   * By default this function performs a modified version of equality that is tolerant of cosmetic
-   * differences like attribute naming and or expression id differences. Operators that
-   * can do better should override this function.
+   * This function performs a modified version of equality that is tolerant of cosmetic
+   * differences like attribute naming and or expression id differences.
    */
-  def sameResult(plan: PlanType): Boolean = {
-    val left = this.canonicalized
-    val right = plan.canonicalized
-    left.getClass == right.getClass &&
-      left.children.size == right.children.size &&
-      left.cleanArgs == right.cleanArgs &&
-      (left.children, right.children).zipped.forall(_ sameResult _)
-  }
+  final def sameResult(other: PlanType): Boolean = this.canonicalized == other.canonicalized
+
+  /**
+   * Returns a `hashCode` for the calculation performed by this plan. Unlike the standard
+   * `hashCode`, an attempt has been made to eliminate cosmetic differences.
+   */
+  final def semanticHash(): Int = canonicalized.hashCode()
 
   /**
    * All the attributes that are used for this plan.
    */
   lazy val allAttributes: AttributeSeq = children.flatMap(_.output)
-
-  protected def cleanExpression(e: Expression): Expression = e match {
-    case a: Alias =>
-      // As the root of the expression, Alias will always take an arbitrary exprId, we need
-      // to erase that for equality testing.
-      val cleanedExprId =
-        Alias(a.child, a.name)(ExprId(-1), a.qualifier, isGenerated = a.isGenerated)
-      BindReferences.bindReference(cleanedExprId, allAttributes, allowFailures = true)
-    case other =>
-      BindReferences.bindReference(other, allAttributes, allowFailures = true)
-  }
-
-  /** Args that have cleaned such that differences in expression id should not affect equality */
-  protected lazy val cleanArgs: Seq[Any] = {
-    def cleanArg(arg: Any): Any = arg match {
-      // Children are checked using sameResult above.
-      case tn: TreeNode[_] if containsChild(tn) => null
-      case e: Expression => cleanExpression(e).canonicalized
-      case other => other
-    }
-
-    mapProductIterator {
-      case s: Option[_] => s.map(cleanArg)
-      case s: Seq[_] => s.map(cleanArg)
-      case m: Map[_, _] => m.mapValues(cleanArg)
-      case other => cleanArg(other)
-    }.toSeq
-  }
 }
