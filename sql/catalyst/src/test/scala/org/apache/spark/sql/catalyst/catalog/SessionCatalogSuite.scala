@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SimpleCatalystConf, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class InMemorySessionCatalogSuite extends SessionCatalogSuite {
@@ -1331,17 +1330,15 @@ abstract class SessionCatalogSuite extends PlanTest {
     }
   }
 
-  test("clone SessionCatalog - temp views") {
+  test("copy SessionCatalog state - temp views") {
     withEmptyCatalog { original =>
       val tempTable1 = Range(1, 10, 1, 10)
       original.createTempView("copytest1", tempTable1, overrideIfExists = false)
 
       // check if tables copied over
-      val clone = original.newSessionCatalogWith(
-        SimpleCatalystConf(caseSensitiveAnalysis = true),
-        new Configuration(),
-        new SimpleFunctionRegistry,
-        CatalystSqlParser)
+      val clone = new SessionCatalog(original.externalCatalog)
+      original.copyStateTo(clone)
+
       assert(original ne clone)
       assert(clone.getTempView("copytest1") == Some(tempTable1))
 
@@ -1355,7 +1352,7 @@ abstract class SessionCatalogSuite extends PlanTest {
     }
   }
 
-  test("clone SessionCatalog - current db") {
+  test("copy SessionCatalog state - current db") {
     withEmptyCatalog { original =>
       val db1 = "db1"
       val db2 = "db2"
@@ -1368,11 +1365,9 @@ abstract class SessionCatalogSuite extends PlanTest {
       original.setCurrentDatabase(db1)
 
       // check if current db copied over
-      val clone = original.newSessionCatalogWith(
-        SimpleCatalystConf(caseSensitiveAnalysis = true),
-        new Configuration(),
-        new SimpleFunctionRegistry,
-        CatalystSqlParser)
+      val clone = new SessionCatalog(original.externalCatalog)
+      original.copyStateTo(clone)
+
       assert(original ne clone)
       assert(clone.getCurrentDatabase == db1)
 
@@ -1388,7 +1383,7 @@ abstract class SessionCatalogSuite extends PlanTest {
     import org.apache.spark.sql.catalyst.dsl.plans._
 
     Seq(true, false) foreach { caseSensitive =>
-      val conf = SimpleCatalystConf(caseSensitive)
+      val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
       val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
       try {
         val analyzer = new Analyzer(catalog, conf)

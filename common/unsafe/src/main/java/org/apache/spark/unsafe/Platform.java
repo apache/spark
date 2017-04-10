@@ -46,18 +46,22 @@ public final class Platform {
   private static final boolean unaligned;
   static {
     boolean _unaligned;
-    // use reflection to access unaligned field
-    try {
-      Class<?> bitsClass =
-        Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
-      Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
-      unalignedMethod.setAccessible(true);
-      _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
-    } catch (Throwable t) {
-      // We at least know x86 and x64 support unaligned access.
-      String arch = System.getProperty("os.arch", "");
-      //noinspection DynamicRegexReplaceableByCompiledPattern
-      _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
+    String arch = System.getProperty("os.arch", "");
+    if (arch.equals("ppc64le") || arch.equals("ppc64")) {
+      // Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231), but ppc64 and ppc64le support it
+      _unaligned = true;
+    } else {
+      try {
+        Class<?> bitsClass =
+          Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
+        Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
+        unalignedMethod.setAccessible(true);
+        _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
+      } catch (Throwable t) {
+        // We at least know x86 and x64 support unaligned access.
+        //noinspection DynamicRegexReplaceableByCompiledPattern
+        _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
+      }
     }
     unaligned = _unaligned;
   }

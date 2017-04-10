@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
@@ -25,12 +24,12 @@ import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
-
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, STARSCHEMA_DETECTION}
 
 class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
 
-  override val conf = SimpleCatalystConf(
-    caseSensitiveAnalysis = true, starSchemaDetection = true)
+  override val conf = new SQLConf().copy(CASE_SENSITIVE -> true, STARSCHEMA_DETECTION -> true)
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -207,7 +206,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     //  and d3_fk1 = s3_pk1
     //
     // Default join reordering: d1, f1, d2, d3, s3
-    // Star join reordering: f1, d1, d3, d2,, d3
+    // Star join reordering: f1, d1, d3, d2, s3
 
     val query =
       d1.join(f1).join(d2).join(s3).join(d3)
@@ -243,7 +242,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     //  and d3_fk1 = s3_pk1
     //
     // Default join reordering: d1, f1, d2, d3, s3
-    // Star join reordering: f1, d1, d3, d2, d3
+    // Star join reordering: f1, d1, d3, d2, s3
     val query =
       d1.join(f1).join(d2).join(s3).join(d3)
         .where((nameToAttr("f1_fk1") === nameToAttr("d1_pk1")) &&

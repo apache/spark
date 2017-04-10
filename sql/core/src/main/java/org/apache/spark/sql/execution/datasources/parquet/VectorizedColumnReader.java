@@ -170,9 +170,13 @@ public class VectorizedColumnReader {
         // Read and decode dictionary ids.
         defColumn.readIntegers(
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+
+        // Timestamp values encoded as INT64 can't be lazily decoded as we need to post process
+        // the values to add microseconds precision.
         if (column.hasDictionary() || (rowId == 0 &&
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
-            descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64 ||
+            (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64  &&
+               column.dataType() != DataTypes.TimestampType) ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.FLOAT ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.DOUBLE ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.BINARY))) {
@@ -265,7 +269,15 @@ public class VectorizedColumnReader {
               column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
             }
           }
-        } else {
+        } else if (column.dataType() == DataTypes.TimestampType) {
+          for (int i = rowId; i < rowId + num; ++i) {
+            if (!column.isNullAt(i)) {
+              column.putLong(i,
+                DateTimeUtils.fromMillis(dictionary.decodeToLong(dictionaryIds.getDictId(i))));
+            }
+          }
+        }
+        else {
           throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
         }
         break;
@@ -377,7 +389,15 @@ public class VectorizedColumnReader {
     if (column.dataType() == DataTypes.LongType ||
         DecimalType.is64BitDecimalType(column.dataType())) {
       defColumn.readLongs(
-          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+        num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+    } else if (column.dataType() == DataTypes.TimestampType) {
+      for (int i = 0; i < num; i++) {
+        if (defColumn.readInteger() == maxDefLevel) {
+          column.putLong(rowId + i, DateTimeUtils.fromMillis(dataColumn.readLong()));
+        } else {
+          column.putNull(rowId + i);
+        }
+      }
     } else {
       throw new UnsupportedOperationException("Unsupported conversion to: " + column.dataType());
     }

@@ -67,6 +67,9 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   // Whether to write data in legacy Parquet format compatible with Spark 1.4 and prior versions
   private var writeLegacyParquetFormat: Boolean = _
 
+  // Whether to write timestamp value with milliseconds precision.
+  private var writeTimestampInMillis: Boolean = _
+
   // Reusable byte array used to write timestamps as Parquet INT96 values
   private val timestampBuffer = new Array[Byte](12)
 
@@ -84,6 +87,13 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       assert(configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key) != null)
       configuration.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean
     }
+
+    this.writeTimestampInMillis = {
+      assert(configuration.get(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key) != null)
+      configuration.get(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key).toBoolean
+    }
+
+
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter)
     // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
     val tzString = configuration.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
@@ -163,6 +173,11 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBinary(
             Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
+
+      case TimestampType if writeTimestampInMillis =>
+        (row: SpecializedGetters, ordinal: Int) =>
+           val millis = DateTimeUtils.toMillis(row.getLong(ordinal))
+           recordConsumer.addLong(millis)
 
       case TimestampType =>
         (row: SpecializedGetters, ordinal: Int) => {

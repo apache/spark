@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
+import org.apache.spark.sql.internal.{BaseSessionStateBuilder, CatalogImpl, SessionState, SessionStateBuilder, SharedState}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
@@ -60,7 +60,7 @@ import org.apache.spark.util.Utils
  * The builder can also be used to create a new session:
  *
  * {{{
- *   SparkSession.builder()
+ *   SparkSession.builder
  *     .master("local")
  *     .appName("Word Count")
  *     .config("spark.some.config.option", "some-value")
@@ -194,7 +194,7 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def udf: UDFRegistration = sessionState.udf
+  def udf: UDFRegistration = sessionState.udfRegistration
 
   /**
    * :: Experimental ::
@@ -591,8 +591,13 @@ class SparkSession private(
   @transient lazy val catalog: Catalog = new CatalogImpl(self)
 
   /**
-   * Returns the specified table as a `DataFrame`.
+   * Returns the specified table/view as a `DataFrame`.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table or view.
+   *                  If a database is specified, it identifies the table/view from the database.
+   *                  Otherwise, it first attempts to find a temporary view with the given name
+   *                  and then match the table/view from the current database.
+   *                  Note that, the global temporary view database is also valid here.
    * @since 2.0.0
    */
   def table(tableName: String): DataFrame = {
@@ -990,28 +995,28 @@ object SparkSession {
   /** Reference to the root SparkSession. */
   private val defaultSession = new AtomicReference[SparkSession]
 
-  private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
+  private val HIVE_SESSION_STATE_BUILDER_CLASS_NAME =
+    "org.apache.spark.sql.hive.HiveSessionStateBuilder"
 
   private def sessionStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
-      case "hive" => HIVE_SESSION_STATE_CLASS_NAME
-      case "in-memory" => classOf[SessionState].getCanonicalName
+      case "hive" => HIVE_SESSION_STATE_BUILDER_CLASS_NAME
+      case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
     }
   }
 
   /**
    * Helper method to create an instance of `SessionState` based on `className` from conf.
-   * The result is either `SessionState` or `HiveSessionState`.
+   * The result is either `SessionState` or a Hive based `SessionState`.
    */
   private def instantiateSessionState(
       className: String,
       sparkSession: SparkSession): SessionState = {
-
     try {
-      // get `SessionState.apply(SparkSession)`
+      // invoke `new [Hive]SessionStateBuilder(SparkSession, Option[SessionState])`
       val clazz = Utils.classForName(className)
-      val method = clazz.getMethod("apply", sparkSession.getClass)
-      method.invoke(null, sparkSession).asInstanceOf[SessionState]
+      val ctor = clazz.getConstructors.head
+      ctor.newInstance(sparkSession, None).asInstanceOf[BaseSessionStateBuilder].build()
     } catch {
       case NonFatal(e) =>
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)
@@ -1023,7 +1028,7 @@ object SparkSession {
    */
   private[spark] def hiveClassesArePresent: Boolean = {
     try {
-      Utils.classForName(HIVE_SESSION_STATE_CLASS_NAME)
+      Utils.classForName(HIVE_SESSION_STATE_BUILDER_CLASS_NAME)
       Utils.classForName("org.apache.hadoop.hive.conf.HiveConf")
       true
     } catch {

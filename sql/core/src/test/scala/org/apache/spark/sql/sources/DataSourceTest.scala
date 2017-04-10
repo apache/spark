@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] abstract class DataSourceTest extends QueryTest {
 
@@ -27,4 +31,56 @@ private[sql] abstract class DataSourceTest extends QueryTest {
     }
   }
 
+}
+
+class DDLScanSource extends RelationProvider {
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): BaseRelation = {
+    SimpleDDLScan(
+      parameters("from").toInt,
+      parameters("TO").toInt,
+      parameters("Table"))(sqlContext.sparkSession)
+  }
+}
+
+case class SimpleDDLScan(
+    from: Int,
+    to: Int,
+    table: String)(@transient val sparkSession: SparkSession)
+  extends BaseRelation with TableScan {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
+
+  override def schema: StructType =
+    StructType(Seq(
+      StructField("intType", IntegerType, nullable = false).withComment(s"test comment $table"),
+      StructField("stringType", StringType, nullable = false),
+      StructField("dateType", DateType, nullable = false),
+      StructField("timestampType", TimestampType, nullable = false),
+      StructField("doubleType", DoubleType, nullable = false),
+      StructField("bigintType", LongType, nullable = false),
+      StructField("tinyintType", ByteType, nullable = false),
+      StructField("decimalType", DecimalType.USER_DEFAULT, nullable = false),
+      StructField("fixedDecimalType", DecimalType(5, 1), nullable = false),
+      StructField("binaryType", BinaryType, nullable = false),
+      StructField("booleanType", BooleanType, nullable = false),
+      StructField("smallIntType", ShortType, nullable = false),
+      StructField("floatType", FloatType, nullable = false),
+      StructField("mapType", MapType(StringType, StringType)),
+      StructField("arrayType", ArrayType(StringType)),
+      StructField("structType",
+        StructType(StructField("f1", StringType) :: StructField("f2", IntegerType) :: Nil
+        )
+      )
+    ))
+
+  override def needConversion: Boolean = false
+
+  override def buildScan(): RDD[Row] = {
+    // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
+    sparkSession.sparkContext.parallelize(from to to).map { e =>
+      InternalRow(UTF8String.fromString(s"people$e"), e * 2)
+    }.asInstanceOf[RDD[Row]]
+  }
 }

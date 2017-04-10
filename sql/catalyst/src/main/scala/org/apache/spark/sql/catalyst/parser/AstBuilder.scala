@@ -75,6 +75,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     visitTableIdentifier(ctx.tableIdentifier)
   }
 
+  override def visitSingleFunctionIdentifier(
+      ctx: SingleFunctionIdentifierContext): FunctionIdentifier = withOrigin(ctx) {
+    visitFunctionIdentifier(ctx.functionIdentifier)
+  }
+
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
     visitSparkDataType(ctx.dataType)
   }
@@ -492,7 +497,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Add an [[Aggregate]] to a logical plan.
+   * Add an [[Aggregate]] or [[GroupingSets]] to a logical plan.
    */
   private def withAggregation(
       ctx: AggregationContext,
@@ -519,7 +524,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Add a Hint to a logical plan.
+   * Add a [[Hint]] to a logical plan.
    */
   private def withHints(
       ctx: HintContext,
@@ -545,7 +550,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a single relation referenced in a FROM claused. This method is used when a part of the
+   * Create a single relation referenced in a FROM clause. This method is used when a part of the
    * join condition is nested, for example:
    * {{{
    *   select * from t1 join (t2 cross join t3) on col1 = col2
@@ -757,6 +762,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitTableIdentifier(
       ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
     TableIdentifier(ctx.table.getText, Option(ctx.db).map(_.getText))
+  }
+
+  /**
+   * Create a [[FunctionIdentifier]] from a 'functionName' or 'databaseName'.'functionName' pattern.
+   */
+  override def visitFunctionIdentifier(
+      ctx: FunctionIdentifierContext): FunctionIdentifier = withOrigin(ctx) {
+    FunctionIdentifier(ctx.function.getText, Option(ctx.db).map(_.getText))
   }
 
   /* ********************************************************************************************

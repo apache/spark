@@ -201,7 +201,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines,
@@ -252,7 +252,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns

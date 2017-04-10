@@ -27,11 +27,10 @@ import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
-import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.{DataSource, FailureSafeParser}
 import org.apache.spark.sql.execution.datasources.csv._
-import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -321,7 +320,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines,
@@ -503,7 +502,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
