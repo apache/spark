@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.annotation.Since
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -30,6 +32,7 @@ import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
+@Since("2.1.0")
 private[r] class GBTClassifierWrapper private (
   val pipeline: PipelineModel,
   val formula: String,
@@ -59,6 +62,7 @@ private[r] class GBTClassifierWrapper private (
       GBTClassifierWrapper.GBTClassifierWrapperWriter(this)
 }
 
+@Since("2.1.0")
 private[r] object GBTClassifierWrapper extends MLReadable[GBTClassifierWrapper] {
 
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"

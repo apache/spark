@@ -18,13 +18,14 @@
 package org.apache.spark.ml.ann
 
 import java.util.Random
-
+import org.apache.spark.annotation.Since
 import breeze.linalg.{sum => Bsum, DenseMatrix => BDM, DenseVector => BDV}
 import breeze.numerics.{log => brzlog}
 
 /**
  * Trait for loss function
  */
+@Since("2.0.0")
 private[ann] trait LossFunction {
   /**
    * Returns the value of loss function.
@@ -41,6 +42,7 @@ private[ann] trait LossFunction {
   def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double
 }
 
+@Since("2.0.0")
 private[ann] class SigmoidLayerWithSquaredError extends Layer {
   override val weightSize = 0
   override val inPlace = true
@@ -52,6 +54,7 @@ private[ann] class SigmoidLayerWithSquaredError extends Layer {
     new SigmoidLayerModelWithSquaredError()
 }
 
+@Since("2.0.0")
 private[ann] class SigmoidLayerModelWithSquaredError
   extends FunctionalLayerModel(new FunctionalLayer(new SigmoidFunction)) with LossFunction {
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
@@ -62,6 +65,7 @@ private[ann] class SigmoidLayerModelWithSquaredError
   }
 }
 
+@Since("2.0.0")
 private[ann] class SoftmaxLayerWithCrossEntropyLoss extends Layer {
   override val weightSize = 0
   override val inPlace = true
@@ -73,6 +77,7 @@ private[ann] class SoftmaxLayerWithCrossEntropyLoss extends Layer {
     new SoftmaxLayerModelWithCrossEntropyLoss()
 }
 
+@Since("2.0.0")
 private[ann] class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with LossFunction {
 
   // loss layer models do not have weights

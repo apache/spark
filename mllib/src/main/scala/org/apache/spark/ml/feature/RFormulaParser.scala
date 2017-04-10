@@ -19,13 +19,14 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable
 import scala.util.parsing.combinator.RegexParsers
-
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types._
 
 /**
  * Represents a parsed R formula.
  */
+@Since("1.5.0")
 private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
   /**
    * Resolves formula terms into column names. A schema is necessary for inferring the meaning
@@ -125,6 +126,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
  *              of column names; non-interaction terms as length 1 Seqs.
  * @param hasIntercept whether the formula specifies fitting with an intercept.
  */
+@Since("1.5.0")
 private[ml] case class ResolvedRFormula(
   label: String, terms: Seq[Seq[String]], hasIntercept: Boolean) {
 
@@ -167,6 +169,7 @@ private[ml] case class Deletion(term: Term) extends Term
 /**
  * Limited implementation of R formula parsing. Currently supports: '~', '+', '-', '.', ':'.
  */
+@Since("1.5.0")
 private[ml] object RFormulaParser extends RegexParsers {
   private val intercept: Parser[Intercept] =
     "([01])".r ^^ { case a => Intercept(a == "1") }

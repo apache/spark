@@ -17,9 +17,12 @@
 
 package org.apache.spark.ml.attribute
 
+import org.apache.spark.annotation.Since
+
 /**
  * Keys used to store attributes.
  */
+@Since("1.4.0")
 private[attribute] object AttributeKeys {
   val ML_ATTR: String = "ml_attr"
   val TYPE: String = "type"

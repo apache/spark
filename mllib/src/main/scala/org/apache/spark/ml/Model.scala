@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.param.ParamMap
 
 /**
@@ -27,6 +27,7 @@ import org.apache.spark.ml.param.ParamMap
  * @tparam M model type
  */
 @DeveloperApi
+@Since("1.2.0")
 abstract class Model[M <: Model[M]] extends Transformer {
   /**
    * The parent estimator that produced this model.

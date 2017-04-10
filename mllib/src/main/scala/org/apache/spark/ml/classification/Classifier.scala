@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -32,6 +32,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * (private[spark]) Params for classification.
  */
+@Since("1.3.0")
 private[spark] trait ClassifierParams
   extends PredictorParams with HasRawPredictionCol {
 
@@ -55,6 +56,7 @@ private[spark] trait ClassifierParams
  * @tparam M  Concrete Model type
  */
 @DeveloperApi
+@Since("1.3.0")
 abstract class Classifier[
     FeaturesType,
     E <: Classifier[FeaturesType, E, M],
@@ -138,6 +140,7 @@ abstract class Classifier[
  * @tparam M  Concrete Model type
  */
 @DeveloperApi
+@Since("1.3.0")
 abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[FeaturesType, M]]
   extends PredictionModel[FeaturesType, M] with ClassifierParams {
 

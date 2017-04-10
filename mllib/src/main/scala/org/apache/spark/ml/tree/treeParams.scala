@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tree
 
 import scala.util.Try
-
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -33,6 +33,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
+@Since("1.4.0")
 private[ml] trait DecisionTreeParams extends PredictorParams
   with HasCheckpointInterval with HasSeed {
 
@@ -207,6 +208,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 /**
  * Parameters for Decision Tree-based classification algorithms.
  */
+@Since("1.4.0")
 private[ml] trait TreeClassifierParams extends Params {
 
   /**
@@ -245,17 +247,20 @@ private[ml] trait TreeClassifierParams extends Params {
   }
 }
 
+@Since("1.4.0")
 private[ml] object TreeClassifierParams {
   // These options should be lowercase.
   final val supportedImpurities: Array[String] = Array("entropy", "gini").map(_.toLowerCase)
 }
 
+@Since("1.4.0")
 private[ml] trait DecisionTreeClassifierParams
   extends DecisionTreeParams with TreeClassifierParams
 
 /**
  * Parameters for Decision Tree-based regression algorithms.
  */
+@Since("1.4.0")
 private[ml] trait TreeRegressorParams extends Params {
 
   /**
@@ -293,11 +298,13 @@ private[ml] trait TreeRegressorParams extends Params {
   }
 }
 
+@Since("1.4.0")
 private[ml] object TreeRegressorParams {
   // These options should be lowercase.
   final val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
 }
 
+@Since("1.4.0")
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
   with TreeRegressorParams with HasVarianceCol {
 
@@ -319,6 +326,7 @@ private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
+@Since("1.4.0")
 private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 
   /**
@@ -358,6 +366,7 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 /**
  * Parameters for Random Forest algorithms.
  */
+@Since("1.4.0")
 private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   /**
@@ -434,15 +443,18 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase
 }
 
+@Since("1.4.0")
 private[spark] object RandomForestParams {
   // These options should be lowercase.
   final val supportedFeatureSubsetStrategies: Array[String] =
     Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)
 }
 
+@Since("1.4.0")
 private[ml] trait RandomForestClassifierParams
   extends RandomForestParams with TreeClassifierParams
 
+@Since("1.4.0")
 private[ml] trait RandomForestRegressorParams
   extends RandomForestParams with TreeRegressorParams
 
@@ -451,6 +463,7 @@ private[ml] trait RandomForestRegressorParams
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
+@Since("1.4.0")
 private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
 
   /* TODO: Add this doc when we add this param.  SPARK-7132
@@ -506,12 +519,14 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   private[ml] def getOldLossType: OldLoss
 }
 
+@Since("1.4.0")
 private[ml] object GBTClassifierParams {
   // The losses below should be lowercase.
   /** Accessor for supported loss settings: logistic */
   final val supportedLossTypes: Array[String] = Array("logistic").map(_.toLowerCase)
 }
 
+@Since("1.4.0")
 private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParams {
 
   /**
@@ -541,12 +556,14 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
   }
 }
 
+@Since("1.4.0")
 private[ml] object GBTRegressorParams {
   // The losses below should be lowercase.
   /** Accessor for supported loss settings: squared (L2), absolute (L1) */
   final val supportedLossTypes: Array[String] = Array("squared", "absolute").map(_.toLowerCase)
 }
 
+@Since("1.4.0")
 private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {
 
   /**

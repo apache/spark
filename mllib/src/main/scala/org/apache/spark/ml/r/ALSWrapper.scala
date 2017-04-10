@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.annotation.Since
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -26,6 +28,7 @@ import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
+@Since("2.1.0")
 private[r] class ALSWrapper private (
     val alsModel: ALSModel,
     val ratingCol: String) extends MLWritable {
@@ -43,6 +46,7 @@ private[r] class ALSWrapper private (
   override def write: MLWriter = new ALSWrapper.ALSWrapperWriter(this)
 }
 
+@Since("2.1.0")
 private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
 
   def fit(  // scalastyle:ignore

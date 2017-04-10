@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.Vector
 
 /**
@@ -26,4 +27,5 @@ import org.apache.spark.ml.linalg.Vector
  * @param weight The weight of this instance.
  * @param features The vector of features for this data point.
  */
+@Since("1.6.0")
 private[ml] case class Instance(label: Double, weight: Double, features: Vector)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 
 
@@ -28,6 +28,8 @@ import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
  * @tparam Learner  Concrete Estimator type
  * @tparam M  Concrete Model type
  */
+
+@Since("1.3.0")
 private[spark] abstract class Regressor[
     FeaturesType,
     Learner <: Regressor[FeaturesType, Learner, M],
@@ -46,6 +48,7 @@ private[spark] abstract class Regressor[
  * @tparam M  Concrete Model type.
  */
 @DeveloperApi
+@Since("1.3.0")
 abstract class RegressionModel[FeaturesType, M <: RegressionModel[FeaturesType, M]]
   extends PredictionModel[FeaturesType, M] with PredictorParams {
 

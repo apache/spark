@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.annotation.Since
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -30,6 +32,7 @@ import org.apache.spark.ml.regression.{RandomForestRegressionModel, RandomForest
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
+@Since("2.1.0")
 private[r] class RandomForestRegressorWrapper private (
   val pipeline: PipelineModel,
   val formula: String,
@@ -54,6 +57,7 @@ private[r] class RandomForestRegressorWrapper private (
       RandomForestRegressorWrapper.RandomForestRegressorWrapperWriter(this)
 }
 
+@Since("2.1.0")
 private[r] object RandomForestRegressorWrapper extends MLReadable[RandomForestRegressorWrapper] {
   def fit(  // scalastyle:ignore
       data: DataFrame,

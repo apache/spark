@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.api.python
 
+import org.apache.spark.annotation.Since
+
 import scala.collection.JavaConverters
 
 import org.apache.spark.SparkContext
@@ -26,6 +28,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 /**
  * Wrapper around GaussianMixtureModel to provide helper methods in Python
  */
+@Since("2.1.0")
 private[python] class GaussianMixtureModelWrapper(model: GaussianMixtureModel) {
   val weights: Vector = Vectors.dense(model.weights)
   val k: Int = weights.size

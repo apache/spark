@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.util
 
+import org.apache.spark.annotation.Since
+
 import scala.collection.mutable
 
 import org.apache.spark.SparkContext
@@ -25,6 +27,7 @@ import org.apache.spark.util.LongAccumulator
 /**
  * Abstract class for stopwatches.
  */
+@Since("1.5.0")
 private[spark] abstract class Stopwatch extends Serializable {
 
   @transient private var running: Boolean = false
@@ -84,6 +87,7 @@ private[spark] abstract class Stopwatch extends Serializable {
 /**
  * A local [[Stopwatch]].
  */
+@Since("1.5.0")
 private[spark] class LocalStopwatch(override val name: String) extends Stopwatch {
 
   private var elapsedTime: Long = 0L
@@ -99,6 +103,7 @@ private[spark] class LocalStopwatch(override val name: String) extends Stopwatch
  * A distributed [[Stopwatch]] using Spark accumulator.
  * @param sc SparkContext
  */
+@Since("1.5.0")
 private[spark] class DistributedStopwatch(
     sc: SparkContext,
     override val name: String) extends Stopwatch {
@@ -116,6 +121,7 @@ private[spark] class DistributedStopwatch(
  * A multiple stopwatch that contains local and distributed stopwatches.
  * @param sc SparkContext
  */
+@Since("1.5.0")
 private[spark] class MultiStopwatch(@transient private val sc: SparkContext) extends Serializable {
 
   private val stopwatches: mutable.Map[String, Stopwatch] = mutable.Map.empty

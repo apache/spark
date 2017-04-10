@@ -17,12 +17,14 @@
 
 package org.apache.spark.ml.ann
 
+import org.apache.spark.annotation.Since
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
 import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 
 /**
  * In-place DGEMM and DGEMV for Breeze
  */
+@Since("1.5.0")
 private[ann] object BreezeUtil {
 
   // TODO: switch to MLlib BLAS interface

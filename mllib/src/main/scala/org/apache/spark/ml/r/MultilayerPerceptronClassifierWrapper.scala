@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.annotation.Since
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -30,6 +32,7 @@ import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util.{MLReadable, MLReader, MLWritable, MLWriter}
 import org.apache.spark.sql.{DataFrame, Dataset}
 
+@Since("2.1.0")
 private[r] class MultilayerPerceptronClassifierWrapper private (
     val pipeline: PipelineModel
   ) extends MLWritable {
@@ -56,6 +59,7 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
     new MultilayerPerceptronClassifierWrapper.MultilayerPerceptronClassifierWrapperWriter(this)
 }
 
+@Since("2.1.0")
 private[r] object MultilayerPerceptronClassifierWrapper
   extends MLReadable[MultilayerPerceptronClassifierWrapper] {
 

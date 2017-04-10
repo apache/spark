@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.tree
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{ImpurityStats,
@@ -25,6 +26,7 @@ import org.apache.spark.mllib.tree.model.{ImpurityStats,
 /**
  * Decision tree node interface.
  */
+@Since("1.4.0")
 sealed abstract class Node extends Serializable {
 
   // TODO: Add aggregate stats (once available).  This will happen after we move the DecisionTree
@@ -110,6 +112,7 @@ private[ml] object Node {
  * @param prediction  Prediction this node makes
  * @param impurity  Impurity measure at this node (for training data)
  */
+@Since("1.4.0")
 class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
@@ -151,6 +154,7 @@ class LeafNode private[ml] (
  * @param rightChild  Right-hand child node
  * @param split  Information about the test used to split to the left or right child.
  */
+@Since("1.4.0")
 class InternalNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
@@ -213,6 +217,7 @@ class InternalNode private[ml] (
   }
 }
 
+@Since("1.4.0")
 private object InternalNode {
 
   /**
@@ -258,6 +263,7 @@ private object InternalNode {
  *                so that we do not need to consider splitting it further.
  * @param stats  Impurity statistics for this node.
  */
+@Since("1.4.0")
 private[tree] class LearningNode(
     var id: Int,
     var leftChild: Option[LearningNode],
@@ -327,6 +333,7 @@ private[tree] class LearningNode(
 
 }
 
+@Since("1.4.0")
 private[tree] object LearningNode {
 
   /** Create a node with some of its fields set. */

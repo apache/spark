@@ -18,8 +18,7 @@
 package org.apache.spark.ml.attribute
 
 import scala.collection.mutable.ArrayBuffer
-
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
 
@@ -34,6 +33,7 @@ import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
  *              indices in the array.
  */
 @DeveloperApi
+@Since("1.4.0")
 class AttributeGroup private (
     val name: String,
     val numAttributes: Option[Int],
@@ -192,6 +192,7 @@ class AttributeGroup private (
  * Factory methods to create attribute groups.
  */
 @DeveloperApi
+@Since("1.4.0")
 object AttributeGroup {
 
   import AttributeKeys._

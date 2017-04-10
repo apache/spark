@@ -17,12 +17,15 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.annotation.Since
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.feature.{RFormula, RFormulaModel}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.Dataset
 
+@Since("2.1.0")
 private[r] object RWrapperUtils extends Logging {
 
   /**

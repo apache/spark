@@ -19,7 +19,7 @@ package org.apache.spark.ml.attribute
 
 import scala.annotation.varargs
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, NumericType, StructField}
 
 /**
@@ -27,6 +27,7 @@ import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, Numeri
  * Abstract class for ML attributes.
  */
 @DeveloperApi
+@Since("1.4.0")
 sealed abstract class Attribute extends Serializable {
 
   name.foreach { n =>
@@ -118,6 +119,7 @@ sealed abstract class Attribute extends Serializable {
 }
 
 /** Trait for ML attribute factories. */
+@Since("1.4.0")
 private[attribute] trait AttributeFactory {
 
   /**
@@ -154,6 +156,7 @@ private[attribute] trait AttributeFactory {
  * :: DeveloperApi ::
  */
 @DeveloperApi
+@Since("1.4.0")
 object Attribute extends AttributeFactory {
 
   private[attribute] override def fromMetadata(metadata: Metadata): Attribute = {
@@ -192,6 +195,7 @@ object Attribute extends AttributeFactory {
  * @param sparsity optional sparsity (ratio of zeros)
  */
 @DeveloperApi
+@Since("1.4.0")
 class NumericAttribute private[ml] (
     override val name: Option[String] = None,
     override val index: Option[Int] = None,
@@ -303,6 +307,7 @@ class NumericAttribute private[ml] (
  * Factory methods for numeric attributes.
  */
 @DeveloperApi
+@Since("1.4.0")
 object NumericAttribute extends AttributeFactory {
 
   /** The default numeric attribute. */
@@ -331,6 +336,7 @@ object NumericAttribute extends AttributeFactory {
  * @param values optional values. At most one of `numValues` and `values` can be defined.
  */
 @DeveloperApi
+@Since("1.4.0")
 class NominalAttribute private[ml] (
     override val name: Option[String] = None,
     override val index: Option[Int] = None,
@@ -468,6 +474,7 @@ class NominalAttribute private[ml] (
  * Factory methods for nominal attributes.
  */
 @DeveloperApi
+@Since("1.4.0")
 object NominalAttribute extends AttributeFactory {
 
   /** The default nominal attribute. */
@@ -494,6 +501,7 @@ object NominalAttribute extends AttributeFactory {
  * @param values optional values. If set, its size must be 2.
  */
 @DeveloperApi
+@Since("1.4.0")
 class BinaryAttribute private[ml] (
     override val name: Option[String] = None,
     override val index: Option[Int] = None,
@@ -570,6 +578,7 @@ class BinaryAttribute private[ml] (
  * Factory methods for binary attributes.
  */
 @DeveloperApi
+@Since("1.4.0")
 object BinaryAttribute extends AttributeFactory {
 
   /** The default binary attribute. */
@@ -590,6 +599,7 @@ object BinaryAttribute extends AttributeFactory {
  * An unresolved attribute.
  */
 @DeveloperApi
+@Since("1.4.0")
 object UnresolvedAttribute extends Attribute {
 
   override def attrType: AttributeType = AttributeType.Unresolved

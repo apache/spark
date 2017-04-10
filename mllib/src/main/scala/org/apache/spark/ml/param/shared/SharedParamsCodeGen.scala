@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.param.shared
 
+import org.apache.spark.annotation.Since
+
 import java.io.PrintWriter
 
 import scala.reflect.ClassTag
@@ -27,6 +29,8 @@ import scala.reflect.ClassTag
  *   build/sbt "mllib/runMain org.apache.spark.ml.param.shared.SharedParamsCodeGen"
  * }}}
  */
+
+@Since("1.4.0")
 private[shared] object SharedParamsCodeGen {
 
   def main(args: Array[String]): Unit = {

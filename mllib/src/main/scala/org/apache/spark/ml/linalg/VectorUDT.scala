@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.linalg
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
@@ -25,6 +26,7 @@ import org.apache.spark.sql.types._
  * User-defined type for [[Vector]] in [[mllib-local]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.Dataset]].
  */
+@Since("2.0.0")
 private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {

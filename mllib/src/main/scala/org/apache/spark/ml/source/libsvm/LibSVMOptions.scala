@@ -17,11 +17,13 @@
 
 package org.apache.spark.ml.source.libsvm
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
  * Options for the LibSVM data source.
  */
+@Since("2.2.0")
 private[libsvm] class LibSVMOptions(@transient private val parameters: CaseInsensitiveMap[String])
   extends Serializable {
 

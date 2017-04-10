@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.util
 
+import org.apache.spark.annotation.Since
+
 import java.util.concurrent.atomic.AtomicLong
 
 import org.json4s._
@@ -39,6 +41,7 @@ import org.apache.spark.sql.Dataset
  * @param dataset the training dataset
  * @tparam E the type of the estimator
  */
+@Since("2.0.0")
 private[spark] class Instrumentation[E <: Estimator[_]] private (
     estimator: E, dataset: RDD[_]) extends Logging {
 
@@ -106,6 +109,7 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
 /**
  * Some common methods for logging information about a training session.
  */
+@Since("2.0.0")
 private[spark] object Instrumentation {
   private val counter = new AtomicLong(0)
 
