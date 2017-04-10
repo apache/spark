@@ -207,8 +207,10 @@ object PrefixSpan extends Logging {
    *
    * @return An array of Item containing only frequent items.
    */
-  private[fpm] def findFrequentItems[Item: ClassTag](data: RDD[Array[Array[Item]]],
-                                                     minCount: Long): Array[Item] = {
+  private[fpm] def findFrequentItems[Item: ClassTag](
+      data: RDD[Array[Array[Item]]],
+      minCount: Long):
+  Array[Item] = {
 
     data.flatMap { itemsets =>
       val uniqItems = mutable.Set.empty[Item]
