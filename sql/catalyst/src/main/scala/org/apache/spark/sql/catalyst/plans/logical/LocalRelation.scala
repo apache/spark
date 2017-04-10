@@ -67,14 +67,6 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
     }
   }
 
-  override def sameResult(plan: LogicalPlan): Boolean = {
-    plan.canonicalized match {
-      case LocalRelation(otherOutput, otherData) =>
-        otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
-      case _ => false
-    }
-  }
-
   override def computeStats(conf: SQLConf): Statistics =
     Statistics(sizeInBytes =
       output.map(n => BigInt(n.dataType.defaultSize)).sum * data.length)

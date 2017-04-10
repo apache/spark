@@ -342,8 +342,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numGeneratedRows" -> SQLMetrics.createMetric(sparkContext, "number of generated rows"))
 
-  // output attributes should not affect the results
-  override lazy val cleanArgs: Seq[Any] = Seq(start, step, numSlices, numElements)
+  override lazy val canonicalized: SparkPlan = {
+    RangeExec(range.canonicalized.asInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Range])
+  }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
@@ -606,11 +607,6 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def sameResult(o: SparkPlan): Boolean = o match {
-    case s: SubqueryExec => child.sameResult(s.child)
-    case _ => false
-  }
 
   @transient
   private lazy val relationFuture: Future[Array[InternalRow]] = {
