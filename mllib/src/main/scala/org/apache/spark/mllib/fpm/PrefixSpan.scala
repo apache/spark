@@ -214,7 +214,7 @@ object PrefixSpan extends Logging {
 
     data.flatMap { itemsets =>
       val uniqItems = mutable.Set.empty[Item]
-      itemsets.foreach ( _.foreach (item => uniqItems += item))
+      itemsets.foreach(set => uniqItems ++= set)
       uniqItems.toIterator.map((_, 1L))
     }.reduceByKey(_ + _).filter { case (_, count) =>
         count >= minCount
