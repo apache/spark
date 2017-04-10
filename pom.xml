@@ -137,7 +137,7 @@
     <parquet.version>1.8.1</parquet.version>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <feign.version>8.18.0</feign.version>
-    <bouncycastle.version>1.52</bouncycastle.version>
+    <bouncycastle.version>1.54</bouncycastle.version>
     <jetty.version>9.2.16.v20160414</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.8.0</chill.version>
@@ -330,6 +330,11 @@
       <dependency>
         <groupId>org.bouncycastle</groupId>
         <artifactId>bcpkix-jdk15on</artifactId>
+        <version>${bouncycastle.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk15on</artifactId>
         <version>${bouncycastle.version}</version>
       </dependency>
       <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
