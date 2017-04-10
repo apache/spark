@@ -44,18 +44,13 @@ object FuncTransformerExample {
     import spark.implicits._
 
     // $example on$
-    val df = Seq(0.0, 1.0, 2.0, 3.0).toDF("value")
+    val df = Seq(0.0, 1.0, 2.0, 3.0).toDF("input")
 
     val labelConverter = new FuncTransformer((i: Double) => if (i >= 1) 1 else 0)
     labelConverter.transform(df).show()
 
-    val doubleToVector = new FuncTransformer((i: Double) => i + 1)
-    doubleToVector.transform(df).show()
-
-    // pipeline example
-    val pipeline = new Pipeline().setStages(Array(labelConverter, doubleToVector))
-    val pipelineModel = pipeline.fit(df)
-    pipelineModel.transform(df).show()
+    val shifter = new FuncTransformer((i: Double) => i + 1)
+    shifter.transform(df).show()
     // $example off$
 
     spark.stop()
