@@ -407,10 +407,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     val quotedColName = "`" + col.name + "`"
     val colValue = col.dataType match {
       case DoubleType | FloatType =>
-        nanvl(df.col(quotedColName), lit(null)) // nanvl only supports these types
+        // nanvl only supports these types
+        nanvl(df.col(quotedColName), lit(null).cast(col.dataType))
       case _ => df.col(quotedColName)
     }
-    coalesce(colValue, lit(replacement)).cast(col.dataType).as(col.name)
+    coalesce(colValue, lit(replacement).cast(col.dataType)).as(col.name)
   }
 
   /**
