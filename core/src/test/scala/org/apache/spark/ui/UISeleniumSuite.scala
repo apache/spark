@@ -558,8 +558,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(1 second), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         // The completed jobs table should have two rows. The first row will be the most recent job:
-        find("completed-summary").get.text should be ("Completed Jobs: 10, only showing 2")
-        find("completed").get.text should be ("Completed Jobs (10, only showing 2)")
+        find("completed-summary").get.text should be ("Completed Jobs: 10, only showing last 2")
+        find("completed").get.text should be ("Completed Jobs (10, only showing last 2)")
         val rows = findAll(cssSelector("tbody tr")).toIndexedSeq.map{_.underlying}
         rows.size should be (expJobInfo.size)
         for {
@@ -603,8 +603,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
       eventually(timeout(1 second), interval(50 milliseconds)) {
         goToUi(sc, "/stages")
-        find("completed-summary").get.text should be ("Completed Stages: 20, only showing 3")
-        find("completed").get.text should be ("Completed Stages (20, only showing 3)")
+        find("completed-summary").get.text should be ("Completed Stages: 20, only showing last 3")
+        find("completed").get.text should be ("Completed Stages (20, only showing last 3)")
         val rows = findAll(cssSelector("tbody tr")).toIndexedSeq.map{_.underlying}
         rows.size should be (3)
         for {
