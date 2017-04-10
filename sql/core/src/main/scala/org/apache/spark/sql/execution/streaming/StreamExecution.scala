@@ -304,8 +304,8 @@ class StreamExecution(
               finishTrigger(dataAvailable)
               if (dataAvailable) {
                 // Update committed offsets.
-                committedOffsets ++= availableOffsets
                 batchCommitLog.add(currentBatchId)
+                committedOffsets ++= availableOffsets
                 logDebug(s"batch ${currentBatchId} committed")
                 // We'll increase currentBatchId after we complete processing current batch's data
                 currentBatchId += 1
