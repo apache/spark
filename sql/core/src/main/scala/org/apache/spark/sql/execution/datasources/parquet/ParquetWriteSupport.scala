@@ -193,7 +193,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
           val adjustedMicros = if (localTz.getID() == storageTz.getID()) {
             rawMicros
           } else {
-            DateTimeUtils.convertTz(rawMicros, localTz, storageTz)
+            DateTimeUtils.convertTz(rawMicros, storageTz, localTz)
           }
           val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(adjustedMicros)
           val buf = ByteBuffer.wrap(timestampBuffer)

@@ -276,8 +276,8 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
-            val timestamp = ParquetRowConverter.binaryToSQLTimestamp(value, storageTz = storageTz,
-              localTz = localTz)
+            val timestamp = ParquetRowConverter.binaryToSQLTimestamp(value, fromTz = localTz,
+              toTz = storageTz)
             updater.setLong(timestamp)
           }
         }
@@ -688,7 +688,7 @@ private[parquet] object ParquetRowConverter {
    * @param binary
    * @return
    */
-  def binaryToSQLTimestamp(binary: Binary, storageTz: TimeZone, localTz: TimeZone): SQLTimestamp = {
+  def binaryToSQLTimestamp(binary: Binary, fromTz: TimeZone, toTz: TimeZone): SQLTimestamp = {
     assert(binary.length() == 12, s"Timestamps (with nanoseconds) are expected to be stored in" +
       s" 12-byte long binaries. Found a ${binary.length()}-byte binary instead.")
     val buffer = binary.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
@@ -696,8 +696,8 @@ private[parquet] object ParquetRowConverter {
     val julianDay = buffer.getInt
     val utcEpochMicros = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
     // avoid expensive time logic if possible.
-    if (storageTz.getID() != localTz.getID()) {
-      DateTimeUtils.convertTz(utcEpochMicros, storageTz, localTz)
+    if (fromTz.getID() != toTz.getID()) {
+      DateTimeUtils.convertTz(utcEpochMicros, fromTz, toTz)
     } else {
       utcEpochMicros
     }
