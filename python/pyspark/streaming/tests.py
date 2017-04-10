@@ -55,7 +55,7 @@ from pyspark.streaming.listener import StreamingListener
 
 class PySparkStreamingTestCase(unittest.TestCase):
 
-    timeout = 10  # seconds
+    timeout = 30  # seconds
     duration = .5
 
     @classmethod
