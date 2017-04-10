@@ -116,11 +116,16 @@ object SQLExecution extends Logging {
       // Some operations will start nested executions. For example, CacheTableCommand will uses
       // Dataset#count to materialize cached records when caching is not lazy. Because there are
       // legitimate reasons to nest executions in withNewExecutionId, this logs a warning but does
-      // not throw an exception to avoid failing at runtime.
+      // not throw an exception to avoid failing at runtime. Exceptions will be thrown for tests
+      // to ensure that nesting is avoided.
       //
-      // To avoid this warning, use nestedExecution { ... }
+      // To avoid this warning, use nested { ... }
       if (!Option(sc.getLocalProperty(ALLOW_NESTED_EXECUTION)).exists(_.toBoolean)) {
-        logWarning(s"$EXECUTION_ID_KEY is already set")
+        if (testing) {
+          logWarning(s"$EXECUTION_ID_KEY is already set")
+        } else {
+          throw new IllegalStateException(s"$EXECUTION_ID_KEY is already set")
+        }
       }
       body
     }
