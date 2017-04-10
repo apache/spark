@@ -32,19 +32,19 @@ object DebugFilesystem extends Logging {
   // Stores the set of active streams and their creation sites.
   private val openStreams = mutable.Map.empty[FSDataInputStream, Throwable]
 
-  def addOpenStream(stream: FSDataInputStream): Unit = synchronized {
+  def addOpenStream(stream: FSDataInputStream): Unit = openStreams.synchronized {
     openStreams.put(stream, new Throwable())
   }
 
-  def clearOpenStreams(): Unit = synchronized {
+  def clearOpenStreams(): Unit = openStreams.synchronized {
     openStreams.clear()
   }
 
-  def removeOpenStream(stream: FSDataInputStream): Unit = synchronized {
+  def removeOpenStream(stream: FSDataInputStream): Unit = openStreams.synchronized {
     openStreams.remove(stream)
   }
 
-  def assertNoOpenStreams(): Unit = synchronized {
+  def assertNoOpenStreams(): Unit = openStreams.synchronized {
     val numOpen = openStreams.values.size
     if (numOpen > 0) {
       for (exc <- openStreams.values) {
