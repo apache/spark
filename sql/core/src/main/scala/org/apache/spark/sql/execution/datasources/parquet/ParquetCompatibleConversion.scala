@@ -22,7 +22,7 @@ import org.apache.parquet.io.api.Converter
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.types._
 
-private[parquet] object ParquetCompatibleConverter {
+private[parquet] object ParquetCompatibleConversion {
 
   // The logic for setting and adding a value in `ParquetPrimitiveConverter` are separated
   // into `NumericValueUpdater` and `NumericCompatibleConverter` so that value can be converted
