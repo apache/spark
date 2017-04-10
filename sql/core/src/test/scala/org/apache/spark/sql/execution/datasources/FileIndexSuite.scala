@@ -235,17 +235,6 @@ class FileIndexSuite extends SharedSQLContext {
     }
     val fileStatusCache = FileStatusCache.getOrCreate(spark)
     fileStatusCache.putLeafFiles(new Path("/tmp", "abc"), files.toArray)
-    // scalastyle:off
-    /* this would fail with:
-     * [info]   java.lang.IllegalStateException: Weights must be non-negative
-     * [info]   at com.google.common.base.Preconditions.checkState(Preconditions.java:149)
-     * [info]   at com.google.common.cache.LocalCache$Segment.setValue(LocalCache.java:2223)
-     * [info]   at com.google.common.cache.LocalCache$Segment.put(LocalCache.java:2944)
-     * [info]   at com.google.common.cache.LocalCache.put(LocalCache.java:4212)
-     * [info]   at com.google.common.cache.LocalCache$LocalManualCache.put(LocalCache.java:4804)
-     * [info]   at org.apache.spark.sql.execution.datasources.SharedInMemoryCache$$anon$3.putLeafFiles(FileStatusCache.scala:131)
-     */
-    // scalastyle:on
   }
 }
 
