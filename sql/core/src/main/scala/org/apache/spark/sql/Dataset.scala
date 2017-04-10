@@ -180,13 +180,9 @@ class Dataset[T] private[sql](
     // to happen right away to let these side effects take place eagerly.
     queryExecution.analyzed match {
       case c: Command =>
-        SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
-          LocalRelation(c.output, queryExecution.executedPlan.executeCollect())
-        }
+        LocalRelation(c.output, withAction("collect", queryExecution)(_.executeCollect()))
       case u @ Union(children) if children.forall(_.isInstanceOf[Command]) =>
-        SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
-          LocalRelation(u.output, queryExecution.executedPlan.executeCollect())
-        }
+        LocalRelation(u.output, withAction("collect", queryExecution)(_.executeCollect()))
       case _ =>
         queryExecution.analyzed
     }
