@@ -18,9 +18,12 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.api.java.function.FilterFunction
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.types._
 
 /*
  * This file defines optimization rules related to object manipulation (for the Dataset API).
@@ -94,5 +97,42 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
         input => f1.asInstanceOf[Any => Boolean].apply(input) &&
           f2.asInstanceOf[Any => Boolean].apply(input)
     }
+  }
+}
+
+/**
+ * Removes MapObjects when the following conditions are satisfied
+ *   1. Mapobject(e) where e is lambdavariable
+ *   2. the function will convert an expression MapObjects(e) to AssertNotNull(e)
+ *   3. the inputData is of primitive type array and its element is not nullable.
+ *   4. the outputData is of primitive type array and its element does not have enull
+ *   5. no custom collection class specified
+ * representation of data item.  For example back to back map operations.
+ */
+object EliminateMapObjects extends Rule[LogicalPlan] {
+  private def convertDataTypeToArrayClass(dt: DataType): Class[_] = dt match {
+    case IntegerType => classOf[Array[Int]]
+    case LongType => classOf[Array[Long]]
+    case DoubleType => classOf[Array[Double]]
+    case FloatType => classOf[Array[Float]]
+    case ShortType => classOf[Array[Short]]
+    case ByteType => classOf[Array[Byte]]
+    case BooleanType => classOf[Array[Boolean]]
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case _ @ DeserializeToObject(_ @ Invoke(
+          MapObjects(_, _, inputType, args, inputData, customCollectionCls, _),
+          funcName, returnType @ ObjectType(returnCls), arguments, propagateNull, returnNullable),
+        outputObjAttr, child) if CatalystTypeConverters.isPrimitive(inputType) &&
+        returnCls.isAssignableFrom(convertDataTypeToArrayClass(inputType)) &&
+        customCollectionCls.isEmpty =>
+      args match {
+        case _@AssertNotNull(LambdaVariable(_, _, dataType, _), _) if dataType == inputType =>
+          DeserializeToObject(Invoke(
+              inputData, funcName, returnType, arguments, propagateNull, returnNullable),
+            outputObjAttr, child)
+        case _ => plan
+      }
   }
 }

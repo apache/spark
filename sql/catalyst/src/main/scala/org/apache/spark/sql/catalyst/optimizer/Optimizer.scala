@@ -91,6 +91,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       CombineLimits,
       CombineUnions,
       // Constant folding and strength reduction
+      EliminateMapObjects,
       NullPropagation(conf),
       FoldablePropagation,
       OptimizeIn(conf),
