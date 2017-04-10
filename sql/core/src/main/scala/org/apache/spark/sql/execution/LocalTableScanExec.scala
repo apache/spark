@@ -33,7 +33,7 @@ case class LocalTableScanExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  private val unsafeRows: Array[InternalRow] = {
+  private lazy val unsafeRows: Array[InternalRow] = {
     if (rows.isEmpty) {
       Array.empty
     } else {

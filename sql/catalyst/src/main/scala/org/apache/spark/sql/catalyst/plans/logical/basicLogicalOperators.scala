@@ -803,6 +803,8 @@ case class SubqueryAlias(
     child: LogicalPlan)
   extends UnaryNode {
 
+  override lazy val canonicalized: LogicalPlan = child.canonicalized
+
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
 

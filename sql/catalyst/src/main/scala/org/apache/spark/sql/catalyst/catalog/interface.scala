@@ -423,8 +423,15 @@ case class CatalogRelation(
     Objects.hashCode(tableMeta.identifier, output)
   }
 
-  /** Only compare table identifier. */
-  override lazy val cleanArgs: Seq[Any] = Seq(tableMeta.identifier)
+  override def preCanonicalized: LogicalPlan = copy(tableMeta = CatalogTable(
+    identifier = tableMeta.identifier,
+    tableType = tableMeta.tableType,
+    storage = CatalogStorageFormat.empty,
+    schema = tableMeta.schema,
+    partitionColumnNames = tableMeta.partitionColumnNames,
+    bucketSpec = tableMeta.bucketSpec,
+    createTime = -1
+  ))
 
   override def computeStats(conf: SQLConf): Statistics = {
     // For data source tables, we will create a `LogicalRelation` and won't call this method, for
