@@ -372,10 +372,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val cleanedSequence1 = PrefixSpan.toDatabaseInternalRepr(rdd1, itemToInt1).collect()
 
     val expected1 = Array(Array(0, 4, 0, 5, 0, 4, 0, 5, 0))
-      .map(x => x.map(y => {
-        if (y == 0) 0
-        else itemToInt1(y) + 1
-      }))
+      .map(_.map(x => if (x == 0) 0 else itemToInt1(x) + 1))
 
     compareInternalSequences(expected1, cleanedSequence1)
 
@@ -389,10 +386,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val cleanedSequence2 = PrefixSpan.toDatabaseInternalRepr(rdd2, itemToInt2).collect()
 
     val expected2 = Array(Array(0, 4, 5, 0, 6, 0, 5, 0, 4, 0, 5, 6, 0))
-      .map(x => x.map(y => {
-        if (y == 0) 0
-        else itemToInt2(y) + 1
-      }))
+      .map(_.map(x => if (x == 0) 0 else itemToInt2(x) + 1))
 
     compareInternalSequences(expected2, cleanedSequence2)
 
@@ -404,7 +398,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rdd3 = sc.parallelize(sequences3, 2).cache()
 
     val cleanedSequence3 = PrefixSpan.toDatabaseInternalRepr(rdd3, itemToInt3).collect()
-    val expected3: Array[Array[Int]] = Array()
+    val expected3 = Array[Array[Int]]()
 
     compareInternalSequences(expected3, cleanedSequence3)
   }

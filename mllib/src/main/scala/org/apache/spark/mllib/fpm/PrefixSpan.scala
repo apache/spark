@@ -207,14 +207,12 @@ object PrefixSpan extends Logging {
    *
    * @return An array of Item containing only frequent items.
    */
-  private[fpm] def findFrequentItems[Item: ClassTag](data : RDD[Array[Array[Item]]],
-                                                     minCount : Long): Array[Item] = {
+  private[fpm] def findFrequentItems[Item: ClassTag](data: RDD[Array[Array[Item]]],
+                                                     minCount: Long): Array[Item] = {
 
     data.flatMap { itemsets =>
       val uniqItems = mutable.Set.empty[Item]
-      itemsets.foreach { _.foreach { item =>
-        uniqItems += item
-      }}
+      itemsets.foreach ( _.foreach (item => uniqItems += item))
       uniqItems.toIterator.map((_, 1L))
     }.reduceByKey(_ + _).filter { case (_, count) =>
         count >= minCount
@@ -231,8 +229,9 @@ object PrefixSpan extends Logging {
    *
    * @return The internal repr of the inputted dataset. With properly placed zero delimiter.
    */
-  private[fpm] def toDatabaseInternalRepr[Item: ClassTag](data : RDD[Array[Array[Item]]],
-                                                        itemToInt : Map[Item, Int]):
+  private[fpm] def toDatabaseInternalRepr[Item: ClassTag](
+      data: RDD[Array[Array[Item]]],
+      itemToInt: Map[Item, Int]):
   RDD[Array[Int]] = {
 
     data.flatMap { itemsets =>
