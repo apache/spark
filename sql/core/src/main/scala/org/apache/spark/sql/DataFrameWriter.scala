@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
@@ -66,7 +66,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def mode(saveMode: String): DataFrameWriter[T] = {
-    this.mode = saveMode.toLowerCase match {
+    this.mode = saveMode.toLowerCase(Locale.ROOT) match {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
       case "ignore" => SaveMode.Ignore
@@ -223,7 +223,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def save(): Unit = {
-    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "write files of Hive data source directly.")
     }

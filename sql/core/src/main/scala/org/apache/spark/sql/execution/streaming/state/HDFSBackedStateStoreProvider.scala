@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io.{DataInputStream, DataOutputStream, FileNotFoundException, IOException}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -599,7 +600,7 @@ private[state] class HDFSBackedStateStoreProvider(
       val nameParts = path.getName.split("\\.")
       if (nameParts.size == 2) {
         val version = nameParts(0).toLong
-        nameParts(1).toLowerCase match {
+        nameParts(1).toLowerCase(Locale.ROOT) match {
           case "delta" =>
             // ignore the file otherwise, snapshot file already exists for that batch id
             if (!versionToFiles.contains(version)) {
