@@ -811,6 +811,17 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("DROP TABLE alter1")
   }
 
+  test("SPARK-12868 ADD JAR FROM HDFS") {
+    val testJar = "hdfs://nn:8020/foo.jar"
+    // This should fail with unknown host, as its just testing the URL parsing
+    // before SPARK-12868 it was failing with Malformed URI
+    val e = intercept[RuntimeException] {
+      sql(s"ADD JAR $testJar")
+    }
+    e.printStackTrace()
+    assert(e.getMessage.contains("java.net.UnknownHostException: nn"))
+  }
+
   test("ADD JAR command 2") {
     // this is a test case from mapjoin_addjar.q
     val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").toURI
