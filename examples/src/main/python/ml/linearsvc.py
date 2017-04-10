@@ -37,10 +37,17 @@ if __name__ == "__main__":
     # Fit the model
     lsvcModel = lsvc.fit(training)
 
-    # Print the coefficients and intercept for linearsSVC
+    # Print the coefficients and intercept for LinearSVC
     print("Coefficients: " + str(lsvcModel.coefficients))
     print("Intercept: " + str(lsvcModel.intercept))
 
+    trainingSummary = lsvcModel.summary
+    print("Total Iteration: " + str(trainingSummary.totalIterations))
+    # Obtain the objective per iteration.
+    objectiveHistory = trainingSummary.objectiveHistory
+    print("objectiveHistory:")
+    for objective in objectiveHistory:
+        print(objective)
     # $example off$
 
     spark.stop()

@@ -250,6 +250,9 @@ class LinearSVC @Since("2.2.0") (
     }
 
     val model = copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
+    val trainingSummary = LinearSVCTrainingSummary($(labelCol), $(featuresCol),
+      objectiveHistory, objectiveHistory.length)
+    model.setSummary(trainingSummary)
     instr.logSuccess(model)
     model
   }
@@ -286,6 +289,16 @@ class LinearSVCModel private[classification] (
 
   @Since("2.2.0")
   def setWeightCol(value: Double): this.type = set(threshold, value)
+
+  private var trainingSummary: LinearSVCTrainingSummary = _
+
+  private[classification]
+  def setSummary(summary: LinearSVCTrainingSummary): this.type = {
+    this.trainingSummary = summary
+    this
+  }
+
+  def summary: LinearSVCTrainingSummary = trainingSummary
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, coefficients) + intercept
@@ -353,6 +366,19 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
     }
   }
 }
+
+/**
+ * Abstraction for Linear SVC Training results.
+ * Currently, the training summary ignores the training weights except
+ * for the objective trace.
+ */
+case class LinearSVCTrainingSummary(
+    labelCol: String,
+    featuresCol: String,
+    objectiveHistory: Array[Double],
+    totalIterations: Int) extends Serializable {
+}
+
 
 /**
  * LinearSVCCostFun implements Breeze's DiffFunction[T] for hinge loss function

@@ -44,6 +44,12 @@ object LinearSVCExample {
 
     // Print the coefficients and intercept for linear svc
     println(s"Coefficients: ${lsvcModel.coefficients} Intercept: ${lsvcModel.intercept}")
+    val trainingSummary = lsvcModel.summary
+    println(s"Total Iteration: ${trainingSummary.totalIterations}")
+    // Obtain the objective per iteration.
+    val objectiveHistory = trainingSummary.objectiveHistory
+    println("objectiveHistory:")
+    objectiveHistory.foreach(loss => println(loss))
     // $example off$
 
     spark.stop()

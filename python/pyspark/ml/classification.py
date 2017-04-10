@@ -172,6 +172,47 @@ class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLR
         """
         return self._call_java("intercept")
 
+    @property
+    @since("2.2.0")
+    def summary(self):
+        """
+        Gets summary (e.g. objective history, total iterations) of model
+        trained on the training set.
+        """
+
+        java_blrt_summary = self._call_java("summary")
+        return LinearSVCTrainingSummary(java_blrt_summary)
+
+
+@inherit_doc
+class LinearSVCTrainingSummary(JavaWrapper):
+    """
+    .. note:: Experimental
+
+    Abstraction for LinearSVC Training results.
+    Currently, the training summary ignores the training weights except
+    for the objective trace.
+
+    .. versionadded:: 2.2.0
+    """
+
+    @property
+    @since("2.2.0")
+    def objectiveHistory(self):
+        """
+        Objective function (scaled loss + regularization) at each
+        iteration.
+        """
+        return self._call_java("objectiveHistory")
+
+    @property
+    @since("2.2.0")
+    def totalIterations(self):
+        """
+        Number of training iterations until termination.
+        """
+        return self._call_java("totalIterations")
+
 
 @inherit_doc
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
