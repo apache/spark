@@ -20,6 +20,7 @@ package org.apache.spark
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable
 import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
@@ -386,6 +387,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       .map { case (k, v) => (k.substring(prefix.length), v) }
   }
 
+  /** Get all parameters as a Map */
+  def getAllAsMap: immutable.Map[String, String] = {
+    settings.asScala.toMap
+  }
 
   /** Get a parameter as an integer, falling back to a default if not set */
   def getInt(key: String, defaultValue: Int): Int = {

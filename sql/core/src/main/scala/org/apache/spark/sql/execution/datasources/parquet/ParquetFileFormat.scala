@@ -238,7 +238,7 @@ class ParquetFileFormat
             .orElse(filesByType.data.headOption)
             .toSeq
       }
-    ParquetFileFormat.mergeSchemasInParallel(filesToTouch, sparkSession)
+    ParquetFileFormat.mergeSchemasInParallel(filesToTouch, sparkSession, parameters)
   }
 
   case class FileTypes(
@@ -513,9 +513,10 @@ object ParquetFileFormat extends Logging {
    *     slow.  And basically locality is not available when using S3 (you can't run computation on
    *     S3 nodes).
    */
-  def mergeSchemasInParallel(
+  private def mergeSchemasInParallel(
       filesToTouch: Seq[FileStatus],
-      sparkSession: SparkSession): Option[StructType] = {
+      sparkSession: SparkSession,
+      parameters: Map[String, String]): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
     val writeTimestampInMillis = sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis
@@ -537,8 +538,9 @@ object ParquetFileFormat extends Logging {
 
     // Set the number of partitions to prevent following schema reads from generating many tasks
     // in case of a small number of parquet files.
-    val numParallelism = Math.min(Math.max(partialFileStatusInfo.size, 1),
-      sparkSession.sparkContext.defaultParallelism)
+    val defaultParallelism = parameters.get("spark.default.parallelism").map(_.toInt)
+      .getOrElse(sparkSession.sparkContext.defaultParallelism)
+    val numParallelism = Math.min(Math.max(partialFileStatusInfo.size, 1), defaultParallelism)
 
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
 

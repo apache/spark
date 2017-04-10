@@ -274,6 +274,29 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  test("datasource-specific minPartitions") {
+    val table =
+      createTable(
+        files = Seq(
+          "file1" -> 1,
+          "file2" -> 1,
+          "file3" -> 1,
+          "file4" -> 1,
+          "file5" -> 1,
+          "file6" -> 1,
+          "file7" -> 1,
+          "file8" -> 1,
+          "file9" -> 1),
+        options = Map("spark.default.parallelism" -> "3"))
+
+    checkScan(table.select('c1)) { partitions =>
+      assert(partitions.size == 3)
+      assert(partitions(0).files.size == 3)
+      assert(partitions(1).files.size == 3)
+      assert(partitions(2).files.size == 3)
+    }
+  }
+
   test("Locality support for FileScanRDD") {
     val partition = FilePartition(0, Seq(
       PartitionedFile(InternalRow.empty, "fakePath0", 0, 10, Array("host0", "host1")),
@@ -537,7 +560,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
    */
   def createTable(
       files: Seq[(String, Int)],
-      buckets: Int = 0): DataFrame = {
+      buckets: Int = 0,
+      options: Map[String, String] = Map.empty): DataFrame = {
     val tempDir = Utils.createTempDir()
     files.foreach {
       case (name, size) =>
@@ -548,6 +572,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
     val df = spark.read
       .format(classOf[TestFileFormat].getName)
+      .options(options)
       .load(tempDir.getCanonicalPath)
 
     if (buckets > 0) {

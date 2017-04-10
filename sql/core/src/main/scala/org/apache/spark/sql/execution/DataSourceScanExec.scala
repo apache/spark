@@ -415,7 +415,8 @@ case class FileSourceScanExec(
     val defaultMaxSplitBytes =
       fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
-    val defaultParallelism = fsRelation.sparkSession.sparkContext.defaultParallelism
+    val defaultParallelism = fsRelation.options.get("spark.default.parallelism").map(_.toInt)
+      .getOrElse(fsRelation.sparkSession.sparkContext.defaultParallelism)
     val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     val bytesPerCore = totalBytes / defaultParallelism
 
