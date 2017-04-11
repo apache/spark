@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.Searching._
-
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.hadoop.fs.Path
@@ -518,7 +516,7 @@ final class Word2Vec @Since("1.4.0") (
     arr.update(0, word)
     var i = 1
     while (i <= numSamples) {
-      val negSample = unigramTable(random.nextFloat())
+      val negSample = unigramTable(random.nextInt(unigramTable.length))
       if(negSample != word) {
         arr.update(i, negSample)
         i += 1
