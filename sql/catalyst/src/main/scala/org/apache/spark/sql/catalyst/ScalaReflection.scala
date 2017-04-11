@@ -275,6 +275,7 @@ object ScalaReflection extends ScalaReflection {
         val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
 
         val mapFunction: Expression => Expression = element => {
+          // upcast the array element to the data type the encoder expected.
           val casted = upCastToExpectedType(element, dataType, newTypePath)
           val converter = deserializerFor(elementType, Some(casted), newTypePath)
           if (elementNullable) {
@@ -311,6 +312,7 @@ object ScalaReflection extends ScalaReflection {
         val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
 
         val mapFunction: Expression => Expression = element => {
+          // upcast the array element to the data type the encoder expected.
           val casted = upCastToExpectedType(element, dataType, newTypePath)
           val converter = deserializerFor(elementType, Some(casted), newTypePath)
           if (elementNullable) {

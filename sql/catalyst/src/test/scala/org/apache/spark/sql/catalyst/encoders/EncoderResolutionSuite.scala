@@ -79,15 +79,14 @@ class EncoderResolutionSuite extends PlanTest {
     val encoder = ExpressionEncoder[PrimitiveArrayClass]
     val attrs = Seq('arr.array(StringType))
     assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
-      "Cannot up cast lambdavariable(MapObjects_loopValue1, MapObjects_loopIsNull1, " +
-        "StringType, true) from string to bigint as it may truncate\n" +
-        s"""
-           |The type path of the target object is:
-           |- array element class: "scala.Long"
-           |- field (class: "scala.Array", name: "arr")
-           |- root class: "org.apache.spark.sql.catalyst.encoders.PrimitiveArrayClass"
-           |You can either add an explicit cast to the input data or choose a higher precision type
-         """.stripMargin.trim + " of the field in the target object")
+      s"""
+         |Cannot up cast array element from string to bigint as it may truncate
+         |The type path of the target object is:
+         |- array element class: "scala.Long"
+         |- field (class: "scala.Array", name: "arr")
+         |- root class: "org.apache.spark.sql.catalyst.encoders.PrimitiveArrayClass"
+         |You can either add an explicit cast to the input data or choose a higher precision type
+       """.stripMargin.trim + " of the field in the target object")
   }
 
   test("real type doesn't match encoder schema but they are compatible: array") {
