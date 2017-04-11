@@ -21,6 +21,7 @@ import gc
 from tempfile import NamedTemporaryFile
 
 from pyspark.cloudpickle import print_exec
+from pyspark.util import _exception_message
 
 if sys.version < '3':
     import cPickle as pickle
@@ -82,7 +83,8 @@ class Broadcast(object):
         except pickle.PickleError:
             raise
         except Exception as e:
-            msg = "Could not serialize broadcast: " + e.__class__.__name__ + ": " + e.message
+            msg = "Could not serialize broadcast: %s: %s" \
+                  % (e.__class__.__name__, _exception_message(e))
             print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
         f.close()
