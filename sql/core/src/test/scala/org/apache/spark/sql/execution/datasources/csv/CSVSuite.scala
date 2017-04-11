@@ -622,6 +622,31 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("save tsv with tsv suffix") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      val cars = spark.read
+        .format("csv")
+        .option("header", "true")
+        .load(testFile(carsFile))
+
+      cars.coalesce(1).write
+        .option("header", "true")
+        .option("fileExtension", ".tsv")
+        .option("delimiter", "\t")
+        .csv(csvDir)
+
+      val tsvFiles = new File(csvDir).listFiles()
+      assert(tsvFiles.exists(_.getName.endsWith(".tsv")))
+
+      val carsCopy = spark.read
+        .option("header", "true")
+        .option("delimiter", "\t")
+        .csv(csvDir)
+
+      verifyCars(carsCopy, withHeader = true)
+    }
+  }
   test("SPARK-13543 Write the output as uncompressed via option()") {
     val extraOptions = Map(
       "mapreduce.output.fileoutputformat.compress" -> "true",

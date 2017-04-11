@@ -140,6 +140,8 @@ class CSVOptions(
 
   val inputBufferSize = 128
 
+  val fileExtension = parameters.getOrElse("fileExtension", ".csv")
+
   val isCommentSet = this.comment != '\u0000'
 
   def asWriterSettings: CsvWriterSettings = {
