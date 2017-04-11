@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -266,17 +267,17 @@ private[parquet] class ParquetRowConverter(
       case TimestampType =>
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
         // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
-        val tzString = hadoopConf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
-        val localTz = TimeZone.getDefault()
-        val storageTz = if (tzString == null) {
-          localTz
+        val sessionTz = TimeZone.getTimeZone(hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key))
+        val storageTzString = hadoopConf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
+        val storageTz = if (storageTzString == null) {
+          sessionTz
         } else {
-          TimeZone.getTimeZone(tzString)
+          TimeZone.getTimeZone(storageTzString)
         }
         new ParquetPrimitiveConverter(updater) {
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
-            val timestamp = ParquetRowConverter.binaryToSQLTimestamp(value, fromTz = localTz,
+            val timestamp = ParquetRowConverter.binaryToSQLTimestamp(value, fromTz = sessionTz,
               toTz = storageTz)
             updater.setLong(timestamp)
           }

@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode._
 import org.apache.spark.sql.types._
 
@@ -195,8 +196,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val logicalRelation = cached.getOrElse {
           // We add the timezone to the relation options, which automatically gets injected into
           // the hadoopConf for the Parquet Converters
-          val tzKey = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
-          val tz = relation.tableMeta.properties.getOrElse(tzKey, "")
+          val storageTzKey = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
+          val storageTz = relation.tableMeta.properties.getOrElse(storageTzKey, "")
+          val sessionTz = sparkSession.sessionState.conf.sessionLocalTimeZone
+          val extraTzOptions = Map(
+            storageTzKey -> storageTz,
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTz
+          )
           val (dataSchema, updatedTable) = inferIfNeeded(relation, options, fileFormat)
           val created =
             LogicalRelation(
@@ -206,7 +212,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 userSpecifiedSchema = Option(dataSchema),
                 // We don't support hive bucketed tables, only ones we write out.
                 bucketSpec = None,
-                options = options ++ Map(tzKey -> tz),
+                options = options ++ extraTzOptions,
                 className = fileType).resolveRelation(),
               table = updatedTable)
 
