@@ -76,10 +76,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sum
   }
 
-  private def getNumInMemoryTableScanExecs(plan: SparkPlan): Int = {
+  private def getNumInMemoryTablesRecursively(plan: SparkPlan): Int = {
     plan.collect {
       case InMemoryTableScanExec(_, _, relation) =>
-        getNumInMemoryTableScanExecs(relation.child) + 1
+        getNumInMemoryTablesRecursively(relation.child) + 1
     }.sum
   }
 
@@ -681,13 +681,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   test("SPARK-19993 simple subquery caching") {
     withTempView("t1", "t2") {
       Seq(1).toDF("c1").createOrReplaceTempView("t1")
-      Seq(1).toDF("c1").createOrReplaceTempView("t2")
+      Seq(2).toDF("c1").createOrReplaceTempView("t2")
 
       sql(
         """
           |SELECT * FROM t1
           |WHERE
-          |NOT EXISTS (SELECT * FROM t1)
+          |NOT EXISTS (SELECT * FROM t2)
         """.stripMargin).cache()
 
       val cachedDs =
@@ -695,7 +695,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
           """
             |SELECT * FROM t1
             |WHERE
-            |NOT EXISTS (SELECT * FROM t1)
+            |NOT EXISTS (SELECT * FROM t2)
           """.stripMargin)
       assert(getNumInMemoryRelations(cachedDs) == 1)
 
@@ -705,7 +705,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         """
           |SELECT * FROM t1
           |WHERE
-          |NOT EXISTS (SELECT * FROM t1 where c1 = 0)
+          |NOT EXISTS (SELECT * FROM t2 where c1 = 0)
         """.stripMargin)
       assert(getNumInMemoryRelations(cachedMissDs) == 0)
     }
@@ -736,9 +736,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("SPARK-19993 subquery with cached underlying relation") {
-    withTempView("t1", "t2") {
+    withTempView("t1") {
       Seq(1).toDF("c1").createOrReplaceTempView("t1")
-      Seq(1).toDF("c1").createOrReplaceTempView("t2")
       spark.catalog.cacheTable("t1")
 
       // underlying table t1 is cached as well as the query that refers to it.
@@ -758,7 +757,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
             |WHERE
             |NOT EXISTS (SELECT * FROM t1)
           """.stripMargin).cache()
-      assert(getNumInMemoryTableScanExecs(cachedDs.queryExecution.sparkPlan) == 3)
+      assert(getNumInMemoryTablesRecursively(cachedDs.queryExecution.sparkPlan) == 3)
     }
   }
 
