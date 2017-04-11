@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfterAll
 
@@ -105,7 +105,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
       testStream(aggregated, Append)()
     }
     Seq("append", "not supported").foreach { m =>
-      assert(e.getMessage.toLowerCase.contains(m.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
     }
   }
 

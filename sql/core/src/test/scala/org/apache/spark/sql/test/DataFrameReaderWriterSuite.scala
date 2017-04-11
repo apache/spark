@@ -18,6 +18,7 @@
 package org.apache.spark.sql.test
 
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import org.scalatest.BeforeAndAfter
@@ -144,7 +145,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         .start()
     }
     Seq("'writeStream'", "only", "streaming Dataset/DataFrame").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -276,13 +277,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     var w = df.write.partitionBy("value")
     var e = intercept[AnalysisException](w.jdbc(null, null, null))
     Seq("jdbc", "partitioning").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
 
     w = df.write.bucketBy(2, "value")
     e = intercept[AnalysisException](w.jdbc(null, null, null))
     Seq("jdbc", "bucketing").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -385,7 +386,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
     // Reader, with user specified schema, should just apply user schema on the file data
     val e = intercept[AnalysisException] { spark.read.schema(userSchema).textFile() }
-    assert(e.getMessage.toLowerCase.contains("user specified schema not supported"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains(
+      "user specified schema not supported"))
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir) }
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir, dir) }
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(Seq(dir, dir): _*) }
