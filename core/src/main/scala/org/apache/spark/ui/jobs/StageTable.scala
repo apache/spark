@@ -43,7 +43,7 @@ private[ui] class StageTableBase(
     killEnabled: Boolean,
     isFailedStage: Boolean) {
   //stripXSS is called to remove suspicious characters used in XSS attacks
-  val allParameters = request.getParameterMap.asScala.toMap.mapValues(UIUtils.stripXSS(_))
+  val allParameters = request.getParameterMap.asScala.toMap.mapValues(UIUtils.stripXSSMap(_))
   val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
     .map(para => para._1 + "=" + para._2(0))
 

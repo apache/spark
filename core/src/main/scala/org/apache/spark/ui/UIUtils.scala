@@ -545,4 +545,10 @@ private[spark] object UIUtils extends Logging {
     }
     strippedXSSUrl
   }
+
+  def stripXSSMap(url: Array[String]): Array[String] = {
+    var strippedXSSUrl = url
+    strippedXSSUrl.foreach(stripXSS(_))
+    strippedXSSUrl
+  }
 }
