@@ -1133,7 +1133,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
   private[regression] lazy val link: Link = familyLink.link
 
   /** Number of instances in DataFrame predictions. */
-  private[regression] lazy val numInstances: Long = predictions.count()
+  @Since("2.2.0")
+  lazy val numInstances: Long = predictions.count()
 
   /** The numeric rank of the fitted linear model. */
   @Since("2.0.0")
