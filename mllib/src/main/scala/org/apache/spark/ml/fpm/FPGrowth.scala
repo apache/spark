@@ -26,7 +26,7 @@ import org.json4s.JsonDSL._
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
+import org.apache.spark.ml.param.shared.HasPredictionCol
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules,
   FPGrowth => MLlibFPGrowth}
@@ -38,7 +38,20 @@ import org.apache.spark.sql.types._
 /**
  * Common params for FPGrowth and FPGrowthModel
  */
-private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPredictionCol {
+private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
+
+  /**
+   * Items column name.
+   * Default: "items"
+   * @group param
+   */
+  @Since("2.2.0")
+  val itemsCol: Param[String] = new Param[String](this, "itemsCol", "items column name")
+  setDefault(itemsCol -> "items")
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getItemsCol: String = $(itemsCol)
 
   /**
    * Minimal support level of the frequent pattern. [0.0, 1.0]. Any pattern that appears
@@ -57,8 +70,8 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
   def getMinSupport: Double = $(minSupport)
 
   /**
-   * Number of partitions (>=1) used by parallel FP-growth. By default the param is not set, and
-   * partition number of the input dataset is used.
+   * Number of partitions (at least 1) used by parallel FP-growth. By default the param is not
+   * set, and partition number of the input dataset is used.
    * @group expertParam
    */
   @Since("2.2.0")
@@ -92,10 +105,10 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
    */
   @Since("2.2.0")
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    val inputType = schema($(featuresCol)).dataType
+    val inputType = schema($(itemsCol)).dataType
     require(inputType.isInstanceOf[ArrayType],
       s"The input column must be ArrayType, but got $inputType.")
-    SchemaUtils.appendColumn(schema, $(predictionCol), schema($(featuresCol)).dataType)
+    SchemaUtils.appendColumn(schema, $(predictionCol), schema($(itemsCol)).dataType)
   }
 }
 
@@ -134,7 +147,7 @@ class FPGrowth @Since("2.2.0") (
 
   /** @group setParam */
   @Since("2.2.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+  def setItemsCol(value: String): this.type = set(itemsCol, value)
 
   /** @group setParam */
   @Since("2.2.0")
@@ -147,8 +160,8 @@ class FPGrowth @Since("2.2.0") (
   }
 
   private def genericFit[T: ClassTag](dataset: Dataset[_]): FPGrowthModel = {
-    val data = dataset.select($(featuresCol))
-    val items = data.where(col($(featuresCol)).isNotNull).rdd.map(r => r.getSeq[T](0).toArray)
+    val data = dataset.select($(itemsCol))
+    val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[T](0).toArray)
     val mllibFP = new MLlibFPGrowth().setMinSupport($(minSupport))
     if (isSet(numPartitions)) {
       mllibFP.setNumPartitions($(numPartitions))
@@ -157,7 +170,7 @@ class FPGrowth @Since("2.2.0") (
     val rows = parentModel.freqItemsets.map(f => Row(f.items, f.freq))
 
     val schema = StructType(Seq(
-      StructField("items", dataset.schema($(featuresCol)).dataType, nullable = false),
+      StructField("items", dataset.schema($(itemsCol)).dataType, nullable = false),
       StructField("freq", LongType, nullable = false)))
     val frequentItems = dataset.sparkSession.createDataFrame(rows, schema)
     copyValues(new FPGrowthModel(uid, frequentItems, data.count())).setParent(this)
@@ -200,11 +213,19 @@ class FPGrowthModel private[ml] (
 
   /** @group setParam */
   @Since("2.2.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+  def setItemsCol(value: String): this.type = set(itemsCol, value)
 
   /** @group setParam */
   @Since("2.2.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /**
+   * Cache minConfidence and associationRules to avoid redundant computation for association rules
+   * during transform. The associationRules will only be re-computed when minConfidence changed.
+   */
+  @transient private var _cachedMinConf: Double = Double.NaN
+
+  @transient private var _cachedRules: DataFrame = _
 
   /**
    * Get association rules fitted by AssociationRules using the minConfidence. Returns a dataframe
@@ -212,9 +233,15 @@ class FPGrowthModel private[ml] (
    * and "consequent" are Array[T], "confidence" and "support" are Double.
    */
   @Since("2.2.0")
-  @transient lazy val associationRules: DataFrame = {
-    AssociationRules.getAssociationRulesFromFP(
-      freqItemsets, "items", "freq", numTrainingRecords, $(minConfidence))
+  @transient def associationRules: DataFrame = {
+    if ($(minConfidence) == _cachedMinConf) {
+      _cachedRules
+    } else {
+      _cachedRules = AssociationRules.getAssociationRulesFromFP(
+        freqItemsets, "items", "freq", numTrainingRecords, $(minConfidence))
+      _cachedMinConf = $(minConfidence)
+      _cachedRules
+    }
   }
 
   /**
@@ -238,7 +265,7 @@ class FPGrowthModel private[ml] (
       .collect().asInstanceOf[Array[(Seq[Any], Seq[Any])]]
     val brRules = dataset.sparkSession.sparkContext.broadcast(rules)
 
-    val dt = dataset.schema($(featuresCol)).dataType
+    val dt = dataset.schema($(itemsCol)).dataType
     // For each rule, examine the input items and summarize the consequents
     val predictUDF = udf((items: Seq[_]) => {
       if (items != null) {
@@ -252,7 +279,7 @@ class FPGrowthModel private[ml] (
       } else {
         Seq.empty
       }}, dt)
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    dataset.withColumn($(predictionCol), predictUDF(col($(itemsCol))))
   }
 
   @Since("2.2.0")

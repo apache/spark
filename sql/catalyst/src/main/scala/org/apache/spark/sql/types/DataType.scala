@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Locale
+
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -49,7 +51,9 @@ abstract class DataType extends AbstractDataType {
 
   /** Name of the type used in JSON serialization. */
   def typeName: String = {
-    this.getClass.getSimpleName.stripSuffix("$").stripSuffix("Type").stripSuffix("UDT").toLowerCase
+    this.getClass.getSimpleName
+      .stripSuffix("$").stripSuffix("Type").stripSuffix("UDT")
+      .toLowerCase(Locale.ROOT)
   }
 
   private[sql] def jsonValue: JValue = typeName
@@ -69,7 +73,7 @@ abstract class DataType extends AbstractDataType {
   /** Readable string representation for the type with truncation */
   private[sql] def simpleString(maxNumberFields: Int): String = simpleString
 
-  def sql: String = simpleString.toUpperCase
+  def sql: String = simpleString.toUpperCase(Locale.ROOT)
 
   /**
    * Check if `this` and `other` are the same data type when ignoring nullability
@@ -115,7 +119,10 @@ object DataType {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
-      case other => nonDecimalNameToType(other)
+      case other => nonDecimalNameToType.getOrElse(
+        other,
+        throw new IllegalArgumentException(
+          s"Failed to convert the JSON string '$name' to a data type."))
     }
   }
 
@@ -164,6 +171,10 @@ object DataType {
     ("sqlType", v: JValue),
     ("type", JString("udt"))) =>
         new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
+
+    case other =>
+      throw new IllegalArgumentException(
+        s"Failed to convert the JSON string '${compact(render(other))}' to a data type.")
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -179,6 +190,9 @@ object DataType {
     ("nullable", JBool(nullable)),
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType), nullable)
+    case other =>
+      throw new IllegalArgumentException(
+        s"Failed to convert the JSON string '${compact(render(other))}' to a field.")
   }
 
   protected[types] def buildFormattedString(

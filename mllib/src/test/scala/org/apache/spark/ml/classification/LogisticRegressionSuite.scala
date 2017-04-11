@@ -26,7 +26,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, SparseMatrix, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, SparseMatrix, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -142,8 +142,7 @@ class LogisticRegressionSuite
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(lr, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
@@ -713,8 +712,6 @@ class LogisticRegressionSuite
 
     assert(model2.intercept ~== interceptR relTol 1E-2)
     assert(model2.coefficients ~== coefficientsR absTol 1E-3)
-    // TODO: move this to a standalone test of compression after SPARK-17471
-    assert(model2.coefficients.isInstanceOf[SparseVector])
   }
 
   test("binary logistic regression without intercept with L1 regularization") {
@@ -1876,7 +1873,7 @@ class LogisticRegressionSuite
       MLTestingUtils.testArbitrarilyScaledWeights[LogisticRegressionModel, LogisticRegression](
         dataset.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LogisticRegressionModel, LogisticRegression](
-        dataset.as[LabeledPoint], estimator, numClasses, modelEquals)
+        dataset.as[LabeledPoint], estimator, numClasses, modelEquals, outlierRatio = 3)
       MLTestingUtils.testOversamplingVsWeighting[LogisticRegressionModel, LogisticRegression](
         dataset.as[LabeledPoint], estimator, modelEquals, seed)
     }
@@ -2031,27 +2028,59 @@ class LogisticRegressionSuite
     // TODO: check num iters is zero when it become available in the model
   }
 
-  test("compressed storage") {
+  test("compressed storage for constant label") {
+    /*
+      When the label is constant and fit intercept is true, all the coefficients will be
+      zeros, and so the model coefficients should be stored as sparse data structures, except
+      when the matrix dimensions are very small.
+     */
     val moreClassesThanFeatures = Seq(
-      LabeledPoint(4.0, Vectors.dense(0.0, 0.0, 0.0)),
-      LabeledPoint(4.0, Vectors.dense(1.0, 1.0, 1.0)),
-      LabeledPoint(4.0, Vectors.dense(2.0, 2.0, 2.0))).toDF()
-    val mlr = new LogisticRegression().setFamily("multinomial")
+      LabeledPoint(4.0, Vectors.dense(Array.fill(5)(0.0))),
+      LabeledPoint(4.0, Vectors.dense(Array.fill(5)(1.0))),
+      LabeledPoint(4.0, Vectors.dense(Array.fill(5)(2.0)))).toDF()
+    val mlr = new LogisticRegression().setFamily("multinomial").setFitIntercept(true)
     val model = mlr.fit(moreClassesThanFeatures)
     assert(model.coefficientMatrix.isInstanceOf[SparseMatrix])
-    assert(model.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 4)
+    assert(model.coefficientMatrix.isColMajor)
+
+    // in this case, it should be stored as row major
     val moreFeaturesThanClasses = Seq(
-      LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0)),
-      LabeledPoint(1.0, Vectors.dense(1.0, 1.0, 1.0)),
-      LabeledPoint(1.0, Vectors.dense(2.0, 2.0, 2.0))).toDF()
+      LabeledPoint(1.0, Vectors.dense(Array.fill(5)(0.0))),
+      LabeledPoint(1.0, Vectors.dense(Array.fill(5)(1.0))),
+      LabeledPoint(1.0, Vectors.dense(Array.fill(5)(2.0)))).toDF()
     val model2 = mlr.fit(moreFeaturesThanClasses)
     assert(model2.coefficientMatrix.isInstanceOf[SparseMatrix])
-    assert(model2.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 3)
+    assert(model2.coefficientMatrix.isRowMajor)
 
-    val blr = new LogisticRegression().setFamily("binomial")
+    val blr = new LogisticRegression().setFamily("binomial").setFitIntercept(true)
     val blrModel = blr.fit(moreFeaturesThanClasses)
     assert(blrModel.coefficientMatrix.isInstanceOf[SparseMatrix])
     assert(blrModel.coefficientMatrix.asInstanceOf[SparseMatrix].colPtrs.length === 2)
+  }
+
+  test("compressed coefficients") {
+
+    val trainer1 = new LogisticRegression()
+      .setRegParam(0.1)
+      .setElasticNetParam(1.0)
+
+    // compressed row major is optimal
+    val model1 = trainer1.fit(multinomialDataset.limit(100))
+    assert(model1.coefficientMatrix.isInstanceOf[SparseMatrix])
+    assert(model1.coefficientMatrix.isRowMajor)
+
+    // compressed column major is optimal since there are more classes than features
+    val labelMeta = NominalAttribute.defaultAttr.withName("label").withNumValues(6).toMetadata()
+    val model2 = trainer1.fit(multinomialDataset
+      .withColumn("label", col("label").as("label", labelMeta)).limit(100))
+    assert(model2.coefficientMatrix.isInstanceOf[SparseMatrix])
+    assert(model2.coefficientMatrix.isColMajor)
+
+    // coefficients are dense without L1 regularization
+    val trainer2 = new LogisticRegression()
+      .setElasticNetParam(0.0)
+    val model3 = trainer2.fit(multinomialDataset.limit(100))
+    assert(model3.coefficientMatrix.isInstanceOf[DenseMatrix])
   }
 
   test("numClasses specified in metadata/inferred") {

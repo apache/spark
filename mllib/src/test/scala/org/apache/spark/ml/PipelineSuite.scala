@@ -79,7 +79,7 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setStages(Array(estimator0, transformer1, estimator2, transformer3))
     val pipelineModel = pipeline.fit(dataset0)
 
-    MLTestingUtils.checkCopy(pipelineModel)
+    MLTestingUtils.checkCopyAndUids(pipeline, pipelineModel)
 
     assert(pipelineModel.stages.length === 4)
     assert(pipelineModel.stages(0).eq(model0))

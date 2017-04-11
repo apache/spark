@@ -17,10 +17,8 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable.HashMap
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.ByteUnit
@@ -98,6 +96,21 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(bytes) === 1L)
   }
 
+  test("conf entry: regex") {
+    val conf = new SparkConf()
+    val rConf = ConfigBuilder(testKey("regex")).regexConf.createWithDefault(".*".r)
+
+    conf.set(rConf, "[0-9a-f]{8}".r)
+    assert(conf.get(rConf).toString === "[0-9a-f]{8}")
+
+    conf.set(rConf.key, "[0-9a-f]{4}")
+    assert(conf.get(rConf).toString === "[0-9a-f]{4}")
+
+    conf.set(rConf.key, "[.")
+    val e = intercept[IllegalArgumentException](conf.get(rConf))
+    assert(e.getMessage.contains("regex should be a regex, but was"))
+  }
+
   test("conf entry: string seq") {
     val conf = new SparkConf()
     val seq = ConfigBuilder(testKey("seq")).stringConf.toSequence.createWithDefault(Seq())
@@ -120,7 +133,7 @@ class ConfigEntrySuite extends SparkFunSuite {
     val conf = new SparkConf()
     val transformationConf = ConfigBuilder(testKey("transformation"))
       .stringConf
-      .transform(_.toLowerCase())
+      .transform(_.toLowerCase(Locale.ROOT))
       .createWithDefault("FOO")
 
     assert(conf.get(transformationConf) === "foo")
@@ -240,4 +253,12 @@ class ConfigEntrySuite extends SparkFunSuite {
     testEntryRef(nullConf, ref(nullConf))
   }
 
+  test("conf entry : default function") {
+    var data = 0
+    val conf = new SparkConf()
+    val iConf = ConfigBuilder(testKey("intval")).intConf.createWithDefaultFunction(() => data)
+    assert(conf.get(iConf) === 0)
+    data = 2
+    assert(conf.get(iConf) === 2)
+  }
 }

@@ -50,6 +50,15 @@ trait StateStore {
   /** Get the current value of a key. */
   def get(key: UnsafeRow): Option[UnsafeRow]
 
+  /**
+   * Return an iterator of key-value pairs that satisfy a certain condition.
+   * Note that the iterator must be fail-safe towards modification to the store, that is,
+   * it must be based on the snapshot of store the time of this call, and any change made to the
+   * store while iterating through iterator should not cause the iterator to fail or have
+   * any affect on the values in the iterator.
+   */
+  def filter(condition: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)]
+
   /** Put a new value for a key. */
   def put(key: UnsafeRow, value: UnsafeRow): Unit
 
