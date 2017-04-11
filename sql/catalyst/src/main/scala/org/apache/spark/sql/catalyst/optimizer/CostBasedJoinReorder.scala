@@ -149,7 +149,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
     }.toMap)
 
     // Build filters from the join graph to be used by the search algorithm.
-    val filters = JoinReorderDPFilters(conf).buildJoinGraphInfo(items, conditions, itemIndex)
+    val filters = JoinReorderDPFilters.buildJoinGraphInfo(conf, items, conditions, itemIndex)
 
     // Build plans for next levels until the last level has only one plan. This plan contains
     // all items that can be joined, so there's no need to continue.
@@ -249,7 +249,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
       return None
     }
 
-    if (conf.joinReorderDPStarFilter && filters.isDefined) {
+    if (filters.isDefined) {
       // Apply star-join filter, which ensures that tables in a star schema relationship
       // are planned together. The star-filter will eliminate joins among star and non-star
       // tables until the star joins are built. The following combinations are allowed:
@@ -257,7 +257,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
       // 2. star-join is a subset of (oneJoinPlan U otherJoinPlan)
       // 3. (oneJoinPlan U otherJoinPlan) is a subset of non star-join
       val isValidJoinCombination =
-        JoinReorderDPFilters(conf).starJoinFilter(oneJoinPlan.itemIds, otherJoinPlan.itemIds,
+        JoinReorderDPFilters.starJoinFilter(oneJoinPlan.itemIds, otherJoinPlan.itemIds,
           filters.get)
       if (!isValidJoinCombination) return None
     }
@@ -362,7 +362,7 @@ case class Cost(card: BigInt, size: BigInt) {
  *
  * Filters (2) and (3) are not implemented.
  */
-case class JoinReorderDPFilters(conf: SQLConf) extends PredicateHelper {
+object JoinReorderDPFilters extends PredicateHelper {
   /**
    * Builds join graph information to be used by the filtering strategies.
    * Currently, it builds the sets of star/non-star joins.
@@ -370,26 +370,25 @@ case class JoinReorderDPFilters(conf: SQLConf) extends PredicateHelper {
    * can be used to filter Cartesian products.
    */
   def buildJoinGraphInfo(
+      conf: SQLConf,
       items: Seq[LogicalPlan],
       conditions: Set[Expression],
-      planIndex: Seq[(LogicalPlan, Int)]): Option[JoinGraphInfo] = {
+      itemIndex: Seq[(LogicalPlan, Int)]): Option[JoinGraphInfo] = {
 
-    // Compute the tables in a star-schema relationship.
-    val starJoin = StarSchemaDetection(conf).findStarJoins(items, conditions.toSeq)
-    val nonStarJoin = items.filterNot(starJoin.contains(_))
+    if (conf.joinReorderDPStarFilter) {
+      // Compute the tables in a star-schema relationship.
+      val starJoin = StarSchemaDetection(conf).findStarJoins(items, conditions.toSeq)
+      val nonStarJoin = items.filterNot(starJoin.contains(_))
 
-    if (starJoin.nonEmpty && nonStarJoin.nonEmpty) {
-      val (starInt, nonStarInt) = planIndex.collect {
-        case (p, i) if starJoin.contains(p) =>
-          (Some(i), None)
-        case (p, i) if nonStarJoin.contains(p) =>
-          (None, Some(i))
-        case _ =>
-          (None, None)
-      }.unzip
-      Some(JoinGraphInfo(starInt.flatten.toSet, nonStarInt.flatten.toSet))
+      if (starJoin.nonEmpty && nonStarJoin.nonEmpty) {
+        val itemMap = itemIndex.toMap
+        Some(JoinGraphInfo(starJoin.map(itemMap).toSet, nonStarJoin.map(itemMap).toSet))
+      } else {
+        // Nothing interesting to return.
+        None
+      }
     } else {
-      // Nothing interesting to return.
+      // Star schema filter is not enabled.
       None
     }
   }

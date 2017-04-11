@@ -31,10 +31,8 @@ import org.apache.spark.sql.internal.SQLConf._
 class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBase {
 
   override val conf = new SQLConf().copy(
-    CASE_SENSITIVE -> true,
     CBO_ENABLED -> true,
     JOIN_REORDER_ENABLED -> true,
-    STARSCHEMA_DETECTION -> true,
     JOIN_REORDER_DP_STAR_FILTER -> true)
 
   object Optimize extends RuleExecutor[LogicalPlan] {
