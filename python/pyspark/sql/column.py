@@ -256,7 +256,7 @@ class Column(object):
     :param other: an extended regex expression
 
     >>> df.filter(df.name.rlike('ice$')).collect()
-    [Row(name=u'Alice', age=1)]
+    [Row(age=2, name=u'Alice')]
     """
     _like_doc = """
     Return a Boolean :class:`Column` based on a SQL LIKE match.
@@ -266,7 +266,7 @@ class Column(object):
     See :func:`rlike` for a regex version
 
     >>> df.filter(df.name.like('Al%')).collect()
-    [Row(name=u'Alice', age=1)]
+    [Row(age=2, name=u'Alice')]
     """
     _startswith_doc = """
     Return a Boolean :class:`Column` based on a string match.
@@ -274,7 +274,7 @@ class Column(object):
     :param other: string at end of line (do not use a regex `^`)
 
     >>> df.filter(df.name.startswith('Al')).collect()
-    [Row(name=u'Alice', age=1)]
+    [Row(age=2, name=u'Alice')]
     >>> df.filter(df.name.startswith('^Al')).collect()
     []
     """
@@ -284,7 +284,7 @@ class Column(object):
     :param other: string at end of line (do not use a regex `$`)
 
     >>> df.filter(df.name.endswith('ice')).collect()
-    [Row(name=u'Alice', age=1)]
+    [Row(age=2, name=u'Alice')]
     >>> df.filter(df.name.endswith('ice$')).collect()
     []
     """
@@ -346,19 +346,17 @@ class Column(object):
     True if the current expression is null. Often combined with
     :func:`DataFrame.filter` to select rows with null values.
 
-    >>> df2.collect()
-    [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]
+    >>> df2 = sc.parallelize([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]).toDF()
     >>> df2.filter(df2.height.isNull).collect()
-    [Row(name=u'Alice', height=None)]
+    [Row(height=None, name=u'Alice')]
     """
     _isNotNull_doc = """
     True if the current expression is null. Often combined with
     :func:`DataFrame.filter` to select rows with non-null values.
 
-    >>> df2.collect()
-    [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]
+    >>> df2 = sc.parallelize([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]).toDF()
     >>> df2.filter(df2.height.isNotNull).collect()
-    [Row(name=u'Tom', height=80)]
+    [Row(height=80, name=u'Tom')]
     """
 
     isNull = _unary_op("isNull", _isNull_doc)
