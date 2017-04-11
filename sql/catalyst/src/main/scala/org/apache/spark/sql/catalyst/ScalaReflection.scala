@@ -132,7 +132,7 @@ object ScalaReflection extends ScalaReflection {
   def deserializerFor[T : TypeTag]: Expression = {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
-    val walkedTypePath = s"""- root class: "${clsName}"""" :: Nil
+    val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
     deserializerFor(tpe, None, walkedTypePath)
   }
 
@@ -270,12 +270,14 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(_, elementNullable) = schemaFor(elementType)
+        val Schema(dataType, elementNullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
         val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
 
-        val mapFunction: Expression => Expression = p => {
-          val converter = deserializerFor(elementType, Some(p), newTypePath)
+        val mapFunction: Expression => Expression = element => {
+          // upcast the array element to the data type the encoder expected.
+          val casted = upCastToExpectedType(element, dataType, newTypePath)
+          val converter = deserializerFor(elementType, Some(casted), newTypePath)
           if (elementNullable) {
             converter
           } else {
@@ -305,12 +307,14 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(_, elementNullable) = schemaFor(elementType)
+        val Schema(dataType, elementNullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
         val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
 
-        val mapFunction: Expression => Expression = p => {
-          val converter = deserializerFor(elementType, Some(p), newTypePath)
+        val mapFunction: Expression => Expression = element => {
+          // upcast the array element to the data type the encoder expected.
+          val casted = upCastToExpectedType(element, dataType, newTypePath)
+          val converter = deserializerFor(elementType, Some(casted), newTypePath)
           if (elementNullable) {
             converter
           } else {
