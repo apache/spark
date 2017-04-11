@@ -128,7 +128,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in numeric columns with `value`.
    *
-   * @since 2.2.0
+   * @since 2.1.1
    */
   def fill(value: Long): DataFrame = fill(value, df.columns)
 
@@ -149,7 +149,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns.
    * If a specified column is not a numeric column, it is ignored.
    *
-   * @since 2.2.0
+   * @since 2.1.1
    */
   def fill(value: Long, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
@@ -165,7 +165,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
    * numeric columns. If a specified column is not a numeric column, it is ignored.
    *
-   * @since 2.2.0
+   * @since 2.1.1
    */
   def fill(value: Long, cols: Seq[String]): DataFrame = fillValue(value, cols)
 
