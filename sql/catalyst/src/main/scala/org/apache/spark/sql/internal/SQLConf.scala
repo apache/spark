@@ -366,7 +366,8 @@ object SQLConf {
         "without a limit, and when a query with a limit or this is set to 0, " +
         "we don't change user's behavior." )
       .intConf
-      .createWithDefault(200)
+      .checkValue(limit => limit >= 0, "The number of sql results is not less than 0.")
+      .createWithDefault(0)
 
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     buildConf("spark.sql.thriftserver.ui.retainedStatements")
