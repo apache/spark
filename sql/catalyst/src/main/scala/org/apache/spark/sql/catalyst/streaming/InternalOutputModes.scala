@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.streaming
 
+import java.util.Locale
+
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -47,7 +49,7 @@ private[sql] object InternalOutputModes {
 
 
   def apply(outputMode: String): OutputMode = {
-    outputMode.toLowerCase match {
+    outputMode.toLowerCase(Locale.ROOT) match {
       case "append" =>
         OutputMode.Append
       case "complete" =>

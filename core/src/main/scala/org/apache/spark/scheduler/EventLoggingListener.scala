@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -316,7 +317,7 @@ private[spark] object EventLoggingListener extends Logging {
   }
 
   private def sanitize(str: String): String = {
-    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase
+    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
   }
 
   /**

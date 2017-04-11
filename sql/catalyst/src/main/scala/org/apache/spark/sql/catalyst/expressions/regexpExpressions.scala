@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
 import org.apache.commons.lang3.StringEscapeUtils
@@ -27,8 +28,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 
-trait StringRegexExpression extends ImplicitCastInputTypes {
-  self: BinaryExpression =>
+abstract class StringRegexExpression extends BinaryExpression
+  with ImplicitCastInputTypes with NullIntolerant {
 
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean
@@ -60,7 +61,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
     }
   }
 
-  override def sql: String = s"${left.sql} ${prettyName.toUpperCase} ${right.sql}"
+  override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
 
@@ -69,8 +70,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
  */
 @ExpressionDescription(
   usage = "str _FUNC_ pattern - Returns true if `str` matches `pattern`, or false otherwise.")
-case class Like(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression {
+case class Like(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
 
@@ -122,8 +122,7 @@ case class Like(left: Expression, right: Expression)
 
 @ExpressionDescription(
   usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.")
-case class RLike(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression {
+case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)

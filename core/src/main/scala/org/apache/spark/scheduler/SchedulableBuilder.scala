@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{FileInputStream, InputStream}
-import java.util.{NoSuchElementException, Properties}
+import java.util.{Locale, NoSuchElementException, Properties}
 
 import scala.util.control.NonFatal
 import scala.xml.{Node, XML}
@@ -142,7 +142,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       defaultValue: SchedulingMode,
       fileName: String): SchedulingMode = {
 
-    val xmlSchedulingMode = (poolNode \ SCHEDULING_MODE_PROPERTY).text.trim.toUpperCase
+    val xmlSchedulingMode =
+      (poolNode \ SCHEDULING_MODE_PROPERTY).text.trim.toUpperCase(Locale.ROOT)
     val warningMessage = s"Unsupported schedulingMode: $xmlSchedulingMode found in " +
       s"Fair Scheduler configuration file: $fileName, using " +
       s"the default schedulingMode: $defaultValue for pool: $poolName"

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -184,7 +186,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns a user-facing string representation of this expression's name.
    * This should usually match the name of the function in SQL.
    */
-  def prettyName: String = nodeName.toLowerCase
+  def prettyName: String = nodeName.toLowerCase(Locale.ROOT)
 
   protected def flatArguments: Iterator[Any] = productIterator.flatMap {
     case t: Traversable[_] => t
@@ -491,7 +493,7 @@ abstract class BinaryExpression extends Expression {
  * A [[BinaryExpression]] that is an operator, with two properties:
  *
  * 1. The string representation is "x symbol y", rather than "funcName(x, y)".
- * 2. Two inputs are expected to the be same type. If the two inputs have different types,
+ * 2. Two inputs are expected to be of the same type. If the two inputs have different types,
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
 abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {

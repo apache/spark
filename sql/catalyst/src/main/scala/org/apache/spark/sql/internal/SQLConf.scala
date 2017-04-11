@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.{NoSuchElementException, Properties, TimeZone}
+import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -227,6 +227,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
+    .doc("When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
+      "extended type. In this mode, the microsecond portion of the timestamp value will be" +
+      "truncated.")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_CACHE_METADATA = buildConf("spark.sql.parquet.cacheMetadata")
     .doc("Turns on caching of Parquet schema metadata. Can speed up querying of static data.")
     .booleanConf
@@ -236,7 +243,7 @@ object SQLConf {
     .doc("Sets the compression codec use when writing Parquet files. Acceptable values include: " +
       "uncompressed, snappy, gzip, lzo.")
     .stringConf
-    .transform(_.toLowerCase())
+    .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
     .createWithDefault("snappy")
 
@@ -317,7 +324,7 @@ object SQLConf {
       "properties) and NEVER_INFER (fallback to using the case-insensitive metastore schema " +
       "instead of inferring).")
     .stringConf
-    .transform(_.toUpperCase())
+    .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
 
@@ -745,7 +752,7 @@ object SQLConf {
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
       .stringConf
-      .createWithDefault(TimeZone.getDefault().getID())
+      .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.spill.threshold")
@@ -934,6 +941,8 @@ class SQLConf extends Serializable with Logging {
   def isParquetBinaryAsString: Boolean = getConf(PARQUET_BINARY_AS_STRING)
 
   def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
+
+  def isParquetINT64AsTimestampMillis: Boolean = getConf(PARQUET_INT64_AS_TIMESTAMP_MILLIS)
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
@@ -1141,5 +1150,14 @@ class SQLConf extends Serializable with Logging {
       case(k, v) => if (v ne null) result.setConfString(k, v)
     }
     result
+  }
+
+  // For test only
+  def copy(entries: (ConfigEntry[_], Any)*): SQLConf = {
+    val cloned = clone()
+    entries.foreach {
+      case (entry, value) => cloned.setConfString(entry.key, value.toString)
+    }
+    cloned
   }
 }

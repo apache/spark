@@ -83,8 +83,7 @@ class AFTSurvivalRegressionSuite
       .setQuantilesCol("quantiles")
       .fit(datasetUnivariate)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(aftr, model)
 
     model.transform(datasetUnivariate)
       .select("label", "prediction", "quantiles")
