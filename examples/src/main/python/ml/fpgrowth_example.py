@@ -40,9 +40,17 @@ if __name__ == "__main__":
     ], ["id", "items"])
 
     fpGrowth = FPGrowth(itemsCol="items", minSupport=0.5, minConfidence=0.6)
-    fpGrowthModel = fpGrowth.fit(df)
+    model = fpGrowth.fit(df)
 
-    fpGrowthModel.transform(df).show()
+    # Display frequent itemsets.
+    model.freqItemsets.show()
+
+    # Display generated association rules.
+    model.associationRules.show()
+
+    # transform examines the input items against all the association rules and summarize the
+    # consequents as prediction
+    model.transform(df).show()
     # $example off$
 
     spark.stop()
