@@ -185,9 +185,12 @@ class Column(object):
                          "in a string column or 'array_contains' function for an array column.")
 
     # bitwise operators
-    bitwiseOR = _bin_op("bitwiseOR")
-    bitwiseAND = _bin_op("bitwiseAND")
-    bitwiseXOR = _bin_op("bitwiseXOR")
+    bitwiseOR = _bin_op("bitwiseOR",
+                        "Compute bitwise OR of this expression with another expression.")
+    bitwiseAND = _bin_op("bitwiseAND",
+                         "Compute bitwise OR of this expression with another expression.")
+    bitwiseXOR = _bin_op("bitwiseXOR",
+                         "Compute bitwise XOR of this expression with another expression.")
 
     @since(1.3)
     def getItem(self, key):
@@ -250,11 +253,19 @@ class Column(object):
         raise TypeError("Column is not iterable")
 
     # string methods
-    contains = _bin_op("contains")
-    rlike = _bin_op("rlike")
-    like = _bin_op("like")
-    startswith = _bin_op("startsWith")
-    endswith = _bin_op("endsWith")
+    contains = _bin_op("contains",
+                       "A boolean expression that is evaluated to true if"
+                       "this string expression contains the other string expression.")
+    rlike = _bin_op("rlike",
+                    "SQL RLIKE with Java regular expression.")
+    like = _bin_op("like",
+                   "LIKE with SQL simple regular expression.")
+    startswith = _bin_op("startsWith",
+                         "A boolean expression that is evaluated to true if"
+                         "this string expression starts with the other string expression.")
+    endswith = _bin_op("endsWith",
+                       "A boolean expression that is evaluated to true if"
+                       "this string expression starts with the other string expression.")
 
     @ignore_unicode_prefix
     @since(1.3)
