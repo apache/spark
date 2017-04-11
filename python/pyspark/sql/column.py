@@ -170,6 +170,8 @@ class Column(object):
     __le__ = _bin_op("leq")
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
+    eqNullSafe = _bin_op("eqNullSafe",
+                         "Equality test that is safe for null values.")
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
