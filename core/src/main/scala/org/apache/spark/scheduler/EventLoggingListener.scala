@@ -149,18 +149,16 @@ private[spark] class EventLoggingListener(
     }
   }
 
-  // When a stage is submitted and completed, we updated our executor memory metrics for that
-  // stage, and then log the metrics. Anytime we receive more executor metrics, we update our
+  // When a stage is submitted and completed, update the executor memory metrics for that
+  // stage, and then log the metrics. Anytime we receive more executor metrics, update the
   // running set of {{executorIdToLatestMetrics}} and {{executorIdToModifiedMaxMetrics}}.
-  // Since stages submit and complete time might be interleaved, we maintain the latest and
-  // max metrics for each time segment. So, for each stage start and stage complete, we
-  // replace each item in {{executorIdToModifiedMaxMetrics}} with that
-  // in {{executorIdToLatestMetrics}}.
+  // Since stage submit and complete times might be interleaved, maintain the latest and
+  // max metrics for each time segment. For each stage start and stage completion, replace
+  // each item in {{executorIdToModifiedMaxMetrics}} with that in {{executorIdToLatestMetrics}}.
   private def updateAndLogExecutorMemoryMetrics() : Unit = {
     executorIdToModifiedMaxMetrics.foreach { case(_, metrics) => logEvent(metrics) }
-    // Clear the modified metrics map after each log action
     executorIdToModifiedMaxMetrics.clear()
-    executorIdToLatestMetrics.foreach {case(_, metrics) => logEvent(metrics) }
+    executorIdToLatestMetrics.foreach { case(_, metrics) => logEvent(metrics) }
   }
 
   // Events that do not trigger a flush
@@ -292,8 +290,11 @@ private[spark] class EventLoggingListener(
   }
 
   /**
-   * According to the updated event to modify the maintained event's metrics
-   * @param latestEvent  the latest event received that used to update the maintained metric
+   * Process an executor metrics update and update our stored cache of events.
+   * Does this event match the ID of an executor we are already tracking?
+   * If no, start tracking metrics for this executor, starting at this event.
+   * If yes, compare time stamps, and perhaps update using this event.
+   * @param latestEvent the latest event received, used to update our map of stored metrics.
    */
   private def updateModifiedMetrics(latestEvent: SparkListenerExecutorMetricsUpdate): Unit = {
     val executorId = latestEvent.execId
@@ -319,8 +320,6 @@ private[spark] class EventLoggingListener(
         } else {
           toBeModTransMetrics.offHeapSize
         }
-
-        // We should maintain a new instance for each update to avoid side-effect
         val modifiedExecMetrics = ExecutorMetrics(toBeModifiedEvent.executorMetrics.hostname,
           toBeModifiedEvent.executorMetrics.port,
           TransportMetrics(timeStamp, onHeapSize, offHeapSize))

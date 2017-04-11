@@ -20,9 +20,10 @@ package org.apache.spark
 import java.io.File
 import java.net.Socket
 
-import com.google.common.collect.MapMaker
 import scala.collection.mutable
 import scala.util.Properties
+
+import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory

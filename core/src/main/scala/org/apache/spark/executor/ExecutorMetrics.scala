@@ -22,36 +22,27 @@ import org.apache.spark.annotation.DeveloperApi
 /**
  * :: DeveloperApi ::
  * Metrics tracked during the execution of an executor.
- *
- * So, when adding new fields, take into consideration that the whole object can be serialized for
- * shipping off at any time to consumers of the SparkListener interface.
  */
 @DeveloperApi
 class ExecutorMetrics extends Serializable {
 
-  /**
-   * Host's name the executor runs on
-   */
   private var _hostname: String = ""
   def hostname: String = _hostname
   private[spark] def setHostname(value: String) = _hostname = value
 
-  /**
-   * Host's port the executor runs on
-   */
   private var _port: Option[Int] = None
   def port: Option[Int] = _port
   private[spark] def setPort(value: Option[Int]) = _port = value
 
   private[spark] def hostPort: String = {
-    val hp = port match {
+    port match {
       case None => hostname
       case value => hostname + ":" + value.get
     }
-    hp
   }
 
-  private var _transportMetrics: TransportMetrics = new TransportMetrics
+  private var _transportMetrics: TransportMetrics =
+    new TransportMetrics(System.currentTimeMillis(), 0L, 0L)
   def transportMetrics: TransportMetrics = _transportMetrics
   private[spark] def setTransportMetrics(value: TransportMetrics) = {
     _transportMetrics = value
@@ -76,16 +67,8 @@ object ExecutorMetrics extends Serializable {
  * Metrics for network layer
  */
 @DeveloperApi
-class TransportMetrics (
-    val timeStamp: Long = System.currentTimeMillis,
-    val onHeapSize: Long = 0L,
-    val offHeapSize: Long = 0L) extends Serializable
+case class TransportMetrics (
+    val timeStamp: Long,
+    val onHeapSize: Long,
+    val offHeapSize: Long) extends Serializable
 
-object TransportMetrics extends Serializable {
-  def apply(
-      timeStamp: Long,
-      onHeapSize: Long,
-      offHeapSize: Long): TransportMetrics = {
-    new TransportMetrics(timeStamp, onHeapSize, offHeapSize)
-  }
-}

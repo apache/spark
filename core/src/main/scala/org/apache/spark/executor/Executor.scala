@@ -710,11 +710,12 @@ private[spark] class Executor(
       }
     }
 
-    env.blockTransferService.getMemMetrics(this.executorMetrics)
+    env.blockTransferService.updateMemMetrics(this.executorMetrics)
     val executorMetrics = if (isLocal) {
-      // JobProgressListener might hold a reference of it during onExecutorMetricsUpdate()
-      // in future, if then JobProgressListener cannot see the changes of metrics any
-      // more, so make a deep copy of it here for future change.
+      // When running locally, there is a chance that the executorMetrics could change
+      // out from under us. So, copy them here, using serialization and deserialization
+      // to create a new object.
+      // TODO: Find a better way of doing this.
       Utils.deserialize[ExecutorMetrics](Utils.serialize(this.executorMetrics))
     } else {
       this.executorMetrics

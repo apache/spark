@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
+import scala.tools.nsc.interpreter.JList
 
 import io.netty.buffer._
 
@@ -69,14 +70,14 @@ private[spark] class NettyBlockTransferService(
     clock = newClock
   }
 
-  private[spark] override def getMemMetrics(executorMetrics: ExecutorMetrics): Unit = {
+  private[spark] override def updateMemMetrics(executorMetrics: ExecutorMetrics): Unit = {
     val currentTime = clock.getTimeMillis()
     val clientPooledAllocator = clientFactory.getPooledAllocator()
     val serverAllocator = server.getAllocator()
-    val clientOffHeapSize: Long = sumOfMetrics(convToScala(clientPooledAllocator.directArenas()))
-    val clientOnHeapSize: Long = sumOfMetrics(convToScala(clientPooledAllocator.heapArenas()))
-    val serverOffHeapSize: Long = sumOfMetrics(convToScala(serverAllocator.directArenas()))
-    val serverOnHeapSize: Long = sumOfMetrics(convToScala(serverAllocator.heapArenas()))
+    val clientOffHeapSize = sumOfMetrics(clientPooledAllocator.directArenas())
+    val clientOnHeapSize = sumOfMetrics(clientPooledAllocator.heapArenas())
+    val serverOffHeapSize = sumOfMetrics(serverAllocator.directArenas())
+    val serverOnHeapSize = sumOfMetrics(serverAllocator.heapArenas())
     logDebug(s"Current Netty Client offheap size is $clientOffHeapSize, " +
       s"Client heap size is $clientOnHeapSize, Server offheap size is $serverOffHeapSize, " +
       s"server heap size is $serverOnHeapSize, executor id is " +
@@ -85,10 +86,8 @@ private[spark] class NettyBlockTransferService(
       clientOnHeapSize + serverOnHeapSize, clientOffHeapSize + serverOffHeapSize))
   }
 
-  private def convToScala = (x: java.util.List[PoolArenaMetric]) => x.asScala
-
-  private def sumOfMetrics(arenaMetricList: Seq[PoolArenaMetric]): Long = {
-    arenaMetricList.map { Arena =>
+  private def sumOfMetrics(arenaMetricList: JList[PoolArenaMetric]): Long = {
+    arenaMetricList.asScala.map { Arena =>
       Arena.chunkLists().asScala.map { chunk =>
         chunk.iterator().asScala.map(_.chunkSize()).sum
       }.sum
