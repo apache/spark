@@ -50,7 +50,7 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   extended = """
     Examples:
-      > SELECT ngrams(array("abc", "abc", "bcd", "abc", "bcd"), 2, 4);
+        > SELECT ngrams(array("abc", "abc", "bcd", "abc", "bcd"), 2, 4);
        [{["abc","bcd"]:2.0},
        {["abc","abc"]:1.0},
        {["bcd","abc"]:1.0}]
@@ -104,7 +104,7 @@ case class NGrams(
   }
 
   override def createAggregationBuffer(): NGramBuffer = {
-    new NGramBuffer(n, k, accuracy, new HashMap[Vector[UTF8String], Double]())
+    new NGramBuffer(n, k, accuracy)
   }
 
   def updateArray(genericArrayData: GenericArrayData, buffer: NGramBuffer, inputRow: InternalRow) {
@@ -189,8 +189,10 @@ object NGrams {
 
   class NGramBuffer(val n: Int,
                     val k: Int,
-                    val precisionFactor: Int,
-                    val frequencyMap: HashMap[Vector[UTF8String], Double]) {
+                    val precisionFactor: Int) {
+
+    val frequencyMap = new HashMap[Vector[UTF8String], Double]()
+
     def add(ng: Vector[UTF8String]): Unit = {
       frequencyMap.put(ng, frequencyMap.getOrDefault(ng, 0.0D) + 1)
     }
