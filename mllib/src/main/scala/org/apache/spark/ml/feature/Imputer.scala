@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
 private[feature] trait ImputerParams extends Params with HasInputCols {
 
   /**
-   * The imputation strategy.
+   * The imputation strategy. Currently only "mean" and "median" are supported.
    * If "mean", then replace missing values using the mean value of the feature.
    * If "median", then replace missing values using the approximate median value of the feature.
    * Default: mean

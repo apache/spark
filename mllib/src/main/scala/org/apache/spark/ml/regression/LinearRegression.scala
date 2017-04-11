@@ -696,7 +696,8 @@ class LinearRegressionSummary private[regression] (
   lazy val numInstances: Long = predictions.count()
 
   /** Degrees of freedom */
-  private val degreesOfFreedom: Long = if (privateModel.getFitIntercept) {
+  @Since("2.2.0")
+  val degreesOfFreedom: Long = if (privateModel.getFitIntercept) {
     numInstances - privateModel.coefficients.size - 1
   } else {
     numInstances - privateModel.coefficients.size

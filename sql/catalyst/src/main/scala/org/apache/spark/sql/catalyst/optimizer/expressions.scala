@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
 
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -27,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /*
@@ -115,7 +115,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  * 2. Replaces [[In (value, seq[Literal])]] with optimized version
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
-case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
+case class OptimizeIn(conf: SQLConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
       case expr @ In(v, list) if expr.inSetConvertible =>
@@ -346,7 +346,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
  * equivalent [[Literal]] values. This rule is more specific with
  * Null value propagation from bottom to top of the expression tree.
  */
-case class NullPropagation(conf: CatalystConf) extends Rule[LogicalPlan] {
+case class NullPropagation(conf: SQLConf) extends Rule[LogicalPlan] {
   private def isNullLiteral(e: Expression): Boolean = e match {
     case Literal(null, _) => true
     case _ => false
@@ -482,7 +482,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 /**
  * Optimizes expressions by replacing according to CodeGen configuration.
  */
-case class OptimizeCodegen(conf: CatalystConf) extends Rule[LogicalPlan] {
+case class OptimizeCodegen(conf: SQLConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case e: CaseWhen if canCodegen(e) => e.toCodegen()
   }
