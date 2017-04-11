@@ -21,6 +21,9 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.AttributeSet
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
@@ -234,8 +237,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       Seq(StringType, BinaryType, NullType, BooleanType,
         ByteType, ShortType, IntegerType, LongType,
         FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
-        DateType, TimestampType,
-        ArrayType(IntegerType), MapType(StringType, LongType), struct)
+        DateType, TimestampType, ArrayType(IntegerType), struct)
     val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
       StructField(s"col$index", dataType, true)
     }
@@ -244,10 +246,10 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
     // Create an RDD for the schema
     val rdd =
-      sparkContext.parallelize((1 to 10000), 10).map { i =>
+      sparkContext.parallelize(1 to 10000, 10).map { i =>
         Row(
-          s"str${i}: test cache.",
-          s"binary${i}: test cache.".getBytes(StandardCharsets.UTF_8),
+          s"str$i: test cache.",
+          s"binary$i: test cache.".getBytes(StandardCharsets.UTF_8),
           null,
           i % 2 == 0,
           i.toByte,
@@ -255,13 +257,12 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
           i,
           Long.MaxValue - i.toLong,
           (i + 0.25).toFloat,
-          (i + 0.75),
+          i + 0.75,
           BigDecimal(Long.MaxValue.toString + ".12345"),
           new java.math.BigDecimal(s"${i % 9 + 1}" + ".23456"),
           new Date(i),
           new Timestamp(i * 1000000L),
-          (i to i + 10).toSeq,
-          (i to i + 10).map(j => s"map_key_$j" -> (Long.MaxValue - j)).toMap,
+          i to i + 10,
           Row((i - 0.25).toFloat, Seq(true, false, null)))
       }
     spark.createDataFrame(rdd, schema).createOrReplaceTempView("InMemoryCache_different_data_types")
@@ -390,4 +391,27 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("InMemoryTableScanExec should return correct output ordering and partitioning") {
+    val df1 = Seq((0, 0), (1, 1)).toDF
+      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist
+    val df2 = Seq((0, 0), (1, 1)).toDF
+      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist
+
+    // Because two cached dataframes have the same logical plan, this is a self-join actually.
+    // So we force one of in-memory relation to alias its output. Then we can test if original and
+    // aliased in-memory relations have correct ordering and partitioning.
+    val joined = df1.joinWith(df2, df1("_1") === df2("_1"))
+
+    val inMemoryScans = joined.queryExecution.executedPlan.collect {
+      case m: InMemoryTableScanExec => m
+    }
+    inMemoryScans.foreach { inMemoryScan =>
+      val sortedAttrs = AttributeSet(inMemoryScan.outputOrdering.flatMap(_.references))
+      assert(sortedAttrs.subsetOf(inMemoryScan.outputSet))
+
+      val partitionedAttrs =
+        inMemoryScan.outputPartitioning.asInstanceOf[HashPartitioning].references
+      assert(partitionedAttrs.subsetOf(inMemoryScan.outputSet))
+    }
+  }
 }

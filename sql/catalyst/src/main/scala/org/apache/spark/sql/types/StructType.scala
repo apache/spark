@@ -417,6 +417,12 @@ object StructType extends AbstractDataType {
     }
   }
 
+  /**
+   * Creates StructType for a given DDL-formatted string, which is a comma separated list of field
+   * definitions, e.g., a INT, b STRING.
+   */
+  def fromDDL(ddl: String): StructType = CatalystSqlParser.parseTableSchema(ddl)
+
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
   def apply(fields: java.util.List[StructField]): StructType = {

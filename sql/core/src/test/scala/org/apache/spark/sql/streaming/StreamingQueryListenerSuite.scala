@@ -35,6 +35,7 @@ import org.apache.spark.sql.{Encoder, SparkSession}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
+import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.util.JsonProtocol
 
 class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
@@ -57,6 +58,20 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val inputData = new MemoryStream[Int](0, sqlContext)
     val df = inputData.toDS().as[Long].map { 10 / _ }
     val listener = new EventCollector
+
+    case class AssertStreamExecThreadToWaitForClock()
+      extends AssertOnQuery(q => {
+        eventually(Timeout(streamingTimeout)) {
+          if (q.exception.isEmpty) {
+            assert(clock.asInstanceOf[StreamManualClock].isStreamWaitingAt(clock.getTimeMillis))
+          }
+        }
+        if (q.exception.isDefined) {
+          throw q.exception.get
+        }
+        true
+      }, "")
+
     try {
       // No events until started
       spark.streams.addListener(listener)
@@ -81,6 +96,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         // Progress event generated when data processed
         AddData(inputData, 1, 2),
         AdvanceManualClock(100),
+        AssertStreamExecThreadToWaitForClock(),
         CheckAnswer(10, 5),
         AssertOnQuery { query =>
           assert(listener.progressEvents.nonEmpty)
@@ -109,8 +125,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
         // Termination event generated with exception message when stopped with error
         StartStream(ProcessingTime(100), triggerClock = clock),
+        AssertStreamExecThreadToWaitForClock(),
         AddData(inputData, 0),
-        AdvanceManualClock(100),
+        AdvanceManualClock(100), // process bad data
         ExpectFailure[SparkException](),
         AssertOnQuery { query =>
           eventually(Timeout(streamingTimeout)) {

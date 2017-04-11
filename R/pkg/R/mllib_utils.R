@@ -118,6 +118,8 @@ read.ml <- function(path) {
     new("BisectingKMeansModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LinearSVCWrapper")) {
     new("LinearSVCModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.FPGrowthWrapper")) {
+    new("FPGrowthModel", jobj = jobj)
   } else {
     stop("Unsupported model: ", jobj)
   }

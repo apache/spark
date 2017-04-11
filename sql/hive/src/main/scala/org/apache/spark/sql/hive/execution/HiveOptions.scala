@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
@@ -29,7 +31,7 @@ class HiveOptions(@transient private val parameters: CaseInsensitiveMap[String])
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
-  val fileFormat = parameters.get(FILE_FORMAT).map(_.toLowerCase)
+  val fileFormat = parameters.get(FILE_FORMAT).map(_.toLowerCase(Locale.ROOT))
   val inputFormat = parameters.get(INPUT_FORMAT)
   val outputFormat = parameters.get(OUTPUT_FORMAT)
 
@@ -75,7 +77,7 @@ class HiveOptions(@transient private val parameters: CaseInsensitiveMap[String])
   }
 
   def serdeProperties: Map[String, String] = parameters.filterKeys {
-    k => !lowerCasedOptionNames.contains(k.toLowerCase)
+    k => !lowerCasedOptionNames.contains(k.toLowerCase(Locale.ROOT))
   }.map { case (k, v) => delimiterOptions.getOrElse(k, k) -> v }
 }
 
@@ -83,7 +85,7 @@ object HiveOptions {
   private val lowerCasedOptionNames = collection.mutable.Set[String]()
 
   private def newOption(name: String): String = {
-    lowerCasedOptionNames += name.toLowerCase
+    lowerCasedOptionNames += name.toLowerCase(Locale.ROOT)
     name
   }
 
@@ -99,5 +101,5 @@ object HiveOptions {
     // The following typo is inherited from Hive...
     "collectionDelim" -> "colelction.delim",
     "mapkeyDelim" -> "mapkey.delim",
-    "lineDelim" -> "line.delim").map { case (k, v) => k.toLowerCase -> v }
+    "lineDelim" -> "line.delim").map { case (k, v) => k.toLowerCase(Locale.ROOT) -> v }
 }

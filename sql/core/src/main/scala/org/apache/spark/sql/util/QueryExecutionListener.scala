@@ -98,6 +98,16 @@ class ExecutionListenerManager private[sql] () extends Logging {
     listeners.clear()
   }
 
+  /**
+   * Get an identical copy of this listener manager.
+   */
+  @DeveloperApi
+  override def clone(): ExecutionListenerManager = writeLock {
+    val newListenerManager = new ExecutionListenerManager
+    listeners.foreach(newListenerManager.register)
+    newListenerManager
+  }
+
   private[sql] def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
     readLock {
       withErrorHandling { listener =>

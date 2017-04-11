@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
+import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -35,6 +36,8 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{StructField, StructType}
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
@@ -48,13 +51,13 @@ object SessionCatalog {
  * This class must be thread-safe.
  */
 class SessionCatalog(
-    externalCatalog: ExternalCatalog,
+    val externalCatalog: ExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
-    functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
-    conf: CatalystConf,
+    conf: SQLConf,
     hadoopConf: Configuration,
-    parser: ParserInterface) extends Logging {
+    parser: ParserInterface,
+    functionResourceLoader: FunctionResourceLoader) extends Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -62,20 +65,23 @@ class SessionCatalog(
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
-      conf: CatalystConf) {
+      conf: SQLConf) {
     this(
       externalCatalog,
       new GlobalTempViewManager("global_temp"),
-      DummyFunctionResourceLoader,
       functionRegistry,
       conf,
       new Configuration(),
-      CatalystSqlParser)
+      CatalystSqlParser,
+      DummyFunctionResourceLoader)
   }
 
   // For testing only.
   def this(externalCatalog: ExternalCatalog) {
-    this(externalCatalog, new SimpleFunctionRegistry, new SimpleCatalystConf(true))
+    this(
+      externalCatalog,
+      new SimpleFunctionRegistry,
+      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
   }
 
   /** List of temporary tables, mapping from table name to their logical plan. */
@@ -87,7 +93,7 @@ class SessionCatalog(
   // check whether the temporary table or function exists, then, if not, operate on
   // the corresponding item in the current database.
   @GuardedBy("this")
-  protected var currentDb = formatDatabaseName(DEFAULT_DATABASE)
+  protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
@@ -155,6 +161,20 @@ class SessionCatalog(
     if (tableExists(name)) {
       val db = name.database.getOrElse(currentDb)
       throw new TableAlreadyExistsException(db = db, table = name.table)
+    }
+  }
+
+  private def checkDuplication(fields: Seq[StructField]): Unit = {
+    val columnNames = if (conf.caseSensitiveAnalysis) {
+      fields.map(_.name)
+    } else {
+      fields.map(_.name.toLowerCase)
+    }
+    if (columnNames.distinct.length != columnNames.length) {
+      val duplicateColumns = columnNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => x
+      }
+      throw new AnalysisException(s"Found duplicate column(s): ${duplicateColumns.mkString(", ")}")
     }
   }
   // ----------------------------------------------------------------------------
@@ -255,7 +275,19 @@ class SessionCatalog(
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
     validateName(table)
-    val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
+
+    val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
+      && !tableDefinition.storage.locationUri.get.isAbsolute) {
+      // make the location of the table qualified.
+      val qualifiedTableLocation =
+        makeQualifiedPath(tableDefinition.storage.locationUri.get)
+      tableDefinition.copy(
+        storage = tableDefinition.storage.copy(locationUri = Some(qualifiedTableLocation)),
+        identifier = TableIdentifier(table, Some(db)))
+    } else {
+      tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
+    }
+
     requireDbExists(db)
     externalCatalog.createTable(newTableDefinition, ignoreIfExists)
   }
@@ -277,6 +309,47 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(tableIdentifier)
     externalCatalog.alterTable(newTableDefinition)
+  }
+
+  /**
+   * Alter the schema of a table identified by the provided table identifier. The new schema
+   * should still contain the existing bucket columns and partition columns used by the table. This
+   * method will also update any Spark SQL-related parameters stored as Hive table properties (such
+   * as the schema itself).
+   *
+   * @param identifier TableIdentifier
+   * @param newSchema Updated schema to be used for the table (must contain existing partition and
+   *                  bucket columns, and partition columns need to be at the end)
+   */
+  def alterTableSchema(
+      identifier: TableIdentifier,
+      newSchema: StructType): Unit = {
+    val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(identifier.table)
+    val tableIdentifier = TableIdentifier(table, Some(db))
+    requireDbExists(db)
+    requireTableExists(tableIdentifier)
+    checkDuplication(newSchema)
+
+    val catalogTable = externalCatalog.getTable(db, table)
+    val oldSchema = catalogTable.schema
+
+    // not supporting dropping columns yet
+    val nonExistentColumnNames = oldSchema.map(_.name).filterNot(columnNameResolved(newSchema, _))
+    if (nonExistentColumnNames.nonEmpty) {
+      throw new AnalysisException(
+        s"""
+           |Some existing schema fields (${nonExistentColumnNames.mkString("[", ",", "]")}) are
+           |not present in the new schema. We don't support dropping columns yet.
+         """.stripMargin)
+    }
+
+    // assuming the newSchema has all partition columns at the end as required
+    externalCatalog.alterTableSchema(db, table, newSchema)
+  }
+
+  private def columnNameResolved(schema: StructType, colName: String): Boolean = {
+    schema.fields.map(_.name).exists(conf.resolver(_, colName))
   }
 
   /**
@@ -578,7 +651,7 @@ class SessionCatalog(
       val table = formatTableName(name.table)
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(table, viewDef, None)
+          SubqueryAlias(table, viewDef)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
@@ -591,17 +664,17 @@ class SessionCatalog(
             desc = metadata,
             output = metadata.schema.toAttributes,
             child = parser.parsePlan(viewText))
-          SubqueryAlias(table, child, Some(name.copy(table = table, database = Some(db))))
+          SubqueryAlias(table, child)
         } else {
           val tableRelation = CatalogRelation(
             metadata,
             // we assume all the columns are nullable.
             metadata.dataSchema.asNullable.toAttributes,
             metadata.partitionSchema.asNullable.toAttributes)
-          SubqueryAlias(table, tableRelation, None)
+          SubqueryAlias(table, tableRelation)
         }
       } else {
-        SubqueryAlias(table, tempTables(table), None)
+        SubqueryAlias(table, tempTables(table))
       }
     }
   }
@@ -1026,7 +1099,7 @@ class SessionCatalog(
     name.database.isEmpty &&
       functionRegistry.functionExists(name.funcName) &&
       !FunctionRegistry.builtin.functionExists(name.funcName) &&
-      !hiveFunctions.contains(name.funcName.toLowerCase)
+      !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
   }
 
   protected def failFunctionLookup(name: String): Nothing = {
@@ -1156,6 +1229,7 @@ class SessionCatalog(
    */
   def reset(): Unit = synchronized {
     setCurrentDatabase(DEFAULT_DATABASE)
+    externalCatalog.setCurrentDatabase(DEFAULT_DATABASE)
     listDatabases().filter(_ != DEFAULT_DATABASE).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
@@ -1182,4 +1256,17 @@ class SessionCatalog(
     }
   }
 
+  /**
+   * Copy the current state of the catalog to another catalog.
+   *
+   * This function is synchronized on this [[SessionCatalog]] (the source) to make sure the copied
+   * state is consistent. The target [[SessionCatalog]] is not synchronized, and should not be
+   * because the target [[SessionCatalog]] should not be published at this point. The caller must
+   * synchronize on the target if this assumption does not hold.
+   */
+  private[sql] def copyStateTo(target: SessionCatalog): Unit = synchronized {
+    target.currentDb = currentDb
+    // copy over temporary tables
+    tempTables.foreach(kv => target.tempTables.put(kv._1, kv._2))
+  }
 }

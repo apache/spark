@@ -167,7 +167,6 @@ try:
                   'pyspark.ml',
                   'pyspark.ml.linalg',
                   'pyspark.ml.param',
-                  'pyspark.ml.stat',
                   'pyspark.sql',
                   'pyspark.streaming',
                   'pyspark.bin',

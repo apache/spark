@@ -853,6 +853,17 @@ class SciPyTests(MLlibTestCase):
         self.assertEqual(sv, serialize(lil.tocsr()))
         self.assertEqual(sv, serialize(lil.todok()))
 
+    def test_convert_to_vector(self):
+        from scipy.sparse import csc_matrix
+        # Create a CSC matrix with non-sorted indices
+        indptr = array([0, 2])
+        indices = array([3, 1])
+        data = array([2.0, 1.0])
+        csc = csc_matrix((data, indices, indptr))
+        self.assertFalse(csc.has_sorted_indices)
+        sv = SparseVector(4, {1: 1, 3: 2})
+        self.assertEqual(sv, _convert_to_vector(csc))
+
     def test_dot(self):
         from scipy.sparse import lil_matrix
         lil = lil_matrix((4, 1))
