@@ -300,15 +300,9 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
     // this will get the millis corresponding to the display time given the current *session*
     // timezone.
     import spark.implicits._
-    val r = df.withColumn("ts", expr("cast(display as timestamp)")).map { row =>
+    df.withColumn("ts", expr("cast(display as timestamp)")).map { row =>
       (row.getAs[String](0), row.getAs[Timestamp](1))
     }
-    val sessionTzA = spark.sparkContext.getConf.get(SQLConf.SESSION_LOCAL_TIMEZONE)
-    val sessionTzB = spark.conf.get(SQLConf.SESSION_LOCAL_TIMEZONE)
-    val row = r.collect().find{_._1 == "2015-12-31 22:49:59.123"}.head
-    logWarning(s"with session tz = ${(sessionTzA, sessionTzB)}, " +
-      s"'2015-12-31 22:49:59.123' --> ${row._2.getTime()}")
-    r
   }
 
   private def testWriteTablesWithTimezone(
