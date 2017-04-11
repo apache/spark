@@ -362,7 +362,7 @@ object SQLConf {
   val THRIFTSERVER_RESULT_LIMIT =
     buildConf("spark.sql.thriftserver.retainedResults")
       .internal()
-      .doc("The number of sql results returned by Thrift Server when running a query " +
+      .doc("The maximum number of rows returned by Thrift Server when running a query " +
         "without a limit, and when a query with a limit or this is set to 0, " +
         "we don't change user's behavior." )
       .intConf
