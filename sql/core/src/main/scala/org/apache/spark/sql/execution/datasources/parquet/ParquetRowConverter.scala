@@ -312,9 +312,8 @@ private[parquet] class ParquetRowConverter(
             s"whose Parquet type is $parquetType")
     }
 
-    val guessedType = schemaConverter.convertField(parquetType)
-    ParquetCompatibleConversion
-      .makeCompatibleConverter(guessedType, catalystType, updater)
+    ParquetUpCastConversion
+      .findUpCastConverter(schemaConverter.convertField(parquetType), catalystType, updater)
       .getOrElse(makeConverter())
   }
 

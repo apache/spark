@@ -773,8 +773,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       withTempPath { file =>
         val data = (1 to 4).map(i => (i.toByte, i.toShort, i, i.toLong, i.toFloat))
 
-        spark.createDataFrame(data).toDF("a", "b", "c", "d", "e")
-          .write.parquet(file.getCanonicalPath)
+        data.toDF("a", "b", "c", "d", "e").write.parquet(file.getCanonicalPath)
 
         val schema = StructType(
           StructField("a", ShortType, true) ::
@@ -785,11 +784,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
         val df = spark.read.schema(schema).parquet(file.getAbsolutePath)
 
-        val expectedDf = data.map { case (a, b, c, d, e) =>
+        val expected = data.map { case (a, b, c, d, e) =>
           (a.toShort, b.toInt, c.toLong, d.toFloat, e.toDouble)
         }.toDF("a", "b", "c", "d", "e")
 
-        checkAnswer(df, expectedDf)
+        checkAnswer(df, expected)
       }
     }
   }
