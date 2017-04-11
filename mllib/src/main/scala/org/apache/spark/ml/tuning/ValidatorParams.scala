@@ -75,7 +75,7 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
    * param to control the number of models evaluated in parallel
    * Default: 1
    *
-   * @group param
+   * @group expertParam
    */
   val numParallelEval: IntParam = new IntParam(this, "numParallelEval",
     "max number of models to evaluate in parallel, 1 for serial evaluation",

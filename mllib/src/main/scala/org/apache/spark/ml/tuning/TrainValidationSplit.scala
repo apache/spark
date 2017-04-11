@@ -133,7 +133,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
       trainingDataset.unpersist()
     } (executionContext)
 
-    // Evaluate models concurrently, limited by a barrier with '$numParallelEval' permits
+    // Evaluate models in a Future with thread-pool size determined by '$numParallelEval'
     val metricFutures = models.zip(epm).map { case (modelFuture, paramMap) =>
       modelFuture.flatMap { model =>
         Future {

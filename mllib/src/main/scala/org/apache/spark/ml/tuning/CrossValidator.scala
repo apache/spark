@@ -153,7 +153,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
         } (executionContext)
       }
 
-      // Wait for metrics to be calculated before upersisting validation dataset
+      // Wait for metrics to be calculated before unpersisting validation dataset
       val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
       validationDataset.unpersist()
       foldMetrics
