@@ -92,11 +92,12 @@ trait PredicateHelper {
   protected def canEvaluateWithinJoin(expr: Expression): Boolean = expr match {
     // Non-deterministic expressions are not allowed as join conditions.
     case e if !e.deterministic => false
-    case l: ListQuery =>
+    case _: ListQuery | _: Exists =>
       // A ListQuery defines the query which we want to search in an IN subquery expression.
       // Currently the only way to evaluate an IN subquery is to convert it to a
       // LeftSemi/LeftAnti/ExistenceJoin by `RewritePredicateSubquery` rule.
       // It cannot be evaluated as part of a Join operator.
+      // An Exists shouldn't be push into a Join operator too.
       false
     case e: SubqueryExpression =>
       // non-correlated subquery will be replaced as literal
