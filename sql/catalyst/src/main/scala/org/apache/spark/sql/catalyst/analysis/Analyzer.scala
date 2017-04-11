@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
+import org.apache.spark.sql.catalyst.expressions.objects.{LambdaVariable, MapObjects, NewInstance, UnresolvedMapObjects}
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -42,13 +43,13 @@ import org.apache.spark.sql.types._
  * to resolve attribute references.
  */
 object SimpleAnalyzer extends Analyzer(
-    new SessionCatalog(
-      new InMemoryCatalog,
-      EmptyFunctionRegistry,
-      new SimpleCatalystConf(caseSensitiveAnalysis = true)) {
-      override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
-    },
-    new SimpleCatalystConf(caseSensitiveAnalysis = true))
+  new SessionCatalog(
+    new InMemoryCatalog,
+    EmptyFunctionRegistry,
+    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
+    override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
+  },
+  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
 /**
  * Provides a way to keep state during the analysis, this enables us to decouple the concerns
@@ -89,11 +90,11 @@ object AnalysisContext {
  */
 class Analyzer(
     catalog: SessionCatalog,
-    conf: CatalystConf,
+    conf: SQLConf,
     maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis {
 
-  def this(catalog: SessionCatalog, conf: CatalystConf) = {
+  def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
@@ -616,7 +617,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        lookupTableFromCatalog(u).canonicalized match {
+        EliminateSubqueryAliases(lookupTableFromCatalog(u)) match {
           case v: View =>
             u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
           case other => i.copy(table = other)
@@ -2226,8 +2227,21 @@ class Analyzer(
           validateTopLevelTupleFields(deserializer, inputs)
           val resolved = resolveExpression(
             deserializer, LocalRelation(inputs), throws = true)
-          validateNestedTupleFields(resolved)
-          resolved
+          val result = resolved transformDown {
+            case UnresolvedMapObjects(func, inputData, cls) if inputData.resolved =>
+              inputData.dataType match {
+                case ArrayType(et, _) =>
+                  val expr = MapObjects(func, inputData, et, cls) transformUp {
+                    case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+                      ExtractValue(child, fieldName, resolver)
+                  }
+                  expr
+                case other =>
+                  throw new AnalysisException("need an array field but got " + other.simpleString)
+              }
+          }
+          validateNestedTupleFields(result)
+          result
       }
     }
 
@@ -2307,7 +2321,11 @@ class Analyzer(
    */
   object ResolveUpCast extends Rule[LogicalPlan] {
     private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
-      throw new AnalysisException(s"Cannot up cast ${from.sql} from " +
+      val fromStr = from match {
+        case l: LambdaVariable => "array element"
+        case e => e.sql
+      }
+      throw new AnalysisException(s"Cannot up cast $fromStr from " +
         s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
         "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
         "You can either add an explicit cast to the input data or choose a higher precision " +
@@ -2331,7 +2349,7 @@ class Analyzer(
   }
 
   /**
-   * Replace [[TimeZoneAwareExpression]] without [[TimeZone]] by its copy with session local
+   * Replace [[TimeZoneAwareExpression]] without timezone id by its copy with session local
    * time zone.
    */
   object ResolveTimeZone extends Rule[LogicalPlan] {
@@ -2502,7 +2520,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
         substitutedPlan.withNewChildren(expandedPlan :: Nil)
       } else if (windowExpressions.size > 1) {
         p.failAnalysis("Multiple time window expressions would result in a cartesian product " +
-          "of rows, therefore they are not currently not supported.")
+          "of rows, therefore they are currently not supported.")
       } else {
         p // Return unchanged. Analyzer will throw exception later
       }

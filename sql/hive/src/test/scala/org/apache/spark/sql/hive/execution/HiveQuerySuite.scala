@@ -80,7 +80,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   private def assertUnsupportedFeature(body: => Unit): Unit = {
     val e = intercept[ParseException] { body }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
   }
 
   // Testing the Broadcast based join for cartesian join (cross join)
@@ -787,62 +787,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
     // If the CREATE TABLE command got executed again, the following assertion would fail
     assert(Try(q0.count()).isSuccess)
-  }
-
-  test("DESCRIBE commands") {
-    sql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
-
-    sql(
-      """FROM src INSERT OVERWRITE TABLE test_describe_commands1 PARTITION (dt='2008-06-08')
-        |SELECT key, value
-      """.stripMargin)
-
-    // Describe a table
-    assertResult(
-      Array(
-        Row("key", "int", null),
-        Row("value", "string", null),
-        Row("dt", "string", null),
-        Row("# Partition Information", "", ""),
-        Row("# col_name", "data_type", "comment"),
-        Row("dt", "string", null))
-    ) {
-      sql("DESCRIBE test_describe_commands1")
-        .select('col_name, 'data_type, 'comment)
-        .collect()
-    }
-
-    // Describe a table with a fully qualified table name
-    assertResult(
-      Array(
-        Row("key", "int", null),
-        Row("value", "string", null),
-        Row("dt", "string", null),
-        Row("# Partition Information", "", ""),
-        Row("# col_name", "data_type", "comment"),
-        Row("dt", "string", null))
-    ) {
-      sql("DESCRIBE default.test_describe_commands1")
-        .select('col_name, 'data_type, 'comment)
-        .collect()
-    }
-
-    // Describe a temporary view.
-    val testData =
-      TestHive.sparkContext.parallelize(
-        TestData(1, "str1") ::
-        TestData(1, "str2") :: Nil)
-    testData.toDF().createOrReplaceTempView("test_describe_commands2")
-
-    assertResult(
-      Array(
-        Row("a", "int", null),
-        Row("b", "string", null))
-    ) {
-      sql("DESCRIBE test_describe_commands2")
-        .select('col_name, 'data_type, 'comment)
-        .collect()
-    }
   }
 
   test("SPARK-2263: Insert Map<K, V> values") {

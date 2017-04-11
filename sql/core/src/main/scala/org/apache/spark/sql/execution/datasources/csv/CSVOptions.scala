@@ -71,9 +71,9 @@ class CSVOptions(
     val param = parameters.getOrElse(paramName, default.toString)
     if (param == null) {
       default
-    } else if (param.toLowerCase == "true") {
+    } else if (param.toLowerCase(Locale.ROOT) == "true") {
       true
-    } else if (param.toLowerCase == "false") {
+    } else if (param.toLowerCase(Locale.ROOT) == "false") {
       false
     } else {
       throw new Exception(s"$paramName flag can be true or false")
@@ -93,8 +93,13 @@ class CSVOptions(
 
   val headerFlag = getBool("header")
   val inferSchemaFlag = getBool("inferSchema")
-  val ignoreLeadingWhiteSpaceFlag = getBool("ignoreLeadingWhiteSpace")
-  val ignoreTrailingWhiteSpaceFlag = getBool("ignoreTrailingWhiteSpace")
+  val ignoreLeadingWhiteSpaceInRead = getBool("ignoreLeadingWhiteSpace", default = false)
+  val ignoreTrailingWhiteSpaceInRead = getBool("ignoreTrailingWhiteSpace", default = false)
+
+  // For write, both options were `true` by default. We leave it as `true` for
+  // backwards compatibility.
+  val ignoreLeadingWhiteSpaceFlagInWrite = getBool("ignoreLeadingWhiteSpace", default = true)
+  val ignoreTrailingWhiteSpaceFlagInWrite = getBool("ignoreTrailingWhiteSpace", default = true)
 
   val columnNameOfCorruptRecord =
     parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
@@ -121,7 +126,7 @@ class CSVOptions(
 
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
-      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), timeZone, Locale.US)
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), timeZone, Locale.US)
 
   val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
 
@@ -144,6 +149,8 @@ class CSVOptions(
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     format.setComment(comment)
+    writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
+    writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
     writerSettings.setEmptyValue(nullValue)
     writerSettings.setSkipEmptyLines(true)
@@ -159,8 +166,8 @@ class CSVOptions(
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     format.setComment(comment)
-    settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlag)
-    settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlag)
+    settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
+    settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)
     settings.setInputBufferSize(inputBufferSize)
     settings.setMaxColumns(maxColumns)

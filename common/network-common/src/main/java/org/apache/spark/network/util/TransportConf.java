@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.util;
 
+import java.util.Locale;
 import java.util.Properties;
 
 import com.google.common.primitives.Ints;
@@ -75,7 +76,9 @@ public class TransportConf {
   }
 
   /** IO mode: nio or epoll */
-  public String ioMode() { return conf.get(SPARK_NETWORK_IO_MODE_KEY, "NIO").toUpperCase(); }
+  public String ioMode() {
+    return conf.get(SPARK_NETWORK_IO_MODE_KEY, "NIO").toUpperCase(Locale.ROOT);
+  }
 
   /** If true, we will prefer allocating off-heap byte buffers within Netty. */
   public boolean preferDirectBufs() {

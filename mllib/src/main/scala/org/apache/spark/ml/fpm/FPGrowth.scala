@@ -69,8 +69,8 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   def getMinSupport: Double = $(minSupport)
 
   /**
-   * Number of partitions (>=1) used by parallel FP-growth. By default the param is not set, and
-   * partition number of the input dataset is used.
+   * Number of partitions (at least 1) used by parallel FP-growth. By default the param is not
+   * set, and partition number of the input dataset is used.
    * @group expertParam
    */
   @Since("2.2.0")
@@ -218,13 +218,28 @@ class FPGrowthModel private[ml] (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /**
-   * Get association rules fitted by AssociationRules using the minConfidence. Returns a dataframe
+   * Cache minConfidence and associationRules to avoid redundant computation for association rules
+   * during transform. The associationRules will only be re-computed when minConfidence changed.
+   */
+  @transient private var _cachedMinConf: Double = Double.NaN
+
+  @transient private var _cachedRules: DataFrame = _
+
+  /**
+   * Get association rules fitted using the minConfidence. Returns a dataframe
    * with three fields, "antecedent", "consequent" and "confidence", where "antecedent" and
    * "consequent" are Array[T] and "confidence" is Double.
    */
   @Since("2.2.0")
-  @transient lazy val associationRules: DataFrame = {
-    AssociationRules.getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence))
+  @transient def associationRules: DataFrame = {
+    if ($(minConfidence) == _cachedMinConf) {
+      _cachedRules
+    } else {
+      _cachedRules = AssociationRules
+        .getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence))
+      _cachedMinConf = $(minConfidence)
+      _cachedRules
+    }
   }
 
   /**

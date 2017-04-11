@@ -19,6 +19,7 @@ package org.apache.spark.executor
 
 import java.net.URL
 import java.nio.ByteBuffer
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
@@ -72,7 +73,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   def extractLogUrls: Map[String, String] = {
     val prefix = "SPARK_LOG_URL_"
     sys.env.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toLowerCase, e._2))
+      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2))
   }
 
   override def receive: PartialFunction[Any, Unit] = {
@@ -97,11 +98,11 @@ private[spark] class CoarseGrainedExecutorBackend(
         executor.launchTask(this, taskDesc)
       }
 
-    case KillTask(taskId, _, interruptThread) =>
+    case KillTask(taskId, _, interruptThread, reason) =>
       if (executor == null) {
         exitExecutor(1, "Received KillTask command but executor was null")
       } else {
-        executor.killTask(taskId, interruptThread)
+        executor.killTask(taskId, interruptThread, reason)
       }
 
     case StopExecutor =>

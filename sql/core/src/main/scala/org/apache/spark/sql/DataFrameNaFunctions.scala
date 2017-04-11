@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.{lang => jl}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 
@@ -89,7 +90,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @since 1.3.1
    */
   def drop(how: String, cols: Seq[String]): DataFrame = {
-    how.toLowerCase match {
+    how.toLowerCase(Locale.ROOT) match {
       case "any" => drop(cols.size, cols)
       case "all" => drop(1, cols)
       case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
@@ -407,10 +408,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     val quotedColName = "`" + col.name + "`"
     val colValue = col.dataType match {
       case DoubleType | FloatType =>
-        nanvl(df.col(quotedColName), lit(null)) // nanvl only supports these types
+        // nanvl only supports these types
+        nanvl(df.col(quotedColName), lit(null).cast(col.dataType))
       case _ => df.col(quotedColName)
     }
-    coalesce(colValue, lit(replacement)).cast(col.dataType).as(col.name)
+    coalesce(colValue, lit(replacement).cast(col.dataType)).as(col.name)
   }
 
   /**

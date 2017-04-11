@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
+import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -35,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object SessionCatalog {
@@ -52,9 +54,10 @@ class SessionCatalog(
     val externalCatalog: ExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
     functionRegistry: FunctionRegistry,
-    conf: CatalystConf,
+    conf: SQLConf,
     hadoopConf: Configuration,
-    parser: ParserInterface) extends Logging {
+    parser: ParserInterface,
+    functionResourceLoader: FunctionResourceLoader) extends Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -62,15 +65,15 @@ class SessionCatalog(
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
-      conf: CatalystConf) {
+      conf: SQLConf) {
     this(
       externalCatalog,
       new GlobalTempViewManager("global_temp"),
       functionRegistry,
       conf,
       new Configuration(),
-      CatalystSqlParser)
-    functionResourceLoader = DummyFunctionResourceLoader
+      CatalystSqlParser,
+      DummyFunctionResourceLoader)
   }
 
   // For testing only.
@@ -78,7 +81,7 @@ class SessionCatalog(
     this(
       externalCatalog,
       new SimpleFunctionRegistry,
-      SimpleCatalystConf(caseSensitiveAnalysis = true))
+      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
   }
 
   /** List of temporary tables, mapping from table name to their logical plan. */
@@ -90,9 +93,7 @@ class SessionCatalog(
   // check whether the temporary table or function exists, then, if not, operate on
   // the corresponding item in the current database.
   @GuardedBy("this")
-  protected var currentDb = formatDatabaseName(DEFAULT_DATABASE)
-
-  @volatile var functionResourceLoader: FunctionResourceLoader = _
+  protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
@@ -1059,9 +1060,6 @@ class SessionCatalog(
    * by a tuple (resource type, resource uri).
    */
   def loadFunctionResources(resources: Seq[FunctionResource]): Unit = {
-    if (functionResourceLoader == null) {
-      throw new IllegalStateException("functionResourceLoader has not yet been initialized")
-    }
     resources.foreach(functionResourceLoader.loadResource)
   }
 
@@ -1101,7 +1099,7 @@ class SessionCatalog(
     name.database.isEmpty &&
       functionRegistry.functionExists(name.funcName) &&
       !FunctionRegistry.builtin.functionExists(name.funcName) &&
-      !hiveFunctions.contains(name.funcName.toLowerCase)
+      !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
   }
 
   protected def failFunctionLookup(name: String): Nothing = {
@@ -1259,28 +1257,16 @@ class SessionCatalog(
   }
 
   /**
-   * Create a new [[SessionCatalog]] with the provided parameters. `externalCatalog` and
-   * `globalTempViewManager` are `inherited`, while `currentDb` and `tempTables` are copied.
+   * Copy the current state of the catalog to another catalog.
+   *
+   * This function is synchronized on this [[SessionCatalog]] (the source) to make sure the copied
+   * state is consistent. The target [[SessionCatalog]] is not synchronized, and should not be
+   * because the target [[SessionCatalog]] should not be published at this point. The caller must
+   * synchronize on the target if this assumption does not hold.
    */
-  def newSessionCatalogWith(
-      conf: CatalystConf,
-      hadoopConf: Configuration,
-      functionRegistry: FunctionRegistry,
-      parser: ParserInterface): SessionCatalog = {
-    val catalog = new SessionCatalog(
-      externalCatalog,
-      globalTempViewManager,
-      functionRegistry,
-      conf,
-      hadoopConf,
-      parser)
-
-    synchronized {
-      catalog.currentDb = currentDb
-      // copy over temporary tables
-      tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2))
-    }
-
-    catalog
+  private[sql] def copyStateTo(target: SessionCatalog): Unit = synchronized {
+    target.currentDb = currentDb
+    // copy over temporary tables
+    tempTables.foreach(kv => target.tempTables.put(kv._1, kv._2))
   }
 }
