@@ -171,7 +171,8 @@ object FileFormatWriter extends Logging {
           queryExecution.toRdd
         } else {
           SortExec(
-            requiredOrdering.map(SortOrder(_, Ascending)),
+            requiredOrdering.map(SortOrder(_, Ascending))
+              ++ queryExecution.executedPlan.outputOrdering,
             global = false,
             child = queryExecution.executedPlan).execute()
         }
