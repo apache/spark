@@ -272,7 +272,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
             val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
 
-            val (appListener, count) = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
+            val (appListener, count) = replay(fileStatus,
+              isApplicationCompleted(fileStatus), replayBus)
             metrics.appUIEventCount.inc(count)
 
             if (appListener.appId.isDefined) {
@@ -280,8 +281,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // make sure to set admin acls before view acls so they are properly picked up
               val adminAcls = HISTORY_UI_ADMIN_ACLS + "," + appListener.adminAcls.getOrElse("")
               ui.getSecurityManager.setAdminAcls(adminAcls)
-              ui.getSecurityManager.setViewAcls(attempt.sparkUser, appListener.viewAcls.getOrElse(""))
-              val adminAclsGroups = HISTORY_UI_ADMIN_ACLS_GROUPS + "," + appListener.adminAclsGroups.getOrElse("")
+              ui.getSecurityManager.setViewAcls(attempt.sparkUser,
+                appListener.viewAcls.getOrElse(""))
+              val adminAclsGroups = HISTORY_UI_ADMIN_ACLS_GROUPS + "," +
+                appListener.adminAclsGroups.getOrElse("")
               ui.getSecurityManager.setAdminAclsGroups(adminAclsGroups)
               ui.getSecurityManager.setViewAclsGroups(appListener.viewAclsGroups.getOrElse(""))
               Some(LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize)))
@@ -495,7 +498,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // won't change whenever HistoryServer restarts and reloads the file.
       val lastUpdated = if (appCompleted) fileStatus.getModificationTime else clock.getTimeMillis()
 
-      val (appListener, count) = replay(fileStatus, appCompleted, new ReplayListenerBus(), eventsFilter)
+      val (appListener, count) = replay(fileStatus, appCompleted,
+        new ReplayListenerBus(), eventsFilter)
       metrics.historyEventCount.inc(count)
 
       // Without an app ID, new logs will render incorrectly in the listing page, so do not list or
