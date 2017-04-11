@@ -530,8 +530,7 @@ private[ui] class JobPagedTable(
   }
 
   override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    URLEncoder.encode(s"$parameterPath&$jobTag.sort=$encodedSortColumn" +
+    URLEncoder.encode(s"$parameterPath&$jobTag.sort=$sortColumn" +
       s"&$jobTag.desc=$desc#$tableHeaderId", "UTF-8")
   }
 
