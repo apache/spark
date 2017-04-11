@@ -22,17 +22,26 @@ from pyspark.ml.feature import QuantileDiscretizer
 # $example off$
 from pyspark.sql import SparkSession
 
-
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("PythonQuantileDiscretizerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("QuantileDiscretizerExample")\
+        .getOrCreate()
 
     # $example on$
-    data = [(0, 18.0,), (1, 19.0,), (2, 8.0,), (3, 5.0,), (4, 2.2,)]
-    dataFrame = spark.createDataFrame(data, ["id", "hour"])
+    data = [(0, 18.0), (1, 19.0), (2, 8.0), (3, 5.0), (4, 2.2)]
+    df = spark.createDataFrame(data, ["id", "hour"])
+    # $example off$
 
+    # Output of QuantileDiscretizer for such small datasets can depend on the number of
+    # partitions. Here we force a single partition to ensure consistent results.
+    # Note this is not necessary for normal use cases
+    df = df.repartition(1)
+
+    # $example on$
     discretizer = QuantileDiscretizer(numBuckets=3, inputCol="hour", outputCol="result")
 
-    result = discretizer.fit(dataFrame).transform(dataFrame)
+    result = discretizer.fit(df).transform(df)
     result.show()
     # $example off$
 

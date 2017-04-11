@@ -33,7 +33,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
-import org.apache.spark.util.ResetSystemProperties
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 class RPackageUtilsSuite
   extends SparkFunSuite
@@ -74,9 +74,13 @@ class RPackageUtilsSuite
     val deps = Seq(dep1, dep2).mkString(",")
     IvyTestUtils.withRepository(main, Some(deps), None, withR = true) { repo =>
       val jars = Seq(main, dep1, dep2).map(c => new JarFile(getJarPath(c, new File(new URI(repo)))))
-      assert(RPackageUtils.checkManifestForR(jars(0)), "should have R code")
-      assert(!RPackageUtils.checkManifestForR(jars(1)), "should not have R code")
-      assert(!RPackageUtils.checkManifestForR(jars(2)), "should not have R code")
+      Utils.tryWithSafeFinally {
+        assert(RPackageUtils.checkManifestForR(jars(0)), "should have R code")
+        assert(!RPackageUtils.checkManifestForR(jars(1)), "should not have R code")
+        assert(!RPackageUtils.checkManifestForR(jars(2)), "should not have R code")
+      } {
+        jars.foreach(_.close())
+      }
     }
   }
 
@@ -131,7 +135,7 @@ class RPackageUtilsSuite
 
   test("SparkR zipping works properly") {
     val tempDir = Files.createTempDir()
-    try {
+    Utils.tryWithSafeFinally {
       IvyTestUtils.writeFile(tempDir, "test.R", "abc")
       val fakeSparkRDir = new File(tempDir, "SparkR")
       assert(fakeSparkRDir.mkdirs())
@@ -144,14 +148,19 @@ class RPackageUtilsSuite
       IvyTestUtils.writeFile(fakePackageDir, "DESCRIPTION", "abc")
       val finalZip = RPackageUtils.zipRLibraries(tempDir, "sparkr.zip")
       assert(finalZip.exists())
-      val entries = new ZipFile(finalZip).entries().asScala.map(_.getName).toSeq
-      assert(entries.contains("/test.R"))
-      assert(entries.contains("/SparkR/abc.R"))
-      assert(entries.contains("/SparkR/DESCRIPTION"))
-      assert(!entries.contains("/package.zip"))
-      assert(entries.contains("/packageTest/def.R"))
-      assert(entries.contains("/packageTest/DESCRIPTION"))
-    } finally {
+      val zipFile = new ZipFile(finalZip)
+      Utils.tryWithSafeFinally {
+        val entries = zipFile.entries().asScala.map(_.getName).toSeq
+        assert(entries.contains("/test.R"))
+        assert(entries.contains("/SparkR/abc.R"))
+        assert(entries.contains("/SparkR/DESCRIPTION"))
+        assert(!entries.contains("/package.zip"))
+        assert(entries.contains("/packageTest/def.R"))
+        assert(entries.contains("/packageTest/DESCRIPTION"))
+      } {
+        zipFile.close()
+      }
+    } {
       FileUtils.deleteDirectory(tempDir)
     }
   }

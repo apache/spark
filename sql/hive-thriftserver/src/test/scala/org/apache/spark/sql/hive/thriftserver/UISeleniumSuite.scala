@@ -36,7 +36,7 @@ class UISeleniumSuite
   implicit var webDriver: WebDriver = _
   var server: HiveThriftServer2 = _
   val uiPort = 20000 + Random.nextInt(10000)
-  override def mode: ServerMode.Value = ServerMode.http
+  override def mode: ServerMode.Value = ServerMode.binary
 
   override def beforeAll(): Unit = {
     webDriver = new HtmlUnitDriver {
@@ -74,7 +74,7 @@ class UISeleniumSuite
   }
 
   ignore("thrift server ui test") {
-    withJdbcStatement { statement =>
+    withJdbcStatement("test_map") { statement =>
       val baseURL = s"http://localhost:$uiPort"
 
       val queries = Seq(

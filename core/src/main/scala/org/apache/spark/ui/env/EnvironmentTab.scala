@@ -23,6 +23,7 @@ import org.apache.spark.ui._
 
 private[ui] class EnvironmentTab(parent: SparkUI) extends SparkUITab(parent, "environment") {
   val listener = parent.environmentListener
+  val conf = parent.conf
   attachPage(new EnvironmentPage(this))
 }
 

@@ -17,22 +17,17 @@
 
 package org.apache.spark.deploy
 
-import java.io.{ByteArrayInputStream, DataInputStream, IOException}
-import java.lang.reflect.Method
+import java.io.IOException
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Comparator, Date}
+import java.util.{Arrays, Comparator, Date, Locale}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
-import org.apache.hadoop.fs.FileSystem.Statistics
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
@@ -87,17 +82,20 @@ class SparkHadoopUtil extends Logging {
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
       // Explicitly check for S3 environment variables
-      if (System.getenv("AWS_ACCESS_KEY_ID") != null &&
-          System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
-        val keyId = System.getenv("AWS_ACCESS_KEY_ID")
-        val accessKey = System.getenv("AWS_SECRET_ACCESS_KEY")
-
+      val keyId = System.getenv("AWS_ACCESS_KEY_ID")
+      val accessKey = System.getenv("AWS_SECRET_ACCESS_KEY")
+      if (keyId != null && accessKey != null) {
         hadoopConf.set("fs.s3.awsAccessKeyId", keyId)
         hadoopConf.set("fs.s3n.awsAccessKeyId", keyId)
         hadoopConf.set("fs.s3a.access.key", keyId)
         hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey)
         hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey)
         hadoopConf.set("fs.s3a.secret.key", accessKey)
+
+        val sessionToken = System.getenv("AWS_SESSION_TOKEN")
+        if (sessionToken != null) {
+          hadoopConf.set("fs.s3a.session.token", sessionToken)
+        }
       }
       // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
       conf.getAll.foreach { case (key, value) =>
@@ -143,54 +141,29 @@ class SparkHadoopUtil extends Logging {
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If
    * getFSBytesReadOnThreadCallback is called from thread r at time t, the returned callback will
-   * return the bytes read on r since t.  Reflection is required because thread-level FileSystem
-   * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
-   * Returns None if the required method can't be found.
+   * return the bytes read on r since t.
+   *
+   * @return None if the required method can't be found.
    */
-  private[spark] def getFSBytesReadOnThreadCallback(): Option[() => Long] = {
-    try {
-      val threadStats = getFileSystemThreadStatistics()
-      val getBytesReadMethod = getFileSystemThreadStatisticsMethod("getBytesRead")
-      val f = () => threadStats.map(getBytesReadMethod.invoke(_).asInstanceOf[Long]).sum
-      val baselineBytesRead = f()
-      Some(() => f() - baselineBytesRead)
-    } catch {
-      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) =>
-        logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
-        None
-    }
+  private[spark] def getFSBytesReadOnThreadCallback(): () => Long = {
+    val threadStats = FileSystem.getAllStatistics.asScala.map(_.getThreadStatistics)
+    val f = () => threadStats.map(_.getBytesRead).sum
+    val baselineBytesRead = f()
+    () => f() - baselineBytesRead
   }
 
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes written. If
    * getFSBytesWrittenOnThreadCallback is called from thread r at time t, the returned callback will
-   * return the bytes written on r since t.  Reflection is required because thread-level FileSystem
-   * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
-   * Returns None if the required method can't be found.
+   * return the bytes written on r since t.
+   *
+   * @return None if the required method can't be found.
    */
-  private[spark] def getFSBytesWrittenOnThreadCallback(): Option[() => Long] = {
-    try {
-      val threadStats = getFileSystemThreadStatistics()
-      val getBytesWrittenMethod = getFileSystemThreadStatisticsMethod("getBytesWritten")
-      val f = () => threadStats.map(getBytesWrittenMethod.invoke(_).asInstanceOf[Long]).sum
-      val baselineBytesWritten = f()
-      Some(() => f() - baselineBytesWritten)
-    } catch {
-      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) =>
-        logDebug("Couldn't find method for retrieving thread-level FileSystem output data", e)
-        None
-    }
-  }
-
-  private def getFileSystemThreadStatistics(): Seq[AnyRef] = {
-    FileSystem.getAllStatistics.asScala.map(
-      Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
-  }
-
-  private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
-    val statisticsDataClass =
-      Utils.classForName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
-    statisticsDataClass.getDeclaredMethod(methodName)
+  private[spark] def getFSBytesWrittenOnThreadCallback(): () => Long = {
+    val threadStats = FileSystem.getAllStatistics.asScala.map(_.getThreadStatistics)
+    val f = () => threadStats.map(_.getBytesWritten).sum
+    val baselineBytesWritten = f()
+    () => f() - baselineBytesWritten
   }
 
   /**
@@ -231,6 +204,10 @@ class SparkHadoopUtil extends Logging {
     recurse(baseStatus)
   }
 
+  def isGlobPath(pattern: Path): Boolean = {
+    pattern.toString.exists("{}[]*?\\".toSet.contains)
+  }
+
   def globPath(pattern: Path): Seq[Path] = {
     val fs = pattern.getFileSystem(conf)
     Option(fs.globStatus(pattern)).map { statuses =>
@@ -239,11 +216,7 @@ class SparkHadoopUtil extends Logging {
   }
 
   def globPathIfNecessary(pattern: Path): Seq[Path] = {
-    if (pattern.toString.exists("{}[]*?\\".toSet.contains)) {
-      globPath(pattern)
-    } else {
-      Seq(pattern)
-    }
+    if (isGlobPath(pattern)) globPath(pattern) else Seq(pattern)
   }
 
   /**
@@ -276,30 +249,6 @@ class SparkHadoopUtil extends Logging {
         Array.empty
     }
   }
-
-  /**
-   * How much time is remaining (in millis) from now to (fraction * renewal time for the token that
-   * is valid the latest)?
-   * This will return -ve (or 0) value if the fraction of validity has already expired.
-   */
-  def getTimeFromNowToRenewal(
-      sparkConf: SparkConf,
-      fraction: Double,
-      credentials: Credentials): Long = {
-    val now = System.currentTimeMillis()
-
-    val renewalInterval =
-      sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
-
-    credentials.getAllTokens.asScala
-      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
-      .map { t =>
-        val identifier = new DelegationTokenIdentifier()
-        identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-        (identifier.getIssueDate + fraction * renewalInterval).toLong - now
-      }.foldLeft(0L)(math.max)
-  }
-
 
   private[spark] def getSuffixForCredentialsPath(credentialsPath: Path): Int = {
     val fileName = credentialsPath.getName
@@ -338,15 +287,15 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Start a thread to periodically update the current user's credentials with new delegation
-   * tokens so that writes to HDFS do not fail.
+   * Start a thread to periodically update the current user's credentials with new credentials so
+   * that access to secured service does not fail.
    */
-  private[spark] def startExecutorDelegationTokenRenewer(conf: SparkConf) {}
+  private[spark] def startCredentialUpdater(conf: SparkConf) {}
 
   /**
-   * Stop the thread that does the delegation token updates.
+   * Stop the thread that does the credential updates.
    */
-  private[spark] def stopExecutorDelegationTokenRenewer() {}
+  private[spark] def stopCredentialUpdater() {}
 
   /**
    * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.
@@ -384,7 +333,7 @@ class SparkHadoopUtil extends Logging {
    * @return a printable string value.
    */
   private[spark] def tokenToString(token: Token[_ <: TokenIdentifier]): String = {
-    val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+    val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.US)
     val buffer = new StringBuilder(128)
     buffer.append(token.toString)
     try {
@@ -400,7 +349,7 @@ class SparkHadoopUtil extends Logging {
       }
     } catch {
       case e: IOException =>
-        logDebug("Failed to decode $token: $e", e)
+        logDebug(s"Failed to decode $token: $e", e)
     }
     buffer.toString
   }

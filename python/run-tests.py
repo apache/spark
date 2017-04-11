@@ -72,7 +72,7 @@ def run_individual_python_test(test_name, pyspark_python):
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
     })
-    LOGGER.debug("Starting test(%s): %s", pyspark_python, test_name)
+    LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     try:
         per_test_output = tempfile.TemporaryFile()
@@ -111,9 +111,9 @@ def run_individual_python_test(test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python2.6", "python3.4", "pypy"] if which(x)]
-    if "python2.6" not in python_execs:
-        LOGGER.warning("Not testing against `python2.6` because it could not be found; falling"
+    python_execs = [x for x in ["python2.7", "python3.4", "pypy"] if which(x)]
+    if "python2.7" not in python_execs:
+        LOGGER.warning("Not testing against `python2.7` because it could not be found; falling"
                        " back to `python` instead")
         python_execs.insert(0, "python")
     return python_execs

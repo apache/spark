@@ -23,13 +23,13 @@ import scala.util.Try
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.util.Utils
 
 /**
- * :: DeveloperApi ::
  * A [[StructType]] object can be constructed by
  * {{{
  * StructType(fields: Seq[StructField])
@@ -37,8 +37,9 @@ import org.apache.spark.sql.catalyst.util.quoteIdentifier
  * For a [[StructType]] object, one or multiple [[StructField]]s can be extracted by names.
  * If multiple [[StructField]]s are extracted, a [[StructType]] object will be returned.
  * If a provided name does not have a matching field, it will be ignored. For the case
- * of extracting a single StructField, a `null` will be returned.
- * Example:
+ * of extracting a single [[StructField]], a `null` will be returned.
+ *
+ * Scala Example:
  * {{{
  * import org.apache.spark.sql._
  * import org.apache.spark.sql.types._
@@ -53,28 +54,30 @@ import org.apache.spark.sql.catalyst.util.quoteIdentifier
  * val singleField = struct("b")
  * // singleField: StructField = StructField(b,LongType,false)
  *
- * // This struct does not have a field called "d". null will be returned.
- * val nonExisting = struct("d")
- * // nonExisting: StructField = null
+ * // If this struct does not have a field called "d", it throws an exception.
+ * struct("d")
+ * // java.lang.IllegalArgumentException: Field "d" does not exist.
+ * //   ...
  *
  * // Extract multiple StructFields. Field names are provided in a set.
  * // A StructType object will be returned.
  * val twoFields = struct(Set("b", "c"))
  * // twoFields: StructType =
- * //   StructType(List(StructField(b,LongType,false), StructField(c,BooleanType,false)))
+ * //   StructType(StructField(b,LongType,false), StructField(c,BooleanType,false))
  *
- * // Any names without matching fields will be ignored.
- * // For the case shown below, "d" will be ignored and
- * // it is treated as struct(Set("b", "c")).
- * val ignoreNonExisting = struct(Set("b", "c", "d"))
- * // ignoreNonExisting: StructType =
- * //   StructType(List(StructField(b,LongType,false), StructField(c,BooleanType,false)))
+ * // Any names without matching fields will throw an exception.
+ * // For the case shown below, an exception is thrown due to "d".
+ * struct(Set("b", "c", "d"))
+ * // java.lang.IllegalArgumentException: Field "d" does not exist.
+ * //    ...
  * }}}
  *
- * A [[org.apache.spark.sql.Row]] object is used as a value of the StructType.
- * Example:
+ * A [[org.apache.spark.sql.Row]] object is used as a value of the [[StructType]].
+ *
+ * Scala Example:
  * {{{
  * import org.apache.spark.sql._
+ * import org.apache.spark.sql.types._
  *
  * val innerStruct =
  *   StructType(
@@ -87,10 +90,11 @@ import org.apache.spark.sql.catalyst.util.quoteIdentifier
  *
  * // Create a Row with the schema defined by struct
  * val row = Row(Row(1, 2, true))
- * // row: Row = [[1,2,true]]
  * }}}
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
   /** No-arg constructor for kryo. */
@@ -112,7 +116,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     }
   }
 
-  override def hashCode(): Int = java.util.Arrays.hashCode(fields.asInstanceOf[Array[AnyRef]])
+  private lazy val _hashCode: Int = java.util.Arrays.hashCode(fields.asInstanceOf[Array[AnyRef]])
+  override def hashCode(): Int = _hashCode
 
   /**
    * Creates a new [[StructType]] by adding a new field.
@@ -136,7 +141,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    *   .add("c", StringType)
    */
   def add(name: String, dataType: DataType): StructType = {
-    StructType(fields :+ new StructField(name, dataType, nullable = true, Metadata.empty))
+    StructType(fields :+ StructField(name, dataType, nullable = true, Metadata.empty))
   }
 
   /**
@@ -148,7 +153,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    *   .add("c", StringType, true)
    */
   def add(name: String, dataType: DataType, nullable: Boolean): StructType = {
-    StructType(fields :+ new StructField(name, dataType, nullable, Metadata.empty))
+    StructType(fields :+ StructField(name, dataType, nullable, Metadata.empty))
   }
 
   /**
@@ -165,7 +170,24 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       dataType: DataType,
       nullable: Boolean,
       metadata: Metadata): StructType = {
-    StructType(fields :+ new StructField(name, dataType, nullable, metadata))
+    StructType(fields :+ StructField(name, dataType, nullable, metadata))
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", IntegerType, true, "comment1")
+   *   .add("b", LongType, false, "comment2")
+   *   .add("c", StringType, true, "comment3")
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: DataType,
+      nullable: Boolean,
+      comment: String): StructType = {
+    StructType(fields :+ StructField(name, dataType, nullable).withComment(comment))
   }
 
   /**
@@ -214,6 +236,24 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       nullable: Boolean,
       metadata: Metadata): StructType = {
     add(name, CatalystSqlParser.parseDataType(dataType), nullable, metadata)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata where the
+   * dataType is specified as a String.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int", true, "comment1")
+   *   .add("b", "long", false, "comment2")
+   *   .add("c", "string", true, "comment3")
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: String,
+      nullable: Boolean,
+      comment: String): StructType = {
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, comment)
   }
 
   /**
@@ -292,7 +332,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
   override def simpleString: String = {
-    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}")
+    val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}")
+    Utils.truncatedString(fieldTypes, "struct<", ",", ">")
+  }
+
+  override def catalogString: String = {
+    // in catalogString, we should not truncate
+    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.catalogString}")
     s"struct<${fieldTypes.mkString(",")}>"
   }
 
@@ -304,7 +350,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private[sql] override def simpleString(maxNumberFields: Int): String = {
     val builder = new StringBuilder
     val fieldTypes = fields.take(maxNumberFields).map {
-      case f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
+      f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
     }
     builder.append("struct<")
     builder.append(fieldTypes.mkString(", "))
@@ -350,9 +396,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     InterpretedOrdering.forSchema(this.fields.map(_.dataType))
 }
 
+/**
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object StructType extends AbstractDataType {
-
-  private[sql] val metadataKeyForOptionalField = "_OPTIONAL_"
 
   override private[sql] def defaultConcreteType: DataType = new StructType
 
@@ -369,6 +417,12 @@ object StructType extends AbstractDataType {
     }
   }
 
+  /**
+   * Creates StructType for a given DDL-formatted string, which is a comma separated list of field
+   * definitions, e.g., a INT, b STRING.
+   */
+  def fromDDL(ddl: String): StructType = CatalystSqlParser.parseTableSchema(ddl)
+
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
   def apply(fields: java.util.List[StructField]): StructType = {
@@ -376,10 +430,10 @@ object StructType extends AbstractDataType {
     StructType(fields.asScala)
   }
 
-  protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
+  private[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 
-  def removeMetadata(key: String, dt: DataType): DataType =
+  private[sql] def removeMetadata(key: String, dt: DataType): DataType =
     dt match {
       case StructType(fields) =>
         val newFields = fields.map { f =>
@@ -408,8 +462,6 @@ object StructType extends AbstractDataType {
 
       case (StructType(leftFields), StructType(rightFields)) =>
         val newFields = ArrayBuffer.empty[StructField]
-        // This metadata will record the fields that only exist in one of two StructTypes
-        val optionalMeta = new MetadataBuilder()
 
         val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
@@ -421,8 +473,7 @@ object StructType extends AbstractDataType {
                   nullable = leftNullable || rightNullable)
               }
               .orElse {
-                optionalMeta.putBoolean(metadataKeyForOptionalField, true)
-                Some(leftField.copy(metadata = optionalMeta.build()))
+                Some(leftField)
               }
               .foreach(newFields += _)
         }
@@ -431,8 +482,7 @@ object StructType extends AbstractDataType {
         rightFields
           .filterNot(f => leftMapped.get(f.name).nonEmpty)
           .foreach { f =>
-            optionalMeta.putBoolean(metadataKeyForOptionalField, true)
-            newFields += f.copy(metadata = optionalMeta.build())
+            newFields += f
           }
 
         StructType(newFields)

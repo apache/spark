@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Classification and Regression - spark.mllib
-displayTitle: Classification and Regression - spark.mllib
+title: Classification and Regression - RDD-based API
+displayTitle: Classification and Regression - RDD-based API
 ---
 
 The `spark.mllib` package supports various methods for 

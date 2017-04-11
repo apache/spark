@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 /**
- * A a collection of common abstractions for query plans as well as
+ * A collection of common abstractions for query plans as well as
  * a base logical plan representation.
  */
 package object plans

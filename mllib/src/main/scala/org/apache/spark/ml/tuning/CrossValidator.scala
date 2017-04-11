@@ -25,7 +25,7 @@ import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType
  */
 private[ml] trait CrossValidatorParams extends ValidatorParams {
   /**
-   * Param for number of folds for cross validation.  Must be >= 2.
+   * Param for number of folds for cross validation.  Must be &gt;= 2.
    * Default: 3
    *
    * @group param
@@ -55,11 +55,13 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
 }
 
 /**
- * :: Experimental ::
- * K-fold cross validation.
+ * K-fold cross validation performs model selection by splitting the dataset into a set of
+ * non-overlapping randomly partitioned folds which are used as separate training and test datasets
+ * e.g., with k=3 folds, K-fold cross validation will generate 3 (training, test) dataset pairs,
+ * each of which uses 2/3 of the data for training and 1/3 for testing. Each fold is used as the
+ * test set exactly once.
  */
 @Since("1.2.0")
-@Experimental
 class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   extends Estimator[CrossValidatorModel]
   with CrossValidatorParams with MLWritable with Logging {
@@ -99,6 +101,11 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
+
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(numFolds, seed)
+    logTuningParams(instr)
+
     val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
@@ -125,6 +132,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
+    instr.logSuccess(bestModel)
     copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
   }
 
@@ -190,15 +198,15 @@ object CrossValidator extends MLReadable[CrossValidator] {
 }
 
 /**
- * :: Experimental ::
- * Model from k-fold cross validation.
+ * CrossValidatorModel contains the model with the highest average cross-validation
+ * metric across folds and uses this model to transform input data. CrossValidatorModel
+ * also tracks the metrics for each param map evaluated.
  *
  * @param bestModel The best model selected from k-fold cross validation.
  * @param avgMetrics Average cross-validation metrics for each paramMap in
- *                   [[CrossValidator.estimatorParamMaps]], in the corresponding order.
+ *                   `CrossValidator.estimatorParamMaps`, in the corresponding order.
  */
 @Since("1.2.0")
-@Experimental
 class CrossValidatorModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("1.2.0") val bestModel: Model[_],

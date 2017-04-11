@@ -56,13 +56,13 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sparkSession: Spa
 }
 
 class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTenPruned
+        |CREATE TEMPORARY VIEW oneToTenPruned
         |USING org.apache.spark.sql.sources.PrunedScanSource
         |OPTIONS (
         |  from '1',
@@ -122,7 +122,7 @@ class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
     test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
 
       // These tests check a particular plan, disable whole stage codegen.
-      caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, false)
+      spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, false)
       try {
         val queryExecution = sql(sqlString).queryExecution
         val rawPlan = queryExecution.executedPlan.collect {
@@ -145,7 +145,7 @@ class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
           fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
         }
       } finally {
-        caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED,
+        spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }

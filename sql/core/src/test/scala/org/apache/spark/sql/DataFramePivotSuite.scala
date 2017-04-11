@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class DataFramePivotSuite extends QueryTest with SharedSQLContext{
+class DataFramePivotSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("pivot courses") {
@@ -196,5 +196,54 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
       Row(2012, Seq(5000.0, 7.0), Seq(20000.0, 7.0)) ::
         Row(2013, Seq(48000.0, 7.0), Seq(30000.0, 7.0)) :: Nil
     )
+  }
+
+  test("pivot preserves aliases if given") {
+    assertResult(
+      Array("year", "dotNET_foo", "dotNET_avg(earnings)", "Java_foo", "Java_avg(earnings)")
+    )(
+      courseSales.groupBy($"year")
+        .pivot("course", Seq("dotNET", "Java"))
+        .agg(sum($"earnings").as("foo"), avg($"earnings")).columns
+    )
+  }
+
+  test("pivot with column definition in groupby") {
+    checkAnswer(
+      courseSales.groupBy(substring(col("course"), 0, 1).as("foo"))
+        .pivot("year", Seq(2012, 2013))
+        .sum("earnings"),
+      Row("d", 15000.0, 48000.0) :: Row("J", 20000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("pivot with null should not throw NPE") {
+    checkAnswer(
+      Seq(Tuple1(None), Tuple1(Some(1))).toDF("a").groupBy($"a").pivot("a").count(),
+      Row(null, 1, null) :: Row(1, null, 1) :: Nil)
+  }
+
+  test("pivot with null and aggregate type not supported by PivotFirst returns correct result") {
+    checkAnswer(
+      Seq(Tuple1(None), Tuple1(Some(1))).toDF("a")
+        .withColumn("b", expr("array(a, 7)"))
+        .groupBy($"a").pivot("a").agg(min($"b")),
+      Row(null, Seq(null, 7), null) :: Row(1, null, Seq(1, 7)) :: Nil)
+  }
+
+  test("pivot with timestamp and count should not print internal representation") {
+    val ts = "2012-12-31 16:00:10.011"
+    val tsWithZone = "2013-01-01 00:00:10.011"
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+      val df = Seq(java.sql.Timestamp.valueOf(ts)).toDF("a").groupBy("a").pivot("a").count()
+      val expected = StructType(
+        StructField("a", TimestampType) ::
+        StructField(tsWithZone, LongType) :: Nil)
+      assert(df.schema == expected)
+      // String representation of timestamp with timezone should take the time difference
+      // into account.
+      checkAnswer(df.select($"a".cast(StringType)), Row(tsWithZone))
+    }
   }
 }

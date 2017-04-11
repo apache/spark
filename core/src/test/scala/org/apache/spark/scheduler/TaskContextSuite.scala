@@ -62,7 +62,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties, new TaskMetrics)
+      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
+      closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
       task.run(0, 0, null)
     }
@@ -83,7 +84,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties, new TaskMetrics)
+      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
+      closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
       task.run(0, 0, null)
     }
@@ -146,14 +148,13 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("accumulators are updated on exception failures") {
     // This means use 1 core and 4 max task failures
     sc = new SparkContext("local[1,4]", "test")
-    val param = AccumulatorParam.LongAccumulatorParam
     // Create 2 accumulators, one that counts failed values and another that doesn't
-    val acc1 = new Accumulator(0L, param, Some("x"), countFailedValues = true)
-    val acc2 = new Accumulator(0L, param, Some("y"), countFailedValues = false)
+    val acc1 = AccumulatorSuite.createLongAccum("x", true)
+    val acc2 = AccumulatorSuite.createLongAccum("y", false)
     // Fail first 3 attempts of every task. This means each task should be run 4 times.
     sc.parallelize(1 to 10, 10).map { i =>
-      acc1 += 1
-      acc2 += 1
+      acc1.add(1)
+      acc2.add(1)
       if (TaskContext.get.attemptNumber() <= 2) {
         throw new Exception("you did something wrong")
       } else {
@@ -227,6 +228,32 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(res === Array("testPropValue,testPropValue"))
   }
 
+  test("immediately call a completion listener if the context is completed") {
+    var invocations = 0
+    val context = TaskContext.empty()
+    context.markTaskCompleted()
+    context.addTaskCompletionListener(_ => invocations += 1)
+    assert(invocations == 1)
+    context.markTaskCompleted()
+    assert(invocations == 1)
+  }
+
+  test("immediately call a failure listener if the context has failed") {
+    var invocations = 0
+    var lastError: Throwable = null
+    val error = new RuntimeException
+    val context = TaskContext.empty()
+    context.markTaskFailed(error)
+    context.addTaskFailureListener { (_, e) =>
+      lastError = e
+      invocations += 1
+    }
+    assert(lastError == error)
+    assert(invocations == 1)
+    context.markTaskFailed(error)
+    assert(lastError == error)
+    assert(invocations == 1)
+  }
 }
 
 private object TaskContextSuite {

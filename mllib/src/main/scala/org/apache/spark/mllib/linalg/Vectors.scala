@@ -34,13 +34,13 @@ import org.apache.spark.annotation.{AlphaComponent, Since}
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
- * Note: Users should not implement this interface.
+ * @note Users should not implement this interface.
  */
 @SQLUserDefinedType(udt = classOf[VectorUDT])
 @Since("1.0.0")
@@ -77,7 +77,7 @@ sealed trait Vector extends Serializable {
 
   /**
    * Returns a hash code value for the vector. The hash code is based on its size and its first 128
-   * nonzero entries, using a hash algorithm similar to [[java.util.Arrays.hashCode]].
+   * nonzero entries, using a hash algorithm similar to `java.util.Arrays.hashCode`.
    */
   override def hashCode(): Int = {
     // This is a reference implementation. It calls return in foreachActive, which is slow.
@@ -103,14 +103,14 @@ sealed trait Vector extends Serializable {
   /**
    * Converts the instance to a breeze vector.
    */
-  private[spark] def toBreeze: BV[Double]
+  private[spark] def asBreeze: BV[Double]
 
   /**
    * Gets the value of the ith element.
    * @param i index
    */
   @Since("1.1.0")
-  def apply(i: Int): Double = toBreeze(i)
+  def apply(i: Int): Double = asBreeze(i)
 
   /**
    * Makes a deep copy of this vector.
@@ -132,7 +132,9 @@ sealed trait Vector extends Serializable {
 
   /**
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
-   * regardless of its value.  Note that inactive entries have value 0.
+   * regardless of its value.
+   *
+   * @note Inactive entries have value 0.
    */
   @Since("1.4.0")
   def numActives: Int
@@ -214,14 +216,14 @@ class VectorUDT extends UserDefinedType[Vector] {
   override def serialize(obj: Vector): InternalRow = {
     obj match {
       case SparseVector(size, indices, values) =>
-        val row = new GenericMutableRow(4)
+        val row = new GenericInternalRow(4)
         row.setByte(0, 0)
         row.setInt(1, size)
         row.update(2, UnsafeArrayData.fromPrimitiveArray(indices))
         row.update(3, UnsafeArrayData.fromPrimitiveArray(values))
         row
       case DenseVector(values) =>
-        val row = new GenericMutableRow(4)
+        val row = new GenericInternalRow(4)
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
@@ -271,7 +273,7 @@ class VectorUDT extends UserDefinedType[Vector] {
 /**
  * Factory methods for [[org.apache.spark.mllib.linalg.Vector]].
  * We don't use the name `Vector` because Scala imports
- * [[scala.collection.immutable.Vector]] by default.
+ * `scala.collection.immutable.Vector` by default.
  */
 @Since("1.0.0")
 object Vectors {
@@ -349,7 +351,7 @@ object Vectors {
   }
 
   /**
-   * Parses a string resulted from [[Vector.toString]] into a [[Vector]].
+   * Parses a string resulted from `Vector.toString` into a [[Vector]].
    */
   @Since("1.1.0")
   def parse(s: String): Vector = {
@@ -610,7 +612,7 @@ class DenseVector @Since("1.0.0") (
   @Since("1.0.0")
   override def toArray: Array[Double] = values
 
-  private[spark] override def toBreeze: BV[Double] = new BDV[Double](values)
+  private[spark] override def asBreeze: BV[Double] = new BDV[Double](values)
 
   @Since("1.0.0")
   override def apply(i: Int): Double = values(i)
@@ -731,7 +733,7 @@ object DenseVector {
 }
 
 /**
- * A sparse vector represented by an index array and an value array.
+ * A sparse vector represented by an index array and a value array.
  *
  * @param size size of the vector.
  * @param indices index array, assume to be strictly increasing.
@@ -770,7 +772,7 @@ class SparseVector @Since("1.0.0") (
     new SparseVector(size, indices.clone(), values.clone())
   }
 
-  private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+  private[spark] override def asBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
   @Since("1.6.0")
   override def foreachActive(f: (Int, Double) => Unit): Unit = {

@@ -31,7 +31,7 @@ Run with:
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
-        .appName("PythonBisectingKMeansExample")\
+        .appName("BisectingKMeansExample")\
         .getOrCreate()
 
     # $example on$

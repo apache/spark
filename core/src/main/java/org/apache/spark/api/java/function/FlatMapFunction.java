@@ -23,6 +23,7 @@ import java.util.Iterator;
 /**
  * A function that returns zero or more output records from each input record.
  */
+@FunctionalInterface
 public interface FlatMapFunction<T, R> extends Serializable {
   Iterator<R> call(T t) throws Exception;
 }

@@ -5,7 +5,7 @@ set hive.auto.convert.join = true;
 
 CREATE TABLE dest1(c1 INT, c2 STRING) STORED AS TEXTFILE;
 
-set mapred.job.tracker=localhost:58;
+set mapreduce.jobtracker.address=localhost:58;
 set hive.exec.mode.local.auto=true;
 
 explain

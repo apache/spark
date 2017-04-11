@@ -27,8 +27,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Seconds, StreamingContext, Time}
-import org.apache.spark.util.IntParam
-import org.apache.spark.util.LongAccumulator
+import org.apache.spark.util.{IntParam, LongAccumulator}
 
 /**
  * Use this singleton to get or register a Broadcast variable.

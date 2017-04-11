@@ -23,7 +23,6 @@ import javax.annotation.concurrent.NotThreadSafe
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.annotation.{DeveloperApi, Private}
 import org.apache.spark.util.NextIterator
 
@@ -40,7 +39,7 @@ import org.apache.spark.util.NextIterator
  *
  * 2. Java serialization interface.
  *
- * Note that serializers are not required to be wire-compatible across different versions of Spark.
+ * @note Serializers are not required to be wire-compatible across different versions of Spark.
  * They are intended to be used to serialize/de-serialize data within a single Spark application.
  */
 @DeveloperApi
@@ -78,7 +77,7 @@ abstract class Serializer {
    * position = 0
    * serOut.write(obj1)
    * serOut.flush()
-   * position = # of bytes writen to stream so far
+   * position = # of bytes written to stream so far
    * obj1Bytes = output[0:position-1]
    * serOut.write(obj2)
    * serOut.flush()

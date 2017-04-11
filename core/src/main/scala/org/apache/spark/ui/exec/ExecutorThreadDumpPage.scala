@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.exec
 
+import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Text}
@@ -42,12 +43,23 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           val v1 = if (threadTrace1.threadName.contains("Executor task launch")) 1 else 0
           val v2 = if (threadTrace2.threadName.contains("Executor task launch")) 1 else 0
           if (v1 == v2) {
-            threadTrace1.threadName.toLowerCase < threadTrace2.threadName.toLowerCase
+            threadTrace1.threadName.toLowerCase(Locale.ROOT) <
+              threadTrace2.threadName.toLowerCase(Locale.ROOT)
           } else {
             v1 > v2
           }
       }.map { thread =>
         val threadId = thread.threadId
+        val blockedBy = thread.blockedByThreadId match {
+          case Some(_) =>
+            <div>
+              Blocked by <a href={s"#${thread.blockedByThreadId}_td_id"}>
+              Thread {thread.blockedByThreadId} {thread.blockedByLock}</a>
+            </div>
+          case None => Text("")
+        }
+        val heldLocks = thread.holdingLocks.mkString(", ")
+
         <tr id={s"thread_${threadId}_tr"} class="accordion-heading"
             onclick={s"toggleThreadStackTrace($threadId, false)"}
             onmouseover={s"onMouseOverAndOut($threadId)"}
@@ -55,6 +67,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           <td id={s"${threadId}_td_id"}>{threadId}</td>
           <td id={s"${threadId}_td_name"}>{thread.threadName}</td>
           <td id={s"${threadId}_td_state"}>{thread.threadState}</td>
+          <td id={s"${threadId}_td_locking"}>{blockedBy}{heldLocks}</td>
           <td id={s"${threadId}_td_stacktrace"} class="hidden">{thread.stackTrace}</td>
         </tr>
       }
@@ -86,6 +99,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
           <th onClick="collapseAllThreadStackTrace(false)">Thread Name</th>
           <th onClick="collapseAllThreadStackTrace(false)">Thread State</th>
+          <th onClick="collapseAllThreadStackTrace(false)">Thread Locks</th>
         </thead>
         <tbody>{dumpRows}</tbody>
       </table>

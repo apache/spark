@@ -29,16 +29,6 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
 
   import testImplicits._
 
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-  }
-
-  override def afterEach(): Unit = {
-    super.beforeEach()
-    TimeZone.setDefault(null)
-  }
-
   test("tumbling window groupBy statement") {
     val df = Seq(
       ("2016-03-27 19:39:34", 1, "a"),
@@ -267,7 +257,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
     }
   }
 
-  test("time window in SQL with with two expressions") {
+  test("time window in SQL with two expressions") {
     withTempTable { table =>
       checkAnswer(
         spark.sql(
@@ -282,7 +272,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
     }
   }
 
-  test("time window in SQL with with three expressions") {
+  test("time window in SQL with three expressions") {
     withTempTable { table =>
       checkAnswer(
         spark.sql(

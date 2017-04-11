@@ -18,6 +18,9 @@
 package org.apache.spark.internal.config
 
 import java.util.concurrent.TimeUnit
+import java.util.regex.PatternSyntaxException
+
+import scala.util.matching.Regex
 
 import org.apache.spark.network.util.{ByteUnit, JavaUtils}
 
@@ -65,6 +68,13 @@ private object ConfigHelpers {
 
   def byteToString(v: Long, unit: ByteUnit): String = unit.convertTo(v, ByteUnit.BYTE) + "b"
 
+  def regexFromString(str: String, key: String): Regex = {
+    try str.r catch {
+      case e: PatternSyntaxException =>
+        throw new IllegalArgumentException(s"$key should be a regex, but was $str", e)
+    }
+  }
+
 }
 
 /**
@@ -88,6 +98,14 @@ private[spark] class TypedConfigBuilder[T](
   /** Apply a transformation to the user-provided values of the config entry. */
   def transform(fn: T => T): TypedConfigBuilder[T] = {
     new TypedConfigBuilder(parent, s => fn(converter(s)), stringConverter)
+  }
+
+  /** Checks if the user-provided value for the config matches the validator. */
+  def checkValue(validator: T => Boolean, errorMsg: String): TypedConfigBuilder[T] = {
+    transform { v =>
+      if (!validator(v)) throw new IllegalArgumentException(errorMsg)
+      v
+    }
   }
 
   /** Check that user-provided values for the config match a pre-defined set. */
@@ -116,10 +134,24 @@ private[spark] class TypedConfigBuilder[T](
 
   /** Creates a [[ConfigEntry]] that has a default value. */
   def createWithDefault(default: T): ConfigEntry[T] = {
-    val transformedDefault = converter(stringConverter(default))
-    val entry = new ConfigEntryWithDefault[T](parent.key, transformedDefault, converter,
+    // Treat "String" as a special case, so that both createWithDefault and createWithDefaultString
+    // behave the same w.r.t. variable expansion of default values.
+    if (default.isInstanceOf[String]) {
+      createWithDefaultString(default.asInstanceOf[String])
+    } else {
+      val transformedDefault = converter(stringConverter(default))
+      val entry = new ConfigEntryWithDefault[T](parent.key, transformedDefault, converter,
+        stringConverter, parent._doc, parent._public)
+      parent._onCreate.foreach(_(entry))
+      entry
+    }
+  }
+
+  /** Creates a [[ConfigEntry]] with a function to determine the default value */
+  def createWithDefaultFunction(defaultFunc: () => T): ConfigEntry[T] = {
+    val entry = new ConfigEntryWithDefaultFunction[T](parent.key, defaultFunc, converter,
       stringConverter, parent._doc, parent._public)
-    parent._onCreate.foreach(_(entry))
+    parent._onCreate.foreach(_ (entry))
     entry
   }
 
@@ -128,8 +160,7 @@ private[spark] class TypedConfigBuilder[T](
    * [[String]] and must be a valid value for the entry.
    */
   def createWithDefaultString(default: String): ConfigEntry[T] = {
-    val typedDefault = converter(default)
-    val entry = new ConfigEntryWithDefault[T](parent.key, typedDefault, converter, stringConverter,
+    val entry = new ConfigEntryWithDefaultString[T](parent.key, default, converter, stringConverter,
       parent._doc, parent._public)
     parent._onCreate.foreach(_(entry))
     entry
@@ -201,4 +232,7 @@ private[spark] case class ConfigBuilder(key: String) {
     new FallbackConfigEntry(key, _doc, _public, fallback)
   }
 
+  def regexConf: TypedConfigBuilder[Regex] = {
+    new TypedConfigBuilder(this, regexFromString(_, this.key), _.toString)
+  }
 }

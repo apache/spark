@@ -86,6 +86,7 @@ object KMeansDataGenerator {
     val data = generateKMeansRDD(sc, numPoints, k, d, r, parts)
     data.map(_.mkString(" ")).saveAsTextFile(outputPath)
 
+    sc.stop()
     System.exit(0)
   }
 }

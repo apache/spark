@@ -53,7 +53,7 @@ public class JavaOneHotEncoderExample {
     );
 
     StructType schema = new StructType(new StructField[]{
-      new StructField("id", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("category", DataTypes.StringType, false, Metadata.empty())
     });
 
@@ -68,9 +68,11 @@ public class JavaOneHotEncoderExample {
     OneHotEncoder encoder = new OneHotEncoder()
       .setInputCol("categoryIndex")
       .setOutputCol("categoryVec");
+
     Dataset<Row> encoded = encoder.transform(indexed);
-    encoded.select("id", "categoryVec").show();
+    encoded.show();
     // $example off$
+
     spark.stop();
   }
 }

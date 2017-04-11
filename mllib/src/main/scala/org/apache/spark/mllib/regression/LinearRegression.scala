@@ -44,7 +44,7 @@ class LinearRegressionModel @Since("1.1.0") (
       dataMatrix: Vector,
       weightMatrix: Vector,
       intercept: Double): Double = {
-    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
+    weightMatrix.asBreeze.dot(dataMatrix.asBreeze) + intercept
   }
 
   @Since("1.3.0")

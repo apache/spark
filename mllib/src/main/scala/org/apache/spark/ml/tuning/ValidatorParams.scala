@@ -26,7 +26,7 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.HasSeed
-import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter, MetaAlgorithmReadWrite, MLWritable}
+import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.sql.types.StructType
 
@@ -75,6 +75,15 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
       est.copy(paramMap).transformSchema(schema)
     }
     est.copy(firstEstimatorParamMap).transformSchema(schema)
+  }
+
+  /**
+   * Instrumentation logging for tuning params including the inner estimator and evaluator info.
+   */
+  protected def logTuningParams(instrumentation: Instrumentation[_]): Unit = {
+    instrumentation.logNamedValue("estimator", $(estimator).getClass.getCanonicalName)
+    instrumentation.logNamedValue("evaluator", $(evaluator).getClass.getCanonicalName)
+    instrumentation.logNamedValue("estimatorParamMapsLength", $(estimatorParamMaps).length)
   }
 }
 
