@@ -113,8 +113,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       SparkConf conf,
       ShuffleWriteMetrics writeMetrics) {
     super(memoryManager,
-      (int) Math.min(PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES, memoryManager.pageSizeBytes()),
-      memoryManager.getTungstenMemoryMode());
+      (int) Math.min(PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES, memoryManager.pageSizeBytes()));
     this.taskMemoryManager = memoryManager;
     this.blockManager = blockManager;
     this.taskContext = taskContext;

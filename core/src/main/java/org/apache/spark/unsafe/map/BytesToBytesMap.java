@@ -181,7 +181,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       double loadFactor,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
-    super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
+    super(taskMemoryManager, pageSizeBytes);
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
     this.serializerManager = serializerManager;
