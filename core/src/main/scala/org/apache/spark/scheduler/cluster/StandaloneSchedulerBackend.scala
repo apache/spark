@@ -55,6 +55,9 @@ private[spark] class StandaloneSchedulerBackend(
   private val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
   private val totalExpectedCores = maxCores.getOrElse(0)
 
+  /** Lock for `stop(finalState: SparkAppHandle.State)` method. */
+  private val stopLock = new Object
+
   override def start() {
     super.start()
     launcherBackend.connect()
@@ -112,7 +115,7 @@ private[spark] class StandaloneSchedulerBackend(
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
   }
 
-  override def stop(): Unit = synchronized {
+  override def stop(): Unit = {
     stop(SparkAppHandle.State.FINISHED)
   }
 
@@ -206,7 +209,7 @@ private[spark] class StandaloneSchedulerBackend(
     registrationBarrier.release()
   }
 
-  private def stop(finalState: SparkAppHandle.State): Unit = synchronized {
+  private def stop(finalState: SparkAppHandle.State): Unit = stopLock.synchronized {
     try {
       stopping = true
 
