@@ -119,7 +119,7 @@ case class RowDataSourceScanExec(
     val input = ctx.freshName("input")
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     val exprRows = output.zipWithIndex.map{ case (a, i) =>
-      new BoundReference(i, a.dataType, a.nullable)
+      BoundReference(i, a.dataType, a.nullable)
     }
     val row = ctx.freshName("row")
     ctx.INPUT_ROW = row
@@ -136,19 +136,17 @@ case class RowDataSourceScanExec(
      """.stripMargin
   }
 
-  // Ignore rdd when checking results
-  override def sameResult(plan: SparkPlan): Boolean = plan match {
-    case other: RowDataSourceScanExec => relation == other.relation && metadata == other.metadata
-    case _ => false
-  }
+  // Only care about `relation` and `metadata` when canonicalizing.
+  override def preCanonicalized: SparkPlan =
+    copy(rdd = null, outputPartitioning = null, metastoreTableIdentifier = None)
 }
 
 /**
  * Physical plan node for scanning data from HadoopFsRelations.
  *
  * @param relation The file-based relation to scan.
- * @param output Output attributes of the scan.
- * @param outputSchema Output schema of the scan.
+ * @param output Output attributes of the scan, including data attributes and partition attributes.
+ * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
  * @param partitionFilters Predicates to use for partition pruning.
  * @param dataFilters Filters on non-partition columns.
  * @param metastoreTableIdentifier identifier for the table in the metastore.
@@ -156,7 +154,7 @@ case class RowDataSourceScanExec(
 case class FileSourceScanExec(
     @transient relation: HadoopFsRelation,
     output: Seq[Attribute],
-    outputSchema: StructType,
+    requiredSchema: StructType,
     partitionFilters: Seq[Expression],
     dataFilters: Seq[Expression],
     override val metastoreTableIdentifier: Option[TableIdentifier])
@@ -267,7 +265,7 @@ case class FileSourceScanExec(
     val metadata =
       Map(
         "Format" -> relation.fileFormat.toString,
-        "ReadSchema" -> outputSchema.catalogString,
+        "ReadSchema" -> requiredSchema.catalogString,
         "Batched" -> supportsBatch.toString,
         "PartitionFilters" -> seqToString(partitionFilters),
         "PushedFilters" -> seqToString(pushedDownFilters),
@@ -287,7 +285,7 @@ case class FileSourceScanExec(
         sparkSession = relation.sparkSession,
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
-        requiredSchema = outputSchema,
+        requiredSchema = requiredSchema,
         filters = pushedDownFilters,
         options = relation.options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
@@ -515,14 +513,13 @@ case class FileSourceScanExec(
     }
   }
 
-  override def sameResult(plan: SparkPlan): Boolean = plan match {
-    case other: FileSourceScanExec =>
-      val thisPredicates = partitionFilters.map(cleanExpression)
-      val otherPredicates = other.partitionFilters.map(cleanExpression)
-      val result = relation == other.relation && metadata == other.metadata &&
-        thisPredicates.length == otherPredicates.length &&
-        thisPredicates.zip(otherPredicates).forall(p => p._1.semanticEquals(p._2))
-      result
-    case _ => false
+  override lazy val canonicalized: FileSourceScanExec = {
+    FileSourceScanExec(
+      relation,
+      output.map(normalizeExprId(_, output)),
+      requiredSchema,
+      partitionFilters.map(normalizeExprId(_, output)),
+      dataFilters.map(normalizeExprId(_, output)),
+      None)
   }
 }

@@ -124,7 +124,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   private def createScalaTestCase(testCase: TestCase): Unit = {
-    if (blackList.exists(t => testCase.name.toLowerCase.contains(t.toLowerCase))) {
+    if (blackList.exists(t =>
+        testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else {

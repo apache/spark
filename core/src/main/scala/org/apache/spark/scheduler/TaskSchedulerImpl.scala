@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.{Timer, TimerTask}
+import java.util.{Locale, Timer, TimerTask}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -56,8 +56,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     val maxTaskFailures: Int,
     private[scheduler] val blacklistTrackerOpt: Option[BlacklistTracker],
     isLocal: Boolean = false)
-  extends TaskScheduler with Logging
-{
+  extends TaskScheduler with Logging {
 
   import TaskSchedulerImpl._
 
@@ -135,12 +134,13 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   private var schedulableBuilder: SchedulableBuilder = null
   // default scheduler is FIFO
   private val schedulingModeConf = conf.get(SCHEDULER_MODE_PROPERTY, SchedulingMode.FIFO.toString)
-  val schedulingMode: SchedulingMode = try {
-    SchedulingMode.withName(schedulingModeConf.toUpperCase)
-  } catch {
-    case e: java.util.NoSuchElementException =>
-      throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf")
-  }
+  val schedulingMode: SchedulingMode =
+    try {
+      SchedulingMode.withName(schedulingModeConf.toUpperCase(Locale.ROOT))
+    } catch {
+      case e: java.util.NoSuchElementException =>
+        throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf")
+    }
 
   val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
 

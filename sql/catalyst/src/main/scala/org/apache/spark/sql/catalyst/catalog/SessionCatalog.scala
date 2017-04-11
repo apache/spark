@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
+import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -1098,7 +1099,7 @@ class SessionCatalog(
     name.database.isEmpty &&
       functionRegistry.functionExists(name.funcName) &&
       !FunctionRegistry.builtin.functionExists(name.funcName) &&
-      !hiveFunctions.contains(name.funcName.toLowerCase)
+      !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
   }
 
   protected def failFunctionLookup(name: String): Nothing = {

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
@@ -32,7 +34,7 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("better error message for NPE") {
     val udf = ScalaUDF(
-      (s: String) => s.toLowerCase,
+      (s: String) => s.toLowerCase(Locale.ROOT),
       StringType,
       Literal.create(null, StringType) :: Nil)
 

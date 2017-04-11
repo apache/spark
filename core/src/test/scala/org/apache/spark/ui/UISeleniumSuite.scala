@@ -18,6 +18,7 @@
 package org.apache.spark.ui
 
 import java.net.{HttpURLConnection, URL}
+import java.util.Locale
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
@@ -453,8 +454,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         findAll(cssSelector("tbody tr a")).foreach { link =>
-          link.text.toLowerCase should include ("count")
-          link.text.toLowerCase should not include "unknown"
+          link.text.toLowerCase(Locale.ROOT) should include ("count")
+          link.text.toLowerCase(Locale.ROOT) should not include "unknown"
         }
       }
     }
