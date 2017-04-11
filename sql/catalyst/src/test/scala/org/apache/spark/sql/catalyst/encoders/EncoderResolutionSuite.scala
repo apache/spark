@@ -33,6 +33,8 @@ case class StringIntClass(a: String, b: Int)
 
 case class ComplexClass(a: Long, b: StringLongClass)
 
+case class PrimitiveArrayClass(arr: Array[Long])
+
 case class ArrayClass(arr: Seq[StringIntClass])
 
 case class NestedArrayClass(nestedArr: Array[ArrayClass])
@@ -64,6 +66,27 @@ class EncoderResolutionSuite extends PlanTest {
       ExpressionEncoder[Long])
     val attrs = Seq('a.struct('a.string, 'b.byte), 'b.int)
     encoder.resolveAndBind(attrs).fromRow(InternalRow(InternalRow(str, 1.toByte), 2))
+  }
+
+  test("real type doesn't match encoder schema but they are compatible: primitive array") {
+    val encoder = ExpressionEncoder[PrimitiveArrayClass]
+    val attrs = Seq('arr.array(IntegerType))
+    val array = new GenericArrayData(Array(1, 2, 3))
+    encoder.resolveAndBind(attrs).fromRow(InternalRow(array))
+  }
+
+  test("the real type is not compatible with encoder schema: primitive array") {
+    val encoder = ExpressionEncoder[PrimitiveArrayClass]
+    val attrs = Seq('arr.array(StringType))
+    assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
+      s"""
+         |Cannot up cast array element from string to bigint as it may truncate
+         |The type path of the target object is:
+         |- array element class: "scala.Long"
+         |- field (class: "scala.Array", name: "arr")
+         |- root class: "org.apache.spark.sql.catalyst.encoders.PrimitiveArrayClass"
+         |You can either add an explicit cast to the input data or choose a higher precision type
+       """.stripMargin.trim + " of the field in the target object")
   }
 
   test("real type doesn't match encoder schema but they are compatible: array") {
