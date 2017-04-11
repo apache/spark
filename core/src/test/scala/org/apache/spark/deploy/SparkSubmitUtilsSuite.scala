@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io.{File, OutputStream, PrintStream}
 import java.nio.charset.StandardCharsets
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, Map}
 
 import com.google.common.io.Files
 import org.apache.ivy.core.module.descriptor.MDArtifact
@@ -38,6 +38,28 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private val noOpOutputStream = new OutputStream {
     def write(b: Int) = {}
+  }
+
+  private def loadIvySettings(dummyIvyLocal: File): IvySettings = {
+   val settingsText =
+      s"""
+         |<ivysettings>
+         |  <caches defaultCacheDir="$tempIvyPath/cache"/>
+         |  <settings defaultResolver="local-ivy-settings-file-test"/>
+         |  <resolvers>
+         |    <filesystem name="local-ivy-settings-file-test">
+         |      <ivy pattern=
+         |        "$dummyIvyLocal/[organisation]/[module]/[revision]/[type]s/[artifact].[ext]"/>
+         |      <artifact pattern=
+         |        "$dummyIvyLocal/[organisation]/[module]/[revision]/[type]s/[artifact].[ext]"/>
+         |    </filesystem>
+         |  </resolvers>
+         |</ivysettings>
+         |""".stripMargin
+
+    val settingsFile = new File(tempIvyPath, "ivysettings.xml")
+    Files.write(settingsText, settingsFile, StandardCharsets.UTF_8)
+    SparkSubmitUtils.loadIvySettings(settingsFile.toString, None, None)
   }
 
   /** Simple PrintStream that reads data into a buffer */
@@ -93,11 +115,13 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("add dependencies works correctly") {
+    val repos = "a/1,b/2,c/3"
+    val settings = SparkSubmitUtils.buildIvySettings(Option(repos), None)
     val md = SparkSubmitUtils.getModuleDescriptor
     val artifacts = SparkSubmitUtils.extractMavenCoordinates("com.databricks:spark-csv_2.11:0.1," +
       "com.databricks:spark-avro_2.11:0.1")
 
-    SparkSubmitUtils.addDependenciesToIvy(md, artifacts, "default")
+    SparkSubmitUtils.addDependenciesToIvy(md, artifacts, settings, "default")
     assert(md.getDependencies.length === 2)
   }
 
@@ -225,25 +249,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = "my.great.dep:mydep:0.5"
     val dummyIvyLocal = new File(tempIvyPath, "local" + File.separator)
-    val settingsText =
-      s"""
-         |<ivysettings>
-         |  <caches defaultCacheDir="$tempIvyPath/cache"/>
-         |  <settings defaultResolver="local-ivy-settings-file-test"/>
-         |  <resolvers>
-         |    <filesystem name="local-ivy-settings-file-test">
-         |      <ivy pattern=
-         |        "$dummyIvyLocal/[organisation]/[module]/[revision]/[type]s/[artifact].[ext]"/>
-         |      <artifact pattern=
-         |        "$dummyIvyLocal/[organisation]/[module]/[revision]/[type]s/[artifact].[ext]"/>
-         |    </filesystem>
-         |  </resolvers>
-         |</ivysettings>
-         |""".stripMargin
-
-    val settingsFile = new File(tempIvyPath, "ivysettings.xml")
-    Files.write(settingsText, settingsFile, StandardCharsets.UTF_8)
-    val settings = SparkSubmitUtils.loadIvySettings(settingsFile.toString, None, None)
+    val settings = loadIvySettings(dummyIvyLocal)
     settings.setDefaultIvyUserDir(new File(tempIvyPath))  // NOTE - can't set this through file
 
     val testUtilSettings = new IvySettings
@@ -269,6 +275,61 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       val r = """.*org.apache.spark-spark-submit-parent-.*""".r
       assert(!ivySettings.getDefaultCache.listFiles.map(_.getName)
         .exists(r.findFirstIn(_).isDefined), "resolution files should be cleaned")
+    }
+  }
+
+  test("test artifact with no transitive dependencies") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1", Map("transitive" -> "false"))
+    val dep = "my.great.dep:mydep:0.5"
+
+    IvyTestUtils.withRepository(main, Some(dep), None) { repo =>
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+        main.toString,
+        SparkSubmitUtils.buildIvySettings(Some(repo), None),
+        isTest = true)
+      assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
+      assert(jarPath.indexOf("mydep") < 0, "should not transitive dependency")
+    }
+  }
+
+  test("test artifact excluding specific dependencies") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1", Map("exclude" -> "mydep"))
+    val dep = "my.great.dep:mydep:0.5"
+
+    IvyTestUtils.withRepository(main, Some(dep), None) { repo =>
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+        main.toString,
+        SparkSubmitUtils.buildIvySettings(Some(repo), None),
+        isTest = true)
+      assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
+      assert(jarPath.indexOf("mydep") < 0, "should not find excluded dependency")
+    }
+  }
+
+  test("test artifact with classifier") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1", Map("classifier" -> "test"))
+
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+        main.toString,
+        SparkSubmitUtils.buildIvySettings(Some(repo), None),
+        isTest = true)
+      assert(jarPath.indexOf("mylib-0.1-test") >= 0, "should find artifact with classifier")
+    }
+  }
+
+  test("test artifact with conf") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1", Map("conf" -> "master"))
+    val badMain = new MavenCoordinate("my.great.lib", "mylib", "0.1", Map("conf" -> "badconf"))
+
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val settings = SparkSubmitUtils.buildIvySettings(Some(repo), None)
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(main.toString, settings, isTest = true)
+      assert(jarPath.indexOf("mylib") >= 0, "should find artifact with good conf")
+      // artifact with bad conf should fail on runtime exception: configuration 'badconf' not found
+      intercept[RuntimeException] {
+        SparkSubmitUtils.resolveMavenCoordinates(badMain.toString, settings, isTest = true)
+      }
     }
   }
 }
