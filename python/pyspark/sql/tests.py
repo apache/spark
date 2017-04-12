@@ -491,18 +491,14 @@ class SQLTests(ReusedPySparkTestCase):
         )
 
     def test_non_existed_udf(self):
-        try:
-            self.spark.udf.registerJavaFunction("udf1", "non_existed_udf")
-            self.fail("should fail due to can not load java udf class")
-        except py4j.protocol.Py4JError as e:
-            self.assertTrue("Can not load class non_existed_udf" in str(e))
+        spark = self.spark
+        self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udf",
+                                lambda: spark.udf.registerJavaFunction("udf1", "non_existed_udf"))
 
     def test_non_existed_udaf(self):
-        try:
-            self.spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf")
-            self.fail("should fail due to can not load java udaf class")
-        except py4j.protocol.Py4JError as e:
-            self.assertTrue("Can not load class non_existed_udaf" in str(e))
+        spark = self.spark
+        self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",
+                                lambda: spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf"))
 
     def test_multiLine_json(self):
         people1 = self.spark.read.json("python/test_support/sql/people.json")

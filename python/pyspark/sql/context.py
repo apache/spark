@@ -233,7 +233,7 @@ class SQLContext(object):
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
     @ignore_unicode_prefix
-    @since(2.2)
+    @since(2.3)
     def registerJavaUDAF(self, name, javaClassName):
         """Register a java UDAF so it can be used in SQL statements.
 
@@ -241,7 +241,7 @@ class SQLContext(object):
         :param javaClassName: fully qualified name of java class
 
         >>> sqlContext.registerJavaUDAF("javaUDAF",
-        ...   "org.apache.spark.sql.hive.aggregate.MyDoubleAvg")
+        ...   "test.org.apache.spark.sql.MyDoubleAvg")
         >>> df = sqlContext.createDataFrame([(1, "a"),(2, "b"), (3, "a")],["id", "name"])
         >>> df.registerTempTable("df")
         >>> sqlContext.sql("SELECT name, javaUDAF(id) as avg from df group by name").collect()
@@ -569,10 +569,10 @@ class UDFRegistration(object):
         return self.sqlContext.registerFunction(name, f, returnType)
 
     def registerJavaFunction(self, name, javaClassName, returnType=None):
-        return self.sqlContext.registerJavaFunction(name, javaClassName, returnType)
+        self.sqlContext.registerJavaFunction(name, javaClassName, returnType)
 
     def registerJavaUDAF(self, name, javaClassName):
-        return self.sqlContext.registerJavaUDAF(name, javaClassName)
+        self.sqlContext.registerJavaUDAF(name, javaClassName)
 
     register.__doc__ = SQLContext.registerFunction.__doc__
 
