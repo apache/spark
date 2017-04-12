@@ -539,7 +539,7 @@ private[deploy] class Master(
 
   private def completeRecovery() {
     // Ensure "only-once" recovery semantics using a short synchronization period.
-    if (state != RecoveryState.RECOVERING) { return }
+    if (state != RecoveryState.RECOVERING && state != RecoveryState.COMPLETING_RECOVERY) { return }
     state = RecoveryState.COMPLETING_RECOVERY
 
     // Kill off any workers and apps that didn't respond to us.
