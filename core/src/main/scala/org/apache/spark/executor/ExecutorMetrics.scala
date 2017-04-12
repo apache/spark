@@ -21,7 +21,6 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
- * Metrics tracked during the execution of an executor.
  */
 @DeveloperApi
 class ExecutorMetrics extends Serializable {
@@ -64,7 +63,6 @@ object ExecutorMetrics extends Serializable {
 
 /**
  * :: DeveloperApi ::
- * Metrics for network layer
  */
 @DeveloperApi
 case class TransportMetrics (

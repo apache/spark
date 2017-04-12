@@ -1257,7 +1257,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
     }
 
-    override def getMemMetrics(executorMetrics: ExecutorMetrics): Unit = {}
+    override def updateMemMetrics(executorMetrics: ExecutorMetrics): Unit = {}
 
     override def close(): Unit = {}
 

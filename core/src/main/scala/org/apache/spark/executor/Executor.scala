@@ -713,9 +713,10 @@ private[spark] class Executor(
     env.blockTransferService.updateMemMetrics(this.executorMetrics)
     val executorMetrics = if (isLocal) {
       // When running locally, there is a chance that the executorMetrics could change
-      // out from under us. So, copy them here, using serialization and deserialization
-      // to create a new object.
-      // TODO: Find a better way of doing this.
+      // out from under us. So, copy them here. In non-local mode this object would be
+      // serialized and de-serialized on its way to the driver. Perform that operation here
+      // to obtain the same result as non-local mode.
+      // TODO - Add a test that fails in local mode if we don't copy executorMetrics here.
       Utils.deserialize[ExecutorMetrics](Utils.serialize(this.executorMetrics))
     } else {
       this.executorMetrics

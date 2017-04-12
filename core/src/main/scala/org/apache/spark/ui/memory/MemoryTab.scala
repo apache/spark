@@ -34,29 +34,30 @@ private[ui] class MemoryTab(parent: SparkUI) extends SparkUITab(parent, "memory"
 
 /**
  * :: DeveloperApi ::
- * A SparkListener that prepares information to be displayed on the MemoryTab
+ * A SparkListener that prepares information to be displayed on the MemoryTab.
  */
 @DeveloperApi
 class MemoryListener extends SparkListener {
   type ExecutorId = String
   val activeExecutorIdToMem = new HashMap[ExecutorId, MemoryUIInfo]
-  // TODO There might be plenty of removed executors (e.g. Dynamic Allocation Mode), This may use
-  // too much memory.
+  // TODO This may use too much memory.
+  // There may be many removed executors (e.g. in Dynamic Allocation Mode).
   val removedExecutorIdToMem = new HashMap[ExecutorId, MemoryUIInfo]
-  // A map that maintains the latest metrics of each active executor
+  // A map that maintains the latest metrics of each active executor.
   val latestExecIdToExecMetrics = new HashMap[ExecutorId, ExecutorMetrics]
-  // activeStagesToMem a map maintains all executors memory information of each stage,
-  // the Map type is [(stageId, attemptId), Seq[(executorId, MemoryUIInfo)]
+  // A map that maintains all executors memory information of each stage.
+  // [(stageId, attemptId), Seq[(executorId, MemoryUIInfo)]
   val activeStagesToMem = new HashMap[(Int, Int), HashMap[ExecutorId, MemoryUIInfo]]
-  // TODO We need to get conf of the retained stages so that we don't need to handle all the
-  // stages since there might be too many completed stages.
+  // TODO Get conf of the retained stages so that we don't need to handle them all.
+  // There may be many completed stages.
   val completedStagesToMem = new HashMap[(Int, Int), HashMap[ExecutorId, MemoryUIInfo]]
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     val executorId = event.execId
     val executorMetrics = event.executorMetrics
-    val memoryInfo = activeExecutorIdToMem.getOrElseUpdate(executorId, new MemoryUIInfo)
-    memoryInfo.updateMemUiInfo(executorMetrics)
+    activeExecutorIdToMem
+      .getOrElseUpdate(executorId, new MemoryUIInfo)
+      .updateMemUiInfo(executorMetrics)
     activeStagesToMem.foreach { case (_, stageMemMetrics) =>
       // If executor is added in the stage running time, we also update the metrics for the
       // executor in {{activeStagesToMem}}

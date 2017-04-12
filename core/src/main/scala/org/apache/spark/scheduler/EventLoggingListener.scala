@@ -303,22 +303,23 @@ private[spark] class EventLoggingListener(
       case None =>
         executorIdToModifiedMaxMetrics(executorId) = latestEvent
       case Some(toBeModifiedEvent) =>
-        val toBeModifiedMetrics = toBeModifiedEvent.executorMetrics.transportMetrics
-        val latestTransMetrics = latestEvent.executorMetrics.transportMetrics
-        val toBeModTransMetrics = toBeModifiedMetrics
-        var timeStamp: Long = toBeModTransMetrics.timeStamp
-        // the logic here should be the same with that for memoryListener
-        val onHeapSize = if (latestTransMetrics.onHeapSize > toBeModTransMetrics.onHeapSize) {
-          timeStamp = latestTransMetrics.timeStamp
-          latestTransMetrics.onHeapSize
+        val toBeModifiedTransportMetrics = toBeModifiedEvent.executorMetrics.transportMetrics
+        val latestTransportMetrics = latestEvent.executorMetrics.transportMetrics
+        var timeStamp: Long = toBeModifiedTransportMetrics.timeStamp
+
+        val onHeapSize = if
+            (latestTransportMetrics.onHeapSize > toBeModifiedTransportMetrics.onHeapSize) {
+          timeStamp = latestTransportMetrics.timeStamp
+          latestTransportMetrics.onHeapSize
         } else {
-          toBeModTransMetrics.onHeapSize
+          toBeModifiedTransportMetrics.onHeapSize
         }
-        val offHeapSize = if (latestTransMetrics.offHeapSize > toBeModTransMetrics.offHeapSize) {
-          timeStamp = latestTransMetrics.timeStamp
-          latestTransMetrics.offHeapSize
+        val offHeapSize =
+            if (latestTransportMetrics.offHeapSize > toBeModifiedTransportMetrics.offHeapSize) {
+          timeStamp = latestTransportMetrics.timeStamp
+          latestTransportMetrics.offHeapSize
         } else {
-          toBeModTransMetrics.offHeapSize
+          toBeModifiedTransportMetrics.offHeapSize
         }
         val modifiedExecMetrics = ExecutorMetrics(toBeModifiedEvent.executorMetrics.hostname,
           toBeModifiedEvent.executorMetrics.port,
