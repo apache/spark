@@ -813,4 +813,31 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast(1.0.toFloat, DateType).checkInputDataTypes().isFailure)
     assert(cast(1.0, DateType).checkInputDataTypes().isFailure)
   }
+
+  test("cast with same structure") {
+    val from = StructType(Seq(
+      StructField("a",
+        ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("m",
+        MapType(StringType, StringType, valueContainsNull = false), nullable = true),
+      StructField("s",
+        StructType(Seq(
+          StructField("i", IntegerType, nullable = true))))))
+
+    val to = StructType(Seq(
+      StructField("x",
+        ArrayType(StringType, containsNull = false), nullable = true),
+      StructField("y",
+        MapType(StringType, StringType, valueContainsNull = false), nullable = true),
+      StructField("z",
+        StructType(Seq(
+          StructField("pgit ch", IntegerType, nullable = true))))))
+
+    val input = Row(
+      Seq("123", "true", "f"),
+      Map("a" -> "123", "b" -> "true", "c" -> "f"),
+      Row(0))
+
+    checkEvaluation(cast(Literal.create(input, from), to), input)
+  }
 }
