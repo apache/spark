@@ -331,7 +331,7 @@ class RowMatrix(DistributedMatrix):
 
         >>> rows = sc.parallelize[[3, 1, 1], [-1, 3, 1]]
         >>> rm = RowMatrix(rows)
-        
+
         >>> svd_model = rm.computeSVD(2, True)
         >>> svd_model.U.rows.collect()
         [DenseVector([-0.7071, 0.7071]), DenseVector([-0.7071, -0.7071])]
@@ -348,7 +348,7 @@ class RowMatrix(DistributedMatrix):
     def computePrincipalComponents(self, k):
         """
         Computes the k principal components of the given row matrix
-        
+
         .. note:: This cannot be computed on matrices with more than 65535 columns.
 
         :param k: Number of principal components to keep.
@@ -390,7 +390,7 @@ class RowMatrix(DistributedMatrix):
 class SingularValueDecomposition(JavaModelWrapper):
     """
     Represents singular value decomposition (SVD) factors.
-    
+
     .. versionadded:: 2.2.0
     """
 
