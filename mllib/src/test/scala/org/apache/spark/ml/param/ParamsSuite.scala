@@ -377,7 +377,7 @@ class ParamsSuite extends SparkFunSuite {
 object ParamsSuite extends SparkFunSuite {
 
   /**
-   * Checks common requirements for [[Params.params]]:
+   * Checks common requirements for `Params.params`:
    *   - params are ordered by names
    *   - param parent has the same UID as the object's UID
    *   - param name is the same as the param method name
