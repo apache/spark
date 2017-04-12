@@ -28,6 +28,7 @@ class SQLExecutionSuite extends SparkFunSuite {
   test("concurrent query execution (SPARK-10548)") {
     // Try to reproduce the issue with the old SparkContext
     val conf = new SparkConf()
+      .set("spark.testing", "1") // required to throw an error for concurrent withNewExecutionId
       .setMaster("local[*]")
       .setAppName("test")
     val badSparkContext = new BadSparkContext(conf)
@@ -52,6 +53,7 @@ class SQLExecutionSuite extends SparkFunSuite {
 
   test("concurrent query execution with fork-join pool (SPARK-13747)") {
     val spark = SparkSession.builder
+      .config("spark.testing", "1") // required to throw an error for concurrent withNewExecutionId
       .master("local[*]")
       .appName("test")
       .getOrCreate()

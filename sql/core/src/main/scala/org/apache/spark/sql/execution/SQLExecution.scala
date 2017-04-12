@@ -124,7 +124,7 @@ object SQLExecution extends Logging {
         if (testing) {
           logWarning(s"$EXECUTION_ID_KEY is already set")
         } else {
-          throw new IllegalStateException(s"$EXECUTION_ID_KEY is already set")
+          throw new IllegalArgumentException(s"$EXECUTION_ID_KEY is already set")
         }
       }
       body
