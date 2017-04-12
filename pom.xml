@@ -186,7 +186,6 @@
     <commons-crypto.version>1.0.0</commons-crypto.version>
 
     <test.java.home>${java.home}</test.java.home>
-    <test.exclude.tags></test.exclude.tags>
 
     <!-- Package to use when relocating shaded classes. -->
     <spark.shade.packageName>org.spark_project</spark.shade.packageName>
@@ -2241,9 +2240,6 @@
                       <goal>build-classpath</goal>
                     </goals>
                   </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
                 </pluginExecution>
                 <pluginExecution>
                   <pluginExecutionFilter>
@@ -2254,9 +2250,6 @@
                       <goal>test-jar</goal>
                     </goals>
                   </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
                 </pluginExecution>
                 <pluginExecution>
                   <pluginExecutionFilter>
@@ -2267,9 +2260,6 @@
                       <goal>run</goal>
                     </goals>
                   </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
                 </pluginExecution>
               </pluginExecutions>
             </lifecycleMappingMetadata>
