@@ -79,7 +79,7 @@ private[sql] class JSONOptions(
 
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
-      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), timeZone, Locale.US)
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), timeZone, Locale.US)
 
   val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
 

@@ -142,8 +142,7 @@ class LogisticRegressionSuite
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(lr, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
@@ -1874,7 +1873,7 @@ class LogisticRegressionSuite
       MLTestingUtils.testArbitrarilyScaledWeights[LogisticRegressionModel, LogisticRegression](
         dataset.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LogisticRegressionModel, LogisticRegression](
-        dataset.as[LabeledPoint], estimator, numClasses, modelEquals)
+        dataset.as[LabeledPoint], estimator, numClasses, modelEquals, outlierRatio = 3)
       MLTestingUtils.testOversamplingVsWeighting[LogisticRegressionModel, LogisticRegression](
         dataset.as[LabeledPoint], estimator, modelEquals, seed)
     }

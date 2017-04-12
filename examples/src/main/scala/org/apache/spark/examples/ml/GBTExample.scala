@@ -18,6 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import java.util.Locale
+
 import scala.collection.mutable
 import scala.language.reflectiveCalls
 
@@ -140,7 +142,7 @@ object GBTExample {
       .getOrCreate()
 
     params.checkpointDir.foreach(spark.sparkContext.setCheckpointDir)
-    val algo = params.algo.toLowerCase
+    val algo = params.algo.toLowerCase(Locale.ROOT)
 
     println(s"GBTExample with parameters:\n$params")
 

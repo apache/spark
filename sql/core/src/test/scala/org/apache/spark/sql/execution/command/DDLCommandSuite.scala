@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.URI
+import java.util.Locale
 
 import scala.reflect.{classTag, ClassTag}
 
@@ -40,8 +41,10 @@ class DDLCommandSuite extends PlanTest {
     val e = intercept[ParseException] {
       parser.parsePlan(sql)
     }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
-    containsThesePhrases.foreach { p => assert(e.getMessage.toLowerCase.contains(p.toLowerCase)) }
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
+    containsThesePhrases.foreach { p =>
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(p.toLowerCase(Locale.ROOT)))
+    }
   }
 
   private def parseAs[T: ClassTag](query: String): T = {
