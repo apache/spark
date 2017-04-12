@@ -252,7 +252,7 @@ class LinearSVC @Since("2.2.0") (
     val model = copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
     val trainingSummary = LinearSVCTrainingSummary($(labelCol), $(featuresCol),
       objectiveHistory, objectiveHistory.length)
-    model.setSummary(trainingSummary)
+    model.setSummary(Some(trainingSummary))
     instr.logSuccess(model)
     model
   }
@@ -290,15 +290,26 @@ class LinearSVCModel private[classification] (
   @Since("2.2.0")
   def setWeightCol(value: Double): this.type = set(threshold, value)
 
-  private var trainingSummary: LinearSVCTrainingSummary = _
+  private var trainingSummary: Option[LinearSVCTrainingSummary] = None
 
   private[classification]
-  def setSummary(summary: LinearSVCTrainingSummary): this.type = {
+  def setSummary(summary: Option[LinearSVCTrainingSummary]): this.type = {
     this.trainingSummary = summary
     this
   }
 
-  def summary: LinearSVCTrainingSummary = trainingSummary
+  /**
+   * Gets summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
+  @Since("2.2.0")
+  def summary: LinearSVCTrainingSummary = trainingSummary.getOrElse(
+    throw new SparkException("No training summary available for this LinearSVCModel")
+  )
+
+  /** Indicates whether a training summary exists for this model instance. */
+  @Since("2.2.0")
+  def hasSummary: Boolean = trainingSummary.isDefined
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, coefficients) + intercept
@@ -368,7 +379,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
 }
 
 /**
- * Abstraction for Linear SVC Training results.
+ * Linear SVC Training results.
  * Currently, the training summary ignores the training weights except
  * for the objective trace.
  */

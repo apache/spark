@@ -174,14 +174,26 @@ class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLR
 
     @property
     @since("2.2.0")
+    def hasSummary(self):
+        """
+        Indicates whether a training summary exists for this model
+        instance.
+        """
+        return self._call_java("hasSummary")
+
+    @property
+    @since("2.2.0")
     def summary(self):
         """
         Gets summary (e.g. objective history, total iterations) of model
         trained on the training set.
         """
-
-        java_blrt_summary = self._call_java("summary")
-        return LinearSVCTrainingSummary(java_blrt_summary)
+        if self.hasSummary:
+            java_blrt_summary = self._call_java("summary")
+            return LinearSVCTrainingSummary(java_blrt_summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
 
 
 @inherit_doc
@@ -189,7 +201,7 @@ class LinearSVCTrainingSummary(JavaWrapper):
     """
     .. note:: Experimental
 
-    Abstraction for LinearSVC Training results.
+    Linear SVC Training results.
     Currently, the training summary ignores the training weights except
     for the objective trace.
 

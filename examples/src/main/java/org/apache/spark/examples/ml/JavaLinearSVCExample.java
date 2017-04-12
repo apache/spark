@@ -20,6 +20,7 @@ package org.apache.spark.examples.ml;
 // $example on$
 import org.apache.spark.ml.classification.LinearSVC;
 import org.apache.spark.ml.classification.LinearSVCModel;
+import org.apache.spark.ml.classification.LinearSVCTrainingSummary;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
@@ -47,6 +48,15 @@ public class JavaLinearSVCExample {
     // Print the coefficients and intercept for LinearSVC
     System.out.println("Coefficients: "
       + lsvcModel.coefficients() + " Intercept: " + lsvcModel.intercept());
+
+    LinearSVCTrainingSummary trainingSummary = lsvcModel.summary();
+    System.out.println("Total Iteration: " + trainingSummary.totalIterations());
+    // Obtain the objective per iteration.
+    double[] objectiveHistory = trainingSummary.objectiveHistory();
+    System.out.println("objectiveHistory:");
+    for (double lossPerIteration : objectiveHistory) {
+      System.out.println(lossPerIteration);
+    }
     // $example off$
 
     spark.stop();
