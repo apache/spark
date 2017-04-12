@@ -936,6 +936,8 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
   override def foldable: Boolean = false
   override def nullable: Boolean = false
 
+  override def flatArguments: Iterator[Any] = Iterator(child)
+
   private val errMsg = "Null value appeared in non-nullable field:" +
     walkedTypePath.mkString("\n", "\n", "\n") +
     "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
