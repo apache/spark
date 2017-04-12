@@ -133,6 +133,28 @@ private[spark] class ShuffleMapStage(
   }
 
   /**
+   * Removes all shuffle outputs associated with this host. Note that this will also remove
+   * outputs which are served by an external shuffle server (if one exists), as they are still
+   * registered with this execId.
+   */
+  def removeOutputsOnHost(host: String): Unit = {
+    var becameUnavailable = false
+    for (partition <- 0 until numPartitions) {
+      val prevList = outputLocs(partition)
+      val newList = prevList.filterNot(_.location.host == host)
+      outputLocs(partition) = newList
+      if (prevList != Nil && newList == Nil) {
+        becameUnavailable = true
+        _numAvailableOutputs -= 1
+      }
+    }
+    if (becameUnavailable) {
+      logInfo("%s is now unavailable on host %s (%d/%d, %s)".format(
+        this, host, _numAvailableOutputs, numPartitions, isAvailable))
+    }
+  }
+
+  /**
    * Removes all shuffle outputs associated with this executor. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists), as they are still
    * registered with this execId.

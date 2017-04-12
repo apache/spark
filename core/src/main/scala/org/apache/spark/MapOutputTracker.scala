@@ -289,7 +289,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
 
   // HashMaps for storing mapStatuses and cached serialized statuses in the driver.
   // Statuses are dropped only by explicit de-registering.
-  protected val mapStatuses = new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
+  // Exposed for testing
+  val mapStatuses = new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
   private val cachedSerializedStatuses = new ConcurrentHashMap[Int, Array[Byte]]().asScala
 
   private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
