@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
@@ -164,7 +164,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
-    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
     }
@@ -268,8 +268,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a JSON file (<a href="http://jsonlines.org/">JSON Lines text format or
-   * newline-delimited JSON</a>) and returns the result as a `DataFrame`.
+   * Loads a JSON file and returns the results as a `DataFrame`.
+   *
    * See the documentation on the overloaded `json()` method with varargs for more details.
    *
    * @since 1.4.0
@@ -320,7 +320,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines,
@@ -502,7 +502,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns

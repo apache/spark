@@ -1445,6 +1445,18 @@ setGeneric("spark.posterior", function(object, newData) { standardGeneric("spark
 #' @export
 setGeneric("spark.perplexity", function(object, data) { standardGeneric("spark.perplexity") })
 
+#' @rdname spark.fpGrowth
+#' @export
+setGeneric("spark.fpGrowth", function(data, ...) { standardGeneric("spark.fpGrowth") })
+
+#' @rdname spark.fpGrowth
+#' @export
+setGeneric("spark.freqItemsets", function(object) { standardGeneric("spark.freqItemsets") })
+
+#' @rdname spark.fpGrowth
+#' @export
+setGeneric("spark.associationRules", function(object) { standardGeneric("spark.associationRules") })
+
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.
 #' @param ... additional argument(s) passed to the method.

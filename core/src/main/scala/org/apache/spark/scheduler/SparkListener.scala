@@ -87,8 +87,13 @@ case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(S
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerBlockManagerAdded(time: Long, blockManagerId: BlockManagerId, maxMem: Long)
-  extends SparkListenerEvent
+case class SparkListenerBlockManagerAdded(
+    time: Long,
+    blockManagerId: BlockManagerId,
+    maxMem: Long,
+    maxOnHeapMem: Option[Long] = None,
+    maxOffHeapMem: Option[Long] = None) extends SparkListenerEvent {
+}
 
 @DeveloperApi
 case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockManagerId)

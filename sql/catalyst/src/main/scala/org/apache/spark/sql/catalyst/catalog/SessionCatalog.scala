@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
+import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -35,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object SessionCatalog {
@@ -52,7 +54,7 @@ class SessionCatalog(
     val externalCatalog: ExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
     functionRegistry: FunctionRegistry,
-    conf: CatalystConf,
+    conf: SQLConf,
     hadoopConf: Configuration,
     parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader) extends Logging {
@@ -63,7 +65,7 @@ class SessionCatalog(
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
-      conf: CatalystConf) {
+      conf: SQLConf) {
     this(
       externalCatalog,
       new GlobalTempViewManager("global_temp"),
@@ -79,7 +81,7 @@ class SessionCatalog(
     this(
       externalCatalog,
       new SimpleFunctionRegistry,
-      SimpleCatalystConf(caseSensitiveAnalysis = true))
+      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
   }
 
   /** List of temporary tables, mapping from table name to their logical plan. */
@@ -1048,7 +1050,7 @@ class SessionCatalog(
    *
    * This performs reflection to decide what type of [[Expression]] to return in the builder.
    */
-  def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
+  protected def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
     // TODO: at least support UDAFs here
     throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
   }
@@ -1062,18 +1064,20 @@ class SessionCatalog(
   }
 
   /**
-   * Create a temporary function.
-   * This assumes no database is specified in `funcDefinition`.
+   * Registers a temporary or permanent function into a session-specific [[FunctionRegistry]]
    */
-  def createTempFunction(
-      name: String,
-      info: ExpressionInfo,
-      funcDefinition: FunctionBuilder,
-      ignoreIfExists: Boolean): Unit = {
-    if (functionRegistry.lookupFunctionBuilder(name).isDefined && !ignoreIfExists) {
-      throw new TempFunctionAlreadyExistsException(name)
+  def registerFunction(
+      funcDefinition: CatalogFunction,
+      ignoreIfExists: Boolean,
+      functionBuilder: Option[FunctionBuilder] = None): Unit = {
+    val func = funcDefinition.identifier
+    if (functionRegistry.functionExists(func.unquotedString) && !ignoreIfExists) {
+      throw new AnalysisException(s"Function $func already exists")
     }
-    functionRegistry.registerFunction(name, info, funcDefinition)
+    val info = new ExpressionInfo(funcDefinition.className, func.database.orNull, func.funcName)
+    val builder =
+      functionBuilder.getOrElse(makeFunctionBuilder(func.unquotedString, funcDefinition.className))
+    functionRegistry.registerFunction(func.unquotedString, info, builder)
   }
 
   /**
@@ -1097,7 +1101,7 @@ class SessionCatalog(
     name.database.isEmpty &&
       functionRegistry.functionExists(name.funcName) &&
       !FunctionRegistry.builtin.functionExists(name.funcName) &&
-      !hiveFunctions.contains(name.funcName.toLowerCase)
+      !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
   }
 
   protected def failFunctionLookup(name: String): Nothing = {
@@ -1178,12 +1182,7 @@ class SessionCatalog(
     // catalog. So, it is possible that qualifiedName is not exactly the same as
     // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
     // At here, we preserve the input from the user.
-    val info = new ExpressionInfo(
-      catalogFunction.className,
-      qualifiedName.database.orNull,
-      qualifiedName.funcName)
-    val builder = makeFunctionBuilder(qualifiedName.unquotedString, catalogFunction.className)
-    createTempFunction(qualifiedName.unquotedString, info, builder, ignoreIfExists = false)
+    registerFunction(catalogFunction.copy(identifier = qualifiedName), ignoreIfExists = false)
     // Now, we need to create the Expression.
     functionRegistry.lookupFunction(qualifiedName.unquotedString, children)
   }

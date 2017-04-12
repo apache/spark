@@ -182,7 +182,9 @@ private[spark] object JsonProtocol {
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockManagerAdded) ~
     ("Block Manager ID" -> blockManagerId) ~
     ("Maximum Memory" -> blockManagerAdded.maxMem) ~
-    ("Timestamp" -> blockManagerAdded.time)
+    ("Timestamp" -> blockManagerAdded.time) ~
+    ("Maximum Onheap Memory" -> blockManagerAdded.maxOnHeapMem) ~
+    ("Maximum Offheap Memory" -> blockManagerAdded.maxOffHeapMem)
   }
 
   def blockManagerRemovedToJson(blockManagerRemoved: SparkListenerBlockManagerRemoved): JValue = {
@@ -266,8 +268,7 @@ private[spark] object JsonProtocol {
     ("Submission Time" -> submissionTime) ~
     ("Completion Time" -> completionTime) ~
     ("Failure Reason" -> failureReason) ~
-    ("Accumulables" -> JArray(
-      stageInfo.accumulables.values.map(accumulableInfoToJson).toList))
+    ("Accumulables" -> accumulablesToJson(stageInfo.accumulables.values))
   }
 
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {
@@ -283,7 +284,15 @@ private[spark] object JsonProtocol {
     ("Finish Time" -> taskInfo.finishTime) ~
     ("Failed" -> taskInfo.failed) ~
     ("Killed" -> taskInfo.killed) ~
-    ("Accumulables" -> JArray(taskInfo.accumulables.toList.map(accumulableInfoToJson)))
+    ("Accumulables" -> accumulablesToJson(taskInfo.accumulables))
+  }
+
+  private lazy val accumulableBlacklist = Set("internal.metrics.updatedBlockStatuses")
+
+  def accumulablesToJson(accumulables: Traversable[AccumulableInfo]): JArray = {
+    JArray(accumulables
+        .filterNot(_.name.exists(accumulableBlacklist.contains))
+        .toList.map(accumulableInfoToJson))
   }
 
   def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
@@ -391,7 +400,7 @@ private[spark] object JsonProtocol {
         ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
         val stackTrace = stackTraceToJson(exceptionFailure.stackTrace)
-        val accumUpdates = JArray(exceptionFailure.accumUpdates.map(accumulableInfoToJson).toList)
+        val accumUpdates = accumulablesToJson(exceptionFailure.accumUpdates)
         ("Class Name" -> exceptionFailure.className) ~
         ("Description" -> exceptionFailure.description) ~
         ("Stack Trace" -> stackTrace) ~
@@ -620,7 +629,9 @@ private[spark] object JsonProtocol {
     val blockManagerId = blockManagerIdFromJson(json \ "Block Manager ID")
     val maxMem = (json \ "Maximum Memory").extract[Long]
     val time = Utils.jsonOption(json \ "Timestamp").map(_.extract[Long]).getOrElse(-1L)
-    SparkListenerBlockManagerAdded(time, blockManagerId, maxMem)
+    val maxOnHeapMem = Utils.jsonOption(json \ "Maximum Onheap Memory").map(_.extract[Long])
+    val maxOffHeapMem = Utils.jsonOption(json \ "Maximum Offheap Memory").map(_.extract[Long])
+    SparkListenerBlockManagerAdded(time, blockManagerId, maxMem, maxOnHeapMem, maxOffHeapMem)
   }
 
   def blockManagerRemovedFromJson(json: JValue): SparkListenerBlockManagerRemoved = {

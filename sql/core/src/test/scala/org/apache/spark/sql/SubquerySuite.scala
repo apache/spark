@@ -844,4 +844,14 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         Row(0) :: Row(1) :: Nil)
     }
   }
+
+  test("ListQuery and Exists should work even no correlated references") {
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c AND (r.d in (select d from r) OR l.a >= 1)"),
+      Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) ::
+        Row(2, 1.0, 2, 3.0) :: Row(3.0, 3.0, 3, 2.0) :: Row(6, null, 6, null) :: Nil)
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c + 1 AND (exists (select * from r) OR l.a = r.c)"),
+      Row(3, 3.0, 2, 3.0) :: Row(3, 3.0, 2, 3.0) :: Nil)
+  }
 }

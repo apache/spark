@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, GroupStateImpl, MemoryStream}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, StoreUpdate}
 import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.MemoryStateStore
+import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /** Class to check custom state types */
@@ -574,11 +575,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       assertNumStateRows(total = 1, updated = 2),
 
       StopStream,
-      StartStream(ProcessingTime("1 second"), triggerClock = clock),
-      AdvanceManualClock(10 * 1000),
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
 
       AddData(inputData, "c"),
-      AdvanceManualClock(1 * 1000),
+      AdvanceManualClock(11 * 1000),
       CheckLastBatch(("b", "-1"), ("c", "1")),
       assertNumStateRows(total = 1, updated = 2),
 
