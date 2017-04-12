@@ -33,9 +33,8 @@ from pyspark.mllib.stat import MultivariateStatisticalSummary
 from pyspark.storagelevel import StorageLevel
 
 
-__all__ = ['DistributedMatrix', 'RowMatrix', 'IndexedRow',
-           'IndexedRowMatrix', 'MatrixEntry', 'CoordinateMatrix',
-           'BlockMatrix']
+__all__ = ['BlockMatrix', 'CoordinateMatrix', 'DistributedMatrix', 'IndexedRow',
+           'IndexedRowMatrix', 'MatrixEntry', 'RowMatrix', 'SingularValueDecomposition']
 
 
 class DistributedMatrix(object):
@@ -301,6 +300,7 @@ class RowMatrix(DistributedMatrix):
         R = decomp.call("R")
         return QRDecomposition(Q, R)
 
+    @since('2.2.0')
     def computeSVD(self, k, computeU=False, rCond=1e-9):
         """
         Computes the singular value decomposition of the RowMatrix.
@@ -316,18 +316,22 @@ class RowMatrix(DistributedMatrix):
              are the eigenvectors of (A' X A)
 
         For more specific details on implementation, please refer
-        the scala documentation.
+        the Scala documentation.
 
-        :param k: Set the number of singular values to keep.
+        :param k: Number of leading singular values to keep (`0 < k <= n`).
+                  It might return less than k if there are numerically zero singular values
+                  or there are not enough Ritz values converged before the maximum number of
+                  Arnoldi update iterations is reached (in case that matrix A is ill-conditioned).
         :param computeU: Whether or not to compute U. If set to be
                          True, then U is computed by A * V * s^-1
         :param rCond: Reciprocal condition number. All singular values
                       smaller than rCond * s[0] are treated as zero
                       where s[0] is the largest singular value.
-        :returns: SingularValueDecomposition object
+        :returns: :py:class:`SingularValueDecomposition`
 
-        >>> data = [(3, 1, 1), (-1, 3, 1)]
-        >>> rm = RowMatrix(sc.parallelize(data))
+        >>> rows = sc.parallelize[[3, 1, 1], [-1, 3, 1]]
+        >>> rm = RowMatrix(rows)
+        
         >>> svd_model = rm.computeSVD(2, True)
         >>> svd_model.U.rows.collect()
         [DenseVector([-0.7071, 0.7071]), DenseVector([-0.7071, -0.7071])]
@@ -340,15 +344,18 @@ class RowMatrix(DistributedMatrix):
             "computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)
 
+    @since('2.2.0')
     def computePrincipalComponents(self, k):
         """
         Computes the k principal components of the given row matrix
+        
+        .. note:: This cannot be computed on matrices with more than 65535 columns.
 
         :param k: Number of principal components to keep.
-        :returns: DenseMatrix
+        :returns: :py:class:`pyspark.mllib.linalg.DenseMatrix`
 
-        >>> data = sc.parallelize([[1, 2, 3], [2, 4, 5], [3, 6, 1]])
-        >>> rm = RowMatrix(data)
+        >>> rows = sc.parallelize([[1, 2, 3], [2, 4, 5], [3, 6, 1]])
+        >>> rm = RowMatrix(rows)
 
         >>> # Returns the two principal components of rm
         >>> pca = rm.computePrincipalComponents(2)
@@ -381,14 +388,18 @@ class RowMatrix(DistributedMatrix):
 
 
 class SingularValueDecomposition(JavaModelWrapper):
-    """Wrapper around the SingularValueDecomposition scala case class"""
+    """
+    Represents singular value decomposition (SVD) factors.
+    
+    .. versionadded:: 2.2.0
+    """
 
     @property
+    @since('2.2.0')
     def U(self):
         """
         Returns a distributed matrix whose columns are the left
-        singular vectors of the SingularValueDecomposition if
-        computeU was set to be True.
+        singular vectors of the SingularValueDecomposition if computeU was set to be True.
         """
         u = self.call("U")
         if u is not None:
@@ -401,14 +412,15 @@ class SingularValueDecomposition(JavaModelWrapper):
                 raise TypeError("Expected RowMatrix/IndexedRowMatrix got %s" % mat_name)
 
     @property
+    @since('2.2.0')
     def s(self):
         """
-        Returns a DenseVector with singular values in
-        descending order.
+        Returns a DenseVector with singular values in descending order.
         """
         return self.call("s")
 
     @property
+    @since('2.2.0')
     def V(self):
         """
         Returns a DenseMatrix whose columns are the right singular
@@ -643,6 +655,7 @@ class IndexedRowMatrix(DistributedMatrix):
                                                            colsPerBlock)
         return BlockMatrix(java_block_matrix, rowsPerBlock, colsPerBlock)
 
+    @since('2.2.0')
     def computeSVD(self, k, computeU=False, rCond=1e-9):
         """
         Computes the singular value decomposition of the IndexedRowMatrix.
@@ -660,7 +673,10 @@ class IndexedRowMatrix(DistributedMatrix):
         For more specific details on implementation, please refer
         the scala documentation.
 
-        :param k: Set the number of singular values to keep.
+        :param k: Number of leading singular values to keep (`0 < k <= n`).
+                  It might return less than k if there are numerically zero singular values
+                  or there are not enough Ritz values converged before the maximum number of
+                  Arnoldi update iterations is reached (in case that matrix A is ill-conditioned).
         :param computeU: Whether or not to compute U. If set to be
                          True, then U is computed by A * V * s^-1
         :param rCond: Reciprocal condition number. All singular values
@@ -668,8 +684,8 @@ class IndexedRowMatrix(DistributedMatrix):
                       where s[0] is the largest singular value.
         :returns: SingularValueDecomposition object
 
-        >>> data = [(0, (3, 1, 1)), (1, (-1, 3, 1))]
-        >>> irm = IndexedRowMatrix(sc.parallelize(data))
+        >>> rows = [(0, (3, 1, 1)), (1, (-1, 3, 1))]
+        >>> irm = IndexedRowMatrix(sc.parallelize(rows))
         >>> svd_model = irm.computeSVD(2, True)
         >>> svd_model.U.rows.collect() # doctest: +NORMALIZE_WHITESPACE
         [IndexedRow(0, [-0.707106781187,0.707106781187]),\
