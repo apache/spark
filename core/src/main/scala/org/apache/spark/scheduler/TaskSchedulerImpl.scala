@@ -708,8 +708,8 @@ private[spark] object TaskSchedulerImpl {
    * offers are ordered such that we'll allocate one container on each host before allocating a
    * second container on any host, and so on, in order to reduce the damage if a host fails.
    *
-   * For example, given a map consisting of h1 to [o1, o2, o3], h2 to [o4] and h3 to [o5, o6],
-   * returns a list, [o1, o5, o4, o2, o6, o3].
+   * For example, given {@literal <h1, [o1, o2, o3]>}, {@literal <h2, [o4]>} and
+   * {@literal <h3, [o5, o6]>}, returns {@literal [o1, o5, o4, o2, o6, o3]}.
    */
   def prioritizeContainers[K, T] (map: HashMap[K, ArrayBuffer[T]]): List[T] = {
     val _keyList = new ArrayBuffer[K](map.size)

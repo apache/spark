@@ -33,9 +33,9 @@ private[spark] trait RpcEnvFactory {
  *
  * It is guaranteed that `onStart`, `receive` and `onStop` will be called in sequence.
  *
- * The life-cycle of an endpoint is as below in an order:
+ * The life-cycle of an endpoint is:
  *
- * constructor, onStart, receive* and onStop
+ * {@code constructor -> onStart -> receive* -> onStop}
  *
  * Note: `receive` can be called concurrently. If you want `receive` to be thread-safe, please use
  * [[ThreadSafeRpcEndpoint]]

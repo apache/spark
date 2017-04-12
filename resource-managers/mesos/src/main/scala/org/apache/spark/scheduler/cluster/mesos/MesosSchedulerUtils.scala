@@ -296,7 +296,7 @@ trait MesosSchedulerUtils extends Logging {
 
   /**
    * Parses the attributes constraints provided to spark and build a matching data struct:
-   *  {@code Map[<attribute-name>, Set[values-to-match]}
+   *  {@literal Map[<attribute-name>, Set[values-to-match]}
    *  The constraints are specified as ';' separated key-value pairs where keys and values
    *  are separated by ':'. The ':' implies equality (for singular values) and "is one of" for
    *  multiple values (comma separated). For example:
