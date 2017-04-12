@@ -284,42 +284,38 @@ class StreamExecution(
         triggerExecutor.execute(() => {
           startTrigger()
 
-          val continueToRun =
-            if (isActive) {
-              reportTimeTaken("triggerExecution") {
-                if (currentBatchId < 0) {
-                  // We'll do this initialization only once
-                  populateStartOffsets(sparkSessionToRunBatches)
-                  logDebug(s"Stream running from $committedOffsets to $availableOffsets")
-                } else {
-                  constructNextBatch()
-                }
-                if (dataAvailable) {
-                  currentStatus = currentStatus.copy(isDataAvailable = true)
-                  updateStatusMessage("Processing new data")
-                  runBatch(sparkSessionToRunBatches)
-                }
-              }
-              // Report trigger as finished and construct progress object.
-              finishTrigger(dataAvailable)
-              if (dataAvailable) {
-                // Update committed offsets.
-                batchCommitLog.add(currentBatchId)
-                committedOffsets ++= availableOffsets
-                logDebug(s"batch ${currentBatchId} committed")
-                // We'll increase currentBatchId after we complete processing current batch's data
-                currentBatchId += 1
+          if (isActive) {
+            reportTimeTaken("triggerExecution") {
+              if (currentBatchId < 0) {
+                // We'll do this initialization only once
+                populateStartOffsets(sparkSessionToRunBatches)
+                logDebug(s"Stream running from $committedOffsets to $availableOffsets")
               } else {
-                currentStatus = currentStatus.copy(isDataAvailable = false)
-                updateStatusMessage("Waiting for data to arrive")
-                Thread.sleep(pollingDelayMs)
+                constructNextBatch()
               }
-              true
-            } else {
-              false
+              if (dataAvailable) {
+                currentStatus = currentStatus.copy(isDataAvailable = true)
+                updateStatusMessage("Processing new data")
+                runBatch(sparkSessionToRunBatches)
+              }
             }
+            // Report trigger as finished and construct progress object.
+            finishTrigger(dataAvailable)
+            if (dataAvailable) {
+              // Update committed offsets.
+              batchCommitLog.add(currentBatchId)
+              committedOffsets ++= availableOffsets
+              logDebug(s"batch ${currentBatchId} committed")
+              // We'll increase currentBatchId after we complete processing current batch's data
+              currentBatchId += 1
+            } else {
+              currentStatus = currentStatus.copy(isDataAvailable = false)
+              updateStatusMessage("Waiting for data to arrive")
+              Thread.sleep(pollingDelayMs)
+            }
+          }
           updateStatusMessage("Waiting for next trigger")
-          continueToRun
+          isActive
         })
         updateStatusMessage("Stopped")
       } else {
