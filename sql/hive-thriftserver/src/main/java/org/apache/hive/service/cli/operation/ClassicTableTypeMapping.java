@@ -28,9 +28,9 @@ import org.apache.hadoop.hive.metastore.TableType;
 /**
  * ClassicTableTypeMapping.
  * Classic table type mapping :
- *  Managed Table ==> Table
- *  External Table ==> Table
- *  Virtual View ==> View
+ *  Managed Table to Table
+ *  External Table to Table
+ *  Virtual View to View
  */
 public class ClassicTableTypeMapping implements TableTypeMapping {
 

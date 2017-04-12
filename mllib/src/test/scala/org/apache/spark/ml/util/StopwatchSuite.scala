@@ -105,8 +105,8 @@ class StopwatchSuite extends SparkFunSuite with MLlibTestSparkContext {
 private object StopwatchSuite extends SparkFunSuite {
 
   /**
-   * Checks the input stopwatch on a task that takes a random time (<10ms) to finish. Validates and
-   * returns the duration reported by the stopwatch.
+   * Checks the input stopwatch on a task that takes a random time (less than 10ms) to finish.
+   * Validates and returns the duration reported by the stopwatch.
    */
   def checkStopwatch(sw: Stopwatch): Long = {
     val ubStart = now

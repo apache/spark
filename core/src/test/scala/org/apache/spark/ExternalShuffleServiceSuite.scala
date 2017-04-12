@@ -27,7 +27,7 @@ import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalSh
 /**
  * This suite creates an external shuffle server and routes all shuffle fetches through it.
  * Note that failures in this suite may arise due to changes in Spark that invalidate expectations
- * set up in [[ExternalShuffleBlockHandler]], such as changing the format of shuffle files or how
+ * set up in `ExternalShuffleBlockHandler`, such as changing the format of shuffle files or how
  * we hash files into folders.
  */
 class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {

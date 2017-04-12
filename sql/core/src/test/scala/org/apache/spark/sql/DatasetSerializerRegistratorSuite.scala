@@ -56,7 +56,9 @@ object TestRegistrator {
   def apply(): TestRegistrator = new TestRegistrator()
 }
 
-/** A [[Serializer]] that takes a [[KryoData]] and serializes it as KryoData(0). */
+/**
+ * A `Serializer` that takes a [[KryoData]] and serializes it as KryoData(0).
+ */
 class ZeroKryoDataSerializer extends Serializer[KryoData] {
   override def write(kryo: Kryo, output: Output, t: KryoData): Unit = {
     output.writeInt(0)

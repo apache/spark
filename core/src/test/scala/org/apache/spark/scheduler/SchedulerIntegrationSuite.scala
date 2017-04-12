@@ -95,12 +95,12 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
   }
 
   /**
-   * A map from partition -> results for all tasks of a job when you call this test framework's
+   * A map from partition to results for all tasks of a job when you call this test framework's
    * [[submit]] method.  Two important considerations:
    *
    * 1. If there is a job failure, results may or may not be empty.  If any tasks succeed before
    * the job has failed, they will get included in `results`.  Instead, check for job failure by
-   * checking [[failure]].  (Also see [[assertDataStructuresEmpty()]])
+   * checking [[failure]]. (Also see `assertDataStructuresEmpty()`)
    *
    * 2. This only gets cleared between tests.  So you'll need to do special handling if you submit
    * more than one job in one test.

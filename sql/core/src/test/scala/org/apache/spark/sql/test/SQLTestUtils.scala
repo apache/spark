@@ -41,11 +41,11 @@ import org.apache.spark.util.{UninterruptibleThread, Utils}
 /**
  * Helper trait that should be extended by all SQL test suites.
  *
- * This allows subclasses to plugin a custom [[SQLContext]]. It comes with test data
+ * This allows subclasses to plugin a custom `SQLContext`. It comes with test data
  * prepared in advance as well as all implicit conversions used extensively by dataframes.
- * To use implicit methods, import `testImplicits._` instead of through the [[SQLContext]].
+ * To use implicit methods, import `testImplicits._` instead of through the `SQLContext`.
  *
- * Subclasses should *not* create [[SQLContext]]s in the test suite constructor, which is
+ * Subclasses should *not* create `SQLContext`s in the test suite constructor, which is
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
 private[sql] trait SQLTestUtils
@@ -65,7 +65,7 @@ private[sql] trait SQLTestUtils
    * A helper object for importing SQL implicits.
    *
    * Note that the alternative of importing `spark.implicits._` is not possible here.
-   * This is because we create the [[SQLContext]] immediately before the first test is run,
+   * This is because we create the `SQLContext` immediately before the first test is run,
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {
@@ -73,7 +73,7 @@ private[sql] trait SQLTestUtils
   }
 
   /**
-   * Materialize the test data immediately after the [[SQLContext]] is set up.
+   * Materialize the test data immediately after the `SQLContext` is set up.
    * This is necessary if the data is accessed by name but not through direct reference.
    */
   protected def setupTestData(): Unit = {
@@ -250,8 +250,8 @@ private[sql] trait SQLTestUtils
   }
 
   /**
-   * Turn a logical plan into a [[DataFrame]]. This should be removed once we have an easier
-   * way to construct [[DataFrame]] directly out of local data without relying on implicits.
+   * Turn a logical plan into a `DataFrame`. This should be removed once we have an easier
+   * way to construct `DataFrame` directly out of local data without relying on implicits.
    */
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
     Dataset.ofRows(spark, plan)
@@ -271,7 +271,9 @@ private[sql] trait SQLTestUtils
     }
   }
 
-  /** Run a test on a separate [[UninterruptibleThread]]. */
+  /**
+   * Run a test on a separate `UninterruptibleThread`.
+   */
   protected def testWithUninterruptibleThread(name: String, quietly: Boolean = false)
     (body: => Unit): Unit = {
     val timeoutMillis = 10000

@@ -44,8 +44,8 @@ abstract class FileStreamSourceTest
   import testImplicits._
 
   /**
-   * A subclass [[AddData]] for adding data to files. This is meant to use the
-   * [[FileStreamSource]] actually being used in the execution.
+   * A subclass `AddData` for adding data to files. This is meant to use the
+   * `FileStreamSource` actually being used in the execution.
    */
   abstract class AddFileData extends AddData {
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {

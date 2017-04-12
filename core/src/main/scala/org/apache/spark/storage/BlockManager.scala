@@ -66,7 +66,7 @@ private[spark] trait BlockData {
   /**
    * Returns a Netty-friendly wrapper for the block's data.
    *
-   * @see [[ManagedBuffer#convertToNetty()]]
+   * Please see `ManagedBuffer.convertToNetty()` for more details.
    */
   def toNetty(): Object
 
