@@ -51,6 +51,7 @@ case class CreateFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
     if (isTemp) {
       if (databaseName.isDefined) {
         throw new AnalysisException(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
@@ -59,17 +60,13 @@ case class CreateFunctionCommand(
       // We first load resources and then put the builder in the function registry.
       // Please note that it is allowed to overwrite an existing temp function.
       catalog.loadFunctionResources(resources)
-      val info = new ExpressionInfo(className, functionName)
-      val builder = catalog.makeFunctionBuilder(functionName, className)
-      catalog.createTempFunction(functionName, info, builder, ignoreIfExists = false)
+      catalog.registerFunction(func, ignoreIfExists = false)
     } else {
       // For a permanent, we will store the metadata into underlying external catalog.
       // This function will be loaded into the FunctionRegistry when a query uses it.
       // We do not load it into FunctionRegistry right now.
       // TODO: should we also parse "IF NOT EXISTS"?
-      catalog.createFunction(
-        CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources),
-        ignoreIfExists = false)
+      catalog.createFunction(func, ignoreIfExists = false)
     }
     Seq.empty[Row]
   }
