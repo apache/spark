@@ -109,13 +109,9 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
 
-    // Create execution context, run in serial if numParallelEval is 1
-    val executionContext = $(numParallelEval) match {
-      case 1 =>
-        ThreadUtils.sameThread
-      case n =>
-        ExecutionContext.fromExecutorService(executorServiceFactory(n))
-    }
+    // Create execution context from the executor service factory
+    val executionContext = ExecutionContext.fromExecutorService(
+      executorServiceFactory.create($(numParallelEval)))
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(numFolds, seed)

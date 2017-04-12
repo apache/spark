@@ -19,6 +19,7 @@ package org.apache.spark.ml.tuning
 
 import java.util.concurrent.ExecutorService
 
+import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, _}
 import org.json4s.jackson.JsonMethods._
@@ -33,6 +34,23 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
+
+
+/**
+ * Interface for defining a custom ExecutorService factory
+ */
+@Experimental
+@InterfaceStability.Unstable
+trait ExecutorServiceFactory {
+
+  /**
+   * Creates an ExecutorService
+   *
+   * @param requestedMaxThreads requested max thread-pool size, optional for the ExecutorService
+   * @return an instance of the ExecutorService
+   */
+  def create(requestedMaxThreads: Int): ExecutorService
+}
 
 /**
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
@@ -86,22 +104,31 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
 
   /**
    * Creates a execution service to be used for validation, defaults to a thread-pool with
-   * size of `numParallelEval`
+   * size of `numParallelEval`, will run same-thread executor if requested pool size is 1
    */
-  protected var executorServiceFactory: (Int) => ExecutorService = {
-    (requestedMaxThreads: Int) => ThreadUtils.newDaemonCachedThreadPool(
-      s"${this.getClass.getSimpleName}-thread-pool", requestedMaxThreads)
+  protected var executorServiceFactory: ExecutorServiceFactory = {
+    new ExecutorServiceFactory {
+      override def create(requestedMaxThreads: Int): ExecutorService = {
+        requestedMaxThreads match {
+          case 1 =>
+            MoreExecutors.sameThreadExecutor()
+          case n =>
+            ThreadUtils.newDaemonCachedThreadPool(
+              s"${this.getClass.getSimpleName}-thread-pool", requestedMaxThreads)
+        }
+      }
+    }
   }
 
   /**
-   * Sets a function to get an execution service to be used for validation
+   * Sets a factory to create an ExecutorService to be used for evaluation thread-pool
    *
-   * @param getExecutorService function to get an ExecutorService given a requestedMaxThread size
+   * @param factory instance of an ExecutorServiceFactory for using custom ExecutorService
    */
   @Experimental
   @InterfaceStability.Unstable
-  def setExecutorService(getExecutorService: (Int) => ExecutorService): Unit = {
-    executorServiceFactory = getExecutorService
+  def setExecutorService(factory: ExecutorServiceFactory): Unit = {
+    executorServiceFactory = factory
   }
 
   protected def transformSchemaImpl(schema: StructType): StructType = {

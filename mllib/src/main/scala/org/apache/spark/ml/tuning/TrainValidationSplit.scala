@@ -102,13 +102,9 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
 
-    // Create execution context, run in serial if numParallelEval is 1
-    val executionContext = $(numParallelEval) match {
-      case 1 =>
-        ThreadUtils.sameThread
-      case n =>
-        ExecutionContext.fromExecutorService(executorServiceFactory(n))
-    }
+    // Create execution context from the executor service factory
+    val executionContext = ExecutionContext.fromExecutorService(
+      executorServiceFactory.create($(numParallelEval)))
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(trainRatio, seed)
