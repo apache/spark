@@ -40,7 +40,7 @@ object NetworkWordCount {
       System.exit(1)
     }
 
-    StreamingExamples.setStreamingLogLevels()
+    StreamingExamplesUtils.setStreamingLogLevels()
 
     // Create the context with a 1 second batch size
     val sparkConf = new SparkConf().setAppName("NetworkWordCount")

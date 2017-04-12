@@ -46,7 +46,7 @@ object DirectKafkaWordCount {
       System.exit(1)
     }
 
-    StreamingExamples.setStreamingLogLevels()
+    StreamingExamplesUtils.setStreamingLogLevels()
 
     val Array(brokers, topics) = args
 

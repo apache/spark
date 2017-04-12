@@ -22,7 +22,7 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.internal.Logging
 
 /** Utility functions for Spark Streaming examples. */
-object StreamingExamples extends Logging {
+object StreamingExamplesUtils extends Logging {
 
   /** Set reasonable logging levels for streaming if the user has not configured log4j. */
   def setStreamingLogLevels() {

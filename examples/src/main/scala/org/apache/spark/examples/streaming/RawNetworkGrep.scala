@@ -43,7 +43,7 @@ object RawNetworkGrep {
       System.exit(1)
     }
 
-    StreamingExamples.setStreamingLogLevels()
+    StreamingExamplesUtils.setStreamingLogLevels()
 
     val Array(IntParam(numStreams), host, IntParam(port), IntParam(batchMillis)) = args
     val sparkConf = new SparkConf().setAppName("RawNetworkGrep")

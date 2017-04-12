@@ -44,7 +44,7 @@ object FlumePollingEventCount {
       System.exit(1)
     }
 
-    StreamingExamples.setStreamingLogLevels()
+    StreamingExamplesUtils.setStreamingLogLevels()
 
     val Array(host, IntParam(port)) = args
 
