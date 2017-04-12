@@ -377,7 +377,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         // As the root of the expression, Alias will always take an arbitrary exprId, we need to
         // normalize that for equality testing, by assigning expr id from 0 incrementally. The
         // alias name doesn't matter and should be erased.
-        Alias(normalizeExprId(a.child), "")(ExprId(id), a.qualifier, isGenerated = a.isGenerated)
+        val normalizedChild = QueryPlan.normalizeExprId(a.child, allAttributes)
+        Alias(normalizedChild, "")(ExprId(id), a.qualifier, isGenerated = a.isGenerated)
 
       case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
         // Top level `AttributeReference` may also be used for output like `Alias`, we should
@@ -385,7 +386,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         id += 1
         ar.withExprId(ExprId(id))
 
-      case other => normalizeExprId(other)
+      case other => QueryPlan.normalizeExprId(other, allAttributes)
     }.withNewChildren(canonicalizedChildren)
   }
 
@@ -395,23 +396,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   protected def preCanonicalized: PlanType = this
 
-  /**
-   * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
-   * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we
-   * do not use `BindReferences` here as the plan may take the expression as a parameter with type
-   * `Attribute`, and replace it with `BoundReference` will cause error.
-   */
-  protected def normalizeExprId[T <: Expression](e: T, input: AttributeSeq = allAttributes): T = {
-    e.transformUp {
-      case ar: AttributeReference =>
-        val ordinal = input.indexOf(ar.exprId)
-        if (ordinal == -1) {
-          ar
-        } else {
-          ar.withExprId(ExprId(ordinal))
-        }
-    }.canonicalized.asInstanceOf[T]
-  }
 
   /**
    * Returns true when the given query plan will return the same results as this query plan.
@@ -437,4 +421,25 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * All the attributes that are used for this plan.
    */
   lazy val allAttributes: AttributeSeq = children.flatMap(_.output)
+}
+
+object QueryPlan {
+  /**
+   * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
+   * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we
+   * do not use `BindReferences` here as the plan may take the expression as a parameter with type
+   * `Attribute`, and replace it with `BoundReference` will cause error.
+   */
+  def normalizeExprId[T <: Expression](e: T, input: AttributeSeq): T = {
+    e.transformUp {
+      case s: SubqueryExpression => s.canonicalize(input)
+      case ar: AttributeReference =>
+        val ordinal = input.indexOf(ar.exprId)
+        if (ordinal == -1) {
+          ar
+        } else {
+          ar.withExprId(ExprId(ordinal))
+        }
+    }.canonicalized.asInstanceOf[T]
+  }
 }
