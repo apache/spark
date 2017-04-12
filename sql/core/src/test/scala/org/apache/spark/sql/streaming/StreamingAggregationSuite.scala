@@ -292,7 +292,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
     )
   }
 
-  test(s"prune results by current_date, complete mode") {
+  test("prune results by current_date, complete mode") {
     import testImplicits._
     val clock = new StreamManualClock
     val tz = TimeZone.getDefault.getID
