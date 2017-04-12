@@ -292,52 +292,54 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
     )
   }
 
-  test("prune results by current_date, complete mode") {
-    import testImplicits._
-    val clock = new StreamManualClock
-    val tz = TimeZone.getDefault.getID
-    val inputData = MemoryStream[Long]
-    val aggregated =
-      inputData.toDF()
-        .select(to_utc_timestamp(from_unixtime('value * DateTimeUtils.SECONDS_PER_DAY), tz))
-        .toDF("value")
-        .groupBy($"value")
-        .agg(count("*"))
-        .where($"value".cast("date") >= date_sub(current_date(), 10))
-        .select(($"value".cast("long") / DateTimeUtils.SECONDS_PER_DAY).cast("long"), $"count(1)")
-    testStream(aggregated, Complete)(
-      StartStream(ProcessingTime("10 day"), triggerClock = clock),
-      // advance clock to 10 days, should retain all keys
-      AddData(inputData, 0L, 5L, 5L, 10L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
-      CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
-      // advance clock to 20 days, should retain keys >= 10
-      AddData(inputData, 15L, 15L, 20L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
-      CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
-      // advance clock to 30 days, should retain keys >= 20
-      AddData(inputData, 85L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
-      CheckLastBatch((20L, 1), (85L, 1)),
+  for (i <- 0 to 1000) {
+    test(s"prune results by current_date, complete mode - $i") {
+      import testImplicits._
+      val clock = new StreamManualClock
+      val tz = TimeZone.getDefault.getID
+      val inputData = MemoryStream[Long]
+      val aggregated =
+        inputData.toDF()
+          .select(to_utc_timestamp(from_unixtime('value * DateTimeUtils.SECONDS_PER_DAY), tz))
+          .toDF("value")
+          .groupBy($"value")
+          .agg(count("*"))
+          .where($"value".cast("date") >= date_sub(current_date(), 10))
+          .select(($"value".cast("long") / DateTimeUtils.SECONDS_PER_DAY).cast("long"), $"count(1)")
+      testStream(aggregated, Complete)(
+        StartStream(ProcessingTime("10 day"), triggerClock = clock),
+        // advance clock to 10 days, should retain all keys
+        AddData(inputData, 0L, 5L, 5L, 10L),
+        AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+        CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
+        // advance clock to 20 days, should retain keys >= 10
+        AddData(inputData, 15L, 15L, 20L),
+        AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+        CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
+        // advance clock to 30 days, should retain keys >= 20
+        AddData(inputData, 85L),
+        AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+        CheckLastBatch((20L, 1), (85L, 1)),
 
-      // bounce stream and ensure correct batch timestamp is used
-      // i.e., we don't take it from the clock, which is at 90 days.
-      StopStream,
-      AssertOnQuery { q => // clear the sink
-        q.sink.asInstanceOf[MemorySink].clear()
-        q.batchCommitLog.purge(3)
-        // advance by 60 days i.e., 90 days total
-        clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
-        true
-      },
-      StartStream(ProcessingTime("10 day"), triggerClock = clock),
-      // Commit log blown, causing a re-run of the last batch
-      CheckLastBatch((20L, 1), (85L, 1)),
+        // bounce stream and ensure correct batch timestamp is used
+        // i.e., we don't take it from the clock, which is at 90 days.
+        StopStream,
+        AssertOnQuery { q => // clear the sink
+          q.sink.asInstanceOf[MemorySink].clear()
+          q.batchCommitLog.purge(3)
+          // advance by 60 days i.e., 90 days total
+          clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
+          true
+        },
+        StartStream(ProcessingTime("10 day"), triggerClock = clock),
+        // Commit log blown, causing a re-run of the last batch
+        CheckLastBatch((20L, 1), (85L, 1)),
 
-      // advance clock to 100 days, should retain keys >= 90
-      AddData(inputData, 85L, 90L, 100L, 105L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
-      CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
-    )
+        // advance clock to 100 days, should retain keys >= 90
+        AddData(inputData, 85L, 90L, 100L, 105L),
+        AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+        CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
+      )
+    }
   }
 }
