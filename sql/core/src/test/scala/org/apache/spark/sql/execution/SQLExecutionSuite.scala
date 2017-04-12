@@ -73,7 +73,9 @@ class SQLExecutionSuite extends SparkFunSuite {
    * Trigger SPARK-10548 by mocking a parent and its child thread executing queries concurrently.
    */
   private def testConcurrentQueryExecution(sc: SparkContext): Unit = {
-    val spark = SparkSession.builder.getOrCreate()
+    val spark = SparkSession.builder
+        .config("spark.testing", "1")// required to throw an error for concurrent withNewExecutionId
+        .getOrCreate()
     import spark.implicits._
 
     // Initialize local properties. This is necessary for the test to pass.
