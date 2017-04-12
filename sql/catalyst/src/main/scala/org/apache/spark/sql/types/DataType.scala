@@ -288,4 +288,30 @@ object DataType {
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }
+
+  /**
+   * Returns true if the two data types share the same "shape", i.e. the types (including
+   * nullability) are the same, but the field names don't need to be the same.
+   */
+  def equalsStructurally(from: DataType, to: DataType): Boolean = {
+    (from, to) match {
+      case (left: ArrayType, right: ArrayType) =>
+        equalsStructurally(left.elementType, right.elementType) &&
+          left.containsNull == right.containsNull
+
+      case (left: MapType, right: MapType) =>
+        equalsStructurally(left.keyType, right.keyType) &&
+          equalsStructurally(left.valueType, right.valueType) &&
+          left.valueContainsNull == right.valueContainsNull
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields)
+            .forall { case (l, r) =>
+              equalsStructurally(l.dataType, r.dataType) && l.nullable == r.nullable
+            }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
 }
