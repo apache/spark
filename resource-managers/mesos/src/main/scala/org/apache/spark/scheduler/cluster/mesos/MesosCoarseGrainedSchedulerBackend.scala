@@ -62,9 +62,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private lazy val hadoopDelegationTokenManager: MesosHadoopDelegationTokenManager =
     new MesosHadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint)
 
-  // Blacklist a slave after this many failures
-  private val MAX_SLAVE_FAILURES = 2
-
   private val maxCoresOption = conf.getOption("spark.cores.max").map(_.toInt)
 
   private val executorCoresOption = conf.getOption("spark.executor.cores").map(_.toInt)
@@ -571,7 +568,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
       numExecutors < executorLimit &&
-      slaves.get(slaveId).map(_.taskFailures).getOrElse(0) < MAX_SLAVE_FAILURES &&
       meetsPortRequirements &&
       satisfiesLocality(offerHostname)
   }
@@ -647,15 +643,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         for (gpus <- gpusByTaskId.get(taskId)) {
           totalGpusAcquired -= gpus
           gpusByTaskId -= taskId
-        }
-        // If it was a failure, mark the slave as failed for blacklisting purposes
-        if (TaskState.isFailed(state)) {
-          slave.taskFailures += 1
-
-          if (slave.taskFailures >= MAX_SLAVE_FAILURES) {
-            logInfo(s"Blacklisting Mesos slave $slaveId due to too many failures; " +
-                "is Spark installed on it?")
-          }
         }
         executorTerminated(d, slaveId, taskId, s"Executor finished with state $state")
         // In case we'd rejected everything before but have now lost a node
@@ -798,7 +785,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
 private class Slave(val hostname: String) {
   val taskIDs = new mutable.HashSet[String]()
-  var taskFailures = 0
   var shuffleRegistered = false
 }
 
