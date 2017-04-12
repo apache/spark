@@ -18,7 +18,6 @@
 package org.apache.spark.ml.feature
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
