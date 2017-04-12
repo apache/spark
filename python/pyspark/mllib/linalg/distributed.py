@@ -329,7 +329,7 @@ class RowMatrix(DistributedMatrix):
                       where s[0] is the largest singular value.
         :returns: :py:class:`SingularValueDecomposition`
 
-        >>> rows = sc.parallelize[[3, 1, 1], [-1, 3, 1]]
+        >>> rows = sc.parallelize([[3, 1, 1], [-1, 3, 1]])
         >>> rm = RowMatrix(rows)
 
         >>> svd_model = rm.computeSVD(2, True)
