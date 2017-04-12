@@ -362,9 +362,10 @@ object SQLConf {
   val THRIFTSERVER_RESULT_LIMIT =
     buildConf("spark.sql.thriftserver.retainedResults")
       .internal()
-      .doc("The maximum number of rows returned by Thrift Server when running a query " +
-        "without a limit, and when a query with a limit or this is set to 0, " +
-        "we don't change user's behavior." )
+      .doc("The maximum number of rows that can be returned by Thrift Server when running " +
+        "a query without a Limit clause. The query could produce non-deterministic results " +
+        "when the query result is not sorted. This parameter is omitted when a Limit " +
+        "clause is part of the query or the input is not a positive integer.")
       .intConf
       .checkValue(limit => limit >= 0, "The number of sql results is not less than 0.")
       .createWithDefault(0)
