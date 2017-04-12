@@ -42,7 +42,7 @@ if __name__ == "__main__":
     collected = U.rows.collect()
     print("U factor is:")
     for vector in collected:
-        print vector
+        print(vector)
     print("Singular values are: %s" % s)
     print("V factor is:\n%s" % V)
     sc.stop()

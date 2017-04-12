@@ -42,5 +42,5 @@ if __name__ == "__main__":
     collected = projected.rows.collect()
     print("Projected Row Matrix of principal component:")
     for vector in collected:
-        print vector
+        print(vector)
     sc.stop()
