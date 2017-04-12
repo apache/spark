@@ -2818,14 +2818,14 @@ setMethod("write.df",
           signature(df = "SparkDataFrame"),
           function(df, path = NULL, source = NULL, mode = "error", ...) {
             if (!is.null(path) && !is.character(path)) {
-              stop("path should be charactor, NULL or omitted.")
+              stop("path should be character, NULL or omitted.")
             }
             if (!is.null(source) && !is.character(source)) {
               stop("source should be character, NULL or omitted. It is the datasource specified ",
                    "in 'spark.sql.sources.default' configuration by default.")
             }
             if (!is.character(mode)) {
-              stop("mode should be charactor or omitted. It is 'error' by default.")
+              stop("mode should be character or omitted. It is 'error' by default.")
             }
             if (is.null(source)) {
               source <- getDefaultSqlSource()
@@ -3040,7 +3040,7 @@ setMethod("fillna",
           signature(x = "SparkDataFrame"),
           function(x, value, cols = NULL) {
             if (!(class(value) %in% c("integer", "numeric", "character", "list"))) {
-              stop("value should be an integer, numeric, charactor or named list.")
+              stop("value should be an integer, numeric, character or named list.")
             }
 
             if (class(value) == "list") {
@@ -3052,7 +3052,7 @@ setMethod("fillna",
               # Check each item in the named list is of valid type
               lapply(value, function(v) {
                 if (!(class(v) %in% c("integer", "numeric", "character"))) {
-                  stop("Each item in value should be an integer, numeric or charactor.")
+                  stop("Each item in value should be an integer, numeric or character.")
                 }
               })
 
@@ -3598,7 +3598,7 @@ setMethod("write.stream",
                    "in 'spark.sql.sources.default' configuration by default.")
             }
             if (!is.null(outputMode) && !is.character(outputMode)) {
-              stop("outputMode should be charactor or omitted.")
+              stop("outputMode should be character or omitted.")
             }
             if (is.null(source)) {
               source <- getDefaultSqlSource()

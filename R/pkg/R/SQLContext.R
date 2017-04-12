@@ -606,7 +606,7 @@ tableToDF <- function(tableName) {
 #' @note read.df since 1.4.0
 read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
   if (!is.null(path) && !is.character(path)) {
-    stop("path should be charactor, NULL or omitted.")
+    stop("path should be character, NULL or omitted.")
   }
   if (!is.null(source) && !is.character(source)) {
     stop("source should be character, NULL or omitted. It is the datasource specified ",
