@@ -359,7 +359,7 @@ object ScalaReflection extends ScalaReflection {
           "toScalaMap",
           keyData :: valueData :: Nil)
 
-      case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
+      case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         val obj = NewInstance(
           udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
@@ -579,7 +579,7 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[java.lang.Boolean] =>
         Invoke(inputObject, "booleanValue", BooleanType)
 
-      case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
+      case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t)
           .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         val obj = NewInstance(
@@ -695,7 +695,7 @@ object ScalaReflection extends ScalaReflection {
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
     tpe match {
-      case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
+      case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         Schema(udt, nullable = true)
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
