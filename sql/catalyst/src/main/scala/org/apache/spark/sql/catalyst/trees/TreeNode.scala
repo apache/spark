@@ -422,6 +422,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def nodeName: String = getClass.getSimpleName.replaceAll("Exec$", "")
 
   /**
+   * Returns a user-facing string representation of this node's name. By default it's `nodeName`.
+   */
+  def prettyName: String = nodeName
+
+  /**
    * The arguments that should be included in the arg string.  Defaults to the `productIterator`.
    */
   protected def stringArgs: Iterator[Any] = productIterator
@@ -447,15 +452,25 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case other => other :: Nil
   }.mkString(", ")
 
-  /** ONE line description of this node. */
-  def simpleString: String = s"$nodeName $argString".trim
+  /** ONE line description of this node */
+  def simpleString: String = prettyName
 
-  /** ONE line description of this node with more information */
-  def verboseString: String
+  /**
+   * ONE line description of this node with more information.
+   * By default, it includes the arguments to this node, minus any children.
+   * It is mainly called by `generateTreeString`, when constructing the string representation
+   * of the nodes in this tree.
+   */
+  def verboseString: String = if (argString != "") {
+    s"$prettyName($argString)".trim
+  } else {
+    simpleString
+  }
 
   /** ONE line description of this node with some suffix information */
   def verboseStringWithSuffix: String = verboseString
 
+  /** The string representation of this tree, by default including all the nodes in this tree */
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */

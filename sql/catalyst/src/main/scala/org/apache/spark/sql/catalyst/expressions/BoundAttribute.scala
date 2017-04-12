@@ -32,6 +32,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   extends LeafExpression {
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
+  override def verboseString: String = toString
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {

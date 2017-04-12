@@ -242,6 +242,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case other => other.toString
   }
 
+  override def verboseString: String = toString
+
   override def hashCode(): Int = {
     val valueHashCode = value match {
       case null => 0

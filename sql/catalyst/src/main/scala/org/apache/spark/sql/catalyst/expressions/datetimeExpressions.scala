@@ -1195,7 +1195,6 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
     this(left, Option(null), ToDate(left))
   }
 
-  override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def sql: String = {
     if (format.isDefined) {
       s"$prettyName(${left.sql}, ${format.get.sql}"
@@ -1226,7 +1225,6 @@ case class ParseToTimestamp(left: Expression, format: Expression, child: Express
   this(left, format, Cast(UnixTimestamp(left, format), TimestampType))
 }
 
-  override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def sql: String = s"$prettyName(${left.sql}, ${format.sql})"
 
   override def prettyName: String = "to_timestamp"

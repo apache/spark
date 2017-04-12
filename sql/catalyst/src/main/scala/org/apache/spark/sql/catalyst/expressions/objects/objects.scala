@@ -261,6 +261,7 @@ case class Invoke(
   }
 
   override def toString: String = s"$targetObject.$functionName"
+  override def verboseString: String = toString
 }
 
 object NewInstance {
@@ -337,6 +338,7 @@ case class NewInstance(
   }
 
   override def toString: String = s"newInstance($cls)"
+  override def verboseString: String = toString
 }
 
 /**

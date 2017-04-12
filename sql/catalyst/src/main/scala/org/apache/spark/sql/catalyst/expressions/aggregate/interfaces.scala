@@ -205,6 +205,11 @@ abstract class AggregateFunction extends Expression {
     s"$prettyName($distinct${children.map(_.sql).mkString(", ")})"
   }
 
+  private def flatArguments: Iterator[Any] = productIterator.flatMap {
+    case t: Traversable[_] => t
+    case single => single :: Nil
+  }
+
   /** String representation used in explain plans. */
   def toAggString(isDistinct: Boolean): String = {
     val start = if (isDistinct) "(distinct " else "("
