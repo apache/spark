@@ -173,8 +173,8 @@ class DataFrameReader(OptionUtils):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
-        `JSON Lines <http://jsonlines.org/>`_(newline-delimited JSON) is supported by default.
-        For JSON (one record per file), set the `wholeFile` parameter to ``true``.
+        `JSON Lines <http://jsonlines.org/>`_ (newline-delimited JSON) is supported by default.
+        For JSON (one record per file), set the ``wholeFile`` parameter to ``true``.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
@@ -634,7 +634,9 @@ class DataFrameWriter(OptionUtils):
 
     @since(1.4)
     def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None):
-        """Saves the content of the :class:`DataFrame` in JSON format at the specified path.
+        """Saves the content of the :class:`DataFrame` in JSON format
+        (`JSON Lines text format or newline-delimited JSON <http://jsonlines.org/>`_) at the
+        specified path.
 
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.

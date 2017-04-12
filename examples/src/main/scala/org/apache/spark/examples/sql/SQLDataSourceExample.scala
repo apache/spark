@@ -139,7 +139,7 @@ object SQLDataSourceExample {
     // +------+
 
     // Alternatively, a DataFrame can be created for a JSON dataset represented by
-    // an Dataset[String] storing one JSON object per string
+    // a Dataset[String] storing one JSON object per string
     val otherPeopleDataset = spark.createDataset(
       """{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}""" :: Nil)
     val otherPeople = spark.read.json(otherPeopleDataset)

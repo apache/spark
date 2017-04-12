@@ -215,7 +215,7 @@ public class JavaSQLDataSourceExample {
     // +------+
 
     // Alternatively, a DataFrame can be created for a JSON dataset represented by
-    // an Dataset[String] storing one JSON object per string.
+    // a Dataset<String> storing one JSON object per string.
     List<String> jsonData = Arrays.asList(
             "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
     Dataset<String> anotherPeopleDataset = spark.createDataset(jsonData, Encoders.STRING());
