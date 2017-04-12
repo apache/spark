@@ -279,7 +279,7 @@ private[spark] object AccumulatorContext {
 
 
 /**
- * An [[AccumulatorV2 accumulator]] for computing sum, count, and averages for 64-bit integers.
+ * An [[AccumulatorV2 accumulator]] for computing sum, count, and average of 64-bit integers.
  *
  * @since 2.0.0
  */

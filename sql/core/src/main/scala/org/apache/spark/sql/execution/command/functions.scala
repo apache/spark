@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
@@ -100,7 +102,7 @@ case class DescribeFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
-    functionName.funcName.toLowerCase match {
+    functionName.funcName.toLowerCase(Locale.ROOT) match {
       case "<>" =>
         Row(s"Function: $functionName") ::
           Row("Usage: expr1 <> expr2 - " +

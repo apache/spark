@@ -630,8 +630,8 @@ private[ui] class JobPagedTable(
       </td>
       <td class="progress-cell">
         {UIUtils.makeProgressBar(started = job.numActiveTasks, completed = job.numCompletedTasks,
-        failed = job.numFailedTasks, skipped = job.numSkippedTasks, killed = job.numKilledTasks,
-        total = job.numTasks - job.numSkippedTasks)}
+        failed = job.numFailedTasks, skipped = job.numSkippedTasks,
+        reasonToNumKilled = job.reasonToNumKilled, total = job.numTasks - job.numSkippedTasks)}
       </td>
     </tr>
   }

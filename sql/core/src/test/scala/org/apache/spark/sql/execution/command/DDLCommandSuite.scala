@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.URI
+import java.util.Locale
 
 import scala.reflect.{classTag, ClassTag}
 
@@ -40,8 +41,10 @@ class DDLCommandSuite extends PlanTest {
     val e = intercept[ParseException] {
       parser.parsePlan(sql)
     }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
-    containsThesePhrases.foreach { p => assert(e.getMessage.toLowerCase.contains(p.toLowerCase)) }
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
+    containsThesePhrases.foreach { p =>
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(p.toLowerCase(Locale.ROOT)))
+    }
   }
 
   private def parseAs[T: ClassTag](query: String): T = {
@@ -780,13 +783,7 @@ class DDLCommandSuite extends PlanTest {
     assertUnsupported("ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES")
   }
 
-  test("alter table: add/replace columns (not allowed)") {
-    assertUnsupported(
-      """
-       |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-       |ADD COLUMNS (new_col1 INT COMMENT 'test_comment', new_col2 LONG
-       |COMMENT 'test_comment2') CASCADE
-      """.stripMargin)
+  test("alter table: replace columns (not allowed)") {
     assertUnsupported(
       """
        |ALTER TABLE table_name REPLACE COLUMNS (new_col1 INT

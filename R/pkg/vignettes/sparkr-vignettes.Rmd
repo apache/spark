@@ -672,6 +672,7 @@ gaussian | identity, log, inverse
 binomial | logit, probit, cloglog (complementary log-log)
 poisson | log, identity, sqrt
 gamma | inverse, identity, log
+tweedie | power link function
 
 There are three ways to specify the `family` argument.
 
@@ -679,7 +680,11 @@ There are three ways to specify the `family` argument.
 
 * Family function, e.g. `family = binomial`.
 
-* Result returned by a family function, e.g. `family = poisson(link = log)`
+* Result returned by a family function, e.g. `family = poisson(link = log)`.
+
+* Note that there are two ways to specify the tweedie family:
+  a) Set `family = "tweedie"` and specify the `var.power` and `link.power`
+  b) When package `statmod` is loaded, the tweedie family is specified using the family definition therein, i.e., `tweedie()`.
 
 For more information regarding the families and their link functions, see the Wikipedia page [Generalized Linear Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
 
@@ -693,6 +698,18 @@ When doing prediction, a new column called `prediction` will be appended. Let's 
 ```{r}
 gaussianFitted <- predict(gaussianGLM, carsDF)
 head(select(gaussianFitted, "model", "prediction", "mpg", "wt", "hp"))
+```
+
+The following is the same fit using the tweedie family:
+```{r}
+tweedieGLM1 <- spark.glm(carsDF, mpg ~ wt + hp, family = "tweedie", var.power = 0.0)
+summary(tweedieGLM1)
+```
+We can try other distributions in the tweedie family, for example, a compound Poisson distribution with a log link:
+```{r}
+tweedieGLM2 <- spark.glm(carsDF, mpg ~ wt + hp, family = "tweedie", 
+                         var.power = 1.2, link.power = 0.0)
+summary(tweedieGLM2)
 ```
 
 #### Isotonic Regression

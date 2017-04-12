@@ -1,6 +1,6 @@
 ---
 layout: global
-displayTitle: Structured Streaming Programming Guide [Alpha]
+displayTitle: Structured Streaming Programming Guide [Experimental]
 title: Structured Streaming Programming Guide
 ---
 
@@ -539,7 +539,7 @@ spark = SparkSession. ...
 
 # Read text from socket 
 socketDF = spark \
-    .readStream() \
+    .readStream \
     .format("socket") \
     .option("host", "localhost") \
     .option("port", 9999) \
@@ -552,7 +552,7 @@ socketDF.printSchema()
 # Read all the csv files written atomically in a directory
 userSchema = StructType().add("name", "string").add("age", "integer")
 csvDF = spark \
-    .readStream() \
+    .readStream \
     .option("sep", ";") \
     .schema(userSchema) \
     .csv("/path/to/directory")  # Equivalent to format("csv").load("/path/to/directory")
@@ -717,11 +717,11 @@ However, to run this query for days, it's necessary for the system to bound the 
 intermediate in-memory state it accumulates. This means the system needs to know when an old 
 aggregate can be dropped from the in-memory state because the application is not going to receive 
 late data for that aggregate any more. To enable this, in Spark 2.1, we have introduced 
-**watermarking**, which let's the engine automatically track the current event time in the data and
+**watermarking**, which lets the engine automatically track the current event time in the data
 and attempt to clean up old state accordingly. You can define the watermark of a query by 
-specifying the event time column and the threshold on how late the data is expected be in terms of 
+specifying the event time column and the threshold on how late the data is expected to be in terms of 
 event time. For a specific window starting at time `T`, the engine will maintain state and allow late
-data to be update the state until `(max event time seen by the engine - late threshold > T)`. 
+data to update the state until `(max event time seen by the engine - late threshold > T)`. 
 In other words, late data within the threshold will be aggregated, 
 but data later than the threshold will be dropped. Let's understand this with an example. We can 
 easily define watermarking on the previous example using `withWatermark()` as shown below.
@@ -764,11 +764,11 @@ Dataset<Row> windowedCounts = words
 words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
 # Group the data by window and word and compute the count of each group
-windowedCounts = words
-    .withWatermark("timestamp", "10 minutes")
+windowedCounts = words \
+    .withWatermark("timestamp", "10 minutes") \
     .groupBy(
         window(words.timestamp, "10 minutes", "5 minutes"),
-        words.word)
+        words.word) \
     .count()
 {% endhighlight %}
 
@@ -792,7 +792,7 @@ This watermark lets the engine maintain intermediate state for additional 10 min
 data to be counted. For example, the data `(12:09, cat)` is out of order and late, and it falls in
 windows `12:05 - 12:15` and `12:10 - 12:20`. Since, it is still ahead of the watermark `12:04` in 
 the trigger, the engine still maintains the intermediate counts as state and correctly updates the 
-counts of the related windows. However, when the watermark is updated to 12:11, the intermediate 
+counts of the related windows. However, when the watermark is updated to `12:11`, the intermediate 
 state for window `(12:00 - 12:10)` is cleared, and all subsequent data (e.g. `(12:04, donkey)`) 
 is considered "too late" and therefore ignored. Note that after every trigger, 
 the updated counts (i.e. purple rows) are written to sink as the trigger output, as dictated by 
@@ -825,7 +825,7 @@ section for detailed explanation of the semantics of each output mode.
 same column as the timestamp column used in the aggregate. For example, 
 `df.withWatermark("time", "1 min").groupBy("time2").count()` is invalid 
 in Append output mode, as watermark is defined on a different column
-as the aggregation column.
+from the aggregation column.
 
 - `withWatermark` must be called before the aggregation for the watermark details to be used. 
 For example, `df.groupBy("time").count().withWatermark("time", "1 min")` is invalid in Append 
@@ -871,6 +871,65 @@ streamingDf.join(staticDf, "type", "right_join")  # right outer join with a stat
 </div>
 </div>
 
+### Streaming Deduplication
+You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
+
+- *With watermark* - If there is a upper bound on how late a duplicate record may arrive, then you can define a watermark on a event time column and deduplicate using both the guid and the event time columns. The query will use the watermark to remove old state data from past records that are not expected to get any duplicates any more. This bounds the amount of the state the query has to maintain.
+
+- *Without watermark* - Since there are no bounds on when a duplicate record may arrive, the query stores the data from all the past records as state.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val streamingDf = spark.readStream. ...  // columns: guid, eventTime, ...
+
+// Without watermark using guid column
+streamingDf.dropDuplicates("guid")
+
+// With watermark using guid and eventTime columns
+streamingDf
+  .withWatermark("eventTime", "10 seconds")
+  .dropDuplicates("guid", "eventTime")
+{% endhighlight %}
+
+</div>
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> streamingDf = spark.readStream. ...;  // columns: guid, eventTime, ...
+
+// Without watermark using guid column
+streamingDf.dropDuplicates("guid");
+
+// With watermark using guid and eventTime columns
+streamingDf
+  .withWatermark("eventTime", "10 seconds")
+  .dropDuplicates("guid", "eventTime");
+{% endhighlight %}
+
+
+</div>
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+streamingDf = spark.readStream. ...
+
+// Without watermark using guid column
+streamingDf.dropDuplicates("guid")
+
+// With watermark using guid and eventTime columns
+streamingDf \
+  .withWatermark("eventTime", "10 seconds") \
+  .dropDuplicates("guid", "eventTime")
+{% endhighlight %}
+
+</div>
+</div>
+
+### Arbitrary Stateful Operations
+Many uscases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)). 
+
 ### Unsupported Operations
 There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
 Some of them are as follows.
@@ -891,7 +950,7 @@ Some of them are as follows.
 
     + Right outer join with a streaming Dataset on the left is not supported
 
-- Any kind of joins between two streaming Datasets are not yet supported.
+- Any kind of joins between two streaming Datasets is not yet supported.
 
 In addition, there are some Dataset methods that will not work on streaming Datasets. They are actions that will immediately run queries and return results, which does not make sense on a streaming Dataset. Rather, those functionalities can be done by explicitly starting a streaming query (see the next section regarding that).
 
@@ -909,7 +968,7 @@ track of all the data received in the stream. This is therefore fundamentally ha
 efficiently.
 
 ## Starting Streaming Queries
-Once you have defined the final result DataFrame/Dataset, all that is left is for you start the streaming computation. To do that, you have to use the `DataStreamWriter`
+Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
 ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.DataStreamWriter)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamWriter) docs)
 returned through `Dataset.writeStream()`. You will have to specify one or more of the following in this interface.
 
@@ -952,13 +1011,6 @@ Here is the compatibility matrix.
     <th>Notes</th>        
   </tr>
   <tr>
-    <td colspan="2" style="vertical-align: middle;">Queries without aggregation</td>
-    <td style="vertical-align: middle;">Append, Update</td>
-    <td style="vertical-align: middle;">
-        Complete mode not supported as it is infeasible to keep all data in the Result Table.
-    </td>
-  </tr>
-  <tr>
     <td rowspan="2" style="vertical-align: middle;">Queries with aggregation</td>
     <td style="vertical-align: middle;">Aggregation on event-time with watermark</td>
     <td style="vertical-align: middle;">Append, Update, Complete</td>
@@ -971,7 +1023,7 @@ Here is the compatibility matrix.
         <br/><br/>
         Update mode uses watermark to drop old aggregation state.
         <br/><br/>
-        Complete mode does drop not old aggregation state since by definition this mode
+        Complete mode does not drop old aggregation state since by definition this mode
         preserves all data in the Result Table.
     </td>    
   </tr>
@@ -987,12 +1039,40 @@ Here is the compatibility matrix.
     </td>  
   </tr>
   <tr>
+    <td colspan="2" style="vertical-align: middle;">Queries with <code>mapGroupsWithState</code></td>
+    <td style="vertical-align: middle;">Update</td>
+    <td style="vertical-align: middle;"></td>
+  </tr>
+  <tr>
+    <td rowspan="2" style="vertical-align: middle;">Queries with <code>flatMapGroupsWithState</code></td>
+    <td style="vertical-align: middle;">Append operation mode</td>
+    <td style="vertical-align: middle;">Append</td>
+    <td style="vertical-align: middle;">
+      Aggregations are allowed after <code>flatMapGroupsWithState</code>.
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align: middle;">Update operation mode</td>
+    <td style="vertical-align: middle;">Update</td>
+    <td style="vertical-align: middle;">
+      Aggregations not allowed after <code>flatMapGroupsWithState</code>.
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" style="vertical-align: middle;">Other queries</td>
+    <td style="vertical-align: middle;">Append, Update</td>
+    <td style="vertical-align: middle;">
+      Complete mode not supported as it is infeasible to keep all unaggregated data in the Result Table.
+    </td>
+  </tr>
+  <tr>
     <td></td>
     <td></td>
     <td></td>
     <td></td>
   </tr>
 </table>
+
 
 #### Output Sinks
 There are a few types of built-in output sinks.
@@ -1201,13 +1281,13 @@ noAggDF = deviceDataDf.select("device").where("signal > 10")
 
 # Print new data to console
 noAggDF \
-    .writeStream() \
+    .writeStream \
     .format("console") \
     .start()
 
 # Write new data to Parquet files
 noAggDF \
-    .writeStream() \
+    .writeStream \
     .format("parquet") \
     .option("checkpointLocation", "path/to/checkpoint/dir") \
     .option("path", "path/to/destination/dir") \
@@ -1218,14 +1298,14 @@ aggDF = df.groupBy("device").count()
 
 # Print updated aggregations to console
 aggDF \
-    .writeStream() \
+    .writeStream \
     .outputMode("complete") \
     .format("console") \
     .start()
 
 # Have all the aggregates in an in memory table. The query name will be the table name
 aggDF \
-    .writeStream() \
+    .writeStream \
     .queryName("aggregates") \
     .outputMode("complete") \
     .format("memory") \
@@ -1313,7 +1393,7 @@ query.lastProgress();    // the most recent progress update of this streaming qu
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-query = df.writeStream().format("console").start()   # get the query object
+query = df.writeStream.format("console").start()   # get the query object
 
 query.id()          # get the unique identifier of the running query that persists across restarts from checkpoint data
 
@@ -1396,15 +1476,15 @@ You can directly get the current status and metrics of an active query using
 `lastProgress()` returns a `StreamingQueryProgress` object 
 in [Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryProgress) 
 and [Java](api/java/org/apache/spark/sql/streaming/StreamingQueryProgress.html)
-and an dictionary with the same fields in Python. It has all the information about
+and a dictionary with the same fields in Python. It has all the information about
 the progress made in the last trigger of the stream - what data was processed, 
 what were the processing rates, latencies, etc. There is also 
 `streamingQuery.recentProgress` which returns an array of last few progresses.  
 
-In addition, `streamingQuery.status()` returns `StreamingQueryStatus` object 
+In addition, `streamingQuery.status()` returns a `StreamingQueryStatus` object 
 in [Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryStatus) 
 and [Java](api/java/org/apache/spark/sql/streaming/StreamingQueryStatus.html)
-and an dictionary with the same fields in Python. It gives information about
+and a dictionary with the same fields in Python. It gives information about
 what the query is immediately doing - is a trigger active, is data being processed, etc.
 
 Here are a few examples.
@@ -1658,7 +1738,7 @@ aggDF
 
 {% highlight python %}
 aggDF \
-    .writeStream() \
+    .writeStream \
     .outputMode("complete") \
     .option("checkpointLocation", "path/to/HDFS/dir") \
     .format("memory") \

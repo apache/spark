@@ -23,7 +23,6 @@ import java.util.LinkedList;
 import org.apache.avro.reflect.Nullable;
 
 import org.apache.spark.TaskContext;
-import org.apache.spark.TaskKilledException;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
@@ -291,8 +290,8 @@ public final class UnsafeInMemorySorter {
       // to avoid performance overhead. This check is added here in `loadNext()` instead of in
       // `hasNext()` because it's technically possible for the caller to be relying on
       // `getNumRecords()` instead of `hasNext()` to know when to stop.
-      if (taskContext != null && taskContext.isInterrupted()) {
-        throw new TaskKilledException();
+      if (taskContext != null) {
+        taskContext.killTaskIfInterrupted();
       }
       // This pointer points to a 4-byte record length, followed by the record's bytes
       final long recordPointer = array.get(offset + position);

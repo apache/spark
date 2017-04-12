@@ -18,11 +18,13 @@
 package org.apache.spark.sql.streaming.test
 
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
+import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
@@ -30,7 +32,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
-import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.streaming.{ProcessingTime => DeprecatedProcessingTime, _}
+import org.apache.spark.sql.streaming.Trigger._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -124,7 +127,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         .save()
     }
     Seq("'write'", "not", "streaming Dataset/DataFrame").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -345,7 +348,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     q = df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .trigger(ProcessingTime.create(100, TimeUnit.SECONDS))
+      .trigger(ProcessingTime(100, TimeUnit.SECONDS))
       .start()
     q.stop()
 
@@ -370,21 +373,22 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .option("checkpointLocation", checkpointLocationURI.toString)
       .trigger(ProcessingTime(10.seconds))
       .start()
+    q.processAllAvailable()
     q.stop()
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      spark.sqlContext,
-      s"$checkpointLocationURI/sources/0",
-      None,
-      "org.apache.spark.sql.streaming.test",
-      Map.empty)
+      any(),
+      meq(s"$checkpointLocationURI/sources/0"),
+      meq(None),
+      meq("org.apache.spark.sql.streaming.test"),
+      meq(Map.empty))
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      spark.sqlContext,
-      s"$checkpointLocationURI/sources/1",
-      None,
-      "org.apache.spark.sql.streaming.test",
-      Map.empty)
+      any(),
+      meq(s"$checkpointLocationURI/sources/1"),
+      meq(None),
+      meq("org.apache.spark.sql.streaming.test"),
+      meq(Map.empty))
   }
 
   private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
@@ -397,7 +401,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     var w = df.writeStream
     var e = intercept[IllegalArgumentException](w.foreach(null))
     Seq("foreach", "null").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -414,7 +418,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     var w = df.writeStream.partitionBy("value")
     var e = intercept[AnalysisException](w.foreach(foreachWriter).start())
     Seq("foreach", "partitioning").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
