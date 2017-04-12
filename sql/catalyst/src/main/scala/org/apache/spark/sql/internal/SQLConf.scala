@@ -367,7 +367,6 @@ object SQLConf {
         "when the query result is not sorted. This parameter is omitted when a Limit " +
         "clause is part of the query or the input is not a positive integer.")
       .intConf
-      .checkValue(limit => limit >= 0, "The number of sql results is not less than 0.")
       .createWithDefault(0)
 
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
