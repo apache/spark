@@ -369,7 +369,7 @@ class ParquetFileFormat
         val vectorizedReader = new VectorizedParquetRecordReader()
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
-        vectorizedReader.initBatch(partitionSchema, file.partitionValues, taskContext.isDefined)
+        vectorizedReader.initBatch(partitionSchema, file.partitionValues, taskContext.isEmpty)
         if (returningBatch) {
           vectorizedReader.enableReturningBatches()
         }
