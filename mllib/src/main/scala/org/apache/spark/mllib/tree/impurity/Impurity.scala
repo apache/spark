@@ -62,10 +62,9 @@ trait Impurity extends Serializable {
    * represent the same distribution
    * @note Unless overridden this method will fail with an exception, for backward compatability
    */
-  @Since("2.0.0")
+  @Since("2.2.0")
   @DeveloperApi
-  def calculate(calcL: ImpurityCalculator, calcR: ImpurityCalculator): Double =
-    throw new UnsupportedOperationException("Impurity.calculate")
+  def calculate(calcL: ImpurityCalculator, calcR: ImpurityCalculator): Double
 
   /**
    * :: DeveloperApi ::
@@ -74,9 +73,9 @@ trait Impurity extends Serializable {
    * p-value) or false otherwise.
    * @note Unless overridden this method returns false by default, for backward compatability
    */
-  @Since("2.0.0")
+  @Since("2.2.0")
   @DeveloperApi
-  def isTestStatistic: Boolean = false
+  def isTestStatistic: Boolean
 }
 
 /**

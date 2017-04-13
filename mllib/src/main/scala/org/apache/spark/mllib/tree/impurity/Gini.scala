@@ -71,6 +71,14 @@ object Gini extends Impurity {
   @Since("1.1.0")
   def instance: this.type = this
 
+  @Since("2.2.0")
+  @DeveloperApi
+  def calculate(calcL: ImpurityCalculator, calcR: ImpurityCalculator): Double =
+    throw new UnsupportedOperationException("Gini.calculate")
+
+  @Since("2.2.0")
+  @DeveloperApi
+  def isTestStatistic: Boolean = false
 }
 
 /**
