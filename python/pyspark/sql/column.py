@@ -346,16 +346,18 @@ class Column(object):
     True if the current expression is null. Often combined with
     :func:`DataFrame.filter` to select rows with null values.
 
+    >>> from pyspark.sql import Row
     >>> df2 = sc.parallelize([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]).toDF()
-    >>> df2.filter(df2.height.isNull).collect()
+    >>> df2.filter(df2.height.isNull()).collect()
     [Row(height=None, name=u'Alice')]
     """
     _isNotNull_doc = """
     True if the current expression is null. Often combined with
     :func:`DataFrame.filter` to select rows with non-null values.
 
+    >>> from pyspark.sql import Row
     >>> df2 = sc.parallelize([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]).toDF()
-    >>> df2.filter(df2.height.isNotNull).collect()
+    >>> df2.filter(df2.height.isNotNull()).collect()
     [Row(height=80, name=u'Tom')]
     """
 
