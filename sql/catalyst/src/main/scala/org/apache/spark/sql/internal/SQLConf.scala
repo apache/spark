@@ -736,6 +736,12 @@ object SQLConf {
       .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
       .createWithDefault(0.7)
 
+  val JOIN_REORDER_DP_STAR_FILTER =
+    buildConf("spark.sql.cbo.joinReorder.dp.star.filter")
+      .doc("Applies star-join filter heuristics to cost based join enumeration.")
+      .booleanConf
+      .createWithDefault(false)
+
   val STARSCHEMA_DETECTION = buildConf("spark.sql.cbo.starSchemaDetection")
     .doc("When true, it enables join reordering based on star schema detection. ")
     .booleanConf
@@ -1010,6 +1016,8 @@ class SQLConf extends Serializable with Logging {
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
 
   def joinReorderCardWeight: Double = getConf(SQLConf.JOIN_REORDER_CARD_WEIGHT)
+
+  def joinReorderDPStarFilter: Boolean = getConf(SQLConf.JOIN_REORDER_DP_STAR_FILTER)
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
