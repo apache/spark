@@ -42,6 +42,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val reader = new VectorizedParquetRecordReader
         reader.initialize(file.asInstanceOf[String], null)
+        reader.initBatch(null, null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
         assert(batch.numRows() == n)
@@ -67,6 +68,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val reader = new VectorizedParquetRecordReader
         reader.initialize(file.asInstanceOf[String], null)
+        reader.initBatch(null, null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
         assert(batch.numRows() == n)
@@ -96,6 +98,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val reader = new VectorizedParquetRecordReader
         reader.initialize(file, null /* set columns to null to project all columns */)
+        reader.initBatch(null, null)
         val column = reader.resultBatch().column(0)
         assert(reader.nextBatch())
 
