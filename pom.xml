@@ -2211,7 +2211,6 @@
           <version>3.0.0</version>
           <executions>
             <execution>
-              <id>default-cli</id>
               <goals>
                  <goal>build-classpath</goal>
               </goals>
