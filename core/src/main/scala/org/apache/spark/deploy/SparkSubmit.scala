@@ -267,6 +267,7 @@ object SparkSubmit extends CommandLineUtils {
       }
     }
 
+
     // Update args.deployMode if it is null. It will be passed down as a Spark property later.
     (args.deployMode, deployMode) match {
       case (null, CLIENT) => args.deployMode = "client"
