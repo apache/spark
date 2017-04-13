@@ -37,7 +37,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils, VersionUtils}
 import org.apache.spark.util.random.XORShiftRandom
 
-
 /**
  * Params for [[Word2Vec]] and [[Word2VecModel]].
  */
@@ -307,8 +306,8 @@ final class Word2Vec @Since("1.4.0") (
   private def fitCBOW[S <: Iterable[String]](input: RDD[S]): feature.Word2VecModel = {
     val (vocabSize, totalWordCount, vocabMap, uniTable) = generateVocab(input)
     val negSamples = $(negativeSamples)
-    assert(negSamples < uniTable.length,
-      s"Need a dictionary larger than ${uniTable.length} for $negSamples negative samples")
+    assert(negSamples < vocabSize,
+      s"Vocab size ($vocabSize) cannot be smaller than negative samples($negSamples)")
     val seed = $(this.seed)
     val initRandom = new XORShiftRandom(seed)
 
@@ -490,7 +489,7 @@ final class Word2Vec @Since("1.4.0") (
       sentence: Array[Int],
       window: Int,
       random: XORShiftRandom): Iterator[(Array[Int], Int)] = {
-    sentence.view.zipWithIndex.map {case (word, i) =>
+    sentence.iterator.zipWithIndex.map {case (word, i) =>
       val b = window - random.nextInt(window) // (window - a) in original code
       // pick b words around the current word index
       val start = math.max(0, i - b) // c in original code, floor ar 0
@@ -499,7 +498,7 @@ final class Word2Vec @Since("1.4.0") (
       val contextIds = sentence.view.zipWithIndex.slice(start, end)
         .filter{case (_, pos) => pos != i}.map(_._1)
       (contextIds.toArray, word)
-    }.toIterator
+    }
   }
 
   // This essentially helps translate from uniform distribution to a distribution
