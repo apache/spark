@@ -22,7 +22,7 @@ import scala.math.BigDecimal.RoundingMode
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.types.{DecimalType, _}
 
 
 object EstimationUtils {
@@ -75,4 +75,26 @@ object EstimationUtils {
     // (simple computation of statistics returns product of children).
     if (outputRowCount > 0) outputRowCount * sizePerRow else 1
   }
+
+  /**
+   * For simplicity we use Decimal to unify operations for data types whose min/max values can be
+   * represented as numbers, e.g. Boolean can be represented as 0 (false) or 1 (true).
+   * The two methods below are the contract of conversion.
+   */
+  def toDecimal(value: Any, dataType: DataType): Decimal = {
+    dataType match {
+      case _: NumericType | DateType | TimestampType => Decimal(value.toString)
+      case BooleanType => if (value.asInstanceOf[Boolean]) Decimal(1) else Decimal(0)
+    }
+  }
+
+  def fromDecimal(dec: Decimal, dataType: DataType): Any = {
+    dataType match {
+      case _: IntegralType | DateType | TimestampType => dec.toLong
+      case FloatType | DoubleType => dec.toDouble
+      case _: DecimalType => dec
+      case BooleanType => dec.toLong == 1
+    }
+  }
+
 }

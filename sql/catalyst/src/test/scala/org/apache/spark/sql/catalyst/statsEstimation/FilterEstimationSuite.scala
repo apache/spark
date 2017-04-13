@@ -148,7 +148,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("cint < 3 OR null") {
     val condition = Or(LessThan(attrInt, Literal(3)), Literal(null, IntegerType))
-    val m = Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)).stats(conf)
     validateEstimatedStats(
       Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
       Seq(attrInt -> colStatInt),
@@ -342,6 +341,14 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 7)
   }
 
+  test("cbool IN (true)") {
+    validateEstimatedStats(
+      Filter(InSet(attrBool, Set(true)), childStatsTestPlan(Seq(attrBool), 10L)),
+      Seq(attrBool -> ColumnStat(distinctCount = 1, min = Some(true), max = Some(true),
+        nullCount = 0, avgLen = 1, maxLen = 1)),
+      expectedRowCount = 5)
+  }
+
   test("cbool = true") {
     validateEstimatedStats(
       Filter(EqualTo(attrBool, Literal(true)), childStatsTestPlan(Seq(attrBool), 10L)),
@@ -533,7 +540,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("cint = cint3") {
     // no records qualify due to no overlap
-    val emptyColStats = Seq[(Attribute, ColumnStat)]()
     validateEstimatedStats(
       Filter(EqualTo(attrInt, attrInt3), childStatsTestPlan(Seq(attrInt, attrInt3), 10L)),
       Nil, // set to empty

@@ -54,7 +54,10 @@ object Range {
   def apply(min: Option[Any], max: Option[Any], dataType: DataType): Range = dataType match {
     case StringType | BinaryType => new DefaultRange()
     case _ if min.isEmpty || max.isEmpty => new NullRange()
-    case _ => toNumericRange(min.get, max.get, dataType)
+    case _ =>
+      NumericRange(
+        min = EstimationUtils.toDecimal(min.get, dataType),
+        max = EstimationUtils.toDecimal(max.get, dataType))
   }
 
   def isIntersected(r1: Range, r2: Range): Boolean = (r1, r2) match {
@@ -79,40 +82,10 @@ object Range {
         (None, None)
       case (n1: NumericRange, n2: NumericRange) =>
         // Choose the maximum of two min values, and the minimum of two max values.
-        val newRange = NumericRange(
-          min = if (n1.min <= n2.min) n2.min else n1.min,
-          max = if (n1.max <= n2.max) n1.max else n2.max)
-        val (newMin, newMax) = fromNumericRange(newRange, dt)
-        (Some(newMin), Some(newMax))
+        val newMin = if (n1.min <= n2.min) n2.min else n1.min
+        val newMax = if (n1.max <= n2.max) n1.max else n2.max
+        (Some(EstimationUtils.fromDecimal(newMin, dt)),
+          Some(EstimationUtils.fromDecimal(newMax, dt)))
     }
   }
-
-  /**
-   * For simplicity we use decimal to unify operations of numeric types, the two methods below
-   * are the contract of conversion.
-   */
-  private def toNumericRange(min: Any, max: Any, dataType: DataType): NumericRange = {
-    dataType match {
-      case _: NumericType | DateType | TimestampType =>
-        NumericRange(Decimal(min.toString), Decimal(max.toString))
-      case BooleanType =>
-        val min1 = if (min.asInstanceOf[Boolean]) 1 else 0
-        val max1 = if (max.asInstanceOf[Boolean]) 1 else 0
-        NumericRange(Decimal(min1), Decimal(max1))
-    }
-  }
-
-  private def fromNumericRange(n: NumericRange, dataType: DataType): (Any, Any) = {
-    dataType match {
-      case _: IntegralType | DateType | TimestampType =>
-        (n.min.toLong, n.max.toLong)
-      case FloatType | DoubleType =>
-        (n.min.toDouble, n.max.toDouble)
-      case _: DecimalType =>
-        (n.min, n.max)
-      case BooleanType =>
-        (n.min.toLong == 1, n.max.toLong == 1)
-    }
-  }
-
 }

@@ -409,8 +409,8 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
           return Some(0.0)
         }
 
-        val newMax = validQuerySet.maxBy(v => BigDecimal(v.toString))
-        val newMin = validQuerySet.minBy(v => BigDecimal(v.toString))
+        val newMax = validQuerySet.maxBy(EstimationUtils.toDecimal(_, dataType))
+        val newMin = validQuerySet.minBy(EstimationUtils.toDecimal(_, dataType))
         // newNdv should not be greater than the old ndv.  For example, column has only 2 values
         // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
         newNdv = ndv.min(BigInt(validQuerySet.size))
