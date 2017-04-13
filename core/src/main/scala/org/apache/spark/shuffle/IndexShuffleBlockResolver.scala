@@ -61,7 +61,7 @@ private[spark] class IndexShuffleBlockResolver(
 
   /**
    * Remove data file and index file that contain the output data from one map.
-   * */
+   */
   def removeDataByMap(shuffleId: Int, mapId: Int): Unit = {
     var file = getDataFile(shuffleId, mapId)
     if (file.exists()) {
@@ -132,7 +132,7 @@ private[spark] class IndexShuffleBlockResolver(
    * replace them with new ones.
    *
    * Note: the `lengths` will be updated to match the existing index file if use the existing ones.
-   * */
+   */
   def writeIndexFileAndCommit(
       shuffleId: Int,
       mapId: Int,

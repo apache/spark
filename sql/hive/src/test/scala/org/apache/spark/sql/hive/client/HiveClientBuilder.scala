@@ -35,22 +35,26 @@ private[client] class HiveClientBuilder {
       Some(new File(sys.props("java.io.tmpdir"), "hive-ivy-cache").getAbsolutePath))
   }
 
-  private def buildConf() = {
+  private def buildConf(extraConf: Map[String, String]) = {
     lazy val warehousePath = Utils.createTempDir()
     lazy val metastorePath = Utils.createTempDir()
     metastorePath.delete()
-    Map(
+    extraConf ++ Map(
       "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$metastorePath;create=true",
       "hive.metastore.warehouse.dir" -> warehousePath.toString)
   }
 
-  def buildClient(version: String, hadoopConf: Configuration): HiveClient = {
+  // for testing only
+  def buildClient(
+      version: String,
+      hadoopConf: Configuration,
+      extraConf: Map[String, String] = Map.empty): HiveClient = {
     IsolatedClientLoader.forVersion(
       hiveMetastoreVersion = version,
       hadoopVersion = VersionInfo.getVersion,
       sparkConf = sparkConf,
       hadoopConf = hadoopConf,
-      config = buildConf(),
+      config = buildConf(extraConf),
       ivyPath = ivyPath).createClient()
   }
 }

@@ -85,7 +85,7 @@ AND             t1b != t3b
 AND             t1d = t2d
 GROUP BY        t1a, t1b, t1c, t3a, t3b, t3c
 HAVING          count(distinct(t3a)) >= 1
-ORDER BY        t1a;
+ORDER BY        t1a, t3b;
 
 -- TC 01.03
 SELECT t1a,

@@ -385,7 +385,7 @@ class SQLContext(object):
 
     @since(1.0)
     def table(self, tableName):
-        """Returns the specified table as a :class:`DataFrame`.
+        """Returns the specified table or view as a :class:`DataFrame`.
 
         :return: :class:`DataFrame`
 

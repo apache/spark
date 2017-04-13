@@ -401,7 +401,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     job.setOutputKeyClass(classOf[String])
     job.setOutputValueClass(classOf[String])
     job.set("mapred.output.format.class", classOf[TextOutputFormat[String, String]].getName)
-    job.set("mapred.output.dir", tempDir.getPath + "/outputDataset_old")
+    job.set("mapreduce.output.fileoutputformat.outputdir", tempDir.getPath + "/outputDataset_old")
     randomRDD.saveAsHadoopDataset(job)
     assert(new File(tempDir.getPath + "/outputDataset_old/part-00000").exists() === true)
   }
@@ -415,7 +415,8 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     job.setOutputValueClass(classOf[String])
     job.setOutputFormatClass(classOf[NewTextOutputFormat[String, String]])
     val jobConfig = job.getConfiguration
-    jobConfig.set("mapred.output.dir", tempDir.getPath + "/outputDataset_new")
+    jobConfig.set("mapreduce.output.fileoutputformat.outputdir",
+      tempDir.getPath + "/outputDataset_new")
     randomRDD.saveAsNewAPIHadoopDataset(jobConfig)
     assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists() === true)
   }

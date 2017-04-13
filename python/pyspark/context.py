@@ -173,10 +173,8 @@ class SparkContext(object):
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
                 self.environment[varName] = v
-        if sys.version >= '3.3' and 'PYTHONHASHSEED' not in os.environ:
-            # disable randomness of hash of string in worker, if this is not
-            # launched by spark-submit
-            self.environment["PYTHONHASHSEED"] = "0"
+
+        self.environment["PYTHONHASHSEED"] = os.environ.get("PYTHONHASHSEED", "0")
 
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)

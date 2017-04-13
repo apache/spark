@@ -200,7 +200,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.bytesToString(2097152) === "2.0 MB")
     assert(Utils.bytesToString(2306867) === "2.2 MB")
     assert(Utils.bytesToString(5368709120L) === "5.0 GB")
-    assert(Utils.bytesToString(5L * 1024L * 1024L * 1024L * 1024L) === "5.0 TB")
+    assert(Utils.bytesToString(5L * (1L << 40)) === "5.0 TB")
+    assert(Utils.bytesToString(5L * (1L << 50)) === "5.0 PB")
+    assert(Utils.bytesToString(5L * (1L << 60)) === "5.0 EB")
+    assert(Utils.bytesToString(BigInt(1L << 11) * (1L << 60)) === "2.36E+21 B")
   }
 
   test("copyStream") {
@@ -507,6 +510,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
         s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
     }
+    assertResolves(",jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
   }
 
   test("nonLocalPaths") {

@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
@@ -33,52 +33,46 @@ import org.apache.spark.sql.types._
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
 
-  test("MetastoreRelations fallback to HDFS for size estimation") {
-    val enableFallBackToHdfsForStats = spark.sessionState.conf.fallBackToHdfsForStatsEnabled
-    try {
-      withTempDir { tempDir =>
+  test("Hive serde tables should fallback to HDFS for size estimation") {
+    withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+      withTable("csv_table") {
+        withTempDir { tempDir =>
+          // EXTERNAL OpenCSVSerde table pointing to LOCATION
+          val file1 = new File(tempDir + "/data1")
+          val writer1 = new PrintWriter(file1)
+          writer1.write("1,2")
+          writer1.close()
 
-        // EXTERNAL OpenCSVSerde table pointing to LOCATION
+          val file2 = new File(tempDir + "/data2")
+          val writer2 = new PrintWriter(file2)
+          writer2.write("1,2")
+          writer2.close()
 
-        val file1 = new File(tempDir + "/data1")
-        val writer1 = new PrintWriter(file1)
-        writer1.write("1,2")
-        writer1.close()
+          sql(
+            s"""
+               |CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
+               |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+               |WITH SERDEPROPERTIES (
+               |\"separatorChar\" = \",\",
+               |\"quoteChar\"     = \"\\\"\",
+               |\"escapeChar\"    = \"\\\\\")
+               |LOCATION '${tempDir.toURI}'""".stripMargin)
 
-        val file2 = new File(tempDir + "/data2")
-        val writer2 = new PrintWriter(file2)
-        writer2.write("1,2")
-        writer2.close()
+          val relation = spark.table("csv_table").queryExecution.analyzed.children.head
+            .asInstanceOf[CatalogRelation]
 
-        sql(
-          s"""CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
-            ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
-            WITH SERDEPROPERTIES (
-              \"separatorChar\" = \",\",
-              \"quoteChar\"     = \"\\\"\",
-              \"escapeChar\"    = \"\\\\\")
-            LOCATION '${tempDir.toURI}'
-          """)
+          val properties = relation.tableMeta.properties
+          assert(properties("totalSize").toLong <= 0, "external table totalSize must be <= 0")
+          assert(properties("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
 
-        spark.conf.set(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, true)
-
-        val relation = spark.table("csv_table").queryExecution.analyzed.children.head
-          .asInstanceOf[MetastoreRelation]
-
-        val properties = relation.hiveQlTable.getParameters
-        assert(properties.get("totalSize").toLong <= 0, "external table totalSize must be <= 0")
-        assert(properties.get("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
-
-        val sizeInBytes = relation.stats(conf).sizeInBytes
-        assert(sizeInBytes === BigInt(file1.length() + file2.length()))
+          val sizeInBytes = relation.stats(conf).sizeInBytes
+          assert(sizeInBytes === BigInt(file1.length() + file2.length()))
+        }
       }
-    } finally {
-      spark.conf.set(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, enableFallBackToHdfsForStats)
-      sql("DROP TABLE csv_table ")
     }
   }
 
-  test("analyze MetastoreRelations") {
+  test("analyze Hive serde tables") {
     def queryTotalSize(tableName: String): BigInt =
       spark.table(tableName).queryExecution.analyzed.stats(conf).sizeInBytes
 
@@ -152,9 +146,11 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   private def checkTableStats(
-      stats: Option[CatalogStatistics],
+      tableName: String,
       hasSizeInBytes: Boolean,
-      expectedRowCounts: Option[Int]): Unit = {
+      expectedRowCounts: Option[Int]): Option[CatalogStatistics] = {
+    val stats = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).stats
+
     if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
       assert(stats.isDefined)
       assert(stats.get.sizeInBytes > 0)
@@ -162,26 +158,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     } else {
       assert(stats.isEmpty)
     }
-  }
 
-  private def checkTableStats(
-      tableName: String,
-      isDataSourceTable: Boolean,
-      hasSizeInBytes: Boolean,
-      expectedRowCounts: Option[Int]): Option[CatalogStatistics] = {
-    val df = sql(s"SELECT * FROM $tableName")
-    val stats = df.queryExecution.analyzed.collect {
-      case rel: MetastoreRelation =>
-        checkTableStats(rel.catalogTable.stats, hasSizeInBytes, expectedRowCounts)
-        assert(!isDataSourceTable, "Expected a Hive serde table, but got a data source table")
-        rel.catalogTable.stats
-      case rel: LogicalRelation =>
-        checkTableStats(rel.catalogTable.get.stats, hasSizeInBytes, expectedRowCounts)
-        assert(isDataSourceTable, "Expected a data source table, but got a Hive serde table")
-        rel.catalogTable.get.stats
-    }
-    assert(stats.size == 1)
-    stats.head
+    stats
   }
 
   test("test table-level statistics for hive tables created in HiveExternalCatalog") {
@@ -192,25 +170,23 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql(s"CREATE TABLE $textTable (key STRING, value STRING) STORED AS TEXTFILE")
       checkTableStats(
         textTable,
-        isDataSourceTable = false,
         hasSizeInBytes = false,
         expectedRowCounts = None)
       sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
       checkTableStats(
         textTable,
-        isDataSourceTable = false,
         hasSizeInBytes = false,
         expectedRowCounts = None)
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
-      val fetchedStats1 = checkTableStats(
-        textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = None)
+      val fetchedStats1 =
+        checkTableStats(textTable, hasSizeInBytes = true, expectedRowCounts = None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS")
-      val fetchedStats2 = checkTableStats(
-        textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = Some(500))
+      val fetchedStats2 =
+        checkTableStats(textTable, hasSizeInBytes = true, expectedRowCounts = Some(500))
       assert(fetchedStats1.get.sizeInBytes == fetchedStats2.get.sizeInBytes)
     }
   }
@@ -221,25 +197,25 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql(s"CREATE TABLE $textTable (key STRING, value STRING) STORED AS TEXTFILE")
       sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS")
-      val fetchedStats1 = checkTableStats(
-        textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = Some(500))
+      val fetchedStats1 =
+        checkTableStats(textTable, hasSizeInBytes = true, expectedRowCounts = Some(500))
 
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
       // when the total size is not changed, the old row count is kept
-      val fetchedStats2 = checkTableStats(
-        textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = Some(500))
+      val fetchedStats2 =
+        checkTableStats(textTable, hasSizeInBytes = true, expectedRowCounts = Some(500))
       assert(fetchedStats1 == fetchedStats2)
 
       sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
       // update total size and remove the old and invalid row count
-      val fetchedStats3 = checkTableStats(
-        textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = None)
+      val fetchedStats3 =
+        checkTableStats(textTable, hasSizeInBytes = true, expectedRowCounts = None)
       assert(fetchedStats3.get.sizeInBytes > fetchedStats2.get.sizeInBytes)
     }
   }
 
-  test("test statistics of LogicalRelation converted from MetastoreRelation") {
+  test("test statistics of LogicalRelation converted from Hive serde tables") {
     val parquetTable = "parquetTable"
     val orcTable = "orcTable"
     withTable(parquetTable, orcTable) {
@@ -251,21 +227,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       // the default value for `spark.sql.hive.convertMetastoreParquet` is true, here we just set it
       // for robustness
       withSQLConf("spark.sql.hive.convertMetastoreParquet" -> "true") {
-        checkTableStats(
-          parquetTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
+        checkTableStats(parquetTable, hasSizeInBytes = false, expectedRowCounts = None)
         sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
-        checkTableStats(
-          parquetTable,
-          isDataSourceTable = true,
-          hasSizeInBytes = true,
-          expectedRowCounts = Some(500))
+        checkTableStats(parquetTable, hasSizeInBytes = true, expectedRowCounts = Some(500))
       }
       withSQLConf("spark.sql.hive.convertMetastoreOrc" -> "true") {
-        checkTableStats(
-          orcTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
+        checkTableStats(orcTable, hasSizeInBytes = false, expectedRowCounts = None)
         sql(s"ANALYZE TABLE $orcTable COMPUTE STATISTICS")
-        checkTableStats(
-          orcTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = Some(500))
+        checkTableStats(orcTable, hasSizeInBytes = true, expectedRowCounts = Some(500))
       }
     }
   }
@@ -385,27 +354,23 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         // Add a filter to avoid creating too many partitions
         sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src WHERE key < 10")
-        checkTableStats(
-          parquetTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
+        checkTableStats(parquetTable, hasSizeInBytes = false, expectedRowCounts = None)
 
         // noscan won't count the number of rows
         sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-        val fetchedStats1 = checkTableStats(
-          parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
+        val fetchedStats1 =
+          checkTableStats(parquetTable, hasSizeInBytes = true, expectedRowCounts = None)
 
         sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src WHERE key < 10")
         sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-        val fetchedStats2 = checkTableStats(
-          parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
+        val fetchedStats2 =
+          checkTableStats(parquetTable, hasSizeInBytes = true, expectedRowCounts = None)
         assert(fetchedStats2.get.sizeInBytes > fetchedStats1.get.sizeInBytes)
 
         // without noscan, we count the number of rows
         sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
-        val fetchedStats3 = checkTableStats(
-          parquetTable,
-          isDataSourceTable = true,
-          hasSizeInBytes = true,
-          expectedRowCounts = Some(20))
+        val fetchedStats3 =
+          checkTableStats(parquetTable, hasSizeInBytes = true, expectedRowCounts = Some(20))
         assert(fetchedStats3.get.sizeInBytes == fetchedStats2.get.sizeInBytes)
       }
     }
@@ -426,11 +391,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val dfNoCols = spark.createDataFrame(rddNoCols, StructType(Seq.empty))
       dfNoCols.write.format("json").saveAsTable(table_no_cols)
       sql(s"ANALYZE TABLE $table_no_cols COMPUTE STATISTICS")
-      checkTableStats(
-        table_no_cols,
-        isDataSourceTable = true,
-        hasSizeInBytes = true,
-        expectedRowCounts = Some(10))
+      checkTableStats(table_no_cols, hasSizeInBytes = true, expectedRowCounts = Some(10))
     }
   }
 
@@ -452,7 +413,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
       // Table lookup will make the table cached.
       spark.table(tableIndent)
-      statsBeforeUpdate = catalog.getCachedDataSourceTable(tableIndent)
+      statsBeforeUpdate = catalog.metastoreCatalog.getCachedDataSourceTable(tableIndent)
         .asInstanceOf[LogicalRelation].catalogTable.get.stats.get
 
       sql(s"INSERT INTO $tableName SELECT 2")
@@ -462,7 +423,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
       }
       spark.table(tableIndent)
-      statsAfterUpdate = catalog.getCachedDataSourceTable(tableIndent)
+      statsAfterUpdate = catalog.metastoreCatalog.getCachedDataSourceTable(tableIndent)
         .asInstanceOf[LogicalRelation].catalogTable.get.stats.get
     }
     (statsBeforeUpdate, statsAfterUpdate)
@@ -478,10 +439,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     assert(statsAfterUpdate.rowCount == Some(2))
   }
 
-  test("estimates the size of a test MetastoreRelation") {
+  test("estimates the size of a test Hive serde tables") {
     val df = sql("""SELECT * FROM src""")
-    val sizes = df.queryExecution.analyzed.collect { case mr: MetastoreRelation =>
-      mr.stats(conf).sizeInBytes
+    val sizes = df.queryExecution.analyzed.collect {
+      case relation: CatalogRelation => relation.stats(conf).sizeInBytes
     }
     assert(sizes.size === 1, s"Size wrong for:\n ${df.queryExecution}")
     assert(sizes(0).equals(BigInt(5812)),
@@ -533,7 +494,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       after()
     }
 
-    /** Tests for MetastoreRelation */
+    /** Tests for Hive serde tables */
     val metastoreQuery = """SELECT * FROM src a JOIN src b ON a.key = 238 AND a.key = b.key"""
     val metastoreAnswer = Seq.fill(4)(Row(238, "val_238", 238, "val_238"))
     mkTest(
@@ -541,7 +502,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       () => (),
       metastoreQuery,
       metastoreAnswer,
-      implicitly[ClassTag[MetastoreRelation]]
+      implicitly[ClassTag[CatalogRelation]]
     )
   }
 
@@ -555,9 +516,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
     // Assert src has a size smaller than the threshold.
     val sizes = df.queryExecution.analyzed.collect {
-      case r if implicitly[ClassTag[MetastoreRelation]].runtimeClass
-        .isAssignableFrom(r.getClass) =>
-        r.stats(conf).sizeInBytes
+      case relation: CatalogRelation => relation.stats(conf).sizeInBytes
     }
     assert(sizes.size === 2 && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold
       && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold,

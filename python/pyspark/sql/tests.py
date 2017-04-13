@@ -275,9 +275,6 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(result[0][0], "a")
         self.assertEqual(result[0][1], "b")
 
-        with self.assertRaises(ValueError):
-            data.select(explode(data.mapfield).alias("a", "b", metadata={'max': 99})).count()
-
     def test_and_in_expression(self):
         self.assertEqual(4, self.df.filter((self.df.key <= 10) & (self.df.value <= "2")).count())
         self.assertRaises(ValueError, lambda: (self.df.key <= 10) and (self.df.value <= "2"))
@@ -449,11 +446,36 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(res.collect(), [Row(id=0, copy=0)])
 
     def test_wholefile_json(self):
-        from pyspark.sql.types import StringType
         people1 = self.spark.read.json("python/test_support/sql/people.json")
         people_array = self.spark.read.json("python/test_support/sql/people_array.json",
                                             wholeFile=True)
         self.assertEqual(people1.collect(), people_array.collect())
+
+    def test_wholefile_csv(self):
+        ages_newlines = self.spark.read.csv(
+            "python/test_support/sql/ages_newlines.csv", wholeFile=True)
+        expected = [Row(_c0=u'Joe', _c1=u'20', _c2=u'Hi,\nI am Jeo'),
+                    Row(_c0=u'Tom', _c1=u'30', _c2=u'My name is Tom'),
+                    Row(_c0=u'Hyukjin', _c1=u'25', _c2=u'I am Hyukjin\n\nI love Spark!')]
+        self.assertEqual(ages_newlines.collect(), expected)
+
+    def test_ignorewhitespace_csv(self):
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.spark.createDataFrame([[" a", "b  ", " c "]]).write.csv(
+            tmpPath,
+            ignoreLeadingWhiteSpace=False,
+            ignoreTrailingWhiteSpace=False)
+
+        expected = [Row(value=u' a,b  , c ')]
+        readback = self.spark.read.text(tmpPath)
+        self.assertEqual(readback.collect(), expected)
+        shutil.rmtree(tmpPath)
+
+    def test_read_multiple_orc_file(self):
+        df = self.spark.read.orc(["python/test_support/sql/orc_partitioned/b=0/c=0",
+                                  "python/test_support/sql/orc_partitioned/b=1/c=1"])
+        self.assertEqual(2, df.count())
 
     def test_udf_with_input_file_name(self):
         from pyspark.sql.functions import udf, input_file_name
@@ -586,6 +608,21 @@ class SQLTests(ReusedPySparkTestCase):
             list(df.first()),
             [2, 3.0, "FOO", "foo", "foo", 3, 1.0]
         )
+
+    def test_udf_wrapper(self):
+        from pyspark.sql.functions import udf
+        from pyspark.sql.types import IntegerType
+
+        def f(x):
+            """Identity"""
+            return x
+
+        return_type = IntegerType()
+        f_ = udf(f, return_type)
+
+        self.assertTrue(f.__doc__ in f_.__doc__)
+        self.assertEqual(f, f_.func)
+        self.assertEqual(return_type, f_.returnType)
 
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
@@ -953,9 +990,13 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(all(isinstance(c, Column) for c in cb))
         cbool = (ci & ci), (ci | ci), (~ci)
         self.assertTrue(all(isinstance(c, Column) for c in cbool))
-        css = cs.like('a'), cs.rlike('a'), cs.asc(), cs.desc(), cs.startswith('a'), cs.endswith('a')
+        css = cs.contains('a'), cs.like('a'), cs.rlike('a'), cs.asc(), cs.desc(),\
+            cs.startswith('a'), cs.endswith('a')
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
+        self.assertRaisesRegexp(ValueError,
+                                "Cannot apply 'in' operator against a column",
+                                lambda: 1 in cs)
 
     def test_column_getitem(self):
         from pyspark.sql.functions import col
@@ -970,13 +1011,6 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(self.testData, df.select("*").collect())
         self.assertEqual(self.testData, df.select(df.key, df.value).collect())
         self.assertEqual([Row(value='1')], df.where(df.key == 1).select(df.value).collect())
-
-    def test_column_alias_metadata(self):
-        df = self.df
-        df_with_meta = df.select(df.key.alias('pk', metadata={'label': 'Primary Key'}))
-        self.assertEqual(df_with_meta.schema['pk'].metadata['label'], 'Primary Key')
-        with self.assertRaises(AssertionError):
-            df.select(df.key.alias('pk', metdata={'label': 'Primary Key'}))
 
     def test_freqItems(self):
         vals = [Row(a=1, b=-2.0) if i % 2 == 0 else Row(a=i, b=i * 1.0) for i in range(100)]
@@ -1104,6 +1138,14 @@ class SQLTests(ReusedPySparkTestCase):
         rndn2 = df.select('key', functions.randn(0)).collect()
         self.assertEqual(sorted(rndn1), sorted(rndn2))
 
+    def test_array_contains_function(self):
+        from pyspark.sql.functions import array_contains
+
+        df = self.spark.createDataFrame([(["1", "2", "3"],), ([],)], ['data'])
+        actual = df.select(array_contains(df.data, 1).alias('b')).collect()
+        # The value argument can be implicitly castable to the element's type of the array.
+        self.assertEqual([Row(b=True), Row(b=False)], actual)
+
     def test_between_function(self):
         df = self.sc.parallelize([
             Row(a=1, b=2, c=3),
@@ -1230,13 +1272,26 @@ class SQLTests(ReusedPySparkTestCase):
 
         shutil.rmtree(tmpPath)
 
-    def test_stream_trigger_takes_keyword_args(self):
+    def test_stream_trigger(self):
         df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+
+        # Should take at least one arg
+        try:
+            df.writeStream.trigger()
+        except ValueError:
+            pass
+
+        # Should not take multiple args
+        try:
+            df.writeStream.trigger(once=True, processingTime='5 seconds')
+        except ValueError:
+            pass
+
+        # Should take only keyword args
         try:
             df.writeStream.trigger('5 seconds')
             self.fail("Should have thrown an exception")
         except TypeError:
-            # should throw error
             pass
 
     def test_stream_read_options(self):
@@ -1548,6 +1603,14 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(now, now1)
         self.assertEqual(now, utcnow1)
 
+    # regression test for SPARK-19561
+    def test_datetime_at_epoch(self):
+        epoch = datetime.datetime.fromtimestamp(0)
+        df = self.spark.createDataFrame([Row(date=epoch)])
+        first = df.select('date', lit(epoch).alias('lit_date')).first()
+        self.assertEqual(first['date'], epoch)
+        self.assertEqual(first['lit_date'], epoch)
+
     def test_decimal(self):
         from decimal import Decimal
         schema = StructType([StructField("decimal", DecimalType(10, 5))])
@@ -1724,6 +1787,78 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(row.name, u'Alice')
         self.assertEqual(row.age, 10)
         self.assertEqual(row.height, None)
+
+        # replace with lists
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace([u'Alice'], [u'Ann']).first()
+        self.assertTupleEqual(row, (u'Ann', 10, 80.1))
+
+        # replace with dict
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace({10: 11}).first()
+        self.assertTupleEqual(row, (u'Alice', 11, 80.1))
+
+        # test backward compatibility with dummy value
+        dummy_value = 1
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace({'Alice': 'Bob'}, dummy_value).first()
+        self.assertTupleEqual(row, (u'Bob', 10, 80.1))
+
+        # test dict with mixed numerics
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace({10: -10, 80.1: 90.5}).first()
+        self.assertTupleEqual(row, (u'Alice', -10, 90.5))
+
+        # replace with tuples
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace((u'Alice', ), (u'Bob', )).first()
+        self.assertTupleEqual(row, (u'Bob', 10, 80.1))
+
+        # replace multiple columns
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.0)], schema).replace((10, 80.0), (20, 90)).first()
+        self.assertTupleEqual(row, (u'Alice', 20, 90.0))
+
+        # test for mixed numerics
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.0)], schema).replace((10, 80), (20, 90.5)).first()
+        self.assertTupleEqual(row, (u'Alice', 20, 90.5))
+
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.0)], schema).replace({10: 20, 80: 90.5}).first()
+        self.assertTupleEqual(row, (u'Alice', 20, 90.5))
+
+        # replace with boolean
+        row = (self
+               .spark.createDataFrame([(u'Alice', 10, 80.0)], schema)
+               .selectExpr("name = 'Bob'", 'age <= 15')
+               .replace(False, True).first())
+        self.assertTupleEqual(row, (True, True))
+
+        # should fail if subset is not list, tuple or None
+        with self.assertRaises(ValueError):
+            self.spark.createDataFrame(
+                [(u'Alice', 10, 80.1)], schema).replace({10: 11}, subset=1).first()
+
+        # should fail if to_replace and value have different length
+        with self.assertRaises(ValueError):
+            self.spark.createDataFrame(
+                [(u'Alice', 10, 80.1)], schema).replace(["Alice", "Bob"], ["Eve"]).first()
+
+        # should fail if when received unexpected type
+        with self.assertRaises(ValueError):
+            from datetime import datetime
+            self.spark.createDataFrame(
+                [(u'Alice', 10, 80.1)], schema).replace(datetime.now(), datetime.now()).first()
+
+        # should fail if provided mixed type replacements
+        with self.assertRaises(ValueError):
+            self.spark.createDataFrame(
+                [(u'Alice', 10, 80.1)], schema).replace(["Alice", 10], ["Eve", 20]).first()
+
+        with self.assertRaises(ValueError):
+            self.spark.createDataFrame(
+                [(u'Alice', 10, 80.1)], schema).replace({u"Alice": u"Bob", 10: 20}).first()
 
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.spark.sql("select abc"))

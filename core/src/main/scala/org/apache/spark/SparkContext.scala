@@ -361,7 +361,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def setLogLevel(logLevel: String) {
     // let's allow lowercase or mixed case too
-    val upperCased = logLevel.toUpperCase(Locale.ENGLISH)
+    val upperCased = logLevel.toUpperCase(Locale.ROOT)
     require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
       s"Supplied level $logLevel did not match one of:" +
         s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
@@ -1815,10 +1815,18 @@ class SparkContext(config: SparkConf) extends Logging {
           // A JAR file which exists only on the driver node
           case null | "file" =>
             try {
+              val file = new File(uri.getPath)
+              if (!file.exists()) {
+                throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
+              }
+              if (file.isDirectory) {
+                throw new IllegalArgumentException(
+                  s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
+              }
               env.rpcEnv.fileServer.addJar(new File(uri.getPath))
             } catch {
-              case exc: FileNotFoundException =>
-                logError(s"Jar not found at $path")
+              case NonFatal(e) =>
+                logError(s"Failed to add $path to Spark environment", e)
                 null
             }
           // A JAR file which exists locally on every worker node
@@ -2239,6 +2247,24 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def cancelStage(stageId: Int): Unit = {
     dagScheduler.cancelStage(stageId, None)
+  }
+
+  /**
+   * Kill and reschedule the given task attempt. Task ids can be obtained from the Spark UI
+   * or through SparkListener.onTaskStart.
+   *
+   * @param taskId the task ID to kill. This id uniquely identifies the task attempt.
+   * @param interruptThread whether to interrupt the thread running the task.
+   * @param reason the reason for killing the task, which should be a short string. If a task
+   *   is killed multiple times with different reasons, only one reason will be reported.
+   *
+   * @return Whether the task was successfully killed.
+   */
+  def killTaskAttempt(
+      taskId: Long,
+      interruptThread: Boolean = true,
+      reason: String = "killed via SparkContext.killTaskAttempt"): Boolean = {
+    dagScheduler.killTaskAttempt(taskId, interruptThread, reason)
   }
 
   /**

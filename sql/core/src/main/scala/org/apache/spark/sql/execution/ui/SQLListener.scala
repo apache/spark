@@ -47,6 +47,13 @@ case class SparkListenerSQLExecutionStart(
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent
 
+/**
+ * A message used to update SQL metric value for driver-side updates (which doesn't get reflected
+ * automatically).
+ *
+ * @param executionId The execution id for a query, so we can find the query plan.
+ * @param accumUpdates Map from accumulator id to the metric value (metrics are always 64-bit ints).
+ */
 @DeveloperApi
 case class SparkListenerDriverAccumUpdates(
     executionId: Long,
@@ -343,10 +350,13 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
                accumulatorUpdate <- taskMetrics.accumulatorUpdates) yield {
             (accumulatorUpdate._1, accumulatorUpdate._2)
           }
-        }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
+        }
 
         val driverUpdates = executionUIData.driverAccumUpdates.toSeq
-        mergeAccumulatorUpdates(accumulatorUpdates ++ driverUpdates, accumulatorId =>
+        val totalUpdates = (accumulatorUpdates ++ driverUpdates).filter {
+          case (id, _) => executionUIData.accumulatorMetrics.contains(id)
+        }
+        mergeAccumulatorUpdates(totalUpdates, accumulatorId =>
           executionUIData.accumulatorMetrics(accumulatorId).metricType)
       case None =>
         // This execution has been dropped

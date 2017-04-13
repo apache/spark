@@ -397,4 +397,22 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         IsNotNull(resolveColumn(tr, "a")),
         IsNotNull(resolveColumn(tr, "c")))))
   }
+
+  test("enable/disable constraint propagation") {
+    val tr = LocalRelation('a.int, 'b.string, 'c.int)
+    val filterRelation = tr.where('a.attr > 10)
+
+    verifyConstraints(
+      filterRelation.analyze.getConstraints(constraintPropagationEnabled = true),
+      filterRelation.analyze.constraints)
+
+    assert(filterRelation.analyze.getConstraints(constraintPropagationEnabled = false).isEmpty)
+
+    val aliasedRelation = tr.where('c.attr > 10 && 'a.attr < 5)
+      .groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).select('c1, 'a, 'a3)
+
+    verifyConstraints(aliasedRelation.analyze.getConstraints(constraintPropagationEnabled = true),
+      aliasedRelation.analyze.constraints)
+    assert(aliasedRelation.analyze.getConstraints(constraintPropagationEnabled = false).isEmpty)
+  }
 }
