@@ -47,11 +47,6 @@ case class ScalaUDF(
   extends Expression with ImplicitCastInputTypes with NonSQLExpression {
 
   // the user-defined functions must be deterministic.
-  if (!super.deterministic) {
-    val name = udfName.getOrElse("")
-    throw new AnalysisException(s"User-defined functions must be deterministic. Name: $name.")
-  }
-
   final override def deterministic: Boolean = true
 
   override def nullable: Boolean = true
