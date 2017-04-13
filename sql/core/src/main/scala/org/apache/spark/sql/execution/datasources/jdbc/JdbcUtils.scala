@@ -119,7 +119,7 @@ object JdbcUtils extends Logging {
       isCaseSensitive: Boolean,
       dialect: JdbcDialect): String = {
     val columns = if (tableSchema.isEmpty) {
-      rddSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
+      rddSchema.fields.map(x => dialect.quoteIdentifier(x.name.replace("\"", ""))).mkString(",")
     } else {
       val columnNameEquality = if (isCaseSensitive) {
         org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
@@ -692,7 +692,7 @@ object JdbcUtils extends Logging {
       .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
       .getOrElse(Map.empty[String, String])
     df.schema.fields.foreach { field =>
-      val name = dialect.quoteIdentifier(field.name)
+      val name = dialect.quoteIdentifier(field.name.replace("\"", ""))
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
       val nullable = if (field.nullable) "" else "NOT NULL"
