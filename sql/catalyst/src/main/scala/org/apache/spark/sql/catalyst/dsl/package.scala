@@ -373,6 +373,9 @@ package object dsl {
       def coalesce(num: Integer): LogicalPlan =
         Repartition(num, shuffle = false, logicalPlan)
 
+      def coalesce(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = false, logicalPlan)
+
       def repartition(num: Integer): LogicalPlan =
         Repartition(num, shuffle = true, logicalPlan)
 
