@@ -194,7 +194,7 @@ class ExecutorClassLoader(
         ClassWriter.COMPUTE_FRAMES + ClassWriter.COMPUTE_MAXS)
       val cleaner = new ConstructorCleaner(name, cw)
       cr.accept(cleaner, 0)
-      return cw.toByteArray
+      cw.toByteArray
     } else {
       // Pass the class through unmodified
       val bos = new ByteArrayOutputStream
@@ -208,7 +208,7 @@ class ExecutorClassLoader(
           done = true
         }
       }
-      return bos.toByteArray
+      bos.toByteArray
     }
   }
 
@@ -238,9 +238,9 @@ extends ClassVisitor(ASM5, cv) {
       mv.visitInsn(RETURN)
       mv.visitMaxs(-1, -1) // stack size and local vars will be auto-computed
       mv.visitEnd()
-      return null
+      null
     } else {
-      return mv
+      mv
     }
   }
 }
