@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -30,6 +31,13 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val stringUdf = ScalaUDF((s: String) => s + "x", StringType, Literal("a") :: Nil)
     checkEvaluation(stringUdf, "ax")
+  }
+
+  test("non-deterministic children") {
+    val e = intercept[AnalysisException] {
+      ScalaUDF((i: Int) => i + 1, IntegerType, Rand(1) :: Nil, Nil, Some("udf"))
+    }.getMessage
+    assert(e.contains("User-defined functions must be deterministic. Name: udf."))
   }
 
   test("better error message for NPE") {

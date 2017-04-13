@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.DataType
@@ -44,6 +45,14 @@ case class ScalaUDF(
     inputTypes: Seq[DataType] = Nil,
     udfName: Option[String] = None)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression {
+
+  // the user-defined functions must be deterministic.
+  if (!super.deterministic) {
+    val name = udfName.getOrElse("")
+    throw new AnalysisException(s"User-defined functions must be deterministic. Name: $name.")
+  }
+
+  final override def deterministic: Boolean = true
 
   override def nullable: Boolean = true
 
