@@ -510,7 +510,7 @@ abstract class Catalog {
   def refreshTable(tableName: String): Unit
 
   /**
-   * Invalidates and refreshes all the cached data (and the associated metadata) for any [[Dataset]]
+   * Invalidates and refreshes all the cached data (and the associated metadata) for any `Dataset`
    * that contains the given data source path. Path matching is by prefix, i.e. "/" would invalidate
    * everything that is cached.
    *

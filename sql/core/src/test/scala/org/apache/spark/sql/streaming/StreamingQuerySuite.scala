@@ -642,8 +642,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
    *
    * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
    * @param timeoutMs         Timeout in milliseconds
-   *                          When timeoutMs <= 0, awaitTermination() is tested (i.e. w/o timeout)
-   *                          When timeoutMs > 0, awaitTermination(timeoutMs) is tested
+   *                          When timeoutMs is less than or equal to 0, awaitTermination() is
+   *                          tested (i.e. w/o timeout)
+   *                          When timeoutMs is greater than 0, awaitTermination(timeoutMs) is
+   *                          tested
    * @param expectedReturnValue Expected return value when awaitTermination(timeoutMs) is used
    */
   case class TestAwaitTermination(
@@ -667,8 +669,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
      *
      * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
      * @param timeoutMs         Timeout in milliseconds
-     *                          When timeoutMs <= 0, awaitTermination() is tested (i.e. w/o timeout)
-     *                          When timeoutMs > 0, awaitTermination(timeoutMs) is tested
+     *                          When timeoutMs is less than or equal to 0, awaitTermination() is
+     *                          tested (i.e. w/o timeout)
+     *                          When timeoutMs is greater than 0, awaitTermination(timeoutMs) is
+     *                          tested
      * @param expectedReturnValue Expected return value when awaitTermination(timeoutMs) is used
      */
     def assertOnQueryCondition(

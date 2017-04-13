@@ -2926,9 +2926,9 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
                paste("source should be character, NULL or omitted. It is the datasource specified",
                      "in 'spark.sql.sources.default' configuration by default."))
   expect_error(write.df(df, path = c(3)),
-               "path should be charactor, NULL or omitted.")
+               "path should be character, NULL or omitted.")
   expect_error(write.df(df, mode = TRUE),
-               "mode should be charactor or omitted. It is 'error' by default.")
+               "mode should be character or omitted. It is 'error' by default.")
 })
 
 test_that("Call DataFrameWriter.load() API in Java without path and check argument types", {
@@ -2947,7 +2947,7 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
 
   # Arguments checking in R side.
   expect_error(read.df(path = c(3)),
-               "path should be charactor, NULL or omitted.")
+               "path should be character, NULL or omitted.")
   expect_error(read.df(jsonPath, source = c(1, 2)),
                paste("source should be character, NULL or omitted. It is the datasource specified",
                      "in 'spark.sql.sources.default' configuration by default."))
