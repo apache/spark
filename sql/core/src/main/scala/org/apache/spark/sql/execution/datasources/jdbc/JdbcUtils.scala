@@ -135,7 +135,7 @@ object JdbcUtils extends Logging {
         val normalizedName = tableColumnNames.find(f => columnNameEquality(f, col.name)).getOrElse {
           throw new AnalysisException(s"""Column "${col.name}" not found in schema $tableSchema""")
         }
-        dialect.quoteIdentifier(normalizedName)
+        dialect.quoteIdentifier(normalizedName.replace("\"", ""))
       }.mkString(",")
     }
     val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
