@@ -182,6 +182,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     rdd.count()  // Defeat early collection by the JVM
 
     // Test that GC causes shuffle cleanup after dereferencing the RDD
+    rdd.count()  // Defeat any early collection of rdd variable by the JVM
     val postGCTester = new CleanerTester(sc, shuffleIds = Seq(0))
     rdd = null  // Make RDD out of scope, so that corresponding shuffle goes out of scope
     runGC()
