@@ -131,6 +131,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   override def stop(): Unit = {
+    // send stop message to executors so they shut down cleanly
+    super.stop()
+
+    // then delete the executor pods
     // TODO investigate why Utils.tryLogNonFatalError() doesn't work in this context.
     // When using Utils.tryLogNonFatalError some of the code fails but without any logs or
     // indication as to why.
@@ -149,7 +153,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
     } catch {
       case e: Throwable => logError("Uncaught exception closing Kubernetes client.", e)
     }
-    super.stop()
   }
 
   private def allocateNewExecutorPod(): (String, Pod) = {
