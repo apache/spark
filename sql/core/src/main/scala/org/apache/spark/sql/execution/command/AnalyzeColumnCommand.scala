@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableTyp
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.DataType
 
 
 /**
@@ -68,15 +69,15 @@ case class AnalyzeColumnCommand(
   private def computeColumnStats(
       sparkSession: SparkSession,
       tableIdent: TableIdentifier,
-      columnNames: Seq[String]): (Long, Map[String, ColumnStat]) = {
+      columnNames: Seq[String]): (Long, Map[String, (DataType, ColumnStat)]) = {
 
     val relation = sparkSession.table(tableIdent).logicalPlan
     // Resolve the column names and dedup using AttributeSet
     val resolver = sparkSession.sessionState.conf.resolver
-    val attributesToAnalyze = AttributeSet(columnNames.map { col =>
+    val attributesToAnalyze = columnNames.map { col =>
       val exprOption = relation.output.find(attr => resolver(attr.name, col))
       exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
-    }).toSeq
+    }
 
     // Make sure the column types are supported for stats gathering.
     attributesToAnalyze.foreach { attr =>
@@ -99,8 +100,8 @@ case class AnalyzeColumnCommand(
     val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation)).head()
 
     val rowCount = statsRow.getLong(0)
-    val columnStats = attributesToAnalyze.zipWithIndex.map { case (expr, i) =>
-      (expr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1)))
+    val columnStats = attributesToAnalyze.zipWithIndex.map { case (attr, i) =>
+      attr.name -> (attr.dataType, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1), attr))
     }.toMap
     (rowCount, columnStats)
   }

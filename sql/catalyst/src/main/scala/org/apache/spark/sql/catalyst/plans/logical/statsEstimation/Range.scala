@@ -17,12 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import java.math.{BigDecimal => JDecimal}
-import java.sql.{Date, Timestamp}
-
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.{BooleanType, DateType, TimestampType, _}
+import org.apache.spark.sql.types._
 
 
 /** Value range of a column. */
@@ -31,13 +27,13 @@ trait Range {
 }
 
 /** For simplicity we use decimal to unify operations of numeric ranges. */
-case class NumericRange(min: JDecimal, max: JDecimal) extends Range {
+case class NumericRange(min: Decimal, max: Decimal) extends Range {
   override def contains(l: Literal): Boolean = {
-    val decimal = l.dataType match {
-      case BooleanType => if (l.value.asInstanceOf[Boolean]) new JDecimal(1) else new JDecimal(0)
-      case _ => new JDecimal(l.value.toString)
+    val lit = l.dataType match {
+      case BooleanType => if (l.value.asInstanceOf[Boolean]) Decimal(1) else Decimal(0)
+      case _ => Decimal(l.value.toString)
     }
-    min.compareTo(decimal) <= 0 && max.compareTo(decimal) >= 0
+    min <= lit && max >= lit
   }
 }
 
@@ -82,7 +78,10 @@ object Range {
         // binary/string types don't support intersecting.
         (None, None)
       case (n1: NumericRange, n2: NumericRange) =>
-        val newRange = NumericRange(n1.min.max(n2.min), n1.max.min(n2.max))
+        // Choose the maximum of two min values, and the minimum of two max values.
+        val newRange = NumericRange(
+          min = if (n1.min <= n2.min) n2.min else n1.min,
+          max = if (n1.max <= n2.max) n1.max else n2.max)
         val (newMin, newMax) = fromNumericRange(newRange, dt)
         (Some(newMin), Some(newMax))
     }
@@ -94,38 +93,25 @@ object Range {
    */
   private def toNumericRange(min: Any, max: Any, dataType: DataType): NumericRange = {
     dataType match {
-      case _: NumericType =>
-        NumericRange(new JDecimal(min.toString), new JDecimal(max.toString))
+      case _: NumericType | DateType | TimestampType =>
+        NumericRange(Decimal(min.toString), Decimal(max.toString))
       case BooleanType =>
         val min1 = if (min.asInstanceOf[Boolean]) 1 else 0
         val max1 = if (max.asInstanceOf[Boolean]) 1 else 0
-        NumericRange(new JDecimal(min1), new JDecimal(max1))
-      case DateType =>
-        val min1 = DateTimeUtils.fromJavaDate(min.asInstanceOf[Date])
-        val max1 = DateTimeUtils.fromJavaDate(max.asInstanceOf[Date])
-        NumericRange(new JDecimal(min1), new JDecimal(max1))
-      case TimestampType =>
-        val min1 = DateTimeUtils.fromJavaTimestamp(min.asInstanceOf[Timestamp])
-        val max1 = DateTimeUtils.fromJavaTimestamp(max.asInstanceOf[Timestamp])
-        NumericRange(new JDecimal(min1), new JDecimal(max1))
+        NumericRange(Decimal(min1), Decimal(max1))
     }
   }
 
   private def fromNumericRange(n: NumericRange, dataType: DataType): (Any, Any) = {
     dataType match {
-      case _: IntegralType =>
-        (n.min.longValue(), n.max.longValue())
+      case _: IntegralType | DateType | TimestampType =>
+        (n.min.toLong, n.max.toLong)
       case FloatType | DoubleType =>
-        (n.min.doubleValue(), n.max.doubleValue())
+        (n.min.toDouble, n.max.toDouble)
       case _: DecimalType =>
         (n.min, n.max)
       case BooleanType =>
-        (n.min.longValue() == 1, n.max.longValue() == 1)
-      case DateType =>
-        (DateTimeUtils.toJavaDate(n.min.intValue()), DateTimeUtils.toJavaDate(n.max.intValue()))
-      case TimestampType =>
-        (DateTimeUtils.toJavaTimestamp(n.min.longValue()),
-          DateTimeUtils.toJavaTimestamp(n.max.longValue()))
+        (n.min.toLong == 1, n.max.toLong == 1)
     }
   }
 

@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 
@@ -62,12 +63,12 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("test row size estimation") {
-    val dec1 = new java.math.BigDecimal("1.000000000000000000")
-    val dec2 = new java.math.BigDecimal("8.000000000000000000")
-    val d1 = Date.valueOf("2016-05-08")
-    val d2 = Date.valueOf("2016-05-09")
-    val t1 = Timestamp.valueOf("2016-05-08 00:00:01")
-    val t2 = Timestamp.valueOf("2016-05-09 00:00:02")
+    val dec1 = Decimal("1.000000000000000000")
+    val dec2 = Decimal("8.000000000000000000")
+    val d1 = DateTimeUtils.fromJavaDate(Date.valueOf("2016-05-08"))
+    val d2 = DateTimeUtils.fromJavaDate(Date.valueOf("2016-05-09"))
+    val t1 = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-05-08 00:00:01"))
+    val t2 = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-05-09 00:00:02"))
 
     val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
       AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = 2,

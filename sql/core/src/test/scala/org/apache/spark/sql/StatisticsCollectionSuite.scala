@@ -26,6 +26,7 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -117,7 +118,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
     stats.zip(df.schema).foreach { case ((k, v), field) =>
       withClue(s"column $k with type ${field.dataType}") {
-        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap)
+        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap(k, field.dataType))
         assert(roundtrip == Some(v))
       }
     }
@@ -207,11 +208,13 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "clong" -> ColumnStat(2, Some(1L), Some(5L), 1, 8, 8),
     "cdouble" -> ColumnStat(2, Some(1.0), Some(6.0), 1, 8, 8),
     "cfloat" -> ColumnStat(2, Some(1.0), Some(7.0), 1, 4, 4),
-    "cdecimal" -> ColumnStat(2, Some(dec1), Some(dec2), 1, 16, 16),
+    "cdecimal" -> ColumnStat(2, Some(Decimal(dec1)), Some(Decimal(dec2)), 1, 16, 16),
     "cstring" -> ColumnStat(2, None, None, 1, 3, 3),
     "cbinary" -> ColumnStat(2, None, None, 1, 3, 3),
-    "cdate" -> ColumnStat(2, Some(d1), Some(d2), 1, 4, 4),
-    "ctimestamp" -> ColumnStat(2, Some(t1), Some(t2), 1, 8, 8)
+    "cdate" -> ColumnStat(2, Some(DateTimeUtils.fromJavaDate(d1)),
+      Some(DateTimeUtils.fromJavaDate(d2)), 1, 4, 4),
+    "ctimestamp" -> ColumnStat(2, Some(DateTimeUtils.fromJavaTimestamp(t1)),
+      Some(DateTimeUtils.fromJavaTimestamp(t2)), 1, 8, 8)
   )
 
   private val randomName = new Random(31)
@@ -237,7 +240,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
       colStats.foreach { case (k, v) =>
         withClue(s"column $k") {
-          assert(table.stats.get.colStats(k) == v)
+          assert(table.stats.get.colStats(k)._2 == v)
         }
       }
     }
@@ -290,7 +293,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     assert(catalogTable.stats.isDefined)
     assert(catalogTable.stats.get.sizeInBytes == 0)
     assert(catalogTable.stats.get.rowCount == Some(0))
-    assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
+    assert(catalogTable.stats.get.colStats == Map("c1" -> (IntegerType, emptyColStat)))
 
     // Check relation statistics
     assert(relation.stats(conf).sizeInBytes == 0)

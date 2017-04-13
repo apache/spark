@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, Project, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DateType, TimestampType, _}
 
 
@@ -254,9 +255,9 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
   test("test join keys of different types") {
     /** Columns in a table with only one row */
     def genColumnData: mutable.LinkedHashMap[Attribute, ColumnStat] = {
-      val dec = new java.math.BigDecimal("1.000000000000000000")
-      val date = Date.valueOf("2016-05-08")
-      val timestamp = Timestamp.valueOf("2016-05-08 00:00:01")
+      val dec = Decimal("1.000000000000000000")
+      val date = DateTimeUtils.fromJavaDate(Date.valueOf("2016-05-08"))
+      val timestamp = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-05-08 00:00:01"))
       mutable.LinkedHashMap[Attribute, ColumnStat](
         AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = 1,
           min = Some(false), max = Some(false), nullCount = 0, avgLen = 1, maxLen = 1),

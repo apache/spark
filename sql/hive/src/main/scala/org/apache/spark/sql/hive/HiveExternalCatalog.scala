@@ -526,8 +526,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       if (stats.rowCount.isDefined) {
         statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
       }
-      stats.colStats.foreach { case (colName, colStat) =>
-        colStat.toMap.foreach { case (k, v) =>
+      stats.colStats.foreach { case (colName, (dataType, colStat)) =>
+        colStat.toMap(colName, dataType).foreach { case (k, v) =>
           statsProperties += (columnStatKeyPropName(colName, k) -> v)
         }
       }
@@ -662,7 +662,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val statsProps = table.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
 
     if (statsProps.nonEmpty) {
-      val colStats = new mutable.HashMap[String, ColumnStat]
+      val colStats = new mutable.HashMap[String, (DataType, ColumnStat)]
 
       // For each column, recover its column stats. Note that this is currently a O(n^2) operation,
       // but given the number of columns it usually not enormous, this is probably OK as a start.
@@ -677,7 +677,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           }
 
           ColumnStat.fromMap(table.identifier.table, field, colStatMap).foreach {
-            colStat => colStats += field.name -> colStat
+            colStat => colStats += field.name -> (field.dataType, colStat)
           }
         }
       }
