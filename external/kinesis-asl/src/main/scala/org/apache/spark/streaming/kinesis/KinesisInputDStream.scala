@@ -267,7 +267,7 @@ object KinesisInputDStream {
         getRequiredParam(checkpointAppName, "checkpointAppName"),
         checkpointInterval.getOrElse(ssc.graph.batchDuration),
         storageLevel.getOrElse(DEFAULT_STORAGE_LEVEL),
-        handler,
+        ssc.sc.clean(handler),
         kinesisCredsProvider.getOrElse(DefaultCredentials),
         dynamoDBCredsProvider,
         cloudWatchCredsProvider)
