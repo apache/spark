@@ -2229,6 +2229,12 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
 
     .. versionadded:: 1.6.0
     """
+    @property
+    def labels(self):
+        """
+        Labels of StringIndexerModel
+        """
+        return self._call_java("labels")
 
     stopWords = Param(Params._dummy(), "stopWords", "The words to be filtered out",
                       typeConverter=TypeConverters.toListString)
