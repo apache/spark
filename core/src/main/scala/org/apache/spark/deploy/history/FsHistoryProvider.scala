@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
-import org.apache.hadoop.security.{AccessControlException, UserGroupInformation}
+import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -319,42 +319,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // scan for modified applications, replay and merge them
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
-          try {
-            val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
-
-            def canAccess = {
-              val perm = entry.getPermission
-              val ugi = UserGroupInformation.getCurrentUser
-              val user = ugi.getShortUserName
-              val groups = ugi.getGroupNames
-              if (user == entry.getOwner && perm.getUserAction.implies(FsAction.READ)) {
-                true
-              } else if (groups.contains(entry.getGroup) &&
-                  perm.getGroupAction.implies(FsAction.READ)) {
-                true
-              } else if (perm.getOtherAction.implies(FsAction.READ)) {
-                true
-              } else {
-                throw new AccessControlException(s"Permission denied: user=$user, " +
-                  s"path=${entry.getPath}:${entry.getOwner}:${entry.getGroup}" +
-                  s"${if (entry.isDirectory) "d" else "-"}$perm")
-              }
-            }
-
-            !entry.isDirectory() &&
-              // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
-              // reading a garbage file is safe, but we would log an error which can be scary to
-              // the end-user.
-              !entry.getPath().getName().startsWith(".") &&
-              prevFileSize < entry.getLen() &&
-              canAccess
-          } catch {
-            case _: AccessControlException =>
-              // Do not use "logInfo" since these messages can get pretty noisy if printed on
-              // every poll.
-              logDebug(s"No permission to read $entry, ignoring.")
-              false
-          }
+          val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
+          !entry.isDirectory() &&
+            // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
+            // reading a garbage file is safe, but we would log an error which can be scary to
+            // the end-user.
+            !entry.getPath().getName().startsWith(".") &&
+            prevFileSize < entry.getLen() &&
+            SparkHadoopUtil.get.checkAccessPermission(entry, FsAction.READ)
         }
         .flatMap { entry => Some(entry) }
         .sortWith { case (entry1, entry2) =>

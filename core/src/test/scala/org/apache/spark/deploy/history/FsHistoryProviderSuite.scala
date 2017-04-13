@@ -27,7 +27,8 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Matchers.any
@@ -37,6 +38,7 @@ import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
@@ -154,7 +156,20 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       SparkListenerApplicationStart("app1-2", Some("app1-2"), 1L, "test", None),
       SparkListenerApplicationEnd(2L)
       )
+
+    val path = new Path(logFile2.toURI)
+    val fs = path.getFileSystem(SparkHadoopUtil.get.conf)
+    val status = fs.getFileStatus(path)
+    SparkHadoopUtil.get.checkAccessPermission(status, FsAction.READ) should be (true)
+
     logFile2.setReadable(false, false)
+    val status1 = fs.getFileStatus(path)
+    SparkHadoopUtil.get.checkAccessPermission(status1, FsAction.READ) should be (false)
+
+    logFile2.setReadable(false, true)
+    val status2 = fs.getFileStatus(path)
+    SparkHadoopUtil.get.checkAccessPermission(status2, FsAction.READ) should be (false)
+
 
     updateAndCheck(provider) { list =>
       list.size should be (1)
