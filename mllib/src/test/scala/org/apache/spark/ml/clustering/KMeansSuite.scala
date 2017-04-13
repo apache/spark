@@ -144,6 +144,21 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(model.getPredictionCol == predictionColName)
   }
 
+  test("KMeansModel transform with non-default feature and prediction cols") {
+    val featuresColName = "kmeans_model_features"
+    val predictionColName = "kmeans_model_prediction"
+
+    val model = new KMeans().setK(k).setSeed(1).fit(dataset)
+    model.setFeaturesCol(featuresColName).setPredictionCol(predictionColName)
+
+    val transformed = model.transform(dataset.withColumnRenamed("features", featuresColName))
+    Seq(featuresColName, predictionColName).foreach { column =>
+      assert(transformed.columns.contains(column))
+    }
+    assert(model.getFeaturesCol == featuresColName)
+    assert(model.getPredictionCol == predictionColName)
+  }
+
   test("read/write") {
     def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {
       assert(model.clusterCenters === model2.clusterCenters)
