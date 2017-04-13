@@ -656,6 +656,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, null)
+          reader.initBatch(null, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
           while (reader.nextKeyValue()) {
             val row = reader.getCurrentValue.asInstanceOf[InternalRow]
