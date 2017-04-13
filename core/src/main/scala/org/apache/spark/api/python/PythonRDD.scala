@@ -18,13 +18,17 @@
 package org.apache.spark.api.python
 
 import java.io._
+import java.lang.ref.PhantomReference
+import java.lang.ref.ReferenceQueue
 import java.net._
 import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 import scala.language.existentials
+import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -39,7 +43,6 @@ import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util._
-
 
 private[spark] class PythonRDD(
     parent: RDD[_],
@@ -926,18 +929,72 @@ private[spark] class PythonAccumulatorV2(
     }
   }
 }
+/**
+ * Create a class that extends PhantomReference.
+ */
+
+private[spark] class FilePhantomReference(@transient var f: File, var q: ReferenceQueue[File])
+  extends PhantomReference(f, q){
+
+  private def cleanup()
+  {
+    f.delete()
+  }
+}
 
 /**
  * A Wrapper for Python Broadcast, which is written into disk by Python. It also will
  * write the data into disk after deserialization, then Python can read it from disks.
  */
 // scalastyle:off no.finalize
+
+/**
+ * Create a class that extends PhantomReference.
+ */
+private[spark] class FilePhantomReference(@transient var f: File, var q: ReferenceQueue[File])
+  extends PhantomReference(f, q){
+
+  private def cleanup()
+  {
+    f.delete()
+  }
+}
+
+private[spark] class PhantomThread( threadName: String, queue: ReferenceQueue[File],
+    phantomReferences: ListBuffer[FilePhantomReference])
+  extends Thread with Logging {
+
+  def shutdownOnTaskCompletion()
+  {
+    this.interrupt()
+  }
+  
+  setDaemon(true)
+  override def run(): Unit = Utils.logUncaughtExceptions {
+    while(phantomReferences.size > 0)
+      {
+       try {
+        val ref = queue.remove().asInstanceOf[FilePhantomReference]
+        phantomReferences -= ref
+       }catch {
+        case ex: InterruptedException => {
+          logDebug("Exception thrown after file object cleanup", ex)
+         }
+       }
+      }
+  }
+}
+
 private[spark] class PythonBroadcast(@transient var path: String) extends Serializable
   with Logging {
 
+  val queue = new ReferenceQueue[File]()
+  val phantomReferences = new ListBuffer[FilePhantomReference]()
+  val threadName = "WeakReference"
+
   /**
-   * Read data from disks, then copy it to `out`
-   */
+ * Read data from disks, then copy it to `out`
+ */
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     val in = new FileInputStream(new File(path))
     try {
@@ -953,27 +1010,46 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
     val file = File.createTempFile("broadcast", "", dir)
+<<<<<<< HEAD
+    val queue = new ReferenceQueue[File]()
+    val exitWhenFinished=false
+    val phantomReferences = new ListBuffer[FilePhantomReference]()
+    val threadName = "WeakReference"
+    val phantomThread=new PhantomThread(threadName,queue,phantomReferences)
+    
+=======
+    phantomReferences += new FilePhantomReference(file, queue)
+>>>>>>> 44b16af2b803a9d9eea2dcbfcd631b5899f9314d
     path = file.getAbsolutePath
     val out = new FileOutputStream(file)
+    phantomReferences += new FilePhantomReference(file, queue)
+    phantomThread.start()
+    if(phantomReferences.size == 0)
+      phantomThread.shutdownOnTaskCompletion
     Utils.tryWithSafeFinally {
       Utils.copyStream(in, out)
     } {
-      out.close()
+       out.close();
     }
   }
 
-  /**
-   * Delete the file once the object is GCed.
+<<<<<<< HEAD
+=======
+  /** Create a seperate daemon thread
+   *  to remove phantomreferences from queue and invoke cleanup
    */
-  override def finalize() {
-    if (!path.isEmpty) {
-      val file = new File(path)
-      if (file.exists()) {
-        if (!file.delete()) {
-          logWarning(s"Error deleting ${file.getPath}")
-        }
+    val referenceThread = new Thread(threadName){
+    setDaemon(true)
+      override def run() {
+      try {
+        val ref = queue.remove().asInstanceOf[FilePhantomReference]
+        phantomReferences -= ref
+      } catch {
+          case e: Exception =>
+            logError(s"Error removing reference", e)
       }
-    }
-  }
+      }
+    }.start()
+>>>>>>> 44b16af2b803a9d9eea2dcbfcd631b5899f9314d
 }
 // scalastyle:on no.finalize
