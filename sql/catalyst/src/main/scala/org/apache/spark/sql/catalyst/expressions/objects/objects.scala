@@ -260,8 +260,8 @@ case class Invoke(
     ev.copy(code = code)
   }
 
+  override def verboseString: String = s"$simpleString($functionName)"
   override def toString: String = s"$targetObject.$functionName"
-  override def verboseString: String = toString
 }
 
 object NewInstance {
@@ -337,8 +337,8 @@ case class NewInstance(
     ev.copy(code = code)
   }
 
-  override def toString: String = s"newInstance($cls)"
   override def verboseString: String = toString
+  override def toString: String = s"newInstance($cls)"
 }
 
 /**
@@ -997,8 +997,6 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
   override def dataType: DataType = child.dataType
   override def foldable: Boolean = false
   override def nullable: Boolean = false
-
-  override def flatArguments: Iterator[Any] = Iterator(child)
 
   private val errMsg = "Null value appeared in non-nullable field:" +
     walkedTypePath.mkString("\n", "\n", "\n") +

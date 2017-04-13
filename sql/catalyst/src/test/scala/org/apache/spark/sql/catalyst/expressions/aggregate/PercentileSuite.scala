@@ -215,7 +215,7 @@ class PercentileSuite extends SparkFunSuite {
       val percentile2 = new Percentile(child, percentage)
       assertEqual(percentile2.checkInputDataTypes(),
         TypeCheckFailure(s"Percentage(s) must be between 0.0 and 1.0, " +
-        s"but got ${percentage.simpleString}"))
+        s"but got ${percentage.toString}"))
     }
 
     val nonFoldablePercentage = Seq(NonFoldableLiteral(0.5),

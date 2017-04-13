@@ -48,7 +48,7 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
     s"Scan $relation ${metastoreTableIdentifier.map(_.unquotedString).getOrElse("")}"
   }
 
-  override def simpleString: String = {
+  override def verboseString: String = {
     val metadataEntries = metadata.toSeq.sorted.map {
       case (key, value) =>
         key + ": " + StringUtils.abbreviate(redact(value), 100)
@@ -56,8 +56,6 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
     val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
     s"$nodeNamePrefix$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
   }
-
-  override def verboseString: String = redact(super.verboseString)
 
   override def treeString(verbose: Boolean, addSuffix: Boolean): String = {
     redact(super.treeString(verbose, addSuffix))

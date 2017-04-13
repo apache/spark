@@ -108,6 +108,7 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
     this(left, right, Coalesce(Seq(left, right)))
   }
 
+  override def toString: String = s"$prettyName($left, $right)"
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 }
 
@@ -126,6 +127,7 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
     this(left, right, If(EqualTo(left, right), Literal.create(null, left.dataType), left))
   }
 
+  override def toString: String = s"$prettyName($left, $right)"
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 }
 
@@ -143,6 +145,7 @@ case class Nvl(left: Expression, right: Expression, child: Expression) extends R
     this(left, right, Coalesce(Seq(left, right)))
   }
 
+  override def toString: String = s"$prettyName($left, $right)"
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 }
 
@@ -163,6 +166,7 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: 
     this(expr1, expr2, expr3, If(IsNotNull(expr1), expr2, expr3))
   }
 
+  override def toString: String = s"$prettyName($expr1, $expr2, $expr3)"
   override def sql: String = s"$prettyName(${expr1.sql}, ${expr2.sql}, ${expr3.sql})"
 }
 

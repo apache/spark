@@ -188,6 +188,16 @@ abstract class Expression extends TreeNode[Expression] {
    */
   override def prettyName: String = nodeName.toLowerCase(Locale.ROOT)
 
+  protected def flatArguments: Iterator[Any] = productIterator.flatMap {
+    case t: Traversable[_] => t
+    case single => single :: Nil
+  }
+
+  // Different to [[TreeNode]], we usually want `toString` returns ONE line description, instead of
+  // tree representation for [[Expression]].
+  override def toString: String = prettyName + Utils.truncatedString(
+    flatArguments.toSeq, "(", ", ", ")")
+
   /**
    * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],
    * this method may return an arbitrary user facing string.

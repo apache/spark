@@ -116,7 +116,7 @@ case class ExternalRDDScanExec[T](
     }
   }
 
-  override def simpleString: String = {
+  override def verboseString: String = {
     s"Scan $nodeName${output.mkString("[", ",", "]")}"
   }
 }
@@ -187,7 +187,7 @@ case class RDDScanExec(
     }
   }
 
-  override def simpleString: String = {
+  override def verboseString: String = {
     s"Scan $nodeName${Utils.truncatedString(output, "[", ",", "]")}"
   }
 }

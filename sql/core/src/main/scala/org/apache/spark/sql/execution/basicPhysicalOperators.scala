@@ -540,7 +540,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       }
   }
 
-  override def simpleString: String = range.simpleString
+  override def verboseString: String = range.verboseString
 }
 
 /**
