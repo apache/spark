@@ -261,7 +261,7 @@ class DecisionTreeClassifierSuite
       .setMinInfoGain(0.01)
     val treeModel = dt.fit(train)
 
-    // The tree should use exactly one of the 3 features: featue(0)
+    // The tree should use exactly one of the 3 features: feature(0)
     val featImps = treeModel.featureImportances
     assert(treeModel.depth === 1)
     assert(featImps.size === 3)
