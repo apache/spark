@@ -286,16 +286,6 @@ final class Word2Vec @Since("1.4.0") (
     (vocabMap.size, totalWordCount, vocabMap, unigramTable)
   }
 
-  private def generateInitMatrices(vocabSize: Int, dim: Int, sc: SparkContext):
-      (Broadcast[Array[Array[Float]]], Broadcast[Array[Array[Float]]]) = {
-    val random = new XORShiftRandom(System.currentTimeMillis())
-    // input to hidden layer weights
-    val syn0 = Array.fill(vocabSize, dim)(random.nextFloat - 0.5f)
-    // hidden layer to output weights
-    val syn1 = Array.fill(vocabSize, dim)(0.0f)
-    (sc.broadcast(syn0), sc.broadcast(syn1))
-  }
-
   /**
    * This method implements Word2Vec Continuous Bag Of Words based implementation using
    * negative sampling optimization, using BLAS for vectorizing operations where applicable.
