@@ -537,6 +537,15 @@ class HiveContext(SQLContext):
         """
         self._ssql_ctx.refreshTable(tableName)
 
+    def refreshTable(self, tableName):
+        """Invalidate and refresh all the cached the metadata of the given
+        table. For performance reasons, Spark SQL or the external data source
+        library it uses might cache certain metadata about a table, such as the
+        location of blocks. When those change outside of Spark SQL, users should
+        call this function to invalidate the cache.
+        """
+        self._ssql_ctx.refreshTable(tableName)
+
 
 class UDFRegistration(object):
     """Wrapper for user-defined function registration."""
