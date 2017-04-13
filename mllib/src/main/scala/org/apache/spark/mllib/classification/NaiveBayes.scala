@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification.{NaiveBayes => NewNaiveBayes}
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.{Loader, Saveable}
+import org.apache.spark.mllib.util.{Broadcastable, Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 
@@ -49,7 +49,7 @@ class NaiveBayesModel private[spark] (
     @Since("0.9.0") val pi: Array[Double],
     @Since("0.9.0") val theta: Array[Array[Double]],
     @Since("1.4.0") val modelType: String)
-  extends ClassificationModel with Serializable with Saveable {
+  extends ClassificationModel with Serializable with Saveable with Broadcastable[NaiveBayesModel] {
 
   import NaiveBayes.{Bernoulli, Multinomial, supportedModelTypes}
 
@@ -88,9 +88,10 @@ class NaiveBayesModel private[spark] (
 
   @Since("1.0.0")
   override def predict(testData: RDD[Vector]): RDD[Double] = {
-    val bcModel = testData.context.broadcast(this)
+    val sc = testData.sparkContext
+    val lclBcModel = getBroadcastModel(sc, this)
     testData.mapPartitions { iter =>
-      val model = bcModel.value
+      val model = lclBcModel.value
       iter.map(model.predict)
     }
   }
@@ -114,9 +115,10 @@ class NaiveBayesModel private[spark] (
    */
   @Since("1.5.0")
   def predictProbabilities(testData: RDD[Vector]): RDD[Vector] = {
-    val bcModel = testData.context.broadcast(this)
+    val sc = testData.sparkContext
+    val lclBcModel = getBroadcastModel(sc, this)
     testData.mapPartitions { iter =>
-      val model = bcModel.value
+      val model = lclBcModel.value
       iter.map(model.predictProbabilities)
     }
   }
