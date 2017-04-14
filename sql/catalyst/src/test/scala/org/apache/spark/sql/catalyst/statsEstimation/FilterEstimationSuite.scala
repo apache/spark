@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, Join, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -45,15 +46,15 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     nullCount = 0, avgLen = 1, maxLen = 1)
 
   // column cdate has 10 values from 2017-01-01 through 2017-01-10.
-  val dMin = Date.valueOf("2017-01-01")
-  val dMax = Date.valueOf("2017-01-10")
+  val dMin = DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-01"))
+  val dMax = DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-10"))
   val attrDate = AttributeReference("cdate", DateType)()
   val colStatDate = ColumnStat(distinctCount = 10, min = Some(dMin), max = Some(dMax),
     nullCount = 0, avgLen = 4, maxLen = 4)
 
   // column cdecimal has 4 values from 0.20 through 0.80 at increment of 0.20.
-  val decMin = new java.math.BigDecimal("0.200000000000000000")
-  val decMax = new java.math.BigDecimal("0.800000000000000000")
+  val decMin = Decimal("0.200000000000000000")
+  val decMax = Decimal("0.800000000000000000")
   val attrDecimal = AttributeReference("cdecimal", DecimalType(18, 18))()
   val colStatDecimal = ColumnStat(distinctCount = 4, min = Some(decMin), max = Some(decMax),
     nullCount = 0, avgLen = 8, maxLen = 8)
@@ -147,7 +148,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("cint < 3 OR null") {
     val condition = Or(LessThan(attrInt, Literal(3)), Literal(null, IntegerType))
-    val m = Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)).stats(conf)
     validateEstimatedStats(
       Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
       Seq(attrInt -> colStatInt),
@@ -341,6 +341,14 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 7)
   }
 
+  test("cbool IN (true)") {
+    validateEstimatedStats(
+      Filter(InSet(attrBool, Set(true)), childStatsTestPlan(Seq(attrBool), 10L)),
+      Seq(attrBool -> ColumnStat(distinctCount = 1, min = Some(true), max = Some(true),
+        nullCount = 0, avgLen = 1, maxLen = 1)),
+      expectedRowCount = 5)
+  }
+
   test("cbool = true") {
     validateEstimatedStats(
       Filter(EqualTo(attrBool, Literal(true)), childStatsTestPlan(Seq(attrBool), 10L)),
@@ -358,9 +366,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cdate = cast('2017-01-02' AS DATE)") {
-    val d20170102 = Date.valueOf("2017-01-02")
+    val d20170102 = DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-02"))
     validateEstimatedStats(
-      Filter(EqualTo(attrDate, Literal(d20170102)),
+      Filter(EqualTo(attrDate, Literal(d20170102, DateType)),
         childStatsTestPlan(Seq(attrDate), 10L)),
       Seq(attrDate -> ColumnStat(distinctCount = 1, min = Some(d20170102), max = Some(d20170102),
         nullCount = 0, avgLen = 4, maxLen = 4)),
@@ -368,9 +376,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cdate < cast('2017-01-03' AS DATE)") {
-    val d20170103 = Date.valueOf("2017-01-03")
+    val d20170103 = DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-03"))
     validateEstimatedStats(
-      Filter(LessThan(attrDate, Literal(d20170103)),
+      Filter(LessThan(attrDate, Literal(d20170103, DateType)),
         childStatsTestPlan(Seq(attrDate), 10L)),
       Seq(attrDate -> ColumnStat(distinctCount = 2, min = Some(dMin), max = Some(d20170103),
         nullCount = 0, avgLen = 4, maxLen = 4)),
@@ -379,19 +387,19 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("""cdate IN ( cast('2017-01-03' AS DATE),
       cast('2017-01-04' AS DATE), cast('2017-01-05' AS DATE) )""") {
-    val d20170103 = Date.valueOf("2017-01-03")
-    val d20170104 = Date.valueOf("2017-01-04")
-    val d20170105 = Date.valueOf("2017-01-05")
+    val d20170103 = DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-03"))
+    val d20170104 = DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-04"))
+    val d20170105 = DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-05"))
     validateEstimatedStats(
-      Filter(In(attrDate, Seq(Literal(d20170103), Literal(d20170104), Literal(d20170105))),
-        childStatsTestPlan(Seq(attrDate), 10L)),
+      Filter(In(attrDate, Seq(Literal(d20170103, DateType), Literal(d20170104, DateType),
+        Literal(d20170105, DateType))), childStatsTestPlan(Seq(attrDate), 10L)),
       Seq(attrDate -> ColumnStat(distinctCount = 3, min = Some(d20170103), max = Some(d20170105),
         nullCount = 0, avgLen = 4, maxLen = 4)),
       expectedRowCount = 3)
   }
 
   test("cdecimal = 0.400000000000000000") {
-    val dec_0_40 = new java.math.BigDecimal("0.400000000000000000")
+    val dec_0_40 = Decimal("0.400000000000000000")
     validateEstimatedStats(
       Filter(EqualTo(attrDecimal, Literal(dec_0_40)),
         childStatsTestPlan(Seq(attrDecimal), 4L)),
@@ -401,7 +409,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cdecimal < 0.60 ") {
-    val dec_0_60 = new java.math.BigDecimal("0.600000000000000000")
+    val dec_0_60 = Decimal("0.600000000000000000")
     validateEstimatedStats(
       Filter(LessThan(attrDecimal, Literal(dec_0_60)),
         childStatsTestPlan(Seq(attrDecimal), 4L)),
@@ -532,7 +540,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("cint = cint3") {
     // no records qualify due to no overlap
-    val emptyColStats = Seq[(Attribute, ColumnStat)]()
     validateEstimatedStats(
       Filter(EqualTo(attrInt, attrInt3), childStatsTestPlan(Seq(attrInt, attrInt3), 10L)),
       Nil, // set to empty

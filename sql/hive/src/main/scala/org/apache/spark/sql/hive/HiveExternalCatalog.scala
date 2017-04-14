@@ -526,8 +526,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       if (stats.rowCount.isDefined) {
         statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
       }
+      val colNameTypeMap: Map[String, DataType] =
+        tableDefinition.schema.fields.map(f => (f.name, f.dataType)).toMap
       stats.colStats.foreach { case (colName, colStat) =>
-        colStat.toMap.foreach { case (k, v) =>
+        colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
           statsProperties += (columnStatKeyPropName(colName, k) -> v)
         }
       }
