@@ -458,6 +458,7 @@ object MapObjects {
       function: Expression => Expression,
       inputData: Expression,
       elementType: DataType,
+      elementNullable: Boolean = true,
       customCollectionCls: Option[Class[_]] = None): MapObjects = {
     val id = curId.getAndIncrement()
     val loopValue = s"MapObjects_loopValue$id"
