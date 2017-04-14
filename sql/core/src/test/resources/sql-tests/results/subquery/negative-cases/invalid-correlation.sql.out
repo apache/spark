@@ -77,7 +77,7 @@ HAVING EXISTS (SELECT 1
 struct<>
 -- !query 5 output
 org.apache.spark.sql.AnalysisException
-Found an aggregate expression in a correlated predicate that has both outer and local references, which is not supported yet. Aggregate expression: min((t1.`t1a` + t2.`t2a`)) Outer references: t1.`t1a` Local references: t2.`t2a`;
+Found an aggregate expression in a correlated predicate that has both outer and local references, which is not supported yet. Aggregate expression: min((t1.`t1a` + t2.`t2a`)), Outer references: t1.`t1a`, Local references: t2.`t2a`.;
 
 
 -- !query 6
@@ -93,7 +93,7 @@ WHERE  t1a IN (SELECT t2a
 struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
-Found an aggregate expression in a correlated predicate that has both outer and local references, which is not supported yet. Aggregate expression: min((t2.`t2a` + t3.`t3a`)) Outer references: t2.`t2a` Local references: t3.`t3a`;
+Found an aggregate expression in a correlated predicate that has both outer and local references, which is not supported yet. Aggregate expression: min((t2.`t2a` + t3.`t3a`)), Outer references: t2.`t2a`, Local references: t3.`t3a`.;
 
 
 -- !query 7

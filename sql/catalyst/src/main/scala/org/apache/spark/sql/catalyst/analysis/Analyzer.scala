@@ -1222,9 +1222,9 @@ class Analyzer(
                 s"""
                    |Found an aggregate expression in a correlated predicate that has both
                    |outer and local references, which is not supported yet.
-                   |Aggregate expression: ${a.sql}
-                   |Outer references: ${outer.map(_.sql).mkString(", ")}
-                   |Local references: ${local.map(_.sql).mkString(", ")}
+                   |Aggregate expression: ${a.sql},
+                   |Outer references: ${outer.map(_.sql).mkString(", ")},
+                   |Local references: ${local.map(_.sql).mkString(", ")}.
                  """.stripMargin.replace("\n", " ").trim()
               failAnalysis(msg)
             }
@@ -1242,7 +1242,7 @@ class Analyzer(
       // Make sure a plan's expressions do not contain outer references
       def failOnOuterReference(p: LogicalPlan): Unit = {
         p.expressions.foreach(checkMixedReferencesInsideAggregation)
-        if (p.expressions.exists(containsOuter)) {
+        if (!p.isInstanceOf[Filter] && p.expressions.exists(containsOuter)) {
           failAnalysis(
             "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
               s"clauses:\n$p")
@@ -1329,7 +1329,7 @@ class Analyzer(
             case _ => true
           }
 
-          correlated.foreach(checkMixedReferencesInsideAggregation)
+          failOnOuterReference(f)
           // The aggregate expressions are treated in a special way by getOuterReferences. If the
           // aggregate expression contains only outer reference attributes then the entire aggregate
           // expression is isolated as an OuterReference.
