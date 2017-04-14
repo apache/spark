@@ -472,47 +472,6 @@ class DAGScheduler(
   }
 
   /**
-   * Get ancestor splits in ShuffledRDD.
-   */
-  private[spark] def parentSplitsInShuffledRDD(stageId: Int, pId: Int): Option[Map[Int, Set[Int]]] =
-  {
-    stageIdToStage.get(stageId) match {
-      case Some(stage) =>
-        val waitingForVisit = new Stack[Tuple2[RDD[_], Int]]
-        waitingForVisit.push((stage.rdd, pId))
-        val ret = new HashMap[Int, HashSet[Int]]()
-        while(waitingForVisit.nonEmpty) {
-          val (rdd, split) = waitingForVisit.pop()
-          if (getCacheLocs(rdd)(split) == Nil) {
-            rdd.dependencies.foreach {
-              case dep: ShuffleDependency[_, _, _] =>
-                val noPartitionerConflict = rdd.partitioner match {
-                  case Some(partitioner) =>
-                    partitioner.isInstanceOf[HashPartitioner] &&
-                    dep.partitioner.isInstanceOf[HashPartitioner] &&
-                    partitioner.numPartitions == dep.partitioner.numPartitions
-                  case None => true
-                }
-                if (noPartitionerConflict) {
-                  ret.getOrElseUpdate(dep.shuffleId, new HashSet[Int]()).add(split)
-                }
-              case dep: NarrowDependency[_] =>
-                dep.getParents(split).foreach {
-                  case parentSplit =>
-                    if (getCacheLocs(dep.rdd)(parentSplit) == Nil) {
-                      waitingForVisit.push((dep.rdd, parentSplit))
-                    }
-                }
-            }
-          }
-        }
-        Some(ret.mapValues(_.toSet).toMap)
-      case None =>
-        None
-    }
-  }
-
-  /**
    * Registers the given jobId among the jobs that need the given stage and
    * all of that stage's ancestors.
    */
@@ -1098,9 +1057,12 @@ class DAGScheduler(
     if (tasks.size > 0) {
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
+      def ordFunc(x: Task[_], y: Task[_]): Boolean = {
+        inputSizeFromShuffledRDD(stageIdToStage(x.stageId).rdd, x.partitionId) >
+        inputSizeFromShuffledRDD(stageIdToStage(y.stageId).rdd, y.partitionId)
+      }
       taskScheduler.submitTasks(new TaskSet(
-        tasks.toArray, stage.id, stage.latestInfo.attemptId, jobId, properties,
-        Some(getTaskInputSizesFromShuffledRDD(tasks))))
+        tasks.sortWith(ordFunc).toArray, stage.id, stage.latestInfo.attemptId, jobId, properties))
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
@@ -1122,23 +1084,27 @@ class DAGScheduler(
     }
   }
 
-  // Visible for testing.
-  private[spark] def getTaskInputSizesFromShuffledRDD(tasks: Seq[Task[_]]): Map[Task[_], Long] = {
-    val taskInputSizeFromShuffledRDD = HashMap[Task[_], Long]()
-    tasks.foreach {
-      case task =>
-        val size =
-          parentSplitsInShuffledRDD(task.stageId, task.partitionId).map {
-            case parentSplits =>
-              parentSplits.map {
-                case (shuffleId, splits) =>
-                  splits.map(mapOutputTracker.getMapSizesByExecutorId(shuffleId, _)
-                    .flatMap(_._2.map(_._2)).sum).sum
-              }.sum
-          }.getOrElse(0L)
-        taskInputSizeFromShuffledRDD(task) = size
+  private[scheduler] def inputSizeFromShuffledRDD(rdd: RDD[_], pId: Int): Long =
+  {
+    var ret = 0L
+    val waitingForVisit = new Stack[Tuple2[RDD[_], Int]]
+    if (getCacheLocs(rdd)(pId) == Nil) {
+      waitingForVisit.push((rdd, pId))
     }
-    taskInputSizeFromShuffledRDD.toMap
+    while(waitingForVisit.nonEmpty) {
+      val (rdd, split) = waitingForVisit.pop()
+      rdd.dependencies.foreach {
+        case dep: ShuffleDependency[_, _, _] =>
+          if (rdd.partitioner.isEmpty || rdd.partitioner == Some(dep.partitioner)) {
+            ret += mapOutputTracker.getStatistics(dep).bytesByPartitionId(split)
+          }
+        case dep: NarrowDependency[_] =>
+          dep.getParents(split).foreach {
+            case parentSplit => ret += inputSizeFromShuffledRDD(dep.rdd, parentSplit)
+          }
+      }
+    }
+    ret
   }
 
   /**

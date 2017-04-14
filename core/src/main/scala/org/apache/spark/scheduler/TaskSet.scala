@@ -19,8 +19,6 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import scala.collection.Map
-
 /**
  * A set of tasks submitted together to the low-level TaskScheduler, usually representing
  * missing partitions of a particular stage.
@@ -30,8 +28,7 @@ private[spark] class TaskSet(
     val stageId: Int,
     val stageAttemptId: Int,
     val priority: Int,
-    val properties: Properties,
-    val taskInputSizesFromShuffledRDDOpt: Option[Map[Task[_], Long]] = None)  {
+    val properties: Properties) {
   val id: String = stageId + "." + stageAttemptId
 
   override def toString: String = "TaskSet " + id

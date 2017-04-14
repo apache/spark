@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.math.max
@@ -139,7 +138,7 @@ private[spark] class TaskSetManager(
   private[scheduler] var pendingTasksWithNoPrefs = new ArrayBuffer[Int]
 
   // Set containing all pending tasks (also used as a stack, as above).
-  private var allPendingTasks = new ArrayBuffer[Int]
+  private val allPendingTasks = new ArrayBuffer[Int]
 
   // Tasks that can be speculated. Since these will be a small fraction of total
   // tasks, we'll just hold them in a HashSet.
@@ -168,8 +167,6 @@ private[spark] class TaskSetManager(
   for (t <- tasks) {
     t.epoch = epoch
   }
-
-  private val sortedPendingTasks = new AtomicBoolean(false)
 
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
@@ -441,10 +438,6 @@ private[spark] class TaskSetManager(
         blacklist.isExecutorBlacklistedForTaskSet(execId)
     }
     if (!isZombie && !offerBlacklisted) {
-      if (sortedPendingTasks.compareAndSet(false, true)) {
-        sortPendingTasks()
-      }
-
       val curTime = clock.getTimeMillis()
 
       var allowedLocality = maxLocality
@@ -516,30 +509,6 @@ private[spark] class TaskSetManager(
       }
     } else {
       None
-    }
-  }
-
-  private[this] def sortPendingTasks(): Unit = {
-    taskSet.taskInputSizesFromShuffledRDDOpt match {
-      case Some(taskInputSizeFromShuffledRDD) =>
-        def ordFunc(x: Int, y: Int): Boolean = {
-          taskInputSizeFromShuffledRDD(tasks(x)) < taskInputSizeFromShuffledRDD(tasks(y))
-        }
-        if (tasks.nonEmpty) {
-          // Sort the tasks based on their input size from ShuffledRDD.
-          pendingTasksForExecutor.foreach {
-            case (k, v) => pendingTasksForExecutor(k) = v.sortWith(ordFunc)
-          }
-          pendingTasksForHost.foreach {
-            case (k, v) => pendingTasksForHost(k) = v.sortWith(ordFunc)
-          }
-          pendingTasksForRack.foreach {
-            case (k, v) => pendingTasksForRack(k) = v.sortWith(ordFunc)
-          }
-          pendingTasksWithNoPrefs = pendingTasksWithNoPrefs.sortWith(ordFunc)
-          allPendingTasks = allPendingTasks.sortWith(ordFunc)
-        }
-      case None => // no-op
     }
   }
 
@@ -864,7 +833,6 @@ private[spark] class TaskSetManager(
         s" has already succeeded).")
     } else {
       addPendingTask(index)
-      sortPendingTasks()
     }
 
     if (!isZombie && reason.countTowardsTaskFailures) {
@@ -936,7 +904,6 @@ private[spark] class TaskSetManager(
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
           addPendingTask(index)
-          sortPendingTasks()
           // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
           // stage finishes when a total of tasks.size tasks finish.
           sched.dagScheduler.taskEnded(
