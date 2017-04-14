@@ -58,6 +58,7 @@ private[streaming] class JavaStreamingListenerWrapper(javaStreamingListener: Jav
       outputOperationInfo.description: String,
       outputOperationInfo.startTime.getOrElse(-1),
       outputOperationInfo.endTime.getOrElse(-1),
+      outputOperationInfo.jobGenTime.getOrElse(-1),
       outputOperationInfo.failureReason.orNull
     )
   }

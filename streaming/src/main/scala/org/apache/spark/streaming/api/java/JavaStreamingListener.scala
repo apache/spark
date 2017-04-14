@@ -255,4 +255,5 @@ private[streaming] case class JavaOutputOperationInfo(
     description: String,
     startTime: Long,
     endTime: Long,
+    jobGenTime:  Long,
     failureReason: String)

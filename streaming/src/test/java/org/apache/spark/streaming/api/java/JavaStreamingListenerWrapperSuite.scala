@@ -67,7 +67,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
     assertReceiverInfo(listener.receiverError.receiverInfo, receiverError.receiverInfo)
 
     val batchSubmitted = StreamingListenerBatchSubmitted(BatchInfo(
-      batchTime = Time(1000L),
+      batchTime = Time(1000L), None,
       streamIdToInputInfo = Map(
         0 -> StreamInputInfo(
           inputStreamId = 0,
@@ -88,6 +88,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
           description = "operation1",
           startTime = None,
           endTime = None,
+          jobGenTime = None,
           failureReason = None),
         1 -> OutputOperationInfo(
           batchTime = Time(1000L),
@@ -96,13 +97,14 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
           description = "operation2",
           startTime = None,
           endTime = None,
+          jobGenTime = None,
           failureReason = None))
     ))
     listenerWrapper.onBatchSubmitted(batchSubmitted)
     assertBatchInfo(listener.batchSubmitted.batchInfo, batchSubmitted.batchInfo)
 
     val batchStarted = StreamingListenerBatchStarted(BatchInfo(
-      batchTime = Time(1000L),
+      batchTime = Time(1000L), None,
       streamIdToInputInfo = Map(
         0 -> StreamInputInfo(
           inputStreamId = 0,
@@ -123,6 +125,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
           description = "operation1",
           startTime = Some(1003L),
           endTime = None,
+          jobGenTime = None,
           failureReason = None),
         1 -> OutputOperationInfo(
           batchTime = Time(1000L),
@@ -131,13 +134,14 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
           description = "operation2",
           startTime = Some(1005L),
           endTime = None,
+          jobGenTime = None,
           failureReason = None))
     ))
     listenerWrapper.onBatchStarted(batchStarted)
     assertBatchInfo(listener.batchStarted.batchInfo, batchStarted.batchInfo)
 
     val batchCompleted = StreamingListenerBatchCompleted(BatchInfo(
-      batchTime = Time(1000L),
+      batchTime = Time(1000L), None,
       streamIdToInputInfo = Map(
         0 -> StreamInputInfo(
           inputStreamId = 0,
@@ -158,6 +162,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
           description = "operation1",
           startTime = Some(1003L),
           endTime = Some(1004L),
+          jobGenTime = None,
           failureReason = None),
         1 -> OutputOperationInfo(
           batchTime = Time(1000L),
@@ -166,6 +171,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
           description = "operation2",
           startTime = Some(1005L),
           endTime = Some(1010L),
+          jobGenTime = None,
           failureReason = None))
     ))
     listenerWrapper.onBatchCompleted(batchCompleted)
@@ -178,6 +184,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
       description = "operation1",
       startTime = Some(1003L),
       endTime = None,
+      jobGenTime = None,
       failureReason = None
     ))
     listenerWrapper.onOutputOperationStarted(outputOperationStarted)
@@ -191,6 +198,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
       description = "operation1",
       startTime = Some(1003L),
       endTime = Some(1004L),
+      jobGenTime = None,
       failureReason = None
     ))
     listenerWrapper.onOutputOperationCompleted(outputOperationCompleted)
@@ -247,6 +255,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
     assert(javaOutputOperationInfo.description === outputOperationInfo.description)
     assert(javaOutputOperationInfo.startTime === outputOperationInfo.startTime.getOrElse(-1))
     assert(javaOutputOperationInfo.endTime === outputOperationInfo.endTime.getOrElse(-1))
+    assert(javaOutputOperationInfo.jobGenTime === outputOperationInfo.jobGenTime.getOrElse(-1))
     assert(javaOutputOperationInfo.failureReason === outputOperationInfo.failureReason.orNull)
   }
 }

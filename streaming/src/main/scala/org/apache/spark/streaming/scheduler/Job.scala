@@ -34,6 +34,7 @@ class Job(val time: Time, func: () => _) {
   private var _callSite: CallSite = null
   private var _startTime: Option[Long] = None
   private var _endTime: Option[Long] = None
+  private var _jobGenTime: Option[Long] = None
 
   def run() {
     _result = Try(func())
@@ -85,6 +86,14 @@ class Job(val time: Time, func: () => _) {
     _startTime = Some(startTime)
   }
 
+  def setGenDelay(jobGenTime: Long): Unit = {
+    _jobGenTime = Some(jobGenTime)
+  }
+
+  def getGenDelay(): Option[Long]  = {
+    _jobGenTime
+  }
+
   def setEndTime(endTime: Long): Unit = {
     _endTime = Some(endTime)
   }
@@ -96,7 +105,7 @@ class Job(val time: Time, func: () => _) {
       None
     }
     OutputOperationInfo(
-      time, outputOpId, callSite.shortForm, callSite.longForm, _startTime, _endTime, failureReason)
+      time, outputOpId, callSite.shortForm, callSite.longForm, _startTime, _endTime, _jobGenTime, failureReason)
   }
 
   override def toString: String = id
