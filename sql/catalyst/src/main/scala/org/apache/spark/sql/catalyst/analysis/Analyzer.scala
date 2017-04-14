@@ -1212,7 +1212,7 @@ class Analyzer(
 
       // Validate that correlated aggregate expression do not contain a mixture
       // of outer and local references.
-      def checkMixedReferencesInsideAggregation(expr: Expression): Unit = {
+      def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
         expr.foreach {
           case a: AggregateExpression if containsOuter(a) =>
             val outer = a.collect { case OuterReference(e) => e.toAttribute }
@@ -1239,9 +1239,11 @@ class Analyzer(
         }
       }
 
-      // Make sure a plan's expressions do not contain outer references
-      def failOnOuterReference(p: LogicalPlan): Unit = {
-        p.expressions.foreach(checkMixedReferencesInsideAggregation)
+      // Make sure a plan's expressions do not contain :
+      // 1. Aggregate expressions that has mixture of outer and local references.
+      // 2. Expressions containing outer references on plan nodes other than Filter.
+      def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
+        p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
         if (!p.isInstanceOf[Filter] && p.expressions.exists(containsOuter)) {
           failAnalysis(
             "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
@@ -1312,9 +1314,9 @@ class Analyzer(
         // These operators can be anywhere in a correlated subquery.
         // so long as they do not host outer references in the operators.
         case s: Sort =>
-          failOnOuterReference(s)
+          failOnInvalidOuterReference(s)
         case r: RepartitionByExpression =>
-          failOnOuterReference(r)
+          failOnInvalidOuterReference(r)
 
         // Category 3:
         // Filter is one of the two operators allowed to host correlated expressions.
@@ -1329,7 +1331,7 @@ class Analyzer(
             case _ => true
           }
 
-          failOnOuterReference(f)
+          failOnInvalidOuterReference(f)
           // The aggregate expressions are treated in a special way by getOuterReferences. If the
           // aggregate expression contains only outer reference attributes then the entire aggregate
           // expression is isolated as an OuterReference.
@@ -1339,7 +1341,7 @@ class Analyzer(
         // Project cannot host any correlated expressions
         // but can be anywhere in a correlated subquery.
         case p: Project =>
-          failOnOuterReference(p)
+          failOnInvalidOuterReference(p)
 
         // Aggregate cannot host any correlated expressions
         // It can be on a correlation path if the correlation contains
@@ -1347,7 +1349,7 @@ class Analyzer(
         // It cannot be on a correlation path if the correlation has
         // non-equality correlated predicates.
         case a: Aggregate =>
-          failOnOuterReference(a)
+          failOnInvalidOuterReference(a)
           failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, a)
 
         // Join can host correlated expressions.
@@ -1355,7 +1357,7 @@ class Analyzer(
           joinType match {
             // Inner join, like Filter, can be anywhere.
             case _: InnerLike =>
-              failOnOuterReference(j)
+              failOnInvalidOuterReference(j)
 
             // Left outer join's right operand cannot be on a correlation path.
             // LeftAnti and ExistenceJoin are special cases of LeftOuter.
@@ -1366,12 +1368,12 @@ class Analyzer(
             // Any correlated references in the subplan
             // of the right operand cannot be pulled up.
             case LeftOuter | LeftSemi | LeftAnti | ExistenceJoin(_) =>
-              failOnOuterReference(j)
+              failOnInvalidOuterReference(j)
               failOnOuterReferenceInSubTree(right)
 
             // Likewise, Right outer join's left operand cannot be on a correlation path.
             case RightOuter =>
-              failOnOuterReference(j)
+              failOnInvalidOuterReference(j)
               failOnOuterReferenceInSubTree(left)
 
             // Any other join types not explicitly listed above,
@@ -1387,7 +1389,7 @@ class Analyzer(
         // Note:
         // Generator with join=false is treated as Category 4.
         case g: Generate if g.join =>
-          failOnOuterReference(g)
+          failOnInvalidOuterReference(g)
 
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only
