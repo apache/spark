@@ -108,21 +108,11 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
  * representation of data item.  For example back to back map operations.
  */
 object EliminateMapObjects extends Rule[LogicalPlan] {
-  private def convertDataTypeToArrayClass(dt: DataType): Class[_] = dt match {
-    case IntegerType => classOf[Array[Int]]
-    case LongType => classOf[Array[Long]]
-    case DoubleType => classOf[Array[Double]]
-    case FloatType => classOf[Array[Float]]
-    case ShortType => classOf[Array[Short]]
-    case ByteType => classOf[Array[Byte]]
-    case BooleanType => classOf[Array[Boolean]]
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case _ @ DeserializeToObject(_ @ Invoke(
-        MapObjects(_, _, _, LambdaVariable(_, _, _, _), inputData, customCollectionCls, _),
-        funcName, returnType @ ObjectType(returnCls), arguments, propagateNull, returnNullable),
-        outputObjAttr, child) if customCollectionCls.isEmpty =>
+        MapObjects(_, _, _, _  : LambdaVariable, inputData, None, _),
+        funcName, returnType @ ObjectType(_), arguments, propagateNull, returnNullable),
+        outputObjAttr, child) =>
       DeserializeToObject(Invoke(
         inputData, funcName, returnType, arguments, propagateNull, returnNullable),
         outputObjAttr, child)

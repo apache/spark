@@ -369,7 +369,7 @@ case class NullPropagation(conf: SQLConf) extends Rule[LogicalPlan] {
       case EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case EqualNullSafe(l, Literal(null, _)) => IsNull(l)
 
-      case a @ AssertNotNull(c, _) if !c.nullable => c
+      case _ @ AssertNotNull(c, _) if !c.nullable => c
 
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
