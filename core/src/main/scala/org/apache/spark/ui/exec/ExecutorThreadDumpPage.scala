@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.exec
 
+import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Text}
@@ -42,7 +43,8 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           val v1 = if (threadTrace1.threadName.contains("Executor task launch")) 1 else 0
           val v2 = if (threadTrace2.threadName.contains("Executor task launch")) 1 else 0
           if (v1 == v2) {
-            threadTrace1.threadName.toLowerCase < threadTrace2.threadName.toLowerCase
+            threadTrace1.threadName.toLowerCase(Locale.ROOT) <
+              threadTrace2.threadName.toLowerCase(Locale.ROOT)
           } else {
             v1 > v2
           }

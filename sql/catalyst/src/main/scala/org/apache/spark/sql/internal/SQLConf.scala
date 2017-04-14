@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.{NoSuchElementException, Properties, TimeZone}
+import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -243,7 +243,7 @@ object SQLConf {
     .doc("Sets the compression codec use when writing Parquet files. Acceptable values include: " +
       "uncompressed, snappy, gzip, lzo.")
     .stringConf
-    .transform(_.toLowerCase())
+    .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
     .createWithDefault("snappy")
 
@@ -324,7 +324,7 @@ object SQLConf {
       "properties) and NEVER_INFER (fallback to using the case-insensitive metastore schema " +
       "instead of inferring).")
     .stringConf
-    .transform(_.toUpperCase())
+    .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
 
@@ -736,6 +736,12 @@ object SQLConf {
       .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
       .createWithDefault(0.7)
 
+  val JOIN_REORDER_DP_STAR_FILTER =
+    buildConf("spark.sql.cbo.joinReorder.dp.star.filter")
+      .doc("Applies star-join filter heuristics to cost based join enumeration.")
+      .booleanConf
+      .createWithDefault(false)
+
   val STARSCHEMA_DETECTION = buildConf("spark.sql.cbo.starSchemaDetection")
     .doc("When true, it enables join reordering based on star schema detection. ")
     .booleanConf
@@ -1010,6 +1016,8 @@ class SQLConf extends Serializable with Logging {
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
 
   def joinReorderCardWeight: Double = getConf(SQLConf.JOIN_REORDER_CARD_WEIGHT)
+
+  def joinReorderDPStarFilter: Boolean = getConf(SQLConf.JOIN_REORDER_DP_STAR_FILTER)
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
