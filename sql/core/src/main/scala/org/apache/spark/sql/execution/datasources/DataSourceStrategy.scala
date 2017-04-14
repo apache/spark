@@ -102,7 +102,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] {
         None
       } else if (potentialSpecs.size == 1) {
         val partValue = potentialSpecs.head._2
-        Some(Alias(Cast(Literal(partValue), field.dataType), field.name)())
+        Some(Alias(Cast(Literal(partValue), field.dataType, Option(conf.sessionLocalTimeZone)),
+          field.name)())
       } else {
         throw new AnalysisException(
           s"Partition column ${field.name} have multiple values specified, " +

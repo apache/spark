@@ -41,13 +41,17 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  private def castWithDefaultTZ(v: Any, targetType: DataType): Cast = {
+    cast(v, targetType, Option("GMT"))
+  }
+
   // expected cannot be null
   private def checkCast(v: Any, expected: Any): Unit = {
     checkEvaluation(cast(v, Literal(expected).dataType), expected)
   }
 
   private def checkNullCast(from: DataType, to: DataType): Unit = {
-    checkEvaluation(cast(Literal.create(null, from), to, Option("GMT")), null)
+    checkEvaluation(castWithDefaultTZ(Literal.create(null, from), to), null)
   }
 
   test("null cast") {
@@ -520,45 +524,45 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(ArrayType(StringType), ArrayType(IntegerType))
 
     {
-      val ret = cast(array, ArrayType(IntegerType, containsNull = true))
+      val ret = castWithDefaultTZ(array, ArrayType(IntegerType, containsNull = true))
       assert(ret.resolved === true)
       checkEvaluation(ret, Seq(123, null, null, null))
     }
     {
-      val ret = cast(array, ArrayType(IntegerType, containsNull = false))
+      val ret = castWithDefaultTZ(array, ArrayType(IntegerType, containsNull = false))
       assert(ret.resolved === false)
     }
     {
-      val ret = cast(array, ArrayType(BooleanType, containsNull = true))
+      val ret = castWithDefaultTZ(array, ArrayType(BooleanType, containsNull = true))
       assert(ret.resolved === true)
       checkEvaluation(ret, Seq(null, true, false, null))
     }
     {
-      val ret = cast(array, ArrayType(BooleanType, containsNull = false))
+      val ret = castWithDefaultTZ(array, ArrayType(BooleanType, containsNull = false))
       assert(ret.resolved === false)
     }
 
     {
-      val ret = cast(array_notNull, ArrayType(IntegerType, containsNull = true))
+      val ret = castWithDefaultTZ(array_notNull, ArrayType(IntegerType, containsNull = true))
       assert(ret.resolved === true)
       checkEvaluation(ret, Seq(123, null, null))
     }
     {
-      val ret = cast(array_notNull, ArrayType(IntegerType, containsNull = false))
+      val ret = castWithDefaultTZ(array_notNull, ArrayType(IntegerType, containsNull = false))
       assert(ret.resolved === false)
     }
     {
-      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = true))
+      val ret = castWithDefaultTZ(array_notNull, ArrayType(BooleanType, containsNull = true))
       assert(ret.resolved === true)
       checkEvaluation(ret, Seq(null, true, false))
     }
     {
-      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
+      val ret = castWithDefaultTZ(array_notNull, ArrayType(BooleanType, containsNull = false))
       assert(ret.resolved === false)
     }
 
     {
-      val ret = cast(array, IntegerType)
+      val ret = castWithDefaultTZ(array, IntegerType)
       assert(ret.resolved === false)
     }
   }
@@ -574,53 +578,63 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(MapType(StringType, IntegerType), MapType(StringType, StringType))
 
     {
-      val ret = cast(map, MapType(StringType, IntegerType, valueContainsNull = true))
+      val ret = castWithDefaultTZ(map, MapType(StringType, IntegerType, valueContainsNull = true))
       assert(ret.resolved === true)
       checkEvaluation(ret, Map("a" -> 123, "b" -> null, "c" -> null, "d" -> null))
     }
     {
-      val ret = cast(map, MapType(StringType, IntegerType, valueContainsNull = false))
+      val ret = castWithDefaultTZ(map, MapType(StringType, IntegerType, valueContainsNull = false))
       assert(ret.resolved === false)
     }
     {
-      val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = true))
+      val ret = castWithDefaultTZ(map, MapType(StringType, BooleanType, valueContainsNull = true))
       assert(ret.resolved === true)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false, "d" -> null))
     }
     {
-      val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = false))
+      val ret = castWithDefaultTZ(map, MapType(StringType, BooleanType, valueContainsNull = false))
       assert(ret.resolved === false)
     }
     {
-      val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
+      val ret = castWithDefaultTZ(map, MapType(IntegerType, StringType, valueContainsNull = true))
       assert(ret.resolved === false)
     }
 
     {
-      val ret = cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = true))
+      val ret = castWithDefaultTZ(
+        map_notNull,
+        MapType(StringType, IntegerType, valueContainsNull = true))
       assert(ret.resolved === true)
       checkEvaluation(ret, Map("a" -> 123, "b" -> null, "c" -> null))
     }
     {
-      val ret = cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = false))
+      val ret = castWithDefaultTZ(
+        map_notNull,
+        MapType(StringType, IntegerType, valueContainsNull = false))
       assert(ret.resolved === false)
     }
     {
-      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = true))
+      val ret = castWithDefaultTZ(
+        map_notNull,
+        MapType(StringType, BooleanType, valueContainsNull = true))
       assert(ret.resolved === true)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false))
     }
     {
-      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
+      val ret = castWithDefaultTZ(
+        map_notNull,
+        MapType(StringType, BooleanType, valueContainsNull = false))
       assert(ret.resolved === false)
     }
     {
-      val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
+      val ret = castWithDefaultTZ(
+        map_notNull,
+        MapType(IntegerType, StringType, valueContainsNull = true))
       assert(ret.resolved === false)
     }
 
     {
-      val ret = cast(map, IntegerType)
+      val ret = castWithDefaultTZ(map, IntegerType)
       assert(ret.resolved === false)
     }
   }
@@ -656,7 +670,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("c", StringType, nullable = false))))
 
     {
-      val ret = cast(struct, StructType(Seq(
+      val ret = castWithDefaultTZ(struct, StructType(Seq(
         StructField("a", IntegerType, nullable = true),
         StructField("b", IntegerType, nullable = true),
         StructField("c", IntegerType, nullable = true),
@@ -665,7 +679,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ret, InternalRow(123, null, null, null))
     }
     {
-      val ret = cast(struct, StructType(Seq(
+      val ret = castWithDefaultTZ(struct, StructType(Seq(
         StructField("a", IntegerType, nullable = true),
         StructField("b", IntegerType, nullable = true),
         StructField("c", IntegerType, nullable = false),
@@ -673,7 +687,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(ret.resolved === false)
     }
     {
-      val ret = cast(struct, StructType(Seq(
+      val ret = castWithDefaultTZ(struct, StructType(Seq(
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = true),
@@ -682,7 +696,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ret, InternalRow(null, true, false, null))
     }
     {
-      val ret = cast(struct, StructType(Seq(
+      val ret = castWithDefaultTZ(struct, StructType(Seq(
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = false),
@@ -691,7 +705,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     {
-      val ret = cast(struct_notNull, StructType(Seq(
+      val ret = castWithDefaultTZ(struct_notNull, StructType(Seq(
         StructField("a", IntegerType, nullable = true),
         StructField("b", IntegerType, nullable = true),
         StructField("c", IntegerType, nullable = true))))
@@ -699,14 +713,14 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ret, InternalRow(123, null, null))
     }
     {
-      val ret = cast(struct_notNull, StructType(Seq(
+      val ret = castWithDefaultTZ(struct_notNull, StructType(Seq(
         StructField("a", IntegerType, nullable = true),
         StructField("b", IntegerType, nullable = true),
         StructField("c", IntegerType, nullable = false))))
       assert(ret.resolved === false)
     }
     {
-      val ret = cast(struct_notNull, StructType(Seq(
+      val ret = castWithDefaultTZ(struct_notNull, StructType(Seq(
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = true))))
@@ -714,7 +728,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ret, InternalRow(null, true, false))
     }
     {
-      val ret = cast(struct_notNull, StructType(Seq(
+      val ret = castWithDefaultTZ(struct_notNull, StructType(Seq(
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = false))))
@@ -722,14 +736,14 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     {
-      val ret = cast(struct, StructType(Seq(
+      val ret = castWithDefaultTZ(struct, StructType(Seq(
         StructField("a", StringType, nullable = true),
         StructField("b", StringType, nullable = true),
         StructField("c", StringType, nullable = true))))
       assert(ret.resolved === false)
     }
     {
-      val ret = cast(struct, IntegerType)
+      val ret = castWithDefaultTZ(struct, IntegerType)
       assert(ret.resolved === false)
     }
   }
