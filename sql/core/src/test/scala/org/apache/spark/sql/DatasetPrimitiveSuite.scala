@@ -265,28 +265,4 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     import packageobject._
     checkDataset(Seq(PackageClass(1)).toDS(), PackageClass(1))
   }
-
-  test("SPARK-20254: Remove unnecessary data conversion for primitive array") {
-    val dsInt = Seq(Array(1, 2, 3)).toDS.cache.map(e => e)
-    val planInt = dsInt.queryExecution.executedPlan
-    val deserializeInt = planInt.find(_.isInstanceOf[DeserializeToObjectExec])
-    assert(deserializeInt.isDefined)
-    assert(deserializeInt.get match {
-      case _ @ DeserializeToObjectExec(_ @ Invoke(_, _ @ "toIntArray", _, _, _, _), _, _) =>
-        true
-      case _ =>
-        false
-    })
-
-    val dsDouble = Seq(Array(1.1, 2.2, 3.3)).toDS.cache.map(e => e)
-    val planDouble = dsDouble.queryExecution.executedPlan
-    val deserializeDouble = planDouble.find(_.isInstanceOf[DeserializeToObjectExec])
-    assert(deserializeDouble.isDefined)
-    assert(deserializeDouble.get match {
-      case _ @ DeserializeToObjectExec(_ @ Invoke(_, _ @ "toDoubleArray", _, _, _, _), _, _) =>
-        true
-      case _ =>
-        false
-    })
-  }
 }
