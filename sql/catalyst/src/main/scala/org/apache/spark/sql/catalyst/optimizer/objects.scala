@@ -102,11 +102,9 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
 
 /**
  * Removes MapObjects when the following conditions are satisfied
- *   1. Mapobject(e) where e is lambdavariable
- *   2. the function will convert an expression MapObjects(e) to AssertNotNull(e)
- *   3. the inputData is of primitive type array and its element is not nullable.
- *   4. the outputData is of primitive type array and its element does not have enull
- *   5. no custom collection class specified
+ *   1. Mapobject(e) where e is lambdavariable(), which means types for input output
+ *      are primitive types
+ *   2. no custom collection class specified
  * representation of data item.  For example back to back map operations.
  */
 object EliminateMapObjects extends Rule[LogicalPlan] {
@@ -122,17 +120,11 @@ object EliminateMapObjects extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case _ @ DeserializeToObject(_ @ Invoke(
-          MapObjects(_, _, inputType, args, inputData, customCollectionCls, _),
-          funcName, returnType @ ObjectType(returnCls), arguments, propagateNull, returnNullable),
-        outputObjAttr, child) if CatalystTypeConverters.isPrimitive(inputType) &&
-        returnCls.isAssignableFrom(convertDataTypeToArrayClass(inputType)) &&
-        customCollectionCls.isEmpty =>
-      args match {
-        case _@AssertNotNull(LambdaVariable(_, _, dataType, _), _) if dataType == inputType =>
-          DeserializeToObject(Invoke(
-              inputData, funcName, returnType, arguments, propagateNull, returnNullable),
-            outputObjAttr, child)
-        case _ => plan
-      }
+        MapObjects(_, _, _, LambdaVariable(_, _, _, _), inputData, customCollectionCls, _),
+        funcName, returnType @ ObjectType(returnCls), arguments, propagateNull, returnNullable),
+        outputObjAttr, child) if customCollectionCls.isEmpty =>
+      DeserializeToObject(Invoke(
+        inputData, funcName, returnType, arguments, propagateNull, returnNullable),
+        outputObjAttr, child)
   }
 }
