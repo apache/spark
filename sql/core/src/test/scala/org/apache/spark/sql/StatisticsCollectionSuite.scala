@@ -240,7 +240,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
       colStats.foreach { case (k, v) =>
         withClue(s"column $k") {
-          assert(table.stats.get.colStats(k)._2 == v)
+          assert(table.stats.get.colStats(k) == v)
         }
       }
     }
@@ -293,7 +293,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     assert(catalogTable.stats.isDefined)
     assert(catalogTable.stats.get.sizeInBytes == 0)
     assert(catalogTable.stats.get.rowCount == Some(0))
-    assert(catalogTable.stats.get.colStats == Map("c1" -> (IntegerType, emptyColStat)))
+    assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
 
     // Check relation statistics
     assert(relation.stats(conf).sizeInBytes == 0)

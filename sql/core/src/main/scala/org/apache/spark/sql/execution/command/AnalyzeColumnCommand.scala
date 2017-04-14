@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableTyp
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.DataType
 
 
 /**
@@ -69,7 +68,7 @@ case class AnalyzeColumnCommand(
   private def computeColumnStats(
       sparkSession: SparkSession,
       tableIdent: TableIdentifier,
-      columnNames: Seq[String]): (Long, Map[String, (DataType, ColumnStat)]) = {
+      columnNames: Seq[String]): (Long, Map[String, ColumnStat]) = {
 
     val relation = sparkSession.table(tableIdent).logicalPlan
     // Resolve the column names and dedup using AttributeSet
@@ -101,7 +100,7 @@ case class AnalyzeColumnCommand(
 
     val rowCount = statsRow.getLong(0)
     val columnStats = attributesToAnalyze.zipWithIndex.map { case (attr, i) =>
-      attr.name -> (attr.dataType, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1), attr))
+      (attr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1), attr))
     }.toMap
     (rowCount, columnStats)
   }

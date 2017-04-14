@@ -113,33 +113,38 @@ case class ColumnStat(
    * As part of the protocol, the returned map always contains a key called "version".
    * In the case min/max values are null (None), they won't appear in the map.
    */
-  def toMap(name: String, dataType: DataType): Map[String, String] = {
-    def toExternalString(v: Any, dataType: DataType): String = {
-      val externalValue = dataType match {
-        case BooleanType => v.toString.toBoolean
-        case _: IntegralType => v.toString.toLong
-        case DateType => DateTimeUtils.toJavaDate(v.toString.toInt)
-        case TimestampType => DateTimeUtils.toJavaTimestamp(v.toString.toLong)
-        case FloatType | DoubleType => v.toString.toDouble
-        case _: DecimalType => Decimal.fromDecimal(v).toJavaBigDecimal
-        // This version of Spark does not use min/max for binary/string types so we ignore it.
-        case _ =>
-          throw new AnalysisException("Column statistics deserialization is not supported for " +
-            s"column $name of data type: $dataType.")
-      }
-      externalValue.toString
-    }
-
+  def toMap(colName: String, dataType: DataType): Map[String, String] = {
     val map = new scala.collection.mutable.HashMap[String, String]
     map.put(ColumnStat.KEY_VERSION, "1")
     map.put(ColumnStat.KEY_DISTINCT_COUNT, distinctCount.toString)
     map.put(ColumnStat.KEY_NULL_COUNT, nullCount.toString)
     map.put(ColumnStat.KEY_AVG_LEN, avgLen.toString)
     map.put(ColumnStat.KEY_MAX_LEN, maxLen.toString)
-    min.foreach { v => map.put(ColumnStat.KEY_MIN_VALUE, toExternalString(v, dataType)) }
-    max.foreach { v => map.put(ColumnStat.KEY_MAX_VALUE, toExternalString(v, dataType)) }
+    min.foreach { v => map.put(ColumnStat.KEY_MIN_VALUE, toExternalString(v, colName, dataType)) }
+    max.foreach { v => map.put(ColumnStat.KEY_MAX_VALUE, toExternalString(v, colName, dataType)) }
     map.toMap
   }
+
+  /**
+   * Converts the given value from Catalyst data type to string representation of external
+   * data type.
+   */
+  private def toExternalString(v: Any, colName: String, dataType: DataType): String = {
+    val externalValue = dataType match {
+      case BooleanType => v.asInstanceOf[Boolean]
+      case _: IntegralType => v.toString.toLong
+      case DateType => DateTimeUtils.toJavaDate(v.toString.toInt)
+      case TimestampType => DateTimeUtils.toJavaTimestamp(v.toString.toLong)
+      case FloatType | DoubleType => v.toString.toDouble
+      case _: DecimalType => Decimal.fromDecimal(v).toJavaBigDecimal
+      // This version of Spark does not use min/max for binary/string types so we ignore it.
+      case _ =>
+        throw new AnalysisException("Column statistics deserialization is not supported for " +
+          s"column $colName of data type: $dataType.")
+    }
+    externalValue.toString
+  }
+
 }
 
 

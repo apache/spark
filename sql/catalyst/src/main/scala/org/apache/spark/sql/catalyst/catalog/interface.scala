@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -352,14 +352,14 @@ object CatalogTable {
 case class CatalogStatistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    colStats: Map[String, (DataType, ColumnStat)] = Map.empty) {
+    colStats: Map[String, ColumnStat] = Map.empty) {
 
   /**
    * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
    * on column names.
    */
   def toPlanStats(planOutput: Seq[Attribute]): Statistics = {
-    val matched = planOutput.flatMap(a => colStats.get(a.name).map(a -> _._2))
+    val matched = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
     Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
       attributeStats = AttributeMap(matched))
   }
