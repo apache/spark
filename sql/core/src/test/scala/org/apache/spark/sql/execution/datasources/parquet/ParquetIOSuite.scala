@@ -674,6 +674,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
+          reader.initBatch(null, null)
           val result = mutable.ArrayBuffer.empty[(String)]
           while (reader.nextKeyValue()) {
             val row = reader.getCurrentValue.asInstanceOf[InternalRow]
@@ -690,6 +691,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
+          reader.initBatch(null, null)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
           while (reader.nextKeyValue()) {
             val row = reader.getCurrentValue.asInstanceOf[InternalRow]
@@ -707,6 +709,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, List[String]().asJava)
+          reader.initBatch(null, null)
           var result = 0
           while (reader.nextKeyValue()) {
             result += 1
