@@ -202,12 +202,12 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   /** A mapping from column to the stats collected. */
   protected val stats = mutable.LinkedHashMap(
     "cbool" -> ColumnStat(2, Some(false), Some(true), 1, 1, 1),
-    "cbyte" -> ColumnStat(2, Some(1L), Some(2L), 1, 1, 1),
-    "cshort" -> ColumnStat(2, Some(1L), Some(3L), 1, 2, 2),
-    "cint" -> ColumnStat(2, Some(1L), Some(4L), 1, 4, 4),
+    "cbyte" -> ColumnStat(2, Some(1.toByte), Some(2.toByte), 1, 1, 1),
+    "cshort" -> ColumnStat(2, Some(1.toShort), Some(3.toShort), 1, 2, 2),
+    "cint" -> ColumnStat(2, Some(1), Some(4), 1, 4, 4),
     "clong" -> ColumnStat(2, Some(1L), Some(5L), 1, 8, 8),
     "cdouble" -> ColumnStat(2, Some(1.0), Some(6.0), 1, 8, 8),
-    "cfloat" -> ColumnStat(2, Some(1.0), Some(7.0), 1, 4, 4),
+    "cfloat" -> ColumnStat(2, Some(1.0f), Some(7.0f), 1, 4, 4),
     "cdecimal" -> ColumnStat(2, Some(Decimal(dec1)), Some(Decimal(dec2)), 1, 16, 16),
     "cstring" -> ColumnStat(2, None, None, 1, 3, 3),
     "cbinary" -> ColumnStat(2, None, None, 1, 3, 3),

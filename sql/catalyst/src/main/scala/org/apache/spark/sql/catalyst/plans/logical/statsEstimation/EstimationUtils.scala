@@ -90,10 +90,16 @@ object EstimationUtils {
 
   def fromDecimal(dec: Decimal, dataType: DataType): Any = {
     dataType match {
-      case _: IntegralType | DateType | TimestampType => dec.toLong
-      case FloatType | DoubleType => dec.toDouble
-      case _: DecimalType => dec
       case BooleanType => dec.toLong == 1
+      case DateType => dec.toInt
+      case TimestampType => dec.toLong
+      case ByteType => dec.toByte
+      case ShortType => dec.toShort
+      case IntegerType => dec.toInt
+      case LongType => dec.toLong
+      case FloatType => dec.toFloat
+      case DoubleType => dec.toDouble
+      case _: DecimalType => dec
     }
   }
 

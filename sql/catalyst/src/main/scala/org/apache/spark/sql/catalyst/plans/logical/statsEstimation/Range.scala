@@ -29,10 +29,7 @@ trait Range {
 /** For simplicity we use decimal to unify operations of numeric ranges. */
 case class NumericRange(min: Decimal, max: Decimal) extends Range {
   override def contains(l: Literal): Boolean = {
-    val lit = l.dataType match {
-      case BooleanType => if (l.value.asInstanceOf[Boolean]) Decimal(1) else Decimal(0)
-      case _ => Decimal(l.value.toString)
-    }
+    val lit = EstimationUtils.toDecimal(l.value, l.dataType)
     min <= lit && max >= lit
   }
 }

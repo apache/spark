@@ -76,11 +76,9 @@ case class Statistics(
  *
  * 1. Supported data types are defined in `ColumnStat.supportsType`.
  * 2. The JVM data type stored in min/max is the internal data type for the corresponding
- * Catalyst data type. For example, the internal type of DateType is Int, and that the internal
- * type of TimestampType is Long.
- * 3. For integral types, they are all upcasted to Longs, i.e. Shorts are stored as Longs.
- * For FloatType, Float is upcasted to Double.
- * 4. There is no guarantee that the statistics collected are accurate. Approximation algorithms
+ *    Catalyst data type. For example, the internal type of DateType is Int, and that the internal
+ *    type of TimestampType is Long.
+ * 3. There is no guarantee that the statistics collected are accurate. Approximation algorithms
  *    (sketches) might have been used, and the data collected can also be stale.
  *
  * @param distinctCount number of distinct values
@@ -131,12 +129,10 @@ case class ColumnStat(
    */
   private def toExternalString(v: Any, colName: String, dataType: DataType): String = {
     val externalValue = dataType match {
-      case BooleanType => v.asInstanceOf[Boolean]
-      case _: IntegralType => v.toString.toLong
-      case DateType => DateTimeUtils.toJavaDate(v.toString.toInt)
-      case TimestampType => DateTimeUtils.toJavaTimestamp(v.toString.toLong)
-      case FloatType | DoubleType => v.toString.toDouble
-      case _: DecimalType => Decimal.fromDecimal(v).toJavaBigDecimal
+      case DateType => DateTimeUtils.toJavaDate(v.asInstanceOf[Int])
+      case TimestampType => DateTimeUtils.toJavaTimestamp(v.asInstanceOf[Long])
+      case BooleanType | _: IntegralType | FloatType | DoubleType => v
+      case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
       case _ =>
         throw new AnalysisException("Column statistics deserialization is not supported for " +
@@ -202,10 +198,14 @@ object ColumnStat extends Logging {
   private def fromExternalString(s: String, name: String, dataType: DataType): Any = {
     dataType match {
       case BooleanType => s.toBoolean
-      case _: IntegralType => s.toLong
-      case DateType => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s)).toLong
+      case DateType => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
       case TimestampType => DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
-      case FloatType | DoubleType => s.toDouble
+      case ByteType => s.toByte
+      case ShortType => s.toShort
+      case IntegerType => s.toInt
+      case LongType => s.toLong
+      case FloatType => s.toFloat
+      case DoubleType => s.toDouble
       case _: DecimalType => Decimal(s)
       // This version of Spark does not use min/max for binary/string types so we ignore it.
       case BinaryType | StringType => null
