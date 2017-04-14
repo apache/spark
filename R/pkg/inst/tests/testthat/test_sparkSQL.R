@@ -3188,6 +3188,24 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
   expect_equal(dbs[[1]], "default")
 })
 
+test_that("dapply with bigint type", {
+  df <- createDataFrame(
+        list(list(1380742793415240, 1, "1"), list(1380742793415240, 2, "2"),
+        list(1380742793415240, 3, "3")), c("a", "b", "c"))
+  schema <- structType(structField("a", "bigint"), structField("b", "bigint"),
+                       structField("c", "string"), structField("d", "bigint"))
+  df1 <- dapply(
+         df,
+         function(x) {
+           y <- x[x[1] > 1, ]
+           y <- cbind(y, y[1] + 1L)
+         },
+         schema)
+  result <- collect(df1)
+  resultString <- sprintf("%.10f", result$a[1])
+  expect_equal(resultString, "1380742793415240.0000000000")
+})
+
 test_that("catalog APIs, listTables, listColumns, listFunctions", {
   tb <- listTables()
   count <- count(tables())
