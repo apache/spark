@@ -1225,8 +1225,7 @@ class Analyzer(
                    |Aggregate expression: ${a.sql}
                    |Outer references: ${outer.map(_.sql).mkString(", ")}
                    |Local references: ${local.map(_.sql).mkString(", ")}
-             """.
-                  stripMargin.replace("\n", " ").trim()
+                 """.stripMargin.replace("\n", " ").trim()
               failAnalysis(msg)
             }
           case _ =>
@@ -1330,7 +1329,7 @@ class Analyzer(
             case _ => true
           }
 
-          correlated.foreach(checkMixedReferencesInsideAggregation(_))
+          correlated.foreach(checkMixedReferencesInsideAggregation)
           // The aggregate expressions are treated in a special way by getOuterReferences. If the
           // aggregate expression contains only outer reference attributes then the entire aggregate
           // expression is isolated as an OuterReference.
