@@ -18,6 +18,7 @@
 package org.apache.spark.rpc
 
 import java.io.File
+import java.net.URI
 import java.nio.channels.ReadableByteChannel
 
 import scala.concurrent.Future
@@ -183,6 +184,14 @@ private[spark] trait RpcEnvFileServer {
    * @return URI for the root of the directory in the file server.
    */
   def addDirectory(baseUri: String, path: File): String
+
+  /**
+   * Remove a jar served by this RpcEnv.
+   *
+   * @param uri The jar file uri.
+   * @return Whether removed it or not.
+   */
+  def removeJar(uri: URI): Boolean
 
   /** Validates and normalizes the base URI for directories. */
   protected def validateDirectoryUri(baseUri: String): String = {

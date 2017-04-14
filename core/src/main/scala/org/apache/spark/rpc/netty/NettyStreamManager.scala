@@ -17,6 +17,7 @@
 package org.apache.spark.rpc.netty
 
 import java.io.File
+import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
@@ -86,6 +87,15 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     require(dirs.putIfAbsent(fixedBaseUri.stripPrefix("/"), path) == null,
       s"URI '$fixedBaseUri' already registered.")
     s"${rpcEnv.address.toSparkURL}$fixedBaseUri"
+  }
+
+  override def removeJar(uri: URI): Boolean = {
+    val jarName = uri.getPath.split("/").last
+    val jarFile = jars.remove(jarName)
+    if (null != jarFile) {
+      jarFile.delete()
+    }
+    !jars.containsKey(jarName)
   }
 
 }
