@@ -119,6 +119,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val metastoreSchema = relation.tableMeta.schema
     val tableIdentifier =
       QualifiedTableName(relation.tableMeta.database, relation.tableMeta.identifier.table)
+    val bucketSpec = relation.tableMeta.bucketSpec
 
     val lazyPruningEnabled = sparkSession.sqlContext.conf.manageFilesourcePartitions
     val tablePath = new Path(relation.tableMeta.location)
@@ -171,8 +172,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             location = fileIndex,
             partitionSchema = partitionSchema,
             dataSchema = dataSchema,
-            // We don't support hive bucketed tables, only ones we write out.
-            bucketSpec = None,
+            bucketSpec = bucketSpec,
             fileFormat = fileFormat,
             options = options)(sparkSession = sparkSession)
           val created = LogicalRelation(fsRelation, updatedTable)
@@ -199,8 +199,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 sparkSession = sparkSession,
                 paths = rootPath.toString :: Nil,
                 userSpecifiedSchema = Option(dataSchema),
-                // We don't support hive bucketed tables, only ones we write out.
-                bucketSpec = None,
+                bucketSpec = bucketSpec,
                 options = options,
                 className = fileType).resolveRelation(),
               table = updatedTable)
