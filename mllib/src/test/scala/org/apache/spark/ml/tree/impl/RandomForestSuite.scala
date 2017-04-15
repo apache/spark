@@ -108,13 +108,26 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
         Map(), Set(),
-        Array(2), Gini, QuantileStrategy.Sort,
+        Array(3), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0, 0
       )
-      val featureSamples = Array(0, 1, 0, 0, 1, 0, 1, 1).map(_.toDouble)
-      val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      val expSplits = Array((0 * 4 + 0 * 4) / (4 + 4))  // = 0.5
-      assert(splits === expSplits)
+
+      // possibleSplits <= numSplits
+      {
+        val featureSamples = Array(0, 1, 0, 0, 1, 0, 1, 1).map(_.toDouble)
+        val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+        val expSplits = Array((0.0 * 4 + 1.0 * 4) / (4 + 4))  // = 0.5
+        assert(splits === expSplits)
+      }
+
+      // possibleSplits > numSplits
+      {
+        val featureSamples = Array(0, 0, 1, 1, 2, 2, 3, 3).map(_.toDouble)
+        val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+        val expSplits = Array((0.0 * 2 + 1.0 * 2) / (2 + 2),
+                              (2.0 * 2 + 3.0 * 2) / (2 + 2))  // = (0.5, 2.5)
+        assert(splits === expSplits)
+      }
     }
 
     // find splits should not return identical splits
