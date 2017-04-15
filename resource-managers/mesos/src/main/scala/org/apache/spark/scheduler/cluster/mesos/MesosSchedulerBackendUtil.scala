@@ -104,7 +104,9 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
    * takes the form key=value
    */
   private def parseParamsSpec(params: String): List[Parameter] = {
-    params.split(",").map(_.split("=")).flatMap { spec: Array[String] =>
+    // split with limit of 2 to avoid parsing error when '='
+    // exists in the parameter value
+    params.split(",").map(_.split("=", 2)).flatMap { spec: Array[String] =>
       val param: Parameter.Builder = Parameter.newBuilder()
       spec match {
         case Array(key, value) =>
