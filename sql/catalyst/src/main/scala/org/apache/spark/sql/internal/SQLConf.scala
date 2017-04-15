@@ -360,7 +360,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val THRIFTSERVER_RESULT_LIMIT =
-    buildConf("spark.sql.thriftserver.retainedResults")
+    buildConf("spark.sql.thriftserver.limit.num.rows")
       .internal()
       .doc("The maximum number of rows that can be returned by Thrift Server when running " +
         "a query without a Limit clause. The query could produce non-deterministic results " +

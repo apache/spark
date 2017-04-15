@@ -121,6 +121,8 @@ private[hive] class SparkExecuteStatementOperation(
         result.toLocalIterator.asScala
       } else {
         if (resultList.isEmpty) {
+          // This parameter is omitted when a Limit clause is part of the query
+          // or the input is not a positive integer.
           val numRows = sqlContext.getConf(SQLConf.THRIFTSERVER_RESULT_LIMIT.key).toInt
           resultList = if (numRows > 0) {
             Some(result.take(result.queryExecution.analyzed.maxRows.getOrElse[Long](numRows).toInt))
@@ -247,6 +249,8 @@ private[hive] class SparkExecuteStatementOperation(
           resultList = None
           result.toLocalIterator.asScala
         } else {
+          // This parameter is omitted when a Limit clause is part of the query
+          // or the input is not a positive integer.
           val numRows = sqlContext.getConf(SQLConf.THRIFTSERVER_RESULT_LIMIT.key).toInt
           resultList = if (numRows > 0) {
             Some(result.take(result.queryExecution.analyzed.maxRows.getOrElse[Long](numRows).toInt))
