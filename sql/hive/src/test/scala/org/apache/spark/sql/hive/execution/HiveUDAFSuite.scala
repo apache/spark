@@ -89,7 +89,7 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("non-deterministic children expressions of UDAF") {
     withTempView("view1") {
       spark.range(1).selectExpr("id as x", "id as y").createTempView("view1")
-      withUserDefinedFunction("testUDAFPercentile" -> true, "testMock" -> true) {
+      withUserDefinedFunction("testUDAFPercentile" -> true) {
         // non-deterministic children of Hive UDAF
         sql(s"CREATE TEMPORARY FUNCTION testUDAFPercentile AS '${classOf[UDAFPercentile].getName}'")
         val e1 = intercept[AnalysisException] {
