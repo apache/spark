@@ -110,9 +110,10 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
 object EliminateMapObjects extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case _ @ DeserializeToObject(_ @ Invoke(
-        MapObjects(_, _, _, _  : LambdaVariable, inputData, None, _),
+        MapObjects(_, _, _, Cast(LambdaVariable(_, _, dataType, _), castDataType, _),
+           inputData, None, _),
         funcName, returnType @ ObjectType(_), arguments, propagateNull, returnNullable),
-        outputObjAttr, child) =>
+        outputObjAttr, child) if dataType == castDataType =>
       DeserializeToObject(Invoke(
         inputData, funcName, returnType, arguments, propagateNull, returnNullable),
         outputObjAttr, child)
