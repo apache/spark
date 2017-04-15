@@ -44,7 +44,7 @@ class EliminateMapObjectsSuite extends PlanTest {
     val intQuery = intInput.deserialize[Array[Int]].analyze
     val intOptimized = Optimize.execute(intQuery)
     val intExpected = DeserializeToObject(
-      Invoke(intInput.output(0), "toIntArray", intObjType),
+      Invoke(intInput.output(0), "toIntArray", intObjType, Nil, true, false),
       AttributeReference("obj", intObjType, true)(), intInput)
     comparePlans(intOptimized, intExpected)
 
@@ -53,7 +53,7 @@ class EliminateMapObjectsSuite extends PlanTest {
     val doubleQuery = doubleInput.deserialize[Array[Double]].analyze
     val doubleOptimized = Optimize.execute(doubleQuery)
     val doubleExpected = DeserializeToObject(
-      Invoke(doubleInput.output(0), "toDoubleArray", doubleObjType),
+      Invoke(doubleInput.output(0), "toDoubleArray", doubleObjType, Nil, true, false),
       AttributeReference("obj", doubleObjType, true)(), doubleInput)
     comparePlans(doubleOptimized, doubleExpected)
   }
