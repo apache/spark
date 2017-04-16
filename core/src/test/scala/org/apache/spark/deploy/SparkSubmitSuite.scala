@@ -404,7 +404,7 @@ class SparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  test("includes jars passed in through --jars") {
+  ignore("includes jars passed in through --jars") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
