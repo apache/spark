@@ -62,11 +62,20 @@ object Variance extends Impurity {
   @Since("1.0.0")
   def instance: this.type = this
 
+  /**
+   * :: DeveloperApi ::
+   * p-values for test-statistic measures, unsupported for [[Variance]]
+   */
   @Since("2.2.0")
   @DeveloperApi
   def calculate(calcL: ImpurityCalculator, calcR: ImpurityCalculator): Double =
     throw new UnsupportedOperationException("Variance.calculate")
 
+  /**
+   * :: DeveloperApi ::
+   * Determine if this impurity measure is a test-statistic measure
+   * @return For [[Variance]] will return false
+   */
   @Since("2.2.0")
   @DeveloperApi
   def isTestStatistic: Boolean = false
