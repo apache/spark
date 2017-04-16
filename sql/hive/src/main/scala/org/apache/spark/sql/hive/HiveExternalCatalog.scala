@@ -632,9 +632,51 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val rawTable = getRawTable(db, table)
     val withNewSchema = rawTable.copy(schema = schema)
     verifyColumnNames(withNewSchema)
+
+    val newProperties = collection.mutable.Map[String, String]()
+    for ((property, value) <- withNewSchema.properties) {
+      newProperties.put(property, value)
+    }
+    for ((property, value) <- tableMetaToTableProps(withNewSchema)) {
+      newProperties.put(property, value)
+    }
+
+    // Since the table schema will be changed, check if the bucketing and sort columns are still
+    // present in the new schema. If not, then discard the bucketing properties
+    val bucketSpec: Option[BucketSpec] = if (rawTable.bucketSpec.isDefined) {
+      val bucketSpec = rawTable.bucketSpec.get
+      val bucketColumnNames = bucketSpec.bucketColumnNames
+      val sortColumnNames = bucketSpec.sortColumnNames
+
+      val bucketColumnsRetained =
+        bucketColumnNames.forall(col => schema.getFieldIndex(col).isDefined)
+      val sortColumnsRetained = sortColumnNames.forall(col => schema.getFieldIndex(col).isDefined)
+
+      if (!bucketColumnsRetained || !sortColumnsRetained) {
+        newProperties.remove(DATASOURCE_SCHEMA_NUMBUCKETS)
+        newProperties.remove(DATASOURCE_SCHEMA_NUMBUCKETCOLS)
+        for (i <- bucketColumnNames.indices) {
+          newProperties.remove(s"$DATASOURCE_SCHEMA_BUCKETCOL_PREFIX$i")
+        }
+
+        newProperties.remove(DATASOURCE_SCHEMA_NUMSORTCOLS)
+        for (i <- sortColumnNames.indices) {
+          newProperties.remove(s"$DATASOURCE_SCHEMA_SORTCOL_PREFIX$i")
+        }
+        None
+      } else {
+        rawTable.bucketSpec
+      }
+    } else {
+      None
+    }
+
     // Add table metadata such as table schema, partition columns, etc. to table properties.
     val updatedTable = withNewSchema.copy(
-      properties = withNewSchema.properties ++ tableMetaToTableProps(withNewSchema))
+      properties = newProperties.toMap,
+      bucketSpec = bucketSpec
+    )
+
     try {
       client.alterTable(updatedTable)
     } catch {

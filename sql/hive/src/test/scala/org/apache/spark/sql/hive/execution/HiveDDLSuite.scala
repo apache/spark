@@ -786,11 +786,12 @@ class HiveDDLSuite
         SORTED BY(id, name) INTO 1024 BUCKETS
         """)
 
-      assert(sql("DESC FORMATTED tbl").collect().containsSlice(
+      val x = sql("DESC FORMATTED tbl").collect()
+      assert(x.containsSlice(
         Seq(
-          Row("Num Buckets:", "1024", ""),
-          Row("Bucket Columns:", "[id]", ""),
-          Row("Sort Columns:", "[id, name]", "")
+          Row("Num Buckets", "1024", ""),
+          Row("Bucket Columns", "[`id`]", ""),
+          Row("Sort Columns", "[`id`, `name`]", "")
         )
       ))
     }
