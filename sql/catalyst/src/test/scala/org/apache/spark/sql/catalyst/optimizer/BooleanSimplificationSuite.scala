@@ -144,14 +144,6 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     checkCondition(!(('a || 'b) && ('c || 'd)), (!'a && !'b) || (!'c && !'d))
   }
 
-  test("Complementation Laws") {
-    checkCondition('a && !'a, LocalRelation(testRelation.output, Seq.empty))
-    checkCondition(!'a && 'a, LocalRelation(testRelation.output, Seq.empty))
-
-    checkCondition('a || !'a, testRelation)
-    checkCondition(!'a || 'a, testRelation)
-  }
-
   private val caseInsensitiveConf = new SimpleCatalystConf(false)
   private val caseInsensitiveAnalyzer = new Analyzer(
     new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, caseInsensitiveConf),
@@ -173,5 +165,13 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     val expected = caseInsensitiveAnalyzer.execute(
       testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
     comparePlans(actual, expected)
+  }
+
+  test("Complementation Laws") {
+    checkCondition('a && !'a, LocalRelation(testRelation.output, Seq.empty))
+    checkCondition(!'a && 'a, LocalRelation(testRelation.output, Seq.empty))
+
+    checkCondition('a || !'a, testRelation)
+    checkCondition(!'a || 'a, testRelation)
   }
 }
