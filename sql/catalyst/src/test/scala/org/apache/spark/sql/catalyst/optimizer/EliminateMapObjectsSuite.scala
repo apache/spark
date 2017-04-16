@@ -28,11 +28,17 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types._
 
 class EliminateMapObjectsSuite extends PlanTest {
-  object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches =
+  class Optimize(addSimplifyCast: Boolean) extends RuleExecutor[LogicalPlan] {
+    val batches = if (addSimplifyCast) {
+      Batch("EliminateMapObjects", FixedPoint(50),
+        NullPropagation(conf),
+        SimplifyCasts,
+        EliminateMapObjects) :: Nil
+    } else {
       Batch("EliminateMapObjects", FixedPoint(50),
         NullPropagation(conf),
         EliminateMapObjects) :: Nil
+    }
   }
 
   implicit private def intArrayEncoder = ExpressionEncoder[Array[Int]]()
@@ -42,19 +48,23 @@ class EliminateMapObjectsSuite extends PlanTest {
     val intObjType = ObjectType(classOf[Array[Int]])
     val intInput = LocalRelation('a.array(ArrayType(IntegerType, false)))
     val intQuery = intInput.deserialize[Array[Int]].analyze
-    val intOptimized = Optimize.execute(intQuery)
-    val intExpected = DeserializeToObject(
-      Invoke(intInput.output(0), "toIntArray", intObjType, Nil, true, false),
-      AttributeReference("obj", intObjType, true)(), intInput)
-    comparePlans(intOptimized, intExpected)
+    Seq(true, false).foreach { addSimplifyCast =>
+      val intOptimized = new Optimize(addSimplifyCast).execute(intQuery)
+      val intExpected = DeserializeToObject(
+        Invoke(intInput.output(0), "toIntArray", intObjType, Nil, true, false),
+        AttributeReference("obj", intObjType, true)(), intInput)
+      comparePlans(intOptimized, intExpected)
+    }
 
     val doubleObjType = ObjectType(classOf[Array[Double]])
     val doubleInput = LocalRelation('a.array(ArrayType(DoubleType, false)))
     val doubleQuery = doubleInput.deserialize[Array[Double]].analyze
-    val doubleOptimized = Optimize.execute(doubleQuery)
-    val doubleExpected = DeserializeToObject(
-      Invoke(doubleInput.output(0), "toDoubleArray", doubleObjType, Nil, true, false),
-      AttributeReference("obj", doubleObjType, true)(), doubleInput)
-    comparePlans(doubleOptimized, doubleExpected)
+    Seq(true, false).foreach { addSimplifyCast =>
+      val doubleOptimized = new Optimize(addSimplifyCast).execute(doubleQuery)
+      val doubleExpected = DeserializeToObject(
+        Invoke(doubleInput.output(0), "toDoubleArray", doubleObjType, Nil, true, false),
+        AttributeReference("obj", doubleObjType, true)(), doubleInput)
+      comparePlans(doubleOptimized, doubleExpected)
+    }
   }
 }

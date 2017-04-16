@@ -110,9 +110,16 @@ object EliminateMapObjects extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case _ @ DeserializeToObject(Invoke(
         MapObjects(_, _, _, Cast(LambdaVariable(_, _, dataType, _), castDataType, _),
-           inputData, None, _),
+          inputData, None),
         funcName, returnType: ObjectType, arguments, propagateNull, returnNullable),
         outputObjAttr, child) if dataType == castDataType =>
+      DeserializeToObject(Invoke(
+        inputData, funcName, returnType, arguments, propagateNull, returnNullable),
+        outputObjAttr, child)
+    case _ @ DeserializeToObject(Invoke(
+        MapObjects(_, _, _, LambdaVariable(_, _, dataType, _), inputData, None),
+        funcName, returnType: ObjectType, arguments, propagateNull, returnNullable),
+        outputObjAttr, child) =>
       DeserializeToObject(Invoke(
         inputData, funcName, returnType, arguments, propagateNull, returnNullable),
         outputObjAttr, child)

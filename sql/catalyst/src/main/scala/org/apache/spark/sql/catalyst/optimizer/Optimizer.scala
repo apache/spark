@@ -92,7 +92,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       CombineUnions,
       // Constant folding and strength reduction
       NullPropagation(conf),
-      EliminateMapObjects,
       FoldablePropagation,
       OptimizeIn(conf),
       ConstantFolding,
@@ -120,7 +119,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       CostBasedJoinReorder(conf)) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates(conf)) ::
-    Batch("Typed Filter Optimization", fixedPoint,
+    Batch("Object Expressions Optimization", fixedPoint,
+      EliminateMapObjects,
       CombineTypedFilters) ::
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
