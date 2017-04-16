@@ -444,31 +444,21 @@ class LinearRegressionModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("2.0.0") val coefficients: Vector,
     @Since("1.3.0") val intercept: Double)
-  extends RegressionModel[Vector, LinearRegressionModel]
-  with LinearRegressionParams with MLWritable {
-
-  private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
+  extends RegressionModel[Vector, LinearRegressionModel] with MLWritable
+  with LinearRegressionParams with HasTrainingSummary[LinearRegressionTrainingSummary] {
 
   override val numFeatures: Int = coefficients.size
+
+  private[ml]
+  override def setSummary(summary: Option[LinearRegressionTrainingSummary]): this.type =
+    super.setSummary(summary)
 
   /**
    * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
    * thrown if `trainingSummary == None`.
    */
   @Since("1.5.0")
-  def summary: LinearRegressionTrainingSummary = trainingSummary.getOrElse {
-    throw new SparkException("No training summary available for this LinearRegressionModel")
-  }
-
-  private[regression]
-  def setSummary(summary: Option[LinearRegressionTrainingSummary]): this.type = {
-    this.trainingSummary = summary
-    this
-  }
-
-  /** Indicates whether a training summary exists for this model instance. */
-  @Since("1.5.0")
-  def hasSummary: Boolean = trainingSummary.isDefined
+  override def summary: LinearRegressionTrainingSummary = super.summary
 
   /**
    * Evaluates the model on a test dataset.

@@ -669,8 +669,8 @@ class LogisticRegressionModel private[spark] (
     @Since("2.1.0") val interceptVector: Vector,
     @Since("1.3.0") override val numClasses: Int,
     private val isMultinomial: Boolean)
-  extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
-  with LogisticRegressionParams with MLWritable {
+  extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel] with MLWritable
+  with LogisticRegressionParams with HasTrainingSummary[LogisticRegressionTrainingSummary] {
 
   require(coefficientMatrix.numRows == interceptVector.size, s"Dimension mismatch! Expected " +
     s"coefficientMatrix.numRows == interceptVector.size, but ${coefficientMatrix.numRows} != " +
@@ -753,17 +753,6 @@ class LogisticRegressionModel private[spark] (
   @Since("1.6.0")
   override val numFeatures: Int = coefficientMatrix.numCols
 
-  private var trainingSummary: Option[LogisticRegressionTrainingSummary] = None
-
-  /**
-   * Gets summary of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
-   */
-  @Since("1.5.0")
-  def summary: LogisticRegressionTrainingSummary = trainingSummary.getOrElse {
-    throw new SparkException("No training summary available for this LogisticRegressionModel")
-  }
-
   /**
    * If the probability column is set returns the current model and probability column,
    * otherwise generates a new column and sets it as the probability column on a new copy
@@ -779,15 +768,16 @@ class LogisticRegressionModel private[spark] (
     }
   }
 
-  private[classification]
-  def setSummary(summary: Option[LogisticRegressionTrainingSummary]): this.type = {
-    this.trainingSummary = summary
-    this
-  }
+  private[ml]
+  override def setSummary(summary: Option[LogisticRegressionTrainingSummary]): this.type =
+    super.setSummary(summary)
 
-  /** Indicates whether a training summary exists for this model instance. */
+  /**
+   * Gets summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
   @Since("1.5.0")
-  def hasSummary: Boolean = trainingSummary.isDefined
+  override def summary: LogisticRegressionTrainingSummary = super.summary
 
   /**
    * Evaluates the model on a test dataset.

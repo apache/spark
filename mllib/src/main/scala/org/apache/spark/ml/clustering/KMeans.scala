@@ -104,7 +104,8 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private val parentModel: MLlibKMeansModel)
-  extends Model[KMeansModel] with KMeansParams with MLWritable {
+  extends Model[KMeansModel] with KMeansParams with MLWritable
+  with HasTrainingSummary[KMeansSummary] {
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
@@ -161,28 +162,15 @@ class KMeansModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter = new KMeansModel.KMeansModelWriter(this)
 
-  private var trainingSummary: Option[KMeansSummary] = None
-
-  private[clustering] def setSummary(summary: Option[KMeansSummary]): this.type = {
-    this.trainingSummary = summary
-    this
-  }
-
-  /**
-   * Return true if there exists summary of model.
-   */
-  @Since("2.0.0")
-  def hasSummary: Boolean = trainingSummary.nonEmpty
+  private[ml] override def setSummary(summary: Option[KMeansSummary]): this.type =
+    super.setSummary(summary)
 
   /**
    * Gets summary of model on training set. An exception is
    * thrown if `trainingSummary == None`.
    */
   @Since("2.0.0")
-  def summary: KMeansSummary = trainingSummary.getOrElse {
-    throw new SparkException(
-      s"No training summary available for the ${this.getClass.getSimpleName}")
-  }
+  override def summary: KMeansSummary = super.summary
 }
 
 @Since("1.6.0")
