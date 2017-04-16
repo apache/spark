@@ -1,0 +1,164 @@
+From 1e8994a568a45a994ef7c2af354ac1ddc2c1586b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 24 Sep 2009 16:07:40 -0700
+Subject: [PATCH 0362/1179] HADOOP-5784. Makes the number of heartbeats that should arrive a second at the JobTracker configurable.
+
+Patch: http://issues.apache.org/jira/secure/attachment/12420257/HADOOP-5784_yhadoop20.patch
+Author: Amareshwari Sriramadasu
+Reason: Improve job latency on small clusters
+Ref: YDH
+---
+ src/mapred/mapred-default.xml                      |    9 +++
+ .../org/apache/hadoop/mapred/JobTracker.java       |    7 ++-
+ .../org/apache/hadoop/mapred/MRConstants.java      |    2 -
+ .../apache/hadoop/mapred/TestMapredHeartbeat.java  |   73 ++++++++++++++++++++
+ 4 files changed, 88 insertions(+), 3 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestMapredHeartbeat.java
+
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index 0168cd9..b3f5094 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -615,6 +615,15 @@
+ </property>
+ 
+ <property>
++  <name>mapred.heartbeats.in.second</name>
++  <value>100</value>
++  <description>Expert: Approximate number of heart-beats that could arrive 
++               JobTracker in a second. Assuming each RPC can be processed 
++               in 10msec, the default value is made 100 RPCs in a second.
++  </description>
++</property> 
++
++<property>
+   <name>mapred.max.tracker.blacklists</name>
+   <value>4</value>
+   <description>The number of blacklists for a taskTracker by various jobs
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 4a081b5..21d8ff7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -135,6 +135,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   // The maximum number of blacklists for a tracker after which the 
+   // tracker could be blacklisted across all jobs
+   private int MAX_BLACKLISTS_PER_TRACKER = 4;
++  // Approximate number of heartbeats that could arrive JobTracker
++  // in a second
++  private int NUM_HEARTBEATS_IN_SECOND = 100;
+   public static enum State { INITIALIZING, RUNNING }
+   State state = State.INITIALIZING;
+   private static final int FS_ACCESS_RETRY_PERIOD = 10000;
+@@ -1930,6 +1933,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     MAX_COMPLETE_USER_JOBS_IN_MEMORY = conf.getInt("mapred.jobtracker.completeuserjobs.maximum", 100);
+     MAX_BLACKLISTS_PER_TRACKER = 
+         conf.getInt("mapred.max.tracker.blacklists", 4);
++    NUM_HEARTBEATS_IN_SECOND = 
++        conf.getInt("mapred.heartbeats.in.second", 100);
+ 
+     //This configuration is there solely for tuning purposes and 
+     //once this feature has been tested in real clusters and an appropriate
+@@ -3036,7 +3041,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     int clusterSize = getClusterStatus().getTaskTrackers();
+     int heartbeatInterval =  Math.max(
+                                 (int)(1000 * Math.ceil((double)clusterSize / 
+-                                                       CLUSTER_INCREMENT)),
++                                                       NUM_HEARTBEATS_IN_SECOND)),
+                                 HEARTBEAT_INTERVAL_MIN) ;
+     return heartbeatInterval;
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/MRConstants.java b/src/mapred/org/apache/hadoop/mapred/MRConstants.java
+index fd6ce74..fc60649 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MRConstants.java
++++ b/src/mapred/org/apache/hadoop/mapred/MRConstants.java
+@@ -27,8 +27,6 @@ interface MRConstants {
+   //
+   public static final int HEARTBEAT_INTERVAL_MIN = 3 * 1000;
+   
+-  public static final int CLUSTER_INCREMENT = 100;
+-
+   public static final long COUNTER_UPDATE_INTERVAL = 60 * 1000;
+ 
+   //
+diff --git a/src/test/org/apache/hadoop/mapred/TestMapredHeartbeat.java b/src/test/org/apache/hadoop/mapred/TestMapredHeartbeat.java
+new file mode 100644
+index 0000000..158a291
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestMapredHeartbeat.java
+@@ -0,0 +1,73 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.mapred.JobConf;
++
++public class TestMapredHeartbeat extends TestCase {
++  public void testJobDirCleanup() throws IOException {
++    MiniMRCluster mr = null;
++    try {
++      // test the default heartbeat interval
++      int taskTrackers = 2;
++      JobConf conf = new JobConf();
++      mr = new MiniMRCluster(taskTrackers, "file:///", 3, 
++          null, null, conf);
++      JobClient jc = new JobClient(mr.createJobConf());
++      while(jc.getClusterStatus().getTaskTrackers() != taskTrackers) {
++        UtilsForTests.waitFor(100);
++      }
++      assertEquals(MRConstants.HEARTBEAT_INTERVAL_MIN, 
++        mr.getJobTrackerRunner().getJobTracker().getNextHeartbeatInterval());
++      mr.shutdown(); 
++      
++      // test configured heartbeat interval
++      taskTrackers = 5;
++      conf.setInt("mapred.heartbeats.in.second", 1);
++      mr = new MiniMRCluster(taskTrackers, "file:///", 3, 
++          null, null, conf);
++      jc = new JobClient(mr.createJobConf());
++      while(jc.getClusterStatus().getTaskTrackers() != taskTrackers) {
++        UtilsForTests.waitFor(100);
++      }
++      assertEquals(taskTrackers * 1000, 
++        mr.getJobTrackerRunner().getJobTracker().getNextHeartbeatInterval());
++      mr.shutdown(); 
++      
++      // test configured heartbeat interval is capped with min value
++      taskTrackers = 5;
++      conf.setInt("mapred.heartbeats.in.second", 10);
++      mr = new MiniMRCluster(taskTrackers, "file:///", 3, 
++          null, null, conf);
++      jc = new JobClient(mr.createJobConf());
++      while(jc.getClusterStatus().getTaskTrackers() != taskTrackers) {
++        UtilsForTests.waitFor(100);
++      }
++      assertEquals(MRConstants.HEARTBEAT_INTERVAL_MIN, 
++        mr.getJobTrackerRunner().getJobTracker().getNextHeartbeatInterval());
++    } finally {
++      if (mr != null) { mr.shutdown(); }
++    }
++  }
++}
++
++
+-- 
+1.7.0.4
+

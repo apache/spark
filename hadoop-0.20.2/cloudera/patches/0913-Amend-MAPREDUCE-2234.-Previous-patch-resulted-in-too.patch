@@ -1,0 +1,73 @@
+From 97c67eea39f2d15ecb7a479efda60204fc46e4c5 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 7 Mar 2011 12:25:32 -0800
+Subject: [PATCH 0913/1179] Amend MAPREDUCE-2234. Previous patch resulted in too many ls -l calls during heartbeats
+
+The previous commit under this JIRA changed the checkLocalDirs function to use
+the checkDir() function that takes a permission. This is fine at startup, but
+is expensive since it results in an `ls -l` fork for every local directory.
+This happens on every heartbeat and is not necessary. This patch amends
+the function to only use this form of checkDir() at start time, and otherwise
+just use the less expensive native java calls.
+
+Author: Todd Lipcon
+Ref: CDH-2780
+---
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   18 +++++++++++++-----
+ 1 files changed, 13 insertions(+), 5 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 0277a70..0abfba5 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -632,7 +632,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+ 
+   void initializeDirectories() throws IOException {
+     localFs = FileSystem.getLocal(fConf);
+-    checkLocalDirs(localFs, localdirs = this.fConf.getLocalDirs());
++    checkLocalDirs(localFs, localdirs = this.fConf.getLocalDirs(), true);
+     deleteUserDirectories(fConf);
+     asyncDiskService = new MRAsyncDiskService(fConf);
+     asyncDiskService.cleanupAllVolumes();
+@@ -1682,7 +1682,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+       localMinSpaceStart = minSpaceStart;
+     }
+     if (askForNewTask) {
+-      checkLocalDirs(localFs, fConf.getLocalDirs());
++      checkLocalDirs(localFs, fConf.getLocalDirs(), false);
+       askForNewTask = enoughFreeSpace(localMinSpaceStart);
+       long freeDiskSpace = getFreeSpace();
+       long totVmem = getTotalVirtualMemoryOnTT();
+@@ -3410,18 +3410,26 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+    * Check if the given local directories
+    * (and parent directories, if necessary) can be created.
+    * @param localDirs where the new TaskTracker should keep its local files.
++   * @param checkAndFixPermissions should check the permissions of the directory
++   *        and try to fix them if incorrect. This is expensive so should only be
++   *        done at startup.
+    * @throws DiskErrorException if all local directories are not writable
+    */
+   private static void checkLocalDirs(LocalFileSystem localFs, 
+-                                     String[] localDirs) 
++                                     String[] localDirs,
++                                     boolean checkAndFixPermissions) 
+     throws DiskErrorException {
+     boolean writable = false;
+         
+     if (localDirs != null) {
+       for (int i = 0; i < localDirs.length; i++) {
+         try {
+-          DiskChecker.checkDir(localFs, new Path(localDirs[i]),
+-                               LOCAL_DIR_PERMISSION);
++          if (checkAndFixPermissions) {
++            DiskChecker.checkDir(localFs, new Path(localDirs[i]),
++                                 LOCAL_DIR_PERMISSION);
++          } else {
++            DiskChecker.checkDir(new File(localDirs[i]));
++          }
+ 
+           writable = true;
+         } catch(IOException e) {
+-- 
+1.7.0.4
+

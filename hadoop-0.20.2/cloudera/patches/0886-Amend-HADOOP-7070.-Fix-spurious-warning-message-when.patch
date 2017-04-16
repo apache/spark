@@ -1,0 +1,48 @@
+From dd51c56ab63cb12bc207647f314ab99e1e8da32b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 17 Feb 2011 16:37:05 -0800
+Subject: [PATCH 0886/1179] Amend HADOOP-7070. Fix spurious warning message when running on machine with no krb5.conf
+
+The issue is that UGI.initialize would call KerberosName.setConfiguration before setting
+its own flag to indicate it was initialized. Then, if there was no krb5.conf,
+the class initializer of KerberosName would call back into UGI.isSecurityEnabled,
+causing initialize() to be run a second time.
+
+This bug doesn't exist upstream.
+
+Reason: spurious warnings
+Author: Todd Lipcon
+Ref: CDH-2688
+---
+ .../hadoop/security/UserGroupInformation.java      |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index e1bd4e4..b2683b8 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -241,6 +241,12 @@ public class UserGroupInformation {
+         new HadoopConfiguration(existingConfig));
+     }
+ 
++    // We're done initializing at this point. Important not to classload
++    // KerberosName before this point, or else its static initializer
++    // may call back into this same method!
++    isInitialized = true;
++    UserGroupInformation.conf = conf;
++
+     // give the configuration on how to translate Kerberos names
+     try {
+       KerberosName.setConfiguration(conf);
+@@ -248,8 +254,6 @@ public class UserGroupInformation {
+       throw new RuntimeException("Problem with Kerberos auth_to_local name " +
+                                  "configuration", ioe);
+     }
+-    isInitialized = true;
+-    UserGroupInformation.conf = conf;
+   }
+ 
+   /**
+-- 
+1.7.0.4
+

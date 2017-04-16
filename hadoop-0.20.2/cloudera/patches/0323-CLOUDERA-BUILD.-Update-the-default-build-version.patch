@@ -1,0 +1,25 @@
+From be7cd3b5cec66c22b58caa8053de4258826e7c08 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 11 Aug 2010 15:07:00 -0700
+Subject: [PATCH 0323/1179] CLOUDERA-BUILD. Update the default build version.
+
+---
+ build.xml |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index d4f5f98..9f8f3e7 100644
+--- a/build.xml
++++ b/build.xml
+@@ -28,7 +28,7 @@
+  
+   <property name="Name" value="Hadoop"/>
+   <property name="name" value="hadoop"/>
+-  <property name="version" value="0.20.2-CDH3b2-SNAPSHOT"/>
++  <property name="version" value="0.20.3-CDH3-SNAPSHOT"/>
+   <property name="final.name" value="${name}-${version}"/>
+   <property name="year" value="2009"/>
+   
+-- 
+1.7.0.4
+

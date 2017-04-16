@@ -1,0 +1,52 @@
+From d93dad715d3c702d15c2a32c85d586c708e70857 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:36:23 -0800
+Subject: [PATCH 0185/1179] CLOUDERA-BUILD. Add test ivy configurations to additional projects.
+
+Author: Aaron Kimball
+Reason: Build system improvement
+---
+ src/contrib/hdfsproxy/ivy.xml    |    1 +
+ src/contrib/hod/ivy.xml          |    1 +
+ src/contrib/scribe-log4j/ivy.xml |    1 +
+ 3 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/hdfsproxy/ivy.xml b/src/contrib/hdfsproxy/ivy.xml
+index f0270ac..da1e9c6 100644
+--- a/src/contrib/hdfsproxy/ivy.xml
++++ b/src/contrib/hdfsproxy/ivy.xml
+@@ -15,6 +15,7 @@
+ 
+     <conf name="common" visibility="private" 
+       description="artifacts needed to compile/test the application"/>
++    <conf name="test" visibility="private" extends="runtime"/>
+   </configurations>
+ 
+   <publications>
+diff --git a/src/contrib/hod/ivy.xml b/src/contrib/hod/ivy.xml
+index e775663..b51d9d9 100644
+--- a/src/contrib/hod/ivy.xml
++++ b/src/contrib/hod/ivy.xml
+@@ -16,6 +16,7 @@
+ 
+     <conf name="common" visibility="private" 
+       description="artifacts needed to compile/test the application"/>
++    <conf name="test" visibility="private" extends="runtime"/>
+   </configurations>
+   <dependencies>
+   </dependencies>
+diff --git a/src/contrib/scribe-log4j/ivy.xml b/src/contrib/scribe-log4j/ivy.xml
+index 043ce75..4b26330 100644
+--- a/src/contrib/scribe-log4j/ivy.xml
++++ b/src/contrib/scribe-log4j/ivy.xml
+@@ -16,6 +16,7 @@
+ 
+     <conf name="common" visibility="private" 
+       description="artifacts needed to compile/test the application"/>
++    <conf name="test" visibility="private" extends="runtime"/>
+   </configurations>
+   <dependencies>
+     <dependency org="commons-logging"
+-- 
+1.7.0.4
+

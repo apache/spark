@@ -1,0 +1,83 @@
+From 3ecb9c07279302d18f7367d49bcd98c4391cbb68 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:37:27 -0800
+Subject: [PATCH 0030/1179] CLOUDERA-BUILD. Decrease build time by only rebuilding the native code for each platform
+
+Reason: build system improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ build.xml                 |   23 +++++++++++++++++------
+ cloudera/do-release-build |    4 ++--
+ 2 files changed, 19 insertions(+), 8 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index f4b91e6..cbf5e78 100644
+--- a/build.xml
++++ b/build.xml
+@@ -240,6 +240,17 @@
+     </sequential>
+   </macrodef>
+ 
++  <macrodef name="copy-native-package" description="Package native code into dist dir">
++    <sequential>
++      <exec dir="${dist.dir}" executable="sh" failonerror="true">
++	  <env key="BASE_NATIVE_LIB_DIR" value="${lib.dir}/native"/>
++	  <env key="BUILD_NATIVE_DIR" value="${build.dir}/native"/>
++	  <env key="DIST_LIB_DIR" value="${dist.dir}/lib/native"/>
++	  <arg line="${native.src.dir}/packageNativeHadoop.sh"/>
++      </exec>
++    </sequential>
++  </macrodef>
++
+   <!-- ====================================================== -->
+   <!-- Stuff needed by all targets                            -->
+   <!-- ====================================================== -->
+@@ -1119,6 +1130,11 @@
+     </macro_tar>
+   </target>
+ 
++  <target name="package-native" depends="compile-core-native, compile-c++, compile-c++-examples, compile-c++-libhdfs">
++    <mkdir dir="${dist.dir}"/>
++    <copy-native-package />
++  </target>
++
+   <target name="bin-package" depends="compile, jar, examples, tools-jar, jar-test, ant-tasks, package-librecordio" 
+ 		description="assembles artifacts for binary target">
+ 
+@@ -1136,12 +1152,7 @@
+       </fileset>
+     </copy>
+ 
+-  	<exec dir="${dist.dir}" executable="sh" failonerror="true">
+-	  <env key="BASE_NATIVE_LIB_DIR" value="${lib.dir}/native"/>
+-	  <env key="BUILD_NATIVE_DIR" value="${build.dir}/native"/>
+-	  <env key="DIST_LIB_DIR" value="${dist.dir}/lib/native"/>
+-	  <arg line="${native.src.dir}/packageNativeHadoop.sh"/>
+-    </exec>
++    <copy-native-package />
+ 
+     <subant target="package">
+       <!--Pass down the version in case its needed again and the target
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index b064515..9f40293 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -57,7 +57,7 @@ JAVA_HOME=$JAVA32_HOME \
+   -Djava5.home=$JAVA5_HOME \
+   -Dforrest.home=$FORREST_HOME \
+   -propertyfile cloudera/build.properties \
+-  clean tar
++  clean package-native
+ 
+ if [ -z "$SKIP_JDIFF" ]; then
+ ant \
+@@ -76,4 +76,4 @@ JAVA_HOME=$JAVA64_HOME \
+   -Djava5.home=$JAVA5_HOME \
+   -Dforrest.home=$FORREST_HOME \
+   -propertyfile cloudera/build.properties \
+-  compile-core-native compile-c++ tar
++  compile-core-native compile-c++ compile-c++-examples tar
+-- 
+1.7.0.4
+

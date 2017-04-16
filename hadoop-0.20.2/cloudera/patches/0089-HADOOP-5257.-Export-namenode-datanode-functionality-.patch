@@ -1,0 +1,385 @@
+From 137999a0b48a81bed10a5f30868dbfe6d176956b Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:58:09 -0800
+Subject: [PATCH 0089/1179] HADOOP-5257. Export namenode/datanode functionality through a pluggable RPC layer
+
+Description: Adding support for pluggable components would allow exporting DFS functionallity using arbitrary protocols, like Thirft or Protocol Buffers. I'm opening this issue on Dhruba's suggestion in HADOOP-4707.
+
+<p>Plug-in implementations would extend this base class:</p>
+
+<div class="code panel" style="border-width: 1px;"><div class="codeContent panelContent">
+<pre class="code-java"><span class="code-keyword">abstract</span> class Plugin {
+
+    <span class="code-keyword">public</span> <span class="code-keyword">abstract</span> datanodeStarted(DataNode datanode);
+
+    <span class="code-keyword">public</span> <span class="code-keyword">abstract</span> datanodeStopping();
+
+    <span class="code-keyword">public</span> <span class="code-keyword">abstract</span> namenodeStarted(NameNode namenode);
+
+    <span class="code-keyword">public</span> <span class="code-keyword">abstract</span> namenodeStopping();
+}</pre>
+</div></div>
+
+<p>Name node instances would then start the plug-ins according to a configuration object, and would also shut them down when the node goes down:</p>
+
+<div class="code panel" style="border-width: 1px;"><div class="codeContent panelContent">
+<pre class="code-java"><span class="code-keyword">public</span> class NameNode {
+
+    <span class="code-comment">// [..]
+</span>
+    <span class="code-keyword">private</span> void initialize(Configuration conf)
+        <span class="code-comment">// [...]
+</span>        <span class="code-keyword">for</span> (Plugin p: PluginManager.loadPlugins(conf))
+          p.namenodeStarted(<span class="code-keyword">this</span>);
+    }
+
+    <span class="code-comment">// [..]
+</span>
+    <span class="code-keyword">public</span> void stop() {
+        <span class="code-keyword">if</span> (stopRequested)
+            <span class="code-keyword">return</span>;
+        stopRequested = <span class="code-keyword">true</span>;
+        <span class="code-keyword">for</span> (Plugin p: plugins)
+            p.namenodeStopping();
+        <span class="code-comment">// [..]
+</span>    }
+
+    <span class="code-comment">// [..]
+</span>}</pre>
+</div></div>
+
+<p>Data nodes would do a similar thing in <tt>DataNode.startDatanode()</tt> and <tt>DataNode.shutdown</tt></p>
+Reason: MISSING: Reason for inclusion
+Author: Carlos Valiente
+Ref: UNKNOWN
+---
+ src/core/org/apache/hadoop/conf/Configuration.java |   26 +++++++
+ src/core/org/apache/hadoop/util/ServicePlugin.java |   46 ++++++++++++
+ src/hdfs/hdfs-default.xml                          |   14 ++++
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   25 +++++++
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   22 ++++++
+ .../org/apache/hadoop/conf/TestGetInstances.java   |   74 ++++++++++++++++++++
+ 6 files changed, 207 insertions(+), 0 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/util/ServicePlugin.java
+ create mode 100644 src/test/org/apache/hadoop/conf/TestGetInstances.java
+
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index 9c6211e..f03b657 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -60,6 +60,7 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ import org.w3c.dom.DOMException;
+ import org.w3c.dom.Document;
+@@ -842,6 +843,31 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+     }
+   }
+ 
++  /**
++   * Get the value of the <code>name</code> property as a <code>List</code>
++   * of objects implementing the interface specified by <code>xface</code>.
++   * 
++   * An exception is thrown if any of the classes does not exist, or if it does
++   * not implement the named interface.
++   * 
++   * @param name the property name.
++   * @param xface the interface implemented by the classes named by
++   *        <code>name</code>.
++   * @return a <code>List</code> of objects implementing <code>xface</code>.
++   */
++  @SuppressWarnings("unchecked")
++  public <U> List<U> getInstances(String name, Class<U> xface) {
++    List<U> ret = new ArrayList<U>();
++    Class<?>[] classes = getClasses(name);
++    for (Class<?> cl: classes) {
++      if (!xface.isAssignableFrom(cl)) {
++        throw new RuntimeException(cl + " does not implement " + xface);
++      }
++      ret.add((U)ReflectionUtils.newInstance(cl, this));
++    }
++    return ret;
++  }
++
+   /** 
+    * Set the value of the <code>name</code> property to the name of a 
+    * <code>theClass</code> implementing the given interface <code>xface</code>.
+diff --git a/src/core/org/apache/hadoop/util/ServicePlugin.java b/src/core/org/apache/hadoop/util/ServicePlugin.java
+new file mode 100644
+index 0000000..a83294e
+--- /dev/null
++++ b/src/core/org/apache/hadoop/util/ServicePlugin.java
+@@ -0,0 +1,46 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.util;
++
++import java.io.Closeable;
++
++/**
++ * Service plug-in interface.
++ * 
++ * Service plug-ins may be used to expose functionality of datanodes or
++ * namenodes using arbitrary RPC protocols. Plug-ins are instantiated by the
++ * service instance, and are notified of service life-cycle events using the
++ * methods defined by this class.
++ * 
++ * Service plug-ins are started after the service instance is started, and
++ * stopped before the service instance is stopped.
++ */
++public interface ServicePlugin extends Closeable {
++
++  /**
++   * This method is invoked when the service instance has been started.
++   *
++   * @param service The service instance invoking this method
++   */
++  void start(Object service);
++  
++  /**
++   * This method is invoked when the service instance is about to be shut down.
++   */
++  void stop();
++}
+diff --git a/src/hdfs/hdfs-default.xml b/src/hdfs/hdfs-default.xml
+index 8b0a3b8..5073306 100644
+--- a/src/hdfs/hdfs-default.xml
++++ b/src/hdfs/hdfs-default.xml
+@@ -362,4 +362,18 @@ creations/deletions), or "all".</description>
+   </description>
+ </property>
+ 
++<property>
++  <name>dfs.datanode.plugins</name>
++  <value></value>
++  <description>Comma-separated list of datanode plug-ins to be activated.
++  </description>
++</property>
++
++<property>
++  <name>dfs.namenode.plugins</name>
++  <value></value>
++  <description>Comma-separated list of namenode plug-ins to be activated.
++  </description>
++</property>
++
+ </configuration>
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 4c3c997..509427b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -88,6 +88,7 @@ import org.apache.hadoop.security.authorize.PolicyProvider;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.util.Daemon;
+ import org.apache.hadoop.util.DiskChecker;
++import org.apache.hadoop.util.ServicePlugin;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+@@ -190,6 +191,9 @@ public class DataNode extends Configured
+   public DataBlockScanner blockScanner = null;
+   public Daemon blockScannerThread = null;
+   
++  /** Activated plug-ins. */
++  private List<ServicePlugin> plugins;
++  
+   private static final Random R = new Random();
+   
+   // For InterDataNodeProtocol
+@@ -397,6 +401,16 @@ public class DataNode extends Configured
+     dnRegistration.setIpcPort(ipcServer.getListenerAddress().getPort());
+ 
+     LOG.info("dnRegistration = " + dnRegistration);
++    
++    plugins = conf.getInstances("dfs.datanode.plugins", ServicePlugin.class);
++    for (ServicePlugin p: plugins) {
++      try {
++        p.start(this);
++        LOG.info("Started plug-in " + p);
++      } catch (Throwable t) {
++        LOG.warn("ServicePlugin " + p + " could not be started", t);
++      }
++    }
+   }
+ 
+   /**
+@@ -564,6 +578,17 @@ public class DataNode extends Configured
+    * Otherwise, deadlock might occur.
+    */
+   public void shutdown() {
++    if (plugins != null) {
++      for (ServicePlugin p : plugins) {
++        try {
++          p.stop();
++          LOG.info("Stopped plug-in " + p);
++        } catch (Throwable t) {
++          LOG.warn("ServicePlugin " + p + " could not be stopped", t);
++        }
++      }
++    }
++    
+     if (infoServer != null) {
+       try {
+         infoServer.stop();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 2da9d70..925c1ca 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -43,6 +43,7 @@ import org.apache.hadoop.hdfs.server.protocol.UpgradeCommand;
+ import org.apache.hadoop.http.HttpServer;
+ import org.apache.hadoop.ipc.*;
+ import org.apache.hadoop.conf.*;
++import org.apache.hadoop.util.ServicePlugin;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.net.NetUtils;
+@@ -59,6 +60,7 @@ import java.io.*;
+ import java.net.*;
+ import java.util.Collection;
+ import java.util.Iterator;
++import java.util.List;
+ 
+ /**********************************************************
+  * NameNode serves as both directory namespace manager and
+@@ -135,6 +137,8 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   private boolean stopRequested = false;
+   /** Is service level authorization enabled? */
+   private boolean serviceAuthEnabled = false;
++  /** Activated plug-ins. */
++  private List<ServicePlugin> plugins;
+   
+   /** Format a new filesystem.  Destroys any filesystem that may already
+    * exist at this location.  **/
+@@ -202,6 +206,15 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     startHttpServer(conf);
+     this.server.start();  //start RPC server   
+     startTrashEmptier(conf);
++    
++    plugins = conf.getInstances("dfs.namenode.plugins", ServicePlugin.class);
++    for (ServicePlugin p: plugins) {
++      try {
++        p.start(this);
++      } catch (Throwable t) {
++        LOG.warn("ServicePlugin " + p + " could not be started", t);
++      }
++    }
+   }
+ 
+   private void startTrashEmptier(Configuration conf) throws IOException {
+@@ -301,6 +314,15 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     if (stopRequested)
+       return;
+     stopRequested = true;
++    if (plugins != null) {
++      for (ServicePlugin p : plugins) {
++        try {
++          p.stop();
++        } catch (Throwable t) {
++          LOG.warn("ServicePlugin " + p + " could not be stopped", t);
++        }
++      }
++    }
+     try {
+       if (httpServer != null) httpServer.stop();
+     } catch (Exception e) {
+diff --git a/src/test/org/apache/hadoop/conf/TestGetInstances.java b/src/test/org/apache/hadoop/conf/TestGetInstances.java
+new file mode 100644
+index 0000000..57b7ff4
+--- /dev/null
++++ b/src/test/org/apache/hadoop/conf/TestGetInstances.java
+@@ -0,0 +1,74 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.conf;
++
++import java.util.List;
++
++import junit.framework.TestCase;
++
++public class TestGetInstances extends TestCase {
++  
++  interface SampleInterface {}
++  
++  interface ChildInterface extends SampleInterface {}
++  
++  static class SampleClass implements SampleInterface {
++    SampleClass() {}
++  }
++	
++  static class AnotherClass implements ChildInterface {
++    AnotherClass() {}
++  }
++  
++  /**
++   * Makes sure <code>Configuration.getInstances()</code> returns
++   * instances of the required type.
++   */
++  public void testGetInstances() throws Exception {
++    Configuration conf = new Configuration();
++    
++    List<SampleInterface> classes =
++      conf.getInstances("no.such.property", SampleInterface.class);
++    assertTrue(classes.isEmpty());
++
++    conf.set("empty.property", "");
++    classes = conf.getInstances("empty.property", SampleInterface.class);
++    assertTrue(classes.isEmpty());
++    
++    conf.setStrings("some.classes",
++        SampleClass.class.getName(), AnotherClass.class.getName());
++    classes = conf.getInstances("some.classes", SampleInterface.class);
++    assertEquals(2, classes.size());
++    
++    try {
++      conf.setStrings("some.classes",
++          SampleClass.class.getName(), AnotherClass.class.getName(),
++          String.class.getName());
++      conf.getInstances("some.classes", SampleInterface.class);
++      fail("java.lang.String does not implement SampleInterface");
++    } catch (RuntimeException e) {}
++    
++    try {
++      conf.setStrings("some.classes",
++          SampleClass.class.getName(), AnotherClass.class.getName(),
++          "no.such.Class");
++      conf.getInstances("some.classes", SampleInterface.class);
++      fail("no.such.Class does not exist");
++    } catch (RuntimeException e) {}
++  }
++}
+-- 
+1.7.0.4
+

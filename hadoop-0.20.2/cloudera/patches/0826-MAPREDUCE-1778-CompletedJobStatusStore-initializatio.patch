@@ -1,0 +1,104 @@
+From 1b9bc9af319325bd26e1530ce18527ca8f74dafd Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:51 -0800
+Subject: [PATCH 0826/1179] MAPREDUCE-1778 CompletedJobStatusStore initialization should fail if {mapred.job.tracker.persist.jobstatus.dir} is unwritable
+
+Author: Krishna Ramachandran
+Ref: CDH-2622
+---
+ .../hadoop/mapred/CompletedJobStatusStore.java     |   28 +++++++++++++++----
+ .../hadoop/mapred/TestJobStatusPersistency.java    |   15 +++++-----
+ 2 files changed, 30 insertions(+), 13 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java b/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java
+index b8d9ae1..ad63f73 100644
+--- a/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java
++++ b/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java
+@@ -30,6 +30,9 @@ import org.apache.hadoop.fs.Path;
+ 
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.AccessControlException;
++import org.apache.hadoop.fs.permission.FsAction;
++import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+ 
+ /**
+  * Persists and retrieves the Job info of a job into/from DFS.
+@@ -55,7 +58,8 @@ class CompletedJobStatusStore implements Runnable {
+ 
+   private static long HOUR = 1000 * 60 * 60;
+   private static long SLEEP_TIME = 1 * HOUR;
+-
++  final static FsPermission JOB_STATUS_STORE_DIR_PERMISSION = FsPermission
++      .createImmutable((short) 0750); // rwxr-x--
+ 
+   CompletedJobStatusStore(Configuration conf, ACLsManager aclsManager)
+       throws IOException {
+@@ -74,12 +78,24 @@ class CompletedJobStatusStore implements Runnable {
+       // set the fs
+       this.fs = path.getFileSystem(conf);
+       if (!fs.exists(path)) {
+-        if (!fs.mkdirs(path)) {
+-          active = false;
+-          LOG.warn("Couldn't create " + jobInfoDir
+-              + ". CompletedJobStore will be inactive.");
+-          return;
++        if (!fs.mkdirs(path, new FsPermission(JOB_STATUS_STORE_DIR_PERMISSION))) {
++          throw new IOException(
++              "CompletedJobStatusStore mkdirs failed to create "
++                  + path.toString());
+         }
++      } else {
++        FileStatus stat = fs.getFileStatus(path);
++        FsPermission actual = stat.getPermission();
++        if (!stat.isDir())
++          throw new DiskErrorException("not a directory: "
++                                   + path.toString());
++        FsAction user = actual.getUserAction();
++        if (!user.implies(FsAction.READ))
++          throw new DiskErrorException("directory is not readable: "
++                                   + path.toString());
++        if (!user.implies(FsAction.WRITE))
++          throw new DiskErrorException("directory is not writable: "
++                                   + path.toString());
+       }
+ 
+       if (retainTime == 0) {
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobStatusPersistency.java b/src/test/org/apache/hadoop/mapred/TestJobStatusPersistency.java
+index d1f5013..d454a46 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobStatusPersistency.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobStatusPersistency.java
+@@ -21,6 +21,7 @@ import java.io.File;
+ import java.io.OutputStream;
+ import java.io.OutputStreamWriter;
+ import java.io.Writer;
++import java.io.IOException;
+ import java.util.Properties;
+ 
+ import org.apache.hadoop.fs.FileSystem;
+@@ -167,15 +168,15 @@ public class TestJobStatusPersistency extends ClusterMapReduceTestCase {
+       config.set("mapred.job.tracker.persist.jobstatus.hours", "1");
+       config.set("mapred.job.tracker.persist.jobstatus.dir", new Path(parent,
+           "child").toUri().getPath());
+-      mr = new MiniMRCluster(0, "file:///", 4, null, null, config);
+-      assertFalse(
+-          "CompletedJobStore is unexpectly active!",
+-          mr.getJobTrackerRunner().getJobTracker().completedJobStatusStore.isActive());
++      boolean started = true;
++      JobConf conf = MiniMRCluster.configureJobConf(config, "file:///", 0, 0, null);
++      try {
++        JobTracker jt = JobTracker.startTracker(conf);
++      } catch (IOException ex) {
++        started = false;
++      }
+     } finally {
+       new File(parent.toUri().getPath()).setWritable(true, false);
+-      if (mr != null) {
+-        mr.shutdown();
+-      }
+     }
+   }
+ }
+-- 
+1.7.0.4
+

@@ -1,0 +1,30 @@
+From 61bf38c1c0b31ef18b93ed225c8367ab4d5d7f96 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 11 Jan 2011 15:46:43 -0800
+Subject: [PATCH 0771/1179] DISTRO-73. Fix filesystem leak when userlog location has different FS URI than JT
+
+No upstream JIRA since this was fixed upstream by MAPREDUCE-157
+
+Reason: Thread leak reported on cdh-user
+Author: Todd Lipcon
+Ref: DISTRO-73
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 59a7ab8..b53215a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -2954,7 +2954,7 @@ public class JobInProgress {
+ 
+     //close the user's FS
+     try {
+-      fs.close();
++      FileSystem.closeAllForUGI(userUGI);
+     } catch (IOException ie) {
+       LOG.warn("Ignoring exception " + StringUtils.stringifyException(ie) + 
+           " while closing FileSystem for " + userUGI);
+-- 
+1.7.0.4
+

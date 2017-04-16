@@ -1,0 +1,114 @@
+From be70b10f11445f4a71807405718bfeebd38ad924 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:42:51 -0800
+Subject: [PATCH 0197/1179] MAPREDUCE-1155. Streaming tests swallow exceptions
+
+Description: Many of the streaming tests (including TestMultipleArchiveFiles) catch exceptions and print their stack trace rather than failing the job. This means that tests do not fail even when the job fails.
+Reason: Test coverage improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ .../hadoop/streaming/TestStreamingCombiner.java    |    2 +-
+ .../hadoop/streaming/TestStreamingExitStatus.java  |   16 +--------------
+ src/contrib/test/mapred-site.xml                   |    6 ++++-
+ src/core/org/apache/hadoop/util/StringUtils.java   |   21 ++++++++++++++++++++
+ 4 files changed, 28 insertions(+), 17 deletions(-)
+
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingCombiner.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingCombiner.java
+index 80fd1e8..6033f9e 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingCombiner.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingCombiner.java
+@@ -41,7 +41,7 @@ public class TestStreamingCombiner extends TestStreaming {
+     };
+   }
+ 
+-  public void testCommandLine() throws IOException {
++  public void testCommandLine() throws Exception {
+     super.testCommandLine();
+     // validate combiner counters
+     String counterGrp = "org.apache.hadoop.mapred.Task$Counter";
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingExitStatus.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingExitStatus.java
+index 4831d5d..5cc741c 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingExitStatus.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingExitStatus.java
+@@ -68,26 +68,12 @@ public class TestStreamingExitStatus extends TestCase
+     out.close();
+   }
+ 
+-  private static String join(CharSequence separator, Iterable<String> strings) {
+-    StringBuilder sb = new StringBuilder();
+-    boolean first = true;
+-    for (String s : strings) {
+-      if (first) {
+-        first = false;
+-      } else {
+-        sb.append(separator);
+-      }
+-      sb.append(s);
+-    }
+-    return sb.toString();
+-  }
+-
+   public void runStreamJob(boolean exitStatusIsFailure, boolean failMap) throws Exception {
+     boolean mayExit = false;
+     int returnStatus = 0;
+     String args[] = genArgs(exitStatusIsFailure, failMap);
+     System.err.println("Testing streaming command line:\n" +
+-               join(" ", Arrays.asList(args)));
++               StringUtils.join(" ", Arrays.asList(args)));
+     StreamJob job = new StreamJob(genArgs(exitStatusIsFailure, failMap), mayExit);
+     returnStatus = job.go();
+     
+diff --git a/src/contrib/test/mapred-site.xml b/src/contrib/test/mapred-site.xml
+index 355da34..037ef37 100644
+--- a/src/contrib/test/mapred-site.xml
++++ b/src/contrib/test/mapred-site.xml
+@@ -4,10 +4,14 @@
+ <!-- Put site-specific property overrides in this file. -->
+ 
+ <configuration>
+-
+ <property>
+   <name>mapred.system.dir</name>
+   <value>build/contrib/${contrib.name}/test/system</value>
+ </property>
+ 
++<property>
++  <name>io.sort.mb</name>
++  <value>10</value>
++</property>
++
+ </configuration>
+diff --git a/src/core/org/apache/hadoop/util/StringUtils.java b/src/core/org/apache/hadoop/util/StringUtils.java
+index 027c72b..d99fe43 100644
+--- a/src/core/org/apache/hadoop/util/StringUtils.java
++++ b/src/core/org/apache/hadoop/util/StringUtils.java
+@@ -685,4 +685,25 @@ public class StringUtils {
+   public static synchronized String limitDecimalTo2(double d) {
+     return decimalFormat.format(d);
+   }
++
++  /**
++   * Concatenates strings, using a separator.
++   *
++   * @param separator Separator to join with.
++   * @param strings Strings to join.
++   */
++  public static String join(CharSequence separator, Iterable<String> strings) {
++    StringBuffer sb = new StringBuffer();
++    boolean first = true;
++    for (String s : strings) {
++      if (first) {
++        first = false;
++      } else {
++        sb.append(separator);
++      }
++      sb.append(s);
++    }
++    return sb.toString();
++  }
++
+ }
+-- 
+1.7.0.4
+

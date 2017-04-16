@@ -1,0 +1,931 @@
+From 0d086cde04450cbb5a5f6d39a345aafcdadaa511 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:52 -0800
+Subject: [PATCH 0849/1179] HDFS-1114. Reduce NameNode memory usage by an alternate hash table
+
+Author: Tsz Wo (Nicholas) Sze
+Reason: reduce memory usage in the NameNode
+Ref: CDH-2622
+---
+ .../hadoop/hdfs/server/namenode/BlocksMap.java     |   66 +++-
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    1 +
+ src/hdfs/org/apache/hadoop/hdfs/util/GSet.java     |    6 +-
+ .../apache/hadoop/hdfs/util/LightWeightGSet.java   |  283 ++++++++++++
+ src/test/org/apache/hadoop/hdfs/util/TestGSet.java |  454 ++++++++++++++++++++
+ 5 files changed, 793 insertions(+), 17 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/util/LightWeightGSet.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/util/TestGSet.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/BlocksMap.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/BlocksMap.java
+index b46f05a..7d89f60 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/BlocksMap.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/BlocksMap.java
+@@ -21,7 +21,7 @@ import java.util.Iterator;
+ 
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.util.GSet;
+-import org.apache.hadoop.hdfs.util.GSetByHashMap;
++import org.apache.hadoop.hdfs.util.LightWeightGSet;
+ 
+ /**
+  * This class maintains the map from a block to its metadata.
+@@ -33,9 +33,12 @@ class BlocksMap {
+   /**
+    * Internal class for block metadata.
+    */
+-  static class BlockInfo extends Block {
++  static class BlockInfo extends Block implements LightWeightGSet.LinkedElement {
+     private INodeFile          inode;
+ 
++    /** For implementing {@link LightWeightGSet.LinkedElement} interface */
++    private LightWeightGSet.LinkedElement nextLinkedElement;
++
+     /**
+      * This array contains triplets of references.
+      * For each i-th data-node the block belongs to
+@@ -268,6 +271,16 @@ class BlocksMap {
+       }
+       return true;
+     }
++
++    @Override
++    public LightWeightGSet.LinkedElement getNext() {
++      return nextLinkedElement;
++    }
++
++    @Override
++    public void setNext(LightWeightGSet.LinkedElement next) {
++      this.nextLinkedElement = next;
++    }
+   }
+ 
+   private static class NodeIterator implements Iterator<DatanodeDescriptor> {
+@@ -292,20 +305,45 @@ class BlocksMap {
+     }
+   }
+ 
+-  // Used for tracking HashMap capacity growth
+-  private int capacity;
+-  private final float loadFactor;
++  /** Constant {@link LightWeightGSet} capacity. */
++  private final int capacity;
+   
+   private GSet<Block, BlockInfo> blocks;
+ 
+   BlocksMap(int initialCapacity, float loadFactor) {
+-    this.capacity = 1;
+-    // Capacity is initialized to the next multiple of 2 of initialCapacity
+-    while (this.capacity < initialCapacity)
+-      this.capacity <<= 1;
+-    this.loadFactor = loadFactor;
+-    this.blocks = new GSetByHashMap<Block, BlockInfo>(
+-        initialCapacity, loadFactor);
++    this.capacity = computeCapacity();
++    this.blocks = new LightWeightGSet<Block, BlockInfo>(capacity);
++  }
++
++  /**
++   * Let t = 2% of max memory.
++   * Let e = round(log_2 t).
++   * Then, we choose capacity = 2^e/(size of reference),
++   * unless it is outside the close interval [1, 2^30].
++   */
++  private static int computeCapacity() {
++    //VM detection
++    //See http://java.sun.com/docs/hotspot/HotSpotFAQ.html#64bit_detection
++    final String vmBit = System.getProperty("sun.arch.data.model");
++
++    //2% of max memory
++    final double twoPC = Runtime.getRuntime().maxMemory()/50.0;
++
++    //compute capacity
++    final int e1 = (int)(Math.log(twoPC)/Math.log(2.0) + 0.5);
++    final int e2 = e1 - ("32".equals(vmBit)? 2: 3);
++    final int exponent = e2 < 0? 0: e2 > 30? 30: e2;
++    final int c = 1 << exponent;
++
++    LightWeightGSet.LOG.info("VM type       = " + vmBit + "-bit");
++    LightWeightGSet.LOG.info("2% max memory = " + twoPC/(1 << 20) + " MB");
++    LightWeightGSet.LOG.info("capacity      = 2^" + exponent
++        + " = " + c + " entries");
++    return c;
++  }
++
++  void close() {
++    blocks = null;
+   }
+ 
+   /**
+@@ -445,10 +483,6 @@ class BlocksMap {
+   
+   /** Get the capacity of the HashMap that stores blocks */
+   public int getCapacity() {
+-    // Capacity doubles every time the map size reaches the threshold
+-    while (blocks.size() > (int)(capacity * loadFactor)) {
+-      capacity <<= 1;
+-    }
+     return capacity;
+   }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 3d342ca..8ad3d9d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -536,6 +536,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+           lmthread.join(3000);
+         }
+         dir.close();
++        blocksMap.close();
+       } catch (InterruptedException ie) {
+       } catch (IOException ie) {
+         LOG.error("Error closing FSDirectory", ie);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/util/GSet.java b/src/hdfs/org/apache/hadoop/hdfs/util/GSet.java
+index 97ad698..e56054e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/util/GSet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/util/GSet.java
+@@ -38,6 +38,7 @@ public interface GSet<K, E extends K> extends Iterable<E> {
+    * @param key The given key.
+    * @return true if the given key equals to a stored element.
+    *         Otherwise, return false.
++   * @throws NullPointerException if key == null.
+    */
+   boolean contains(K key);
+ 
+@@ -47,6 +48,7 @@ public interface GSet<K, E extends K> extends Iterable<E> {
+    * @param key The given key.
+    * @return The stored element if it exists.
+    *         Otherwise, return null.
++   * @throws NullPointerException if key == null.
+    */
+   E get(K key);
+ 
+@@ -63,6 +65,7 @@ public interface GSet<K, E extends K> extends Iterable<E> {
+    * @param element The element being put.
+    * @return the previous stored element if there is any.
+    *         Otherwise, return null.
++   * @throws NullPointerException if element == null.
+    */
+   E put(E element);
+ 
+@@ -72,6 +75,7 @@ public interface GSet<K, E extends K> extends Iterable<E> {
+    * @param key The key of the element being removed.
+    * @return If such element exists, return it.
+    *         Otherwise, return null. 
+-   */
++    * @throws NullPointerException if key == null.
++  */
+   E remove(K key);
+ }
+\ No newline at end of file
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/util/LightWeightGSet.java b/src/hdfs/org/apache/hadoop/hdfs/util/LightWeightGSet.java
+new file mode 100644
+index 0000000..3fc1860
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/util/LightWeightGSet.java
+@@ -0,0 +1,283 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.util;
++
++import java.io.PrintStream;
++import java.util.ConcurrentModificationException;
++import java.util.Iterator;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/**
++ * A low memory footprint {@link GSet} implementation,
++ * which uses an array for storing the elements
++ * and linked lists for collision resolution.
++ *
++ * No rehash will be performed.
++ * Therefore, the internal array will never be resized.
++ *
++ * This class does not support null element.
++ *
++ * This class is not thread safe.
++ *
++ * @param <K> Key type for looking up the elements
++ * @param <E> Element type, which must be
++ *       (1) a subclass of K, and
++ *       (2) implementing {@link LinkedElement} interface.
++ */
++public class LightWeightGSet<K, E extends K> implements GSet<K, E> {
++  /**
++   * Elements of {@link LightWeightGSet}.
++   */
++  public static interface LinkedElement {
++    /** Set the next element. */
++    public void setNext(LinkedElement next);
++
++    /** Get the next element. */
++    public LinkedElement getNext();
++  }
++
++  public static final Log LOG = LogFactory.getLog(GSet.class);
++  static final int MAX_ARRAY_LENGTH = 1 << 30; //prevent int overflow problem
++  static final int MIN_ARRAY_LENGTH = 1;
++
++  /**
++   * An internal array of entries, which are the rows of the hash table.
++   * The size must be a power of two.
++   */
++  private final LinkedElement[] entries;
++  /** A mask for computing the array index from the hash value of an element. */
++  private final int hash_mask;
++  /** The size of the set (not the entry array). */
++  private int size = 0;
++  /** Modification version for fail-fast.
++   * @see ConcurrentModificationException
++   */
++  private volatile int modification = 0;
++
++  /**
++   * @param recommended_length Recommended size of the internal array.
++   */
++  public LightWeightGSet(final int recommended_length) {
++    final int actual = actualArrayLength(recommended_length);
++    LOG.info("recommended=" + recommended_length + ", actual=" + actual);
++
++    entries = new LinkedElement[actual];
++    hash_mask = entries.length - 1;
++  }
++
++  //compute actual length
++  private static int actualArrayLength(int recommended) {
++    if (recommended > MAX_ARRAY_LENGTH) {
++      return MAX_ARRAY_LENGTH;
++    } else if (recommended < MIN_ARRAY_LENGTH) {
++      return MIN_ARRAY_LENGTH;
++    } else {
++      final int a = Integer.highestOneBit(recommended);
++      return a == recommended? a: a << 1;
++    }
++  }
++
++  @Override
++  public int size() {
++    return size;
++  }
++
++  private int getIndex(final K key) {
++    return key.hashCode() & hash_mask;
++  }
++
++  private E convert(final LinkedElement e){
++    @SuppressWarnings("unchecked")
++    final E r = (E)e;
++    return r;
++  }
++
++  @Override
++  public E get(final K key) {
++    //validate key
++    if (key == null) {
++      throw new NullPointerException("key == null");
++    }
++
++    //find element
++    final int index = getIndex(key);
++    for(LinkedElement e = entries[index]; e != null; e = e.getNext()) {
++      if (e.equals(key)) {
++        return convert(e);
++      }
++    }
++    //element not found
++    return null;
++  }
++
++  @Override
++  public boolean contains(final K key) {
++    return get(key) != null;
++  }
++
++  @Override
++  public E put(final E element) {
++    //validate element
++    if (element == null) {
++      throw new NullPointerException("Null element is not supported.");
++    }
++    if (!(element instanceof LinkedElement)) {
++      throw new IllegalArgumentException(
++          "!(element instanceof LinkedElement), element.getClass()="
++          + element.getClass());
++    }
++    final LinkedElement e = (LinkedElement)element;
++
++    //find index
++    final int index = getIndex(element);
++
++    //remove if it already exists
++    final E existing = remove(index, element);
++
++    //insert the element to the head of the linked list
++    modification++;
++    size++;
++    e.setNext(entries[index]);
++    entries[index] = e;
++
++    return existing;
++  }
++
++  /**
++   * Remove the element corresponding to the key,
++   * given key.hashCode() == index.
++   *
++   * @return If such element exists, return it.
++   *         Otherwise, return null.
++   */
++  private E remove(final int index, final K key) {
++    if (entries[index] == null) {
++      return null;
++    } else if (entries[index].equals(key)) {
++      //remove the head of the linked list
++      modification++;
++      size--;
++      final LinkedElement e = entries[index];
++      entries[index] = e.getNext();
++      e.setNext(null);
++      return convert(e);
++    } else {
++      //head != null and key is not equal to head
++      //search the element
++      LinkedElement prev = entries[index];
++      for(LinkedElement curr = prev.getNext(); curr != null; ) {
++        if (curr.equals(key)) {
++          //found the element, remove it
++          modification++;
++          size--;
++          prev.setNext(curr.getNext());
++          curr.setNext(null);
++          return convert(curr);
++        } else {
++          prev = curr;
++          curr = curr.getNext();
++        }
++      }
++      //element not found
++      return null;
++    }
++  }
++
++  @Override
++  public E remove(final K key) {
++    //validate key
++    if (key == null) {
++      throw new NullPointerException("key == null");
++    }
++    return remove(getIndex(key), key);
++  }
++
++  @Override
++  public Iterator<E> iterator() {
++    return new SetIterator();
++  }
++
++  @Override
++  public String toString() {
++    final StringBuilder b = new StringBuilder(getClass().getSimpleName());
++    b.append("(size=").append(size)
++     .append(String.format(", %08x", hash_mask))
++     .append(", modification=").append(modification)
++     .append(", entries.length=").append(entries.length)
++     .append(")");
++    return b.toString();
++  }
++
++  /** Print detailed information of this object. */
++  public void printDetails(final PrintStream out) {
++    out.print(this + ", entries = [");
++    for(int i = 0; i < entries.length; i++) {
++      if (entries[i] != null) {
++        LinkedElement e = entries[i];
++        out.print("\n  " + i + ": " + e);
++        for(e = e.getNext(); e != null; e = e.getNext()) {
++          out.print(" -> " + e);
++        }
++      }
++    }
++    out.println("\n]");
++  }
++
++  private class SetIterator implements Iterator<E> {
++    /** The starting modification for fail-fast. */
++    private final int startModification = modification;
++    /** The current index of the entry array. */
++    private int index = -1;
++    /** The next element to return. */
++    private LinkedElement next = nextNonemptyEntry();
++
++    /** Find the next nonempty entry starting at (index + 1). */
++    private LinkedElement nextNonemptyEntry() {
++      for(index++; index < entries.length && entries[index] == null; index++);
++      return index < entries.length? entries[index]: null;
++    }
++
++    @Override
++    public boolean hasNext() {
++      return next != null;
++    }
++
++    @Override
++    public E next() {
++      if (modification != startModification) {
++        throw new ConcurrentModificationException("modification=" + modification
++            + " != startModification = " + startModification);
++      }
++
++      final E e = convert(next);
++
++      //find the next element
++      final LinkedElement n = next.getNext();
++      next = n != null? n: nextNonemptyEntry();
++
++      return e;
++    }
++
++    @Override
++    public void remove() {
++      throw new UnsupportedOperationException("Remove is not supported.");
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/util/TestGSet.java b/src/test/org/apache/hadoop/hdfs/util/TestGSet.java
+new file mode 100644
+index 0000000..538f01a
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/util/TestGSet.java
+@@ -0,0 +1,454 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.util;
++
++import java.util.ConcurrentModificationException;
++import java.util.Iterator;
++import java.util.Random;
++
++import org.junit.Assert;
++import org.junit.Test;
++
++public class TestGSet {
++  private static final Random ran = new Random();
++  private static final long starttime = System.currentTimeMillis();
++
++  private static void print(Object s) {
++    System.out.print(s);
++    System.out.flush();
++  }
++
++  private static void println(Object s) {
++    System.out.println(s);
++  }
++
++  @Test
++  public void testExceptionCases() {
++    {
++      //test contains
++      final LightWeightGSet<Integer, Integer> gset
++        = new LightWeightGSet<Integer, Integer>(16);
++      try {
++        //test contains with a null element
++        gset.contains(null);
++        Assert.fail();
++      } catch(NullPointerException e) {
++        LightWeightGSet.LOG.info("GOOD: getting " + e, e);
++      }
++    }
++
++    {
++      //test get
++      final LightWeightGSet<Integer, Integer> gset
++        = new LightWeightGSet<Integer, Integer>(16);
++      try {
++        //test get with a null element
++        gset.get(null);
++        Assert.fail();
++      } catch(NullPointerException e) {
++        LightWeightGSet.LOG.info("GOOD: getting " + e, e);
++      }
++    }
++
++    {
++      //test put
++      final LightWeightGSet<Integer, Integer> gset
++        = new LightWeightGSet<Integer, Integer>(16);
++      try {
++        //test put with a null element
++        gset.put(null);
++        Assert.fail();
++      } catch(NullPointerException e) {
++        LightWeightGSet.LOG.info("GOOD: getting " + e, e);
++      }
++      try {
++        //test putting an element which is not implementing LinkedElement
++        gset.put(1);
++        Assert.fail();
++      } catch(IllegalArgumentException e) {
++        LightWeightGSet.LOG.info("GOOD: getting " + e, e);
++      }
++    }
++
++    {
++      //test iterator
++      final IntElement[] data = new IntElement[5];
++      for(int i = 0; i < data.length; i++) {
++        data[i] = new IntElement(i, i);
++      }
++
++      for(int v = 1; v < data.length-1; v++) {
++        {
++          //test remove while iterating
++          final GSet<IntElement, IntElement> gset = createGSet(data);
++          for(IntElement i : gset) {
++            if (i.value == v) {
++              //okay because data[0] is not in gset
++              gset.remove(data[0]);
++            }
++          }
++
++          try {
++            //exception because data[1] is in gset
++            for(IntElement i : gset) {
++              if (i.value == v) {
++                gset.remove(data[1]);
++              }
++            }
++            Assert.fail();
++          } catch(ConcurrentModificationException e) {
++            LightWeightGSet.LOG.info("GOOD: getting " + e, e);
++          }
++        }
++
++        {
++          //test put new element while iterating
++          final GSet<IntElement, IntElement> gset = createGSet(data);
++          try {
++            for(IntElement i : gset) {
++              if (i.value == v) {
++                gset.put(data[0]);
++              }
++            }
++            Assert.fail();
++          } catch(ConcurrentModificationException e) {
++            LightWeightGSet.LOG.info("GOOD: getting " + e, e);
++          }
++        }
++
++        {
++          //test put existing element while iterating
++          final GSet<IntElement, IntElement> gset = createGSet(data);
++          try {
++            for(IntElement i : gset) {
++              if (i.value == v) {
++                gset.put(data[3]);
++              }
++            }
++            Assert.fail();
++          } catch(ConcurrentModificationException e) {
++            LightWeightGSet.LOG.info("GOOD: getting " + e, e);
++          }
++        }
++      }
++    }
++  }
++
++  private static GSet<IntElement, IntElement> createGSet(final IntElement[] data) {
++    final GSet<IntElement, IntElement> gset
++      = new LightWeightGSet<IntElement, IntElement>(8);
++    for(int i = 1; i < data.length; i++) {
++      gset.put(data[i]);
++    }
++    return gset;
++  }
++
++  @Test
++  public void testGSet() {
++    //The parameters are: table length, data size, modulus.
++    check(new GSetTestCase(1, 1 << 4, 65537));
++    check(new GSetTestCase(17, 1 << 16, 17));
++    check(new GSetTestCase(255, 1 << 10, 65537));
++  }
++
++  /**
++   * A long test,
++   * which may take ~5 hours,
++   * with various data sets and parameters.
++   * If you are changing the implementation,
++   * please un-comment the following line in order to run the test.
++   */
++  //@Test
++  public void runMultipleTestGSet() {
++    for(int offset = -2; offset <= 2; offset++) {
++      runTestGSet(1, offset);
++      for(int i = 1; i < Integer.SIZE - 1; i++) {
++        runTestGSet((1 << i) + 1, offset);
++      }
++    }
++  }
++
++  private static void runTestGSet(final int modulus, final int offset) {
++    println("\n\nmodulus=" + modulus + ", offset=" + offset);
++    for(int i = 0; i <= 16; i += 4) {
++      final int tablelength = (1 << i) + offset;
++
++      final int upper = i + 2;
++      final int steps = Math.max(1, upper/3);
++
++      for(int j = 0; j <= upper; j += steps) {
++        final int datasize = 1 << j;
++        check(new GSetTestCase(tablelength, datasize, modulus));
++      }
++    }
++  }
++
++  private static void check(final GSetTestCase test) {
++    //check add
++    print("  check add .................. ");
++    for(int i = 0; i < test.data.size()/2; i++) {
++      test.put(test.data.get(i));
++    }
++    for(int i = 0; i < test.data.size(); i++) {
++      test.put(test.data.get(i));
++    }
++    println("DONE " + test.stat());
++
++    //check remove and add
++    print("  check remove & add ......... ");
++    for(int j = 0; j < 10; j++) {
++      for(int i = 0; i < test.data.size()/2; i++) {
++        final int r = ran.nextInt(test.data.size());
++        test.remove(test.data.get(r));
++      }
++      for(int i = 0; i < test.data.size()/2; i++) {
++        final int r = ran.nextInt(test.data.size());
++        test.put(test.data.get(r));
++      }
++    }
++    println("DONE " + test.stat());
++
++    //check remove
++    print("  check remove ............... ");
++    for(int i = 0; i < test.data.size(); i++) {
++      test.remove(test.data.get(i));
++    }
++    Assert.assertEquals(0, test.gset.size());
++    println("DONE " + test.stat());
++
++    //check remove and add again
++    print("  check remove & add again ... ");
++    for(int j = 0; j < 10; j++) {
++      for(int i = 0; i < test.data.size()/2; i++) {
++        final int r = ran.nextInt(test.data.size());
++        test.remove(test.data.get(r));
++      }
++      for(int i = 0; i < test.data.size()/2; i++) {
++        final int r = ran.nextInt(test.data.size());
++        test.put(test.data.get(r));
++      }
++    }
++    println("DONE " + test.stat());
++
++    final long s = (System.currentTimeMillis() - starttime)/1000L;
++    println("total time elapsed=" + s + "s\n");
++  }
++
++  /** Test cases */
++  private static class GSetTestCase implements GSet<IntElement, IntElement> {
++    final GSet<IntElement, IntElement> expected
++        = new GSetByHashMap<IntElement, IntElement>(1024, 0.75f);
++    final GSet<IntElement, IntElement> gset;
++    final IntData data;
++
++    final String info;
++    final long starttime = System.currentTimeMillis();
++    /** Determine the probability in {@link #check()}. */
++    final int denominator;
++    int iterate_count = 0;
++    int contain_count = 0;
++
++    GSetTestCase(int tablelength, int datasize, int modulus) {
++      denominator = Math.min((datasize >> 7) + 1, 1 << 16);
++      info = getClass().getSimpleName()
++          + ": tablelength=" + tablelength
++          + ", datasize=" + datasize
++          + ", modulus=" + modulus
++          + ", denominator=" + denominator;
++      println(info);
++
++      data  = new IntData(datasize, modulus);
++      gset = new LightWeightGSet<IntElement, IntElement>(tablelength);
++
++      Assert.assertEquals(0, gset.size());
++    }
++
++    private boolean containsTest(IntElement key) {
++      final boolean e = expected.contains(key);
++      Assert.assertEquals(e, gset.contains(key));
++      return e;
++    }
++    @Override
++    public boolean contains(IntElement key) {
++      final boolean e = containsTest(key);
++      check();
++      return e;
++    }
++
++    private IntElement getTest(IntElement key) {
++      final IntElement e = expected.get(key);
++      Assert.assertEquals(e.id, gset.get(key).id);
++      return e;
++    }
++    @Override
++    public IntElement get(IntElement key) {
++      final IntElement e = getTest(key);
++      check();
++      return e;
++    }
++
++    private IntElement putTest(IntElement element) {
++      final IntElement e = expected.put(element);
++      if (e == null) {
++        Assert.assertEquals(null, gset.put(element));
++      } else {
++        Assert.assertEquals(e.id, gset.put(element).id);
++      }
++      return e;
++    }
++    @Override
++    public IntElement put(IntElement element) {
++      final IntElement e = putTest(element);
++      check();
++      return e;
++    }
++
++    private IntElement removeTest(IntElement key) {
++      final IntElement e = expected.remove(key);
++      if (e == null) {
++        Assert.assertEquals(null, gset.remove(key));
++      } else {
++        Assert.assertEquals(e.id, gset.remove(key).id);
++      }
++
++      check();
++      return e;
++    }
++    @Override
++    public IntElement remove(IntElement key) {
++      final IntElement e = removeTest(key);
++      check();
++      return e;
++    }
++
++    private int sizeTest() {
++      final int s = expected.size();
++      Assert.assertEquals(s, gset.size());
++      return s;
++    }
++    @Override
++    public int size() {
++      final int s = sizeTest();
++      check();
++      return s;
++    }
++
++    @Override
++    public Iterator<IntElement> iterator() {
++      throw new UnsupportedOperationException();
++    }
++
++    void check() {
++      //test size
++      sizeTest();
++
++      if (ran.nextInt(denominator) == 0) {
++        //test get(..), check content and test iterator
++        iterate_count++;
++        for(IntElement i : gset) {
++          getTest(i);
++        }
++      }
++
++      if (ran.nextInt(denominator) == 0) {
++        //test contains(..)
++        contain_count++;
++        final int count = Math.min(data.size(), 1000);
++        if (count == data.size()) {
++          for(IntElement i : data.integers) {
++            containsTest(i);
++          }
++        } else {
++          for(int j = 0; j < count; j++) {
++            containsTest(data.get(ran.nextInt(data.size())));
++          }
++        }
++      }
++    }
++
++    String stat() {
++      final long t = System.currentTimeMillis() - starttime;
++      return String.format(" iterate=%5d, contain=%5d, time elapsed=%5d.%03ds",
++          iterate_count, contain_count, t/1000, t%1000);
++    }
++  }
++
++  /** Test data set */
++  private static class IntData {
++    final IntElement[] integers;
++
++    IntData(int size, int modulus) {
++      integers = new IntElement[size];
++      for(int i = 0; i < integers.length; i++) {
++        integers[i] = new IntElement(i, ran.nextInt(modulus));
++      }
++    }
++
++    IntElement get(int i) {
++      return integers[i];
++    }
++
++    int size() {
++      return integers.length;
++    }
++  }
++
++  /** Elements of {@link LightWeightGSet} in this test */
++  private static class IntElement implements LightWeightGSet.LinkedElement,
++      Comparable<IntElement> {
++    private LightWeightGSet.LinkedElement next;
++    final int id;
++    final int value;
++
++    IntElement(int id, int value) {
++      this.id = id;
++      this.value = value;
++    }
++
++    @Override
++    public boolean equals(Object obj) {
++      return obj != null && obj instanceof IntElement
++          && value == ((IntElement)obj).value;
++    }
++
++    @Override
++    public int hashCode() {
++      return value;
++    }
++
++    @Override
++    public int compareTo(IntElement that) {
++      return value - that.value;
++    }
++
++    @Override
++    public String toString() {
++      return id + "#" + value;
++    }
++
++    @Override
++    public LightWeightGSet.LinkedElement getNext() {
++      return next;
++    }
++
++    @Override
++    public void setNext(LightWeightGSet.LinkedElement e) {
++      next = e;
++    }
++  }
++}
+-- 
+1.7.0.4
+

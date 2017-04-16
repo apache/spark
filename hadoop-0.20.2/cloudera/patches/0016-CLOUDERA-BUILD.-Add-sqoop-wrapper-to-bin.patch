@@ -1,0 +1,34 @@
+From 6991a0eb635953bf3729bce330c426ed7d8b996a Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:26:29 -0800
+Subject: [PATCH 0016/1179] CLOUDERA-BUILD. Add sqoop wrapper to bin
+
+Description: Adds a '/usr/bin/sqoop' wrapper script for users
+Reason: User-experience improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ bin/sqoop |   11 +++++++++++
+ 1 files changed, 11 insertions(+), 0 deletions(-)
+ create mode 100755 bin/sqoop
+
+diff --git a/bin/sqoop b/bin/sqoop
+new file mode 100755
+index 0000000..63bcd58
+--- /dev/null
++++ b/bin/sqoop
+@@ -0,0 +1,11 @@
++#!/bin/sh
++
++bin=`dirname $0`
++bin=`cd ${bin} && pwd`
++
++. "$bin"/hadoop-config.sh
++SQOOP_JAR_PATH="$HADOOP_HOME/contrib/sqoop"
++
++SQOOP_JAR=`ls -1 ${SQOOP_JAR_PATH}/hadoop-*-sqoop.jar | head -n 1`
++${bin}/hadoop jar ${SQOOP_JAR} org.apache.hadoop.sqoop.Sqoop "$@"
++
+-- 
+1.7.0.4
+

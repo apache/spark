@@ -1,0 +1,32 @@
+From 6037aff7bb49c057b9661d83fb7c89dfd3694738 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 8 Mar 2011 15:55:11 -0800
+Subject: [PATCH 0915/1179] HADOOP-7154. Set MALLOC_ARENA_MAX in default config
+
+Reason: RHEL 6.0 support
+Author: Todd Lipcon
+Ref: CDH-2721
+---
+ bin/hadoop-config.sh |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
+
+diff --git a/bin/hadoop-config.sh b/bin/hadoop-config.sh
+index a76b8e9..22d1717 100644
+--- a/bin/hadoop-config.sh
++++ b/bin/hadoop-config.sh
+@@ -97,6 +97,12 @@ EOF
+   fi
+ fi
+ 
++# Newer versions of glibc use an arena memory allocator that causes virtual
++# memory usage to explode. This interacts badly with the many threads that
++# we use in Hadoop. Tune the variable down to prevent vmem explosion.
++export MALLOC_ARENA_MAX=${MALLOC_ARENA_MAX:-4}
++
++
+ if [ -d $HADOOP_HOME/pids ]; then
+ HADOOP_PID_DIR="${HADOOP_PID_DIR:-$HADOOP_HOME/pids}"
+ fi
+-- 
+1.7.0.4
+

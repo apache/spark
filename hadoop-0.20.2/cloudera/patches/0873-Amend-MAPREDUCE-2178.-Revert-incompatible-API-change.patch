@@ -1,0 +1,103 @@
+From 541407b9f144228f2b7934decc114c59b769e481 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 12 Feb 2011 13:28:13 -0800
+Subject: [PATCH 0873/1179] Amend MAPREDUCE-2178. Revert incompatible API change to FileUtil.chmod
+
+Reverts a change which removed InterruptedException from FileUtil.chmod's signature.
+Though the function never throws InterruptedException, this removal causes
+compilation failures for any clients who try to catch this exception (incl Pig)
+
+Reason: fix Pig build failure
+Author: Todd Lipcon
+Ref: CDH-2633
+---
+ src/core/org/apache/hadoop/fs/FileUtil.java        |    4 ++--
+ .../filecache/TrackerDistributedCacheManager.java  |    8 +++++++-
+ .../org/apache/hadoop/mapred/JobLocalizer.java     |    8 +++++++-
+ .../hadoop/mapred/TestTaskTrackerLocalization.java |   10 ++++++++--
+ 4 files changed, 24 insertions(+), 6 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FileUtil.java b/src/core/org/apache/hadoop/fs/FileUtil.java
+index 9962a3c..910679d 100644
+--- a/src/core/org/apache/hadoop/fs/FileUtil.java
++++ b/src/core/org/apache/hadoop/fs/FileUtil.java
+@@ -706,7 +706,7 @@ public class FileUtil {
+    * @throws InterruptedException
+    */
+   public static int chmod(String filename, String perm
+-                          ) throws IOException {
++                          ) throws IOException, InterruptedException {
+     return chmod(filename, perm, false);
+   }
+ 
+@@ -721,7 +721,7 @@ public class FileUtil {
+    * @throws InterruptedException
+    */
+   public static int chmod(String filename, String perm, boolean recursive)
+-                            throws IOException {
++                            throws IOException, InterruptedException {
+     StringBuffer cmdBuf = new StringBuffer();
+     cmdBuf.append("chmod ");
+     if (recursive) {
+diff --git a/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java b/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
+index d2c8243..581f400 100644
+--- a/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
++++ b/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
+@@ -557,7 +557,13 @@ public class TrackerDistributedCacheManager {
+         // else will not do anyhting
+         // and copy the file into the dir as it is
+       }
+-      FileUtil.chmod(destDir.toString(), "ugo+rx", true);
++      try {
++        FileUtil.chmod(destDir.toString(), "ugo+rx", true);
++      } catch (InterruptedException ie) {
++        // This exception is never actually thrown, but the signature says
++        // it is, and we can't make the incompatible change within CDH
++        throw new IOException("Interrupted while chmodding", ie);
++      }
+     }
+     // promote the output to the final location
+     if (!localFs.rename(workDir, finalDir)) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java b/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java
+index 99710bc..df13e45 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java
+@@ -278,7 +278,13 @@ public class JobLocalizer {
+         new File(localJarFile.toString()),
+         new File(localJarFile.getParent().toString()),
+         localJobConf.getJarUnpackPattern());
+-      FileUtil.chmod(localJarFile.getParent().toString(), "ugo+rx", true);
++      try {
++        FileUtil.chmod(localJarFile.getParent().toString(), "ugo+rx", true);
++      } catch (InterruptedException ie) {
++        // This exception is never actually thrown, but the signature says
++        // it is, and we can't make the incompatible change within CDH
++        throw new IOException("Interrupted while chmodding", ie);
++      }
+     }
+   }
+ 
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+index e1471eb..5b0e24b 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+@@ -610,8 +610,14 @@ public class TestTaskTrackerLocalization extends TestCase {
+     out.close();
+     // no write permission for subDir and subDir/file
+     int ret = 0;
+-    if((ret = FileUtil.chmod(subDir.toUri().getPath(), "a=rx", true)) != 0) {
+-      LOG.warn("chmod failed for " + subDir + ";retVal=" + ret);
++    try {
++      if((ret = FileUtil.chmod(subDir.toUri().getPath(), "a=rx", true)) != 0) {
++        LOG.warn("chmod failed for " + subDir + ";retVal=" + ret);
++      }
++    } catch (InterruptedException ie) {
++      // This exception is never actually thrown, but the signature says
++      // it is, and we can't make the incompatible change within CDH
++      throw new IOException("Interrupted while chmodding", ie);
+     }
+   }
+ 
+-- 
+1.7.0.4
+

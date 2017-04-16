@@ -1,0 +1,253 @@
+From 8fcb419648160efaed6fdd467875c3b1743d2bee Mon Sep 17 00:00:00 2001
+From: Dhruba Borthakur <dhruba@apache.org>
+Date: Wed, 9 Jun 2010 23:12:21 +0000
+Subject: [PATCH 0270/1179] HDFS-988. Fix bug where savenameSpace can corrupt edits log.
+
+Description: Fixes several synchronization errors in the NameNode and ensures
+             that all edits have been synced to the edits log before
+             the namespace is saved.
+Reason: Fixes potential data corruption bug.
+Author: Todd Lipcon
+Ref: CDH-1436
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   93 ++++++++++++-------
+ 1 files changed, 59 insertions(+), 34 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 80be318..400d03a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -455,7 +455,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     return fsNamesystemObject;
+   } 
+ 
+-  NamespaceInfo getNamespaceInfo() {
++  synchronized NamespaceInfo getNamespaceInfo() {
+     return new NamespaceInfo(dir.fsImage.getNamespaceID(),
+                              dir.fsImage.getCTime(),
+                              getDistributedUpgradeVersion());
+@@ -677,12 +677,14 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    * Set permissions for an existing file.
+    * @throws IOException
+    */
+-  public synchronized void setPermission(String src, FsPermission permission
++  public void setPermission(String src, FsPermission permission
+       ) throws IOException {
+-    if (isInSafeMode())
+-       throw new SafeModeException("Cannot set permission for " + src, safeMode);
+-    checkOwner(src);
+-    dir.setPermission(src, permission);
++    synchronized (this) {
++      if (isInSafeMode())
++         throw new SafeModeException("Cannot set permission for " + src, safeMode);
++      checkOwner(src);
++      dir.setPermission(src, permission);
++    }
+     getEditLog().logSync();
+     if (auditLog.isInfoEnabled()) {
+       final FileStatus stat = dir.getFileInfo(src);
+@@ -696,21 +698,23 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    * Set owner for an existing file.
+    * @throws IOException
+    */
+-  public synchronized void setOwner(String src, String username, String group
++  public void setOwner(String src, String username, String group
+       ) throws IOException {
+-    if (isInSafeMode())
+-       throw new SafeModeException("Cannot set owner for " + src, safeMode);
+-    PermissionChecker pc = checkOwner(src);
+-    if (!pc.isSuper) {
+-      if (username != null && !pc.user.equals(username)) {
+-        throw new AccessControlException("Non-super user cannot change owner.");
+-      }
+-      if (group != null && !pc.containsGroup(group)) {
+-        throw new AccessControlException("User does not belong to " + group
+-            + " .");
++    synchronized (this) {
++      if (isInSafeMode())
++         throw new SafeModeException("Cannot set owner for " + src, safeMode);
++      PermissionChecker pc = checkOwner(src);
++      if (!pc.isSuper) {
++        if (username != null && !pc.user.equals(username)) {
++          throw new AccessControlException("Non-super user cannot change owner.");
++        }
++        if (group != null && !pc.containsGroup(group)) {
++          throw new AccessControlException("User does not belong to " + group
++              + " .");
++        }
+       }
++      dir.setOwner(src, username, group);
+     }
+-    dir.setOwner(src, username, group);
+     getEditLog().logSync();
+     if (auditLog.isInfoEnabled()) {
+       final FileStatus stat = dir.getFileInfo(src);
+@@ -859,6 +863,9 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       throw new IOException("Access time for hdfs is not configured. " +
+                             " Please set dfs.support.accessTime configuration parameter.");
+     }
++    if (isInSafeMode()) {
++      throw new SafeModeException("Cannot set accesstimes  for " + src, safeMode);
++    }
+     //
+     // The caller needs to have write access to set access & modification times.
+     if (isPermissionEnabled) {
+@@ -1255,10 +1262,6 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+                                   +src+" for "+clientName);
+ 
+     synchronized (this) {
+-      if (isInSafeMode()) {
+-        throw new SafeModeException("Cannot add block to " + src, safeMode);
+-      }
+-
+       // have we exceeded the configured limit of fs objects.
+       checkFsObjectLimit();
+ 
+@@ -1289,6 +1292,9 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+ 
+     // Allocate a new block and record it in the INode. 
+     synchronized (this) {
++      if (isInSafeMode()) {
++        throw new SafeModeException("Cannot add block to " + src, safeMode);
++      }
+       INode[] pathINodes = dir.getExistingPathINodes(src);
+       int inodesLen = pathINodes.length;
+       checkLease(src, clientName, pathINodes[inodesLen-1]);
+@@ -1322,6 +1328,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     //
+     NameNode.stateChangeLog.debug("BLOCK* NameSystem.abandonBlock: "
+                                   +b+"of file "+src);
++    if (isInSafeMode()) {
++      throw new SafeModeException("Cannot abandon block " + b +
++                                  " for fle" + src, safeMode);
++    }
+     INodeFileUnderConstruction file = checkLease(src, holder);
+     dir.removeBlock(src, file, b);
+     NameNode.stateChangeLog.debug("BLOCK* NameSystem.abandonBlock: "
+@@ -1605,7 +1615,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   /**
+    * Invalidates the given block on the given datanode.
+    */
+-  public synchronized void invalidateBlock(Block blk, DatanodeInfo dn)
++  private synchronized void invalidateBlock(Block blk, DatanodeInfo dn)
+     throws IOException {
+     NameNode.stateChangeLog.info("DIR* NameSystem.invalidateBlock: " 
+                                  + blk + " on " 
+@@ -1804,13 +1814,15 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    * contract.
+    */
+   void setQuota(String path, long nsQuota, long dsQuota) throws IOException {
+-   if (isInSafeMode())
+-      throw new SafeModeException("Cannot set quota on " + path, safeMode); 
+-   if (isPermissionEnabled) {
+-      checkSuperuserPrivilege();
+-    }
++   synchronized (this) {
++     if (isInSafeMode())
++        throw new SafeModeException("Cannot set quota on " + path, safeMode); 
++     if (isPermissionEnabled) {
++        checkSuperuserPrivilege();
++      }
+     
+-    dir.setQuota(path, nsQuota, dsQuota);
++      dir.setQuota(path, nsQuota, dsQuota);
++    }
+     getEditLog().logSync();
+   }
+   
+@@ -1830,6 +1842,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       INodeFileUnderConstruction pendingFile  = checkLease(src, clientName);
+       dir.persistBlocks(src, pendingFile);
+     }
++    getEditLog().logSync();
+   }
+ 
+   /**
+@@ -1920,7 +1933,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     checkReplicationFactor(newFile);
+   }
+ 
+-  synchronized void commitBlockSynchronization(Block lastblock,
++  public void commitBlockSynchronization(Block lastblock,
+       long newgenerationstamp, long newlength,
+       boolean closeFile, boolean deleteblock, DatanodeID[] newtargets
+       ) throws IOException {
+@@ -1931,6 +1944,12 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+           + ", closeFile=" + closeFile
+           + ", deleteBlock=" + deleteblock
+           + ")");
++    String src = null;
++    synchronized (this) {
++    if (isInSafeMode()) {
++      throw new SafeModeException("Cannot commitBlockSynchronization " 
++                                  + lastblock, safeMode);
++    }
+     final BlockInfo oldblockinfo = blocksMap.getStoredBlock(lastblock);
+     if (oldblockinfo == null) {
+       throw new IOException("Block (=" + lastblock + ") not found");
+@@ -1973,7 +1992,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+ 
+     // If this commit does not want to close the file, persist
+     // blocks only if append is supported and return
+-    String src = leaseManager.findPath(pendingFile);
++    src = leaseManager.findPath(pendingFile);
+     if (!closeFile) {
+       if (supportAppends) {
+         dir.persistBlocks(src, pendingFile);
+@@ -1985,6 +2004,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     
+     //remove lease, close file
+     finalizeINodeFileUnderConstruction(src, pendingFile);
++    } // end of synchronized section
++
+     getEditLog().logSync();
+     LOG.info("commitBlockSynchronization(newblock=" + lastblock
+           + ", file=" + src
+@@ -1997,7 +2018,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   /**
+    * Renew the lease(s) held by the given client
+    */
+-  void renewLease(String holder) throws IOException {
++  synchronized void renewLease(String holder) throws IOException {
+     if (isInSafeMode())
+       throw new SafeModeException("Cannot renew lease for " + holder, safeMode);
+     leaseManager.renewLease(holder);
+@@ -2584,7 +2605,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+               + "Removing block " + block
+               + " from neededReplications as it has enough replicas.");
+           return false;
+-        }
++        } 
+ 
+         // Add block to the to be replicated list
+         srcNode.addBlockToBeReplicated(block, targets);
+@@ -4453,6 +4474,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       return;
+     }
+     safeMode.setManual();
++    getEditLog().logSyncAll();
+     NameNode.stateChangeLog.info("STATE* Safe mode is ON. " 
+                                 + safeMode.getTurnOffTip());
+   }
+@@ -4742,7 +4764,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   /**
+    * Increments, logs and then returns the stamp
+    */
+-  long nextGenerationStamp() {
++  private long nextGenerationStamp() {
+     long gs = generationStamp.nextStamp();
+     getEditLog().logGenerationStamp(gs);
+     return gs;
+@@ -4753,6 +4775,9 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    * Increments, logs and then returns the stamp
+    */
+   synchronized long nextGenerationStampForBlock(Block block) throws IOException {
++    if (isInSafeMode()) {
++      throw new SafeModeException("Cannot get nextGenStamp for " + block, safeMode);
++    }
+     BlockInfo storedBlock = blocksMap.getStoredBlock(block);
+     if (storedBlock == null) {
+       String msg = block + " is already commited, storedBlock == null.";
+-- 
+1.7.0.4
+

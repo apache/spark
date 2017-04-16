@@ -1,0 +1,142 @@
+From b8f3851b9604b8c1156c4a9df5c6a8b532676104 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Feb 2011 12:11:15 -0800
+Subject: [PATCH 0857/1179] Amend MAPREDUCE-2178. Fix racy check for config file perms
+
+Reason: Security fix
+Author: Todd Lipcon
+Ref: CDH-2623
+---
+ src/c++/task-controller/impl/configuration.c |   53 +++++++++++---------------
+ src/c++/task-controller/impl/configuration.h |    8 ----
+ src/c++/task-controller/impl/main.c          |    3 -
+ 3 files changed, 22 insertions(+), 42 deletions(-)
+
+diff --git a/src/c++/task-controller/impl/configuration.c b/src/c++/task-controller/impl/configuration.c
+index 471a098..8103000 100644
+--- a/src/c++/task-controller/impl/configuration.c
++++ b/src/c++/task-controller/impl/configuration.c
+@@ -21,7 +21,7 @@
+ 
+ #include "configuration.h"
+ #include "task-controller.h"
+-
++#include <assert.h>
+ #include <errno.h>
+ #include <unistd.h>
+ #include <stdio.h>
+@@ -64,50 +64,34 @@ void free_configurations() {
+ }
+ 
+ /**
+- * Is the file/directory only writable by root.
+- * Returns 1 if true
++ * Ensure that the configuration file and all of the containing directories
++ * are only writable by root. Otherwise, an attacker can change the 
++ * configuration and potentially cause damage.
++ * returns 1 if permissions are ok
+  */
+-static int is_only_root_writable(const char *file) {
++int check_configuration_permissions(FILE *conf_file) {
++  int fd = fileno(conf_file);
++  assert(fd != -1);
++
+   struct stat file_stat;
+-  if (stat(file, &file_stat) != 0) {
+-    fprintf(LOGFILE, "Can't stat file %s - %s\n", file, strerror(errno));
++  if (fstat(fd, &file_stat) != 0) {
++    fprintf(LOGFILE, "Can't stat opened conf file - %s\n", strerror(errno));
+     return 0;
+   }
+   if (file_stat.st_uid != 0) {
+-    fprintf(LOGFILE, "File %s must be owned by root, but is owned by %d\n",
+-            file, file_stat.st_uid);
++    fprintf(LOGFILE, "File must be owned by root, but is owned by %d\n",
++            file_stat.st_uid);
+     return 0;
+   }
+   if ((file_stat.st_mode & (S_IWGRP | S_IWOTH)) != 0) {
+     fprintf(LOGFILE, 
+-	    "File %s must not be world or group writable, but is %03o\n",
+-	    file, file_stat.st_mode & (~S_IFMT));
++	    "File must not be world or group writable, but is %03o\n",
++	    file_stat.st_mode & (~S_IFMT));
+     return 0;
+   }
+   return 1;
+ }
+ 
+-/**
+- * Ensure that the configuration file and all of the containing directories
+- * are only writable by root. Otherwise, an attacker can change the 
+- * configuration and potentially cause damage.
+- * returns 0 if permissions are ok
+- */
+-int check_configuration_permissions(const char* file_name) {
+-  // copy the input so that we can modify it with dirname
+-  char* dir = strdup(file_name);
+-  char* buffer = dir;
+-  do {
+-    if (!is_only_root_writable(dir)) {
+-      free(buffer);
+-      return -1;
+-    }
+-    dir = dirname(dir);
+-  } while (strcmp(dir, "/") != 0);
+-  free(buffer);
+-  return 0;
+-}
+-
+ //function used to load the configurations present in the secure config
+ void read_config(const char* file_name) {
+   fprintf(LOGFILE, "Reading task controller config from %s\n" , file_name);
+@@ -136,6 +120,13 @@ void read_config(const char* file_name) {
+     fprintf(LOGFILE, "Invalid conf file provided : %s \n", file_name);
+     exit(INVALID_CONFIG_FILE);
+   }
++  // verify that the conf file is owned by root and has safe permissions
++  if (!check_configuration_permissions(conf_file)) {
++    fprintf(LOGFILE, "Invalid permissions or ownership on conf file %s\n", file_name);
++    fprintf(LOGFILE, "Must be owned by root and not writable by group or other\n");
++    exit(INVALID_CONFIG_FILE);
++  }
++
+   while(!feof(conf_file)) {
+     line = (char *) malloc(linesize);
+     if(line == NULL) {
+diff --git a/src/c++/task-controller/impl/configuration.h b/src/c++/task-controller/impl/configuration.h
+index 16ca23d..a216427 100644
+--- a/src/c++/task-controller/impl/configuration.h
++++ b/src/c++/task-controller/impl/configuration.h
+@@ -16,14 +16,6 @@
+  * limitations under the License.
+  */
+ 
+-/**
+- * Ensure that the configuration file and all of the containing directories
+- * are only writable by root. Otherwise, an attacker can change the 
+- * configuration and potentially cause damage.
+- * returns 0 if permissions are ok
+- */
+-int check_configuration_permissions(const char* file_name);
+-
+ // read the given configuration file
+ void read_config(const char* config_file);
+ 
+diff --git a/src/c++/task-controller/impl/main.c b/src/c++/task-controller/impl/main.c
+index 415fc10..1312fd0 100644
+--- a/src/c++/task-controller/impl/main.c
++++ b/src/c++/task-controller/impl/main.c
+@@ -84,9 +84,6 @@ int main(int argc, char **argv) {
+     fprintf(LOGFILE, "Configuration file %s not found.\n", orig_conf_file);
+     return INVALID_CONFIG_FILE;
+   }
+-  if (check_configuration_permissions(conf_file) != 0) {
+-    return INVALID_CONFIG_FILE;
+-  }
+   read_config(conf_file);
+   free(conf_file);
+ 
+-- 
+1.7.0.4
+

@@ -1,0 +1,84 @@
+From 85731af89c0e110d0219cdb4f6ea1cf09eb2e53a Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Wed, 2 Mar 2011 15:48:21 -0800
+Subject: [PATCH 0896/1179] MAPREDUCE-2351. mapred.job.tracker.history.completed.location should support an arbitrary filesystem URI
+
+Reason: Limitation
+Author: Tom White
+Ref: CDH-2714
+---
+ .../org/apache/hadoop/mapred/JobHistory.java       |    5 +++--
+ .../org/apache/hadoop/mapred/TestJobHistory.java   |   17 ++++++++++++++---
+ 2 files changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index 4b7fccc..2e66d3f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -355,8 +355,9 @@ public class JobHistory {
+     String doneLocation = conf.
+                      get("mapred.job.tracker.history.completed.location");
+     if (doneLocation != null) {
+-      DONE = fs.makeQualified(new Path(doneLocation));
+-      DONEDIR_FS = fs;
++      Path donePath = new Path(doneLocation);
++      DONEDIR_FS = donePath.getFileSystem(conf);
++      DONE = DONEDIR_FS.makeQualified(donePath);
+     } else {
+       DONE = new Path(LOG_DIR, "done");
+       DONEDIR_FS = LOGDIR_FS;
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistory.java b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+index 43bd5cf..202f17a 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistory.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+@@ -819,7 +819,16 @@ public class TestJobHistory extends TestCase {
+   }
+ 
+   public void testDoneFolderOnHDFS() throws IOException {
++    runDoneFolderTest("history_done");
++  }
++    
++  public void testDoneFolderNotOnDefaultFileSystem() throws IOException {
++    runDoneFolderTest("file://" + System.getProperty("test.build.data", "tmp") + "/history_done");
++  }
++    
++  private void runDoneFolderTest(String doneFolder) throws IOException {
+     MiniMRCluster mr = null;
++    MiniDFSCluster dfsCluster = null;
+     try {
+       JobConf conf = new JobConf();
+       // keep for less time
+@@ -827,10 +836,9 @@ public class TestJobHistory extends TestCase {
+       conf.setLong("mapred.jobtracker.retirejob.interval", 100000);
+ 
+       //set the done folder location
+-      String doneFolder = "history_done";
+       conf.set("mapred.job.tracker.history.completed.location", doneFolder);
+ 
+-      MiniDFSCluster dfsCluster = new MiniDFSCluster(conf, 2, true, null);
++      dfsCluster = new MiniDFSCluster(conf, 2, true, null);
+       mr = new MiniMRCluster(2, dfsCluster.getFileSystem().getUri().toString(),
+           3, null, null, conf);
+ 
+@@ -856,7 +864,7 @@ public class TestJobHistory extends TestCase {
+       
+       Path doneDir = JobHistory.getCompletedJobHistoryLocation();
+       assertEquals("History DONE folder not correct", 
+-          doneFolder, doneDir.getName());
++          new Path(doneFolder).getName(), doneDir.getName());
+       JobID id = job.getID();
+       String logFileName = getDoneFile(conf, id, doneDir);
+       assertNotNull(logFileName);
+@@ -901,6 +909,9 @@ public class TestJobHistory extends TestCase {
+         cleanupLocalFiles(mr);
+         mr.shutdown();
+       }
++      if (dfsCluster != null) {
++        dfsCluster.shutdown();
++      }
+     }
+   }
+ 
+-- 
+1.7.0.4
+

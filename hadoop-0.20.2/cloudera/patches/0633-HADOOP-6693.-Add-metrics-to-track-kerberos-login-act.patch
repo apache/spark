@@ -1,0 +1,236 @@
+From c04645dd48af89b8191e090efd15f8520946a606 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 30 Apr 2010 14:34:53 -0700
+Subject: [PATCH 0633/1179] HADOOP-6693. Add metrics to track kerberos login activity
+
+Patch: https://issues.apache.org/jira/secure/attachment/12443326/HADOOP-6693.rel20.1.patch
+Author: Suresh Srinivas
+Reason: Security
+Ref: YDH
+---
+ conf/hadoop-metrics.properties                     |    4 +
+ .../hadoop/security/UserGroupInformation.java      |   67 +++++++++++++++++++-
+ src/test/org/apache/hadoop/ipc/TestSaslRPC.java    |    2 +
+ .../hadoop/security/TestUserGroupInformation.java  |   15 +++++
+ 4 files changed, 86 insertions(+), 2 deletions(-)
+
+diff --git a/conf/hadoop-metrics.properties b/conf/hadoop-metrics.properties
+index 0f91b5b..cab2cd0 100644
+--- a/conf/hadoop-metrics.properties
++++ b/conf/hadoop-metrics.properties
+@@ -42,3 +42,7 @@ mapred.class=org.apache.hadoop.metrics.spi.NullContext
+ # jvm.class=org.apache.hadoop.metrics.ganglia.GangliaContext
+ # jvm.period=10
+ # jvm.servers=localhost:8649
++
++
++# Configuration of the "ugi" context for null
++ugi.class=org.apache.hadoop.metrics.spi.NullContext
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index b89df2d..094976f 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -50,6 +50,13 @@ import javax.security.auth.spi.LoginModule;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.metrics.MetricsContext;
++import org.apache.hadoop.metrics.MetricsRecord;
++import org.apache.hadoop.metrics.MetricsUtil;
++import org.apache.hadoop.metrics.Updater;
++import org.apache.hadoop.metrics.util.MetricsBase;
++import org.apache.hadoop.metrics.util.MetricsRegistry;
++import org.apache.hadoop.metrics.util.MetricsTimeVaryingRate;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+@@ -72,6 +79,41 @@ public class UserGroupInformation {
+    */
+   private static final float TICKET_RENEW_WINDOW = 0.80f;
+   
++  /** 
++   * UgiMetrics maintains UGI activity statistics
++   * and publishes them through the metrics interfaces.
++   */
++  static class UgiMetrics implements Updater {
++    final MetricsTimeVaryingRate loginSuccess;
++    final MetricsTimeVaryingRate loginFailure;
++    private final MetricsRecord metricsRecord;
++    private final MetricsRegistry registry;
++
++    UgiMetrics() {
++      registry = new MetricsRegistry();
++      loginSuccess = new MetricsTimeVaryingRate("loginSuccess", registry,
++          "Rate of successful kerberos logins and time taken in milliseconds");
++      loginFailure = new MetricsTimeVaryingRate("loginFailure", registry,
++          "Rate of failed kerberos logins and time taken in milliseconds");
++      final MetricsContext metricsContext = MetricsUtil.getContext("ugi");
++      metricsRecord = MetricsUtil.createRecord(metricsContext, "ugi");
++      metricsContext.registerUpdater(this);
++    }
++
++    /**
++     * Push the metrics to the monitoring subsystem on doUpdate() call.
++     */
++    @Override
++    public void doUpdates(final MetricsContext context) {
++      synchronized (this) {
++        for (MetricsBase m : registry.getMetricsList()) {
++          m.pushMetric(metricsRecord);
++        }
++      }
++      metricsRecord.update();
++    }
++  }
++  
+   /**
+    * A login module that looks at the Kerberos, Unix, or Windows principal and
+    * adds the corresponding UserName.
+@@ -132,6 +174,8 @@ public class UserGroupInformation {
+     }
+   }
+ 
++  /** Metrics to track UGI activity */
++  static UgiMetrics metrics = new UgiMetrics();
+   /** Are the static variables that depend on configuration initialized? */
+   private static boolean isInitialized = false;
+   /** Should we use Kerberos configuration? */
+@@ -516,7 +560,7 @@ public class UserGroupInformation {
+   }
+   /**
+    * Log a user in from a keytab file. Loads a user identity from a keytab
+-   * file and login them in. They become the currently logged-in user.
++   * file and logs them in. They become the currently logged-in user.
+    * @param user the principal name to load from the keytab
+    * @param path the path to the keytab file
+    * @throws IOException if the keytab file can't be read
+@@ -533,14 +577,20 @@ public class UserGroupInformation {
+     keytabPrincipal = user;
+     Subject subject = new Subject();
+     LoginContext login;   
++    long start = 0;
+     try {
+       login = 
+         new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, subject);
++      start = System.currentTimeMillis();
+       login.login();
++      metrics.loginSuccess.inc(System.currentTimeMillis() - start);
+       loginUser = new UserGroupInformation(subject);
+       loginUser.setLogin(login);
+       loginUser.setAuthenticationMethod(AuthenticationMethod.KERBEROS);
+     } catch (LoginException le) {
++      if (start > 0) {
++        metrics.loginFailure.inc(System.currentTimeMillis() - start);
++      }
+       throw new IOException("Login failure for " + user + " from keytab " + 
+                             path, le);
+     }
+@@ -604,22 +654,29 @@ public class UserGroupInformation {
+     String oldKeytabFile = null;
+     String oldKeytabPrincipal = null;
+ 
++    long start = 0;
+     try {
+       oldKeytabFile = keytabFile;
+       oldKeytabPrincipal = keytabPrincipal;
+       keytabFile = path;
+       keytabPrincipal = user;
+       Subject subject = new Subject();
++      
+       LoginContext login = 
+         new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, subject); 
+        
++      start = System.currentTimeMillis();
+       login.login();
++      metrics.loginSuccess.inc(System.currentTimeMillis() - start);
+       UserGroupInformation newLoginUser = new UserGroupInformation(subject);
+       newLoginUser.setLogin(login);
+       newLoginUser.setAuthenticationMethod(AuthenticationMethod.KERBEROS);
+       
+       return newLoginUser;
+     } catch (LoginException le) {
++      if (start > 0) {
++        metrics.loginFailure.inc(System.currentTimeMillis() - start);
++      }
+       throw new IOException("Login failure for " + user + " from keytab " + 
+                             path, le);
+     } finally {
+@@ -630,7 +687,7 @@ public class UserGroupInformation {
+   
+   /**
+    * Re-Login a user in from a keytab file. Loads a user identity from a keytab
+-   * file and login them in. They become the currently logged-in user. This
++   * file and logs them in. They become the currently logged-in user. This
+    * method assumes that {@link #loginUserFromKeytab(String, String)} had 
+    * happened already.
+    * The Subject field of this UserGroupInformation object is updated to have
+@@ -650,6 +707,7 @@ public class UserGroupInformation {
+     if (!hasSufficientTimeElapsed()) {
+       return;
+     }
++    long start = 0;
+     try {
+       LOG.info("Initiating logout for " + getUserName());
+       //clear up the kerberos state. But the tokens are not cleared! As per 
+@@ -662,9 +720,14 @@ public class UserGroupInformation {
+         new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, 
+             getSubject());
+       LOG.info("Initiating re-login for " + keytabPrincipal);
++      start = System.currentTimeMillis();
+       login.login();
++      metrics.loginSuccess.inc(System.currentTimeMillis() - start);
+       setLogin(login);
+     } catch (LoginException le) {
++      if (start > 0) {
++        metrics.loginFailure.inc(System.currentTimeMillis() - start);
++      }
+       throw new IOException("Login failure for " + keytabPrincipal + 
+           " from keytab " + keytabFile, le);
+     } 
+diff --git a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+index 3cb8c5f..c6e46d6 100644
+--- a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+@@ -47,6 +47,7 @@ import org.apache.hadoop.security.SaslInputStream;
+ import org.apache.hadoop.security.SaslRpcClient;
+ import org.apache.hadoop.security.SaslRpcServer;
+ import org.apache.hadoop.security.SecurityUtil;
++import org.apache.hadoop.security.TestUserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+ 
+@@ -249,6 +250,7 @@ public class TestSaslRPC {
+     newConf.set(SERVER_PRINCIPAL_KEY, principal);
+     newConf.set(SERVER_KEYTAB_KEY, keytab);
+     SecurityUtil.login(newConf, SERVER_KEYTAB_KEY, SERVER_PRINCIPAL_KEY);
++    TestUserGroupInformation.verifyLoginMetrics(1, 0);
+     UserGroupInformation current = UserGroupInformation.getCurrentUser();
+     System.out.println("UGI: " + current);
+ 
+diff --git a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+index 0ed4e2d..52837bf 100644
+--- a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
++++ b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+@@ -303,4 +303,19 @@ public class TestUserGroupInformation {
+       new UserGroupInformation(proxyUgi3.getSubject());
+     Assert.assertEquals(proxyUgi3, proxyUgi4);
+   }
++  
++  public static void verifyLoginMetrics(int success, int failure)
++      throws IOException {
++    // Ensure metrics related to kerberos login is updated.
++    UserGroupInformation.UgiMetrics metrics = UserGroupInformation.metrics;
++    metrics.doUpdates(null);
++    if (success > 0) {
++      assertEquals(success, metrics.loginSuccess.getPreviousIntervalNumOps());
++      assertTrue(metrics.loginSuccess.getPreviousIntervalAverageTime() > 0);
++    }
++    if (failure > 0) {
++      assertEquals(failure, metrics.loginFailure.getPreviousIntervalNumOps());
++      assertTrue(metrics.loginFailure.getPreviousIntervalAverageTime() > 0);
++    }
++  }
+ }
+-- 
+1.7.0.4
+

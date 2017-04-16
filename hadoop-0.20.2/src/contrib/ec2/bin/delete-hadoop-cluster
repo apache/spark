@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Delete the groups an local files associated with a cluster.
+
+if [ -z $1 ]; then
+  echo "Cluster name required!"
+  exit -1
+fi
+
+CLUSTER=$1
+
+# Finding Hadoop clusters
+CLUSTERS=`ec2-describe-instances | \
+  awk '"RESERVATION" == $1 && $4 ~ /-master$/, "INSTANCE" == $1' | tr '\n' '\t' | \
+  grep "$CLUSTER" | grep running | cut -f4 | rev | cut -d'-' -f2- | rev`
+  
+if [ -n "$CLUSTERS" ]; then
+  echo "Cluster $CLUSTER has running instances. Please terminate them first."
+  exit 0
+fi
+
+# Import variables
+bin=`dirname "$0"`
+bin=`cd "$bin"; pwd`
+. "$bin"/hadoop-ec2-env.sh
+
+rm -f $MASTER_IP_PATH
+rm -f $MASTER_PRIVATE_IP_PATH
+
+ec2-describe-group | egrep "[[:space:]]$CLUSTER_MASTER[[:space:]]" > /dev/null
+if [ $? -eq 0 ]; then
+  echo "Deleting group $CLUSTER_MASTER"
+  ec2-revoke $CLUSTER_MASTER -o $CLUSTER -u $AWS_ACCOUNT_ID
+fi
+
+ec2-describe-group | egrep "[[:space:]]$CLUSTER[[:space:]]" > /dev/null
+if [ $? -eq 0 ]; then
+  echo "Deleting group $CLUSTER"
+  ec2-revoke $CLUSTER -o $CLUSTER_MASTER -u $AWS_ACCOUNT_ID
+fi
+
+ec2-delete-group $CLUSTER_MASTER
+ec2-delete-group $CLUSTER

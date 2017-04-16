@@ -1,0 +1,33 @@
+From 1444a9469340822ed0af92ee9ac780c7b9835c26 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 23 Apr 2010 09:36:33 -0700
+Subject: [PATCH 0609/1179] HADOOP-6718. Client does not close connection when an exception happens during SASL negotiation
+
+Patch: https://issues.apache.org/jira/secure/attachment/12442614/6718-bp20.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Client.java |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index cc93700..c684ec4 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -467,7 +467,12 @@ public class Client {
+           if (ticket.doAs(new PrivilegedExceptionAction<Boolean>() {
+             @Override
+             public Boolean run() throws IOException {
+-              return setupSaslConnection(in2, out2);
++              try {
++                return setupSaslConnection(in2, out2);
++              } catch (IOException ie) {
++                handleConnectionFailure(1, 1, ie);
++                throw ie;
++              }
+             }
+           })) {
+             // Sasl connect is successful. Let's set up Sasl i/o streams.
+-- 
+1.7.0.4
+

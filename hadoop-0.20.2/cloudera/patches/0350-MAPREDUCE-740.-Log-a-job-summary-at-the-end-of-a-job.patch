@@ -1,0 +1,262 @@
+From 9ed072be95517e09cbc78333abbc3d5129e2db7d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:48 -0700
+Subject: [PATCH 0350/1179] MAPREDUCE-740. Log a job-summary at the end of a job, while allowing it to be
+ configured to use a custom appender if desired.
+
+Author: Arun C Murthy
+Ref: YDH
+---
+ conf/log4j.properties                              |   21 ++++
+ .../org/apache/hadoop/mapred/JobInProgress.java    |  100 +++++++++++++++++++-
+ src/mapred/org/apache/hadoop/mapred/JobStatus.java |   16 +++
+ .../org/apache/hadoop/mapred/TaskInProgress.java   |    4 +
+ 4 files changed, 139 insertions(+), 2 deletions(-)
+
+diff --git a/conf/log4j.properties b/conf/log4j.properties
+index d797df6..fd2c44a 100644
+--- a/conf/log4j.properties
++++ b/conf/log4j.properties
+@@ -3,6 +3,16 @@ hadoop.root.logger=INFO,console
+ hadoop.log.dir=.
+ hadoop.log.file=hadoop.log
+ 
++#
++# Job Summary Appender 
++#
++# Use following logger to send summary to separate file defined by 
++# hadoop.mapreduce.jobsummary.log.file rolled daily:
++# hadoop.mapreduce.jobsummary.logger=INFO,JSA
++# 
++hadoop.mapreduce.jobsummary.logger=${hadoop.root.logger}
++hadoop.mapreduce.jobsummary.log.file=hadoop-mapreduce.jobsummary.log
++
+ # Define the root logger to the system property "hadoop.root.logger".
+ log4j.rootLogger=${hadoop.root.logger}, EventCounter
+ 
+@@ -92,3 +102,14 @@ log4j.logger.org.jets3t.service.impl.rest.httpclient.RestS3Service=ERROR
+ # Sends counts of logging messages at different severity levels to Hadoop Metrics.
+ #
+ log4j.appender.EventCounter=org.apache.hadoop.metrics.jvm.EventCounter
++
++#
++# Job Summary Appender
++#
++log4j.appender.JSA=org.apache.log4j.DailyRollingFileAppender
++log4j.appender.JSA.File=${hadoop.log.dir}/${hadoop.mapreduce.jobsummary.log.file}
++log4j.appender.JSA.layout=org.apache.log4j.PatternLayout
++log4j.appender.JSA.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n
++log4j.appender.JSA.DatePattern=.yyyy-MM-dd
++log4j.logger.org.apache.hadoop.mapred.JobInProgress$JobSummary=${hadoop.mapreduce.jobsummary.logger}
++log4j.additivity.org.apache.hadoop.mapred.JobInProgress$JobSummary=false
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 276e62a..cdae3bf 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -209,6 +209,8 @@ public class JobInProgress {
+     OTHER_LOCAL_MAPS,
+     DATA_LOCAL_MAPS,
+     RACK_LOCAL_MAPS,
++    SLOTS_MILLIS_MAPS,
++    SLOTS_MILLIS_REDUCES,
+     FALLOW_SLOTS_MILLIS_MAPS,
+     FALLOW_SLOTS_MILLIS_REDUCES
+   }
+@@ -2169,6 +2171,22 @@ public class JobInProgress {
+   }
+ 
+   /**
++   * Metering: Occupied Slots * (Finish - Start)
++   * @param tip {@link TaskInProgress} to be metered which just completed, 
++   *            cannot be <code>null</code> 
++   * @param status {@link TaskStatus} of the completed task, cannot be 
++   *               <code>null</code>
++   */
++  private void meterTaskAttempt(TaskInProgress tip, TaskStatus status) {
++    Counter slotCounter = 
++      (tip.isMapTask()) ? Counter.SLOTS_MILLIS_MAPS : 
++                          Counter.SLOTS_MILLIS_REDUCES;
++    jobCounters.incrCounter(slotCounter, 
++                            tip.getNumSlotsRequired() * 
++                            (status.getFinishTime() - status.getStartTime()));
++  }
++  
++  /**
+    * A taskid assigned to this JobInProgress has reported in successfully.
+    */
+   public synchronized boolean completedTask(TaskInProgress tip, 
+@@ -2178,6 +2196,9 @@ public class JobInProgress {
+     int oldNumAttempts = tip.getActiveTasks().size();
+     final JobTrackerInstrumentation metrics = jobtracker.getInstrumentation();
+         
++    // Metering
++    meterTaskAttempt(tip, status);
++    
+     // Sanity check: is the TIP already complete? 
+     // It _is_ safe to not decrement running{Map|Reduce}Tasks and
+     // finished{Map|Reduce}Tasks variables here because one and only
+@@ -2319,6 +2340,12 @@ public class JobInProgress {
+       this.finishTime = System.currentTimeMillis();
+       LOG.info("Job " + this.status.getJobID() + 
+                " has completed successfully.");
++      
++      // Log the job summary (this should be done prior to logging to 
++      // job-history to ensure job-counters are in-sync 
++      JobSummary.logJobSummary(this, jobtracker.getClusterStatus(false));
++      
++      // Log job-history
+       JobHistory.JobInfo.logFinished(this.status.getJobID(), finishTime, 
+                                      this.finishedMapTasks, 
+                                      this.finishedReduceTasks, failedMapTasks, 
+@@ -2334,6 +2361,9 @@ public class JobInProgress {
+   private synchronized void terminateJob(int jobTerminationState) {
+     if ((status.getRunState() == JobStatus.RUNNING) ||
+         (status.getRunState() == JobStatus.PREP)) {
++      // Log the job summary
++      JobSummary.logJobSummary(this, jobtracker.getClusterStatus(false));
++      
+       if (jobTerminationState == JobStatus.FAILED) {
+         this.status = new JobStatus(status.getJobID(),
+                                     1.0f, 1.0f, 1.0f, JobStatus.FAILED,
+@@ -2352,6 +2382,7 @@ public class JobInProgress {
+                                      this.finishedReduceTasks);
+       }
+       garbageCollect();
++      
+       jobtracker.getInstrumentation().terminateJob(
+           this.conf, this.status.getJobID());
+     }
+@@ -2512,9 +2543,13 @@ public class JobInProgress {
+           failReduce(tip);
+         }
+       }
++      
++      // Metering
++      meterTaskAttempt(tip, status);
+     }
+         
+-    // the case when the map was complete but the task tracker went down.
++    // The case when the map was complete but the task tracker went down.
++    // However, we don't need to do any metering here...
+     if (wasComplete && !isComplete) {
+       if (tip.isMapTask()) {
+         // Put the task back in the cache. This will help locality for cases
+@@ -2705,8 +2740,9 @@ public class JobInProgress {
+    * from the various tables.
+    */
+   synchronized void garbageCollect() {
+-    //Cancel task tracker reservation
++    // Cancel task tracker reservation
+     cancelReservedSlots();
++    
+     // Let the JobTracker know that a job is complete
+     jobtracker.getInstrumentation().decWaitingMaps(getJobID(), pendingMaps());
+     jobtracker.getInstrumentation().decWaitingReduces(getJobID(), pendingReduces());
+@@ -2918,4 +2954,64 @@ public class JobInProgress {
+   void setClusterSize(int clusterSize) {
+     this.clusterSize = clusterSize;
+   }
++
++  static class JobSummary {
++    static final Log LOG = LogFactory.getLog(JobSummary.class);
++    
++    // Escape sequences 
++    static final char EQUALS = '=';
++    static final char[] charsToEscape = 
++      {StringUtils.COMMA, EQUALS, StringUtils.ESCAPE_CHAR};
++    
++    /**
++     * Log a summary of the job's runtime.
++     * 
++     * @param job {@link JobInProgress} whose summary is to be logged, cannot
++     *            be <code>null</code>.
++     * @param cluster {@link ClusterStatus} of the cluster on which the job was
++     *                run, cannot be <code>null</code>
++     */
++    public static void logJobSummary(JobInProgress job, ClusterStatus cluster) {
++      JobStatus status = job.getStatus();
++      JobProfile profile = job.getProfile();
++      String user = StringUtils.escapeString(profile.getUser(), 
++                                             StringUtils.ESCAPE_CHAR, 
++                                             charsToEscape);
++      String queue = StringUtils.escapeString(profile.getQueueName(), 
++                                              StringUtils.ESCAPE_CHAR, 
++                                              charsToEscape);
++      Counters jobCounters = job.getJobCounters();
++      long mapSlotSeconds = 
++        (jobCounters.getCounter(Counter.SLOTS_MILLIS_MAPS) +
++         jobCounters.getCounter(Counter.FALLOW_SLOTS_MILLIS_MAPS)) / 1000;
++      long reduceSlotSeconds = 
++        (jobCounters.getCounter(Counter.SLOTS_MILLIS_REDUCES) +
++         jobCounters.getCounter(Counter.FALLOW_SLOTS_MILLIS_REDUCES)) / 1000;
++
++      LOG.info("jobId=" + job.getJobID() + StringUtils.COMMA +
++               "submitTime" + EQUALS + job.getStartTime() + StringUtils.COMMA +
++               "launchTime" + EQUALS + job.getLaunchTime() + StringUtils.COMMA +
++               "finishTime" + EQUALS + job.getFinishTime() + StringUtils.COMMA +
++               "numMaps" + EQUALS + job.getMapTasks().length + 
++                           StringUtils.COMMA +
++               "numSlotsPerMap" + EQUALS + job.getNumSlotsPerMap() + 
++                                  StringUtils.COMMA +
++               "numReduces" + EQUALS + job.getReduceTasks().length + 
++                              StringUtils.COMMA +
++               "numSlotsPerReduce" + EQUALS + job.getNumSlotsPerReduce() + 
++                                     StringUtils.COMMA +
++               "user" + EQUALS + user + StringUtils.COMMA +
++               "queue" + EQUALS + queue + StringUtils.COMMA +
++               "status" + EQUALS + 
++                          JobStatus.getJobRunState(status.getRunState()) + 
++                          StringUtils.COMMA + 
++               "mapSlotSeconds" + EQUALS + mapSlotSeconds + StringUtils.COMMA +
++               "reduceSlotsSeconds" + EQUALS + reduceSlotSeconds  + 
++                                      StringUtils.COMMA +
++               "clusterMapCapacity" + EQUALS + cluster.getMaxMapTasks() + 
++                                      StringUtils.COMMA +
++               "clusterReduceCapacity" + EQUALS + cluster.getMaxReduceTasks()
++      );
++    }
++  }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobStatus.java b/src/mapred/org/apache/hadoop/mapred/JobStatus.java
+index 954c6fa..40ac72e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobStatus.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobStatus.java
+@@ -48,6 +48,22 @@ public class JobStatus implements Writable, Cloneable {
+   public static final int PREP = 4;
+   public static final int KILLED = 5;
+ 
++  private static final String UNKNOWN = "UNKNOWN";
++  private static final String[] runStates =
++      {UNKNOWN, "RUNNING", "SUCCEEDED", "FAILED", "PREP", "KILLED"};
++  
++  /**
++   * Helper method to get human-readable state of the job.
++   * @param state job state
++   * @return human-readable state of the job
++   */
++  public static String getJobRunState(int state) {
++    if (state < 1 || state >= runStates.length) {
++      return UNKNOWN;
++    }
++    return runStates[state];
++  }
++  
+   private JobID jobid;
+   private float mapProgress;
+   private float reduceProgress;
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+index d9d1407..78144c0 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+@@ -1185,4 +1185,8 @@ public class TaskInProgress {
+   TreeMap<TaskAttemptID, String> getActiveTasks() {
+     return activeTasks;
+   }
++
++  int getNumSlotsRequired() {
++    return numSlotsRequired;
++  }
+ }
+-- 
+1.7.0.4
+

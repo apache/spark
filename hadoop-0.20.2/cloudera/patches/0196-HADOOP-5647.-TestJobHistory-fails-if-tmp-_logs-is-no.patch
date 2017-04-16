@@ -1,0 +1,47 @@
+From f84830ae5e6c862cd0e2b8ebea57880e54c8a082 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:42:33 -0800
+Subject: [PATCH 0196/1179] HADOOP-5647. TestJobHistory fails if /tmp/_logs is not writable to. Testcase should not depend on /tmp
+
+Description: TestJobHistory sets /tmp as hadoop.job.history.user.location to check if the history file is created in that directory or not. If /tmp/_logs is already created by some other user, this test will fail because of not having write permission.
+Reason: Bugfix in test harness
+Author: Ravi Gummadi
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/mapred/TestJobHistory.java   |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistory.java b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+index f2561a4..f59f28c 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistory.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+@@ -51,7 +51,7 @@ import org.apache.commons.logging.LogFactory;
+  *
+  * testJobHistoryUserLogLocation
+  * Run jobs with the given values of hadoop.job.history.user.location as
+- *   (1)null(default case), (2)"none", and (3)some dir like "/tmp".
++ *   (1)null(default case), (2)"none", and (3)some user specified dir.
+  *   Validate user history file location in each case.
+  *
+  * testJobHistoryJobStatus
+@@ -1049,7 +1049,7 @@ public class TestJobHistory extends TestCase {
+ 
+   // Validate user history file location for the given values of
+   // hadoop.job.history.user.location as
+-  // (1)null(default case), (2)"none", and (3)some dir "/tmp"
++  // (1)null(default case), (2)"none", and (3)some user specified dir.
+   public void testJobHistoryUserLogLocation() throws IOException {
+     MiniMRCluster mr = null;
+     try {
+@@ -1079,7 +1079,7 @@ public class TestJobHistory extends TestCase {
+       inDir = new Path(TEST_ROOT_DIR + "/succeed/input3");
+       outDir = new Path(TEST_ROOT_DIR + "/succeed/output3");
+       // validate for the case of any dir
+-      conf.set("hadoop.job.history.user.location", "/tmp");
++      conf.set("hadoop.job.history.user.location", TEST_ROOT_DIR + "/succeed");
+       job = UtilsForTests.runJobSucceed(conf, inDir, outDir);
+       validateJobHistoryUserLogLocation(job.getID(), conf);
+ 
+-- 
+1.7.0.4
+

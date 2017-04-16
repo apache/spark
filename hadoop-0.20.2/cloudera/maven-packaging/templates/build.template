@@ -1,0 +1,3 @@
+version=org.apache.hadoop:hadoop-core.version
+hadoop.version=org.apache.hadoop:hadoop-core.version
+reactor.repo=https://repository.cloudera.com/content/repositories/snapshots

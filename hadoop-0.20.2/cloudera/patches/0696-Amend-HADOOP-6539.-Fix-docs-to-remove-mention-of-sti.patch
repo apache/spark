@@ -1,0 +1,32 @@
+From a9adf89fd17aa3199c4c4f26d7a2d5f8ccffc84d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 10 Sep 2010 16:15:12 -0700
+Subject: [PATCH 0696/1179] Amend HADOOP-6539. Fix docs to remove mention of sticky bit feature not backported
+
+Author: Todd Lipcon
+Ref: CDH-648
+---
+ .../content/xdocs/hdfs_permissions_guide.xml       |    7 +++----
+ 1 files changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml b/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
+index df23001..ef52265 100644
+--- a/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
++++ b/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
+@@ -41,10 +41,9 @@
+ 		or delete files or directories, and the <em>x</em> permission is required to access a child of the directory. 
+ 		</p>
+ 	 <p>	
+-		In contrast to the POSIX model, there are no <em>setuid</em> or <em>setgid</em> bits for files as there is no notion of executable files. 
+-		For directories, there are no <em>setuid</em> or <em>setgid</em> bits directory as a simplification. The <em>Sticky bit</em> can be set 
+-		on directories, preventing anyone except the superuser, directory owner or file owner from deleting or moving the files within the directory. 
+-		Setting the sticky bit for a file has no effect. Collectively, the permissions of a file or directory are its <em>mode</em>. In general, Unix 
++		In contrast to the POSIX model, there are no <em>sticky</em>, <em>setuid</em> or <em>setgid</em> bits for files as there is no notion of executable files. 
++		For directories, there are no <em>setuid</em> or <em>setgid</em> bits directory as a simplification. 
++                Collectively, the permissions of a file or directory are its <em>mode</em>. In general, Unix 
+ 		customs for representing and displaying modes will be used, including the use of octal numbers in this description. When a file or directory 
+ 		is created, its owner is the user identity of the client process, and its group is the group of the parent directory (the BSD rule).
+ 	</p>
+-- 
+1.7.0.4
+

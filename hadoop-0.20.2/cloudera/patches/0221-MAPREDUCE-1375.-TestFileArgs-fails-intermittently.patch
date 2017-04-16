@@ -1,0 +1,47 @@
+From 5e7fb9843f99f5e1023f2723210f26ac0c33323b Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:52:45 -0800
+Subject: [PATCH 0221/1179] MAPREDUCE-1375. TestFileArgs fails intermittently
+
+Description: TestFileArgs failed once for me with the following error
+<div class="code panel" style="border-width: 1px;"><div class="codeContent panelContent">
+<pre class="code-java">expected:&lt;[job.jar
+sidefile
+tmp
+]&gt; but was:&lt;[]&gt;
+sidefile
+tmp
+]&gt; but was:&lt;[]&gt;
+        at org.apache.hadoop.streaming.TestStreaming.checkOutput(TestStreaming.java:107)
+        at org.apache.hadoop.streaming.TestStreaming.testCommandLine(TestStreaming.java:123)</pre>
+</div></div>
+
+    This test was flaky due to trying to write some data into /bin/ls.
+    Depending on the speed of the test run, this sometimes resulted
+    in a Broken Pipe on flush() which caused the test to fail.
+
+Reason: Bugfix (race condition in test)
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/streaming/TestFileArgs.java  |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java
+index b8e1b6b..e875391 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java
+@@ -70,6 +70,10 @@ public class TestFileArgs extends TestStreaming
+       new FileOutputStream(SIDE_FILE.getAbsoluteFile()));
+     dos.write("hello world\n".getBytes("UTF-8"));
+     dos.close();
++
++    // Since ls doesn't read stdin, we don't want to write anything
++    // to it, or else we risk Broken Pipe exceptions.
++    input = "";
+   }
+ 
+   @Override
+-- 
+1.7.0.4
+

@@ -1,0 +1,28 @@
+From 9b4d8ffe7fb92a3e1487760e3f04d420f170fb53 Mon Sep 17 00:00:00 2001
+From: Harsh J <harsh@cloudera.com>
+Date: Wed, 14 Mar 2012 03:04:43 +0530
+Subject: [PATCH 1144/1179] MAPREDUCE-4001. Improve MAPREDUCE-3789's fix logic by looking at job's slot demands instead.
+
+Reason: Customer request
+Author: Harsh J
+Ref: CDH-4276
+---
+ .../hadoop/mapred/CapacityTaskScheduler.java       |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
+index 2285fb2..f7d60bf 100644
+--- a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
++++ b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
+@@ -344,7 +344,7 @@ class CapacityTaskScheduler extends TaskScheduler {
+           // starved
+           if ((getPendingTasks(j) != 0 &&
+               !hasSufficientReservedTaskTrackers(j)) &&
+-                (taskTracker.getAvailableSlots(type) !=
++                !(j.getNumSlotsPerTask(type) >
+                  getTTMaxSlotsForType(taskTrackerStatus, type))) {
+             // Reserve all available slots on this tasktracker
+             LOG.info(j.getJobID() + ": Reserving "
+-- 
+1.7.0.4
+

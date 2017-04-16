@@ -1,0 +1,135 @@
+<FindBugsFilter>
+     <Match>
+       <Package name="org.apache.hadoop.record.compiler.generated" />
+     </Match>
+     <Match>
+       <Bug pattern="EI_EXPOSE_REP" />
+     </Match>
+     <Match>
+       <Bug pattern="EI_EXPOSE_REP2" />
+     </Match>
+     <Match>
+       <Bug pattern="SE_COMPARATOR_SHOULD_BE_SERIALIZABLE" />
+     </Match>
+     <Match>
+       <Class name="~.*_jsp" />
+       <Bug pattern="DLS_DEAD_LOCAL_STORE" />
+     </Match>
+     <Match>
+       <Class name="org.apache.hadoop.mapred.jobdetails_jsp"/>
+       <Bug pattern="HRS_REQUEST_PARAMETER_TO_HTTP_HEADER"/>
+     </Match>
+     <Match>
+       <Field name="_jspx_dependants" />
+       <Bug pattern="UWF_UNWRITTEN_FIELD" />
+     </Match>
+     <!-- 
+       Inconsistent synchronization for Client.Connection.out is
+       is intentional to make a connection to be closed instantly. 
+     --> 
+     <Match>
+       <Class name="org.apache.hadoop.ipc.Client$Connection" />
+       <Field name="out" />
+       <Bug pattern="IS2_INCONSISTENT_SYNC" />
+     </Match>
+     <!-- 
+       Ignore Cross Scripting Vulnerabilities
+       We have an input quoting filter that protects us.
+     -->
+     <Match>
+       <Bug code="XSS" />
+     </Match>
+     <Match>
+       <Bug code="HRS" />
+     </Match>
+     <!-- 
+       Accesses to Client.Connection.saslRpcClient are in fact
+       synchronized (inside synchronized methods).
+     --> 
+     <Match>
+       <Class name="org.apache.hadoop.ipc.Client$Connection" />
+       <Field name="saslRpcClient" />
+       <Bug pattern="IS2_INCONSISTENT_SYNC" />
+     </Match>
+     <Match>
+       <Class name="org.apache.hadoop.mapred.OutputCommitter" />
+       <Or>
+       <Method name="abortJob" />
+       <Method name="commitJob" />
+       <Method name="cleanupJob" />
+       </Or>
+       <Bug pattern="NM_WRONG_PACKAGE_INTENTIONAL" />
+     </Match>
+
+     <!--
+       TFile
+     -->
+      <Match>
+       <Class name="org.apache.hadoop.io.file.tfile.Chunk$ChunkDecoder" />
+       <Method name="close" />
+       <Bug pattern="SR_NOT_CHECKED" />
+      </Match>
+    <!--
+      The purpose of skip() is to drain remaining bytes of the chunk-encoded
+	  stream (one chunk at a time). The termination condition is checked by
+	  checkEOF().
+    -->
+     <Match>
+       <Class name="org.apache.hadoop.io.file.tfile.Utils" />
+       <Method name="writeVLong" />
+       <Bug pattern="SF_SWITCH_FALLTHROUGH" />
+     </Match>
+    <!--
+	  The switch condition fall through is intentional and for performance
+	  purposes.
+    -->
+     <Match>
+       <Class name="org.apache.hadoop.mapred.Task" />
+       <Method name="reportFatalError" />
+       <Bug pattern="DM_EXIT" />
+     </Match>
+    <!--
+       We need to cast objects between old and new api objects
+     -->
+     <Match>
+       <Class name="org.apache.hadoop.mapred.OutputCommitter" />
+       <Bug pattern="BC_UNCONFIRMED_CAST" />
+     </Match>
+     <Match>
+       <Class name="org.apache.hadoop.mapred.FileOutputCommitter" />
+       <Bug pattern="NM_WRONG_PACKAGE_INTENTIONAL" />
+     </Match>
+     <!--
+       Further SaslException should be ignored during cleanup and
+       original exception should be re-thrown.
+     -->
+     <Match>
+       <Class name="org.apache.hadoop.security.SaslRpcClient" />
+       <Bug pattern="DE_MIGHT_IGNORE" />
+     </Match>
+    <!--
+       JobTracker's static variables should be ignored
+     -->
+     <Match>
+       <Class name="org.apache.hadoop.mapred.JobTracker" />
+       <Or>
+       <Field name="RETIRE_JOB_INTERVAL" />
+       <Field name="TASKTRACKER_EXPIRY_INTERVAL" />
+       <Field name="RETIRE_JOB_CHECK_INTERVAL" />
+       </Or>
+       <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD" />
+     </Match>
+     <!--
+        Call to System.exit is intentional, HADOOP-249
+     <-->
+     <Match>
+       <Class name="org.apache.hadoop.mapred.Child" />
+       <Bug pattern="DM_EXIT" />
+     </Match>
+     <!-- Don't complain about System.exit() being called from quit() -->
+     <Match>
+       <Class name="org.apache.hadoop.hdfs.server.namenode.MetaRecoveryContext" />
+       <Method name="quit" />
+       <Bug pattern="DM_EXIT" />
+     </Match>
+</FindBugsFilter>

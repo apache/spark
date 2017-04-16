@@ -1,0 +1,34 @@
+From 23c45791bbc3a23d69c77f3518b5d1a1a4702ccc Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:34:11 -0800
+Subject: [PATCH 0179/1179] HADOOP-6462. contrib/cloud failing, target "compile" does not exist
+
+Description: I'm not seeing this mentioned in hudson or other bugreports, which confuses me. With the addition of a src/contrib/cloud/build.xml from <a href="http://issues.apache.org/jira/browse/HADOOP-6426" title="Create ant build for running EC2 unit tests"><del>HADOOP-6426</del></a>, contrib/build.xml won't build no more: <br/>
+hadoop-common/src/contrib/build.xml:30: The following error occurred while executing this line:<br/>
+Target "compile" does not exist in the project "hadoop-cloud".
+
+<p>What is odd is this: the final patch of <a href="http://issues.apache.org/jira/browse/HADOOP-6426" title="Create ant build for running EC2 unit tests"><del>HADOOP-6426</del></a> does include the stub &lt;target&gt; files needed, yet they aren't in SVN_HEAD. Which implies that a different version may have gone in than intended. </p>
+Reason: Build system bugfix
+Author: Tom White
+Ref: UNKNOWN
+---
+ src/contrib/cloud/build.xml |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/cloud/build.xml b/src/contrib/cloud/build.xml
+index a154e21..c262319 100644
+--- a/src/contrib/cloud/build.xml
++++ b/src/contrib/cloud/build.xml
+@@ -38,4 +38,8 @@
+       </fileset>
+     </py-test>
+   </target>
++  <target name="compile"/>
++  <target name="package"/>
++  <target name="test" depends="test-py"/>
++  <target name="clean"/>
+ </project>
+\ No newline at end of file
+-- 
+1.7.0.4
+

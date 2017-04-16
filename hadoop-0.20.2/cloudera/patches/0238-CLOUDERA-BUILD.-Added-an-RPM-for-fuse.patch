@@ -1,0 +1,101 @@
+From d144085817496eecc57c510022d66d0540b4511d Mon Sep 17 00:00:00 2001
+From: newalex <newalex@centos64-build01.sf.cloudera.com>
+Date: Tue, 6 Apr 2010 14:05:29 -0700
+Subject: [PATCH 0238/1179] CLOUDERA-BUILD. Added an RPM for fuse
+
+Description: The required changes to the cloudera hadoop building scripts for pulling the fuse files out and cleaning up its mess.
+Reason: Building packages
+Author: Alex Newman
+Ref: CDH-928
+---
+ cloudera/install_hadoop.sh |   46 ++++++++++++++++++++++++++++++++++++++++---
+ 1 files changed, 42 insertions(+), 4 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 26bf402..fb0f0ca 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -1,7 +1,7 @@
+ #!/bin/sh -x
+ # Copyright 2009 Cloudera, inc.
+ 
+-set -e
++set -ex
+ 
+ usage() {
+   echo "
+@@ -115,7 +115,7 @@ mkdir -p $LIB_DIR
+ # Take out things we've installed elsewhere
+ 
+ for x in docs lib/native c++ src conf ; do
+-  rm -rf $LIB_DIR/$x
++  rm -rf $LIB_DIR/$x 
+ done
+ 
+ # Make bin wrappers
+@@ -133,8 +133,8 @@ EOF
+ done
+ 
+ # Fix some bad permissions in HOD
+-chmod 755 $LIB_DIR/contrib/hod/support/checklimits.sh
+-chmod 644 $LIB_DIR/contrib/hod/bin/VERSION
++chmod 755 $LIB_DIR/contrib/hod/support/checklimits.sh || /bin/true
++chmod 644 $LIB_DIR/contrib/hod/bin/VERSION || /bin/true
+ 
+ # Link examples to /usr/share
+ mkdir -p $EXAMPLE_DIR
+@@ -152,6 +152,12 @@ cp -r ${BUILD_DIR}/../../docs/* $DOC_DIR
+ 
+ # Install source
+ mkdir -p $SRC_DIR
++rm -f ${HADOOP_SRC_DIR}/contrib/fuse-dfs/src/*.o 
++rm -f ${HADOOP_SRC_DIR}/contrib/fuse-dfs/src/fuse_dfs
++rm -f ${HADOOP_SRC_DIR}/contrib/fuse-dfs/fuse_dfs
++rm -rf ${HADOOP_SRC_DIR}/contrib/hod/
++
++
+ cp -a ${HADOOP_SRC_DIR}/* $SRC_DIR/
+ 
+ # Make the empty config
+@@ -185,6 +191,38 @@ cp ${BUILD_DIR}/../../docs/sqoop/sqoop.1.gz $MAN_DIR/man1/sqoop-$APACHE_BRANCH.1
+ ############################################################
+ 
+ if [ ! -z "$NATIVE_BUILD_STRING" ]; then
++<<<<<<< HEAD:cloudera/install_hadoop.sh
++=======
++  # Fuse 
++  mkdir -p $LIB_DIR/bin
++  mv  ${BUILD_DIR}/contrib/fuse-dfs/* $LIB_DIR/bin
++  rmdir ${BUILD_DIR}/contrib/fuse-dfs 
++
++  fuse_wrapper=${BIN_DIR}/fuse_dfs
++  cat > $fuse_wrapper << EOF
++#!/bin/sh
++if [ "\$HADOOP_HOME" = "" ]
++        then export HADOOP_HOME=/usr/lib/hadoop
++fi
++
++if [ "\$JAVA_HOME" = "" ]
++        then export JAVA_HOME=/usr/java/default
++fi
++
++if [ "\$LD_LIBRARY_PATH" = "" ]
++	then JVM_LIB=\`find \${JAVA_HOME}/jre/lib -name libjvm.so |tail -n 1\`
++        export LD_LIBRARY_PATH=\`dirname \$JVM_LIB\`:/usr/lib/
++
++fi
++
++export PATH=\$PATH:\${HADOOP_HOME}/bin/
++
++\${HADOOP_HOME}/bin/fuse_dfs \$@
++EOF
++
++  chmod 755 $fuse_wrapper
++
++>>>>>>> da634a1... CLOUDERA-BUILD. Added an RPM for fuse:cloudera/install_hadoop.sh
+   # Native compression libs
+   mkdir -p $LIB_DIR/lib/native/
+   cp -r ${BUILD_DIR}/lib/native/${NATIVE_BUILD_STRING} $LIB_DIR/lib/native/
+-- 
+1.7.0.4
+

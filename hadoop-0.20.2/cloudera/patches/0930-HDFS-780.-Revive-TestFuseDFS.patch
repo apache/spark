@@ -1,0 +1,1868 @@
+From bf19274fc15bb5b37089f3a50db7dbb053c92490 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 15 Mar 2011 21:36:53 -0700
+Subject: [PATCH 0930/1179] HDFS-780. Revive TestFuseDFS.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-2778
+---
+ src/contrib/build-contrib.xml                  |    1 +
+ src/contrib/build.xml                          |    1 +
+ src/contrib/fuse-dfs/build.xml                 |   58 ++-
+ src/contrib/fuse-dfs/configure.ac              |    3 +
+ src/contrib/fuse-dfs/ivy.xml                   |   15 +-
+ src/contrib/fuse-dfs/src/Makefile.am           |    3 +-
+ src/contrib/fuse-dfs/src/fuse_dfs.c            |   14 +-
+ src/contrib/fuse-dfs/src/fuse_dfs.h            |   35 +-
+ src/contrib/fuse-dfs/src/fuse_impls_access.c   |    2 +-
+ src/contrib/fuse-dfs/src/fuse_impls_chmod.c    |    4 +-
+ src/contrib/fuse-dfs/src/fuse_impls_chown.c    |   11 +-
+ src/contrib/fuse-dfs/src/fuse_impls_flush.c    |    2 +-
+ src/contrib/fuse-dfs/src/fuse_impls_getattr.c  |    5 +-
+ src/contrib/fuse-dfs/src/fuse_impls_mkdir.c    |   11 +-
+ src/contrib/fuse-dfs/src/fuse_impls_mknod.c    |    7 +-
+ src/contrib/fuse-dfs/src/fuse_impls_open.c     |    9 +-
+ src/contrib/fuse-dfs/src/fuse_impls_read.c     |    2 +-
+ src/contrib/fuse-dfs/src/fuse_impls_readdir.c  |   11 +-
+ src/contrib/fuse-dfs/src/fuse_impls_release.c  |    3 +-
+ src/contrib/fuse-dfs/src/fuse_impls_rename.c   |    9 +-
+ src/contrib/fuse-dfs/src/fuse_impls_rmdir.c    |    8 +-
+ src/contrib/fuse-dfs/src/fuse_impls_statfs.c   |    2 +-
+ src/contrib/fuse-dfs/src/fuse_impls_truncate.c |    6 +-
+ src/contrib/fuse-dfs/src/fuse_impls_unlink.c   |   10 +-
+ src/contrib/fuse-dfs/src/fuse_impls_utimens.c  |    3 +-
+ src/contrib/fuse-dfs/src/fuse_impls_write.c    |   11 +-
+ src/contrib/fuse-dfs/src/fuse_init.c           |    6 +-
+ src/contrib/fuse-dfs/src/fuse_options.c        |   47 +-
+ src/contrib/fuse-dfs/src/fuse_trash.c          |   21 +-
+ src/contrib/fuse-dfs/src/fuse_users.c          |    2 +-
+ src/contrib/fuse-dfs/src/test/TestFuseDFS.java |  809 ++++++++----------------
+ 31 files changed, 471 insertions(+), 660 deletions(-)
+
+diff --git a/src/contrib/build-contrib.xml b/src/contrib/build-contrib.xml
+index 9a5ebe1..cd01ff2 100644
+--- a/src/contrib/build-contrib.xml
++++ b/src/contrib/build-contrib.xml
+@@ -53,6 +53,7 @@
+   <!-- NB: sun.arch.data.model is not supported on all platforms -->
+   <property name="build.platform"
+             value="${os.name}-${os.arch}-${sun.arch.data.model}"/>
++  <property name="build.c++.libhdfs" value="${build.dir}/../../c++/${build.platform}/lib"/>
+   <property name="build.test" location="${build.dir}/test"/>
+   <property name="build.examples" location="${build.dir}/examples"/>
+   <property name="hadoop.log.dir" location="${build.dir}/test/logs"/>
+diff --git a/src/contrib/build.xml b/src/contrib/build.xml
+index d2a51d7..e41c132 100644
+--- a/src/contrib/build.xml
++++ b/src/contrib/build.xml
+@@ -50,6 +50,7 @@
+      <delete file="${build.contrib.dir}/testsfailed"/>
+     <subant target="test">
+       <property name="continueOnFailure" value="true"/>
++      <fileset dir="." includes="fuse-dfs/build.xml"/>
+       <fileset dir="." includes="hdfsproxy/build.xml"/>
+       <fileset dir="." includes="streaming/build.xml"/>
+       <fileset dir="." includes="fairscheduler/build.xml"/>
+diff --git a/src/contrib/fuse-dfs/build.xml b/src/contrib/fuse-dfs/build.xml
+index e8ab8d3..7f0853b 100644
+--- a/src/contrib/fuse-dfs/build.xml
++++ b/src/contrib/fuse-dfs/build.xml
+@@ -17,7 +17,7 @@
+    limitations under the License.
+ -->
+ 
+-<project name="fuse-dfs" default="compile">
++<project name="fuse-dfs" default="jar">
+ 
+   <import file="../build-contrib.xml"/>
+ 
+@@ -32,7 +32,7 @@
+ 
+ 
+   <target name="check-libhdfs-exists" if="fusedfs">
+-  <property name="libhdfs.lib" value="${hadoop.root}/build/c++/${build.platform}/lib/libhdfs.so"/>
++    <property name="libhdfs.lib" value="${build.c++.libhdfs}/libhdfs.so"/>
+         <available file="${libhdfs.lib}" property="libhdfs-exists"/>
+     <fail message="libhdfs.so does not exist: ${libhdfs.lib}. Please check flags -Dlibhdfs=1 -Dfusedfs=1 are set or first try ant compile -Dcompile.c++=true -Dlibhdfs=true">
+          <condition>
+@@ -64,12 +64,12 @@
+     </exec>
+     <mkdir dir="${build.dir}"/>
+     <mkdir dir="${build.dir}/test"/>
++    <!-- Use exec since the copy task doesn't preserve attrs -->
+     <exec executable="cp" failonerror="true">
+-    <arg line="${root}/src/fuse_dfs ${build.dir}"/>
++      <arg line="${hadoop.root}/src/contrib/fuse-dfs/src/fuse_dfs ${build.dir}"/>
+     </exec>
+-    <mkdir dir="${build.dir}/test"/>
+     <exec executable="cp" failonerror="true">
+-    <arg line="${root}/src/fuse_dfs_wrapper.sh ${build.dir}"/>
++      <arg line="${hadoop.root}/src/contrib/fuse-dfs/src/fuse_dfs_wrapper.sh ${build.dir}"/>
+     </exec>
+ 
+   </target>
+@@ -91,11 +91,49 @@
+     </exec>
+   </target>
+ 
+-  <target name="test" if="fusedfs">
+-    <echo message="testing FuseDFS ..."/>
+-   <antcall target="hadoopbuildcontrib.test"> 
+-   </antcall>
+-  </target>  
++  <!-- Override test.classpath to avoid referencing "${ant.project.name}.test-classpath" -->
++  <path id="test.classpath">
++    <pathelement location="${build.test}"/>
++    <pathelement location="${hadoop.root}/build/test/classes"/>
++    <pathelement location="${hadoop.root}/src/contrib/test"/>
++    <pathelement location="${conf.dir}"/>
++    <pathelement location="${hadoop.root}/build"/>
++    <path refid="contrib-classpath"/>
++  </path>
++
++  <target name="compile-test" depends="init, ivy-retrieve-common, check-libhdfs-exists" if="fusedfs">
++    <javac encoding="${build.encoding}"
++	   srcdir="${src.test}"
++	   includes="**/*.java"
++	   destdir="${build.test}"
++	   debug="${javac.debug}">
++      <classpath refid="test.classpath"/>
++    </javac>
++  </target>
++
++  <target name="test" depends="compile-test,check-libhdfs-exists" if="fusedfs">
++    <junit showoutput="${test.output}" fork="yes" printsummary="yes" 
++          errorProperty="tests.failed" haltonfailure="no" failureProperty="tests.failed">
++      <classpath refid="test.classpath"/>
++      <sysproperty key="test.build.data" value="${build.test}/data"/>
++      <sysproperty key="build.test" value="${build.test}"/>
++      <sysproperty key="user.dir" value="${build.test}/data"/>
++      <sysproperty key="hadoop.log.dir" value="${hadoop.log.dir}"/>
++      <sysproperty key="test.src.dir" value="${test.src.dir}"/>
++      <formatter type="plain" />
++      <batchtest todir="${build.test}" unless="testcase">
++        <fileset dir="${src.test}">
++          <include name="**/Test*.java"/>
++        </fileset>
++      </batchtest>
++      <batchtest todir="${build.test}" if="testcase">
++        <fileset dir="${src.test}">
++          <include name="**/${testcase}.java"/>
++        </fileset>
++      </batchtest>
++    </junit>
++    <fail if="tests.failed">Tests failed!</fail>
++ </target>
+ 
+   <!-- override clean target !-->
+   <target name="clean" depends="check-libhdfs-fuse" if="libhdfs-fuse">
+diff --git a/src/contrib/fuse-dfs/configure.ac b/src/contrib/fuse-dfs/configure.ac
+index 0726ca9..26c6b0f 100644
+--- a/src/contrib/fuse-dfs/configure.ac
++++ b/src/contrib/fuse-dfs/configure.ac
+@@ -43,6 +43,9 @@ AC_SUBST([DEFS])
+ AC_FUNC_GETGROUPS
+ AC_TYPE_GETGROUPS
+ 
++AC_PROG_CC
++AC_SYS_LARGEFILE
++
+ ############################################################################
+ # Section 2:
+ # User Configurable system defaults. Change With CAUTION!
+diff --git a/src/contrib/fuse-dfs/ivy.xml b/src/contrib/fuse-dfs/ivy.xml
+index 2e731c8..d90e328 100644
+--- a/src/contrib/fuse-dfs/ivy.xml
++++ b/src/contrib/fuse-dfs/ivy.xml
+@@ -24,14 +24,17 @@
+     <artifact conf="master"/>
+   </publications>
+   <dependencies>
+-    <dependency org="commons-logging"
+-      name="commons-logging"
+-      rev="${commons-logging.version}"
+-      conf="common->default"/>
+     <dependency org="log4j"
+       name="log4j"
+       rev="${log4j.version}"
+       conf="common->master"/>
+-    </dependencies>
+-  
++    <dependency org="commons-logging"
++      name="commons-logging"
++      rev="${commons-logging.version}"
++      conf="common->master"/>
++    <dependency org="junit"
++      name="junit"
++      rev="${junit.version}"
++      conf="common->master"/>
++  </dependencies>
+ </ivy-module>
+diff --git a/src/contrib/fuse-dfs/src/Makefile.am b/src/contrib/fuse-dfs/src/Makefile.am
+index 7ac454c..43b520e 100644
+--- a/src/contrib/fuse-dfs/src/Makefile.am
++++ b/src/contrib/fuse-dfs/src/Makefile.am
+@@ -15,5 +15,6 @@
+ #
+ bin_PROGRAMS = fuse_dfs
+ fuse_dfs_SOURCES = fuse_dfs.c fuse_options.c fuse_trash.c fuse_stat_struct.c fuse_users.c fuse_init.c fuse_connect.c fuse_impls_access.c fuse_impls_chmod.c  fuse_impls_chown.c  fuse_impls_create.c  fuse_impls_flush.c fuse_impls_getattr.c  fuse_impls_mkdir.c  fuse_impls_mknod.c  fuse_impls_open.c fuse_impls_read.c fuse_impls_release.c fuse_impls_readdir.c fuse_impls_rename.c fuse_impls_rmdir.c fuse_impls_statfs.c fuse_impls_symlink.c fuse_impls_truncate.c fuse_impls_utimens.c  fuse_impls_unlink.c fuse_impls_write.c
+-AM_CPPFLAGS= -DPERMS=$(PERMS) -D_FILE_OFFSET_BITS=64 -I$(JAVA_HOME)/include -I$(HADOOP_HOME)/src/c++/libhdfs/ -I$(JAVA_HOME)/include/linux/ -D_FUSE_DFS_VERSION=\"$(PACKAGE_VERSION)\" -DPROTECTED_PATHS=\"$(PROTECTED_PATHS)\" -I$(FUSE_HOME)/include
++AM_CFLAGS= -Wall -g
++AM_CPPFLAGS= -DPERMS=$(PERMS) -D_FILE_OFFSET_BITS=64 -I$(JAVA_HOME)/include -I$(HADOOP_HOME)/src/c++/libhdfs -I$(JAVA_HOME)/include/linux -D_FUSE_DFS_VERSION=\"$(PACKAGE_VERSION)\" -DPROTECTED_PATHS=\"$(PROTECTED_PATHS)\" -I$(FUSE_HOME)/include
+ AM_LDFLAGS= -L$(HADOOP_HOME)/build/c++/$(BUILD_PLATFORM)/lib -lhdfs -L$(FUSE_HOME)/lib -lfuse -L$(JAVA_HOME)/jre/lib/$(OS_ARCH)/server -ljvm
+diff --git a/src/contrib/fuse-dfs/src/fuse_dfs.c b/src/contrib/fuse-dfs/src/fuse_dfs.c
+index 2fb41c2..6d40634 100644
+--- a/src/contrib/fuse-dfs/src/fuse_dfs.c
++++ b/src/contrib/fuse-dfs/src/fuse_dfs.c
+@@ -56,7 +56,7 @@ static struct fuse_operations dfs_oper = {
+   .write	= dfs_write,
+   .flush        = dfs_flush,
+   .mknod        = dfs_mknod,
+-	.utimens	= dfs_utimens,
++  .utimens      = dfs_utimens,
+   .chmod	= dfs_chmod,
+   .chown	= dfs_chown,
+   .truncate	= dfs_truncate,
+@@ -118,15 +118,11 @@ int main(int argc, char *argv[])
+     if ((temp = hdfsConnect(options.server, options.port)) == NULL) {
+       const char *cp = getenv("CLASSPATH");
+       const char *ld = getenv("LD_LIBRARY_PATH");
+-      fprintf(stderr, "FATAL: misconfiguration problem, cannot connect to hdfs - here's your environment\n");
+-      fprintf(stderr, "LD_LIBRARY_PATH=%s\n",ld == NULL ? "NULL" : ld);
+-      fprintf(stderr, "CLASSPATH=%s\n",cp == NULL ? "NULL" : cp);
+-      syslog(LOG_ERR, "FATAL: misconfiguration problem, cannot connect to hdfs - here's your environment\n");
+-      syslog(LOG_ERR, "LD_LIBRARY_PATH=%s\n",ld == NULL ? "NULL" : ld);
+-      syslog(LOG_ERR, "CLASSPATH=%s\n",cp == NULL ? "NULL" : cp);
++      ERROR("FATAL: misconfiguration - cannot connect to HDFS");
++      ERROR("LD_LIBRARY_PATH=%s",ld == NULL ? "NULL" : ld);
++      ERROR("CLASSPATH=%s",cp == NULL ? "NULL" : cp);
+       exit(0);
+-    }  
+-    temp = NULL;
++    }
+   }
+ 
+   int ret = fuse_main(args.argc, args.argv, &dfs_oper, NULL);
+diff --git a/src/contrib/fuse-dfs/src/fuse_dfs.h b/src/contrib/fuse-dfs/src/fuse_dfs.h
+index c7e794a..ad20b9a 100644
+--- a/src/contrib/fuse-dfs/src/fuse_dfs.h
++++ b/src/contrib/fuse-dfs/src/fuse_dfs.h
+@@ -49,16 +49,39 @@
+ //
+ int is_protected(const char *path);
+ 
++#undef INFO
++#define INFO(_fmt, ...) {                       \
++  fprintf(stdout, "INFO %s:%d " _fmt "\n",      \
++          __FILE__, __LINE__, ## __VA_ARGS__);  \
++  syslog(LOG_INFO, "INFO %s:%d " _fmt "\n",     \
++          __FILE__, __LINE__, ## __VA_ARGS__);  \
++}
++
++#undef DEBUG
++#define DEBUG(_fmt, ...) {                      \
++  fprintf(stdout, "DEBUG %s:%d " _fmt "\n",     \
++          __FILE__, __LINE__, ## __VA_ARGS__);  \
++  syslog(LOG_DEBUG, "DEBUG %s:%d " _fmt "\n",   \
++          __FILE__, __LINE__, ## __VA_ARGS__);  \
++}
++
++#undef ERROR
++#define ERROR(_fmt, ...) {                      \
++  fprintf(stderr, "ERROR %s:%d " _fmt "\n",     \
++          __FILE__, __LINE__, ## __VA_ARGS__);  \
++  syslog(LOG_ERR, "ERROR %s:%d " _fmt "\n",     \
++          __FILE__, __LINE__, ## __VA_ARGS__);  \
++}
+ 
+ //#define DOTRACE
+ #ifdef DOTRACE
+-#define TRACE(x) \
+-  syslog(LOG_ERR, "fuse_dfs TRACE - %s\n", x);  \
+-  fprintf(stderr, "fuse_dfs TRACE - %s\n", x);
++#define TRACE(x) {        \
++    DEBUG("TRACE %s", x); \
++}
+ 
+-#define TRACE1(x,y)                              \
+-  syslog(LOG_ERR, "fuse_dfs TRACE - %s %s\n", x,y);  \
+-  fprintf(stderr, "fuse_dfs TRACE - %s %s\n", x,y);
++#define TRACE1(x,y) {             \
++    DEBUG("TRACE %s %s\n", x, y); \
++}
+ #else
+ #define TRACE(x) ; 
+ #define TRACE1(x,y) ; 
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_access.c b/src/contrib/fuse-dfs/src/fuse_impls_access.c
+index cd25b19..c804011 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_access.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_access.c
+@@ -33,7 +33,7 @@ int dfs_access(const char *path, int mask)
+ 
+   hdfsFS userFS;
+   if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port)) == NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not connect to HDFS");
+     return -EIO;
+   }
+   //  return hdfsAccess(userFS, path, mask);
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_chmod.c b/src/contrib/fuse-dfs/src/fuse_impls_chmod.c
+index 7b74f95..f397c03 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_chmod.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_chmod.c
+@@ -37,12 +37,12 @@ int dfs_chmod(const char *path, mode_t mode)
+   hdfsFS userFS;
+   // if not connected, try to connect and fail out if we can't.
+   if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port))== NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not connect to HDFS");
+     return -EIO;
+   }
+ 
+   if (hdfsChmod(userFS, path, (short)mode)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to chmod %s to %d",path, (int)mode);
++    ERROR("Could not chmod %s to %d", path, (int)mode);
+     return -EIO;
+   }
+ #endif
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_chown.c b/src/contrib/fuse-dfs/src/fuse_impls_chown.c
+index 4c65d89..10cdd31 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_chown.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_chown.c
+@@ -41,16 +41,14 @@
+ 
+   user = getUsername(uid);
+   if (NULL == user) {
+-    syslog(LOG_ERR,"Could not lookup the user id string %d\n",(int)uid); 
+-    fprintf(stderr, "could not lookup userid %d\n", (int)uid); 
++    ERROR("Could not lookup the user id string %d",(int)uid); 
+     ret = -EIO;
+   }
+ 
+   if (0 == ret) {
+     group = getGroup(gid);
+     if (group == NULL) {
+-      syslog(LOG_ERR,"Could not lookup the group id string %d\n",(int)gid); 
+-      fprintf(stderr, "could not lookup group %d\n", (int)gid); 
++      ERROR("Could not lookup the group id string %d",(int)gid);
+       ret = -EIO;
+     } 
+   }
+@@ -59,15 +57,14 @@
+   if (0 == ret) {
+     // if not connected, try to connect and fail out if we can't.
+     if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port))== NULL) {
+-      syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++      ERROR("Could not connect to HDFS");
+       ret = -EIO;
+     }
+   }
+ 
+   if (0 == ret) {
+-    //  fprintf(stderr, "DEBUG: chown %s %d->%s %d->%s\n", path, (int)uid, user, (int)gid, group);
+     if (hdfsChown(userFS, path, user, group)) {
+-      syslog(LOG_ERR,"ERROR: hdfs trying to chown %s to %d/%d",path, (int)uid, gid);
++      ERROR("Could not chown %s to %d:%d", path, (int)uid, gid);
+       ret = -EIO;
+     }
+   }
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_flush.c b/src/contrib/fuse-dfs/src/fuse_impls_flush.c
+index 4a2f761..6d4f05c 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_flush.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_flush.c
+@@ -46,7 +46,7 @@ int dfs_flush(const char *path, struct fuse_file_info *fi) {
+ 
+     assert(fh->fs);
+     if (hdfsFlush(fh->fs, file_handle) != 0) {
+-      syslog(LOG_ERR, "ERROR: dfs problem - could not flush file_handle(%lx) for %s %s:%d\n",(long)file_handle,path, __FILE__, __LINE__);
++      ERROR("Could not flush %lx for %s\n",(long)file_handle, path);
+       return -EIO;
+     }
+   }
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_getattr.c b/src/contrib/fuse-dfs/src/fuse_impls_getattr.c
+index 44ce7e0..a31960c 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_getattr.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_getattr.c
+@@ -33,8 +33,9 @@ int dfs_getattr(const char *path, struct stat *st)
+   assert(st);
+ 
+   // if not connected, try to connect and fail out if we can't.
+-  if (NULL == dfs->fs && NULL == (dfs->fs = hdfsConnect(dfs->nn_hostname,dfs->nn_port))) {
+-    syslog(LOG_ERR, "ERROR: could not connect to %s:%d %s:%d\n", dfs->nn_hostname, dfs->nn_port,__FILE__, __LINE__);
++  if (NULL == dfs->fs && 
++      NULL == (dfs->fs = hdfsConnect(dfs->nn_hostname,dfs->nn_port))) {
++    ERROR("Could not connect to %s:%d", dfs->nn_hostname, dfs->nn_port);
+     return -EIO;
+   }
+ 
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_mkdir.c b/src/contrib/fuse-dfs/src/fuse_impls_mkdir.c
+index ef2a2c3..58b9e07 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_mkdir.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_mkdir.c
+@@ -34,35 +34,34 @@ int dfs_mkdir(const char *path, mode_t mode)
+   assert('/' == *path);
+ 
+   if (is_protected(path)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to create the directory: %s", path);
++    ERROR("HDFS trying to create directory %s", path);
+     return -EACCES;
+   }
+ 
+   if (dfs->read_only) {
+-    syslog(LOG_ERR,"ERROR: hdfs is configured as read-only, cannot create the directory %s\n",path);
++    ERROR("HDFS is configured read-only, cannot create directory %s", path);
+     return -EACCES;
+   }
+   
+   hdfsFS userFS;
+   // if not connected, try to connect and fail out if we can't.
+   if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port))== NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not connect");
+     return -EIO;
+   }
+ 
+   // In theory the create and chmod should be atomic.
+ 
+   if (hdfsCreateDirectory(userFS, path)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to create directory %s",path);
++    ERROR("HDFS could not create directory %s", path);
+     return -EIO;
+   }
+ 
+ #if PERMS
+   if (hdfsChmod(userFS, path, (short)mode)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to chmod %s to %d",path, (int)mode);
++    ERROR("Could not chmod %s to %d", path, (int)mode);
+     return -EIO;
+   }
+ #endif
+   return 0;
+-
+ }
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_mknod.c b/src/contrib/fuse-dfs/src/fuse_impls_mknod.c
+index 02570dc..c745cf1 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_mknod.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_mknod.c
+@@ -19,8 +19,9 @@
+ #include "fuse_dfs.h"
+ #include "fuse_impls.h"
+ 
+- int dfs_mknod(const char *path, mode_t mode, dev_t rdev) {
+-  TRACE1("mknod", path)
+-  syslog(LOG_DEBUG,"in dfs_mknod");
++int dfs_mknod(const char *path, mode_t mode, dev_t rdev)
++{
++  TRACE1("mknod", path);
++  DEBUG("dfs_mknod");
+   return 0;
+ }
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_open.c b/src/contrib/fuse-dfs/src/fuse_impls_open.c
+index aa9a3a2..1def4c4 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_open.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_open.c
+@@ -41,12 +41,12 @@ int dfs_open(const char *path, struct fuse_file_info *fi)
+   // retrieve dfs specific data
+   dfs_fh *fh = (dfs_fh*)malloc(sizeof (dfs_fh));
+   if (fh == NULL) {
+-    syslog(LOG_ERR, "ERROR: malloc of new file handle failed %s:%d\n", __FILE__, __LINE__);
++    ERROR("Malloc of new file handle failed");
+     return -EIO;
+   }
+ 
+   if ((fh->fs = doConnectAsUser(dfs->nn_hostname,dfs->nn_port)) == NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not connect to dfs");
+     return -EIO;
+   }
+ 
+@@ -66,8 +66,7 @@ int dfs_open(const char *path, struct fuse_file_info *fi)
+   }
+ 
+   if ((fh->hdfsFH = hdfsOpenFile(fh->fs, path, flags,  0, 0, 0)) == NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect open file %s:%d\n", __FILE__, __LINE__);
+-    syslog(LOG_ERR, "ERROR: errno %d\n", errno);
++    ERROR("Could not open file %s (errno=%d)", path, errno);
+     if (errno == 0 || errno == EINTERNAL) {
+       return -EIO;
+     }
+@@ -88,7 +87,7 @@ int dfs_open(const char *path, struct fuse_file_info *fi)
+     assert(dfs->rdbuffer_size > 0);
+ 
+     if (NULL == (fh->buf = (char*)malloc(dfs->rdbuffer_size*sizeof (char)))) {
+-      syslog(LOG_ERR, "ERROR: could not allocate memory for file buffer for a read for file %s dfs %s:%d\n", path,__FILE__, __LINE__);
++      ERROR("Could not allocate memory for a read for file %s\n", path);
+       ret = -EIO;
+     }
+ 
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_read.c b/src/contrib/fuse-dfs/src/fuse_impls_read.c
+index 4024024..5209261 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_read.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_read.c
+@@ -108,7 +108,7 @@ int dfs_read(const char *path, char *buf, size_t size, off_t offset,
+       if (total_read < size && num_read < 0) {
+         // invalidate the buffer 
+         fh->bufferSize = 0; 
+-        syslog(LOG_ERR, "Read error - pread failed for %s with return code %d %s:%d", path, (int)num_read, __FILE__, __LINE__);
++        ERROR("pread failed for %s with return code %d", path, (int)num_read);
+         ret = -EIO;
+       } else {
+         // Either EOF, all read or read beyond size, but then there was an error
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_readdir.c b/src/contrib/fuse-dfs/src/fuse_impls_readdir.c
+index ea1068f..b0fb1f5 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_readdir.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_readdir.c
+@@ -42,7 +42,7 @@ int dfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+   hdfsFS userFS;
+   // if not connected, try to connect and fail out if we can't.
+   if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port))== NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not connect");
+     return -EIO;
+   }
+ 
+@@ -61,7 +61,7 @@ int dfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+   for (i = 0; i < numEntries; i++) {
+ 
+     if (NULL == info[i].mName) {
+-      syslog(LOG_ERR,"ERROR: for <%s> info[%d].mName==NULL %s:%d", path, i, __FILE__,__LINE__);
++      ERROR("Path %s info[%d].mName is NULL", path, i);
+       continue;
+     }
+ 
+@@ -71,8 +71,7 @@ int dfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+     // Find the final path component
+     const char *str = strrchr(info[i].mName, '/');
+     if (NULL == str) {
+-      syslog(LOG_ERR, "ERROR: invalid URI %s %s:%d",
+-             info[i].mName, __FILE__,__LINE__);
++      ERROR("Invalid URI %s", info[i].mName);
+       continue;
+     }
+     str++;
+@@ -80,7 +79,7 @@ int dfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+     // pack this entry into the fuse buffer
+     int res = 0;
+     if ((res = filler(buf,str,&st,0)) != 0) {
+-      syslog(LOG_ERR, "ERROR: readdir filling the buffer %d %s:%d\n",res, __FILE__, __LINE__);
++      ERROR("Readdir filler failed: %d\n",res);
+     }
+   }
+ 
+@@ -111,7 +110,7 @@ int dfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+       // flatten the info using fuse's function into a buffer
+       int res = 0;
+       if ((res = filler(buf,str,&st,0)) != 0) {
+-        syslog(LOG_ERR, "ERROR: readdir filling the buffer %d %s:%d", res, __FILE__, __LINE__);
++	ERROR("Readdir filler failed: %d\n",res);
+       }
+     }
+   // free the info pointers
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_release.c b/src/contrib/fuse-dfs/src/fuse_impls_release.c
+index 6afda97..d19fc8d 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_release.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_release.c
+@@ -55,8 +55,7 @@ int dfs_release (const char *path, struct fuse_file_info *fi) {
+ 
+     if (NULL != file_handle) {
+       if (hdfsCloseFile(fh->fs, file_handle) != 0) {
+-        syslog(LOG_ERR, "ERROR: dfs problem - could not close file_handle(%ld) for %s %s:%d\n",(long)file_handle,path, __FILE__, __LINE__);
+-        fprintf(stderr, "ERROR: dfs problem - could not close file_handle(%ld) for %s %s:%d\n",(long)file_handle,path, __FILE__, __LINE__);
++        ERROR("Could not close handle %ld for %s\n",(long)file_handle, path);
+         ret = -EIO;
+       }
+     }
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_rename.c b/src/contrib/fuse-dfs/src/fuse_impls_rename.c
+index a964def..25a3324 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_rename.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_rename.c
+@@ -37,27 +37,26 @@ int dfs_rename(const char *from, const char *to)
+   assert('/' == *to);
+ 
+   if (is_protected(from) || is_protected(to)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to rename: %s %s", from, to);
++    ERROR("Could not rename %s to %s", from, to);
+     return -EACCES;
+   }
+ 
+   if (dfs->read_only) {
+-    syslog(LOG_ERR,"ERROR: hdfs is configured as read-only, cannot rename the directory %s\n",from);
++    ERROR("HDFS configured read-only, cannot rename directory %s", from);
+     return -EACCES;
+   }
+ 
+   hdfsFS userFS;
+   // if not connected, try to connect and fail out if we can't.
+   if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port))== NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not connect");
+     return -EIO;
+   }
+ 
+   if (hdfsRename(userFS, from, to)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to rename %s to %s",from, to);
++    ERROR("Rename %s to %s failed", from, to);
+     return -EIO;
+   }
+ 
+   return 0;
+-
+ }
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_rmdir.c b/src/contrib/fuse-dfs/src/fuse_impls_rmdir.c
+index 075e4fb..b17d892 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_rmdir.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_rmdir.c
+@@ -36,19 +36,19 @@ int dfs_rmdir(const char *path)
+   assert('/' == *path);
+ 
+   if (is_protected(path)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to delete a protected directory: %s ",path);
++    ERROR("Trying to delete protected directory %s", path);
+     return -EACCES;
+   }
+ 
+   if (dfs->read_only) {
+-    syslog(LOG_ERR,"ERROR: hdfs is configured as read-only, cannot delete the directory %s\n",path);
++    ERROR("HDFS configured read-only, cannot delete directory %s", path);
+     return -EACCES;
+   }
+ 
+   hdfsFS userFS;
+   // if not connected, try to connect and fail out if we can't.
+   if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port))== NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not connect");
+     return -EIO;
+   }
+ 
+@@ -63,7 +63,7 @@ int dfs_rmdir(const char *path)
+   }
+ 
+   if (hdfsDeleteWithTrash(userFS, path, dfs->usetrash)) {
+-    syslog(LOG_ERR,"ERROR: hdfs error trying to delete the directory %s\n",path);
++    ERROR("Error trying to delete directory %s", path);
+     return -EIO;
+   }
+ 
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_statfs.c b/src/contrib/fuse-dfs/src/fuse_impls_statfs.c
+index 1579903..9185cda 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_statfs.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_statfs.c
+@@ -39,7 +39,7 @@ int dfs_statfs(const char *path, struct statvfs *st)
+   hdfsFS userFS;
+   // if not connected, try to connect and fail out if we can't.
+   if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port))== NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not connect");
+     return -EIO;
+   }
+ 
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_truncate.c b/src/contrib/fuse-dfs/src/fuse_impls_truncate.c
+index b93cb45..cf2b0e4 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_truncate.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_truncate.c
+@@ -50,7 +50,7 @@ int dfs_truncate(const char *path, off_t size)
+   hdfsFS userFS;
+   // if not connected, try to connect and fail out if we can't.
+   if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port)) == NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not connect");
+     return -EIO;
+   }
+ 
+@@ -58,12 +58,12 @@ int dfs_truncate(const char *path, off_t size)
+ 
+   hdfsFile file;
+   if ((file = (hdfsFile)hdfsOpenFile(userFS, path, flags,  0, 0, 0)) == NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect open file %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not connect open file %s", path);
+     return -EIO;
+   }
+ 
+   if (hdfsCloseFile(userFS, file) != 0) {
+-    syslog(LOG_ERR, "ERROR: could not connect close file %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not close file %s", path);
+     return -EIO;
+   }
+   return 0;
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_unlink.c b/src/contrib/fuse-dfs/src/fuse_impls_unlink.c
+index a26ad8f..ad7872f 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_unlink.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_unlink.c
+@@ -35,28 +35,26 @@ int dfs_unlink(const char *path)
+   assert('/' == *path);
+ 
+   if (is_protected(path)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to delete a protected directory: %s ",path);
++    ERROR("Trying to delete protected directory %s ", path);
+     return -EACCES;
+   }
+ 
+   if (dfs->read_only) {
+-    syslog(LOG_ERR,"ERROR: hdfs is configured as read-only, cannot create the directory %s\n",path);
++    ERROR("HDFS configured read-only, cannot create directory %s", path);
+     return -EACCES;
+   }
+ 
+   hdfsFS userFS;
+   // if not connected, try to connect and fail out if we can't.
+   if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port))== NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++    ERROR("Could not connect");
+     return -EIO;
+   }
+ 
+-
+   if (hdfsDeleteWithTrash(userFS, path, dfs->usetrash)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to delete the file %s",path);
++    ERROR("Could not delete file %s", path);
+     return -EIO;
+   }
+ 
+   return 0;
+-
+ }
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_utimens.c b/src/contrib/fuse-dfs/src/fuse_impls_utimens.c
+index d199e46..069d27a 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_utimens.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_utimens.c
+@@ -38,8 +38,7 @@ int dfs_utimens(const char *path, const struct timespec ts[2])
+   hdfsFS userFS;
+   // if not connected, try to connect and fail out if we can't.
+   if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port))== NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n",
+-           __FILE__, __LINE__);
++    ERROR("Could not connect");
+     return -EIO;
+   }
+ 
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_write.c b/src/contrib/fuse-dfs/src/fuse_impls_write.c
+index 3e16977..8bb0454 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_write.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_write.c
+@@ -52,13 +52,14 @@ int dfs_write(const char *path, const char *buf, size_t size,
+ 
+   tOffset cur_offset = hdfsTell(fh->fs, file_handle);
+   if (cur_offset != offset) {
+-    syslog(LOG_ERR, "ERROR: user trying to random access write to a file %d!=%d for %s %s:%d\n",(int)cur_offset, (int)offset,path, __FILE__, __LINE__);
++    ERROR("User trying to random access write to a file %d != %d for %s",
++	  (int)cur_offset, (int)offset, path);
+     ret =  -ENOTSUP;
+   } else {
+     length = hdfsWrite(fh->fs, file_handle, buf, size);
+     if (length <= 0) {
+-      syslog(LOG_ERR, "ERROR: could not write all the bytes for %s %d!=%d%s:%d\n", path, length, (int)size, __FILE__, __LINE__);
+-      syslog(LOG_ERR, "ERROR: errno %d\n", errno);
++      ERROR("Could not write all bytes for %s %d != %d (errno=%d)", 
++	    path, length, (int)size, errno);
+       if (errno == 0 || errno == EINTERNAL) {
+         ret = -EIO;
+       } else {
+@@ -66,8 +67,8 @@ int dfs_write(const char *path, const char *buf, size_t size,
+       }
+     } 
+     if (length != size) {
+-      syslog(LOG_ERR, "ERROR: could not write all the bytes for %s %d!=%d%s:%d\n", path, length, (int)size, __FILE__, __LINE__);
+-      syslog(LOG_ERR, "ERROR: errno - %d\n", errno);
++      ERROR("Could not write all bytes for %s %d != %d (errno=%d)", 
++	    path, length, (int)size, errno);
+     }
+   }
+ 
+diff --git a/src/contrib/fuse-dfs/src/fuse_init.c b/src/contrib/fuse-dfs/src/fuse_init.c
+index 0e1edfc..f492a3f 100644
+--- a/src/contrib/fuse-dfs/src/fuse_init.c
++++ b/src/contrib/fuse-dfs/src/fuse_init.c
+@@ -97,7 +97,7 @@ void *dfs_init()
+   dfs_context *dfs = (dfs_context*)malloc(sizeof (dfs_context));
+ 
+   if (NULL == dfs) {
+-    syslog(LOG_ERR, "FATAL: could not malloc fuse dfs context struct - out of memory %s:%d", __FILE__, __LINE__);
++    ERROR("FATAL: could not malloc dfs_context");
+     exit(1);
+   }
+ 
+@@ -112,13 +112,13 @@ void *dfs_init()
+   dfs->rdbuffer_size         = options.rdbuffer_size;
+   dfs->direct_io             = options.direct_io;
+ 
+-  syslog(LOG_INFO, "mounting %s:%d", dfs->nn_hostname, dfs->nn_port);
++  INFO("Mounting %s:%d", dfs->nn_hostname, dfs->nn_port);
+ 
+   init_protectedpaths(dfs);
+   assert(dfs->protectedpaths != NULL);
+ 
+   if (dfs->rdbuffer_size <= 0) {
+-    syslog(LOG_DEBUG, "WARN: dfs->rdbuffersize <= 0 = %ld %s:%d", dfs->rdbuffer_size, __FILE__, __LINE__);
++    DEBUG("dfs->rdbuffersize <= 0 = %ld", dfs->rdbuffer_size);
+     dfs->rdbuffer_size = 32768;
+   }
+   return (void*)dfs;
+diff --git a/src/contrib/fuse-dfs/src/fuse_options.c b/src/contrib/fuse-dfs/src/fuse_options.c
+index 7e151ec..c880a8c 100644
+--- a/src/contrib/fuse-dfs/src/fuse_options.c
++++ b/src/contrib/fuse-dfs/src/fuse_options.c
+@@ -23,29 +23,38 @@
+ #include "fuse_context_handle.h"
+ 
+ void print_options() {
+-  fprintf(stderr,"options:\n");
+-  fprintf(stderr, "\tprotected=%s\n",options.protected);
+-  fprintf(stderr, "\tserver=%s\n",options.server);
+-  fprintf(stderr, "\tport=%d\n",options.port);
+-  fprintf(stderr, "\tdebug=%d\n",options.debug);
+-  fprintf(stderr, "\tread_only=%d\n",options.read_only);
+-  fprintf(stderr, "\tusetrash=%d\n",options.usetrash);
+-  fprintf(stderr, "\tentry_timeout=%d\n",options.entry_timeout);
+-  fprintf(stderr, "\tattribute_timeout=%d\n",options.attribute_timeout);
+-  fprintf(stderr, "\tprivate=%d\n",options.private);
+-  fprintf(stderr, "\trdbuffer_size=%d (KBs)\n",(int)options.rdbuffer_size/1024);
++  printf("options:\n"
++	 "\tprotected=%s\n"
++	 "\tserver=%s\n"
++	 "\tport=%d\n"
++	 "\tdebug=%d\n"
++	 "\tread_only=%d\n"
++	 "\tusetrash=%d\n"
++	 "\tentry_timeout=%d\n"
++	 "\tattribute_timeout=%d\n"
++	 "\tprivate=%d\n"
++	 "\trdbuffer_size=%d (KBs)\n", 
++	 options.protected, options.server, options.port, options.debug,
++	 options.read_only, options.usetrash, options.entry_timeout, 
++	 options.attribute_timeout, options.private, 
++	 (int)options.rdbuffer_size / 1024);
+ }
+ 
+-const char *program;  
+-
++const char *program;
+ 
+ /** macro to define options */
+ #define DFSFS_OPT_KEY(t, p, v) { t, offsetof(struct options, p), v }
+ 
+ void print_usage(const char *pname)
+ {
+-  fprintf(stdout,"USAGE: %s [debug] [--help] [--version] [-oprotected=<colon_seped_list_of_paths] [rw] [-onotrash] [-ousetrash] [-obig_writes] [-oprivate (single user)] [ro] [-oserver=<hadoop_servername>] [-oport=<hadoop_port>] [-oentry_timeout=<secs>] [-oattribute_timeout=<secs>] [-odirect_io] [-onopoermissions] [-o<other fuse option>] <mntpoint> [fuse options]\n",pname);
+-  fprintf(stdout,"NOTE: debugging option for fuse is -debug\n");
++  printf("USAGE: %s [debug] [--help] [--version] "
++	 "[-oprotected=<colon_seped_list_of_paths] [rw] [-onotrash] "
++	 "[-ousetrash] [-obig_writes] [-oprivate (single user)] [ro] "
++	 "[-oserver=<hadoop_servername>] [-oport=<hadoop_port>] "
++	 "[-oentry_timeout=<secs>] [-oattribute_timeout=<secs>] "
++	 "[-odirect_io] [-onopoermissions] [-o<other fuse option>] "
++	 "<mntpoint> [fuse options]\n", pname);
++  printf("NOTE: debugging option for fuse is -debug\n");
+ }
+ 
+ 
+@@ -98,10 +107,10 @@ int dfs_options(void *data, const char *arg, int key,  struct fuse_args *outargs
+ 
+   switch (key) {
+   case FUSE_OPT_KEY_OPT:
+-    fprintf(stderr,"fuse-dfs ignoring option %s\n",arg);
++    fprintf(stderr, "fuse-dfs ignoring option %s\n", arg);
+     return 1;
+   case  KEY_VERSION:
+-    fprintf(stdout,"%s %s\n",program,_FUSE_DFS_VERSION);
++    fprintf(stdout, "%s %s\n", program, _FUSE_DFS_VERSION);
+     exit(0);
+   case KEY_HELP:
+     print_usage(program);
+@@ -150,14 +159,14 @@ int dfs_options(void *data, const char *arg, int key,  struct fuse_args *outargs
+       } else if (strcmp(arg,"rw") == 0) {
+         options.read_only = 0;
+       } else {
+-        fprintf(stderr,"fuse-dfs didn't recognize %s,%d\n",arg,key);
++        ERROR("fuse-dfs didn't recognize %s,%d\n",arg,key);
+         fuse_opt_add_arg(outargs,arg);
+         return 0;
+       }
+     } else {
+       options.port = tmp_port;
+       options.server = strdup(tmp_server);
+-      fprintf(stderr, "port=%d,server=%s\n", options.port, options.server);
++      ERROR("port=%d,server=%s\n", options.port, options.server);
+     }
+   }
+   }
+diff --git a/src/contrib/fuse-dfs/src/fuse_trash.c b/src/contrib/fuse-dfs/src/fuse_trash.c
+index d5b62d4..4f87197 100644
+--- a/src/contrib/fuse-dfs/src/fuse_trash.c
++++ b/src/contrib/fuse-dfs/src/fuse_trash.c
+@@ -47,10 +47,10 @@ int move_to_trash(const char *item, hdfsFS userFS) {
+ 
+ 
+   char fname[4096]; // or last element of the directory path
+-  char parent_directory[4096]; // the directory the fname resides in
++  char parent_dir[4096]; // the directory the fname resides in
+ 
+   if (strlen(item) > sizeof(fname) - strlen(TrashDir)) {
+-    syslog(LOG_ERR, "ERROR: internal buffer too small to accomodate path of length %d %s:%d\n", (int)strlen(item), __FILE__, __LINE__);
++    ERROR("Buffer too small to accomodate path of len %d", (int)strlen(item));
+     return -EIO;
+   }
+ 
+@@ -60,16 +60,17 @@ int move_to_trash(const char *item, hdfsFS userFS) {
+     int length_of_fname = strlen(item) - length_of_parent_dir - 1; // the '/'
+ 
+     // note - the below strncpys should be safe from overflow because of the check on item's string length above.
+-    strncpy(parent_directory, item, length_of_parent_dir);
+-    parent_directory[length_of_parent_dir ] = 0;
++    strncpy(parent_dir, item, length_of_parent_dir);
++    parent_dir[length_of_parent_dir ] = 0;
+     strncpy(fname, item + length_of_parent_dir + 1, strlen(item));
+     fname[length_of_fname + 1] = 0;
+   }
+ 
+   // create the target trash directory
+   char trash_dir[4096];
+-  if (snprintf(trash_dir, sizeof(trash_dir), "%s%s",TrashDir,parent_directory) >= sizeof trash_dir) {
+-    syslog(LOG_ERR, "move_to_trash error target is not big enough to hold new name for %s %s:%d\n",item, __FILE__, __LINE__);
++  if (snprintf(trash_dir, sizeof(trash_dir), "%s%s", TrashDir, parent_dir) 
++      >= sizeof trash_dir) {
++    ERROR("Move to trash error target not big enough for %s", item);
+     return -EIO;
+   }
+ 
+@@ -89,19 +90,19 @@ int move_to_trash(const char *item, hdfsFS userFS) {
+   char target[4096];
+   int j ;
+   if ( snprintf(target, sizeof target,"%s/%s",trash_dir, fname) >= sizeof target) {
+-    syslog(LOG_ERR, "move_to_trash error target is not big enough to hold new name for %s %s:%d\n",item, __FILE__, __LINE__);
++    ERROR("Move to trash error target not big enough for %s", item);
+     return -EIO;
+   }
+ 
+   // NOTE: this loop differs from the java version by capping the #of tries
+   for (j = 1; ! hdfsExists(userFS, target) && j < TRASH_RENAME_TRIES ; j++) {
+     if (snprintf(target, sizeof target,"%s/%s.%d",trash_dir, fname, j) >= sizeof target) {
+-      syslog(LOG_ERR, "move_to_trash error target is not big enough to hold new name for %s %s:%d\n",item, __FILE__, __LINE__);
++      ERROR("Move to trash error target not big enough for %s", item);
+       return -EIO;
+     }
+   }
+   if (hdfsRename(userFS, item, target)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to rename %s to %s",item, target);
++    ERROR("Trying to rename %s to %s", item, target);
+     return -EIO;
+   }
+   return 0;
+@@ -117,7 +118,7 @@ int hdfsDeleteWithTrash(hdfsFS userFS, const char *path, int useTrash) {
+   }
+ 
+   if (hdfsDelete(userFS, path)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to delete the file %s",path);
++    ERROR("Trying to delete the file %s", path);
+     return -EIO;
+   }
+   return 0;
+diff --git a/src/contrib/fuse-dfs/src/fuse_users.c b/src/contrib/fuse-dfs/src/fuse_users.c
+index d68ec3a..4637a28 100644
+--- a/src/contrib/fuse-dfs/src/fuse_users.c
++++ b/src/contrib/fuse-dfs/src/fuse_users.c
+@@ -194,7 +194,7 @@ char ** getGroups(uid_t uid, int *num_groups)
+   for (i=0; i < *num_groups; i++)  {
+     groupnames[i] = getGroup(grouplist[i]);
+     if (groupnames[i] == NULL) {
+-      fprintf(stderr, "error could not lookup group %d\n",(int)grouplist[i]);
++      ERROR("Could not lookup group %d\n", (int)grouplist[i]);
+     }
+   } 
+   free(grouplist);
+diff --git a/src/contrib/fuse-dfs/src/test/TestFuseDFS.java b/src/contrib/fuse-dfs/src/test/TestFuseDFS.java
+index 1e9e099..eb46d2c 100644
+--- a/src/contrib/fuse-dfs/src/test/TestFuseDFS.java
++++ b/src/contrib/fuse-dfs/src/test/TestFuseDFS.java
+@@ -16,611 +16,354 @@
+  * limitations under the License.
+  */
+ 
+-import org.apache.hadoop.hdfs.*;
+-import junit.framework.TestCase;
+ import java.io.*;
++import java.net.URI;
++import java.util.ArrayList;
++import java.util.concurrent.atomic.*;
++
++import org.apache.log4j.Level;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.*;
+ import org.apache.hadoop.fs.permission.*;
+-import java.net.*;
++import org.apache.hadoop.hdfs.*;
++import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.util.StringUtils;
+ 
+-/**
+- * This class tests that the Fuse module for DFS can mount properly
+- * and does a few simple commands:
+- * mkdir
+- * rmdir
+- * ls
+- * cat
+- *
+- * cp and touch are purposely not tested because they won't work with the current module
++import org.junit.Test;
++import org.junit.BeforeClass;
++import org.junit.AfterClass;
++import static org.junit.Assert.*;
+ 
+- *
++/**
++ * Basic functional tests on a fuse-dfs mount.
+  */
+-public class TestFuseDFS extends TestCase {
+-
+-  /**
+-   * mount the fuse file system using assumed fuse module library installed in /usr/local/lib or somewhere else on your
+-   * pre-existing LD_LIBRARY_PATH
+-   *
+-   */
+-
+-  static Process fuse_process;
+-  static String fuse_cmd;
+-  static private void mount(String mountpoint, URI dfs) throws IOException, InterruptedException  {
+-
+-    String cp = System.getProperty("java.class.path");
+-    Runtime r = Runtime.getRuntime();
+-    fuse_cmd = System.getProperty("build.test") + "/../fuse_dfs";
+-    String libhdfs = System.getProperty("build.test") + "/../../../libhdfs/";
+-    String arch = System.getProperty("os.arch");
+-    String jvm = System.getProperty("java.home") + "/lib/" + arch + "/server";
+-    String lp = System.getProperty("LD_LIBRARY_PATH") + ":" + "/usr/local/lib:" + libhdfs + ":" + jvm;
+-    System.err.println("LD_LIBRARY_PATH=" + lp);
+-    String cmd[] =  {  fuse_cmd, "dfs://" + dfs.getHost() + ":" + String.valueOf(dfs.getPort()), 
+-                       mountpoint, "-obig_writes", "-odebug", "-oentry_timeout=0.1",  "-oattribute_timeout=0.1", "-ousetrash", "rw", "-oinitchecks",
+-                       "-ordbuffer=32768"};
+-    final String [] envp = {
+-      "CLASSPATH="+  cp,
+-      "LD_LIBRARY_PATH=" + lp,
+-      "PATH=" + "/usr/bin:/bin"
+-
+-    };
+-
+-    // ensure the mount point is not currently mounted
+-    Process p = r.exec("fusermount -u " + mountpoint);
+-    p.waitFor();
++public class TestFuseDFS {
+ 
+-    // clean up the mount point
+-    p = r.exec("rm -rf " + mountpoint);
+-    assertTrue(p.waitFor() == 0);
++  private static MiniDFSCluster cluster;
++  private static FileSystem fs;
++  private static Runtime r;
++  private static String mountPoint;
+ 
+-    // make the mount point if needed
+-    p = r.exec("mkdir -p " + mountpoint);
+-    assertTrue(p.waitFor() == 0);
+-
+-    // mount fuse to the mount point
+-    fuse_process = r.exec(cmd, envp);
+-
+-    // give DFS a chance to come up
+-    try { Thread.sleep(3000); } catch(Exception e) { }
++  private static final Log LOG = LogFactory.getLog(TestFuseDFS.class);
++  {
++    ((Log4JLogger)LOG).getLogger().setLevel(Level.ALL);
+   }
+ 
+-  /**
+-   * unmounts fuse for before shutting down.
+-   */
+-  static private void umount(String mpoint) throws IOException, InterruptedException {
+-    Runtime r= Runtime.getRuntime();
+-    Process p = r.exec("fusermount -u " + mpoint);
+-    p.waitFor();
++  /** Dump the given intput stream to stderr */
++  private static void dumpInputStream(InputStream is) throws IOException {
++    int len;
++    do {
++      byte b[] = new byte[is.available()];
++      len = is.read(b);
++      System.out.println("Read "+len+" bytes");
++      System.out.write(b, 0, b.length);
++    } while (len > 0);
+   }
+ 
+-  /**
+-   * Set things up - create mini dfs cluster and mount the fuse filesystem.
++  /** 
++   * Wait for the given process to return and check that it exited
++   * as required. Log if the process failed.
+    */
+-  public TestFuseDFS() throws IOException,InterruptedException  {
+-  }
+-
+-  static private MiniDFSCluster cluster;
+-  static private DistributedFileSystem fileSys;
+-  final static private String mpoint;
+-
+-  static {
+-    mpoint = System.getProperty("build.test") + "/mnt";
+-    System.runFinalizersOnExit(true);
+-    startStuff();
+-  }
+-
+-
+-  static public void startStuff() {
++  private static void checkProcessRet(Process p, boolean expectPass) 
++      throws IOException {
+     try {
+-      Configuration conf = new Configuration();
+-      conf.setBoolean("dfs.permissions",false);
+-      cluster = new MiniDFSCluster(conf, 1, true, null);
+-      fileSys = (DistributedFileSystem)cluster.getFileSystem();
+-      assertTrue(fileSys.getFileStatus(new Path("/")).isDir());
+-      mount(mpoint, fileSys.getUri());
+-    } catch(Exception e) {
+-      e.printStackTrace();
++      int ret = p.waitFor();
++      if (ret != 0) {
++	dumpInputStream(p.getErrorStream());
++      }
++      if (expectPass) {
++	assertEquals(0, ret);
++      } else {
++	assertTrue(ret != 0);
++      }
++    } catch (InterruptedException ie) {
++      fail("Process interrupted: "+ie.getMessage());
+     }
+   }
+ 
+-  public void setUp() {
+-  }
+-
+-  /**
+-   * use shell to create a dir and then use filesys to see it exists.
+-   */
+-  public void testMkdir() throws IOException,InterruptedException, Exception  {
++  /** Exec the given command and assert it executed successfully */
++  private static void execWaitRet(String cmd) throws IOException {
++    LOG.debug("EXEC "+cmd);
++    Process p = r.exec(cmd);
+     try {
+-      // First create a new directory with mkdirs
+-      Path path = new Path("/foo");
+-      Runtime r = Runtime.getRuntime();
+-      String cmd = "mkdir -p " + mpoint + path.toString();
+-      Process p = r.exec(cmd);
+-      assertTrue(p.waitFor() == 0);
+-
+-      // check it is there
+-      assertTrue(fileSys.getFileStatus(path).isDir());
+-
+-      // check again through the shell
+-      String lsCmd = "ls " + mpoint + path.toString();
+-      p = r.exec(lsCmd);
+-      assertTrue(p.waitFor() == 0);
+-    } catch(Exception e) {
+-      e.printStackTrace();
+-      throw e;
++      p.waitFor();
++    } catch (InterruptedException ie) {
++      fail("Process interrupted: "+ie.getMessage());
+     }
+   }
+ 
++  /** Exec the given command and assert it executed successfully */
++  private static void execIgnoreRet(String cmd) throws IOException {
++    LOG.debug("EXEC "+cmd);
++    r.exec(cmd);
++  }
+ 
+-  /**
+-   * use shell to create a dir and then use filesys to see it exists.
+-   */
+-  public void testWrites() throws IOException,InterruptedException  {
+-    try {
+-
+-      // write a hello file
+-      File file = new File(mpoint, "hello.txt");
+-      FileOutputStream f = new FileOutputStream(file);
+-      String s = "hello ";
+-      f.write(s.getBytes());
+-      s = "world";
+-      f.write(s.getBytes());
+-      f.flush();
+-      f.close();
+-
++  /** Exec the given command and assert it executed successfully */
++  private static void execAssertSucceeds(String cmd) throws IOException {
++    LOG.debug("EXEC "+cmd);
++    checkProcessRet(r.exec(cmd), true);
++  }
+ 
+-      try {
+-        Thread.sleep(1000);
+-      } catch(Exception e) {
+-      }
++  /** Exec the given command, assert it returned an error code */
++  private static void execAssertFails(String cmd) throws IOException {
++    LOG.debug("EXEC "+cmd);
++    checkProcessRet(r.exec(cmd), false);
++  }
+ 
+-      // check the file exists.
+-      Path myPath = new Path("/hello.txt");
+-      assertTrue(fileSys.exists(myPath));
+-
+-      // check the data is ok
+-      FileInputStream fi = new FileInputStream(new File(mpoint, "hello.txt"));
+-      byte b[] = new byte[12];
+-      int length = fi.read(b,0,12);
+-      assertTrue(length > 0);
+-      String s2 = new String( b, 0, length);
+-      assertEquals("hello world", s2);
+-    } catch(Exception e) {
+-      e.printStackTrace();
+-    } finally {
+-    }
++  /** Create and write the given file */
++  private static void createFile(File f, String s) throws IOException {
++    InputStream is = new ByteArrayInputStream(s.getBytes());
++    FileOutputStream fos = new FileOutputStream(f);
++    IOUtils.copyBytes(is, fos, s.length(), true);
+   }
+ 
+-  /**
+-   * Test ls for dir already created in testMkdDir also tests bad ls
+-   */
+-  public void testLs() throws IOException,InterruptedException  {
++  /** Check that the given file exists with the given contents */
++  private static void checkFile(File f, String expectedContents) 
++      throws IOException {
++    FileInputStream fi = new FileInputStream(f);
++    int len = expectedContents.length();
++    byte[] b = new byte[len];
+     try {
+-      // First create a new directory with mkdirs
+-      Runtime r = Runtime.getRuntime();
+-
+-      // mkdir
+-      Process p = r.exec("mkdir -p " + mpoint + "/test/mkdirs");
+-      assertTrue(p.waitFor() == 0);
+-
+-      // ls
+-      p = r.exec("ls " + mpoint + "/test/mkdirs");
+-      assertTrue(p.waitFor() == 0);
+-
+-      // ls non-existant directory
+-      p = r.exec("ls " + mpoint + "/test/mkdirsNotThere");
+-      int res = p.waitFor();
+-      assertFalse(res == 0);
+-    } catch(Exception e) {
+-      e.printStackTrace();
++      IOUtils.readFully(fi, b, 0, len);
++    } catch (IOException ie) {
++      fail("Reading "+f.getName()+" failed with "+ie.getMessage());
++    } finally {
++      fi.close(); // NB: leaving f unclosed prevents unmount
+     }
+-
++    String s = new String(b, 0, len);
++    assertEquals("File content differs", expectedContents, s);
+   }
+ 
+-  /**
+-   * Remove a dir using the shell and use filesys to see it no longer exists.
+-   */
+-  public void testRmdir() throws IOException,InterruptedException  {
+-    try {
+-      // First create a new directory with mkdirs
+-
+-      Runtime r = Runtime.getRuntime();
+-      Process p = r.exec("mkdir -p " + mpoint + "/test/rmdir");
+-      assertTrue(p.waitFor() == 0);
+-
+-      Path myPath = new Path("/test/rmdir");
+-      assertTrue(fileSys.exists(myPath));
+-
+-      // remove it
+-      p = r.exec("rmdir " + mpoint + "/test/rmdir");
+-      assertTrue(p.waitFor() == 0);
+-
+-      // check it is not there
+-      assertFalse(fileSys.exists(myPath));
+-
+-      Path trashPath = new Path("/user/root/.Trash/Current/test/rmdir");
+-      assertTrue(fileSys.exists(trashPath));
+-
+-      // make it again to test trashing same thing twice
+-      p = r.exec("mkdir -p " + mpoint + "/test/rmdir");
+-      assertTrue(p.waitFor() == 0);
++  /** Run a fuse-dfs process to mount the given DFS */
++  private static void establishMount(URI uri) throws IOException  {
++    Runtime r = Runtime.getRuntime();
++    String cp = System.getProperty("java.class.path");
+ 
+-      assertTrue(fileSys.exists(myPath));
++    String buildTestDir = System.getProperty("build.test");
++    String fuseCmd = buildTestDir + "/../fuse_dfs";
++    String libHdfs = buildTestDir + "/../../../c++/lib";
+ 
+-      // remove it
+-      p = r.exec("rmdir " + mpoint + "/test/rmdir");
+-      assertTrue(p.waitFor() == 0);
++    String arch = System.getProperty("os.arch");
++    String jvm = System.getProperty("java.home") + "/lib/" + arch + "/server";
++    String lp = System.getProperty("LD_LIBRARY_PATH")+":"+libHdfs+":"+jvm;
++    LOG.debug("LD_LIBRARY_PATH=" + lp);
++
++    String nameNode = 
++      "dfs://" + uri.getHost() + ":" + String.valueOf(uri.getPort());
++
++    // NB: We're mounting via an unprivileged user, therefore
++    // user_allow_other needs to be set in /etc/fuse.conf, which also
++    // needs to be world readable.
++    String mountCmd[] = {
++      fuseCmd, nameNode, mountPoint,
++      // "-odebug",              // Don't daemonize
++      "-obig_writes",            // Allow >4kb writes
++      "-oentry_timeout=0.1",     // Don't cache dents long
++      "-oattribute_timeout=0.1", // Don't cache attributes long
++      "-ordbuffer=32768",        // Read buffer size in kb
++      "rw"
++    };
+ 
+-      // check it is not there
+-      assertFalse(fileSys.exists(myPath));
++    String [] env = {
++      "CLASSPATH="+cp,
++      "LD_LIBRARY_PATH="+lp,
++      "PATH=/usr/bin:/bin"
++    };
+ 
+-      trashPath = new Path("/user/root/.Trash/Current/test/rmdir.1");
+-      assertTrue(fileSys.exists(trashPath));
++    execWaitRet("fusermount -u " + mountPoint);
++    execAssertSucceeds("rm -rf " + mountPoint);
++    execAssertSucceeds("mkdir -p " + mountPoint);
+ 
+-    } catch(Exception e) {
+-      e.printStackTrace();
++    // Mount the mini cluster
++    try {
++      Process fuseProcess = r.exec(mountCmd, env);
++      assertEquals(0, fuseProcess.waitFor());
++    } catch (InterruptedException ie) {
++      fail("Failed to mount");
+     }
+   }
+ 
+-  /**
+-   * use shell to create a dir and then use filesys to see it exists.
+-   */
+-  public void testDF() throws IOException,InterruptedException, Exception  {
+-    try {
+-      // First create a new directory with mkdirs
+-      Path path = new Path("/foo");
+-      Runtime r = Runtime.getRuntime();
+-      String cmd = "mkdir -p " + mpoint + path.toString();
+-      Process p = r.exec(cmd);
+-      assertTrue(p.waitFor() == 0);
+-      File f = new File(mpoint + "/foo");
+-
+-      DistributedFileSystem.DiskStatus d = fileSys.getDiskStatus();
+-
+-      long fileUsedBlocks =  (f.getTotalSpace() - f.getFreeSpace())/(64 * 1024 * 1024);
+-      long dfsUsedBlocks = (long)Math.ceil((double)d.getDfsUsed()/(64 * 1024 * 1024));
++  /** Tear down the fuse-dfs process and mount */
++  private static void teardownMount() throws IOException {
++    execWaitRet("fusermount -u " + mountPoint);
++  }
+ 
+-      assertTrue(fileUsedBlocks == dfsUsedBlocks);
+-      assertTrue(d.getCapacity() == f.getTotalSpace());
++  @BeforeClass
++  public static void startUp() throws IOException {
++    Configuration conf = new Configuration();
++    r = Runtime.getRuntime();
++    mountPoint = System.getProperty("build.test") + "/mnt";
++    conf.setBoolean(DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY, false);
++    cluster = new MiniDFSCluster(conf, 1, true, null);
++    cluster.waitClusterUp();
++    fs = cluster.getFileSystem();
++    establishMount(fs.getUri());
++  }
+ 
+-    } catch(Exception e) {
+-      e.printStackTrace();
+-      throw e;
++  @AfterClass
++  public static void tearDown() throws IOException {
++    // Unmount before taking down the mini cluster
++    // so no outstanding operations hang.
++    teardownMount();
++    if (fs != null) {
++      fs.close();
++    }
++    if (cluster != null) {
++      cluster.shutdown();
+     }
+   }
+ 
+-  /**
+-   * use shell to create a dir and then use filesys to see it exists.
+-   */
+-  public void testChown() throws IOException,InterruptedException, Exception  {
+-    try {
+-      // First create a new directory with mkdirs
+-      Path path = new Path("/foo");
+-      Runtime r = Runtime.getRuntime();
+-      String cmd = "mkdir -p " + mpoint + path.toString();
+-      Process p = r.exec(cmd);
+-      assertTrue(p.waitFor() == 0);
++  /** Test basic directory creation, access, removal */
++  @Test
++  public void testBasicDir() throws IOException {
++    File d = new File(mountPoint, "dir1");
+ 
+-      // check it is there
+-      assertTrue(fileSys.getFileStatus(path).isDir());
++    // Mkdir, access and rm via the mount
++    execAssertSucceeds("mkdir " + d.getAbsolutePath());
++    execAssertSucceeds("ls " + d.getAbsolutePath());
++    execAssertSucceeds("rmdir " + d.getAbsolutePath());
+ 
+-      FileStatus foo = fileSys.getFileStatus(path);
+-      System.err.println("DEBUG:owner=" + foo.getOwner());
++    // The dir should no longer exist
++    execAssertFails("ls " + d.getAbsolutePath());
++  }
+ 
+-      cmd = "chown nobody " + mpoint + path.toString();
+-      p = r.exec(cmd);
+-      assertTrue(p.waitFor() == 0);
++  /** Test basic file creation and writing */
++  @Test
++  public void testCreate() throws IOException {
++    final String contents = "hello world";
++    File f = new File(mountPoint, "file1");
+ 
+-      //      cmd = "chgrp nobody " + mpoint + path.toString();
+-      //      p = r.exec(cmd);
+-      //      assertTrue(p.waitFor() == 0);
++    // Create and access via the mount
++    createFile(f, contents);
+ 
+-      foo = fileSys.getFileStatus(path);
++    // XX avoids premature EOF
++    try {
++      Thread.sleep(1000);
++    } catch (InterruptedException ie) { }
+ 
+-      System.err.println("DEBUG:owner=" + foo.getOwner());
++    checkFile(f, contents);
+ 
+-      assertTrue(foo.getOwner().equals("nobody"));
+-      assertTrue(foo.getGroup().equals("nobody"));
++    // Cat, stat and delete via the mount
++    execAssertSucceeds("cat " + f.getAbsolutePath());
++    execAssertSucceeds("stat " + f.getAbsolutePath());
++    execAssertSucceeds("rm " + f.getAbsolutePath());
+ 
+-    } catch(Exception e) {
+-      e.printStackTrace();
+-      throw e;
+-    }
++    // The file should no longer exist
++    execAssertFails("ls " + f.getAbsolutePath());
+   }
+ 
+-  /**
+-   * use shell to create a dir and then use filesys to see it exists.
+-   */
+-  public void testChmod() throws IOException,InterruptedException, Exception  {
+-    try {
+-      // First create a new directory with mkdirs
+-      Path path = new Path("/foo");
+-      Runtime r = Runtime.getRuntime();
+-      String cmd = "mkdir -p " + mpoint + path.toString();
+-      Process p = r.exec(cmd);
+-      assertTrue(p.waitFor() == 0);
+-
+-      // check it is there
+-      assertTrue(fileSys.getFileStatus(path).isDir());
+-
+-      cmd = "chmod 777 " + mpoint + path.toString();
+-      p = r.exec(cmd);
+-      assertTrue(p.waitFor() == 0);
+-
+-      FileStatus foo = fileSys.getFileStatus(path);
+-      FsPermission perm = foo.getPermission();
+-      assertTrue(perm.toShort() == 0777);
+-
+-    } catch(Exception e) {
+-      e.printStackTrace();
+-      throw e;
+-    }
++  /** Test creating a file via touch */
++  @Test
++  public void testTouch() throws IOException {
++    File f = new File(mountPoint, "file1");
++    execAssertSucceeds("touch " + f.getAbsolutePath());
++    execAssertSucceeds("rm " + f.getAbsolutePath());
+   }
+ 
+-  /**
+-   * use shell to create a dir and then use filesys to see it exists.
+-   */
+-  public void testUtimes() throws IOException,InterruptedException, Exception  {
+-    try {
+-      // First create a new directory with mkdirs
+-      Path path = new Path("/utimetest");
+-      Runtime r = Runtime.getRuntime();
+-      String cmd = "touch " + mpoint + path.toString();
+-      Process p = r.exec(cmd);
+-      assertTrue(p.waitFor() == 0);
+-
+-      // check it is there
+-      assertTrue(fileSys.exists(path));
++  /** Test random access to a file */
++  @Test
++  public void testRandomAccess() throws IOException {
++    final String contents = "hello world";
++    File f = new File(mountPoint, "file1");
+ 
+-      FileStatus foo = fileSys.getFileStatus(path);
+-      long oldTime = foo.getModificationTime();
+-      try { Thread.sleep(1000); } catch(Exception e) {}
++    createFile(f, contents);
+ 
+-      cmd = "touch " + mpoint + path.toString();
+-      p = r.exec(cmd);
+-      assertTrue(p.waitFor() == 0);
+-
+-      try { Thread.sleep(1000); } catch(Exception e) {}
+-      foo = fileSys.getFileStatus(path);
+-      long newTime = foo.getModificationTime();
+-
+-      assertTrue(newTime > oldTime);
+-
+-    } catch(Exception e) {
+-      e.printStackTrace();
+-      throw e;
++    RandomAccessFile raf = new RandomAccessFile(f, "rw");
++    raf.seek(f.length());
++    try {
++      raf.write('b');
++    } catch (IOException e) {
++      // Expected: fuse-dfs not yet support append
++      assertEquals("Operation not supported", e.getMessage());
+     } finally {
++      raf.close();
+     }
+-  }
+ 
+-  /**
+-   *
+-   * Test dfs_read on a file size that will trigger multiple internal reads. 
+-   * First, just check raw size reading is ok and then check with smaller reads
+-   * including checking the validity of the data read.
+-   *
+-   */
+-  public void testReads() throws IOException,InterruptedException  {
++    raf = new RandomAccessFile(f, "rw");
++    raf.seek(0);
+     try {
+-      // First create a new directory with mkdirs
+-      Runtime r = Runtime.getRuntime();
+-      Process p;
+-
+-      // create the file
+-      Path myPath = new Path("/test/hello.reads");
+-      FSDataOutputStream s = fileSys.create(myPath);
+-      String hello = "hello world!";
+-      int written = 0;
+-      int mycount = 0;
+-      while(written < 1024 * 9) {
+-        s.writeUTF(hello);
+-        s.writeInt(mycount++);
+-        written += hello.length() + 4;
+-      }
+-      s.close();
+-
+-      // check it exists
+-      assertTrue(fileSys.exists(myPath));
+-      FileStatus foo = fileSys.getFileStatus(myPath);
+-      assertTrue(foo.getLen() >= 9 * 1024);
+-
+-
+-      {
+-        // cat the file
+-        DataInputStream is = new DataInputStream(new FileInputStream(mpoint + "/test/hello.reads"));
+-        byte buf [] = new byte[4096];
+-        // test reading 0 length
+-        assertTrue(is.read(buf, 0, 0) == 0);
+-
+-        // test real reads
+-        assertTrue(is.read(buf, 0, 1024) == 1024);
+-        assertTrue(is.read(buf, 0, 4096) == 4096);
+-        assertTrue(is.read(buf, 0, 4096) == 4096);
+-        is.close();
+-      }
+-
+-      {
+-        DataInputStream is = new DataInputStream(new FileInputStream(mpoint + "/test/hello.reads"));
+-        int read = 0;
+-        int counter = 0;
+-        try {
+-          while(true) {
+-            String s2 = DataInputStream.readUTF(is);
+-            int s3 = is.readInt();
+-            assertTrue(s2.equals(hello));
+-            assertTrue(s3 == counter++);
+-            read += hello.length() + 4;
+-          }
+-        } catch(EOFException e) {
+-          assertTrue(read >= 9 * 1024);
+-        }
+-      }
+-
+-      // check reading an empty file for EOF
+-      {
+-        // create the file
+-        myPath = new Path("/test/hello.reads2");
+-        s = fileSys.create(myPath);
+-        s.close();
+-
+-        FSDataInputStream fs = fileSys.open(myPath);
+-        assertEquals(-1,  fs.read());
+-
+-        FileInputStream f = new FileInputStream(mpoint + "/test/hello.reads2");
+-        assertEquals(-1, f.read());
+-      }
+-
+-    } catch(Exception e) {
+-      e.printStackTrace();
++      raf.write('b');
++      fail("Over-wrote existing bytes");
++    } catch (IOException e) {
++      // Expected: can-not overwrite a file
++      assertEquals("Invalid argument", e.getMessage());
+     } finally {
++      raf.close();
+     }
++    execAssertSucceeds("rm " + f.getAbsolutePath());
+   }
+ 
+-
+-  /**
+-   * Use filesys to create the hello world! file and then cat it and see its contents are correct.
+-   */
+-  public void testCat() throws IOException,InterruptedException  {
+-    try {
+-      // First create a new directory with mkdirs
+-      Runtime r = Runtime.getRuntime();
+-      Process p = r.exec("rm -rf " + mpoint + "/test/hello");
+-      assertTrue(p.waitFor() == 0);
+-
+-      // create the file
+-      Path myPath = new Path("/test/hello");
+-      FSDataOutputStream s = fileSys.create(myPath);
+-      String hello = "hello world!";
+-      s.writeUTF(hello);
+-      s.writeInt(1033);
+-      s.close();
+-
+-      // check it exists
+-      assertTrue(fileSys.exists(myPath));
+-
+-      // cat the file
+-      DataInputStream is = new DataInputStream(new FileInputStream(mpoint + "/test/hello"));
+-      String s2 = DataInputStream.readUTF(is);
+-      int s3 = is.readInt();
+-      assertTrue(s2.equals(hello));
+-      assertTrue(s3 == 1033);
+-
+-    } catch(Exception e) {
+-      e.printStackTrace();
+-    } finally {
++  /** Test copying a set of files from the mount to itself */
++  @Test
++  public void testCopyFiles() throws IOException {
++    final String contents = "hello world";
++    File d1 = new File(mountPoint, "dir1");
++    File d2 = new File(mountPoint, "dir2");
++
++    // Create and populate dir1 via the mount
++    execAssertSucceeds("mkdir " + d1.getAbsolutePath());
++    for (int i = 0; i < 5; i++) {
++      createFile(new File(d1, "file"+i), contents);
+     }
++    assertEquals(5, d1.listFiles().length);
++
++    // Copy dir from the mount to the mount
++    execAssertSucceeds("cp -r " + d1.getAbsolutePath() +
++                       " " + d2.getAbsolutePath());
++    assertEquals(5, d2.listFiles().length);
++
++    // Access all the files in the dirs and remove them
++    execAssertSucceeds("find " + d1.getAbsolutePath());
++    execAssertSucceeds("find " + d2.getAbsolutePath());
++    execAssertSucceeds("rm -r " + d1.getAbsolutePath());
++    execAssertSucceeds("rm -r " + d2.getAbsolutePath());
+   }
+ 
++  /** Test concurrent creation and access of the mount */
++  @Test
++  public void testMultipleThreads() throws IOException {
++    ArrayList<Thread> threads = new ArrayList<Thread>();
++    final AtomicReference<String> errorMessage = new AtomicReference<String>();
++
++    for (int i = 0; i < 10; i++) {
++      Thread t = new Thread() {
++	  public void run() {
++	    try {
++	      File d = new File(mountPoint, "dir"+getId());
++	      execWaitRet("mkdir " + d.getAbsolutePath());
++	      for (int j = 0; j < 10; j++) {
++		File f = new File(d, "file"+j);
++		final String contents = "thread "+getId()+" "+j;
++		createFile(f, contents);
++	      }
++	      for (int j = 0; j < 10; j++) {
++		File f = new File(d, "file"+j);
++		execWaitRet("cat " + f.getAbsolutePath());
++		execWaitRet("rm " + f.getAbsolutePath());
++	      }
++	      execWaitRet("rmdir " + d.getAbsolutePath());
++	    } catch (IOException ie) {
++	      errorMessage.set(
++		String.format("Exception %s", 
++			      StringUtils.stringifyException(ie)));
++	    }
++          }
++	};
++      t.start();
++      threads.add(t);
++    }
+ 
+-
+-  /**
+-   * Use filesys to create the hello world! file and then cat it and see its contents are correct.
+-   */
+-  public void testAppends() throws IOException,InterruptedException  {
+-    try {
+-      // First create a new directory with mkdirs
+-      Runtime r = Runtime.getRuntime();
+-
+-      {
+-        FileOutputStream os = new FileOutputStream(mpoint + "/appends");
+-        String hello = "hello";
+-        os.write(hello.getBytes());
+-        os.flush();
+-        os.close();
+-      }
+-
+-      // check it exists
+-      Path myPath = new Path("/appends");
+-      assertTrue(fileSys.exists(myPath));
+-
++    for (Thread t : threads) {
+       try {
+-        Thread.sleep(1000);
+-      } catch(Exception e) {
++	t.join();
++      } catch (InterruptedException ie) {
++	fail("Thread interrupted: "+ie.getMessage());
+       }
+-
+-      FileStatus foo = fileSys.getFileStatus(myPath);
+-
+-      File f = new File(mpoint + "/appends");
+-      assertTrue(f.length() > 0);
+-
+-      {
+-        FileOutputStream os = new FileOutputStream(mpoint + "/appends", true);
+-        String hello = " world!";
+-        os.write(hello.getBytes());
+-        os.flush();
+-        os.close();
+-      }
+-
+-      // cat the file
+-      FileInputStream is = new FileInputStream(mpoint + "/appends");
+-      byte b[] = new byte[1024];
+-      int len = is.read(b);
+-      assertTrue(len > 0);
+-      String s2 = new String(b,0,len);
+-      assertTrue(s2.equals("hello world!"));
+-
+-    } catch(Exception e) {
+-      e.printStackTrace();
+-    } finally {
+     }
+-  }
+ 
+-
+-
+-
+-  public void testDone() throws IOException {
+-      close();
+-  }
+-
+-  /**
+-   * Unmount and close
+-   */
+-  protected void tearDown() throws Exception {
+-  }
+-
+-  /**
+-   * Unmount and close
+-   */
+-  protected void finalize() throws Throwable {
+-    close();
+-  }
+-
+-  public void close() {
+-    try {
+-      int length;
+-
+-      // print out the fuse debug output
+-      {
+-      do {
+-      InputStream i = fuse_process.getInputStream();
+-      byte b[] = new byte[i.available()];
+-      length = i.read(b);
+-      System.err.println("read x bytes: " + length);
+-      System.err.write(b,0,b.length);
+-      } while(length > 0) ;
+-      }
+-
+-      do {
+-      InputStream i = fuse_process.getErrorStream();
+-      byte b[] = new byte[i.available()];
+-      length = i.read(b);
+-      System.err.println("read x bytes: " + length);
+-      System.err.write(b,0,b.length);
+-      } while(length > 0) ;
+-
+-      umount(mpoint);
+-
+-      fuse_process.destroy();
+-      fuse_process = null;
+-        if(fileSys != null) {
+-        fileSys.close();
+-        fileSys = null;
+-      }
+-      if(cluster != null) {
+-        cluster.shutdown();
+-        cluster = null;
+-      }
+-    } catch(Exception e) { }
++    assertNull(errorMessage.get(), errorMessage.get());
+   }
+-};
++}
+-- 
+1.7.0.4
+

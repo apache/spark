@@ -1,0 +1,431 @@
+From aa7ae9d9826866f94ecfe5629d087ef68e4b5c54 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:18:29 -0800
+Subject: [PATCH 0129/1179] MAPREDUCE-999. Improve Sqoop test speed and refactor tests
+
+Description: Sqoop's tests take a long time to run, but this can be improved (by a factor of 2 or more) by taking advantage of <tt>jobclient.completion.poll.interval</tt>.
+Reason: Testing performance improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../hadoop/sqoop/mapreduce/AutoProgressMapper.java |    1 +
+ .../src/test/org/apache/hadoop/sqoop/AllTests.java |   27 +--------
+ .../test/org/apache/hadoop/sqoop/SmokeTests.java   |   65 ++++++++++++++++++++
+ .../org/apache/hadoop/sqoop/TestAllTables.java     |    8 +--
+ .../org/apache/hadoop/sqoop/TestMultiMaps.java     |    6 +-
+ .../test/org/apache/hadoop/sqoop/TestSplitBy.java  |    8 +--
+ .../test/org/apache/hadoop/sqoop/TestWhere.java    |    8 +--
+ .../apache/hadoop/sqoop/hive/TestHiveImport.java   |    8 +--
+ .../apache/hadoop/sqoop/manager/MySQLAuthTest.java |    4 +-
+ .../hadoop/sqoop/manager/OracleManagerTest.java    |    6 +-
+ .../apache/hadoop/sqoop/orm/TestParseMethods.java  |    8 +--
+ .../apache/hadoop/sqoop/testutil/CommonArgs.java   |   45 ++++++++++++++
+ .../hadoop/sqoop/testutil/ImportJobTestCase.java   |    7 +--
+ 13 files changed, 130 insertions(+), 71 deletions(-)
+ create mode 100644 src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/SmokeTests.java
+ create mode 100644 src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/CommonArgs.java
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/AutoProgressMapper.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/AutoProgressMapper.java
+index d74970f..8a889a8 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/AutoProgressMapper.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/AutoProgressMapper.java
+@@ -68,6 +68,7 @@ public class AutoProgressMapper<KEYIN, VALIN, KEYOUT, VALOUT>
+   private class ProgressThread extends Thread {
+ 
+     private volatile boolean keepGoing; // while this is true, thread runs.
++
+     private Context context;
+     private long startTimeMillis;
+     private long lastReportMillis;
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java
+index f396fd3..333828a 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java
+@@ -18,15 +18,7 @@
+ 
+ package org.apache.hadoop.sqoop;
+ 
+-import org.apache.hadoop.sqoop.hive.TestHiveImport;
+-import org.apache.hadoop.sqoop.lib.TestFieldFormatter;
+-import org.apache.hadoop.sqoop.lib.TestRecordParser;
+-import org.apache.hadoop.sqoop.manager.TestHsqldbManager;
+-import org.apache.hadoop.sqoop.manager.TestSqlManager;
+ import org.apache.hadoop.sqoop.mapred.MapredTests;
+-import org.apache.hadoop.sqoop.mapreduce.MapreduceTests;
+-import org.apache.hadoop.sqoop.orm.TestClassWriter;
+-import org.apache.hadoop.sqoop.orm.TestParseMethods;
+ 
+ import junit.framework.Test;
+ import junit.framework.TestSuite;
+@@ -39,26 +31,11 @@ public final class AllTests {
+   private AllTests() { }
+ 
+   public static Test suite() {
+-    TestSuite suite = new TestSuite("Tests for org.apache.hadoop.sqoop");
++    TestSuite suite = new TestSuite("All tests for org.apache.hadoop.sqoop");
+ 
+-    suite.addTestSuite(TestAllTables.class);
+-    suite.addTestSuite(TestHsqldbManager.class);
+-    suite.addTestSuite(TestSqlManager.class);
+-    suite.addTestSuite(TestClassWriter.class);
+-    suite.addTestSuite(TestColumnTypes.class);
+-    suite.addTestSuite(TestMultiCols.class);
+-    suite.addTestSuite(TestMultiMaps.class);
+-    suite.addTestSuite(TestSplitBy.class);
+-    suite.addTestSuite(TestWhere.class);
+-    suite.addTestSuite(TestHiveImport.class);
+-    suite.addTestSuite(TestRecordParser.class);
+-    suite.addTestSuite(TestFieldFormatter.class);
+-    suite.addTestSuite(TestImportOptions.class);
+-    suite.addTestSuite(TestParseMethods.class);
+-    suite.addTestSuite(TestConnFactory.class);
++    suite.addTest(SmokeTests.suite());
+     suite.addTest(ThirdPartyTests.suite());
+     suite.addTest(MapredTests.suite());
+-    suite.addTest(MapreduceTests.suite());
+ 
+     return suite;
+   }
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/SmokeTests.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/SmokeTests.java
+new file mode 100644
+index 0000000..fab372f
+--- /dev/null
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/SmokeTests.java
+@@ -0,0 +1,65 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.sqoop;
++
++import org.apache.hadoop.sqoop.hive.TestHiveImport;
++import org.apache.hadoop.sqoop.lib.TestFieldFormatter;
++import org.apache.hadoop.sqoop.lib.TestRecordParser;
++import org.apache.hadoop.sqoop.manager.TestHsqldbManager;
++import org.apache.hadoop.sqoop.manager.TestSqlManager;
++import org.apache.hadoop.sqoop.mapred.MapredTests;
++import org.apache.hadoop.sqoop.mapreduce.MapreduceTests;
++import org.apache.hadoop.sqoop.orm.TestClassWriter;
++import org.apache.hadoop.sqoop.orm.TestParseMethods;
++
++import junit.framework.Test;
++import junit.framework.TestSuite;
++
++/**
++ * Smoke tests for Sqoop (org.apache.hadoop.sqoop)
++ */
++public final class SmokeTests {
++
++  private SmokeTests() { }
++
++  public static Test suite() {
++    TestSuite suite = new TestSuite("Smoke tests for org.apache.hadoop.sqoop");
++
++    suite.addTestSuite(TestAllTables.class);
++    suite.addTestSuite(TestHsqldbManager.class);
++    suite.addTestSuite(TestSqlManager.class);
++    suite.addTestSuite(TestClassWriter.class);
++    suite.addTestSuite(TestColumnTypes.class);
++    suite.addTestSuite(TestMultiCols.class);
++    suite.addTestSuite(TestMultiMaps.class);
++    suite.addTestSuite(TestSplitBy.class);
++    suite.addTestSuite(TestWhere.class);
++    suite.addTestSuite(TestHiveImport.class);
++    suite.addTestSuite(TestRecordParser.class);
++    suite.addTestSuite(TestFieldFormatter.class);
++    suite.addTestSuite(TestImportOptions.class);
++    suite.addTestSuite(TestParseMethods.class);
++    suite.addTestSuite(TestConnFactory.class);
++    suite.addTest(MapreduceTests.suite());
++
++    return suite;
++  }
++
++}
++
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestAllTables.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestAllTables.java
+index 2f05e09..8e31a54 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestAllTables.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestAllTables.java
+@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.IOUtils;
+ import org.junit.Before;
+ 
++import org.apache.hadoop.sqoop.testutil.CommonArgs;
+ import org.apache.hadoop.sqoop.testutil.HsqldbTestServer;
+ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+ 
+@@ -47,12 +48,7 @@ public class TestAllTables extends ImportJobTestCase {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+     if (includeHadoopFlags) {
+-      args.add("-D");
+-      args.add("mapred.job.tracker=local");
+-      args.add("-D");
+-      args.add("mapred.map.tasks=1");
+-      args.add("-D");
+-      args.add("fs.default.name=file:///");
++      CommonArgs.addHadoopFlags(args);
+     }
+ 
+     args.add("--all-tables");
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestMultiMaps.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestMultiMaps.java
+index f66af20..520492f 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestMultiMaps.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestMultiMaps.java
+@@ -32,6 +32,7 @@ import org.apache.hadoop.util.ReflectionUtils;
+ 
+ import org.apache.hadoop.sqoop.ImportOptions.InvalidOptionsException;
+ import org.apache.hadoop.sqoop.orm.CompilationManager;
++import org.apache.hadoop.sqoop.testutil.CommonArgs;
+ import org.apache.hadoop.sqoop.testutil.HsqldbTestServer;
+ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+ import org.apache.hadoop.sqoop.testutil.SeqFileReader;
+@@ -55,10 +56,7 @@ public class TestMultiMaps extends ImportJobTestCase {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+     if (includeHadoopFlags) {
+-      args.add("-D");
+-      args.add("mapred.job.tracker=local");
+-      args.add("-D");
+-      args.add("fs.default.name=file:///");
++      CommonArgs.addHadoopFlags(args);
+     }
+ 
+     args.add("--table");
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestSplitBy.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestSplitBy.java
+index b4e1126..35fb879 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestSplitBy.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestSplitBy.java
+@@ -28,6 +28,7 @@ import org.apache.hadoop.util.ReflectionUtils;
+ 
+ import org.apache.hadoop.sqoop.ImportOptions.InvalidOptionsException;
+ import org.apache.hadoop.sqoop.orm.CompilationManager;
++import org.apache.hadoop.sqoop.testutil.CommonArgs;
+ import org.apache.hadoop.sqoop.testutil.HsqldbTestServer;
+ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+ import org.apache.hadoop.sqoop.testutil.SeqFileReader;
+@@ -51,12 +52,7 @@ public class TestSplitBy extends ImportJobTestCase {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+     if (includeHadoopFlags) {
+-      args.add("-D");
+-      args.add("mapred.job.tracker=local");
+-      args.add("-D");
+-      args.add("mapred.map.tasks=1");
+-      args.add("-D");
+-      args.add("fs.default.name=file:///");
++      CommonArgs.addHadoopFlags(args);
+     }
+ 
+     args.add("--table");
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestWhere.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestWhere.java
+index 669bd18..8c0a2d4 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestWhere.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestWhere.java
+@@ -28,6 +28,7 @@ import org.apache.hadoop.util.ReflectionUtils;
+ 
+ import org.apache.hadoop.sqoop.ImportOptions.InvalidOptionsException;
+ import org.apache.hadoop.sqoop.orm.CompilationManager;
++import org.apache.hadoop.sqoop.testutil.CommonArgs;
+ import org.apache.hadoop.sqoop.testutil.HsqldbTestServer;
+ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+ import org.apache.hadoop.sqoop.testutil.SeqFileReader;
+@@ -54,12 +55,7 @@ public class TestWhere extends ImportJobTestCase {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+     if (includeHadoopFlags) {
+-      args.add("-D");
+-      args.add("mapred.job.tracker=local");
+-      args.add("-D");
+-      args.add("mapred.map.tasks=1");
+-      args.add("-D");
+-      args.add("fs.default.name=file:///");
++      CommonArgs.addHadoopFlags(args);
+     }
+ 
+     args.add("--table");
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
+index 96581a1..11d5854 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
+@@ -28,6 +28,7 @@ import org.junit.Test;
+ import org.apache.hadoop.fs.Path;
+ 
+ import org.apache.hadoop.sqoop.ImportOptions;
++import org.apache.hadoop.sqoop.testutil.CommonArgs;
+ import org.apache.hadoop.sqoop.testutil.HsqldbTestServer;
+ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+ 
+@@ -46,12 +47,7 @@ public class TestHiveImport extends ImportJobTestCase {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+     if (includeHadoopFlags) {
+-      args.add("-D");
+-      args.add("mapred.job.tracker=local");
+-      args.add("-D");
+-      args.add("mapred.map.tasks=1");
+-      args.add("-D");
+-      args.add("fs.default.name=file:///");
++      CommonArgs.addHadoopFlags(args);
+     }
+ 
+     args.add("--table");
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
+index 5d972b8..aeb14ee 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
+@@ -40,6 +40,7 @@ import org.junit.Test;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.sqoop.ImportOptions;
++import org.apache.hadoop.sqoop.testutil.CommonArgs;
+ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+ 
+ /**
+@@ -134,8 +135,7 @@ public class MySQLAuthTest extends ImportJobTestCase {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+     if (includeHadoopFlags) {
+-      args.add("-D");
+-      args.add("fs.default.name=file:///");
++      CommonArgs.addHadoopFlags(args);
+     }
+ 
+     args.add("--table");
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/OracleManagerTest.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/OracleManagerTest.java
+index 87c410a..d6395d0 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/OracleManagerTest.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/OracleManagerTest.java
+@@ -40,6 +40,7 @@ import org.junit.Test;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.sqoop.ImportOptions;
++import org.apache.hadoop.sqoop.testutil.CommonArgs;
+ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+ import org.apache.hadoop.sqoop.util.FileListing;
+ 
+@@ -141,10 +142,7 @@ public class OracleManagerTest extends ImportJobTestCase {
+   private String [] getArgv() {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+-    args.add("-D");
+-    args.add("fs.default.name=file:///");
+-    args.add("-D");
+-    args.add("mapred.job.tracker=local");
++    CommonArgs.addHadoopFlags(args);
+ 
+     args.add("--table");
+     args.add(TABLE_NAME);
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestParseMethods.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestParseMethods.java
+index fdc4f21..9c0413f 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestParseMethods.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestParseMethods.java
+@@ -37,6 +37,7 @@ import org.apache.hadoop.sqoop.ImportOptions;
+ import org.apache.hadoop.sqoop.ImportOptions.InvalidOptionsException;
+ import org.apache.hadoop.sqoop.mapred.RawKeyTextOutputFormat;
+ import org.apache.hadoop.sqoop.orm.CompilationManager;
++import org.apache.hadoop.sqoop.testutil.CommonArgs;
+ import org.apache.hadoop.sqoop.testutil.HsqldbTestServer;
+ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+ import org.apache.hadoop.sqoop.testutil.ReparseMapper;
+@@ -58,12 +59,7 @@ public class TestParseMethods extends ImportJobTestCase {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+     if (includeHadoopFlags) {
+-      args.add("-D");
+-      args.add("mapred.job.tracker=local");
+-      args.add("-D");
+-      args.add("mapred.map.tasks=1");
+-      args.add("-D");
+-      args.add("fs.default.name=file:///");
++      CommonArgs.addHadoopFlags(args);
+     }
+ 
+     args.add("--table");
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/CommonArgs.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/CommonArgs.java
+new file mode 100644
+index 0000000..7763bac
+--- /dev/null
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/CommonArgs.java
+@@ -0,0 +1,45 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.sqoop.testutil;
++
++import java.util.List;
++
++/**
++ * Sets common arguments to Sqoop sub-instances for testing.
++ */
++public final class CommonArgs {
++
++  private CommonArgs() {
++  }
++
++  /** Craft a list of arguments that are common to (virtually) all Sqoop programs
++   */
++  public static void addHadoopFlags(List<String> args) {
++    args.add("-D");
++    args.add("mapred.job.tracker=local");
++    args.add("-D");
++    args.add("mapred.map.tasks=1");
++    args.add("-D");
++    args.add("fs.default.name=file:///");
++    args.add("-D");
++    args.add("jobclient.completion.poll.interval=50");
++    args.add("-D");
++    args.add("jobclient.progress.monitor.poll.interval=50");
++  }
++}
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java
+index a309011..090cf3a 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java
+@@ -286,12 +286,7 @@ public class ImportJobTestCase extends TestCase {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+     if (includeHadoopFlags) {
+-      args.add("-D");
+-      args.add("mapred.job.tracker=local");
+-      args.add("-D");
+-      args.add("mapred.map.tasks=1");
+-      args.add("-D");
+-      args.add("fs.default.name=file:///");
++      CommonArgs.addHadoopFlags(args);
+     }
+ 
+     args.add("--table");
+-- 
+1.7.0.4
+

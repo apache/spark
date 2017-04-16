@@ -1,0 +1,29 @@
+From 95683ebe551b9e4ee2e0b0419696dc46e2710162 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sat, 13 Aug 2011 19:17:59 -0700
+Subject: [PATCH 1027/1179] CLOUDERA-BUILD. Point *-default doc links to the right place.
+
+---
+ src/docs/src/documentation/content/xdocs/site.xml |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/site.xml b/src/docs/src/documentation/content/xdocs/site.xml
+index 1c4f1c2..05f4250 100644
+--- a/src/docs/src/documentation/content/xdocs/site.xml
++++ b/src/docs/src/documentation/content/xdocs/site.xml
+@@ -87,9 +87,9 @@ See http://forrest.apache.org/docs/linking.html for more info.
+     <wiki      href="http://wiki.apache.org/hadoop/" />
+     <faq       href="http://wiki.apache.org/hadoop/FAQ" />
+     <hadoop-default href="http://hadoop.apache.org/core/docs/current/hadoop-default.html" />
+-    <core-default href="http://hadoop.apache.org/core/docs/r0.20.2/core-default.html" />
+-    <hdfs-default href="http://hadoop.apache.org/core/docs/r0.20.2/hdfs-default.html" />
+-    <mapred-default href="http://hadoop.apache.org/core/docs/r0.20.2/mapred-default.html" />
++    <core-default href="http://archive.cloudera.com/cdh/3/hadoop/core-default.html" />
++    <hdfs-default href="http://archive.cloudera.com/cdh/3/hadoop/hdfs-default.html" />
++    <mapred-default href="http://archive.cloudera.com/cdh/3/hadoop/mapred-default.html" />
+     <zlib      href="http://www.zlib.net/" />
+     <gzip      href="http://www.gzip.org/" />
+     <bzip      href="http://www.bzip.org/" />
+-- 
+1.7.0.4
+

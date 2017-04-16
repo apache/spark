@@ -1,0 +1,659 @@
+From f0e8a989ff4be91c1428eea1d6e27cc3d13d5817 Mon Sep 17 00:00:00 2001
+From: Ahmed Radwan <ahmed@cloudera.com>
+Date: Thu, 23 Jun 2011 07:20:43 -0700
+Subject: [PATCH 0998/1179] MAPREDUCE-2254. Allow setting of end-of-record delimiter for
+ TextInputFormat.
+ MAPREDUCE-2602. Allow setting of end-of-record delimiter for
+ TextInputFormat (for the old API).
+
+Reason: Improvement
+Author: Ahmed Radwan
+Ref: CDH-3268
+---
+ src/core/org/apache/hadoop/util/LineReader.java    |  125 +++++++++++++++++-
+ .../org/apache/hadoop/mapred/LineRecordReader.java |   37 +++++-
+ .../org/apache/hadoop/mapred/TextInputFormat.java  |    6 +-
+ .../mapreduce/lib/input/LineRecordReader.java      |   21 +++-
+ .../mapreduce/lib/input/TextInputFormat.java       |    7 +-
+ .../apache/hadoop/mapred/TestLineRecordReader.java |  139 +++++++++++++++++++
+ .../mapreduce/lib/input/TestLineRecordReader.java  |  140 ++++++++++++++++++++
+ 7 files changed, 462 insertions(+), 13 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestLineRecordReader.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/input/TestLineRecordReader.java
+
+diff --git a/src/core/org/apache/hadoop/util/LineReader.java b/src/core/org/apache/hadoop/util/LineReader.java
+index b5c6e68..9742460 100644
+--- a/src/core/org/apache/hadoop/util/LineReader.java
++++ b/src/core/org/apache/hadoop/util/LineReader.java
+@@ -26,6 +26,14 @@ import org.apache.hadoop.io.Text;
+ 
+ /**
+  * A class that provides a line reader from an input stream.
++ * Depending on the constructor used, lines will either be terminated by:
++ * <ul>
++ * <li>one of the following: '\n' (LF) , '\r' (CR),
++ * or '\r\n' (CR+LF).</li>
++ * <li><em>or</em>, a custom byte sequence delimiter</li>
++ * </ul>
++ * In both cases, EOF also terminates an otherwise unterminated
++ * line.
+  */
+ public class LineReader {
+   private static final int DEFAULT_BUFFER_SIZE = 64 * 1024;
+@@ -40,6 +48,9 @@ public class LineReader {
+   private static final byte CR = '\r';
+   private static final byte LF = '\n';
+ 
++  // The line delimiter
++  private final byte[] recordDelimiterBytes;
++
+   /**
+    * Create a line reader that reads from the given stream using the
+    * default buffer-size (64k).
+@@ -61,6 +72,7 @@ public class LineReader {
+     this.in = in;
+     this.bufferSize = bufferSize;
+     this.buffer = new byte[this.bufferSize];
++    this.recordDelimiterBytes = null;
+   }
+ 
+   /**
+@@ -76,6 +88,56 @@ public class LineReader {
+   }
+ 
+   /**
++   * Create a line reader that reads from the given stream using the
++   * default buffer-size, and using a custom delimiter of array of
++   * bytes.
++   * @param in The input stream
++   * @param recordDelimiterBytes The delimiter
++   */
++  public LineReader(InputStream in, byte[] recordDelimiterBytes) {
++    this.in = in;
++    this.bufferSize = DEFAULT_BUFFER_SIZE;
++    this.buffer = new byte[this.bufferSize];
++    this.recordDelimiterBytes = recordDelimiterBytes;
++  }
++
++  /**
++   * Create a line reader that reads from the given stream using the
++   * given buffer-size, and using a custom delimiter of array of
++   * bytes.
++   * @param in The input stream
++   * @param bufferSize Size of the read buffer
++   * @param recordDelimiterBytes The delimiter
++   * @throws IOException
++   */
++  public LineReader(InputStream in, int bufferSize,
++      byte[] recordDelimiterBytes) {
++    this.in = in;
++    this.bufferSize = bufferSize;
++    this.buffer = new byte[this.bufferSize];
++    this.recordDelimiterBytes = recordDelimiterBytes;
++  }
++
++  /**
++   * Create a line reader that reads from the given stream using the
++   * <code>io.file.buffer.size</code> specified in the given
++   * <code>Configuration</code>, and using a custom delimiter of array of
++   * bytes.
++   * @param in input stream
++   * @param conf configuration
++   * @param recordDelimiterBytes The delimiter
++   * @throws IOException
++   */
++  public LineReader(InputStream in, Configuration conf,
++      byte[] recordDelimiterBytes) throws IOException {
++    this.in = in;
++    this.bufferSize = conf.getInt("io.file.buffer.size", DEFAULT_BUFFER_SIZE);
++    this.buffer = new byte[this.bufferSize];
++    this.recordDelimiterBytes = recordDelimiterBytes;
++  }
++
++
++  /**
+    * Close the underlying stream.
+    * @throws IOException
+    */
+@@ -84,10 +146,7 @@ public class LineReader {
+   }
+   
+   /**
+-   * Read one line from the InputStream into the given Text.  A line
+-   * can be terminated by one of the following: '\n' (LF) , '\r' (CR),
+-   * or '\r\n' (CR+LF).  EOF also terminates an otherwise unterminated
+-   * line.
++   * Read one line from the InputStream into the given Text.
+    *
+    * @param str the object to store the given line (without newline)
+    * @param maxLineLength the maximum number of bytes to store into str;
+@@ -104,6 +163,18 @@ public class LineReader {
+    */
+   public int readLine(Text str, int maxLineLength,
+                       int maxBytesToConsume) throws IOException {
++    if (this.recordDelimiterBytes != null) {
++      return readCustomLine(str, maxLineLength, maxBytesToConsume);
++    } else {
++      return readDefaultLine(str, maxLineLength, maxBytesToConsume);
++    }
++  }
++
++  /**
++   * Read a line terminated by one of CR, LF, or CRLF.
++   */
++  private int readDefaultLine(Text str, int maxLineLength, int maxBytesToConsume)
++  throws IOException {
+     /* We're reading data from in, but the head of the stream may be
+      * already buffered in buffer, so we have several cases:
+      * 1. No newline characters are in the buffer, so we need to copy
+@@ -167,6 +238,52 @@ public class LineReader {
+   }
+ 
+   /**
++   * Read a line terminated by a custom delimiter.
++   */
++  private int readCustomLine(Text str, int maxLineLength, int maxBytesToConsume)
++      throws IOException {
++    str.clear();
++    int txtLength = 0; // tracks str.getLength(), as an optimization
++    long bytesConsumed = 0;
++    int delPosn = 0;
++    do {
++      int startPosn = bufferPosn; // starting from where we left off the last
++      // time
++      if (bufferPosn >= bufferLength) {
++        startPosn = bufferPosn = 0;
++        bufferLength = in.read(buffer);
++        if (bufferLength <= 0)
++          break; // EOF
++      }
++      for (; bufferPosn < bufferLength; ++bufferPosn) {
++        if (buffer[bufferPosn] == recordDelimiterBytes[delPosn]) {
++          delPosn++;
++          if (delPosn >= recordDelimiterBytes.length) {
++            bufferPosn++;
++            break;
++          }
++        } else {
++          delPosn = 0;
++        }
++      }
++      int readLength = bufferPosn - startPosn;
++      bytesConsumed += readLength;
++      int appendLength = readLength - delPosn;
++      if (appendLength > maxLineLength - txtLength) {
++        appendLength = maxLineLength - txtLength;
++      }
++      if (appendLength > 0) {
++        str.append(buffer, startPosn, appendLength);
++        txtLength += appendLength;
++      }
++    } while (delPosn < recordDelimiterBytes.length
++        && bytesConsumed < maxBytesToConsume);
++    if (bytesConsumed > (long) Integer.MAX_VALUE)
++      throw new IOException("Too many bytes before delimiter: " + bytesConsumed);
++    return (int) bytesConsumed;
++  }
++
++  /**
+    * Read from the InputStream into the given Text.
+    * @param str the object to store the given line
+    * @param maxLineLength the maximum number of bytes to store into str.
+diff --git a/src/mapred/org/apache/hadoop/mapred/LineRecordReader.java b/src/mapred/org/apache/hadoop/mapred/LineRecordReader.java
+index 53a6d14..57d9bc6 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LineRecordReader.java
++++ b/src/mapred/org/apache/hadoop/mapred/LineRecordReader.java
+@@ -61,10 +61,25 @@ public class LineRecordReader implements RecordReader<LongWritable, Text> {
+     public LineReader(InputStream in, Configuration conf) throws IOException {
+       super(in, conf);
+     }
++    LineReader(InputStream in, byte[] recordDelimiter) {
++      super(in, recordDelimiter);
++    }
++    LineReader(InputStream in, int bufferSize, byte[] recordDelimiter) {
++      super(in, bufferSize, recordDelimiter);
++    }
++    public LineReader(InputStream in, Configuration conf,
++        byte[] recordDelimiter) throws IOException {
++      super(in, conf, recordDelimiter);
++    }
+   }
+ 
+   public LineRecordReader(Configuration job, 
+                           FileSplit split) throws IOException {
++    this(job, split, null);
++  }
++
++  public LineRecordReader(Configuration job, FileSplit split,
++      byte[] recordDelimiter) throws IOException {
+     this.maxLineLength = job.getInt("mapred.linerecordreader.maxlength",
+                                     Integer.MAX_VALUE);
+     start = split.getStart();
+@@ -78,7 +93,8 @@ public class LineRecordReader implements RecordReader<LongWritable, Text> {
+     FSDataInputStream fileIn = fs.open(split.getPath());
+     boolean skipFirstLine = false;
+     if (codec != null) {
+-      in = new LineReader(codec.createInputStream(fileIn), job);
++      in = new LineReader(codec.createInputStream(fileIn), job,
++            recordDelimiter);
+       end = Long.MAX_VALUE;
+     } else {
+       if (start != 0) {
+@@ -86,7 +102,7 @@ public class LineRecordReader implements RecordReader<LongWritable, Text> {
+         --start;
+         fileIn.seek(start);
+       }
+-      in = new LineReader(fileIn, job);
++      in = new LineReader(fileIn, job, recordDelimiter);
+     }
+     if (skipFirstLine) {  // skip first line and re-establish "start".
+       start += in.readLine(new Text(), 0,
+@@ -97,19 +113,30 @@ public class LineRecordReader implements RecordReader<LongWritable, Text> {
+   
+   public LineRecordReader(InputStream in, long offset, long endOffset,
+                           int maxLineLength) {
++    this(in, offset, endOffset, maxLineLength, null);
++  }
++
++  public LineRecordReader(InputStream in, long offset, long endOffset,
++      int maxLineLength, byte[] recordDelimiter) {
+     this.maxLineLength = maxLineLength;
+-    this.in = new LineReader(in);
++    this.in = new LineReader(in, recordDelimiter);
+     this.start = offset;
+     this.pos = offset;
+     this.end = endOffset;    
+   }
+ 
++  public LineRecordReader(InputStream in, long offset, long endOffset,
++                          Configuration job)
++    throws IOException{
++    this(in, offset, endOffset, job, null);
++  }
++
+   public LineRecordReader(InputStream in, long offset, long endOffset, 
+-                          Configuration job) 
++      Configuration job, byte[] recordDelimiter)
+     throws IOException{
+     this.maxLineLength = job.getInt("mapred.linerecordreader.maxlength",
+                                     Integer.MAX_VALUE);
+-    this.in = new LineReader(in, job);
++    this.in = new LineReader(in, job, recordDelimiter);
+     this.start = offset;
+     this.pos = offset;
+     this.end = endOffset;    
+diff --git a/src/mapred/org/apache/hadoop/mapred/TextInputFormat.java b/src/mapred/org/apache/hadoop/mapred/TextInputFormat.java
+index edf6f68..1839b04 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TextInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/TextInputFormat.java
+@@ -48,6 +48,10 @@ public class TextInputFormat extends FileInputFormat<LongWritable, Text>
+     throws IOException {
+     
+     reporter.setStatus(genericSplit.toString());
+-    return new LineRecordReader(job, (FileSplit) genericSplit);
++    String delimiter = job.get("textinputformat.record.delimiter");
++    byte[] recordDelimiterBytes = null;
++    if (null != delimiter) recordDelimiterBytes = delimiter.getBytes();
++    return new LineRecordReader(job, (FileSplit) genericSplit,
++        recordDelimiterBytes);
+   }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/input/LineRecordReader.java b/src/mapred/org/apache/hadoop/mapreduce/lib/input/LineRecordReader.java
+index a54b0d7..8ea3a34 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/input/LineRecordReader.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/input/LineRecordReader.java
+@@ -49,6 +49,14 @@ public class LineRecordReader extends RecordReader<LongWritable, Text> {
+   private int maxLineLength;
+   private LongWritable key = null;
+   private Text value = null;
++  private byte[] recordDelimiterBytes;
++
++  public LineRecordReader() {
++  }
++
++  public LineRecordReader(byte[] recordDelimiter) {
++    this.recordDelimiterBytes = recordDelimiter;
++  }
+ 
+   public void initialize(InputSplit genericSplit,
+                          TaskAttemptContext context) throws IOException {
+@@ -67,7 +75,12 @@ public class LineRecordReader extends RecordReader<LongWritable, Text> {
+     FSDataInputStream fileIn = fs.open(split.getPath());
+     boolean skipFirstLine = false;
+     if (codec != null) {
+-      in = new LineReader(codec.createInputStream(fileIn), job);
++      if (null == this.recordDelimiterBytes) {
++        in = new LineReader(codec.createInputStream(fileIn), job);
++      } else {
++        in = new LineReader(codec.createInputStream(fileIn), job,
++            this.recordDelimiterBytes);
++      }
+       end = Long.MAX_VALUE;
+     } else {
+       if (start != 0) {
+@@ -75,7 +88,11 @@ public class LineRecordReader extends RecordReader<LongWritable, Text> {
+         --start;
+         fileIn.seek(start);
+       }
+-      in = new LineReader(fileIn, job);
++      if (null == this.recordDelimiterBytes) {
++        in = new LineReader(fileIn, job);
++      } else {
++        in = new LineReader(fileIn, job, this.recordDelimiterBytes);
++      }
+     }
+     if (skipFirstLine) {  // skip first line and re-establish "start".
+       start += in.readLine(new Text(), 0,
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/input/TextInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/input/TextInputFormat.java
+index bbf2ca8..85d562e 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/input/TextInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/input/TextInputFormat.java
+@@ -38,7 +38,12 @@ public class TextInputFormat extends FileInputFormat<LongWritable, Text> {
+   public RecordReader<LongWritable, Text> 
+     createRecordReader(InputSplit split,
+                        TaskAttemptContext context) {
+-    return new LineRecordReader();
++    String delimiter = context.getConfiguration().get(
++        "textinputformat.record.delimiter");
++    byte[] recordDelimiterBytes = null;
++    if (null != delimiter)
++      recordDelimiterBytes = delimiter.getBytes();
++    return new LineRecordReader(recordDelimiterBytes);
+   }
+ 
+   @Override
+diff --git a/src/test/org/apache/hadoop/mapred/TestLineRecordReader.java b/src/test/org/apache/hadoop/mapred/TestLineRecordReader.java
+new file mode 100644
+index 0000000..472da68
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestLineRecordReader.java
+@@ -0,0 +1,139 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements. See the NOTICE file distributed with this
++ * work for additional information regarding copyright ownership. The ASF
++ * licenses this file to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance with the
++ * License. You may obtain a copy of the License at
++ * 
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * 
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++import java.io.InputStreamReader;
++import java.io.OutputStreamWriter;
++import java.io.Reader;
++import java.io.Writer;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapred.Mapper;
++import org.apache.hadoop.mapred.Reducer;
++import org.apache.hadoop.mapred.lib.IdentityMapper;
++import org.apache.hadoop.mapred.lib.IdentityReducer;
++import org.apache.tools.ant.util.FileUtils;
++import org.junit.Test;
++
++public class TestLineRecordReader extends TestCase {
++
++  private static Path workDir = new Path(new Path(System.getProperty(
++      "test.build.data", "."), "data"), "TestTextInputFormat");
++  private static Path inputDir = new Path(workDir, "input");
++  private static Path outputDir = new Path(workDir, "output");
++
++  /**
++   * Writes the input test file
++   * 
++   * @param conf
++   * @throws IOException
++   */
++  public void createInputFile(Configuration conf) throws IOException {
++    FileSystem localFs = FileSystem.getLocal(conf);
++    Path file = new Path(inputDir, "test.txt");
++    Writer writer = new OutputStreamWriter(localFs.create(file));
++    writer.write("abc\ndef\t\nghi\njkl");
++    writer.close();
++  }
++
++  /**
++   * Reads the output file into a string
++   * 
++   * @param conf
++   * @return
++   * @throws IOException
++   */
++  public String readOutputFile(Configuration conf) throws IOException {
++    FileSystem localFs = FileSystem.getLocal(conf);
++    Path file = new Path(outputDir, "part-00000");
++    Reader reader = new InputStreamReader(localFs.open(file));
++    String r = FileUtils.readFully(reader);
++    reader.close();
++    return r;
++  }
++
++  /**
++   * Creates and runs an MR job
++   * 
++   * @param conf
++   * @throws IOException
++   * @throws InterruptedException
++   * @throws ClassNotFoundException
++   */
++  public void createAndRunJob(Configuration conf) throws IOException,
++      InterruptedException, ClassNotFoundException {
++    JobConf job = new JobConf(conf);
++    job.setJarByClass(TestLineRecordReader.class);
++    job.setMapperClass(IdentityMapper.class);
++    job.setReducerClass(IdentityReducer.class);
++    FileInputFormat.addInputPath(job, inputDir);
++    FileOutputFormat.setOutputPath(job, outputDir);
++    JobClient.runJob(job);
++  }
++
++  /**
++   * Test the case when a custom record delimiter is specified using the
++   * textinputformat.record.delimiter configuration property
++   * 
++   * @throws IOException
++   * @throws InterruptedException
++   * @throws ClassNotFoundException
++   */
++  @Test
++  public void testCustomRecordDelimiters() throws IOException,
++      InterruptedException, ClassNotFoundException {
++    Configuration conf = new Configuration();
++    conf.set("textinputformat.record.delimiter", "\t\n");
++    FileSystem localFs = FileSystem.getLocal(conf);
++    // cleanup
++    localFs.delete(workDir, true);
++    // creating input test file
++    createInputFile(conf);
++    createAndRunJob(conf);
++    String expected = "0\tabc\ndef\n9\tghi\njkl\n";
++    this.assertEquals(expected, readOutputFile(conf));
++  }
++
++  /**
++   * Test the default behavior when the textinputformat.record.delimiter
++   * configuration property is not specified
++   * 
++   * @throws IOException
++   * @throws InterruptedException
++   * @throws ClassNotFoundException
++   */
++  @Test
++  public void testDefaultRecordDelimiters() throws IOException,
++      InterruptedException, ClassNotFoundException {
++    Configuration conf = new Configuration();
++    FileSystem localFs = FileSystem.getLocal(conf);
++    // cleanup
++    localFs.delete(workDir, true);
++    // creating input test file
++    createInputFile(conf);
++    createAndRunJob(conf);
++    String expected = "0\tabc\n4\tdef\t\n9\tghi\n13\tjkl\n";
++    this.assertEquals(expected, readOutputFile(conf));
++  }
++
++}
+\ No newline at end of file
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/input/TestLineRecordReader.java b/src/test/org/apache/hadoop/mapreduce/lib/input/TestLineRecordReader.java
+new file mode 100644
+index 0000000..c59577f
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/input/TestLineRecordReader.java
+@@ -0,0 +1,140 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.input;
++
++import java.io.IOException;
++import java.io.InputStreamReader;
++import java.io.OutputStreamWriter;
++import java.io.Reader;
++import java.io.Writer;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.Mapper;
++import org.apache.hadoop.mapreduce.Reducer;
++import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
++import org.apache.tools.ant.util.FileUtils;
++import org.junit.Test;
++
++public class TestLineRecordReader extends TestCase {
++
++  private static Path workDir = new Path(new Path(System.getProperty(
++      "test.build.data", "."), "data"), "TestTextInputFormat");
++  private static Path inputDir = new Path(workDir, "input");
++  private static Path outputDir = new Path(workDir, "output");
++
++  /**
++   * Writes the input test file
++   *
++   * @param conf
++   * @throws IOException
++   */
++  public void createInputFile(Configuration conf) throws IOException {
++    FileSystem localFs = FileSystem.getLocal(conf);
++    Path file = new Path(inputDir, "test.txt");
++    Writer writer = new OutputStreamWriter(localFs.create(file));
++    writer.write("abc\ndef\t\nghi\njkl");
++    writer.close();
++  }
++
++  /**
++   * Reads the output file into a string
++   *
++   * @param conf
++   * @return
++   * @throws IOException
++   */
++  public String readOutputFile(Configuration conf) throws IOException {
++    FileSystem localFs = FileSystem.getLocal(conf);
++    Path file = new Path(outputDir, "part-r-00000");
++    Reader reader = new InputStreamReader(localFs.open(file));
++    String r = FileUtils.readFully(reader);
++    reader.close();
++    return r;
++  }
++
++  /**
++   * Creates and runs an MR job
++   *
++   * @param conf
++   * @throws IOException
++   * @throws InterruptedException
++   * @throws ClassNotFoundException
++   */
++  public void createAndRunJob(Configuration conf) throws IOException,
++      InterruptedException, ClassNotFoundException {
++    Job job = new Job(conf, "testLineRecordReader");
++    job.setJarByClass(TestLineRecordReader.class);
++    job.setMapperClass(Mapper.class);
++    job.setReducerClass(Reducer.class);
++    FileInputFormat.addInputPath(job, inputDir);
++    FileOutputFormat.setOutputPath(job, outputDir);
++    job.waitForCompletion(true);
++  }
++
++  /**
++   * Test the case when a custom record delimiter is specified using the
++   * textinputformat.record.delimiter configuration property
++   *
++   * @throws IOException
++   * @throws InterruptedException
++   * @throws ClassNotFoundException
++   */
++  @Test
++  public void testCustomRecordDelimiters() throws IOException,
++      InterruptedException, ClassNotFoundException {
++    Configuration conf = new Configuration();
++    conf.set("textinputformat.record.delimiter", "\t\n");
++    FileSystem localFs = FileSystem.getLocal(conf);
++    // cleanup
++    localFs.delete(workDir, true);
++    // creating input test file
++    createInputFile(conf);
++    createAndRunJob(conf);
++    String expected = "0\tabc\ndef\n9\tghi\njkl\n";
++    this.assertEquals(expected, readOutputFile(conf));
++  }
++
++  /**
++   * Test the default behavior when the textinputformat.record.delimiter
++   * configuration property is not specified
++   *
++   * @throws IOException
++   * @throws InterruptedException
++   * @throws ClassNotFoundException
++   */
++  @Test
++  public void testDefaultRecordDelimiters() throws IOException,
++      InterruptedException, ClassNotFoundException {
++    Configuration conf = new Configuration();
++    FileSystem localFs = FileSystem.getLocal(conf);
++    // cleanup
++    localFs.delete(workDir, true);
++    // creating input test file
++    createInputFile(conf);
++    createAndRunJob(conf);
++    String expected = "0\tabc\n4\tdef\t\n9\tghi\n13\tjkl\n";
++    this.assertEquals(expected, readOutputFile(conf));
++  }
++
++}
+-- 
+1.7.0.4
+

@@ -1,0 +1,71 @@
+From 69059680d9e0df4004ac7199c2c54ea658c35173 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 5 Mar 2010 05:58:25 +0000
+Subject: [PATCH 0538/1179] HDFS-814. Add an api to get the visible length of a DFSDataInputStream.
+
+Patch: http://issues.apache.org/jira/secure/attachment/12437934/getLength-yahoo-0.20.patch
+Patch: http://issues.apache.org/jira/secure/attachment/12438026/privateInputStream.patch
+Author: Tsz Wo (Nicholas), SZE
+Ref: YDH
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   13 +++++++++++--
+ .../org/apache/hadoop/hdfs/TestFileStatus.java     |    5 +++++
+ 2 files changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 613904a..0645244 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2193,8 +2193,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       throw new IOException("Mark/reset not supported");
+     }
+   }
+-    
+-  static class DFSDataInputStream extends FSDataInputStream {
++
++  /**
++   * The Hdfs implementation of {@link FSDataInputStream}
++   */
++  public static class DFSDataInputStream extends FSDataInputStream {
+     DFSDataInputStream(DFSInputStream in)
+       throws IOException {
+       super(in);
+@@ -2221,6 +2224,12 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       return ((DFSInputStream)in).getAllBlocks();
+     }
+ 
++    /**
++     * @return The visible length of the file.
++     */
++    public long getVisibleLength() throws IOException {
++      return ((DFSInputStream)in).getFileLength();
++    }
+   }
+ 
+   /****************************************************************
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileStatus.java b/src/test/org/apache/hadoop/hdfs/TestFileStatus.java
+index ed8f341..266fadd 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileStatus.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileStatus.java
+@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.hdfs.DFSClient.DFSDataInputStream;
+ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+@@ -113,6 +114,10 @@ public class TestFileStatus extends TestCase {
+       assertEquals(fs.makeQualified(file1).toString(), 
+           status.getPath().toString());
+ 
++      // test getVisbileLen
++      DFSDataInputStream fin = (DFSDataInputStream)fs.open(file1);
++      assertEquals(status.getLen(), fin.getVisibleLength());
++      
+       // test listStatus on a file
+       FileStatus[] stats = fs.listStatus(file1);
+       assertEquals(1, stats.length);
+-- 
+1.7.0.4
+

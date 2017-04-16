@@ -1,0 +1,140 @@
+From b5f1e39c0561d262829ae4cce546773a418db96e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 7 Jan 2011 14:07:54 -0800
+Subject: [PATCH 0758/1179] HADOOP-7070. Delegate calls up to parent UserGroupInformation
+
+Reason: Fix login behavior underneath glassfish or other JAAS-using containers
+Author: Todd Lipcon
+Ref: DISTRO-66
+---
+ .../hadoop/security/UserGroupInformation.java      |   27 ++++++++++++-
+ .../hadoop/security/TestUserGroupInformation.java  |   41 ++++++++++++++++++++
+ 2 files changed, 66 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index fd6c035..bd8eb95 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -224,8 +224,23 @@ public class UserGroupInformation {
+     // Set the configuration for JAAS to be the Hadoop configuration. 
+     // This is done here rather than a static initializer to avoid a
+     // circular dependence.
+-    javax.security.auth.login.Configuration.setConfiguration
+-        (new HadoopConfiguration());
++    javax.security.auth.login.Configuration existingConfig = null;
++    try {
++      existingConfig =
++        javax.security.auth.login.Configuration.getConfiguration();
++    } catch (SecurityException se) {
++      // If no security configuration is on the classpath, then
++      // we catch this exception, and we don't need to delegate
++      // to anyone
++    }
++
++    if (existingConfig instanceof HadoopConfiguration) {
++      LOG.info("JAAS Configuration already set up for Hadoop, not re-installing.");
++    } else {
++      javax.security.auth.login.Configuration.setConfiguration(
++        new HadoopConfiguration(existingConfig));
++    }
++
+     // give the configuration on how to translate Kerberos names
+     try {
+       KerberosName.setConfiguration(conf);
+@@ -379,6 +394,12 @@ public class UserGroupInformation {
+     private static final AppConfigurationEntry[] KEYTAB_KERBEROS_CONF =
+       new AppConfigurationEntry[]{KEYTAB_KERBEROS_LOGIN, HADOOP_LOGIN};
+ 
++    private final javax.security.auth.login.Configuration parent;
++
++    HadoopConfiguration(javax.security.auth.login.Configuration parent) {
++      this.parent = parent;
++    }
++
+     @Override
+     public AppConfigurationEntry[] getAppConfigurationEntry(String appName) {
+       if (SIMPLE_CONFIG_NAME.equals(appName)) {
+@@ -389,6 +410,8 @@ public class UserGroupInformation {
+         KEYTAB_KERBEROS_OPTIONS.put("keyTab", keytabFile);
+         KEYTAB_KERBEROS_OPTIONS.put("principal", keytabPrincipal);
+         return KEYTAB_KERBEROS_CONF;
++      } else if (parent != null) {
++        return parent.getAppConfigurationEntry(appName);
+       }
+       return null;
+     }
+diff --git a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+index 52837bf..84aa8ab 100644
+--- a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
++++ b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+@@ -22,6 +22,7 @@ import static org.junit.Assert.assertFalse;
+ import static org.junit.Assert.assertTrue;
+ import static org.junit.Assert.fail;
+ 
++import org.mockito.Mockito;
+ import static org.mockito.Mockito.mock;
+ 
+ import java.io.BufferedReader;
+@@ -31,6 +32,10 @@ import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.List;
++
++import javax.security.auth.login.AppConfigurationEntry;
++import javax.security.auth.login.LoginContext;
++
+ import junit.framework.Assert;
+ 
+ import org.apache.hadoop.conf.Configuration;
+@@ -47,7 +52,12 @@ public class TestUserGroupInformation {
+   final private static String[] GROUP_NAMES = 
+     new String[]{GROUP1_NAME, GROUP2_NAME, GROUP3_NAME};
+ 
++  private static javax.security.auth.login.Configuration mockJaasConf;
++
++
+   static {
++    setupMockJaasParent();
++
+     Configuration conf = new Configuration();
+     conf.set("hadoop.security.auth_to_local",
+         "RULE:[2:$1@$0](.*@HADOOP.APACHE.ORG)s/@.*//" +
+@@ -318,4 +328,35 @@ public class TestUserGroupInformation {
+       assertTrue(metrics.loginFailure.getPreviousIntervalAverageTime() > 0);
+     }
+   }
++
++  /**
++   * Setup a JAAS Configuration that handles a fake app.
++   * This runs before UserGroupInformation has been initialized,
++   * so UGI picks up this Configuration as the parent.
++   */
++  private static void setupMockJaasParent() {
++    javax.security.auth.login.Configuration existing = null;
++    try {
++      existing =javax.security.auth.login.Configuration.getConfiguration();
++      assertFalse("setupMockJaasParent should run before the Hadoop " +
++                  "configuration provider is installed.",
++                  existing.getClass().getCanonicalName()
++                  .startsWith("org.apache.hadoop"));
++    } catch (SecurityException se) {
++      // We get this if no configuration has been set. So it's OK.
++    }
++
++    mockJaasConf = mock(javax.security.auth.login.Configuration.class);
++    Mockito.doReturn(new AppConfigurationEntry[] {})
++      .when(mockJaasConf)
++      .getAppConfigurationEntry("foobar-app");
++    javax.security.auth.login.Configuration.setConfiguration(mockJaasConf);
++  }
++
++  @Test
++  public void testDelegateJaasConfiguration() throws Exception {
++    // This will throw if the Configuration doesn't have any entries
++    // for "foobar"
++    LoginContext login = new LoginContext("foobar-app");
++  }
+ }
+-- 
+1.7.0.4
+

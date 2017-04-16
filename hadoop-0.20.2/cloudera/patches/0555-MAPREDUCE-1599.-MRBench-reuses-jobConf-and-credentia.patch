@@ -1,0 +1,29 @@
+From d31d5e1b2eef3d92c60781087aba2857900d2273 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 16 Mar 2010 12:01:28 -0700
+Subject: [PATCH 0555/1179] MAPREDUCE-1599. MRBench reuses jobConf and credentials therein.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12438844/MR-1599-y20.1.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ src/test/org/apache/hadoop/mapred/MRBench.java |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/mapred/MRBench.java b/src/test/org/apache/hadoop/mapred/MRBench.java
+index 9800bc5..bb287cf 100644
+--- a/src/test/org/apache/hadoop/mapred/MRBench.java
++++ b/src/test/org/apache/hadoop/mapred/MRBench.java
+@@ -161,7 +161,8 @@ public class MRBench extends Configured implements Tool{
+     
+     jobConf.setNumMapTasks(numMaps);
+     jobConf.setNumReduceTasks(numReduces);
+-    
++    jobConf
++        .setBoolean("mapreduce.job.complete.cancel.delegation.tokens", false);
+     return jobConf; 
+   }
+   
+-- 
+1.7.0.4
+

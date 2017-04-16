@@ -1,0 +1,3 @@
+core=`find . -name 'core*'`
+#Only pipes programs have 5th argument as program name.
+gdb -quiet $5 -c $core -x $HADOOP_HOME/src/c++/pipes/debug/pipes-default-gdb-commands.txt 

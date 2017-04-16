@@ -1,0 +1,48 @@
+From 7361ea92c13d6ca986e332acef70c2d8983c2f4c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 10 Feb 2011 21:15:48 -0800
+Subject: [PATCH 0855/1179] Amend MAPREDUCE-2265. Restore sbin location for task controller install
+
+Reason: reapply after YDH 0.20.100 merge
+Author: Todd Lipcon
+Ref: CDH-2623
+---
+ build.xml |   14 ++++----------
+ 1 files changed, 4 insertions(+), 10 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 276c25e..e76cf7c 100644
+--- a/build.xml
++++ b/build.xml
+@@ -175,10 +175,9 @@
+     stored for compilation -->
+   <property name="build.c++.task-controller" 
+     value="${build.c++}/task-controller" />
+-  <property name="task-controller.prefix.dir" value="${dist.dir}" />
+-  <!-- the configuration directory for the linux task controller -->
+-  <property name="hadoop.conf.dir" value="/etc/hadoop"/>
+-
++  <!-- the default install dir is build directory override it using
++   -Dtask-controller.install.dir=$HADOOP_HOME/bin -->
++  <property name="task-controller.install.dir" value="${dist.dir}/sbin/${build.platform}/" />
+   <!-- end of task-controller properties -->
+ 
+   <!-- jsvc properties set here -->
+@@ -2196,13 +2195,8 @@
+     <chmod file="${c++.task-controller.src}/configure" perm="ugo+x"/> 
+     <exec executable="${c++.task-controller.src}/configure"
+           dir="${build.c++.task-controller}">
+-      <arg value="--prefix=${task-controller.prefix.dir}"/>
+-      <env key="CFLAGS" 
+-           value="-DHADOOP_CONF_DIR=${hadoop.conf.dir}"/>
++      <arg value="--bindir=${task-controller.install.dir}"/>
+     </exec>
+-    <!-- delete main in case HADOOP_CONF_DIR is different -->
+-    <delete file="${build.c++.task-controller}/impl/main.o"
+-            quiet="true" failonerror="false"/>
+     <exec executable="make"
+           dir="${build.c++.task-controller}"
+           searchpath="yes" failonerror="yes">
+-- 
+1.7.0.4
+

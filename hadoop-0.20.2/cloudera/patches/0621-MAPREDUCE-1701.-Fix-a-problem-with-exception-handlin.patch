@@ -1,0 +1,27 @@
+From 1b1896055e04da90194893c90ac7e2a3787e5077 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 20 Apr 2010 10:55:56 -0700
+Subject: [PATCH 0621/1179] MAPREDUCE-1701. Fix a problem with exception handling in delegation token renewals.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12442239/MAPREDUCE-1701-BP20-1.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ .../security/token/DelegationTokenRenewal.java     |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+index d7eaf04..2397c82 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+@@ -160,6 +160,7 @@ public class DelegationTokenRenewal {
+       } catch (AccessControlException ioe) {
+         LOG.warn("failed to renew token:"+token, ioe);
+         removeFailedDelegationToken(dttr);
++        throw new IOException("failed to renew token", ioe);
+       } catch (Exception e) {
+         LOG.warn("failed to renew token:"+token, e);
+         // returns default expiration date
+-- 
+1.7.0.4
+

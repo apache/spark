@@ -1,0 +1,434 @@
+From d60df2ded7690aed311726e6493ca88d578b882b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 20 Feb 2010 12:17:18 -0800
+Subject: [PATCH 0607/1179] HADOOP-6545. Cached FileSystem objects can lead to wrong token being used in setting up connections
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436456/6545-bp20.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/fs/FileSystem.java     |  185 ++++++++++++++-------
+ src/test/org/apache/hadoop/fs/TestFileSystem.java |   62 +++++++-
+ 2 files changed, 184 insertions(+), 63 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FileSystem.java b/src/core/org/apache/hadoop/fs/FileSystem.java
+index 1e9620d..f4d3365 100644
+--- a/src/core/org/apache/hadoop/fs/FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/FileSystem.java
+@@ -23,10 +23,10 @@ import java.io.IOException;
+ import java.net.URI;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+-import java.util.Collection;
+ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.IdentityHashMap;
++import java.security.PrivilegedExceptionAction;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
+@@ -38,11 +38,12 @@ import java.util.regex.Pattern;
+ import org.apache.commons.logging.*;
+ 
+ import org.apache.hadoop.conf.*;
+-import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.util.*;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.io.MultipleIOException;
++import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
+ 
+ /****************************************************************
+  * An abstract base class for a fairly generic filesystem.  It
+@@ -89,6 +90,21 @@ public abstract class FileSystem extends Configured implements Closeable {
+    */
+   private Set<Path> deleteOnExit = new TreeSet<Path>();
+ 
++  public static FileSystem get(final URI uri, final Configuration conf, 
++      final String user)
++  throws IOException, InterruptedException {
++    UserGroupInformation ugi;
++    if (user == null) {
++      ugi = UserGroupInformation.getCurrentUser();
++    } else {
++      ugi = UserGroupInformation.createRemoteUser(user);
++    }
++    return ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
++      public FileSystem run() throws IOException {
++        return get(uri, conf);
++      }
++    });
++  }
+   /** Returns the configured filesystem implementation.*/
+   public static FileSystem get(Configuration conf) throws IOException {
+     return get(getDefaultUri(conf), conf);
+@@ -130,6 +146,22 @@ public abstract class FileSystem extends Configured implements Closeable {
+   /** Returns a URI whose scheme and authority identify this FileSystem.*/
+   public abstract URI getUri();
+   
++  /**
++   * Get the default port for this file system.
++   * @return the default port or 0 if there isn't one
++   */
++  protected int getDefaultPort() {
++    return 0;
++  }
++
++  /**
++   * Get a canonical name for this file system.
++   * @return a URI string that uniquely identifies this file system
++   */
++  public String getCanonicalServiceName() {
++    return SecurityUtil.buildDTServiceName(getUri(), getDefaultPort());
++  }
++  
+   /** @deprecated call #getUri() instead.*/
+   public String getName() { return getUri().toString(); }
+ 
+@@ -236,17 +268,6 @@ public abstract class FileSystem extends Configured implements Closeable {
+     return (LocalFileSystem)newInstance(LocalFileSystem.NAME, conf);
+   }
+ 
+-  private static class ClientFinalizer extends Thread {
+-    public synchronized void run() {
+-      try {
+-        FileSystem.closeAll();
+-      } catch (IOException e) {
+-        LOG.info("FileSystem.closeAll() threw an exception:\n" + e);
+-      }
+-    }
+-  }
+-  private static final ClientFinalizer clientFinalizer = new ClientFinalizer();
+-
+   /**
+    * Close all cached filesystems. Be sure those filesystems are not
+    * used anymore.
+@@ -254,7 +275,21 @@ public abstract class FileSystem extends Configured implements Closeable {
+    * @throws IOException
+    */
+   public static void closeAll() throws IOException {
+-    CACHE.closeAll();
++    LOG.debug("Starting clear of FileSystem cache with " + CACHE.size() +
++              " elements.");
++    CACHE.closeAll(null, false);
++    LOG.debug("Done clearing cache");
++  }
++
++  /**
++   * Close all cached filesystems for a given UGI. Be sure those filesystems 
++   * are not used anymore.
++   * @param ugi
++   * @throws IOException
++   */
++  public static void closeAllForUGI(UserGroupInformation ugi) 
++  throws IOException {
++    CACHE.closeAll(ugi, false);
+   }
+ 
+   /** Make sure that a path specifies a FileSystem. */
+@@ -1135,6 +1170,15 @@ public abstract class FileSystem extends Configured implements Closeable {
+       .makeQualified(this);
+   }
+ 
++  /**
++   * Get a new delegation token for this file system.
++   * @param renewer the account name that is allowed to renew the token.
++   * @return a new delegation token
++   * @throws IOException
++   */
++  public Token<?> getDelegationToken(String renewer) throws IOException {
++    return null;
++  }
+ 
+   /**
+    * Set the current working directory for the given file system. All relative
+@@ -1283,6 +1327,7 @@ public abstract class FileSystem extends Configured implements Closeable {
+     // delete all files that were marked as delete-on-exit.
+     processDeleteOnExit();
+     CACHE.remove(this.key, this);
++    LOG.debug("Removing filesystem for " + getUri());
+   }
+ 
+   /** Return the total size of all files in the filesystem.*/
+@@ -1436,6 +1481,7 @@ public abstract class FileSystem extends Configured implements Closeable {
+   private static FileSystem createFileSystem(URI uri, Configuration conf
+       ) throws IOException {
+     Class<?> clazz = conf.getClass("fs." + uri.getScheme() + ".impl", null);
++    LOG.debug("Creating filesystem for " + uri);
+     if (clazz == null) {
+       throw new IOException("No FileSystem for scheme: " + uri.getScheme());
+     }
+@@ -1454,7 +1500,7 @@ public abstract class FileSystem extends Configured implements Closeable {
+     /** A variable that makes all objects in the cache unique */
+     private static AtomicLong unique = new AtomicLong(1);
+ 
+-    synchronized FileSystem get(URI uri, Configuration conf) throws IOException{
++    FileSystem get(URI uri, Configuration conf) throws IOException{
+       Key key = new Key(uri, conf);
+       return getInternal(uri, conf, key);
+     }
+@@ -1466,9 +1512,23 @@ public abstract class FileSystem extends Configured implements Closeable {
+     }
+ 
+     private FileSystem getInternal(URI uri, Configuration conf, Key key) throws IOException{
+-      FileSystem fs = map.get(key);
+-      if (fs == null) {
+-        fs = createFileSystem(uri, conf);
++      FileSystem fs = null;
++      synchronized (this) {
++        fs = map.get(key);
++      }
++      if (fs != null) {
++        return fs;
++      }
++      
++      fs = createFileSystem(uri, conf);
++      synchronized (this) {  // refetch the lock again
++        FileSystem oldfs = map.get(key);
++        if (oldfs != null) { // a file system is created while lock is releasing
++          fs.close(); // close the new file system
++          return oldfs;  // return the old file system
++        }
++
++        // now insert the new file system into the map
+         if (map.isEmpty() && !clientFinalizer.isAlive()) {
+           Runtime.getRuntime().addShutdownHook(clientFinalizer);
+         }
+@@ -1478,8 +1538,8 @@ public abstract class FileSystem extends Configured implements Closeable {
+         if (conf.getBoolean("fs.automatic.close", true)) {
+           toAutoClose.add(key);
+         }
++        return fs;
+       }
+-      return fs;
+     }
+ 
+     synchronized void remove(Key key, FileSystem fs) {
+@@ -1495,63 +1555,56 @@ public abstract class FileSystem extends Configured implements Closeable {
+       }
+     }
+ 
+-    synchronized void closeAll() throws IOException {
+-      closeAll(false);
++    private class ClientFinalizer extends Thread {
++      public synchronized void run() {
++        try {
++          closeAll(null, true);
++        } catch (IOException e) {
++          LOG.info("FileSystem.Cache.closeAll() threw an exception:\n" + e);
++        }
++      }
+     }
+ 
+     /**
+-     * Close all FileSystem instances in the Cache.
+-     * @param onlyAutomatic only close those that are marked for automatic closing
++     * Close all of the file systems in the cache.
++     * @param ugi Only close filesystems with this UGI - may be null to indicate ignoring UGI
++     * @param onlyAutomatic only close filesystems marked for automatic close
+      */
+-    synchronized void closeAll(boolean onlyAutomatic) throws IOException {
+-      List<IOException> exceptions = new ArrayList<IOException>();
+-
+-      // Make a copy of the keys in the map since we'll be modifying
+-      // the map while iterating over it, which isn't safe.
+-      List<Key> keys = new ArrayList<Key>();
+-      keys.addAll(map.keySet());
+-
+-      for (Key key : keys) {
+-        final FileSystem fs = map.get(key);
+-
++    synchronized void closeAll(UserGroupInformation ugi, boolean onlyAutomatic) throws IOException {
++      List<FileSystem> targetFSList = new ArrayList<FileSystem>();
++      //Make a pass over the list and collect the filesystems to close
++      //we cannot close inline since close() removes the entry from the Map
++      for (Map.Entry<Key, FileSystem> entry : map.entrySet()) {
++        final Key key = entry.getKey();
++        final FileSystem fs = entry.getValue();
++        if (fs == null) continue;
++        if (ugi != null && !ugi.equals(key.ugi)) continue;
+         if (onlyAutomatic && !toAutoClose.contains(key)) {
+           continue;
+         }
+-
+-        //remove from cache
+-        remove(key, fs);
+-
+-        if (fs != null) {
+-          try {
+-            fs.close();
+-          }
+-          catch(IOException ioe) {
+-            exceptions.add(ioe);
+-          }
++        targetFSList.add(fs);   
++      }
++      List<IOException> exceptions = new ArrayList<IOException>();
++      //now make a pass over the target list and close each
++      for (FileSystem fs : targetFSList) {
++        try {
++          fs.close();
++        }
++        catch(IOException ioe) {
++          exceptions.add(ioe);
+         }
+       }
+-
+       if (!exceptions.isEmpty()) {
+         throw MultipleIOException.createIOException(exceptions);
+       }
+     }
+ 
+-    private class ClientFinalizer extends Thread {
+-      public synchronized void run() {
+-        try {
+-          closeAll(true);
+-        } catch (IOException e) {
+-          LOG.info("FileSystem.Cache.closeAll() threw an exception:\n" + e);
+-        }
+-      }
+-    }
+-
+     /** FileSystem.Cache.Key */
+     static class Key {
+       final String scheme;
+       final String authority;
+-      final String username;
+-      final long unique;   // an artificial way to make a key unique
++      final long unique;
++      final UserGroupInformation ugi;
+ 
+       Key(URI uri, Configuration conf) throws IOException {
+         this(uri, conf, 0);
+@@ -1561,12 +1614,12 @@ public abstract class FileSystem extends Configured implements Closeable {
+         scheme = uri.getScheme()==null?"":uri.getScheme().toLowerCase();
+         authority = uri.getAuthority()==null?"":uri.getAuthority().toLowerCase();
+         this.unique = unique;
+-        username = UserGroupInformation.getCurrentUser().getUserName();
++        this.ugi = UserGroupInformation.getCurrentUser();
+       }
+ 
+       /** {@inheritDoc} */
+       public int hashCode() {
+-        return (scheme + authority + username).hashCode() + (int)unique;
++        return (scheme + authority).hashCode() + (int)unique + ugi.hashCode();
+       }
+ 
+       static boolean isEqual(Object a, Object b) {
+@@ -1582,7 +1635,7 @@ public abstract class FileSystem extends Configured implements Closeable {
+           Key that = (Key)obj;
+           return isEqual(this.scheme, that.scheme)
+                  && isEqual(this.authority, that.authority)
+-                 && isEqual(this.username, that.username)
++                 && isEqual(this.ugi, that.ugi)
+                  && (this.unique == that.unique);
+         }
+         return false;        
+@@ -1590,9 +1643,17 @@ public abstract class FileSystem extends Configured implements Closeable {
+ 
+       /** {@inheritDoc} */
+       public String toString() {
+-        return username + "@" + scheme + "://" + authority;        
++        return "("+ugi.toString() + ")@" + scheme + "://" + authority;        
+       }
+     }
++    
++    /**
++     * Get the number of file systems in the cache.
++     * @return the number of cached file systems
++     */
++    int size() {
++      return map.size();
++    }
+   }
+   
+   public static final class Statistics {
+diff --git a/src/test/org/apache/hadoop/fs/TestFileSystem.java b/src/test/org/apache/hadoop/fs/TestFileSystem.java
+index 1c3e1f3..3c26fbe 100644
+--- a/src/test/org/apache/hadoop/fs/TestFileSystem.java
++++ b/src/test/org/apache/hadoop/fs/TestFileSystem.java
+@@ -57,6 +57,12 @@ import org.apache.hadoop.mapred.Reporter;
+ import org.apache.hadoop.mapred.SequenceFileInputFormat;
+ import org.apache.hadoop.mapred.lib.LongSumReducer;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++import java.security.PrivilegedAction;
++import java.security.PrivilegedActionException;
++import java.security.PrivilegedExceptionAction;
++import static org.mockito.Mockito.mock;
+ 
+ public class TestFileSystem extends TestCase {
+   private static final Log LOG = FileSystem.LOG;
+@@ -600,7 +606,7 @@ public class TestFileSystem extends TestCase {
+     // Different URIs should result in different FS instances
+     assertNotSame(fsWithAuto, fsWithoutAuto);
+ 
+-    FileSystem.CACHE.closeAll(true);
++    FileSystem.CACHE.closeAll(null, true);
+     assertEquals(1, closed.size());
+     assertTrue(closed.contains(fsWithAuto));
+ 
+@@ -673,4 +679,58 @@ public class TestFileSystem extends TestCase {
+     fs1.close();
+     fs2.close();
+   }
++
++  @SuppressWarnings("unchecked")
++  public <T extends TokenIdentifier> void testCacheForUgi() throws Exception {
++    final Configuration conf = new Configuration();
++    conf.set("fs.cachedfile.impl", conf.get("fs.file.impl"));
++    UserGroupInformation ugiA = UserGroupInformation.createRemoteUser("foo");
++    UserGroupInformation ugiB = UserGroupInformation.createRemoteUser("bar");
++    FileSystem fsA = ugiA.doAs(new PrivilegedExceptionAction<FileSystem>() {
++      public FileSystem run() throws Exception {
++        return FileSystem.get(new URI("cachedfile://a"), conf);
++      }
++    });
++    FileSystem fsA1 = ugiA.doAs(new PrivilegedExceptionAction<FileSystem>() {
++      public FileSystem run() throws Exception {
++        return FileSystem.get(new URI("cachedfile://a"), conf);
++      }
++    });
++    //Since the UGIs are the same, we should have the same filesystem for both
++    assertSame(fsA, fsA1);
++    
++    FileSystem fsB = ugiB.doAs(new PrivilegedExceptionAction<FileSystem>() {
++      public FileSystem run() throws Exception {
++        return FileSystem.get(new URI("cachedfile://a"), conf);
++      }
++    });
++    //Since the UGIs are different, we should end up with different filesystems
++    //corresponding to the two UGIs
++    assertNotSame(fsA, fsB);
++    
++    Token<T> t1 = mock(Token.class);
++    ugiA = UserGroupInformation.createRemoteUser("foo");
++    ugiA.addToken(t1);
++    
++    fsA = ugiA.doAs(new PrivilegedExceptionAction<FileSystem>() {
++      public FileSystem run() throws Exception {
++        return FileSystem.get(new URI("cachedfile://a"), conf);
++      }
++    });
++    //Although the users in the UGI are same, ugiA has tokens in it, and
++    //we should end up with different filesystems corresponding to the two UGIs
++    assertNotSame(fsA, fsA1);
++    
++    ugiA = UserGroupInformation.createRemoteUser("foo");
++    ugiA.addToken(t1);
++    
++    fsA1 = ugiA.doAs(new PrivilegedExceptionAction<FileSystem>() {
++      public FileSystem run() throws Exception {
++        return FileSystem.get(new URI("cachedfile://a"), conf);
++      }
++    });
++    //Now the users in the UGI are the same, and they also have the same token.
++    //We should have the same filesystem for both
++    assertSame(fsA, fsA1);
++  }
+ }
+-- 
+1.7.0.4
+

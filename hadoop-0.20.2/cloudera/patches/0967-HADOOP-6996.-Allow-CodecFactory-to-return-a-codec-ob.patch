@@ -1,0 +1,132 @@
+From 829bc94b23b9ab447fc51919cecfe5d9bd0a0c2b Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Tue, 7 Jun 2011 16:40:23 -0700
+Subject: [PATCH 0967/1179] HADOOP-6996. Allow CodecFactory to return a codec object given a codec' class name
+
+Reason: Improvement
+Author: Hairong Kuang
+Ref: CDH-3226
+---
+ .../io/compress/CompressionCodecFactory.java       |   21 +++++++++++-
+ .../hadoop/io/compress/TestCodecFactory.java       |   36 ++++++++++++++++++-
+ 2 files changed, 54 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/compress/CompressionCodecFactory.java b/src/core/org/apache/hadoop/io/compress/CompressionCodecFactory.java
+index dae2e68..1cba520 100644
+--- a/src/core/org/apache/hadoop/io/compress/CompressionCodecFactory.java
++++ b/src/core/org/apache/hadoop/io/compress/CompressionCodecFactory.java
+@@ -39,10 +39,16 @@ public class CompressionCodecFactory {
+    * automatically supports finding the longest matching suffix. 
+    */
+   private SortedMap<String, CompressionCodec> codecs = null;
+-  
++
++  /**
++   * A map from class names to the codecs
++   */
++  private HashMap<String, CompressionCodec> codecsByClassName = null;
++
+   private void addCodec(CompressionCodec codec) {
+     String suffix = codec.getDefaultExtension();
+     codecs.put(new StringBuffer(suffix).reverse().toString(), codec);
++    codecsByClassName.put(codec.getClass().getCanonicalName(), codec);
+   }
+   
+   /**
+@@ -131,6 +137,7 @@ public class CompressionCodecFactory {
+    */
+   public CompressionCodecFactory(Configuration conf) {
+     codecs = new TreeMap<String, CompressionCodec>();
++    codecsByClassName = new HashMap<String, CompressionCodec>();
+     List<Class<? extends CompressionCodec>> codecClasses = getCodecClasses(conf);
+     if (codecClasses == null) {
+       addCodec(new GzipCodec());
+@@ -168,6 +175,18 @@ public class CompressionCodecFactory {
+   }
+   
+   /**
++   * Find the relevant compression codec for the codec's canonical class name.
++   * @param classname the canonical class name of the codec
++   * @return the codec object
++   */
++  public CompressionCodec getCodecByClassName(String classname) {
++    if (codecsByClassName == null) {
++      return null;
++    }
++    return codecsByClassName.get(classname);
++  }
++
++  /**
+    * Removes a suffix from a filename, if it has it.
+    * @param filename the filename to strip
+    * @param suffix the suffix to remove
+diff --git a/src/test/org/apache/hadoop/io/compress/TestCodecFactory.java b/src/test/org/apache/hadoop/io/compress/TestCodecFactory.java
+index 1451c1a..baaddc5 100644
+--- a/src/test/org/apache/hadoop/io/compress/TestCodecFactory.java
++++ b/src/test/org/apache/hadoop/io/compress/TestCodecFactory.java
+@@ -124,28 +124,60 @@ public class TestCodecFactory extends TestCase {
+       new CompressionCodecFactory(new Configuration());
+     CompressionCodec codec = factory.getCodec(new Path("/tmp/foo.bar"));
+     assertEquals("default factory foo codec", null, codec);
++    codec = factory.getCodecByClassName(BarCodec.class.getCanonicalName());
++    assertEquals("default factory foo codec", null, codec);
++    
+     codec = factory.getCodec(new Path("/tmp/foo.gz"));
+     checkCodec("default factory for .gz", GzipCodec.class, codec);
++    codec = factory.getCodecByClassName(GzipCodec.class.getCanonicalName());
++    checkCodec("default factory for gzip codec", GzipCodec.class, codec);
++    
+     codec = factory.getCodec(new Path("/tmp/foo.bz2"));
+     checkCodec("default factory for .bz2", BZip2Codec.class, codec);
++    codec = factory.getCodecByClassName(BZip2Codec.class.getCanonicalName());
++    checkCodec("default factory for bzip2 codec", BZip2Codec.class, codec);
++    
+     factory = setClasses(new Class[0]);
+     codec = factory.getCodec(new Path("/tmp/foo.bar"));
+     assertEquals("empty codec bar codec", null, codec);
++    codec = factory.getCodecByClassName(BarCodec.class.getCanonicalName());
++    assertEquals("empty codec bar codec", null, codec);
++    
+     codec = factory.getCodec(new Path("/tmp/foo.gz"));
+     assertEquals("empty codec gz codec", null, codec);
++    codec = factory.getCodecByClassName(GzipCodec.class.getCanonicalName());
++    assertEquals("empty codec gz codec", null, codec);
++    
+     codec = factory.getCodec(new Path("/tmp/foo.bz2"));
+-    assertEquals("default factory for .bz2", null, codec);
++    assertEquals("empty factory for .bz2", null, codec);
++    codec = factory.getCodecByClassName(BZip2Codec.class.getCanonicalName());
++    assertEquals("empty factory for bzip2 codec", null, codec);
++    
+     factory = setClasses(new Class[]{BarCodec.class, FooCodec.class, 
+                                      FooBarCodec.class});
+     codec = factory.getCodec(new Path("/tmp/.foo.bar.gz"));
+     assertEquals("full factory gz codec", null, codec);
++    codec = factory.getCodecByClassName(GzipCodec.class.getCanonicalName());
++    assertEquals("full codec gz codec", null, codec);
++     
+     codec = factory.getCodec(new Path("/tmp/foo.bz2"));
+-    assertEquals("default factory for .bz2", null, codec);
++    assertEquals("full factory for .bz2", null, codec);
++    codec = factory.getCodecByClassName(BZip2Codec.class.getCanonicalName());
++    assertEquals("full codec bzip2 codec", null, codec);
++    
+     codec = factory.getCodec(new Path("/tmp/foo.bar"));
+     checkCodec("full factory bar codec", BarCodec.class, codec);
++    codec = factory.getCodecByClassName(BarCodec.class.getCanonicalName());
++    checkCodec("full factory bar codec", BarCodec.class, codec);
++    
+     codec = factory.getCodec(new Path("/tmp/foo/baz.foo.bar"));
+     checkCodec("full factory foo bar codec", FooBarCodec.class, codec);
++    codec = factory.getCodecByClassName(FooBarCodec.class.getCanonicalName());
++    checkCodec("full factory foo bar codec", FooBarCodec.class, codec);
++    
+     codec = factory.getCodec(new Path("/tmp/foo.foo"));
+     checkCodec("full factory foo codec", FooCodec.class, codec);
++    codec = factory.getCodecByClassName(FooCodec.class.getCanonicalName());
++    checkCodec("full factory foo codec", FooCodec.class, codec);
+   }
+ }
+-- 
+1.7.0.4
+

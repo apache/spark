@@ -1,0 +1,243 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+
+  <property>
+    <name>mapred.tasktracker.tasks.sleeptime-before-sigkill</name>
+    <value>250</value>
+    <description>Normally, this is the amount of time before killing
+      processes, and the recommended-default is 5.000 seconds - a value of
+      5000 here.  In this case, we are using it solely to blast tasks before
+      killing them, and killing them very quickly (1/4 second) to guarantee
+      that we do not leave VMs around for later jobs.
+    </description>
+  </property>
+
+  <property>
+    <name>mapred.system.dir</name>
+    <value>/user/mapred/system</value>
+    <final>true</final>
+  </property>
+
+  <property>
+    <name>mapred.job.tracker</name>
+    <value>${local.jobtracker}:50300</value>
+    <final>true</final>
+  </property>
+
+  <property>
+    <name>mapred.job.tracker.http.address</name>
+    <value>0.0.0.0:50030</value>
+    <final>true</final>
+  </property>
+
+  <property>
+    <name>mapred.temp.dir</name>
+    <value>/var/lib/hadoop-0.20/cache/mapred/tmp</value>
+    <final>true</final>
+  </property>
+
+  <property>
+    <name>mapred.local.dir</name>
+    <value>/var/lib/hadoop-0.20/cache/mapred/local</value>
+    <final>true</final>
+  </property>
+
+  <property>
+    <name>mapreduce.cluster.administrators</name>
+    <value> hadoop</value>
+  </property>
+
+  <property>
+    <name>mapred.tasktracker.map.tasks.maximum</name>
+    <value>4</value>
+  </property>
+
+  <property>
+    <name>mapred.tasktracker.reduce.tasks.maximum</name>
+    <value>2</value>
+  </property>
+
+  <property>
+    <name>mapred.map.tasks.speculative.execution</name>
+    <value>false</value>
+    <description>If true, then multiple instances of some map tasks
+               may be executed in parallel.</description>
+  </property>
+
+  <property>
+    <name>mapred.reduce.tasks.speculative.execution</name>
+    <value>false</value>
+    <description>If true, then multiple instances of some reduce tasks
+               may be executed in parallel.</description>
+  </property>
+
+  <property>
+    <name>mapred.reduce.slowstart.completed.maps</name>
+    <value>0.05</value>
+  </property>
+
+  <property>
+    <name>mapred.output.compression.type</name>
+    <value>BLOCK</value>
+    <description>If the job outputs are to compressed as SequenceFiles, how 
+       should they be compressed? Should be one of NONE, RECORD or BLOCK.
+    </description>
+  </property>
+
+  <property>
+    <name>mapred.jobtracker.restart.recover</name>
+    <value>false</value>
+    <description>"true" to enable (job) recovery upon restart,
+               "false" to start afresh
+    </description>
+  </property>
+
+  <property>
+    <name>jetty.connector</name>
+    <value>org.mortbay.jetty.nio.SelectChannelConnector</value>
+  </property>
+
+  <property>
+    <name>mapred.task.tracker.task-controller</name>
+    <value>org.apache.hadoop.mapred.LinuxTaskController</value>
+  </property>
+
+  <property>
+    <name>mapred.child.root.logger</name>
+    <value>INFO,TLA</value>
+  </property>
+
+  <property>
+    <name>stream.tmpdir</name>
+    <value>${mapred.temp.dir}</value>
+  </property>
+
+
+  <property>
+    <name>mapred.child.java.opts</name>
+    <value>-server -Xmx640m -Djava.net.preferIPv4Stack=true</value>
+  </property>
+
+  <property>
+    <name>mapred.child.ulimit</name>
+    <value>8388608</value>
+  </property>
+
+  <property>
+    <name>mapred.job.tracker.persist.jobstatus.active</name>
+    <value>true</value>
+    <description>Indicates if persistency of job status information is
+      active or not.
+    </description>
+  </property>
+
+  <property>
+    <name>mapred.job.tracker.persist.jobstatus.dir</name>
+    <value>file:///var/local/hadoop/mapred/jobstatus</value>
+    <description>The directory where the job status information is persisted
+      in a file system to be available after it drops of the memory queue and
+      between jobtracker restarts.
+    </description>
+  </property>
+
+  <property>
+    <name>mapred.job.tracker.history.completed.location</name>
+    <value>/user/mapred/history/done</value>
+  </property>
+
+  <property>
+    <name>mapred.heartbeats.in.second</name>
+    <value>200</value>
+    <description>to enable HADOOP:5784</description>
+  </property>
+
+  <property>
+    <name>mapreduce.tasktracker.outofband.heartbeat</name>
+    <value>true</value>
+    <description>to enable MAPREDUCE:270</description>
+  </property>
+
+  <property>
+    <name>mapred.jobtracker.maxtasks.per.job</name>
+    <value>200000</value>
+    <final>true</final>
+    <description>The maximum number of tasks for a single job.
+      A value of -1 indicates that there is no maximum.  
+    </description>
+  </property>
+
+  <property>
+    <name>mapreduce.jobtracker.kerberos.principal</name>
+    <value>mapred/_HOST@${local.realm}</value>   
+    <description>
+       JT principal
+    </description>
+  </property>
+
+  <property>
+    <name>mapreduce.tasktracker.kerberos.principal</name>
+    <value>mapred/_HOST@${local.realm}</value>   
+    <description>       
+       TT principal.
+    </description>
+  </property>
+
+
+  <property>
+    <name>hadoop.job.history.user.location</name>
+    <value>none</value>
+  </property>
+
+  <property>
+    <name>mapreduce.jobtracker.keytab.file</name>
+    <value>/var/local/hadoop/mapred.keytab</value>
+    <description>
+        The keytab for the jobtracker principal.
+    </description>
+  </property>
+
+  <property>
+    <name>mapreduce.tasktracker.keytab.file</name>
+    <value>/var/local/hadoop/mapred.keytab</value>
+    <description>The filename of the keytab for the task tracker</description>
+  </property>
+
+  <property>
+    <name>mapreduce.jobtracker.staging.root.dir</name>
+    <value>/user</value>
+    <description>The Path prefix for where the staging directories should be 
+      placed. The next level is always the user's
+      name. It is a path in the default file system.
+    </description>
+  </property>
+
+
+  <property>
+    <name>mapreduce.job.acl-modify-job</name>
+    <value></value>
+  </property>
+
+  <property>
+    <name>mapreduce.job.acl-view-job</name>
+    <value>Dr.Who</value>
+  </property>
+
+  <property>
+    <name>mapreduce.tasktracker.group</name>
+    <value>mapred</value>
+    <description>The group that the task controller uses for accessing the
+      task controller. The mapred user must be a member and users should *not*
+      be members.
+    </description> 
+  </property>
+
+  <property>
+    <name>mapred.acls.enabled</name>
+    <value>true</value>
+  </property>
+    
+</configuration>

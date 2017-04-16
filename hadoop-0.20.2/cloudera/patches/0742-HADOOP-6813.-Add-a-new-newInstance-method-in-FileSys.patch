@@ -1,0 +1,84 @@
+From fa4ca629131059ade47618d0ed201c4ddc3abe72 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 12 Nov 2010 19:46:24 -0800
+Subject: [PATCH 0742/1179] HADOOP-6813. Add a new newInstance method in FileSystem that takes a "user" as argument.
+
+Reason: Improvement
+Author: Devaraj Das
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/fs/FileSystem.java      |   24 ++++++++++++++++++++
+ .../apache/hadoop/fs/TestFileSystemCaching.java    |   17 ++++++++++++++
+ 2 files changed, 41 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FileSystem.java b/src/core/org/apache/hadoop/fs/FileSystem.java
+index d3581ba..ee4b1ac 100644
+--- a/src/core/org/apache/hadoop/fs/FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/FileSystem.java
+@@ -227,6 +227,30 @@ public abstract class FileSystem extends Configured implements Closeable {
+     return CACHE.get(uri, conf);
+   }
+ 
++  /**
++   * Returns the FileSystem for this URI's scheme and authority and the 
++   * passed user. Internally invokes {@link #newInstance(URI, Configuration)}
++   * @param uri
++   * @param conf
++   * @param user
++   * @return filesystem instance
++   * @throws IOException
++   * @throws InterruptedException
++   */
++  public static FileSystem newInstance(final URI uri, final Configuration conf,
++      final String user) throws IOException, InterruptedException {
++    UserGroupInformation ugi;
++    if (user == null) {
++      ugi = UserGroupInformation.getCurrentUser();
++    } else {
++      ugi = UserGroupInformation.createRemoteUser(user);
++    }
++    return ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
++      public FileSystem run() throws IOException {
++        return newInstance(uri,conf); 
++      }
++    });
++  }
+   /** Returns the FileSystem for this URI's scheme and authority.  The scheme
+    * of the URI determines a configuration property name,
+    * <tt>fs.<i>scheme</i>.class</tt> whose value names the FileSystem class.
+diff --git a/src/test/org/apache/hadoop/fs/TestFileSystemCaching.java b/src/test/org/apache/hadoop/fs/TestFileSystemCaching.java
+index 78d494d..53d54d2 100644
+--- a/src/test/org/apache/hadoop/fs/TestFileSystemCaching.java
++++ b/src/test/org/apache/hadoop/fs/TestFileSystemCaching.java
+@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration;
+ import java.util.concurrent.Semaphore;
+ 
+ import junit.framework.TestCase;
++import static junit.framework.Assert.assertTrue;
+ 
+ public class TestFileSystemCaching extends TestCase {
+ 
+@@ -68,4 +69,20 @@ public class TestFileSystemCaching extends TestCase {
+     t.interrupt();
+     t.join();
+   }
++
++  public void testFsUniqueness() throws Exception {
++    final Configuration conf = new Configuration();
++    conf.set("fs.cachedfile.impl", conf.get("fs.file.impl"));
++    // multiple invocations of FileSystem.get return the same object.
++    FileSystem fs1 = FileSystem.get(conf);
++    FileSystem fs2 = FileSystem.get(conf);
++    assertTrue(fs1 == fs2);
++
++    // multiple invocations of FileSystem.newInstance return different objects
++    fs1 = FileSystem.newInstance(new URI("cachedfile://a"), conf, "bar");
++    fs2 = FileSystem.newInstance(new URI("cachedfile://a"), conf, "bar");
++    assertTrue(fs1 != fs2 && !fs1.equals(fs2));
++    fs1.close();
++    fs2.close();
++  }
+ }
+-- 
+1.7.0.4
+

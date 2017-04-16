@@ -1,0 +1,343 @@
+{
+  "name" : "<root>",
+  "children" : [ {
+    "name" : "194\\.6\\.133\\.192",
+    "children" : [ {
+      "name" : "cluster50218\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster50232\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.117\\.128",
+    "children" : [ {
+      "name" : "cluster1218\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1236\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1200\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1227\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1223\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.129\\.128",
+    "children" : [ {
+      "name" : "cluster1872\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1876\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1854\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1869\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1846\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1867\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.134\\.64",
+    "children" : [ {
+      "name" : "cluster50286\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.116\\.192",
+    "children" : [ {
+      "name" : "cluster1143\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1157\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.128\\.0",
+    "children" : [ {
+      "name" : "cluster1586\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.127\\.192",
+    "children" : [ {
+      "name" : "cluster1553\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1551\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.133\\.64",
+    "children" : [ {
+      "name" : "cluster50130\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster50141\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster50152\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.117\\.192",
+    "children" : [ {
+      "name" : "cluster1259\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1245\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1260\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1261\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.116\\.64",
+    "children" : [ {
+      "name" : "cluster1064\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1059\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.126\\.0",
+    "children" : [ {
+      "name" : "cluster1288\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1294\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.116\\.128",
+    "children" : [ {
+      "name" : "cluster1080\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1097\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.135\\.64",
+    "children" : [ {
+      "name" : "cluster3071\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster3049\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.135\\.128",
+    "children" : [ {
+      "name" : "cluster3097\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster3098\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster3082\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster3112\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster3104\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.128\\.192",
+    "children" : [ {
+      "name" : "cluster50510\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster50478\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster50505\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster50481\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.130\\.0",
+    "children" : [ {
+      "name" : "cluster1930\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1928\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1932\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.63\\.0",
+    "children" : [ {
+      "name" : "cluster1770\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1779\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1771\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.62\\.128",
+    "children" : [ {
+      "name" : "cluster1694\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1718\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.126\\.192",
+    "children" : [ {
+      "name" : "cluster1412\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1405\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.126\\.64",
+    "children" : [ {
+      "name" : "cluster1357\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.129\\.192",
+    "children" : [ {
+      "name" : "cluster1911\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1889\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.63\\.192",
+    "children" : [ {
+      "name" : "cluster1004\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1020\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1028\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.132\\.128",
+    "children" : [ {
+      "name" : "cluster50021\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.127\\.64",
+    "children" : [ {
+      "name" : "cluster1457\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1450\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1466\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.129\\.64",
+    "children" : [ {
+      "name" : "cluster1816\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1803\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.134\\.128",
+    "children" : [ {
+      "name" : "cluster50359\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.126\\.128",
+    "children" : [ {
+      "name" : "cluster1393\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1396\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1369\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.62\\.64",
+    "children" : [ {
+      "name" : "cluster1660\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1649\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.129\\.0",
+    "children" : [ {
+      "name" : "cluster50543\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.128\\.64",
+    "children" : [ {
+      "name" : "cluster1639\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster1607\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.62\\.192",
+    "children" : [ {
+      "name" : "cluster50427\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster50411\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "194\\.6\\.132\\.192",
+    "children" : [ {
+      "name" : "cluster50053\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster50057\\.secondleveldomain\\.com",
+      "children" : null
+    }, {
+      "name" : "cluster50050\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  }, {
+    "name" : "192\\.30\\.63\\.64",
+    "children" : [ {
+      "name" : "cluster1733\\.secondleveldomain\\.com",
+      "children" : null
+    } ]
+  } ]
+}

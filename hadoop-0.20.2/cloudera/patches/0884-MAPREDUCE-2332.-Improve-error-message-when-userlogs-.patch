@@ -1,0 +1,41 @@
+From f57c22b8ec079abc5a051551bce9b1209fa3e6a3 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Feb 2011 23:32:32 -0800
+Subject: [PATCH 0884/1179] MAPREDUCE-2332. Improve error message when userlogs dir has bad ownership
+
+Patch differs from trunk patch on account of MR-2178
+
+Reason: common souce of user error
+Author: Todd Lipcon
+Ref: CDH-2670
+---
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   13 +++++++++++--
+ 1 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 3f90fe9..aba4185 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -657,8 +657,17 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     if (!taskLog.isDirectory() && !taskLog.mkdirs()) {
+       LOG.warn("Unable to create taskLog directory : " + taskLog.getPath());
+     } else {
+-      localFs.setPermission(new Path(taskLog.getCanonicalPath()),
+-                            new FsPermission((short)0755));
++      Path taskLogDir = new Path(taskLog.getCanonicalPath());
++      try {
++        localFs.setPermission(taskLogDir,
++                              new FsPermission((short)0755));
++      } catch (IOException ioe) {
++        throw new IOException(
++          "Unable to set permissions on task log directory. " +
++          taskLogDir + " should be owned by " +
++          "and accessible by user '" + System.getProperty("user.name") +
++          "'.", ioe);
++      }
+     }
+     DiskChecker.checkDir(TaskLog.getUserLogDir());
+   }
+-- 
+1.7.0.4
+

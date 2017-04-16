@@ -1,0 +1,170 @@
+<?xml version="1.0"?>
+<!--
+  Copyright 2002-2004 The Apache Software Foundation
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN" "http://forrest.apache.org/dtd/document-v20.dtd">
+
+<document>
+  
+  <header>
+    <title>Vaidya Guide</title>
+  </header>
+  
+  <body>
+  
+    <section>
+      <title>Purpose</title>
+      
+      <p>This document describes various user-facing facets of Hadoop Vaidya, a performance diagnostic tool for map/reduce jobs. It
+         describes how to execute a default set of rules against your map/reduce job counters and
+         how to write and execute new rules to detect specific performance problems. 
+      </p>
+      <p>A few sample test rules are provided with the tool with the objective of growing the rules database over the time. 
+         You are welcome to contribute new rules for everyone's benefit; to do so, follow the 
+         <a href="http://wiki.apache.org/hadoop/HowToContribute">How to Contribute</a> procedure
+         specified on Apache Hadoop website.
+      </p>
+    </section>
+    
+    <section>
+      <title>Prerequisites</title>
+      
+      <p>Ensure that Hadoop is installed and configured. More details:</p> 
+      <ul>
+        <li>
+          Make sure HADOOP_HOME environment variable is set.
+        </li>
+        <li>
+          Make sure Java is installed and configured as a part of the Hadoop installation.
+        </li>
+      </ul>
+    </section>
+    
+    <section>
+      <title>Overview</title>
+      
+      <p>Hadoop Vaidya (Vaidya in Sanskrit language means "one who knows", or "a physician") 
+	    is a rule based performance diagnostic tool for 
+        MapReduce jobs. It performs a post execution analysis of map/reduce 
+        job by parsing and collecting execution statistics through job history 
+        and job configuration files. It runs a set of predefined tests/rules 
+        against job execution statistics to diagnose various performance problems. 
+        Each test rule detects a specific performance problem with the MapReduce job and provides 
+        a targeted advice to the user. This tool generates an XML report based on 
+        the evaluation results of individual test rules.
+      </p>
+      
+    </section>
+  
+    <section>
+	 <title>Terminology</title>
+	 
+	 <p> This section describes main concepts and terminology involved with Hadoop Vaidya,</p>
+		<ul>
+			<li> <em>PostExPerformanceDiagnoser</em>: This class extends the base Diagnoser class and acts as a driver for post execution performance analysis of MapReduce Jobs. 
+                       It detects performance inefficiencies by executing a set of performance diagnosis rules against the job execution statistics.</li>
+			<li> <em>Job Statistics</em>: This includes the job configuration information (job.xml) and various counters logged by MapReduce job as a part of the job history log
+		           file. The counters are parsed and collected into the Job Statistics data structures, which contains global job level aggregate counters and 
+			     a set of counters for each Map and Reduce task.</li>
+			<li> <em>Diagnostic Test/Rule</em>: This is a program logic that detects the inefficiency of M/R job based on the job statistics. The
+				 description of the Test is specified as an XML element (DiagnosticTest) in a test description file e.g. 
+				 default tests description file, <em>$HADOOP_HOME/contrib/vaidya/conf/postex_diagnosis_tests.xml</em>. The actual logic is coded as
+				 a java class and referenced in the DiagnosticTest XML element. </li>
+		</ul>
+	<p></p>
+	<p>Following section describes the <em>DiagnosticTest</em> XML element in a diagnostic test description file </p>
+		<ul>
+			<li> <em>DiagnosticTest{Title}</em>: Specifies a short name/description of the test.</li>
+			<li> <em>DiagnosticTest{ClassName}</em>: Specifies fully qualified class name that implements the test logic.</li>
+			<li> <em>DiagnosticTest{Description}</em>: Specifies a full description of the test rule.</li>
+			<li> <em>DiagnosticTest{Importance}</em>: Specifies a declarative value for overall importance of the test rule. (Values: High, Medium, Low)</li>
+			<li> <em>DiagnosticTest{SuccessThreshod}</em>: This is a threshold value specified by test case writer such that if impact level of the test case
+				 is lesser, then test is declared as PASSED (or NEGATIVE). The impact level is calculated and returned
+				 by individual test's evaluate function, specifying the degree of problem job has with respect to the condition being evaluated.</li>
+			<li> <em>DiagnosticTest{Prescription}</em>: This is a targeted advice written by the test case adviser for the user to follow when test is not PASSED. </li>
+			<li> <em>DiagonsticTest{InputElement}</em>: This is a test specific input that test writer has to optionally provide. This will be supplied to individual test case
+                       class so that test writer can use it within test case. This is typically a test configuration information such that test writer need not change the
+                       Java code for test case but rather can configure the test case using these input values. </li>
+		</ul>
+	<p></p>
+	<p>Following section describes the performance analysis report generated by the tool in XML format</p>
+		<ul>
+			<li> <em>PostExPerformanceDiagnosticReport</em>: This is a document (root) element from the XML report generated by the tool. </li>
+			<li> <em>TestReportElement</em>: This is a XML report element from the test report document, one for each individual test specified in test description
+				 file </li>  
+			<li> <em>TestReportElement{TestTitle}</em>: Will be included from DiagnosticTest{Title} </li>
+			<li> <em>TestReportElement{TestDescription}</em>: Will be included from DiagnosticTest{Description} </li>
+			<li> <em>TestReportElement{TestImportance}</em>: Will be included from DiagnosticTest{Importance} </li>
+			<li> <em>TestReportElement{TestSeverity}</em>: This is a product of Test Impact level and Test Importance. It indicates overall severity of the test.</li>
+			<li> <em>TestReportElement{ReferenceDetails}</em>: This is a test specific runtime information provided by test case to support the test result and severity. Typically
+				 Test writer should print the test impact level in this section. </li>
+			<li> <em>TestReportElement{TestResults}</em>: This is boolean outcome of the test based on the SuccessThreshold specified by test writer in the DiagnosticTest description. The 
+				 test PASSED(NEGATIVE) indicates no problem vs. FAILED (POSITIVE) indicates a potential problem with the job for given test case. </li>
+			<li> <em>TestReportElement{TestPrescription}</em>: This will be included from DiagnosticTest{Prescription}, unless test case writer overrides it in the test case class through getPrescription()
+				 method </li>
+		</ul>	 
+	</section>
+	
+	<section>
+		<title>How to Execute the Hadoop Vaidya Tool</title>
+		  
+      	<p>Script to execute Hadoop Vaidya is in <code>$HADOOP_HOME/contrib/vaidya/bin/</code> directory.
+		   It comes with a default set of rules defined in file: 
+           <code>$HADOOP_HOME/contrib/vaidya/conf/postex_diagnosis_tests.xml</code> </p>
+		  <ul>
+			<li>Make sure HADOOP_HOME environment variable is set and Java is installed and configured.</li>
+			<li>Execute the Hadoop Vaidya script with -help (or without any arguments) to get the command line help. e.g. 
+                       <code>=>sh $HADOOP_HOME/contrib/vaidya/bin/vaidya.sh -help</code></li>
+			<li>User needs to 
+				 supply job's configuration file (<code>-jobconf job_conf.xml</code>), job history log file (<code>-joblog job_history_log_file</code>), and optionally the test description
+				 file (<code>-testconf postex_diagonostic_tests.xml</code>). If test description file is not specified then the default one is picked up from the Hadoop Vaidya Jar (<code>$HADOOP_HOME/contrib/vaidya/hadoop-{version}-vaidya.jar</code>).
+				 This default test description file is also available at following location for users to make a local copy, modify and add new test rules: 
+			     <code>$HADOOP_HOME/contrib/vaidya/conf/postex_diagnostic_tests.xml</code></li>
+			<li> Use <code>-report report_file</code> option to store the xml report into specified report_file. </li>  
+		 </ul>
+	</section>
+	
+    <section>
+		<title>How to Write and Execute your own Tests</title>
+		<p>Writing and executing your own test rules is not very hard. You can take a look at Hadoop Vaidya source code for existing set of tests. 
+		   The source code is at this <a href="http://svn.apache.org/viewvc/hadoop/core/trunk/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/">hadoop svn repository location</a>. The default set of tests are under <code>"postexdiagnosis/tests/"</code> folder.</p>
+		<ul>
+		  <li>Writing a test class for your new test case should extend the <code>org.apache.hadoop.vaidya.DiagnosticTest</code> class and 
+		       it should override following three methods from the base class, 
+              <ul> 
+				<li> evaluate() </li>
+				<li> getPrescription() </li> 
+ 				<li> getReferenceDetails() </li> 
+              </ul>
+          </li>
+		  <li>Make a local copy of the <code>$HADOOP_HOME/contrib/vaidya/conf/postex_diagnostic_tests.xml</code> file or create a new test description XML file.</li>
+		  <li>Add the test description element for your new test case to this test description file.</li>
+		  <li>Compile your new test class (or multiple classes), archive them into a Jar file and add it to the CLASSPATH e.g. (<code>export CLASSPATH=$CLASSPATH:newtests.jar</code>)</li>
+		  <li>Execute the Hadoop Vaidya script with the job configuration, job history log and reference to newly created test description file using <em>--testconf</em> option. 
+		  <code>=>sh $HADOOP_HOME/contrib/vaidya/bin/vaidya.sh -joblog job_history_log_file -jobconf job.xml -testconf new_test_description_file -report report.xml</code></li>
+		</ul>
+	</section>
+	
+    <p> </p>
+    <p> </p>
+    <p>
+      <em>Java and JNI are trademarks or registered trademarks of 
+      Sun Microsystems, Inc. in the United States and other countries.</em>
+    </p>
+    
+  </body>
+  
+</document>

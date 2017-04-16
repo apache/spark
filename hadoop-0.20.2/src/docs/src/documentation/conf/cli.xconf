@@ -1,0 +1,327 @@
+<?xml version="1.0"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!--+
+    |  This is the Apache Cocoon command line configuration file.
+    |  Here you give the command line interface details of where
+    |  to find various aspects of your Cocoon installation.
+    |
+    |  If you wish, you can also use this file to specify the URIs
+    |  that you wish to generate.
+    |
+    |  The current configuration information in this file is for
+    |  building the Cocoon documentation. Therefore, all links here
+    |  are relative to the build context dir, which, in the build.xml
+    |  file, is set to ${build.context}
+    |
+    |  Options:
+    |    verbose:            increase amount of information presented
+    |                        to standard output (default: false)
+    |    follow-links:       whether linked pages should also be
+    |                        generated (default: true)
+    |    precompile-only:    precompile sitemaps and XSP pages, but
+    |                        do not generate any pages (default: false)
+    |    confirm-extensions: check the mime type for the generated page
+    |                        and adjust filename and links extensions
+    |                        to match the mime type
+    |                        (e.g. text/html->.html)
+    |
+    |  Note: Whilst using an xconf file to configure the Cocoon
+    |        Command Line gives access to more features, the use of
+    |        command line parameters is more stable, as there are
+    |        currently plans to improve the xconf format to allow
+    |        greater flexibility. If you require a stable and
+    |        consistent method for accessing the CLI, it is recommended
+    |        that you use the command line parameters to configure
+    |        the CLI. See documentation at:
+    |        http://cocoon.apache.org/2.1/userdocs/offline/
+    |        http://wiki.apache.org/cocoon/CommandLine
+    |
+    +-->
+
+<cocoon verbose="true"
+        follow-links="true"
+        precompile-only="false"
+        confirm-extensions="false">
+
+   <!--+
+       |  The context directory is usually the webapp directory
+       |  containing the sitemap.xmap file.
+       |
+       |  The config file is the cocoon.xconf file.
+       |
+       |  The work directory is used by Cocoon to store temporary
+       |  files and cache files.
+       |
+       |  The destination directory is where generated pages will
+       |  be written (assuming the 'simple' mapper is used, see
+       |  below)
+       +-->
+   <context-dir>.</context-dir>
+   <config-file>WEB-INF/cocoon.xconf</config-file>
+   <work-dir>../tmp/cocoon-work</work-dir>
+   <dest-dir>../site</dest-dir>
+
+   <!--+
+       |  A checksum file can be used to store checksums for pages
+       |  as they are generated. When the site is next generated,
+       |  files will not be written if their checksum has not changed.
+       |  This means that it will be easier to detect which files
+       |  need to be uploaded to a server, using the timestamp.
+       |
+       |  The default path is relative to the core webapp directory.
+       |  An asolute path can be used.
+       +-->
+   <!--   <checksums-uri>build/work/checksums</checksums-uri>-->
+
+   <!--+
+       | Broken link reporting options:
+       |   Report into a text file, one link per line:
+       |     <broken-links type="text" report="filename"/>
+       |   Report into an XML file:
+       |     <broken-links type="xml" report="filename"/>
+       |   Ignore broken links (default):
+       |     <broken-links type="none"/>
+       |
+       |   Two attributes to this node specify whether a page should
+       |   be generated when an error has occured. 'generate' specifies
+       |   whether a page should be generated (default: true) and
+       |   extension specifies an extension that should be appended
+       |   to the generated page's filename (default: none)
+       |
+       |   Using this, a quick scan through the destination directory
+       |   will show broken links, by their filename extension.
+       +-->
+   <broken-links type="xml"
+                 file="../brokenlinks.xml"
+                 generate="false"
+                 extension=".error"
+                 show-referrers="true"/>
+
+   <!--+
+       |  Load classes at startup. This is necessary for generating
+       |  from sites that use SQL databases and JDBC.
+       |  The <load-class> element can be repeated if multiple classes
+       |  are needed.
+       +-->
+   <!--
+   <load-class>org.firebirdsql.jdbc.Driver</load-class>
+   -->
+
+   <!--+
+       |  Configures logging.
+       |  The 'log-kit' parameter specifies the location of the log kit
+       |  configuration file (usually called logkit.xconf.
+       |
+       |  Logger specifies the logging category (for all logging prior
+       |  to other Cocoon logging categories taking over)
+       |
+       |  Available log levels are:
+       |    DEBUG:        prints all level of log messages.
+       |    INFO:         prints all level of log messages except DEBUG
+       |                  ones.
+       |    WARN:         prints all level of log messages except DEBUG
+       |                  and INFO ones.
+       |    ERROR:        prints all level of log messages except DEBUG,
+       |                  INFO and WARN ones.
+       |    FATAL_ERROR:  prints only log messages of this level
+       +-->
+   <!-- <logging log-kit="WEB-INF/logkit.xconf" logger="cli" level="ERROR" /> -->
+
+   <!--+
+       |  Specifies the filename to be appended to URIs that
+       |  refer to a directory (i.e. end with a forward slash).
+       +-->
+   <default-filename>index.html</default-filename>
+
+   <!--+
+       |  Specifies a user agent string to the sitemap when
+       |  generating the site.
+       |
+       |  A generic term for a web browser is "user agent". Any
+       |  user agent, when connecting to a web server, will provide
+       |  a string to identify itself (e.g. as Internet Explorer or
+       |  Mozilla). It is possible to have Cocoon serve different
+       |  content depending upon the user agent string provided by
+       |  the browser. If your site does this, then you may want to
+       |  use this <user-agent> entry to provide a 'fake' user agent
+       |  to Cocoon, so that it generates the correct version of your
+       |  site.
+       |
+       |  For most sites, this can be ignored.
+       +-->
+   <!--
+   <user-agent>Cocoon Command Line Environment 2.1</user-agent>
+   -->
+
+   <!--+
+       |  Specifies an accept string to the sitemap when generating
+       |  the site.
+       |  User agents can specify to an HTTP server what types of content
+       |  (by mime-type) they are able to receive. E.g. a browser may be
+       |  able to handle jpegs, but not pngs. The HTTP accept header
+       |  allows the server to take the browser's capabilities into account,
+       |  and only send back content that it can handle.
+       |
+       |  For most sites, this can be ignored.
+       +-->
+
+   <accept>*/*</accept>
+
+   <!--+
+       | Specifies which URIs should be included or excluded, according
+       | to wildcard patterns.
+       |
+       | These includes/excludes are only relevant when you are following
+       | links. A link URI must match an include pattern (if one is given)
+       | and not match an exclude pattern, if it is to be followed by
+       | Cocoon. It can be useful, for example, where there are links in
+       | your site to pages that are not generated by Cocoon, such as
+       | references to api-documentation.
+       |
+       | By default, all URIs are included. If both include and exclude
+       | patterns are specified, a URI is first checked against the
+       | include patterns, and then against the exclude patterns.
+       |
+       | Multiple patterns can be given, using muliple include or exclude
+       | nodes.
+       |
+       | The order of the elements is not significant, as only the first
+       | successful match of each category is used.
+       |
+       | Currently, only the complete source URI can be matched (including
+       | any URI prefix). Future plans include destination URI matching
+       | and regexp matching. If you have requirements for these, contact
+       | dev@cocoon.apache.org.
+       +-->
+
+   <exclude pattern="**/"/>
+   <exclude pattern="api/**"/>
+   <exclude pattern="jdiff/**"/>
+   <exclude pattern="changes.html"/>
+   <exclude pattern="releasenotes.html"/>
+
+<!--
+  This is a workaround for FOR-284 "link rewriting broken when
+  linking to xml source views which contain site: links".
+  See the explanation there and in declare-broken-site-links.xsl
+-->
+   <exclude pattern="site:**"/>
+   <exclude pattern="ext:**"/>
+   <exclude pattern="lm:**"/>
+   <exclude pattern="**/site:**"/>
+   <exclude pattern="**/ext:**"/>
+   <exclude pattern="**/lm:**"/>
+
+   <!-- Exclude tokens used in URLs to ASF mirrors (interpreted by a CGI) -->
+   <exclude pattern="[preferred]/**"/>
+   <exclude pattern="[location]"/>
+
+   <!--   <include-links extension=".html"/>-->
+
+   <!--+
+       |  <uri> nodes specify the URIs that should be generated, and
+       |  where required, what should be done with the generated pages.
+       |  They describe the way the URI of the generated file is created
+       |  from the source page's URI. There are three ways that a generated
+       |  file URI can be created: append, replace and insert.
+       |
+       |  The "type" attribute specifies one of (append|replace|insert):
+       |
+       |  append:
+       |  Append the generated page's URI to the end of the source URI:
+       |
+       |   <uri type="append" src-prefix="documents/" src="index.html"
+       |   dest="build/dest/"/>
+       |
+       |  This means that
+       |   (1) the "documents/index.html" page is generated
+       |   (2) the file will be written to "build/dest/documents/index.html"
+       |
+       |  replace:
+       |  Completely ignore the generated page's URI - just
+       |  use the destination URI:
+       |
+       |   <uri type="replace" src-prefix="documents/" src="index.html"
+       |   dest="build/dest/docs.html"/>
+       |
+       |  This means that
+       |   (1) the "documents/index.html" page is generated
+       |   (2) the result is written to "build/dest/docs.html"
+       |   (3) this works only for "single" pages - and not when links
+       |       are followed
+       |
+       |  insert:
+       |  Insert generated page's URI into the destination
+       |  URI at the point marked with a * (example uses fictional
+       |  zip protocol)
+       |
+       |   <uri type="insert" src-prefix="documents/" src="index.html"
+       |   dest="zip://*.zip/page.html"/>
+       |
+       |  This means that
+       |   (1)
+       |
+       |  In any of these scenarios, if the dest attribute is omitted,
+       |  the value provided globally using the <dest-dir> node will
+       |  be used instead.
+       +-->
+   <!--
+   <uri type="replace"
+        src-prefix="samples/"
+        src="hello-world/hello.html"
+        dest="build/dest/hello-world.html"/>
+   -->
+
+   <!--+
+       | <uri> nodes can be grouped together in a <uris> node. This
+       | enables a group of URIs to share properties. The following
+       | properties can be set for a group of URIs:
+       |   * follow-links:       should pages be crawled for links
+       |   * confirm-extensions: should file extensions be checked
+       |                         for the correct mime type
+       |   * src-prefix:         all source URIs should be
+       |                         pre-pended with this prefix before
+       |                         generation. The prefix is not
+       |                         included when calculating the
+       |                         destination URI
+       |   * dest:               the base destination URI to be
+       |                         shared by all pages in this group
+       |   * type:               the method to be used to calculate
+       |                         the destination URI. See above
+       |                         section on <uri> node for details.
+       |
+       | Each <uris> node can have a name attribute. When a name
+       | attribute has been specified, the -n switch on the command
+       | line can be used to tell Cocoon to only process the URIs
+       | within this URI group. When no -n switch is given, all
+       | <uris> nodes are processed. Thus, one xconf file can be
+       | used to manage multiple sites.
+       +-->
+   <!--
+   <uris name="mirrors" follow-links="false">
+     <uri type="append" src="mirrors.html"/>
+   </uris>
+   -->
+
+   <!--+
+       |  File containing URIs (plain text, one per line).
+       +-->
+   <!--
+   <uri-file>uris.txt</uri-file>
+   -->
+</cocoon>

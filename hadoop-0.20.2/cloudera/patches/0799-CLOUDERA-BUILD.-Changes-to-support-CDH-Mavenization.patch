@@ -1,0 +1,1533 @@
+From e3356ca6f8a2ee616f610da19fc141d7578a905d Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Thu, 27 Jan 2011 15:55:01 -0800
+Subject: [PATCH 0799/1179] CLOUDERA-BUILD. Changes to support CDH Mavenization.
+
+---
+ build.xml                                          |   42 ++---
+ cloudera-pom.xml                                   |  238 ++++++++++++++++++++
+ cloudera/do-release-build                          |    8 +
+ cloudera/maven-packaging/hadoop-core/pom.xml       |  169 ++++++++++++++
+ cloudera/maven-packaging/hadoop-examples/pom.xml   |   80 +++++++
+ cloudera/maven-packaging/hadoop-streaming/pom.xml  |   80 +++++++
+ cloudera/maven-packaging/hadoop-tarball/pom.xml    |   93 ++++++++
+ cloudera/maven-packaging/hadoop-test/pom.xml       |   96 ++++++++
+ cloudera/maven-packaging/hadoop-tools/pom.xml      |   80 +++++++
+ cloudera/maven-packaging/pom.xml                   |   97 ++++++++
+ cloudera/maven-packaging/templates/build.template  |    2 +
+ .../maven-packaging/templates/libraries.template   |   83 +++++++
+ ivy/hadoop-core-pom-template.xml                   |  122 ----------
+ ivy/hadoop-examples-pom-template.xml               |   34 ---
+ ivy/hadoop-streaming-pom-template.xml              |   34 ---
+ ivy/hadoop-test-pom-template.xml                   |   53 -----
+ ivy/hadoop-tools-pom-template.xml                  |   34 ---
+ 17 files changed, 1040 insertions(+), 305 deletions(-)
+ create mode 100644 cloudera-pom.xml
+ create mode 100644 cloudera/maven-packaging/hadoop-core/pom.xml
+ create mode 100644 cloudera/maven-packaging/hadoop-examples/pom.xml
+ create mode 100644 cloudera/maven-packaging/hadoop-streaming/pom.xml
+ create mode 100644 cloudera/maven-packaging/hadoop-tarball/pom.xml
+ create mode 100644 cloudera/maven-packaging/hadoop-test/pom.xml
+ create mode 100644 cloudera/maven-packaging/hadoop-tools/pom.xml
+ create mode 100644 cloudera/maven-packaging/pom.xml
+ create mode 100644 cloudera/maven-packaging/templates/build.template
+ create mode 100644 cloudera/maven-packaging/templates/libraries.template
+ delete mode 100644 ivy/hadoop-core-pom-template.xml
+ delete mode 100644 ivy/hadoop-examples-pom-template.xml
+ delete mode 100644 ivy/hadoop-streaming-pom-template.xml
+ delete mode 100644 ivy/hadoop-test-pom-template.xml
+ delete mode 100644 ivy/hadoop-tools-pom-template.xml
+
+diff --git a/build.xml b/build.xml
+index e1bb146..be4db34 100644
+--- a/build.xml
++++ b/build.xml
+@@ -325,6 +325,15 @@
+     </sequential>
+   </macrodef>
+ 
++  <!-- Initializes ivy/libraries.properties and build.properties with CDH versions -->
++  <target  name="init-cdh" unless="cdh.maven">
++    <exec  executable="mvn" dir="${basedir}" failonerror="true">
++      <arg value="-f" />
++      <arg value="cloudera-pom.xml" />
++      <arg value="process-resources"/>
++    </exec>
++  </target>
++
+   <!-- ====================================================== -->
+   <!-- Stuff needed by all targets                            -->
+   <!-- ====================================================== -->
+@@ -1445,6 +1454,8 @@
+       <fileset dir="${build.dir}/contrib/fairscheduler" includes="*.jar"/>
+     </copy>
+ 
++    <copy file="cloudera-pom.xml" tofile="${dist.dir}/cloudera-pom.xml"/>
++
+     <copy todir="${dist.dir}/cloudera">
+       <fileset dir="cloudera" />
+     </copy>
+@@ -1516,11 +1527,6 @@
+     <delete dir="${build.dir}"/>
+     <delete dir="${docs.src}/build"/>
+     <delete dir="${src.docs.cn}/build"/>
+-    <delete file="${basedir}/ivy/hadoop-core-pom.xml"/>
+-    <delete file="${basedir}/ivy/hadoop-test-pom.xml"/>
+-    <delete file="${basedir}/ivy/hadoop-examples-pom.xml"/>
+-    <delete file="${basedir}/ivy/hadoop-tools-pom.xml"/>
+-    <delete file="${basedir}/ivy/hadoop-streaming-pom.xml"/>
+   </target>
+ 
+   <target name="clean-sign" description="Clean.  Delete .asc files">
+@@ -1885,7 +1891,7 @@
+     </condition>
+   </target>
+ 
+-  <target name="ivy-download" description="To download ivy" unless="offline">
++  <target name="ivy-download" depends="init-cdh" description="To download ivy" unless="offline">
+     <get src="${ivy_repo_url}" dest="${ivy.jar}" usetimestamp="true"/>
+   </target>
+ 
+@@ -2017,29 +2023,9 @@
+          classpathref="mvn-ant-task.classpath"/>
+   </target>  
+ 
+-  <target name="mvn-install" depends="mvn-taskdef,bin-package,set-version"
++  <target name="mvn-install" depends=""
+      description="To install hadoop core and test jars to local filesystem's m2 cache">
+-     <artifact:pom file="${hadoop-core.pom}" id="hadoop.core"/>
+-     <artifact:pom file="${hadoop-test.pom}" id="hadoop.test"/>
+-     <artifact:pom file="${hadoop-examples.pom}" id="hadoop.examples"/>
+-     <artifact:pom file="${hadoop-tools.pom}" id="hadoop.tools"/>
+-     <artifact:pom file="${hadoop-streaming.pom}" id="hadoop.streaming"/>
+-
+-     <artifact:install file="${hadoop-core.jar}">
+-        <pom refid="hadoop.core"/>
+-     </artifact:install>
+-     <artifact:install file="${hadoop-test.jar}">
+-        <pom refid="hadoop.test"/>
+-     </artifact:install>
+-     <artifact:install file="${hadoop-tools.jar}">
+-        <pom refid="hadoop.tools"/>
+-     </artifact:install>
+-     <artifact:install file="${hadoop-examples.jar}">
+-        <pom refid="hadoop.examples"/>
+-     </artifact:install>
+-     <artifact:install file="${hadoop-streaming.jar}">
+-        <pom refid="hadoop.streaming"/>
+-     </artifact:install>
++    <echo>To install Cloudera hadoop core and test jars into Maven cache, run "mvn -f cloudera-pom.xml install" from this directory.</echo>
+   </target>
+ 
+   <target name="mvn-deploy" depends="mvn-taskdef, bin-package, set-version, signanddeploy, simpledeploy"
+diff --git a/cloudera-pom.xml b/cloudera-pom.xml
+new file mode 100644
+index 0000000..f537a93
+--- /dev/null
++++ b/cloudera-pom.xml
+@@ -0,0 +1,238 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<!--
++NOTE - This POM is used for Cloudera's build and packaging process.
++-->
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++  <modelVersion>4.0.0</modelVersion>
++  
++  <parent>
++    <groupId>com.cloudera.cdh</groupId>
++    <artifactId>hadoop-root</artifactId>
++    <version>3.0-beta-4-SNAPSHOT</version>
++  </parent>
++  
++  <groupId>com.cloudera.cdh</groupId>
++  <artifactId>hadoop-ant</artifactId>
++  <version>3.0-beta-4-SNAPSHOT</version>
++  <packaging>pom</packaging>
++  
++  <scm>
++    <connection>scm:git:git@git.sf.cloudera.com:hadoop.git</connection>
++    <url>git@git.sf.cloudera.com:hadoop.git</url>
++  </scm>
++  
++  <description>Hadoop dummy for crepo</description>
++  <name>Hadoop ant</name>
++  
++  <licenses>
++    <license>
++      <name>The Apache Software License, Version 2.0</name>
++      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
++    </license>
++  </licenses>
++  
++  <organization>
++    <name>Cloudera</name>
++    <url>http://www.cloudera.com</url>
++  </organization>
++  
++  <profiles>
++    <!--To allow standalone project to fetch CDH artifacts -->
++    <!--Activate by default doing a negation of negation   -->
++    <!-- this trick allows CDH root to switch it off       -->
++    <profile>
++      <id>cdh.repos</id>
++      <activation>
++        <activeByDefault>false</activeByDefault>
++        <property>
++          <name>use.cdh.repos</name>
++          <value>!false</value>
++        </property>
++      </activation>
++      <repositories>
++        <repository>
++          <id>cdh.releases.repo</id>
++          <url>https://repository.cloudera.com/content/repositories/releases</url>
++          <name>CDH Releases Repository</name>
++          <snapshots>
++            <enabled>false</enabled>
++          </snapshots>
++        </repository>
++        <repository>
++          <id>cdh.snapshots.repo</id>
++          <url>https://repository.cloudera.com/content/repositories/snapshots</url>
++          <name>CDH Snapshots Repository</name>
++          <snapshots>
++            <enabled>true</enabled>
++          </snapshots>
++        </repository>
++      </repositories>
++    </profile>
++    <!-- Similar logic to allow us to skip compilation/tests when run -->
++    <!-- via do-release-build or packaging scripts, since we're already -->
++    <!-- compiling via direct ant calls. -->
++    <profile>
++      <id>non.release.build</id>
++      <activation>
++        <activeByDefault>false</activeByDefault>
++        <property>
++          <name>not.cdh.release.build</name>
++          <value>!false</value>
++        </property>
++      </activation>
++      <build>
++        <plugins>
++          <plugin>
++            <groupId>org.apache.maven.plugins</groupId>
++            <artifactId>maven-antrun-plugin</artifactId>
++            <version>1.6</version>
++            <inherited>false</inherited>
++            <executions>
++              <execution>
++                <id>clean</id>
++                <configuration>
++                  <target>
++                    <exec executable="${ant.cmd}" dir="${basedir}" failonerror="true">
++                      <arg value="clean"/>
++                      <arg value="-Dcdh.maven=true"/>
++                      <arg value="-Divy.cache.dir=${ivy.cache.dir}"/>
++                    </exec>
++                  </target>
++                </configuration>
++                <goals>
++                  <goal>run</goal>
++                </goals>
++                <phase>clean</phase>
++              </execution>
++              <execution>
++                <id>compile</id>
++                <configuration>
++                  <target>
++                    <exec executable="${ant.cmd}" dir="${basedir}" failonerror="true">
++                      <arg value="bin-package"/>
++                      <arg value="-Dcdh.maven=true"/>
++                      <arg value="-Divy.cache.dir=${ivy.cache.dir}"/>
++                    </exec>
++                  </target>
++                </configuration>
++                <goals>
++                  <goal>run</goal>
++                </goals>
++                <phase>compile</phase>
++              </execution>
++              <execution>
++                <id>test</id>
++                <configuration>
++                  <target unless="${skipTests}">
++                    <exec executable="${ant.cmd}" dir="${basedir}" failonerror="true">
++                      <arg value="test"/>
++                      <arg value="-Dcdh.maven=true"/>
++                      <arg value="-Divy.cache.dir=${ivy.cache.dir}"/>
++                </exec>
++                  </target>
++                </configuration>
++                <goals>
++                  <goal>run</goal>
++                </goals>
++                <phase>test</phase>
++              </execution>
++            </executions>
++          </plugin>
++        </plugins>
++      </build>
++    </profile>
++        <!-- Profile that's only activated when we're calling as a release build, to run -->
++    <!-- with variables set *and* tar target -->
++    <profile>
++      <id>cdh.release.build</id>
++      <activation>
++        <activeByDefault>false</activeByDefault>
++        <property>
++          <name>not.cdh.release.build</name>
++          <value>false</value>
++        </property>
++      </activation>
++      <build>
++        <plugins>
++          <plugin>
++            <groupId>org.apache.maven.plugins</groupId>
++            <artifactId>maven-antrun-plugin</artifactId>
++            <inherited>false</inherited>
++            <executions>
++              <execution>
++                <id>tar</id>
++                <configuration>
++                  <target if="do.full.compile">
++                    <property file="${basedir}/build.properties"/>
++                    <exec executable="/bin/bash" dir="${basedir}/cloudera" failonerror="true">
++                      <arg value="do-release-build" />
++                      <env key="SKIP_MVN_EXPLICIT" value="true" />
++                    </exec>
++                  </target>
++                </configuration>
++                <goals>
++                  <goal>run</goal>
++                </goals>
++                <phase>compile</phase>
++              </execution>
++            </executions>
++          </plugin>
++        </plugins>
++      </build>
++    </profile>
++  </profiles>
++  
++  <build>
++    <plugins>
++      
++      <plugin>
++        <groupId>com.cloudera.kitchen</groupId>
++        <artifactId>maven-deps-to-props-plugin</artifactId>
++        
++        <executions>
++          <execution>
++            <id>libraries.properties</id>
++            <configuration>
++              <templateFile>${basedir}/cloudera/maven-packaging/templates/libraries.template</templateFile>
++              <targetFile>${basedir}/ivy/libraries.properties</targetFile>
++            </configuration>
++            <goals>
++              <goal>generate</goal>
++            </goals>
++            <phase>process-resources</phase>
++          </execution>
++          <execution>
++            <id>build.properties</id>
++            <configuration>
++              <templateFile>${basedir}/cloudera/maven-packaging/templates/build.template</templateFile>
++              <targetFile>${basedir}/build.properties</targetFile>
++            </configuration>
++            <goals>
++              <goal>generate</goal>
++            </goals>
++            <phase>process-resources</phase>
++          </execution>
++        </executions>
++      </plugin>
++    </plugins>
++  </build>
++  
++</project>
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index e458887..37072c4 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -81,6 +81,7 @@ if [ -z "$SKIP_JDIFF" ]; then
+ ant \
+   -Djdiff.stable=0.20.1 \
+   -Djdiff.build.dir=build/docs/jdiff-cloudera \
++  -propertyfile build.properties \
+   -propertyfile cloudera/build.properties api-report
+ fi
+ 
+@@ -98,3 +99,10 @@ JAVA_HOME=$JAVA64_HOME \
+   -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+   -propertyfile cloudera/build.properties \
+   compile-core-native compile-c++ compile-c++-examples task-controller tar
++
++if [ -z "$SKIP_MVN_EXPLICIT" ]; then
++# Change to cloudera/maven directory, and install
++# (and if called from CDH nightly build, deploy) artifacts into Maven repository
++cd $BIN_DIR/maven-packaging
++mvn -Dnot.cdh.release.build=false install $DO_MAVEN_DEPLOY
++fi
+diff --git a/cloudera/maven-packaging/hadoop-core/pom.xml b/cloudera/maven-packaging/hadoop-core/pom.xml
+new file mode 100644
+index 0000000..cb96e1a
+--- /dev/null
++++ b/cloudera/maven-packaging/hadoop-core/pom.xml
+@@ -0,0 +1,169 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++  
++  <modelVersion>4.0.0</modelVersion>
++  
++  <parent>
++    <groupId>com.cloudera.cdh</groupId>
++    <artifactId>hadoop-root</artifactId>
++    <version>3.0-beta-4-SNAPSHOT</version>
++  </parent>
++  
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-core</artifactId>
++  <version>0.20.2-CDH3B4-SNAPSHOT</version>
++  <packaging>jar</packaging>
++  
++  <name>hadoop-core</name>
++  
++  <dependencies>
++    <dependency>
++      <groupId>com.cloudera.cdh</groupId>
++      <artifactId>hadoop-ant</artifactId>
++      <type>pom</type>
++    </dependency>
++    
++    <dependency>
++      <groupId>commons-cli</groupId>
++      <artifactId>commons-cli</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>xmlenc</groupId>
++      <artifactId>xmlenc</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>commons-httpclient</groupId>
++      <artifactId>commons-httpclient</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>commons-codec</groupId>
++      <artifactId>commons-codec</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>commons-net</groupId>
++      <artifactId>commons-net</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>org.mortbay.jetty</groupId>
++      <artifactId>jetty</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>org.mortbay.jetty</groupId>
++      <artifactId>jetty-util</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>tomcat</groupId>
++      <artifactId>jasper-runtime</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>tomcat</groupId>
++      <artifactId>jasper-compiler</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>org.codehaus.jackson</groupId>
++      <artifactId>jackson-core-asl</artifactId>
++      <scope>compile</scope>
++    </dependency>
++    <dependency>
++      <groupId>org.codehaus.jackson</groupId>
++      <artifactId>jackson-mapper-asl</artifactId>
++      <scope>compile</scope>
++    </dependency>
++    
++    <!--<dependency>-->
++    <!--<groupId>org.mortbay.jetty</groupId>-->
++    <!--<artifactId>jsp-api-2.1</artifactId>-->
++    <!--</dependency>-->
++    <dependency>
++      <groupId>javax.servlet.jsp</groupId>
++      <artifactId>jsp-api</artifactId>
++    </dependency>
++    
++    <!--<dependency>-->
++    <!--<groupId>org.mortbay.jetty</groupId>-->
++    <!--<artifactId>jsp-2.1</artifactId>-->
++    <!--</dependency>-->
++    <dependency>
++      <groupId>commons-el</groupId>
++      <artifactId>commons-el</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>net.java.dev.jets3t</groupId>
++      <artifactId>jets3t</artifactId>
++    </dependency>
++    
++    <!--<dependency>-->
++    <!--<groupId>org.mortbay.jetty</groupId>-->
++    <!--<artifactId>servlet-api-2.5</artifactId>-->
++    <!--</dependency>-->
++    <dependency>
++      <groupId>javax.servlet</groupId>
++      <artifactId>servlet-api</artifactId>
++    </dependency>
++    
++    <!--<dependency>-->
++    <!--<groupId>net.sf.kosmosfs</groupId>-->
++    <!--<artifactId>kfs</artifactId>-->
++    <!--</dependency>-->
++    
++    <dependency>
++      <groupId>hsqldb</groupId>
++      <artifactId>hsqldb</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>oro</groupId>
++      <artifactId>oro</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>org.eclipse.jdt</groupId>
++      <artifactId>core</artifactId>
++    </dependency>
++  </dependencies>
++  
++  <build>
++    <plugins>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <inherited>false</inherited>
++        <executions>
++          <execution>
++            <id>compile</id>
++            <configuration>
++              <target>
++                <copy todir="${basedir}/target">
++                  <fileset dir="${basedir}/../../../build" includes="hadoop-core-${project.version}.jar" />
++                </copy>
++                <unzip dest="${basedir}/target/classes">
++                  <fileset dir="${basedir}/target" includes="hadoop-core-${project.version}.jar" />
++                </unzip>
++              </target>
++            </configuration>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <phase>compile</phase>
++          </execution>
++        </executions>
++      </plugin>
++    </plugins>
++  </build>
++  
++</project>
+diff --git a/cloudera/maven-packaging/hadoop-examples/pom.xml b/cloudera/maven-packaging/hadoop-examples/pom.xml
+new file mode 100644
+index 0000000..9f0a905
+--- /dev/null
++++ b/cloudera/maven-packaging/hadoop-examples/pom.xml
+@@ -0,0 +1,80 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++
++  <modelVersion>4.0.0</modelVersion>
++  
++  <parent>
++    <groupId>com.cloudera.cdh</groupId>
++    <artifactId>hadoop-root</artifactId>
++    <version>3.0-beta-4-SNAPSHOT</version>
++  </parent>
++  
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-examples</artifactId>
++  <version>0.20.2-CDH3B4-SNAPSHOT</version>
++  <packaging>jar</packaging>
++  
++  <name>hadoop-examples</name>
++  
++  <dependencies>
++    <dependency>
++      <groupId>com.cloudera.cdh</groupId>
++      <artifactId>hadoop-ant</artifactId>
++      <type>pom</type>
++    </dependency>
++    
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-core</artifactId>
++    </dependency>
++  </dependencies>
++  
++  <build>
++    <plugins>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <inherited>false</inherited>
++        <executions>
++          <execution>
++            <id>compile</id>
++            <configuration>
++              <target>
++                <copy todir="${basedir}/target">
++                  <fileset dir="${basedir}/../../../build" includes="hadoop-examples-${project.version}.jar" />
++                </copy>
++                <unzip dest="${basedir}/target/classes">
++                  <fileset dir="${basedir}/target" includes="hadoop-examples-${project.version}.jar" />
++                </unzip>
++              </target>
++            </configuration>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <phase>compile</phase>
++          </execution>
++        </executions>
++      </plugin>
++    </plugins>
++  </build>
++  
++</project>
++
+diff --git a/cloudera/maven-packaging/hadoop-streaming/pom.xml b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+new file mode 100644
+index 0000000..5a9137c
+--- /dev/null
++++ b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+@@ -0,0 +1,80 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++
++  <modelVersion>4.0.0</modelVersion>
++
++  <parent>
++    <groupId>com.cloudera.cdh</groupId>
++    <artifactId>hadoop-root</artifactId>
++    <version>3.0-beta-4-SNAPSHOT</version>
++  </parent>
++  
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-streaming</artifactId>
++  <version>0.20.2-CDH3B4-SNAPSHOT</version>
++  <packaging>jar</packaging>
++  
++  <name>hadoop-streaming</name>
++  
++  <dependencies>
++    <dependency>
++      <groupId>com.cloudera.cdh</groupId>
++      <artifactId>hadoop-ant</artifactId>
++      <type>pom</type>
++    </dependency>
++    
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-core</artifactId>
++    </dependency>
++  </dependencies>
++  
++  <build>
++    <plugins>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <inherited>false</inherited>
++        <executions>
++          <execution>
++            <id>compile</id>
++            <configuration>
++              <target>
++                <copy todir="${basedir}/target">
++                  <fileset dir="${basedir}/../../../build/contrib/streaming" includes="hadoop-streaming-${project.version}.jar" />
++                </copy>
++                <unzip dest="${basedir}/target/classes">
++                  <fileset dir="${basedir}/target" includes="hadoop-streaming-${project.version}.jar" />
++                </unzip>
++              </target>
++            </configuration>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <phase>compile</phase>
++          </execution>
++        </executions>
++      </plugin>
++    </plugins>
++  </build>
++  
++</project>
++
+diff --git a/cloudera/maven-packaging/hadoop-tarball/pom.xml b/cloudera/maven-packaging/hadoop-tarball/pom.xml
+new file mode 100644
+index 0000000..a8394ec
+--- /dev/null
++++ b/cloudera/maven-packaging/hadoop-tarball/pom.xml
+@@ -0,0 +1,93 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++
++  <modelVersion>4.0.0</modelVersion>
++  
++  <parent>
++    <groupId>com.cloudera.cdh</groupId>
++    <artifactId>hadoop-root</artifactId>
++    <version>3.0-beta-4-SNAPSHOT</version>
++  </parent>
++  
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-tarball</artifactId>
++  <packaging>pom</packaging>
++  <version>0.20.2-CDH3B4-SNAPSHOT</version>
++  
++  <name>hadoop-tarball</name>
++  
++  <dependencies>
++    <dependency>
++      <groupId>com.cloudera.cdh</groupId>
++      <artifactId>hadoop-ant</artifactId>
++      <type>pom</type>
++    </dependency>
++    
++  </dependencies>
++  
++  <build>
++    <plugins>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <inherited>false</inherited>
++        <executions>
++          <execution>
++            <id>compile</id>
++            <configuration>
++              <target>
++                <copy todir="${basedir}/target">
++                  <fileset dir="${basedir}/../../../build" includes="hadoop-${project.version}.tar.gz" />
++                </copy>
++              </target>
++            </configuration>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <phase>compile</phase>
++          </execution>
++        </executions>
++      </plugin>
++      <plugin>
++        <groupId>org.codehaus.mojo</groupId>
++        <artifactId>build-helper-maven-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>attach-tarball</id>
++            <phase>package</phase>
++            <goals>
++              <goal>attach-artifact</goal>
++            </goals>
++            <configuration>
++              <artifacts>
++                <artifact>
++                  <file>${project.build.directory}/hadoop-${project.version}.tar.gz</file>
++                  <type>tar.gz</type>
++                </artifact>
++              </artifacts>
++            </configuration>
++          </execution>
++        </executions>
++      </plugin>
++    </plugins>
++  </build>
++  
++</project>
+diff --git a/cloudera/maven-packaging/hadoop-test/pom.xml b/cloudera/maven-packaging/hadoop-test/pom.xml
+new file mode 100644
+index 0000000..37799b8
+--- /dev/null
++++ b/cloudera/maven-packaging/hadoop-test/pom.xml
+@@ -0,0 +1,96 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++
++  <modelVersion>4.0.0</modelVersion>
++  
++  <parent>
++    <groupId>com.cloudera.cdh</groupId>
++    <artifactId>hadoop-root</artifactId>
++    <version>3.0-beta-4-SNAPSHOT</version>
++  </parent>
++  
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-test</artifactId>
++  <packaging>jar</packaging>
++  <version>0.20.2-CDH3B4-SNAPSHOT</version>
++  
++  <name>hadoop-test</name>
++  
++  <dependencies>
++    <dependency>
++      <groupId>com.cloudera.cdh</groupId>
++      <artifactId>hadoop-ant</artifactId>
++      <type>pom</type>
++    </dependency>
++    
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-core</artifactId>
++      <version>0.20.2-CDH3B4-SNAPSHOT</version>
++    </dependency>
++    <dependency>
++      <groupId>org.apache.ftpserver</groupId>
++      <artifactId>ftplet-api</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>org.apache.mina</groupId>
++      <artifactId>mina-core</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>org.apache.ftpserver</groupId>
++      <artifactId>ftpserver-core</artifactId>
++    </dependency>
++    <dependency>
++      <groupId>org.apache.ftpserver</groupId>
++      <artifactId>ftpserver-deprecated</artifactId>
++    </dependency>
++  </dependencies>
++  
++  <build>
++    <plugins>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <inherited>false</inherited>
++        <executions>
++          <execution>
++            <id>compile</id>
++            <configuration>
++              <target>
++                <copy todir="${basedir}/target">
++                  <fileset dir="${basedir}/../../../build" includes="hadoop-test-${project.version}.jar" />
++                </copy>
++                <unzip dest="${basedir}/target/classes">
++                  <fileset dir="${basedir}/target" includes="hadoop-test-${project.version}.jar" />
++                </unzip>
++              </target>
++            </configuration>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <phase>compile</phase>
++          </execution>
++        </executions>
++      </plugin>
++    </plugins>
++  </build>
++  
++</project>
+diff --git a/cloudera/maven-packaging/hadoop-tools/pom.xml b/cloudera/maven-packaging/hadoop-tools/pom.xml
+new file mode 100644
+index 0000000..647246a
+--- /dev/null
++++ b/cloudera/maven-packaging/hadoop-tools/pom.xml
+@@ -0,0 +1,80 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++
++  <modelVersion>4.0.0</modelVersion>
++  
++  <parent>
++    <groupId>com.cloudera.cdh</groupId>
++    <artifactId>hadoop-root</artifactId>
++    <version>3.0-beta-4-SNAPSHOT</version>
++  </parent>
++  
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-tools</artifactId>
++  <packaging>jar</packaging>
++  <version>0.20.2-CDH3B4-SNAPSHOT</version>
++  
++  <name>hadoop-tools</name>
++  
++  <dependencies>
++    <dependency>
++      <groupId>com.cloudera.cdh</groupId>
++      <artifactId>hadoop-ant</artifactId>
++      <type>pom</type>
++    </dependency>
++    
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-core</artifactId>
++      <version>0.20.2-CDH3B4-SNAPSHOT</version>
++    </dependency>
++  </dependencies>
++  
++  <build>
++    <plugins>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <inherited>false</inherited>
++        <executions>
++          <execution>
++            <id>compile</id>
++            <configuration>
++              <target>
++                <copy todir="${basedir}/target">
++                  <fileset dir="${basedir}/../../../build" includes="hadoop-tools-${project.version}.jar" />
++                </copy>
++                <unzip dest="${basedir}/target/classes">
++                  <fileset dir="${basedir}/target" includes="hadoop-tools-${project.version}.jar" />
++                </unzip>
++              </target>
++            </configuration>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <phase>compile</phase>
++          </execution>
++        </executions>
++      </plugin>
++    </plugins>
++  </build>
++  
++</project>
+diff --git a/cloudera/maven-packaging/pom.xml b/cloudera/maven-packaging/pom.xml
+new file mode 100644
+index 0000000..afeaee5
+--- /dev/null
++++ b/cloudera/maven-packaging/pom.xml
+@@ -0,0 +1,97 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++<project>
++  <modelVersion>4.0.0</modelVersion>
++  
++  <parent>
++    <groupId>com.cloudera.cdh</groupId>
++    <artifactId>cdh-root</artifactId>
++    <version>3.0-beta-4-SNAPSHOT</version>
++  </parent>
++  
++  <groupId>com.cloudera.cdh</groupId>
++  <artifactId>hadoop-root</artifactId>
++  <version>3.0-beta-4-SNAPSHOT</version>
++  <packaging>pom</packaging>
++  
++  <description>Hadoop root</description>
++  <name>CDH Hadoop root</name>
++  
++  <licenses>
++    <license>
++      <name>The Apache Software License, Version 2.0</name>
++      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
++    </license>
++  </licenses>
++  
++  <organization>
++    <name>Cloudera</name>
++    <url>http://www.cloudera.com</url>
++  </organization>
++
++  <profiles>
++    <profile>
++      <id>non.release.build</id>
++      <activation>
++        <activeByDefault>false</activeByDefault>
++        <property>
++          <name>not.cdh.release.build</name>
++          <value>!false</value>
++        </property>
++      </activation>
++      <modules>
++        <module>../../cloudera-pom.xml</module>
++        <module>hadoop-core</module>
++        <module>hadoop-streaming</module>
++        <module>hadoop-examples</module>
++        <module>hadoop-test</module>
++        <module>hadoop-tools</module>
++      </modules>
++    </profile>
++    <profile>
++      <id>cdh.release.build</id>
++      <activation>
++        <activeByDefault>false</activeByDefault>
++        <property>
++          <name>not.cdh.release.build</name>
++          <value>false</value>
++        </property>
++      </activation>
++      <modules>
++        <module>../../cloudera-pom.xml</module>
++        <module>hadoop-core</module>
++        <module>hadoop-streaming</module>
++        <module>hadoop-examples</module>
++        <module>hadoop-test</module>
++        <module>hadoop-tools</module>
++        <module>hadoop-tarball</module>
++      </modules>
++    </profile>
++  </profiles>
++      
++        
++      
++  
++  <build>
++    <plugins>
++      
++    </plugins>
++  </build>
++  
++</project>
++
+diff --git a/cloudera/maven-packaging/templates/build.template b/cloudera/maven-packaging/templates/build.template
+new file mode 100644
+index 0000000..f8442d2
+--- /dev/null
++++ b/cloudera/maven-packaging/templates/build.template
+@@ -0,0 +1,2 @@
++version=org.apache.hadoop:hadoop-core.version
++hadoop.version=org.apache.hadoop:hadoop-core.version
+diff --git a/cloudera/maven-packaging/templates/libraries.template b/cloudera/maven-packaging/templates/libraries.template
+new file mode 100644
+index 0000000..48a44b0
+--- /dev/null
++++ b/cloudera/maven-packaging/templates/libraries.template
+@@ -0,0 +1,83 @@
++#   Licensed under the Apache License, Version 2.0 (the "License");
++#   you may not use this file except in compliance with the License.
++#   You may obtain a copy of the License at
++#
++#       http://www.apache.org/licenses/LICENSE-2.0
++#
++#   Unless required by applicable law or agreed to in writing, software
++#   distributed under the License is distributed on an "AS IS" BASIS,
++#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++#   See the License for the specific language governing permissions and
++#   limitations under the License.
++
++#This properties file lists the versions of the various artifacts used by hadoop and components.
++#It drives ivy and the generation of a maven POM
++
++# CDH: This is used by Hadoop ANT build as the Hadoop version (the hadoop.verison below actually is not)
++version=org.apache.hadoop:hadoop-core.version
++
++# This is the version of hadoop we are generating
++hadoop.version=org.apache.hadoop:hadoop-core.version
++
++#These are the versions of our dependencies (in alphabetical order)
++#??? apacheant.version=1.7.0
++#??? ant-task.version=2.0.10
++
++aspectj.version=org.aspectj:aspectjrt.version
++
++checkstyle.version=checkstyle:checkstyle.version
++
++commons-cli.version=commons-cli:commons-cli.version
++commons-codec.version=commons-codec:commons-codec.version
++commons-collections.version=commons-collections:commons-collections.version
++commons-daemon.version=commons-daemon:commons-daemon.version
++commons-httpclient.version=commons-httpclient:commons-httpclient.version
++commons-lang.version=commons-lang:commons-lang.version
++commons-logging.version=commons-logging:commons-logging.version
++commons-logging-api.version=commons-logging:commons-logging-api.version
++commons-el.version=commons-el:commons-el.version
++#??? commons-fileupload.version=1.2
++#??? commons-io.version=1.4
++commons-net.version=commons-net:commons-net.version
++core.version=org.eclipse.jdt:core.version
++#??? coreplugin.version=1.3.2
++
++#??? hsqldb.version=1.8.0.10
++
++#ivy.version=2.0.0-beta2
++ivy.version=org.apache.ivy:ivy.version
++
++jackson.version=org.codehaus.jackson:jackson-mapper-asl.version
++jasper.version=tomcat:jasper-compiler.version
++#not able to figureout the version of jsp & jsp-api version to get it resolved throught ivy
++# but still declared here as we are going to have a local copy from the lib folder
++jsp.version=javax.servlet.jsp:jsp-api.version
++#??? jsp-api.version=5.5.12
++jets3t.version=net.java.dev.jets3t:jets3t.version
++jetty.version=org.mortbay.jetty:jetty.version
++jetty-util.version=org.mortbay.jetty:jetty-util.version
++junit.version=junit:junit.version
++jdiff.version=jdiff:jdiff.version
++#??? json.version=1.0
++
++#??? kfs.version=0.1
++
++log4j.version=log4j:log4j.version
++lucene-core.version=org.apache.lucene:lucene-core.version
++
++mockito-all.version=org.mockito:mockito-all.version
++
++oro.version=oro:oro.version
++
++rats-lib.version=com.google.code.p.arat:rat-lib.version
++
++#??? servlet.version=4.0.6
++servlet-api-2.5.version=org.mortbay.jetty:servlet-api-2.5.version
++#??? servlet-api.version=2.5
++slf4j-api.version=org.slf4j:slf4j-api.version
++slf4j-log4j12.version=org.slf4j:slf4j-log4j12.version
++
++#??? wagon-http.version=1.0-beta-2
++xmlenc.version=xmlenc:xmlenc.version
++xerces.version=xerces:xerces.version
++
+diff --git a/ivy/hadoop-core-pom-template.xml b/ivy/hadoop-core-pom-template.xml
+deleted file mode 100644
+index 779795e..0000000
+--- a/ivy/hadoop-core-pom-template.xml
++++ /dev/null
+@@ -1,122 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<!--
+-   Licensed to the Apache Software Foundation (ASF) under one or more
+-   contributor license agreements.  See the NOTICE file distributed with
+-   this work for additional information regarding copyright ownership.
+-   The ASF licenses this file to You under the Apache License, Version 2.0
+-   (the "License"); you may not use this file except in compliance with
+-   the License.  You may obtain a copy of the License at
+-
+-       http://www.apache.org/licenses/LICENSE-2.0
+-
+-   Unless required by applicable law or agreed to in writing, software
+-   distributed under the License is distributed on an "AS IS" BASIS,
+-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-   See the License for the specific language governing permissions and
+-   limitations under the License.
+--->
+-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+-  <modelVersion>4.0.0</modelVersion>
+-  <groupId>com.cloudera.hadoop</groupId>
+-  <artifactId>hadoop-core</artifactId>
+-  <packaging>jar</packaging>
+-  <version>@version</version>
+-  <dependencies>
+-   <dependency>
+-      <groupId>commons-cli</groupId>
+-      <artifactId>commons-cli</artifactId>
+-      <version>1.2</version>
+-    </dependency>
+-   <dependency>
+-      <groupId>xmlenc</groupId>
+-      <artifactId>xmlenc</artifactId>
+-      <version>0.52</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>commons-httpclient</groupId>
+-      <artifactId>commons-httpclient</artifactId>
+-      <version>3.0.1</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>commons-codec</groupId>
+-      <artifactId>commons-codec</artifactId>
+-      <version>1.4</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>commons-net</groupId>
+-      <artifactId>commons-net</artifactId>
+-      <version>1.4.1</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.mortbay.jetty</groupId>
+-      <artifactId>jetty</artifactId>
+-      <version>6.1.14</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.mortbay.jetty</groupId>
+-      <artifactId>jetty-util</artifactId>
+-      <version>6.1.14</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>tomcat</groupId>
+-      <artifactId>jasper-runtime</artifactId>
+-      <version>5.5.12</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>tomcat</groupId>
+-      <artifactId>jasper-compiler</artifactId>
+-      <version>5.5.12</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.mortbay.jetty</groupId>
+-      <artifactId>jsp-api-2.1</artifactId>
+-      <version>6.1.14</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.mortbay.jetty</groupId>
+-      <artifactId>jsp-2.1</artifactId>
+-      <version>6.1.14</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>commons-el</groupId>
+-      <artifactId>commons-el</artifactId>
+-      <version>1.0</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>net.java.dev.jets3t</groupId>
+-      <artifactId>jets3t</artifactId>
+-      <version>0.7.1</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>commons-net</groupId>
+-      <artifactId>commons-net</artifactId>
+-      <version>1.4.1</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.mortbay.jetty</groupId>
+-      <artifactId>servlet-api-2.5</artifactId>
+-      <version>6.1.14</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>net.sf.kosmosfs</groupId>
+-      <artifactId>kfs</artifactId>
+-      <version>0.3</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>hsqldb</groupId>
+-      <artifactId>hsqldb</artifactId>
+-      <version>1.8.0.10</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>oro</groupId>
+-      <artifactId>oro</artifactId>
+-      <version>2.0.8</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.eclipse.jdt</groupId>
+-      <artifactId>core</artifactId>
+-      <version>3.1.1</version>
+-    </dependency>
+-  </dependencies>
+-</project>
+diff --git a/ivy/hadoop-examples-pom-template.xml b/ivy/hadoop-examples-pom-template.xml
+deleted file mode 100644
+index ccecede..0000000
+--- a/ivy/hadoop-examples-pom-template.xml
++++ /dev/null
+@@ -1,34 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+- <!--
+-   Licensed to the Apache Software Foundation (ASF) under one or more
+-   contributor license agreements.  See the NOTICE file distributed with
+-   this work for additional information regarding copyright ownership.
+-   The ASF licenses this file to You under the Apache License, Version 2.0
+-   (the "License"); you may not use this file except in compliance with
+-   the License.  You may obtain a copy of the License at
+-
+-       http://www.apache.org/licenses/LICENSE-2.0
+-
+-   Unless required by applicable law or agreed to in writing, software
+-   distributed under the License is distributed on an "AS IS" BASIS,
+-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-   See the License for the specific language governing permissions and
+-   limitations under the License.
+--->
+-
+-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+-
+-  <modelVersion>4.0.0</modelVersion>
+-  <groupId>com.cloudera.hadoop</groupId>
+-  <artifactId>hadoop-examples</artifactId>
+-  <packaging>jar</packaging>
+-  <version>@version</version>
+-  <dependencies>
+-    <dependency>
+-      <groupId>com.cloudera.hadoop</groupId>
+-      <artifactId>hadoop-core</artifactId>
+-      <version>@version</version>
+-    </dependency>
+-  </dependencies>
+-</project>
+diff --git a/ivy/hadoop-streaming-pom-template.xml b/ivy/hadoop-streaming-pom-template.xml
+deleted file mode 100644
+index 68fa3de..0000000
+--- a/ivy/hadoop-streaming-pom-template.xml
++++ /dev/null
+@@ -1,34 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+- <!--
+-   Licensed to the Apache Software Foundation (ASF) under one or more
+-   contributor license agreements.  See the NOTICE file distributed with
+-   this work for additional information regarding copyright ownership.
+-   The ASF licenses this file to You under the Apache License, Version 2.0
+-   (the "License"); you may not use this file except in compliance with
+-   the License.  You may obtain a copy of the License at
+-
+-       http://www.apache.org/licenses/LICENSE-2.0
+-
+-   Unless required by applicable law or agreed to in writing, software
+-   distributed under the License is distributed on an "AS IS" BASIS,
+-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-   See the License for the specific language governing permissions and
+-   limitations under the License.
+--->
+-
+-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+-
+-  <modelVersion>4.0.0</modelVersion>
+-  <groupId>com.cloudera.hadoop</groupId>
+-  <artifactId>hadoop-streaming</artifactId>
+-  <packaging>jar</packaging>
+-  <version>@version</version>
+-  <dependencies>
+-    <dependency>
+-      <groupId>com.cloudera.hadoop</groupId>
+-      <artifactId>hadoop-core</artifactId>
+-      <version>@version</version>
+-    </dependency>
+-  </dependencies>
+-</project>
+diff --git a/ivy/hadoop-test-pom-template.xml b/ivy/hadoop-test-pom-template.xml
+deleted file mode 100644
+index 688b739..0000000
+--- a/ivy/hadoop-test-pom-template.xml
++++ /dev/null
+@@ -1,53 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<!--
+-   Licensed to the Apache Software Foundation (ASF) under one or more
+-   contributor license agreements.  See the NOTICE file distributed with
+-   this work for additional information regarding copyright ownership.
+-   The ASF licenses this file to You under the Apache License, Version 2.0
+-   (the "License"); you may not use this file except in compliance with
+-   the License.  You may obtain a copy of the License at
+-
+-       http://www.apache.org/licenses/LICENSE-2.0
+-
+-   Unless required by applicable law or agreed to in writing, software
+-   distributed under the License is distributed on an "AS IS" BASIS,
+-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-   See the License for the specific language governing permissions and
+-   limitations under the License.
+--->
+-
+-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+-  <modelVersion>4.0.0</modelVersion>
+-  <groupId>com.cloudera.hadoop</groupId>
+-  <artifactId>hadoop-test</artifactId>
+-  <packaging>jar</packaging>
+-  <version>@version</version>
+-  <dependencies>
+-    <dependency>
+-      <groupId>com.cloudera.hadoop</groupId>
+-      <artifactId>hadoop-core</artifactId>
+-      <version>@version</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.ftpserver</groupId>
+-      <artifactId>ftplet-api</artifactId>
+-      <version>1.0.0</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.mina</groupId>
+-      <artifactId>mina-core</artifactId>
+-      <version>2.0.0-M5</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.ftpserver</groupId>
+-      <artifactId>ftpserver-core</artifactId>
+-      <version>1.0.0</version>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.ftpserver</groupId>
+-      <artifactId>ftpserver-deprecated</artifactId>
+-      <version>1.0.0-M2</version>
+-    </dependency>
+-  </dependencies>
+-</project>
+diff --git a/ivy/hadoop-tools-pom-template.xml b/ivy/hadoop-tools-pom-template.xml
+deleted file mode 100644
+index 2fa332e..0000000
+--- a/ivy/hadoop-tools-pom-template.xml
++++ /dev/null
+@@ -1,34 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+- <!--
+-   Licensed to the Apache Software Foundation (ASF) under one or more
+-   contributor license agreements.  See the NOTICE file distributed with
+-   this work for additional information regarding copyright ownership.
+-   The ASF licenses this file to You under the Apache License, Version 2.0
+-   (the "License"); you may not use this file except in compliance with
+-   the License.  You may obtain a copy of the License at
+-
+-       http://www.apache.org/licenses/LICENSE-2.0
+-
+-   Unless required by applicable law or agreed to in writing, software
+-   distributed under the License is distributed on an "AS IS" BASIS,
+-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-   See the License for the specific language governing permissions and
+-   limitations under the License.
+--->
+-
+-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+-
+-  <modelVersion>4.0.0</modelVersion>
+-  <groupId>com.cloudera.hadoop</groupId>
+-  <artifactId>hadoop-tools</artifactId>
+-  <packaging>jar</packaging>
+-  <version>@version</version>
+-  <dependencies>
+-    <dependency>
+-      <groupId>com.cloudera.hadoop</groupId>
+-      <artifactId>hadoop-core</artifactId>
+-      <version>@version</version>
+-    </dependency>
+-  </dependencies>
+-</project>
+-- 
+1.7.0.4
+

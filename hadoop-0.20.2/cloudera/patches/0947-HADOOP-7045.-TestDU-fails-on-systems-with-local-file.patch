@@ -1,0 +1,67 @@
+From 58815d50145c62a961f14a6f789491b3e4272fbe Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 18 Apr 2011 14:52:10 -0700
+Subject: [PATCH 0947/1179] HADOOP-7045. TestDU fails on systems with local file systems with extended attributes.
+
+We should modify the test to allow for some extra on-disk slack. The on-disk
+usage could also be smaller if the file data is all zeros or compression is
+enabled. The test currently handles the former by writing random data, we're
+punting on the latter.
+
+Reason: Test
+Author: Eli Collins
+Ref: CDH-3033
+---
+ src/test/org/apache/hadoop/fs/TestDU.java |   19 ++++++++++++++-----
+ 1 files changed, 14 insertions(+), 5 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/fs/TestDU.java b/src/test/org/apache/hadoop/fs/TestDU.java
+index 6df487b..f6cfa1c 100644
+--- a/src/test/org/apache/hadoop/fs/TestDU.java
++++ b/src/test/org/apache/hadoop/fs/TestDU.java
+@@ -65,7 +65,10 @@ public class TestDU extends TestCase {
+    * @throws InterruptedException
+    */
+   public void testDU() throws IOException, InterruptedException {
+-    int writtenSize = 32*1024;   // writing 32K
++    final int writtenSize = 32*1024;   // writing 32K
++    // Allow for extra 4K on-disk slack for local file systems
++    // that may store additional file metadata (eg ext attrs).
++    final int slack = 4*1024;
+     File file = new File(DU_DIR, "data");
+     createFile(file, writtenSize);
+ 
+@@ -76,7 +79,9 @@ public class TestDU extends TestCase {
+     long duSize = du.getUsed();
+     du.shutdown();
+ 
+-    assertEquals(writtenSize, duSize);
++    assertTrue("Invalid on-disk size",
++        duSize >= writtenSize &&
++        writtenSize <= (duSize + slack));
+     
+     //test with 0 interval, will not launch thread 
+     du = new DU(file, 0);
+@@ -84,12 +89,16 @@ public class TestDU extends TestCase {
+     duSize = du.getUsed();
+     du.shutdown();
+     
+-    assertEquals(writtenSize, duSize);  
++    assertTrue("Invalid on-disk size",
++        duSize >= writtenSize &&
++        writtenSize <= (duSize + slack));
+     
+     //test without launching thread 
+     du = new DU(file, 10000);
+     duSize = du.getUsed();
+-    
+-    assertEquals(writtenSize, duSize);     
++
++    assertTrue("Invalid on-disk size",
++        duSize >= writtenSize &&
++        writtenSize <= (duSize + slack));
+   }
+ }
+-- 
+1.7.0.4
+

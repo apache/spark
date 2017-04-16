@@ -1,0 +1,570 @@
+From 1b8d8c3de261c8334d6eac4f5d3fd42cad894e81 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Wed, 2 Jun 2010 21:53:01 -0700
+Subject: [PATCH 0297/1179] HDFS-1186. Writers should be interrupted when recovery is started, not when it's completed.
+
+Description: When the write pipeline recovery process is initiated, this
+             interrupts any concurrent writers to the block under recovery.
+             This prevents a case where some edits may be lost if the
+             writer has lost its lease but continues to write (eg due to
+             a garbage collection pause)
+Reason: Fixes a potential dataloss bug
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    6 +-
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |  114 +++++++++++++-------
+ .../hdfs/server/datanode/FSDatasetInterface.java   |    2 +-
+ .../server/protocol/InterDatanodeProtocol.java     |    4 +-
+ .../org/apache/hadoop/hdfs/AppendTestUtil.java     |   85 +++++++++++++++
+ .../org/apache/hadoop/hdfs/TestFileAppend4.java    |   39 +------
+ .../apache/hadoop/hdfs/TestMultiThreadedSync.java  |   35 +------
+ .../hadoop/hdfs/TestSyncingWriterInterrupted.java  |   77 +++++++++++++
+ .../hdfs/server/datanode/SimulatedFSDataset.java   |    2 +-
+ 9 files changed, 249 insertions(+), 115 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/TestSyncingWriterInterrupted.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 3a0f86c..a37863e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -1453,8 +1453,8 @@ public class DataNode extends Configured
+   }
+   
+   @Override
+-  public BlockRecoveryInfo getBlockRecoveryInfo(Block block) throws IOException {
+-    return data.getBlockRecoveryInfo(block.getBlockId());
++  public BlockRecoveryInfo startBlockRecovery(Block block) throws IOException {
++    return data.startBlockRecovery(block.getBlockId());
+   }
+ 
+   public Daemon recoverBlocks(final Block[] blocks, final DatanodeInfo[][] targets) {
+@@ -1566,7 +1566,7 @@ public class DataNode extends Configured
+           } else {
+             datanode = DataNode.createInterDataNodeProtocolProxy(id, getConf());
+           }
+-          BlockRecoveryInfo info = datanode.getBlockRecoveryInfo(block);
++          BlockRecoveryInfo info = datanode.startBlockRecovery(block);
+           if (info == null) {
+             LOG.info("No block metadata found for block " + block + " on datanode "
+                 + id);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index 22cdeea..d6be89d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -1080,32 +1080,39 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+         return;
+       }
+ 
+-      // interrupt and wait for all ongoing create threads
+-      for(Thread t : threads) {
+-        t.interrupt();
+-      }
+-      for(Thread t : threads) {
+-        try {
+-          t.join();
+-        } catch (InterruptedException e) {
+-          DataNode.LOG.warn("interruptOngoingCreates: t=" + t, e);
+-          break; // retry with new threadlist from the beginning
+-        }
++      interruptAndJoinThreads(threads);
++    }
++  }
++
++  /**
++   * Try to interrupt all of the given threads, and join on them.
++   * If interrupted, returns false, indicating some threads may
++   * still be running.
++   */
++  private boolean interruptAndJoinThreads(List<Thread> threads) {
++    // interrupt and wait for all ongoing create threads
++    for(Thread t : threads) {
++      t.interrupt();
++    }
++    for(Thread t : threads) {
++      try {
++        t.join();
++      } catch (InterruptedException e) {
++        DataNode.LOG.warn("interruptOngoingCreates: t=" + t, e);
++        return false;
+       }
+     }
++    return true;
+   }
+ 
++  
+   /**
+-   * Try to update an old block to a new block.
+-   * If there are ongoing create threads running for the old block,
+-   * the threads will be returned without updating the block. 
+-   * 
+-   * @return ongoing create threads if there is any. Otherwise, return null.
++   * Return a list of active writer threads for the given block.
++   * @return null if there are no such threads or the file is
++   * not being created
+    */
+-  private synchronized List<Thread> tryUpdateBlock(
+-      Block oldblock, Block newblock) throws IOException {
+-    //check ongoing create threads
+-    final ActiveFile activefile = ongoingCreates.get(oldblock);
++  private synchronized ArrayList<Thread> getActiveThreads(Block block) {
++    final ActiveFile activefile = ongoingCreates.get(block);
+     if (activefile != null && !activefile.threads.isEmpty()) {
+       //remove dead threads
+       for(Iterator<Thread> i = activefile.threads.iterator(); i.hasNext(); ) {
+@@ -1114,13 +1121,30 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+           i.remove();
+         }
+       }
+-
++  
+       //return living threads
+       if (!activefile.threads.isEmpty()) {
+         return new ArrayList<Thread>(activefile.threads);
+       }
+     }
+-
++    return null;
++  }
++  
++  /**
++   * Try to update an old block to a new block.
++   * If there are ongoing create threads running for the old block,
++   * the threads will be returned without updating the block. 
++   * 
++   * @return ongoing create threads if there is any. Otherwise, return null.
++   */
++  private synchronized List<Thread> tryUpdateBlock(
++      Block oldblock, Block newblock) throws IOException {
++    //check ongoing create threads
++    ArrayList<Thread> activeThreads = getActiveThreads(oldblock);
++    if (activeThreads != null) {
++      return activeThreads;
++    }
++    
+     //No ongoing create threads is alive.  Update block.
+     File blockFile = findBlockFile(oldblock.getBlockId());
+     if (blockFile == null) {
+@@ -1829,30 +1853,42 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+   }
+ 
+   @Override
+-  public synchronized  BlockRecoveryInfo getBlockRecoveryInfo(long blockId) 
+-      throws IOException {
++  public BlockRecoveryInfo startBlockRecovery(long blockId) 
++      throws IOException {    
+     Block stored = getStoredBlock(blockId);
+ 
+     if (stored == null) {
+       return null;
+     }
+     
+-    ActiveFile activeFile = ongoingCreates.get(stored);
+-    boolean isRecovery = (activeFile != null) && activeFile.wasRecoveredOnStartup;
+-    
++    // It's important that this loop not be synchronized - otherwise
++    // this will deadlock against the thread it's joining against!
++    while (true) {
++      DataNode.LOG.debug(
++          "Interrupting active writer threads for block " + stored);
++      List<Thread> activeThreads = getActiveThreads(stored);
++      if (activeThreads == null) break;
++      if (interruptAndJoinThreads(activeThreads))
++        break;
++    }
+     
+-    BlockRecoveryInfo info = new BlockRecoveryInfo(
+-        stored, isRecovery);
+-    if (DataNode.LOG.isDebugEnabled()) {
+-      DataNode.LOG.debug("getBlockMetaDataInfo successful block=" + stored +
+-                " length " + stored.getNumBytes() +
+-                " genstamp " + stored.getGenerationStamp());
++    synchronized (this) {
++      ActiveFile activeFile = ongoingCreates.get(stored);
++      boolean isRecovery = (activeFile != null) && activeFile.wasRecoveredOnStartup;
++      
++      
++      BlockRecoveryInfo info = new BlockRecoveryInfo(
++          stored, isRecovery);
++      if (DataNode.LOG.isDebugEnabled()) {
++        DataNode.LOG.debug("getBlockMetaDataInfo successful block=" + stored +
++                  " length " + stored.getNumBytes() +
++                  " genstamp " + stored.getGenerationStamp());
++      }
++  
++      // paranoia! verify that the contents of the stored block
++      // matches the block file on disk.
++      validateBlockMetadata(stored);
++      return info;
+     }
+-
+-    // paranoia! verify that the contents of the stored block
+-    // matches the block file on disk.
+-    validateBlockMetadata(stored);
+-
+-    return info;
+   }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
+index d057d95..4497a46 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
+@@ -302,5 +302,5 @@ public interface FSDatasetInterface extends FSDatasetMBean {
+    */
+   public boolean hasEnoughResources();
+ 
+-  public BlockRecoveryInfo getBlockRecoveryInfo(long blockId) throws IOException;
++  public BlockRecoveryInfo startBlockRecovery(long blockId) throws IOException;
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
+index a70bad7..cded318 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
+@@ -41,10 +41,12 @@ public interface InterDatanodeProtocol extends VersionedProtocol {
+   BlockMetaDataInfo getBlockMetaDataInfo(Block block) throws IOException;
+ 
+   /**
++   * Begin recovery on a block - this interrupts writers and returns the
++   * necessary metadata for recovery to begin.
+    * @return the BlockRecoveryInfo for a block
+    * @return null if the block is not found
+    */
+-  BlockRecoveryInfo getBlockRecoveryInfo(Block block) throws IOException;
++  BlockRecoveryInfo startBlockRecovery(Block block) throws IOException;
+   
+   /**
+    * Update the block to the new generation stamp and length.  
+diff --git a/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java b/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java
+index 050d9e5..c85d0df 100644
+--- a/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java
++++ b/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java
+@@ -21,15 +21,20 @@ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.OutputStream;
+ import java.util.Random;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.atomic.AtomicInteger;
++import java.util.concurrent.atomic.AtomicReference;
+ 
+ import junit.framework.TestCase;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+@@ -116,4 +121,84 @@ class AppendTestUtil {
+       throw new IOException("p=" + p + ", length=" + length + ", i=" + i, ioe);
+     }
+   }
++  
++  static class WriterThread extends Thread {
++    private final FSDataOutputStream stm;
++    private final AtomicReference<Throwable> thrown;
++    private final int numWrites;
++    private final CountDownLatch countdown;
++    private final byte[] toWrite;
++    private AtomicInteger numWritten = new AtomicInteger();
++    
++    public WriterThread(FSDataOutputStream stm,
++        byte[] toWrite,
++        AtomicReference<Throwable> thrown,
++        CountDownLatch countdown, int numWrites) {
++      this.toWrite = toWrite;
++      this.stm = stm;
++      this.thrown = thrown;
++      this.numWrites = numWrites;
++      this.countdown = countdown;
++    }
++  
++    public void run() {
++      try {
++        countdown.await();
++        for (int i = 0; i < numWrites && thrown.get() == null; i++) {
++          doAWrite();
++          numWritten.getAndIncrement();
++        }
++      } catch (Throwable t) {
++        thrown.compareAndSet(null, t);
++      }
++    }
++  
++    private void doAWrite() throws IOException {
++      stm.write(toWrite);
++      stm.sync();
++    }
++    
++    public int getNumWritten() {
++      return numWritten.get();
++    }
++  }
++
++  public static void loseLeases(FileSystem whichfs) throws Exception {
++    LOG.info("leasechecker.interruptAndJoin()");
++    // lose the lease on the client
++    DistributedFileSystem dfs = (DistributedFileSystem)whichfs;
++    dfs.dfs.leasechecker.interruptAndJoin();
++  }
++  public static void recoverFile(MiniDFSCluster cluster, FileSystem fs,
++      Path file1) throws IOException {
++    
++    // set the soft limit to be 1 second so that the
++    // namenode triggers lease recovery upon append request
++    cluster.setLeasePeriod(1000, FSConstants.LEASE_HARDLIMIT_PERIOD);
++
++    // Trying recovery
++    int tries = 60;
++    boolean recovered = false;
++    FSDataOutputStream out = null;
++    while (!recovered && tries-- > 0) {
++      try {
++        out = fs.append(file1);
++        LOG.info("Successfully opened for appends");
++        recovered = true;
++      } catch (IOException e) {
++        LOG.info("Failed open for append, waiting on lease recovery");
++        try {
++          Thread.sleep(1000);
++        } catch (InterruptedException ex) {
++          // ignore it and try again
++        }
++      }
++    }
++    if (out != null) {
++      out.close();
++    }
++    if (!recovered) {
++      throw new RuntimeException("Recovery failed");
++    }    
++  }  
+ }
+\ No newline at end of file
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+index 91791ae..eb31cd9 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+@@ -2,6 +2,7 @@ package org.apache.hadoop.hdfs;
+ 
+ import junit.framework.TestCase;
+ 
++
+ import java.io.File;
+ import java.io.IOException;
+ import java.io.OutputStream;
+@@ -38,6 +39,7 @@ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.hdfs.server.namenode.FSEditLog;
+ import org.apache.hadoop.hdfs.server.namenode.FSImageAdapter;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
++import static org.apache.hadoop.hdfs.AppendTestUtil.loseLeases;
+ import org.apache.hadoop.fs.BlockLocation;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -132,13 +134,6 @@ public class TestFileAppend4 extends TestCase {
+     assertTrue(file1 + " should be replicated to " + rep + " datanodes, not " +
+                actualRepl + ".", actualRepl == rep);
+   }
+-  
+-  private void loseLeases(FileSystem whichfs) throws Exception {
+-    LOG.info("leasechecker.interruptAndJoin()");
+-    // lose the lease on the client
+-    DistributedFileSystem dfs = (DistributedFileSystem)whichfs;
+-    dfs.dfs.leasechecker.interruptAndJoin();
+-  }
+ 
+   /*
+    * Recover file.
+@@ -152,35 +147,7 @@ public class TestFileAppend4 extends TestCase {
+    */
+   private void recoverFile(final FileSystem fs) throws Exception {
+     LOG.info("Recovering File Lease");
+-
+-    // set the soft limit to be 1 second so that the
+-    // namenode triggers lease recovery upon append request
+-    cluster.setLeasePeriod(1000, FSConstants.LEASE_HARDLIMIT_PERIOD);
+-
+-    // Trying recovery
+-    int tries = 60;
+-    boolean recovered = false;
+-    FSDataOutputStream out = null;
+-    while (!recovered && tries-- > 0) {
+-      try {
+-        out = fs.append(file1);
+-        LOG.info("Successfully opened for appends");
+-        recovered = true;
+-      } catch (IOException e) {
+-        LOG.info("Failed open for append, waiting on lease recovery");
+-        try {
+-          Thread.sleep(1000);
+-        } catch (InterruptedException ex) {
+-          // ignore it and try again
+-        }
+-      }
+-    }
+-    if (out != null) {
+-      out.close();
+-    }
+-    if (!recovered) {
+-      fail((tries > 0) ? "Recovery failed" : "Recovery should take < 1 min");
+-    }
++    AppendTestUtil.recoverFile(cluster, fs, file1);
+     LOG.info("Past out lease recovery");
+   }
+   
+diff --git a/src/test/org/apache/hadoop/hdfs/TestMultiThreadedSync.java b/src/test/org/apache/hadoop/hdfs/TestMultiThreadedSync.java
+index fab512c..6b953f4 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestMultiThreadedSync.java
++++ b/src/test/org/apache/hadoop/hdfs/TestMultiThreadedSync.java
+@@ -76,39 +76,6 @@ public class TestMultiThreadedSync {
+     toWrite = AppendTestUtil.randomBytes(seed, size);
+   }
+ 
+-  private class WriterThread extends Thread {
+-    private final FSDataOutputStream stm;
+-    private final AtomicReference<Throwable> thrown;
+-    private final int numWrites;
+-    private final CountDownLatch countdown;
+-
+-    public WriterThread(FSDataOutputStream stm,
+-      AtomicReference<Throwable> thrown,
+-      CountDownLatch countdown, int numWrites) {
+-      this.stm = stm;
+-      this.thrown = thrown;
+-      this.numWrites = numWrites;
+-      this.countdown = countdown;
+-    }
+-
+-    public void run() {
+-      try {
+-        countdown.await();
+-        for (int i = 0; i < numWrites && thrown.get() == null; i++) {
+-          doAWrite();
+-        }
+-      } catch (Throwable t) {
+-        thrown.compareAndSet(null, t);
+-      }
+-    }
+-
+-    private void doAWrite() throws IOException {
+-      stm.write(toWrite);
+-      stm.sync();
+-    }
+-  }
+-
+-
+   @Test
+   public void testMultipleSyncers() throws Exception {
+     Configuration conf = new Configuration();
+@@ -146,7 +113,7 @@ public class TestMultiThreadedSync {
+     ArrayList<Thread> threads = new ArrayList<Thread>();
+     AtomicReference<Throwable> thrown = new AtomicReference<Throwable>();
+     for (int i = 0; i < numThreads; i++) {
+-      Thread t = new WriterThread(stm, thrown, countdown, numWrites);
++      Thread t = new AppendTestUtil.WriterThread(stm, toWrite, thrown, countdown, numWrites);
+       threads.add(t);
+       t.start();
+     }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestSyncingWriterInterrupted.java b/src/test/org/apache/hadoop/hdfs/TestSyncingWriterInterrupted.java
+new file mode 100644
+index 0000000..7fe0edf
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/TestSyncingWriterInterrupted.java
+@@ -0,0 +1,77 @@
++package org.apache.hadoop.hdfs;
++
++import static org.junit.Assert.*;
++
++import java.util.ArrayList;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.atomic.AtomicReference;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.AppendTestUtil.WriterThread;
++import org.junit.Before;
++import org.junit.BeforeClass;
++import org.junit.Test;
++
++public class TestSyncingWriterInterrupted {
++  static final Log LOG = LogFactory.getLog(TestFileAppend4.class);
++  private Configuration conf;
++
++  @Before
++  public void setUp() throws Exception {
++    conf = new Configuration();
++    conf.setBoolean("dfs.support.append", true);
++    conf.setInt("dfs.client.block.recovery.retries", 1);
++  }
++  
++  @Test(timeout=90000)
++  public void testWriterInterrupted() throws Exception {
++    short repl = 3;
++    int numWrites = 20000;
++    
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, repl, true, null);
++    FileSystem fs1 = cluster.getFileSystem();
++    FileSystem fs2 = AppendTestUtil.createHdfsWithDifferentUsername(fs1.getConf());    
++    
++    Path path = new Path("/testWriterInterrupted");
++    FSDataOutputStream stm = fs1.create(path);
++    byte[] toWrite = AppendTestUtil.randomBytes(0, 5);
++    
++    CountDownLatch countdown = new CountDownLatch(1);
++    AtomicReference<Throwable> thrown = new AtomicReference<Throwable>();
++    WriterThread writerThread = new AppendTestUtil.WriterThread(
++        stm, toWrite, thrown, countdown, numWrites);
++    writerThread.start();
++    countdown.countDown();
++    while (writerThread.getNumWritten() == 0 &&
++        thrown.get() == null &&
++        writerThread.isAlive()) {
++      System.err.println("Waiting for writer to start");
++      Thread.sleep(10);
++    }
++    assertTrue(writerThread.isAlive());    
++    if (thrown.get() != null) {
++      throw new RuntimeException(thrown.get());
++    }
++    
++    AppendTestUtil.loseLeases(fs1);    
++    AppendTestUtil.recoverFile(cluster, fs2, path);
++
++    while (thrown.get() == null) {
++      LOG.info("Waiting for writer thread to get expected exception");
++      Thread.sleep(1000);
++    }
++    assertNotNull(thrown.get());
++    
++    // Check that we can see all of the synced edits
++    int expectedEdits = writerThread.getNumWritten();
++    int gotEdits = (int)(fs2.getFileStatus(path).getLen() / toWrite.length);
++    assertTrue("Expected at least " + expectedEdits +
++        " edits, got " + gotEdits, gotEdits >= expectedEdits);
++    
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java b/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java
+index 7f24eb0..5502d71 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java
+@@ -686,7 +686,7 @@ public class SimulatedFSDataset  implements FSConstants, FSDatasetInterface, Con
+   }
+ 
+   @Override
+-  public BlockRecoveryInfo getBlockRecoveryInfo(long blockId)
++  public BlockRecoveryInfo startBlockRecovery(long blockId)
+       throws IOException {
+     Block stored = getStoredBlock(blockId);
+     return new BlockRecoveryInfo(stored, false);
+-- 
+1.7.0.4
+

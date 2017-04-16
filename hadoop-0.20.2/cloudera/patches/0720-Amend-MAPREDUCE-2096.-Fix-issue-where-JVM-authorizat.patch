@@ -1,0 +1,51 @@
+From a93572183d61bcc9523206450a017c8908795009 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 3 Oct 2010 22:52:24 -0700
+Subject: [PATCH 0720/1179] Amend MAPREDUCE-2096. Fix issue where JVM authorization was incorrectly triggered
+
+Reason: TaskRunner calls TaskTracker.reportDiagonsticInfo directly at one point,
+        so the current user is the MR user, rather than the Job. This patch
+        changes the TaskRunner to call to an unauthorized version of the function.
+Author: Todd Lipcon
+Ref: CDH-648
+---
+ .../org/apache/hadoop/mapred/TaskRunner.java       |    2 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    9 +++++++++
+ 2 files changed, 10 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index eaccf57..ba27e9c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -229,7 +229,7 @@ abstract class TaskRunner extends Thread {
+       ByteArrayOutputStream baos = new ByteArrayOutputStream();
+       causeThrowable.printStackTrace(new PrintStream(baos));
+       try {
+-        tracker.reportDiagnosticInfo(t.getTaskID(), baos.toString());
++        tracker.internalReportDiagnosticInfo(t.getTaskID(), baos.toString());
+       } catch (IOException e) {
+         LOG.warn(t.getTaskID()+" Reporting Diagnostics", e);
+       }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index badd794..25f2594 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -3162,6 +3162,15 @@ public class TaskTracker
+    */
+   public synchronized void reportDiagnosticInfo(TaskAttemptID taskid, String info) throws IOException {
+     ensureAuthorizedJVM(taskid.getJobID());
++    internalReportDiagnosticInfo(taskid, info);
++  }
++
++  /**
++   * Same as reportDiagnosticInfo but does not authorize caller. This is used
++   * internally within MapReduce, whereas reportDiagonsticInfo may be called
++   * via RPC.
++   */
++  synchronized void internalReportDiagnosticInfo(TaskAttemptID taskid, String info) throws IOException {
+     TaskInProgress tip = tasks.get(taskid);
+     if (tip != null) {
+       tip.reportDiagnosticInfo(info);
+-- 
+1.7.0.4
+

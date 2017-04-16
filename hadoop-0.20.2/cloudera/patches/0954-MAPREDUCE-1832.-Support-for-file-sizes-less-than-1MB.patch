@@ -1,0 +1,557 @@
+From 858d5bb8ad49cf2b3f65af939be97bcbae6b25e5 Mon Sep 17 00:00:00 2001
+From: Konstantin Boudnik <cos@apache.org>
+Date: Mon, 2 May 2011 14:42:41 -0700
+Subject: [PATCH 0954/1179] MAPREDUCE-1832. Support for file sizes less than 1MB in DFSIO benchmark.
+
+Reason: Backport test improvements.
+Author: Konstantin Shvachko
+Ref: CDH-3117
+---
+ src/test/org/apache/hadoop/fs/TestDFSIO.java |  366 ++++++++++++++++++-------
+ 1 files changed, 263 insertions(+), 103 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/fs/TestDFSIO.java b/src/test/org/apache/hadoop/fs/TestDFSIO.java
+index fa3bc6f..820d9a0 100644
+--- a/src/test/org/apache/hadoop/fs/TestDFSIO.java
++++ b/src/test/org/apache/hadoop/fs/TestDFSIO.java
+@@ -32,7 +32,9 @@ import java.util.StringTokenizer;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.conf.Configured;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.io.LongWritable;
+ import org.apache.hadoop.io.SequenceFile;
+ import org.apache.hadoop.io.Text;
+@@ -76,22 +78,87 @@ public class TestDFSIO extends Configured implements Tool {
+   private static final int TEST_TYPE_READ = 0;
+   private static final int TEST_TYPE_WRITE = 1;
+   private static final int TEST_TYPE_CLEANUP = 2;
++  private static final int TEST_TYPE_APPEND = 3;
+   private static final int DEFAULT_BUFFER_SIZE = 1000000;
+   private static final String BASE_FILE_NAME = "test_io_";
+   private static final String DEFAULT_RES_FILE_NAME = "TestDFSIO_results.log";
+   
+-  private static final long MEGA = 0x100000;
+-  private static String TEST_ROOT_DIR = System.getProperty("test.build.data","/benchmarks/TestDFSIO");
+-  private static Path CONTROL_DIR = new Path(TEST_ROOT_DIR, "io_control");
+-  private static Path WRITE_DIR = new Path(TEST_ROOT_DIR, "io_write");
+-  private static Path READ_DIR = new Path(TEST_ROOT_DIR, "io_read");
+-  private static Path DATA_DIR = new Path(TEST_ROOT_DIR, "io_data");
++  private static final long MEGA = ByteMultiple.MB.value();
++  private static final String USAGE =
++                            "Usage: " + TestDFSIO.class.getSimpleName() +
++                            " [genericOptions]" +
++                            " -read | -write | -append | -clean [-nrFiles N]" +
++                            " [-fileSize Size[B|KB|MB|GB|TB]]" +
++                            " [-resFile resultFileName] [-bufferSize Bytes]" +
++                            " [-rootDir]";
++
++  private Configuration config;
+ 
+   static{
+     Configuration.addDefaultResource("hdfs-default.xml");
+     Configuration.addDefaultResource("hdfs-site.xml");
++    Configuration.addDefaultResource("mapred-default.xml");
++    Configuration.addDefaultResource("mapred-site.xml");
++  }
++
++  static enum ByteMultiple {
++    B(1L),
++    KB(0x400L),
++    MB(0x100000L),
++    GB(0x40000000L),
++    TB(0x10000000000L);
++
++    private long multiplier;
++
++    private ByteMultiple(long mult) {
++      multiplier = mult;
++    }
++
++    long value() {
++      return multiplier;
++    }
++
++    static ByteMultiple parseString(String sMultiple) {
++      if(sMultiple == null || sMultiple.isEmpty()) // MB by default
++        return MB;
++      String sMU = sMultiple.toUpperCase();
++      if(B.name().toUpperCase().endsWith(sMU))
++        return B;
++      if(KB.name().toUpperCase().endsWith(sMU))
++        return KB;
++      if(MB.name().toUpperCase().endsWith(sMU))
++        return MB;
++      if(GB.name().toUpperCase().endsWith(sMU))
++        return GB;
++      if(TB.name().toUpperCase().endsWith(sMU))
++        return TB;
++      throw new IllegalArgumentException("Unsupported ByteMultiple "+sMultiple);
++    }
++  }
++
++  public TestDFSIO() {
++    this.config = new Configuration();
+   }
+ 
++  private static String getBaseDir(Configuration conf) {
++    return conf.get("test.build.data","/benchmarks/TestDFSIO");
++  }
++  private static Path getControlDir(Configuration conf) {
++    return new Path(getBaseDir(conf), "io_control");
++  }
++  private static Path getWriteDir(Configuration conf) {
++    return new Path(getBaseDir(conf), "io_write");
++  }
++  private static Path getReadDir(Configuration conf) {
++    return new Path(getBaseDir(conf), "io_read");
++  }
++  private static Path getAppendDir(Configuration conf) {
++    return new Path(getBaseDir(conf), "io_append");
++  }
++  private static Path getDataDir(Configuration conf) {
++    return new Path(getBaseDir(conf), "io_data");
++   }
++
+   /**
+    * Run the test with default parameters.
+    * 
+@@ -99,7 +166,8 @@ public class TestDFSIO extends Configured implements Tool {
+    */
+   @Test
+   public void testIOs() throws Exception {
+-    testIOs(10, 10, new Configuration());
++    TestDFSIO bench = new TestDFSIO();
++    bench.testIOs(1, 4);
+   }
+ 
+   /**
+@@ -109,32 +177,52 @@ public class TestDFSIO extends Configured implements Tool {
+    * @param nrFiles number of files
+    * @throws IOException
+    */
+-  public static void testIOs(int fileSize, int nrFiles, Configuration fsConfig)
++
++  public void testIOs(int fileSize, int nrFiles)
+     throws IOException {
++    config.setBoolean(DFSConfigKeys.DFS_SUPPORT_APPEND_KEY, true);
++    MiniDFSCluster cluster = null;
++    try {
++      cluster = new MiniDFSCluster(config, 2, true, null);
++      FileSystem fs = cluster.getFileSystem();
+ 
+-    FileSystem fs = FileSystem.get(fsConfig);
++      createControlFile(fs, fileSize, nrFiles);
++      long tStart = System.currentTimeMillis();
++      writeTest(fs);
++      long execTime = System.currentTimeMillis() - tStart;
++      analyzeResult(fs, TEST_TYPE_WRITE, execTime, DEFAULT_RES_FILE_NAME);
+ 
+-    createControlFile(fs, fileSize, nrFiles, fsConfig);
+-    writeTest(fs, fsConfig);
+-    readTest(fs, fsConfig);
+-    cleanup(fs);
++      tStart = System.currentTimeMillis();
++      readTest(fs);
++      execTime = System.currentTimeMillis() - tStart;
++      analyzeResult(fs, TEST_TYPE_READ, execTime, DEFAULT_RES_FILE_NAME);
++
++      tStart = System.currentTimeMillis();
++      appendTest(fs);
++      execTime = System.currentTimeMillis() - tStart;
++      analyzeResult(fs, TEST_TYPE_APPEND, execTime, DEFAULT_RES_FILE_NAME);
++
++      cleanup(fs);
++    } finally {
++      if(cluster != null) cluster.shutdown();
++    }
+   }
+ 
+-  private static void createControlFile(FileSystem fs,
+-                                        int fileSize, // in MB 
+-                                        int nrFiles,
+-                                        Configuration fsConfig
+-                                        ) throws IOException {
+-    LOG.info("creating control file: "+fileSize+" mega bytes, "+nrFiles+" files");
++  private void createControlFile(FileSystem fs,
++                                  long fileSize, // in bytes
++                                  int nrFiles
++                                ) throws IOException {
++    LOG.info("creating control file: "+fileSize+" bytes, "+nrFiles+" files");
+ 
+-    fs.delete(CONTROL_DIR, true);
++    Path controlDir = getControlDir(config);
++    fs.delete(controlDir, true);
+ 
+     for(int i=0; i < nrFiles; i++) {
+       String name = getFileName(i);
+-      Path controlFile = new Path(CONTROL_DIR, "in_file_" + name);
++      Path controlFile = new Path(controlDir, "in_file_" + name);
+       SequenceFile.Writer writer = null;
+       try {
+-        writer = SequenceFile.createWriter(fs, fsConfig, controlFile,
++        writer = SequenceFile.createWriter(fs, config, controlFile,
+                                            Text.class, LongWritable.class,
+                                            CompressionType.NONE);
+         writer.append(new Text(name), new LongWritable(fileSize));
+@@ -202,14 +290,14 @@ public class TestDFSIO extends Configured implements Tool {
+         buffer[i] = (byte)('0' + i % 50);
+     }
+ 
++    @Override
+     public Long doIO(Reporter reporter, 
+                        String name, 
+-                       long totalSize 
+-                       ) throws IOException {
++                       long totalSize // in bytes
++                     ) throws IOException {
+       // create file
+-      totalSize *= MEGA;
+       OutputStream out;
+-      out = fs.create(new Path(DATA_DIR, name), true, bufferSize);
++      out = fs.create(new Path(getDataDir(getConf()), name), true, bufferSize);
+       
+       try {
+         // write to the file
+@@ -228,23 +316,21 @@ public class TestDFSIO extends Configured implements Tool {
+     }
+   }
+ 
+-  private static void writeTest(FileSystem fs, Configuration fsConfig)
+-  throws IOException {
+-
+-    fs.delete(DATA_DIR, true);
+-    fs.delete(WRITE_DIR, true);
++  private void writeTest(FileSystem fs) throws IOException {
++    Path writeDir = getWriteDir(config);
++    fs.delete(getDataDir(config), true);
++    fs.delete(writeDir, true);
+     
+-    runIOTest(WriteMapper.class, WRITE_DIR, fsConfig);
++    runIOTest(WriteMapper.class, writeDir);
+   }
+   
+   @SuppressWarnings("deprecation")
+-  private static void runIOTest(
++  private void runIOTest(
+           Class<? extends Mapper<Text, LongWritable, Text, Text>> mapperClass, 
+-          Path outputDir,
+-          Configuration fsConfig) throws IOException {
+-    JobConf job = new JobConf(fsConfig, TestDFSIO.class);
++          Path outputDir) throws IOException {
++    JobConf job = new JobConf(config, TestDFSIO.class);
+ 
+-    FileInputFormat.setInputPaths(job, CONTROL_DIR);
++    FileInputFormat.setInputPaths(job, getControlDir(config));
+     job.setInputFormat(SequenceFileInputFormat.class);
+ 
+     job.setMapperClass(mapperClass);
+@@ -258,6 +344,47 @@ public class TestDFSIO extends Configured implements Tool {
+   }
+ 
+   /**
++   * Append mapper class.
++   */
++  public static class AppendMapper extends IOStatMapper<Long> {
++
++    public AppendMapper() {
++      for(int i=0; i < bufferSize; i++)
++        buffer[i] = (byte)('0' + i % 50);
++    }
++
++    public Long doIO(Reporter reporter,
++                       String name,
++                       long totalSize // in bytes
++                     ) throws IOException {
++      // create file
++      OutputStream out;
++      out = fs.append(new Path(getDataDir(getConf()), name), bufferSize);
++
++      try {
++        // write to the file
++        long nrRemaining;
++        for (nrRemaining = totalSize; nrRemaining > 0; nrRemaining -= bufferSize) {
++          int curSize = (bufferSize < nrRemaining) ? bufferSize : (int)nrRemaining;
++          out.write(buffer, 0, curSize);
++          reporter.setStatus("writing " + name + "@" +
++                             (totalSize - nrRemaining) + "/" + totalSize
++                             + " ::host = " + hostName);
++        }
++      } finally {
++        out.close();
++      }
++      return Long.valueOf(totalSize);
++    }
++  }
++
++  private void appendTest(FileSystem fs) throws IOException {
++    Path appendDir = getAppendDir(config);
++    fs.delete(appendDir, true);
++    runIOTest(AppendMapper.class, appendDir);
++  }
++
++  /**
+    * Read mapper class.
+    */
+   public static class ReadMapper extends IOStatMapper<Long> {
+@@ -267,15 +394,15 @@ public class TestDFSIO extends Configured implements Tool {
+ 
+     public Long doIO(Reporter reporter, 
+                        String name, 
+-                       long totalSize 
++		       long totalSize // in bytes
+                        ) throws IOException {
+-      totalSize *= MEGA;
+-      // open file
+-      DataInputStream in = fs.open(new Path(DATA_DIR, name));
++
++      DataInputStream in = fs.open(new Path(getDataDir(getConf()), name));
+       long actualSize = 0;
+       try {
+-        while (actualSize < totalSize) {
+-          int curSize = in.read(buffer, 0, bufferSize);
++        for(int curSize = bufferSize;
++                curSize == bufferSize && actualSize < totalSize;) {
++          curSize = in.read(buffer, 0, bufferSize);
+           if (curSize < 0) break;
+           actualSize += curSize;
+           reporter.setStatus("reading " + name + "@" + 
+@@ -289,22 +416,24 @@ public class TestDFSIO extends Configured implements Tool {
+     }
+   }
+ 
+-  private static void readTest(FileSystem fs, Configuration fsConfig)
+-  throws IOException {
+-    fs.delete(READ_DIR, true);
+-    runIOTest(ReadMapper.class, READ_DIR, fsConfig);
++  private void readTest(FileSystem fs) throws IOException {
++    Path readDir = getReadDir(config);
++    fs.delete(readDir, true);
++    runIOTest(ReadMapper.class, readDir);
+   }
+ 
+-  private static void sequentialTest(FileSystem fs, 
+-                                     int testType, 
+-                                     int fileSize, 
+-                                     int nrFiles
+-                                     ) throws Exception {
++  private void sequentialTest(FileSystem fs,
++                              int testType,
++                              long fileSize, // in bytes
++                              int nrFiles
++                              ) throws Exception {
+     IOStatMapper<Long> ioer = null;
+     if (testType == TEST_TYPE_READ)
+       ioer = new ReadMapper();
+     else if (testType == TEST_TYPE_WRITE)
+       ioer = new WriteMapper();
++    else if (testType == TEST_TYPE_APPEND)
++      ioer = new AppendMapper();
+     else
+       return;
+     for(int i=0; i < nrFiles; i++)
+@@ -314,20 +443,31 @@ public class TestDFSIO extends Configured implements Tool {
+   }
+ 
+   public static void main(String[] args) throws Exception{
+-    int res = ToolRunner.run(new TestDFSIO(), args);
++    TestDFSIO bench = new TestDFSIO();
++    int res = -1;
++    try {
++      res = ToolRunner.run(bench, args);
++    } catch(Exception e) {
++      System.err.print(StringUtils.stringifyException(e));
++      res = -2;
++    }
++    if(res == -1)
++      System.err.print(USAGE);
+     System.exit(res);
+   }
+   
+-  private static void analyzeResult( FileSystem fs, 
+-                                     int testType,
+-                                     long execTime,
+-                                     String resFileName
+-                                     ) throws IOException {
++  private void analyzeResult(FileSystem fs,
++                             int testType,
++                             long execTime,
++                             String resFileName
++                            ) throws IOException {
+     Path reduceFile;
+     if (testType == TEST_TYPE_WRITE)
+-      reduceFile = new Path(WRITE_DIR, "part-00000");
++      reduceFile = new Path(getWriteDir(config), "part-00000");
++    else if (testType == TEST_TYPE_APPEND)
++      reduceFile = new Path(getAppendDir(config), "part-00000");
+     else
+-      reduceFile = new Path(READ_DIR, "part-00000");
++      reduceFile = new Path(getReadDir(config), "part-00000");
+     long tasks = 0;
+     long size = 0;
+     long time = 0;
+@@ -363,10 +503,11 @@ public class TestDFSIO extends Configured implements Tool {
+     String resultLines[] = {
+       "----- TestDFSIO ----- : " + ((testType == TEST_TYPE_WRITE) ? "write" :
+                                     (testType == TEST_TYPE_READ) ? "read" : 
++                                    (testType == TEST_TYPE_APPEND) ? "append" :
+                                     "unknown"),
+       "           Date & time: " + new Date(System.currentTimeMillis()),
+       "       Number of files: " + tasks,
+-      "Total MBytes processed: " + size/MEGA,
++      "Total MBytes processed: " + toMB(size),
+       "     Throughput mb/sec: " + size * 1000.0 / (time * MEGA),
+       "Average IO rate mb/sec: " + med,
+       " IO rate std deviation: " + stdDev,
+@@ -385,29 +526,25 @@ public class TestDFSIO extends Configured implements Tool {
+     }
+   }
+ 
+-  private static void cleanup(FileSystem fs) throws IOException {
++  private void cleanup(FileSystem fs)
++  throws IOException {
+     LOG.info("Cleaning up test files");
+-    fs.delete(new Path(TEST_ROOT_DIR), true);
++    fs.delete(new Path(getBaseDir(config)), true);
+   }
+ 
+   @Override
+   public int run(String[] args) throws Exception {
+     int testType = TEST_TYPE_READ;
+     int bufferSize = DEFAULT_BUFFER_SIZE;
+-    int fileSize = 1;
++    long fileSize = 1*MEGA;
+     int nrFiles = 1;
+     String resFileName = DEFAULT_RES_FILE_NAME;
+     boolean isSequential = false;
++    String version = TestDFSIO.class.getSimpleName() + ".0.0.6";
+     
+-    String className = TestDFSIO.class.getSimpleName();
+-    String version = className + ".0.0.4";
+-    String usage = "Usage: " + className + " -read | -write | -clean " +
+-    		"[-nrFiles N] [-fileSize MB] [-resFile resultFileName] " +
+-    		"[-bufferSize Bytes] ";
+-    
+-    System.out.println(version);
++    LOG.info(version);
+     if (args.length == 0) {
+-      System.err.println(usage);
++      System.err.println("Missing arguments.");
+       return -1;
+     }
+     for (int i = 0; i < args.length; i++) {       // parse command line
+@@ -415,6 +552,8 @@ public class TestDFSIO extends Configured implements Tool {
+         testType = TEST_TYPE_READ;
+       } else if (args[i].equals("-write")) {
+         testType = TEST_TYPE_WRITE;
++      } else if (args[i].equals("-append")) {
++        testType = TEST_TYPE_APPEND;
+       } else if (args[i].equals("-clean")) {
+         testType = TEST_TYPE_CLEANUP;
+       } else if (args[i].startsWith("-seq")) {
+@@ -422,48 +561,69 @@ public class TestDFSIO extends Configured implements Tool {
+       } else if (args[i].equals("-nrFiles")) {
+         nrFiles = Integer.parseInt(args[++i]);
+       } else if (args[i].equals("-fileSize")) {
+-        fileSize = Integer.parseInt(args[++i]);
++        fileSize = parseSize(args[++i]);
+       } else if (args[i].equals("-bufferSize")) {
+         bufferSize = Integer.parseInt(args[++i]);
+       } else if (args[i].equals("-resFile")) {
+         resFileName = args[++i];
+-      }
++      } else {
++        System.err.println("Illegal argument: " + args[i]);
++        return -1;
++       }
+     }
+ 
+     LOG.info("nrFiles = " + nrFiles);
+-    LOG.info("fileSize (MB) = " + fileSize);
++    LOG.info("fileSize (MB) = " + toMB(fileSize));
+     LOG.info("bufferSize = " + bufferSize);
+-  
+-    try {
+-      Configuration fsConfig = new Configuration(getConf());
+-      fsConfig.setInt("test.io.file.buffer.size", bufferSize);
+-      FileSystem fs = FileSystem.get(fsConfig);
+-
+-      if (isSequential) {
+-        long tStart = System.currentTimeMillis();
+-        sequentialTest(fs, testType, fileSize, nrFiles);
+-        long execTime = System.currentTimeMillis() - tStart;
+-        String resultLine = "Seq Test exec time sec: " + (float)execTime / 1000;
+-        LOG.info(resultLine);
+-        return 0;
+-      }
+-      if (testType == TEST_TYPE_CLEANUP) {
+-        cleanup(fs);
+-        return 0;
+-      }
+-      createControlFile(fs, fileSize, nrFiles, fsConfig);
++    LOG.info("baseDir = " + getBaseDir(config));
++
++    config.setInt("test.io.file.buffer.size", bufferSize);
++    config.setBoolean(DFSConfigKeys.DFS_SUPPORT_APPEND_KEY, true);
++    FileSystem fs = FileSystem.get(config);
++
++    if (isSequential) {
+       long tStart = System.currentTimeMillis();
+-      if (testType == TEST_TYPE_WRITE)
+-        writeTest(fs, fsConfig);
+-      if (testType == TEST_TYPE_READ)
+-        readTest(fs, fsConfig);
++      sequentialTest(fs, testType, fileSize, nrFiles);
+       long execTime = System.currentTimeMillis() - tStart;
+-    
+-      analyzeResult(fs, testType, execTime, resFileName);
+-    } catch(Exception e) {
+-      System.err.print(StringUtils.stringifyException(e));
+-      return -1;
++      String resultLine = "Seq Test exec time sec: " + (float)execTime / 1000;
++      LOG.info(resultLine);
++      return 0;
++    }
++
++    if (testType == TEST_TYPE_CLEANUP) {
++      cleanup(fs);
++      return 0;
+     }
++    createControlFile(fs, fileSize, nrFiles);
++    long tStart = System.currentTimeMillis();
++    if (testType == TEST_TYPE_WRITE)
++      writeTest(fs);
++    if (testType == TEST_TYPE_READ)
++      readTest(fs);
++    if (testType == TEST_TYPE_APPEND)
++      appendTest(fs);
++
++    long execTime = System.currentTimeMillis() - tStart;
++
++    analyzeResult(fs, testType, execTime, resFileName);
+     return 0;
+   }
++
++  /**
++   * Returns size in bytes.
++   *
++   * @param arg = {d}[B|KB|MB|GB|TB]
++   * @return
++   */
++  static long parseSize(String arg) {
++    String[] args = arg.split("\\D", 2);  // get digits
++    assert args.length <= 2;
++    long fileSize = Long.parseLong(args[0]);
++    String bytesMult = arg.substring(args[0].length()); // get byte multiple
++    return fileSize * ByteMultiple.parseString(bytesMult).value();
++  }
++
++  static float toMB(long bytes) {
++    return ((float)bytes)/MEGA;
++  }
+ }
+-- 
+1.7.0.4
+

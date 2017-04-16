@@ -1,0 +1,40 @@
+From 35fa82b5c743e34d62449e0f4abffd885e0dfe4c Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:34:42 -0800
+Subject: [PATCH 0026/1179] HADOOP-5656. Counter for S3N Read Bytes does not work
+
+Description: Counter for S3N Read Bytes does not work on trunk. On 0.18 branch neither read nor write byte counters work.
+Reason: Bugfix
+Author: Ian Nowland
+Ref: UNKNOWN
+---
+ .../hadoop/fs/s3native/NativeS3FileSystem.java     |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java b/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
+index 5469484..96191ba 100644
+--- a/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
+@@ -90,6 +90,9 @@ public class NativeS3FileSystem extends FileSystem {
+       if (result != -1) {
+         pos++;
+       }
++      if (statistics != null && result != -1) {
++        statistics.incrementBytesRead(1);
++      }
+       return result;
+     }
+     public synchronized int read(byte[] b, int off, int len)
+@@ -99,6 +102,9 @@ public class NativeS3FileSystem extends FileSystem {
+       if (result > 0) {
+         pos += result;
+       }
++      if (statistics != null && result > 0) {
++        statistics.incrementBytesRead(result);
++      }
+       return result;
+     }
+ 
+-- 
+1.7.0.4
+

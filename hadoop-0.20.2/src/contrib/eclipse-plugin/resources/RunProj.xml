@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cheatsheet title="MapReduce project run tutorial">
+	<intro>
+		<description>
+			This tutorial informs you how to run your newly created
+			MapReduce Project in one of two fashions: locally as a Java
+			Application, or on a Hadoop Server.
+		</description>
+	</intro>
+	<item title="Run as Java Application">
+		<description>
+			To run your MapReduce application locally, right-click on
+			your Driver class in the Package Explorer and select <b>Run as
+			/ Java Application</b>.
+		</description>
+	</item>
+	<item title="Run on Hadoop Server">
+		<description>
+			To run your MapReduce application on a Hadoop server, right-click on
+			your Driver class in the Package Explorer and select <b>Run as
+			/ Run on Hadoop</b>.
+		</description>
+	</item>
+</cheatsheet>

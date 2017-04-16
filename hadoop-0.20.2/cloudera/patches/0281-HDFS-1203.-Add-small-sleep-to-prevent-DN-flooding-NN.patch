@@ -1,0 +1,35 @@
+From 7a93fcc8c22b7cff87221ec0a8bf8f6689f12b82 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 22 Apr 2010 10:24:59 -0700
+Subject: [PATCH 0281/1179] HDFS-1203. Add small sleep to prevent DN flooding NN in error cases
+
+Description: If the datanode experiences an error in sending its block
+             reports to the name node, it previously would loop retrying
+             with no delay between attempts. In the case that the DN
+             is sending an invalid report, this will flood the NN with
+             RPCs. This patch adds a short sleep before the retry.
+Reason: Prevents possible flood of RPCs to the NameNode in DN error
+        conditions.
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 7f0fae1..391abb3 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -846,6 +846,9 @@ public class DataNode extends Configured
+           shutdown();
+           return;
+         }
++        try {
++          Thread.sleep(1000);
++        } catch (InterruptedException ie) {}
+         LOG.warn(StringUtils.stringifyException(re));
+       } catch (IOException e) {
+         LOG.warn(StringUtils.stringifyException(e));
+-- 
+1.7.0.4
+

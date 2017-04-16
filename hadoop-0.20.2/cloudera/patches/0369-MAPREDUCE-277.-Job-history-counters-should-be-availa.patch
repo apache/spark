@@ -1,0 +1,458 @@
+From a77ecd569495efc6bee0059eeafeebbfe6c797c4 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 15 Oct 2009 11:37:22 +0530
+Subject: [PATCH 0369/1179] MAPREDUCE-277. Job history counters should be available on the UI.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12421419/patch-277-0.20.txt
+Author: Jothi Padmanabhan
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/HistoryViewer.java    |   58 ++++++++++-
+ .../org/apache/hadoop/mapred/JobHistory.java       |    9 ++-
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    3 +-
+ .../org/apache/hadoop/mapred/TestJobHistory.java   |    8 ++
+ src/webapps/job/jobdetailshistory.jsp              |   65 ++++++++++++-
+ src/webapps/job/taskdetailshistory.jsp             |   26 ++++-
+ src/webapps/job/taskstatshistory.jsp               |  106 ++++++++++++++++++++
+ 7 files changed, 265 insertions(+), 10 deletions(-)
+ create mode 100644 src/webapps/job/taskstatshistory.jsp
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/HistoryViewer.java b/src/mapred/org/apache/hadoop/mapred/HistoryViewer.java
+index 54b6ca1..2180009 100644
+--- a/src/mapred/org/apache/hadoop/mapred/HistoryViewer.java
++++ b/src/mapred/org/apache/hadoop/mapred/HistoryViewer.java
+@@ -19,10 +19,14 @@
+ package org.apache.hadoop.mapred;
+ 
+ import java.io.IOException;
++import java.text.DecimalFormat;
++import java.text.Format;
++import java.text.ParseException;
+ import java.text.SimpleDateFormat;
+ import java.util.Arrays;
+ import java.util.Comparator;
+ import java.util.Date;
++import java.util.Iterator;
+ import java.util.Map;
+ import java.util.Set;
+ import java.util.TreeMap;
+@@ -32,6 +36,8 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.PathFilter;
++import org.apache.hadoop.mapred.Counters.Counter;
++import org.apache.hadoop.mapred.Counters.Group;
+ import org.apache.hadoop.mapred.DefaultJobHistoryParser.*;
+ import org.apache.hadoop.mapred.JobHistory.*;
+ import org.apache.hadoop.util.StringUtils;
+@@ -89,7 +95,7 @@ class HistoryViewer {
+     }
+   }
+   
+-  public void print() throws IOException{
++  public void print() throws IOException {
+     printJobDetails();
+     printTaskSummary();
+     printJobAnalysis();
+@@ -117,7 +123,7 @@ class HistoryViewer {
+     printFailedAttempts(filter);
+   }
+ 
+-  private void printJobDetails() {
++  private void printJobDetails() throws IOException {
+     StringBuffer jobDetails = new StringBuffer();
+     jobDetails.append("\nHadoop job: " ).append(jobId);
+     jobDetails.append("\n=====================================");
+@@ -140,10 +146,58 @@ class HistoryViewer {
+                         job.getLong(Keys.LAUNCH_TIME)));
+     jobDetails.append("\nStatus: ").append(((job.get(Keys.JOB_STATUS) == "") ? 
+                       "Incomplete" :job.get(Keys.JOB_STATUS)));
++    try {
++      printCounters(jobDetails, job);
++    } catch (ParseException p) {
++      throw new IOException(p);
++    }
+     jobDetails.append("\n=====================================");
+     System.out.println(jobDetails.toString());
+   }
+   
++  private void printCounters(StringBuffer buff, JobInfo job) 
++      throws ParseException {
++    Counters mapCounters = 
++      Counters.fromEscapedCompactString(job.get(Keys.MAP_COUNTERS));
++    Counters reduceCounters = 
++      Counters.fromEscapedCompactString(job.get(Keys.REDUCE_COUNTERS));
++    Counters totalCounters = 
++      Counters.fromEscapedCompactString(job.get(Keys.COUNTERS));
++    
++    // Killed jobs might not have counters
++    if (totalCounters == null) {
++      return;
++    }
++    buff.append("\nCounters: \n\n");
++    buff.append(String.format("|%1$-30s|%2$-30s|%3$-10s|%4$-10s|%5$-10s|", 
++      "Group Name",
++      "Counter name",
++      "Map Value",
++      "Reduce Value",
++      "Total Value"));
++    buff.append("\n------------------------------------------"+
++      "---------------------------------------------");
++    for (String groupName : totalCounters.getGroupNames()) {
++      Group totalGroup = totalCounters.getGroup(groupName);
++      Group mapGroup = mapCounters.getGroup(groupName);
++      Group reduceGroup = reduceCounters.getGroup(groupName);
++      Format decimal = new DecimalFormat();
++      Iterator<Counter> ctrItr = totalGroup.iterator();
++      while (ctrItr.hasNext()) {
++        Counter counter = ctrItr.next();
++        String name = counter.getDisplayName();
++        String mapValue = decimal.format(mapGroup.getCounter(name));
++        String reduceValue = decimal.format(reduceGroup.getCounter(name));
++        String totalValue = decimal.format(counter.getValue());
++        buff.append(
++          String.format("\n|%1$-30s|%2$-30s|%3$-10s|%4$-10s|%5$-10s", 
++          totalGroup.getDisplayName(),
++          counter.getDisplayName(),
++          mapValue, reduceValue, totalValue));
++      }
++    }
++  }
++  
+   private void printTasks(String taskType, String taskStatus) {
+     Map<String, JobHistory.Task> tasks = job.getAllTasks();
+     StringBuffer taskList = new StringBuffer();
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index b503406..c05ed79 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -266,7 +266,7 @@ public class JobHistory {
+     FINISHED_MAPS, FINISHED_REDUCES, JOB_STATUS, TASKID, HOSTNAME, TASK_TYPE, 
+     ERROR, TASK_ATTEMPT_ID, TASK_STATUS, COPY_PHASE, SORT_PHASE, REDUCE_PHASE, 
+     SHUFFLE_FINISHED, SORT_FINISHED, COUNTERS, SPLITS, JOB_PRIORITY, HTTP_PORT, 
+-    TRACKER_NAME, STATE_STRING, VERSION
++    TRACKER_NAME, STATE_STRING, VERSION, MAP_COUNTERS, REDUCE_COUNTERS
+   }
+ 
+   /**
+@@ -1335,7 +1335,9 @@ public class JobHistory {
+     public static void logFinished(JobID jobId, long finishTime, 
+                                    int finishedMaps, int finishedReduces,
+                                    int failedMaps, int failedReduces,
+-                                   Counters counters){
++                                   Counters mapCounters,
++                                   Counters reduceCounters,
++                                   Counters counters) {
+       if (!disableHistory){
+         // close job file for this job
+         ArrayList<PrintWriter> writer = fileManager.getWriters(jobId); 
+@@ -1346,6 +1348,7 @@ public class JobHistory {
+                                      Keys.JOB_STATUS, Keys.FINISHED_MAPS, 
+                                      Keys.FINISHED_REDUCES,
+                                      Keys.FAILED_MAPS, Keys.FAILED_REDUCES,
++                                     Keys.MAP_COUNTERS, Keys.REDUCE_COUNTERS,
+                                      Keys.COUNTERS},
+                          new String[] {jobId.toString(),  Long.toString(finishTime), 
+                                        Values.SUCCESS.name(), 
+@@ -1353,6 +1356,8 @@ public class JobHistory {
+                                        String.valueOf(finishedReduces),
+                                        String.valueOf(failedMaps), 
+                                        String.valueOf(failedReduces),
++                                       mapCounters.makeEscapedCompactString(),
++                                       reduceCounters.makeEscapedCompactString(),
+                                        counters.makeEscapedCompactString()});
+           for (PrintWriter out : writer) {
+             out.close();
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 376dc97..9c884b9 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -2375,7 +2375,8 @@ public class JobInProgress {
+       JobHistory.JobInfo.logFinished(this.status.getJobID(), finishTime, 
+                                      this.finishedMapTasks, 
+                                      this.finishedReduceTasks, failedMapTasks, 
+-                                     failedReduceTasks, getCounters());
++                                     failedReduceTasks, getMapCounters(),
++                                     getReduceCounters(), getCounters());
+       // Note that finalize will close the job history handles which garbage collect
+       // might try to finalize
+       garbageCollect();
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistory.java b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+index 63e339f..81c6d4c 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistory.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+@@ -555,6 +555,14 @@ public class TestJobHistory extends TestCase {
+     assertTrue("Counters of job obtained from history file did not " +
+                "match the expected value",
+                c.makeEscapedCompactString().equals(values.get(Keys.COUNTERS)));
++    Counters m = jip.getMapCounters();
++    assertTrue("Map Counters of job obtained from history file did not " +
++               "match the expected value", m.makeEscapedCompactString().
++               equals(values.get(Keys.MAP_COUNTERS)));
++    Counters r = jip.getReduceCounters();
++    assertTrue("Reduce Counters of job obtained from history file did not " +
++               "match the expected value", r.makeEscapedCompactString().
++               equals(values.get(Keys.REDUCE_COUNTERS)));
+ 
+     // Validate number of total maps, total reduces, finished maps,
+     // finished reduces, failed maps, failed recudes
+diff --git a/src/webapps/job/jobdetailshistory.jsp b/src/webapps/job/jobdetailshistory.jsp
+index 76191da..6e47b8b 100644
+--- a/src/webapps/job/jobdetailshistory.jsp
++++ b/src/webapps/job/jobdetailshistory.jsp
+@@ -6,7 +6,7 @@
+   import="org.apache.hadoop.fs.*"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.util.*"
+-  import="java.text.SimpleDateFormat"
++  import="java.text.*"
+   import="org.apache.hadoop.mapred.JobHistory.*"
+ %>
+ <%!	private static final long serialVersionUID = 1L;
+@@ -198,6 +198,68 @@ Hadoop Job <%=jobid %> on History Viewer
+ </tr>
+ </table>
+ 
++<br>
++<br>
++
++<table border=2 cellpadding="5" cellspacing="2">
++  <tr>
++  <th><br/></th>
++  <th>Counter</th>
++  <th>Map</th>
++  <th>Reduce</th>
++  <th>Total</th>
++</tr>
++
++<%  
++
++ Counters totalCounters = 
++   Counters.fromEscapedCompactString(job.get(Keys.COUNTERS));
++ Counters mapCounters = 
++   Counters.fromEscapedCompactString(job.get(Keys.MAP_COUNTERS));
++ Counters reduceCounters = 
++   Counters.fromEscapedCompactString(job.get(Keys.REDUCE_COUNTERS));
++
++ if (totalCounters != null) {
++   for (String groupName : totalCounters.getGroupNames()) {
++     Counters.Group totalGroup = totalCounters.getGroup(groupName);
++     Counters.Group mapGroup = mapCounters.getGroup(groupName);
++     Counters.Group reduceGroup = reduceCounters.getGroup(groupName);
++  
++     Format decimal = new DecimalFormat();
++  
++     boolean isFirst = true;
++     Iterator<Counters.Counter> ctrItr = totalGroup.iterator();
++     while(ctrItr.hasNext()) {
++       Counters.Counter counter = ctrItr.next();
++       String name = counter.getDisplayName();
++       String mapValue = 
++         decimal.format(mapGroup.getCounter(name));
++       String reduceValue = 
++         decimal.format(reduceGroup.getCounter(name));
++       String totalValue = decimal.format(counter.getCounter());
++%>
++       <tr>
++<%
++       if (isFirst) {
++         isFirst = false;
++%>
++         <td rowspan="<%=totalGroup.size()%>"><%=totalGroup.getDisplayName()%></td>
++<%
++       }
++%>
++       <td><%=counter.getDisplayName()%></td>
++       <td align="right"><%=mapValue%></td>
++       <td align="right"><%=reduceValue%></td>
++       <td align="right"><%=totalValue%></td>
++     </tr>
++<%
++      }
++    }
++  }
++%>
++</table>
++<br>
++
+ <br/>
+  <%
+     DefaultJobHistoryParser.FailedOnNodesFilter filter = 
+@@ -232,6 +294,7 @@ Hadoop Job <%=jobid %> on History Viewer
+  %>
+ </table>
+ <br/>
++
+  <%
+     DefaultJobHistoryParser.KilledOnNodesFilter killedFilter =
+                  new DefaultJobHistoryParser.KilledOnNodesFilter();
+diff --git a/src/webapps/job/taskdetailshistory.jsp b/src/webapps/job/taskdetailshistory.jsp
+index a10a33a..21d5189 100644
+--- a/src/webapps/job/taskdetailshistory.jsp
++++ b/src/webapps/job/taskdetailshistory.jsp
+@@ -43,12 +43,13 @@
+ <%
+   }
+ %>
+-<th>Finish Time</th><th>Host</th><th>Error</th><th>Task Logs</th></tr>
++<th>Finish Time</th><th>Host</th><th>Error</th><th>Task Logs</th>
++<th>Counters</th></tr>
+ </thead>
+ <tbody>
+ <%
+   for (JobHistory.TaskAttempt attempt : task.getTaskAttempts().values()) {
+-    printTaskAttempt(attempt, type, out);
++    printTaskAttempt(attempt, type, out, encodedLogFileName);
+   }
+ %>
+ </tbody>
+@@ -71,8 +72,9 @@
+ %>
+ <%!
+   private void printTaskAttempt(JobHistory.TaskAttempt taskAttempt,
+-                                String type, JspWriter out) 
+-  throws IOException {
++                                String type, JspWriter out,
++                                String logFile) 
++  throws Exception {
+     out.print("<tr>"); 
+     out.print("<td>" + taskAttempt.get(Keys.TASK_ATTEMPT_ID) + "</td>");
+     out.print("<td>" + StringUtils.getFormattedTimeWithDiff(dateFormat,
+@@ -108,6 +110,22 @@
+         out.print("n/a");
+     }
+     out.print("</td>");
++    Counters counters = 
++      Counters.fromEscapedCompactString(taskAttempt.get(Keys.COUNTERS));
++    if (counters != null) {
++      TaskAttemptID attemptId = 
++        TaskAttemptID.forName(taskAttempt.get(Keys.TASK_ATTEMPT_ID));
++      TaskID taskId = attemptId.getTaskID();
++      org.apache.hadoop.mapreduce.JobID jobId = taskId.getJobID();
++      out.print("<td>" 
++       + "<a href=\"/taskstatshistory.jsp?jobid=" + jobId
++           + "&taskid=" + taskId
++           + "&attemptid=" + attemptId
++           + "&logFile=" + logFile + "\">"
++           + counters.size() + "</a></td>");
++    } else {
++      out.print("<td></td>");
++    }
+     out.print("</tr>"); 
+   }
+ %>
+diff --git a/src/webapps/job/taskstatshistory.jsp b/src/webapps/job/taskstatshistory.jsp
+new file mode 100644
+index 0000000..e2b6a38
+--- /dev/null
++++ b/src/webapps/job/taskstatshistory.jsp
+@@ -0,0 +1,106 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
++<%@ page
++  contentType="text/html; charset=UTF-8"
++  import="javax.servlet.http.*"
++  import="java.io.*"
++  import="java.util.*"
++  import="org.apache.hadoop.mapred.*"
++  import="org.apache.hadoop.fs.*"
++  import="org.apache.hadoop.util.*"
++  import="java.text.*"
++  import="org.apache.hadoop.mapred.JobHistory.*" 
++%>
++<%! private static SimpleDateFormat dateFormat = new SimpleDateFormat("d/MM HH:mm:ss") ;
++    private static final long serialVersionUID = 1L;
++%>
++
++<%
++  String jobid = request.getParameter("jobid");
++  String attemptid = request.getParameter("attemptid");
++  String taskid = request.getParameter("taskid");
++  String logFile = request.getParameter("logFile");
++  String encodedLogFileName = 
++    JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
++
++  Format decimal = new DecimalFormat();
++
++  FileSystem fs = (FileSystem) application.getAttribute("fileSys");
++  JobHistory.JobInfo job = JSPUtil.getJobInfo(request, fs);
++
++  JobHistory.Task task = job.getAllTasks().get(taskid);
++  JobHistory.TaskAttempt attempt = task.getTaskAttempts().get(attemptid);
++
++  Counters counters = 
++    Counters.fromEscapedCompactString(attempt.get(Keys.COUNTERS));
++%>
++
++<html>
++  <head>
++    <title>Counters for <%=attemptid%></title>
++  </head>
++<body>
++<h1>Counters for <%=attemptid%></h1>
++
++<hr>
++
++<%
++  if (counters == null) {
++%>
++    <h3>No counter information found for this attempt</h3>
++<%
++  } else {    
++%>
++    <table>
++<%
++      for (String groupName : counters.getGroupNames()) {
++        Counters.Group group = counters.getGroup(groupName);
++        String displayGroupName = group.getDisplayName();
++%>
++        <tr>
++          <td colspan="3"><br/><b><%=displayGroupName%></b></td>
++        </tr>
++<%
++        Iterator<Counters.Counter> ctrItr = group.iterator();
++        while(ctrItr.hasNext()) {
++          Counters.Counter counter = ctrItr.next();
++          String displayCounterName = counter.getDisplayName();
++          long value = counter.getCounter();
++%>
++          <tr>
++            <td width="50"></td>
++            <td><%=displayCounterName%></td>
++            <td align="right"><%=decimal.format(value)%></td>
++          </tr>
++<%
++        }
++      }
++%>
++    </table>
++<%
++  }
++%>
++
++<hr>
++<a href="jobdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>">Go back to the job</a><br>
++<a href="jobtracker.jsp">Go back to JobTracker</a><br>
++<%
++out.println(ServletUtil.htmlFooter());
++%>
+-- 
+1.7.0.4
+

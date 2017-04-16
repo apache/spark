@@ -1,0 +1,159 @@
+<html>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+  <head>
+    <title>org.apache.hadoop.metrics</title>
+  </head>
+<body>
+This package defines an API for reporting performance metric information.
+<p/>
+The API is abstract so that it can be implemented on top of
+a variety of metrics client libraries.  The choice of 
+client library is a configuration option, and different 
+modules within the same application can use
+different metrics implementation libraries.
+<p/>
+Sub-packages:
+<dl>
+    <dt><code>org.apache.hadoop.metrics.spi</code></dt>
+    <dd>The abstract Server Provider Interface package. Those wishing to
+    integrate the metrics API with a particular metrics client library should 
+    extend this package.</dd>
+    
+    <dt><code>org.apache.hadoop.metrics.file</code></dt>
+    <dd>An implementation package which writes the metric data to 
+    a file, or sends it to the standard output stream.</dd>
+ 
+    <dt> <code>org.apache.hadoop.metrics.ganglia</code></dt>
+    <dd>An implementation package which sends metric data to 
+    <a href="http://ganglia.sourceforge.net/">Ganglia</a>.</dd>
+</dl>
+
+<h3>Introduction to the Metrics API</h3>
+
+Here is a simple example of how to use this package to report a single
+metric value:
+<pre>
+    private ContextFactory contextFactory = ContextFactory.getFactory();
+    
+    void reportMyMetric(float myMetric) {
+        MetricsContext myContext = contextFactory.getContext("myContext");
+        MetricsRecord myRecord = myContext.getRecord("myRecord");
+        myRecord.setMetric("myMetric", myMetric);
+        myRecord.update();
+    }
+</pre>
+  
+In this example there are three names:
+<dl>
+  <dt><i>myContext</i></dt>
+  <dd>The context name will typically identify either the application, or else a
+  module within an application or library.</dd>
+  
+  <dt><i>myRecord</i></dt>
+  <dd>The record name generally identifies some entity for which a set of
+  metrics are to be reported.  For example, you could have a record named 
+  "cacheStats" for reporting a number of statistics relating to the usage of
+  some cache in your application.</dd>
+  
+  <dt><i>myMetric</i></dt>
+  <dd>This identifies a particular metric.  For example, you might have metrics
+  named "cache_hits" and "cache_misses".
+  </dd>
+</dl>
+
+<h3>Tags</h3>
+
+In some cases it is useful to have multiple records with the same name. For 
+example, suppose that you want to report statistics about each disk on a computer. 
+In this case, the record name would be something like "diskStats", but you also
+need to identify the disk which is done by adding a <i>tag</i> to the record.
+The code could look something like this:
+<pre>
+    private MetricsRecord diskStats =
+            contextFactory.getContext("myContext").getRecord("diskStats");
+            
+    void reportDiskMetrics(String diskName, float diskBusy, float diskUsed) {
+        diskStats.setTag("diskName", diskName);
+        diskStats.setMetric("diskBusy", diskBusy);
+        diskStats.setMetric("diskUsed", diskUsed);
+        diskStats.update();
+    }
+</pre>
+
+<h3>Buffering and Callbacks</h3>
+
+Data is not sent immediately to the metrics system when 
+<code>MetricsRecord.update()</code> is called. Instead it is stored in an
+internal table, and the contents of the table are sent periodically.
+This can be important for two reasons:
+<ol>
+    <li>It means that a programmer is free to put calls to this API in an 
+    inner loop, since updates can be very frequent without slowing down
+    the application significantly.</li>
+    <li>Some implementations can gain efficiency by combining many metrics 
+    into a single UDP message.</li>
+</ol>
+
+The API provides a timer-based callback via the 
+<code>registerUpdater()</code> method.  The benefit of this
+versus using <code>java.util.Timer</code> is that the callbacks will be done 
+immediately before sending the data, making the data as current as possible.
+
+<h3>Configuration</h3>
+
+It is possible to programmatically examine and modify configuration data
+before creating a context, like this:
+<pre>
+    ContextFactory factory = ContextFactory.getFactory();
+    ... examine and/or modify factory attributes ...
+    MetricsContext context = factory.getContext("myContext");
+</pre>
+The factory attributes can be examined and modified using the following
+<code>ContextFactory</code>methods:
+<ul>
+    <li><code>Object getAttribute(String attributeName)</code></li>
+    <li><code>String[] getAttributeNames()</code></li>
+    <li><code>void setAttribute(String name, Object value)</code></li>
+    <li><code>void removeAttribute(attributeName)</code></li>
+</ul>
+
+<p/>
+<code>ContextFactory.getFactory()</code> initializes the factory attributes by
+reading the properties file <code>hadoop-metrics.properties</code> if it exists 
+on the class path.
+
+<p/>
+A factory attribute named:
+<pre>
+<i>contextName</i>.class
+</pre>
+should have as its value the fully qualified name of the class to be 
+instantiated by a call of the <code>CodeFactory</code> method
+<code>getContext(<i>contextName</i>)</code>.  If this factory attribute is not 
+specified, the default is to instantiate 
+<code>org.apache.hadoop.metrics.file.FileContext</code>.
+
+<p/>
+Other factory attributes are specific to a particular implementation of this 
+API and are documented elsewhere.  For example, configuration attributes for
+the file and Ganglia implementations can be found in the javadoc for 
+their respective packages.
+</body>
+</html>

@@ -1,0 +1,489 @@
+From 0a4dab2eac0ba8b6da5190bc53a9ce8e4344a336 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:41:01 -0800
+Subject: [PATCH 0039/1179] MAPREDUCE-685. Sqoop will fail with OutOfMemory on large tables using mysql
+
+Description: The default MySQL JDBC client behavior is to buffer the entire ResultSet in the client before allowing the user to use the ResultSet object. On large SELECTs, this can cause OutOfMemory exceptions, even when the client intends to close the ResultSet after reading only a few rows. The MySQL ConnManager should configure its connection to use row-at-a-time delivery of results to the client.
+Reason: bugfix / scalability improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../apache/hadoop/sqoop/manager/ConnManager.java   |    2 +
+ .../hadoop/sqoop/manager/LocalMySQLManager.java    |    1 +
+ .../apache/hadoop/sqoop/manager/MySQLManager.java  |   45 +++++-
+ .../apache/hadoop/sqoop/manager/SqlManager.java    |  186 ++++++++++++--------
+ .../hadoop/sqoop/manager/TestSqlManager.java       |   22 ++-
+ .../hadoop/sqoop/testutil/ImportJobTestCase.java   |   12 +-
+ 6 files changed, 190 insertions(+), 78 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java
+index 1cca205..951a389 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java
+@@ -67,6 +67,8 @@ public interface ConnManager {
+    * Execute a SQL statement to read the named set of columns from a table.
+    * If columns is null, all columns from the table are read. This is a local
+    * (non-parallelized) read of the table back to the current client.
++   * The client is responsible for calling ResultSet.close() when done with the
++   * returned ResultSet object.
+    */
+   ResultSet readTable(String tableName, String [] columns) throws SQLException;
+ 
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java
+index d765701..16ee134 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java
+@@ -27,6 +27,7 @@ import java.io.OutputStream;
+ import java.io.OutputStreamWriter;
+ import java.net.MalformedURLException;
+ import java.net.URL;
++import java.sql.SQLException;
+ import java.util.ArrayList;
+ 
+ import org.apache.commons.logging.Log;
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
+index 106496d..fee4dde 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
+@@ -19,6 +19,7 @@
+ package org.apache.hadoop.sqoop.manager;
+ 
+ import java.io.IOException;
++import java.sql.PreparedStatement;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.util.ArrayList;
+@@ -53,11 +54,20 @@ public class MySQLManager extends GenericJdbcManager {
+   }
+ 
+   @Override
++  protected String getColNamesQuery(String tableName) {
++    // Use mysql-specific hints and LIMIT to return fast
++    return "SELECT t.* FROM " + tableName + " AS t LIMIT 1";
++  }
++
++  @Override
+   public String[] listDatabases() {
+     // TODO(aaron): Add an automated unit test for this.
+ 
+-    ResultSet results = execute("SHOW DATABASES");
+-    if (null == results) {
++    ResultSet results;
++    try {
++      results = execute("SHOW DATABASES");
++    } catch (SQLException sqlE) {
++      LOG.error("Error executing statement: " + sqlE.toString());
+       return null;
+     }
+ 
+@@ -72,6 +82,12 @@ public class MySQLManager extends GenericJdbcManager {
+     } catch (SQLException sqlException) {
+       LOG.error("Error reading from database: " + sqlException.toString());
+       return null;
++    } finally {
++      try {
++        results.close();
++      } catch (SQLException sqlE) {
++        LOG.warn("Exception closing ResultSet: " + sqlE.toString());
++      }
+     }
+   }
+ 
+@@ -98,5 +114,30 @@ public class MySQLManager extends GenericJdbcManager {
+     // Then run the normal importTable() method.
+     super.importTable(tableName, jarFile, conf);
+   }
++
++  /**
++   * Executes an arbitrary SQL statement. Sets mysql-specific parameter
++   * to ensure the entire table is not buffered in RAM before reading
++   * any rows. A consequence of this is that every ResultSet returned
++   * by this method *MUST* be close()'d, or read to exhaustion before
++   * another query can be executed from this ConnManager instance.
++   *
++   * @param stmt The SQL statement to execute
++   * @return A ResultSet encapsulating the results or null on error
++   */
++  protected ResultSet execute(String stmt, Object... args) throws SQLException {
++    PreparedStatement statement = null;
++    statement = this.getConnection().prepareStatement(stmt,
++        ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
++    statement.setFetchSize(Integer.MIN_VALUE); // MySQL: read row-at-a-time.
++    if (null != args) {
++      for (int i = 0; i < args.length; i++) {
++        statement.setObject(i + 1, args[i]);
++      }
++    }
++
++    LOG.info("Executing SQL statement: " + stmt);
++    return statement.executeQuery();
++  }
+ }
+ 
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
+index b53d77c..2610596 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
+@@ -44,9 +44,6 @@ import org.apache.hadoop.conf.Configuration;
+  * ConnManager implementation for generic SQL-compliant database.
+  * This is an abstract class; it requires a database-specific
+  * ConnManager implementation to actually create the connection.
+- *
+- * 
+- *
+  */
+ public abstract class SqlManager implements ConnManager {
+ 
+@@ -63,12 +60,23 @@ public abstract class SqlManager implements ConnManager {
+     this.options = opts;
+   }
+ 
++  /**
++   * @return the SQL query to use in getColumnNames() in case this logic must
++   * be tuned per-database, but the main extraction loop is still inheritable.
++   */
++  protected String getColNamesQuery(String tableName) {
++    return "SELECT t.* FROM " + tableName + " AS t";
++  }
++
+   @Override
+   public String[] getColumnNames(String tableName) {
+-    String stmt = "SELECT t.* FROM " + tableName + " AS t WHERE 1 = 1";
++    String stmt = getColNamesQuery(tableName);
+ 
+-    ResultSet results = execute(stmt);
+-    if (null == results) {
++    ResultSet results;
++    try {
++      results = execute(stmt);
++    } catch (SQLException sqlE) {
++      LOG.error("Error executing statement: " + sqlE.toString());
+       return null;
+     }
+ 
+@@ -87,15 +95,32 @@ public abstract class SqlManager implements ConnManager {
+     } catch (SQLException sqlException) {
+       LOG.error("Error reading from database: " + sqlException.toString());
+       return null;
++    } finally {
++      try {
++        results.close();
++      } catch (SQLException sqlE) {
++        LOG.warn("SQLException closing ResultSet: " + sqlE.toString());
++      }
+     }
+   }
+ 
++  /**
++   * @return the SQL query to use in getColumnTypes() in case this logic must
++   * be tuned per-database, but the main extraction loop is still inheritable.
++   */
++  protected String getColTypesQuery(String tableName) {
++    return getColNamesQuery(tableName);
++  }
++  
+   @Override
+   public Map<String, Integer> getColumnTypes(String tableName) {
+-    String stmt = "SELECT t.* FROM " + tableName + " AS t WHERE 1 = 1";
++    String stmt = getColTypesQuery(tableName);
+ 
+-    ResultSet results = execute(stmt);
+-    if (null == results) {
++    ResultSet results;
++    try {
++      results = execute(stmt);
++    } catch (SQLException sqlE) {
++      LOG.error("Error executing statement: " + sqlE.toString());
+       return null;
+     }
+ 
+@@ -118,6 +143,12 @@ public abstract class SqlManager implements ConnManager {
+     } catch (SQLException sqlException) {
+       LOG.error("Error reading from database: " + sqlException.toString());
+       return null;
++    } finally {
++      try {
++        results.close();
++      } catch (SQLException sqlE) { 
++        LOG.warn("SQLException closing ResultSet: " + sqlE.toString());
++      }
+     }
+   }
+ 
+@@ -157,28 +188,38 @@ public abstract class SqlManager implements ConnManager {
+     ResultSet results = null;
+     String [] tableTypes = {"TABLE"};
+     try {
+-      DatabaseMetaData metaData = this.getConnection().getMetaData();
+-      results = metaData.getTables(null, null, null, tableTypes);
+-    } catch (SQLException sqlException) {
+-      LOG.error("Error reading database metadata: " + sqlException.toString());
+-      return null;
+-    }
+-
+-    if (null == results) {
+-      return null;
+-    }
++      try {
++        DatabaseMetaData metaData = this.getConnection().getMetaData();
++        results = metaData.getTables(null, null, null, tableTypes);
++      } catch (SQLException sqlException) {
++        LOG.error("Error reading database metadata: " + sqlException.toString());
++        return null;
++      }
+ 
+-    try {
+-      ArrayList<String> tables = new ArrayList<String>();
+-      while (results.next()) {
+-        String tableName = results.getString("TABLE_NAME");
+-        tables.add(tableName);
++      if (null == results) {
++        return null;
+       }
+ 
+-      return tables.toArray(new String[0]);
+-    } catch (SQLException sqlException) {
+-      LOG.error("Error reading from database: " + sqlException.toString());
+-      return null;
++      try {
++        ArrayList<String> tables = new ArrayList<String>();
++        while (results.next()) {
++          String tableName = results.getString("TABLE_NAME");
++          tables.add(tableName);
++        }
++
++        return tables.toArray(new String[0]);
++      } catch (SQLException sqlException) {
++        LOG.error("Error reading from database: " + sqlException.toString());
++        return null;
++      }
++    } finally {
++      if (null != results) {
++        try {
++          results.close();
++        } catch (SQLException sqlE) {
++          LOG.warn("Exception closing ResultSet: " + sqlE.toString());
++        }
++      }
+     }
+   }
+ 
+@@ -190,16 +231,20 @@ public abstract class SqlManager implements ConnManager {
+       if (null == results) {
+         return null;
+       }
+-
+-      if (results.next()) {
+-        return results.getString("COLUMN_NAME");
++      
++      try {
++        if (results.next()) {
++          return results.getString("COLUMN_NAME");
++        } else {
++          return null;
++        }
++      } finally {
++        results.close();
+       }
+     } catch (SQLException sqlException) {
+       LOG.error("Error reading primary key metadata: " + sqlException.toString());
+       return null;
+     }
+-
+-    return null;
+   }
+ 
+   /**
+@@ -234,31 +279,18 @@ public abstract class SqlManager implements ConnManager {
+    * @param stmt The SQL statement to execute
+    * @return A ResultSet encapsulating the results or null on error
+    */
+-  protected ResultSet execute(String stmt, Object... args) {
+-    if (null == stmt) {
+-      LOG.error("Null statement sent to SqlManager.execute()");
+-      return null;
+-    }
+-
++  protected ResultSet execute(String stmt, Object... args) throws SQLException {
+     PreparedStatement statement = null;
+-    try {
+-      statement = this.getConnection().prepareStatement(stmt,
+-          ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+-      if (null != args) {
+-        for (int i = 0; i < args.length; i++) {
+-          statement.setObject(i + 1, args[i]);
+-        }
++    statement = this.getConnection().prepareStatement(stmt,
++        ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
++    if (null != args) {
++      for (int i = 0; i < args.length; i++) {
++        statement.setObject(i + 1, args[i]);
+       }
+-
+-      LOG.debug("Executing SQL statement: " + stmt);
+-      return statement.executeQuery();
+-    } catch (SQLException sqlException) {
+-      LOG.error("Error returned by SQL database: " + sqlException.toString());
+-      return null;
+     }
+ 
+-    // TODO(aaron): Is calling ResultSet.close() sufficient?
+-    // Or must statement.close() be called too?
++    LOG.info("Executing SQL statement: " + stmt);
++    return statement.executeQuery();
+   }
+ 
+   /**
+@@ -319,28 +351,38 @@ public abstract class SqlManager implements ConnManager {
+    */
+   public void execAndPrint(String s) {
+     System.out.println("Executing statement: " + s);
+-    ResultSet results = execute(s);
+-    if (null == results) {
+-      LOG.info("Got null results back!");
++    ResultSet results;
++    try {
++      results = execute(s);
++    } catch (SQLException sqlE) {
++      LOG.error("Error executing statement: " + sqlE.toString());
+       return;
+     }
+ 
+     try {
+-      int cols = results.getMetaData().getColumnCount();
+-      System.out.println("Got " + cols + " columns back");
+-      if (cols > 0) {
+-        System.out.println("Schema: " + results.getMetaData().getSchemaName(1));
+-        System.out.println("Table: " + results.getMetaData().getTableName(1));
++      try {
++        int cols = results.getMetaData().getColumnCount();
++        System.out.println("Got " + cols + " columns back");
++        if (cols > 0) {
++          System.out.println("Schema: " + results.getMetaData().getSchemaName(1));
++          System.out.println("Table: " + results.getMetaData().getTableName(1));
++        }
++      } catch (SQLException sqlE) {
++        LOG.error("SQLException reading result metadata: " + sqlE.toString());
+       }
+-    } catch (SQLException sqlE) {
+-      LOG.error("SQLException reading result metadata: " + sqlE.toString());
+-    }
+ 
+-    try {
+-      new ResultSetPrinter().printResultSet(System.out, results);
+-    } catch (IOException ioe) {
+-      LOG.error("IOException writing results to stdout: " + ioe.toString());
+-      return;
++      try {
++        new ResultSetPrinter().printResultSet(System.out, results);
++      } catch (IOException ioe) {
++        LOG.error("IOException writing results to stdout: " + ioe.toString());
++        return;
++      }
++    } finally {
++      try {
++        results.close();
++      } catch (SQLException sqlE) {
++        LOG.warn("SQLException closing ResultSet: " + sqlE.toString());
++      }
+     }
+   }
+ 
+@@ -368,8 +410,8 @@ public abstract class SqlManager implements ConnManager {
+       connection = DriverManager.getConnection(options.getConnectString(), username, password);
+     }
+ 
+-    connection.setAutoCommit(false);
+-    connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
++    // We only use this for metadata queries. Loosest semantics are okay.
++    connection.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+ 
+     return connection;
+   }
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/TestSqlManager.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/TestSqlManager.java
+index a4fee36..2c9d6c8 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/TestSqlManager.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/TestSqlManager.java
+@@ -130,8 +130,9 @@ public class TestSqlManager extends TestCase {
+ 
+   @Test
+   public void testReadTable() {
++    ResultSet results = null;
+     try {
+-      ResultSet results = manager.readTable(HsqldbTestServer.getTableName(),
++      results = manager.readTable(HsqldbTestServer.getTableName(),
+           HsqldbTestServer.getFieldNames());
+ 
+       assertNotNull("ResultSet from readTable() is null!", results);
+@@ -161,17 +162,34 @@ public class TestSqlManager extends TestCase {
+       assertEquals("Expected right sum of 20", EXPECTED_COL2_SUM, sumCol2);
+     } catch (SQLException sqlException) {
+       fail("SQL Exception: " + sqlException.toString());
++    } finally {
++      if (null != results) {
++        try {
++          results.close();
++        } catch (SQLException sqlE) {
++          fail("SQL Exception in ResultSet.close(): " + sqlE.toString());
++        }
++      }
+     }
+   }
+ 
+   @Test
+   public void testReadMissingTable() {
++    ResultSet results = null;
+     try {
+       String [] colNames = { "*" };
+-      ResultSet results = manager.readTable(MISSING_TABLE, colNames);
++      results = manager.readTable(MISSING_TABLE, colNames);
+       assertNull("Expected null resultset from readTable(MISSING_TABLE)", results);
+     } catch (SQLException sqlException) {
+       // we actually expect this. pass.
++    } finally {
++      if (null != results) {
++        try {
++          results.close();
++        } catch (SQLException sqlE) {
++          fail("SQL Exception in ResultSet.close(): " + sqlE.toString());
++        }
++      }
+     }
+   }
+ 
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java
+index 4c9b80f..de07f88 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java
+@@ -239,8 +239,9 @@ public class ImportJobTestCase extends TestCase {
+    *
+    */
+   protected void verifyReadback(int colNum, String expectedVal) {
++    ResultSet results = null;
+     try {
+-      ResultSet results = getManager().readTable(getTableName(), getColNames());
++      results = getManager().readTable(getTableName(), getColNames());
+       assertNotNull("Null results from readTable()!", results);
+       assertTrue("Expected at least one row returned", results.next());
+       String resultVal = results.getString(colNum);
+@@ -250,9 +251,16 @@ public class ImportJobTestCase extends TestCase {
+ 
+       assertEquals("Error reading inserted value back from db", expectedVal, resultVal);
+       assertFalse("Expected at most one row returned", results.next());
+-      results.close();
+     } catch (SQLException sqlE) {
+       fail("Got SQLException: " + sqlE.toString());
++    } finally {
++      if (null != results) {
++        try {
++          results.close();
++        } catch (SQLException sqlE) {
++          fail("Got SQLException in resultset.close(): " + sqlE.toString());
++        }
++      }
+     }
+   }
+ 
+-- 
+1.7.0.4
+

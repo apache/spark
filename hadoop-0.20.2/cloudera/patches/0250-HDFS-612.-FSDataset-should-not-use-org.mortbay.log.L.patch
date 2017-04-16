@@ -1,0 +1,62 @@
+From 90f5a4bf77d17adcabb834a3cc2e02becb9f012d Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 17 May 2010 18:53:50 -0700
+Subject: [PATCH 0250/1179] HDFS-612. FSDataset should not use org.mortbay.log.Log.
+
+Description: Cleans up HDFS-547 logging.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-1079
+---
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index 6a324a4..3fbdc33 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -50,7 +50,6 @@ import org.apache.hadoop.util.DataChecksum;
+ import org.apache.hadoop.util.DiskChecker;
+ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+ import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
+-import org.mortbay.log.Log;
+ 
+ /**************************************************
+  * FSDataset manages a set of data blocks.  Each block
+@@ -601,10 +600,11 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+           }
+         }
+         volumes = fsvs; // replace array of volumes
++        DataNode.LOG.info("Completed FSVolumeSet.checkDirs. Removed "
++            + removed_vols.size() + " volumes. List of current volumes: "
++            + this);
+       }
+-      Log.info("Completed FSVolumeSet.checkDirs. Removed=" + removed_size + 
+-          "volumes. List of current volumes: " +   toString());
+-      
++
+       return removed_vols;
+     }
+       
+@@ -1305,7 +1305,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     try {
+       f = validateBlockFile(b);
+     } catch(IOException e) {
+-      Log.warn("Block " + b + " is not valid:",e);
++      DataNode.LOG.warn("Block " + b + " is not valid:",e);
+     }
+     
+     return f != null;
+@@ -1499,7 +1499,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       }
+     } // end of sync
+     mlsec = System.currentTimeMillis() - mlsec;
+-    DataNode.LOG.warn(">>>>>>>>>>>>Removed " + removed_blocks + " out of " + total_blocks +
++    DataNode.LOG.warn("Removed " + removed_blocks + " out of " + total_blocks +
+         "(took " + mlsec + " millisecs)");
+ 
+     // report the error
+-- 
+1.7.0.4
+

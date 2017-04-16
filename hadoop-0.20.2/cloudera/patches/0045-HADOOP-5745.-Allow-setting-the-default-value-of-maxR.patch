@@ -1,0 +1,91 @@
+From 78cb9f21a3ddf04f8cef9e37a94f657448d0d111 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:43:51 -0800
+Subject: [PATCH 0045/1179] HADOOP-5745. Allow setting the default value of maxRunningJobs for all pools
+
+Description: The &lt;pool&gt; element allows setting the maxRunningJobs for that pool. It wold be nice to be able to set a default value for all pools.
+
+<p>In out configuration, pools are autocreated.. every new uesre gets his own pool. We would like to allow each user to be able to run a max of 5 jobs at a time. For the etl pool, this limit will be set to a greater value,</p>
+Reason: Improved configuration flexibility
+Author: dhruba borthakur
+Ref: UNKNOWN
+---
+ .../java/org/apache/hadoop/mapred/PoolManager.java |    9 ++++++++-
+ .../apache/hadoop/mapred/TestFairScheduler.java    |    6 +++++-
+ 2 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+index d432479..08bb3e4 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+@@ -69,6 +69,7 @@ public class PoolManager {
+   private Map<String, Integer> poolMaxJobs = new HashMap<String, Integer>();
+   private Map<String, Integer> userMaxJobs = new HashMap<String, Integer>();
+   private int userMaxJobsDefault = Integer.MAX_VALUE;
++  private int poolMaxJobsDefault = Integer.MAX_VALUE;
+ 
+   private String allocFile; // Path to XML file containing allocations
+   private String poolNameProperty; // Jobconf property to use for determining a
+@@ -167,6 +168,7 @@ public class PoolManager {
+     Map<String, Integer> userMaxJobs = new HashMap<String, Integer>();
+     Map<String, Double> poolWeights = new HashMap<String, Double>();
+     int userMaxJobsDefault = Integer.MAX_VALUE;
++    int poolMaxJobsDefault = Integer.MAX_VALUE;
+     
+     // Remember all pool names so we can display them on web UI, etc.
+     List<String> poolNamesInAllocFile = new ArrayList<String>();
+@@ -232,6 +234,10 @@ public class PoolManager {
+         String text = ((Text)element.getFirstChild()).getData().trim();
+         int val = Integer.parseInt(text);
+         userMaxJobsDefault = val;
++      } else if ("poolMaxJobsDefault".equals(element.getTagName())) {
++        String text = ((Text)element.getFirstChild()).getData().trim();
++        int val = Integer.parseInt(text);
++        poolMaxJobsDefault = val;
+       } else {
+         LOG.warn("Bad element in allocations file: " + element.getTagName());
+       }
+@@ -245,6 +251,7 @@ public class PoolManager {
+       this.poolMaxJobs = poolMaxJobs;
+       this.userMaxJobs = userMaxJobs;
+       this.userMaxJobsDefault = userMaxJobsDefault;
++      this.poolMaxJobsDefault = poolMaxJobsDefault;
+       this.poolWeights = poolWeights;
+       for (String name: poolNamesInAllocFile) {
+         getPool(name);
+@@ -327,7 +334,7 @@ public class PoolManager {
+     if (poolMaxJobs.containsKey(pool)) {
+       return poolMaxJobs.get(pool);
+     } else {
+-      return Integer.MAX_VALUE;
++      return poolMaxJobsDefault;
+     }
+   }
+ 
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index 19aa25e..26afeb2 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -315,6 +315,8 @@ public class TestFairScheduler extends TestCase {
+     out.println("<pool name=\"poolD\">");
+     out.println("<maxRunningJobs>3</maxRunningJobs>");
+     out.println("</pool>");
++    // Set default limit of jobs per pool to 15
++    out.println("<poolMaxJobsDefault>15</poolMaxJobsDefault>");
+     // Set default limit of jobs per user to 5
+     out.println("<userMaxJobsDefault>5</userMaxJobsDefault>");
+     // Give user1 a limit of 10 jobs
+@@ -340,7 +342,9 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(0, poolManager.getAllocation("poolC", TaskType.REDUCE));
+     assertEquals(0, poolManager.getAllocation("poolD", TaskType.MAP));
+     assertEquals(0, poolManager.getAllocation("poolD", TaskType.REDUCE));
+-    assertEquals(Integer.MAX_VALUE, poolManager.getPoolMaxJobs("poolA"));
++    assertEquals(15, poolManager.getPoolMaxJobs("poolA"));
++    assertEquals(15, poolManager.getPoolMaxJobs("poolB"));
++    assertEquals(15, poolManager.getPoolMaxJobs("poolC"));
+     assertEquals(3, poolManager.getPoolMaxJobs("poolD"));
+     assertEquals(10, poolManager.getUserMaxJobs("user1"));
+     assertEquals(5, poolManager.getUserMaxJobs("user2"));
+-- 
+1.7.0.4
+

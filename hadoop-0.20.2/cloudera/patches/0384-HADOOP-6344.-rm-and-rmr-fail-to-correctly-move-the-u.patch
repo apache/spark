@@ -1,0 +1,29 @@
+From 3bd620eff0f312008d11e29dffea2fa62457a630 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 29 Oct 2009 19:11:25 -0700
+Subject: [PATCH 0384/1179] HADOOP-6344. rm and rmr fail to correctly move the user's files to the trash prior to deleting when they are over quota.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12423634/HDFS-740-for-Y20.patch
+Author: Jakob Homan
+Ref: YDH
+---
+ src/core/org/apache/hadoop/fs/Trash.java |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/Trash.java b/src/core/org/apache/hadoop/fs/Trash.java
+index 641b51c..f4f93f8 100644
+--- a/src/core/org/apache/hadoop/fs/Trash.java
++++ b/src/core/org/apache/hadoop/fs/Trash.java
+@@ -123,7 +123,8 @@ public class Trash extends Configured {
+         }
+       } catch (IOException e) {
+         LOG.warn("Can't create trash directory: "+baseTrashPath);
+-        return false;
++        cause = e;
++        break;
+       }
+       try {
+         //
+-- 
+1.7.0.4
+

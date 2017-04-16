@@ -1,0 +1,230 @@
+From 5d44075f3ac224bf9a259b0731035734d9c152a2 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 3 Feb 2011 09:23:55 -0800
+Subject: [PATCH 0861/1179] Ammend MAPREDUCE-2234. TaskTracker should fail on startup if log dir isn't writable
+
+Reapply after MAPREDUCE-2178 backport.
+
+Reason: Easier diagnosis of misconfigured TT permissions
+Author: Todd Lipcon
+Ref: CDH-2500
+---
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   72 +++++++++++++-------
+ .../hadoop/mapred/TestTaskTrackerDirectories.java  |   23 ++++---
+ 2 files changed, 60 insertions(+), 35 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index c1195fd..4319326 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -143,6 +143,9 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+ 
+   static enum State {NORMAL, STALE, INTERRUPTED, DENIED}
+ 
++  static final FsPermission LOCAL_DIR_PERMISSION =
++    FsPermission.createImmutable((short) 0755);
++
+   static{
+     Configuration.addDefaultResource("mapred-default.xml");
+     Configuration.addDefaultResource("mapred-site.xml");
+@@ -202,7 +205,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   
+   // The filesystem where job files are stored
+   FileSystem systemFS = null;
+-  private FileSystem localFs = null;
++  private LocalFileSystem localFs = null;
+   private final HttpServer server;
+     
+   volatile boolean shuttingDown = false;
+@@ -626,6 +629,39 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     }
+   }
+ 
++  void initializeDirectories() throws IOException {
++    localFs = FileSystem.getLocal(fConf);
++    checkLocalDirs(localFs, localdirs = this.fConf.getLocalDirs());
++    deleteUserDirectories(fConf);
++    asyncDiskService = new MRAsyncDiskService(fConf);
++    asyncDiskService.cleanupAllVolumes();
++
++    final FsPermission ttdir = FsPermission.createImmutable((short) 0755);
++    for (String s : localdirs) {
++      localFs.mkdirs(new Path(s, SUBDIR), ttdir);
++    }
++    fConf.deleteLocalFiles(TT_PRIVATE_DIR);
++    final FsPermission priv = FsPermission.createImmutable((short) 0700);
++    for (String s : localdirs) {
++      localFs.mkdirs(new Path(s, TT_PRIVATE_DIR), priv);
++    }
++    fConf.deleteLocalFiles(TT_LOG_TMP_DIR);
++    final FsPermission pub = FsPermission.createImmutable((short) 0755);
++    for (String s : localdirs) {
++      localFs.mkdirs(new Path(s, TT_LOG_TMP_DIR), pub);
++    }
++
++    // Set up the user log directory
++    File taskLog = TaskLog.getUserLogDir();
++    if (!taskLog.isDirectory() && !taskLog.mkdirs()) {
++      LOG.warn("Unable to create taskLog directory : " + taskLog.getPath());
++    } else {
++      localFs.setPermission(new Path(taskLog.getCanonicalPath()),
++                            new FsPermission((short)0755));
++    }
++    DiskChecker.checkDir(TaskLog.getUserLogDir());
++  }
++
+   public static final String TT_USER_NAME = "mapreduce.tasktracker.kerberos.principal";
+   public static final String TT_KEYTAB_FILE =
+     "mapreduce.tasktracker.keytab.file";  
+@@ -640,7 +676,6 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     LOG.info("Starting tasktracker with owner as "
+         + getMROwner().getShortUserName());
+ 
+-    localFs = FileSystem.getLocal(fConf);
+     if (fConf.get("slave.host.name") != null) {
+       this.localHostname = fConf.get("slave.host.name");
+     }
+@@ -653,25 +688,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+  
+     // Check local disk, start async disk service, and clean up all 
+     // local directories.
+-    checkLocalDirs(localdirs = this.fConf.getLocalDirs());
+-    deleteUserDirectories(fConf);
+-    asyncDiskService = new MRAsyncDiskService(fConf);
+-    asyncDiskService.cleanupAllVolumes();
+-
+-    final FsPermission ttdir = FsPermission.createImmutable((short) 0755);
+-    for (String s : localdirs) {
+-      localFs.mkdirs(new Path(s, SUBDIR), ttdir);
+-    }
+-    fConf.deleteLocalFiles(TT_PRIVATE_DIR);
+-    final FsPermission priv = FsPermission.createImmutable((short) 0700);
+-    for (String s : localdirs) {
+-      localFs.mkdirs(new Path(s, TT_PRIVATE_DIR), priv);
+-    }
+-    fConf.deleteLocalFiles(TT_LOG_TMP_DIR);
+-    final FsPermission pub = FsPermission.createImmutable((short) 0755);
+-    for (String s : localdirs) {
+-      localFs.mkdirs(new Path(s, TT_LOG_TMP_DIR), pub);
+-    }
++    initializeDirectories();
+ 
+     // Clear out state tables
+     this.tasks.clear();
+@@ -1643,7 +1660,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+       localMinSpaceStart = minSpaceStart;
+     }
+     if (askForNewTask) {
+-      checkLocalDirs(fConf.getLocalDirs());
++      checkLocalDirs(localFs, fConf.getLocalDirs());
+       askForNewTask = enoughFreeSpace(localMinSpaceStart);
+       long freeDiskSpace = getFreeSpace();
+       long totVmem = getTotalVirtualMemoryOnTT();
+@@ -3373,16 +3390,19 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+    * @param localDirs where the new TaskTracker should keep its local files.
+    * @throws DiskErrorException if all local directories are not writable
+    */
+-  private static void checkLocalDirs(String[] localDirs) 
++  private static void checkLocalDirs(LocalFileSystem localFs, 
++                                     String[] localDirs) 
+     throws DiskErrorException {
+     boolean writable = false;
+         
+     if (localDirs != null) {
+       for (int i = 0; i < localDirs.length; i++) {
+         try {
+-          DiskChecker.checkDir(new File(localDirs[i]));
++          DiskChecker.checkDir(localFs, new Path(localDirs[i]),
++                               LOCAL_DIR_PERMISSION);
++
+           writable = true;
+-        } catch(DiskErrorException e) {
++        } catch(IOException e) {
+           LOG.warn("Task Tracker local " + e.getMessage());
+         }
+       }
+@@ -3698,7 +3718,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+ 
+   // only used by tests
+   void setLocalFileSystem(FileSystem fs){
+-    localFs = fs;
++    localFs = (LocalFileSystem)fs;
+   }
+ 
+   int getMaxCurrentMapTasks() {
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java
+index e1596c4..f932416 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java
+@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.RawLocalFileSystem;
+ import org.junit.Test;
+ import org.junit.Before;
++import org.mockito.Mockito;
+ 
+ /**
+  * Tests for the correct behavior of the TaskTracker starting up with
+@@ -56,7 +57,7 @@ public class TestTaskTrackerDirectories {
+     };
+     
+     conf.setStrings("mapred.local.dir", dirs);
+-    setupTaskController(conf);
++    setupTaskTracker(conf);
+ 
+     for (String dir : dirs) {
+       checkDir(dir);
+@@ -74,7 +75,7 @@ public class TestTaskTrackerDirectories {
+     FileUtil.chmod(dirs[0], "000");
+ 
+     conf.setStrings("mapred.local.dir", dirs);
+-    setupTaskController(conf);
++    setupTaskTracker(conf);
+     
+     for (String dir : dirs) {
+       checkDir(dir);
+@@ -86,7 +87,7 @@ public class TestTaskTrackerDirectories {
+     File dir = TaskLog.getUserLogDir();
+     FileUtil.fullyDelete(dir);
+     
+-    setupTaskController(new Configuration());
++    setupTaskTracker(new Configuration());
+     
+     checkDir(dir.getAbsolutePath());
+   }
+@@ -103,7 +104,7 @@ public class TestTaskTrackerDirectories {
+         dir.createNewFile());
+ 
+     try {
+-      setupTaskController(new Configuration());
++      setupTaskTracker(new Configuration());
+       fail("Didn't throw!");
+     } catch (IOException ioe) {
+       System.err.println("Got expected exception");
+@@ -118,15 +119,19 @@ public class TestTaskTrackerDirectories {
+     dir.mkdirs();
+     FileUtil.chmod(dir.getAbsolutePath(), "000");
+     
+-    setupTaskController(new Configuration());
++    setupTaskTracker(new Configuration());
+     
+     checkDir(dir.getAbsolutePath());
+   }
+   
+-  private void setupTaskController(Configuration conf) throws IOException {
+-    TaskController tc = new DefaultTaskController();
+-    tc.setConf(conf);
+-    tc.setup(new LocalDirAllocator("mapred.local.dir"));
++  private void setupTaskTracker(Configuration conf) throws Exception {
++    JobConf ttConf = new JobConf(conf);
++    // Doesn't matter what we give here - we won't actually
++    // connect to it.
++    TaskTracker tt = new TaskTracker();
++    tt.setConf(ttConf);
++    tt.setTaskController(Mockito.mock(TaskController.class));
++    tt.initializeDirectories();
+   }
+ 
+   private void checkDir(String dir) throws IOException {
+-- 
+1.7.0.4
+

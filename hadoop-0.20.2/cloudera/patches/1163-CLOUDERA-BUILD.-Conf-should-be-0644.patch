@@ -1,0 +1,31 @@
+From 3542e7fecac1649dc3e9ca85c16d38b9b50b0a1c Mon Sep 17 00:00:00 2001
+From: Peter Linnell <plinnell@cloudera.com>
+Date: Thu, 5 Apr 2012 18:42:14 -0700
+Subject: [PATCH 1163/1179] CLOUDERA-BUILD. Conf should be 0644.
+
+Author: Peter Linnell
+Reason: Bug
+Ref: CDH-4256
+---
+ cloudera/install_hadoop.sh |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index d1bef42..54adfd8 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -194,8 +194,10 @@ ln -s /var/run/hadoop-$APACHE_BRANCH $LIB_DIR/pids
+ # Make the pseudo-distributed config
+ for conf in conf.pseudo ; do
+   install -d -m 0755 $ETC_DIR/$conf
+-  # Install the default configurations
++  # Install the default configurations 
+   (cd ${BUILD_DIR}/conf && tar -cf - .) | (cd $ETC_DIR/$conf && tar -xf -)
++  chmod -R 0644 $ETC_DIR/$conf/*
++
+   # Overlay the -site files
+   (cd ${BUILD_DIR}/../../example-confs/$conf && tar -cf - .) | (cd $ETC_DIR/$conf && tar -xf -)
+ done
+-- 
+1.7.0.4
+

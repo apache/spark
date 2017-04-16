@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<cheatsheet title="Set default Hadoop path tutorial">
+	<intro>
+		<description>
+			This tutorial informs you how to set the default Hadoop
+			directory for the plugin.
+		</description>
+	</intro>
+	<item title="Open Plugin Preferences window">
+		<description>
+			To set the default Hadoop directory, open the plugin
+			preferences from the menu option
+			<b>Window > Preferences</b>.  <br />
+			Go to the <b>Hadoop Home Directory</b>
+			preference, and enter the installation directory there.
+
+			Use the following embedded command to open the Preferences
+			window:
+		</description>
+
+		<action pluginId="org.eclipse.jdt.ui"
+			class="org.eclipse.ui.internal.OpenPreferencesAction" />
+	</item>
+</cheatsheet>

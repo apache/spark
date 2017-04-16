@@ -1,0 +1,3221 @@
+From 12c64dfa5a3548776a039c835c5e5c7aa844a2f5 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 25 Nov 2011 23:45:41 -0800
+Subject: [PATCH 1090/1179] MAPREDUCE-2413. TT should handle disk failures by reinitializing itself.
+ MAPREDUCE-2928. MR-2413 improvements.
+ MAPREDUCE-2957. The TT should not re-init if it has no good local dirs.
+ MAPREDUCE-2850. Add test for MAPREDUCE-2413.
+ MAPREDUCE-3395. Add mapred.disk.healthChecker.interval to mapred-default.xml.
+ MAPREDUCE-2415. Distribute the user task logs on to multiple disks.
+ MAPREDUCE-3424. MR-2415 cleanup.
+ MAPREDUCE-3015. Add local dir failure info to metrics and the web UI.
+ MAPREDUCE-3419. Don't mark exited TT threads as dead in MiniMRCluster.
+
+Author: Ravi Gummadi, Bharath Mundlapudi, Eli Collins
+Ref: CDH-3307
+---
+ src/c++/task-controller/impl/configuration.c       |   73 +++--
+ src/c++/task-controller/impl/configuration.h       |   13 +-
+ src/c++/task-controller/impl/main.c                |   60 +++--
+ src/c++/task-controller/impl/task-controller.c     |  208 +++++++++++---
+ src/c++/task-controller/impl/task-controller.h     |   17 +-
+ .../task-controller/test/test-task-controller.c    |  142 ++++++++--
+ .../hadoop/mapred/TestCapacityScheduler.java       |    4 +-
+ .../hadoop/mapred/TestCapBasedLoadManager.java     |    2 +-
+ .../apache/hadoop/mapred/TestFairScheduler.java    |    6 +-
+ .../documentation/content/xdocs/cluster_setup.xml  |    7 -
+ src/mapred/mapred-default.xml                      |   10 +
+ .../hadoop/mapred/DefaultTaskController.java       |   33 ++-
+ .../apache/hadoop/mapred/InterTrackerProtocol.java |    3 +-
+ .../org/apache/hadoop/mapred/JobTracker.java       |    5 +-
+ .../apache/hadoop/mapred/LinuxTaskController.java  |   43 ++-
+ .../org/apache/hadoop/mapred/MRConstants.java      |    6 +
+ .../org/apache/hadoop/mapred/TaskController.java   |   21 ++-
+ src/mapred/org/apache/hadoop/mapred/TaskLog.java   |   77 +++++
+ .../org/apache/hadoop/mapred/TaskRunner.java       |   10 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |  294 ++++++++++++++------
+ .../hadoop/mapred/TaskTrackerMetricsInst.java      |    1 +
+ .../apache/hadoop/mapred/TaskTrackerStatus.java    |   28 ++-
+ .../org/apache/hadoop/mapred/UserLogCleaner.java   |  109 ++++++--
+ .../TestTrackerDistributedCacheManager.java        |    8 +-
+ .../hadoop/mapred/ClusterMapReduceTestCase.java    |   29 ++-
+ .../mapred/ClusterWithLinuxTaskController.java     |   13 +-
+ .../org/apache/hadoop/mapred/MiniMRCluster.java    |    4 +-
+ .../apache/hadoop/mapred/TestClusterStatus.java    |    6 +-
+ .../org/apache/hadoop/mapred/TestDiskFailures.java |  151 ++++++++++
+ .../hadoop/mapred/TestJobQueueTaskScheduler.java   |    4 +-
+ .../org/apache/hadoop/mapred/TestJvmManager.java   |    7 +-
+ .../hadoop/mapred/TestLinuxTaskController.java     |   10 +-
+ .../org/apache/hadoop/mapred/TestNodeRefresh.java  |    1 -
+ .../hadoop/mapred/TestParallelInitialization.java  |    2 +-
+ .../hadoop/mapred/TestTaskTrackerDirectories.java  |   65 +++--
+ .../hadoop/mapred/TestTaskTrackerLocalization.java |    3 +-
+ ...ributedCacheManagerWithLinuxTaskController.java |    4 +-
+ .../apache/hadoop/mapred/TestUserLogCleanup.java   |   36 ++-
+ .../org/apache/hadoop/mapred/UtilsForTests.java    |   14 +
+ src/webapps/job/machines.jsp                       |   13 +-
+ 40 files changed, 1177 insertions(+), 365 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestDiskFailures.java
+
+diff --git a/src/c++/task-controller/impl/configuration.c b/src/c++/task-controller/impl/configuration.c
+index 0a2b7b2..d1afec8 100644
+--- a/src/c++/task-controller/impl/configuration.c
++++ b/src/c++/task-controller/impl/configuration.c
+@@ -21,7 +21,7 @@
+ 
+ #include "configuration.h"
+ #include "task-controller.h"
+-#include <assert.h>
++
+ #include <errno.h>
+ #include <unistd.h>
+ #include <stdio.h>
+@@ -64,36 +64,52 @@ void free_configurations() {
+ }
+ 
+ /**
+- * Ensure that the configuration file and all of the containing directories
+- * are only writable by root. Otherwise, an attacker can change the 
+- * configuration and potentially cause damage.
+- * returns 1 if permissions are ok
++ * Is the file/directory only writable by root.
++ * Returns 1 if true
+  */
+-int check_configuration_permissions(FILE *conf_file) {
+-  int fd = fileno(conf_file);
+-  assert(fd != -1);
+-
++static int is_only_root_writable(const char *file) {
+   struct stat file_stat;
+-  if (fstat(fd, &file_stat) != 0) {
+-    fprintf(LOGFILE, "Can't stat opened conf file - %s\n", strerror(errno));
++  if (stat(file, &file_stat) != 0) {
++    fprintf(LOGFILE, "Can't stat file %s - %s\n", file, strerror(errno));
+     return 0;
+   }
+   if (file_stat.st_uid != 0) {
+-    fprintf(LOGFILE, "File must be owned by root, but is owned by %d\n",
+-            file_stat.st_uid);
++    fprintf(LOGFILE, "File %s must be owned by root, but is owned by %d\n",
++            file, file_stat.st_uid);
+     return 0;
+   }
+   if ((file_stat.st_mode & (S_IWGRP | S_IWOTH)) != 0) {
+     fprintf(LOGFILE, 
+-	    "File must not be world or group writable, but is %03o\n",
+-	    file_stat.st_mode & (~S_IFMT));
++	    "File %s must not be world or group writable, but is %03o\n",
++	    file, file_stat.st_mode & (~S_IFMT));
+     return 0;
+   }
+   return 1;
+ }
+ 
++/**
++ * Ensure that the configuration file and all of the containing directories
++ * are only writable by root. Otherwise, an attacker can change the 
++ * configuration and potentially cause damage.
++ * returns 0 if permissions are ok
++ */
++int check_configuration_permissions(const char* file_name) {
++  // copy the input so that we can modify it with dirname
++  char* dir = strdup(file_name);
++  char* buffer = dir;
++  do {
++    if (!is_only_root_writable(dir)) {
++      free(buffer);
++      return -1;
++    }
++    dir = dirname(dir);
++  } while (strcmp(dir, "/") != 0);
++  free(buffer);
++  return 0;
++}
++
+ //function used to load the configurations present in the secure config
+-void read_config(const char* file_name, int do_permissions_check) {
++void read_config(const char* file_name) {
+   fprintf(LOGFILE, "Reading task controller config from %s\n" , file_name);
+   FILE *conf_file;
+   char *line;
+@@ -120,13 +136,6 @@ void read_config(const char* file_name, int do_permissions_check) {
+     fprintf(LOGFILE, "Invalid conf file provided : %s \n", file_name);
+     exit(INVALID_CONFIG_FILE);
+   }
+-  // verify that the conf file is owned by root and has safe permissions
+-  if (do_permissions_check && !check_configuration_permissions(conf_file)) {
+-    fprintf(LOGFILE, "Invalid permissions or ownership on conf file %s\n", file_name);
+-    fprintf(LOGFILE, "Must be owned by root and not writable by group or other\n");
+-    exit(INVALID_CONFIG_FILE);
+-  }
+-
+   while(!feof(conf_file)) {
+     line = (char *) malloc(linesize);
+     if(line == NULL) {
+@@ -236,8 +245,9 @@ void read_config(const char* file_name, int do_permissions_check) {
+ /*
+  * function used to get a configuration value.
+  * The function for the first time populates the configuration details into
+- * array, next time onwards used the populated array.
++ * array, next time onwards uses the populated array.
+  *
++ * Memory returned here should be freed using free.
+  */
+ char * get_value(const char* key) {
+   int count;
+@@ -254,8 +264,15 @@ char * get_value(const char* key) {
+  * Value delimiter is assumed to be a comma.
+  */
+ char ** get_values(const char * key) {
+-  char ** toPass = NULL;
+   char *value = get_value(key);
++  return extract_values(value);
++}
++
++/**
++ * Extracts array of values from the comma separated list of values.
++ */
++char ** extract_values(char * value) {
++  char ** toPass = NULL;
+   char *tempTok = NULL;
+   char *tempstr = NULL;
+   int size = 0;
+@@ -281,9 +298,13 @@ char ** get_values(const char * key) {
+   return toPass;
+ }
+ 
+-// free an entry set of values
++/**
++ * Free an entry set of values.
++ */
+ void free_values(char** values) {
+   if (*values != NULL) {
++    // the values were tokenized from the same malloc, so freeing the first
++    // frees the entire block.
+     free(*values);
+   }
+   if (values != NULL) {
+diff --git a/src/c++/task-controller/impl/configuration.h b/src/c++/task-controller/impl/configuration.h
+index 65702b8..9844741 100644
+--- a/src/c++/task-controller/impl/configuration.h
++++ b/src/c++/task-controller/impl/configuration.h
+@@ -16,8 +16,16 @@
+  * limitations under the License.
+  */
+ 
++/**
++ * Ensure that the configuration file and all of the containing directories
++ * are only writable by root. Otherwise, an attacker can change the 
++ * configuration and potentially cause damage.
++ * returns 0 if permissions are ok
++ */
++int check_configuration_permissions(const char* file_name);
++
+ // read the given configuration file
+-void read_config(const char* config_file, int do_permissions_check);
++void read_config(const char* config_file);
+ 
+ //method exposed to get the configurations
+ char *get_value(const char* key);
+@@ -26,6 +34,9 @@ char *get_value(const char* key);
+ //comma seperated strings.
+ char ** get_values(const char* key);
+ 
++// Extracts array of values from the comma separated list of values.
++char ** extract_values(char * value);
++
+ // free the memory returned by get_values
+ void free_values(char** values);
+ 
+diff --git a/src/c++/task-controller/impl/main.c b/src/c++/task-controller/impl/main.c
+index 27ffb73..c2fe239 100644
+--- a/src/c++/task-controller/impl/main.c
++++ b/src/c++/task-controller/impl/main.c
+@@ -36,7 +36,9 @@
+ 
+ void display_usage(FILE *stream) {
+   fprintf(stream,
+-      "Usage: task-controller user command command-args\n");
++   "Usage: task-controller user good-local-dirs command command-args\n");
++  fprintf(stream, " where good-local-dirs is a comma separated list of " \
++          "good mapred local directories.\n");
+   fprintf(stream, "Commands:\n");
+   fprintf(stream, "   initialize job:       %2d jobid credentials cmd args\n",
+ 	  INITIALIZE_JOB);
+@@ -76,8 +78,15 @@ char *infer_conf_dir(char *executable_file) {
+ }
+ 
+ int main(int argc, char **argv) {
++  //Minimum number of arguments required to run the task-controller
++  if (argc < 5) {
++    display_usage(stdout);
++    return INVALID_ARGUMENT_NUMBER;
++  }
++
+   LOGFILE = stdout;
+   int command;
++  const char * good_local_dirs = NULL;
+   const char * job_id = NULL;
+   const char * task_id = NULL;
+   const char * cred_file = NULL;
+@@ -100,7 +109,7 @@ int main(int argc, char **argv) {
+     return INVALID_CONFIG_FILE;
+   }
+ #else
+-  conf_dir = strdup(HADOOP_CONF_DIR);
++  conf_dir = strdup(STRINGIFY(HADOOP_CONF_DIR));
+ #endif
+ 
+   size_t len = strlen(conf_dir) + strlen(CONF_FILENAME) + 2;
+@@ -114,7 +123,10 @@ int main(int argc, char **argv) {
+   }
+   free(orig_conf_file);
+   free(conf_dir);
+-  read_config(conf_file, 1);
++  if (check_configuration_permissions(conf_file) != 0) {
++    return INVALID_CONFIG_FILE;
++  }
++  read_config(conf_file);
+   free(conf_file);
+ 
+   // look up the task tracker group in the config file
+@@ -140,12 +152,6 @@ int main(int argc, char **argv) {
+     return INVALID_TASKCONTROLLER_PERMISSIONS;
+   }
+ 
+-  //Minimum number of arguments required to run the task-controller
+-  if (argc < 4) {
+-    display_usage(stdout);
+-    return INVALID_ARGUMENT_NUMBER;
+-  }
+-
+   //checks done for user name
+   if (argv[optind] == NULL) {
+     fprintf(LOGFILE, "Invalid user name \n");
+@@ -157,41 +163,46 @@ int main(int argc, char **argv) {
+   }
+ 
+   optind = optind + 1;
++  good_local_dirs = argv[optind];
++  if (good_local_dirs == NULL) {
++    return INVALID_TT_ROOT;
++  }
++
++  optind = optind + 1;
+   command = atoi(argv[optind++]);
+ 
+   fprintf(LOGFILE, "main : command provided %d\n",command);
+   fprintf(LOGFILE, "main : user is %s\n", user_detail->pw_name);
++  fprintf(LOGFILE, "Good mapred-local-dirs are %s\n", good_local_dirs);
+ 
+   switch (command) {
+   case INITIALIZE_JOB:
+-    if (argc < 7) {
+-      fprintf(LOGFILE, "Too few arguments (%d vs 7) for initialize job\n",
+-	      argc);
++    if (argc < 8) {
++      fprintf(LOGFILE, "Too few arguments (%d vs 8) for initialize job\n",
++              argc);
+       return INVALID_ARGUMENT_NUMBER;
+     }
+     job_id = argv[optind++];
+     cred_file = argv[optind++];
+     job_xml = argv[optind++];
+-    exit_code = initialize_job(user_detail->pw_name, job_id, cred_file,
+-                               job_xml, argv + optind);
++    exit_code = initialize_job(user_detail->pw_name, good_local_dirs, job_id,
++                               cred_file, job_xml, argv + optind);
+     break;
+   case LAUNCH_TASK_JVM:
+-    if (argc < 7) {
+-      fprintf(LOGFILE, "Too few arguments (%d vs 7) for launch task\n",
+-	      argc);
++    if (argc < 8) {
++      fprintf(LOGFILE, "Too few arguments (%d vs 8) for launch task\n", argc);
+       return INVALID_ARGUMENT_NUMBER;
+     }
+     job_id = argv[optind++];
+     task_id = argv[optind++];
+     current_dir = argv[optind++];
+     script_file = argv[optind++];
+-    exit_code = run_task_as_user(user_detail->pw_name, job_id, task_id, 
+-                                 current_dir, script_file);
++    exit_code = run_task_as_user(user_detail->pw_name, good_local_dirs, job_id,
++                                 task_id, current_dir, script_file);
+     break;
+   case SIGNAL_TASK:
+-    if (argc < 5) {
+-      fprintf(LOGFILE, "Too few arguments (%d vs 5) for signal task\n",
+-	      argc);
++    if (argc < 6) {
++      fprintf(LOGFILE, "Too few arguments (%d vs 6) for signal task\n", argc);
+       return INVALID_ARGUMENT_NUMBER;
+     } else {
+       char* end_ptr = NULL;
+@@ -212,11 +223,12 @@ int main(int argc, char **argv) {
+     break;
+   case DELETE_AS_USER:
+     dir_to_be_deleted = argv[optind++];
+-    exit_code= delete_as_user(user_detail->pw_name, dir_to_be_deleted);
++    exit_code= delete_as_user(user_detail->pw_name, good_local_dirs,
++                              dir_to_be_deleted);
+     break;
+   case DELETE_LOG_AS_USER:
+     dir_to_be_deleted = argv[optind++];
+-    exit_code= delete_log_directory(dir_to_be_deleted);
++    exit_code= delete_log_directory(dir_to_be_deleted, good_local_dirs);
+     break;
+   case RUN_COMMAND_AS_USER:
+     exit_code = run_command_as_user(user_detail->pw_name, argv + optind);
+diff --git a/src/c++/task-controller/impl/task-controller.c b/src/c++/task-controller/impl/task-controller.c
+index 243d092..c1f857a 100644
+--- a/src/c++/task-controller/impl/task-controller.c
++++ b/src/c++/task-controller/impl/task-controller.c
+@@ -28,9 +28,11 @@
+ #include <signal.h>
+ #include <stdarg.h>
+ #include <stdio.h>
++#include <stdbool.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/stat.h>
++#include <sys/time.h>
+ 
+ #define USER_DIR_PATTERN "%s/taskTracker/%s"
+ 
+@@ -38,11 +40,13 @@
+ 
+ #define ATTEMPT_DIR_PATTERN TT_JOB_DIR_PATTERN "/%s/work"
+ 
+-#define TASK_SCRIPT "taskjvm.sh"
++#define USER_LOG_PATTERN "%s/userlogs/%s"
++
++#define TASK_DIR_PATTERN USER_LOG_PATTERN "/%s"
+ 
+-#define TT_LOCAL_TASK_DIR_PATTERN    "%s/taskTracker/%s/jobcache/%s/%s"
++#define TASK_SCRIPT "taskjvm.sh"
+ 
+-#define TT_SYS_DIR_KEY "mapred.local.dir"
++#define TT_LOCAL_TASK_DIR_PATTERN "%s/taskTracker/%s/jobcache/%s/%s"
+ 
+ #define TT_LOG_DIR_KEY "hadoop.log.dir"
+ 
+@@ -56,6 +60,8 @@ static const int DEFAULT_MIN_USERID = 1000;
+ 
+ #define BANNED_USERS_KEY "banned.users"
+ 
++#define USERLOGS "userlogs"
++
+ static const char* DEFAULT_BANNED_USERS[] = {"mapred", "hdfs", "bin", 0};
+ 
+ //struct to store the user details
+@@ -135,7 +141,7 @@ int check_taskcontroller_permissions(char *executable_file) {
+     return -1;
+   }
+ 
+-  // check others do not have read/write/execute permissions
++  // check others do not have write/execute permissions
+   if ((filestat.st_mode & S_IWOTH) == S_IWOTH ||
+       (filestat.st_mode & S_IXOTH) == S_IXOTH) {
+     fprintf(LOGFILE,
+@@ -210,6 +216,14 @@ int change_user(uid_t user, gid_t group) {
+ }
+ 
+ /**
++ * Get the array of mapred local dirs from the given comma separated list of
++ * paths. Memory allocated using strdup here is freed up in free_values().
++ */
++char ** get_mapred_local_dirs(const char * good_local_dirs) {
++  return extract_values(strdup(good_local_dirs));
++}
++
++/**
+  * Utility function to concatenate argB to argA using the concat_pattern.
+  */
+ char *concatenate(char *concat_pattern, char *return_path_name, 
+@@ -288,7 +302,7 @@ char* get_job_log_directory(const char* jobid) {
+     fprintf(LOGFILE, "Log directory %s is not configured.\n", TT_LOG_DIR_KEY);
+     return NULL;
+   }
+-  char *result = concatenate("%s/userlogs/%s", "job log dir", 2, log_dir, 
++  char *result = concatenate(USER_LOG_PATTERN, "job log dir", 2, log_dir, 
+                              jobid);
+   if (result == NULL) {
+     fprintf(LOGFILE, "failed to get memory in get_job_log_directory for %s"
+@@ -349,12 +363,52 @@ int mkdirs(const char* path, mode_t perm) {
+   return 0;
+ }
+ 
++static short get_current_local_dir_count(char **local_dir)
++{
++  char **local_dir_ptr;
++  short count=0;
++
++  for(local_dir_ptr = local_dir; *local_dir_ptr != NULL; ++local_dir_ptr) {
++    ++count;
++  }
++  return count;
++}
++
++static char* get_nth_local_dir(char **local_dir, int nth)
++{
++  char **local_dir_ptr;
++  short count=0;
++
++  for(local_dir_ptr = local_dir; *local_dir_ptr != NULL; ++local_dir_ptr) {
++    if(count == nth) {
++      return strdup(*local_dir_ptr);
++    }
++    ++count;
++  }
++  fprintf(LOGFILE, "Invalid index %d for %d local directories\n", nth, count);
++  return NULL;
++}
++
++static char*  get_random_local_dir(char **local_dir) {
++  struct timeval tv;
++  short nth;
++  gettimeofday(&tv, NULL);
++  srand ( (long) tv.tv_sec*1000000 + tv.tv_usec );
++  short cnt = get_current_local_dir_count(local_dir);
++  if(cnt == 0) {
++    fprintf(LOGFILE, "No valid local directories\n");
++    return NULL;
++  }
++  nth = rand() % cnt;
++  return get_nth_local_dir(local_dir, nth);
++}
++
+ /**
+  * Function to prepare the attempt directories for the task JVM.
+  * It creates the task work and log directories.
+  */
+-static int create_attempt_directories(const char* user, const char *job_id, 
+-					const char *task_id) {
++int create_attempt_directories(const char* user,
++    const char * good_local_dirs, const char *job_id, const char *task_id) {
+   // create dirs as 0750
+   const mode_t perms = S_IRWXU | S_IRGRP | S_IXGRP;
+   if (job_id == NULL || task_id == NULL || user == NULL) {
+@@ -364,11 +418,11 @@ static int create_attempt_directories(const char* user, const char *job_id,
+   }
+   int result = 0;
+ 
+-  char **local_dir = get_values(TT_SYS_DIR_KEY);
++  char **local_dir = get_mapred_local_dirs(good_local_dirs);
+ 
+   if (local_dir == NULL) {
+-    fprintf(LOGFILE, "%s is not configured.\n", TT_SYS_DIR_KEY);
+-    return -1;
++    fprintf(LOGFILE, "Good mapred local directories could not be obtained.\n");
++    return INVALID_TT_ROOT;
+   }
+ 
+   char **local_dir_ptr;
+@@ -386,24 +440,70 @@ static int create_attempt_directories(const char* user, const char *job_id,
+       free(task_dir);
+     }
+   }
+-  free_values(local_dir);
+ 
+   // also make the directory for the task logs
+   char *job_task_name = malloc(strlen(job_id) + strlen(task_id) + 2);
++  char *real_task_dir = NULL; // target of symlink
++  char *real_job_dir = NULL;  // parent dir of target of symlink
++  char *random_local_dir = NULL;
++  char *link_task_log_dir = NULL; // symlink
+   if (job_task_name == NULL) {
+     fprintf(LOGFILE, "Malloc of job task name failed\n");
+     result = -1;
+   } else {
+     sprintf(job_task_name, "%s/%s", job_id, task_id);
+-    char *log_dir = get_job_log_directory(job_task_name);
+-    free(job_task_name);
+-    if (log_dir == NULL) {
++    link_task_log_dir = get_job_log_directory(job_task_name);
++    random_local_dir = get_random_local_dir(local_dir);
++    if(random_local_dir == NULL) {
++      result = -1;
++      goto cleanup;
++    }
++    real_job_dir = malloc(strlen(random_local_dir) + strlen(USERLOGS) + 
++                          strlen(job_id) + 3);
++    if (real_job_dir == NULL) {
++      fprintf(LOGFILE, "Malloc of real job directory failed\n");
++      result = -1;
++      goto cleanup;
++    } 
++    real_task_dir = malloc(strlen(random_local_dir) + strlen(USERLOGS) + 
++                           strlen(job_id) + strlen(task_id) + 4);
++    if (real_task_dir == NULL) {
++      fprintf(LOGFILE, "Malloc of real task directory failed\n");
+       result = -1;
+-    } else if (mkdirs(log_dir, perms) != 0) {
++      goto cleanup;
++    }
++    sprintf(real_job_dir, USER_LOG_PATTERN, random_local_dir, job_id);
++    result = create_directory_for_user(real_job_dir);
++    if( result != 0) {
++      result = -1;
++      goto cleanup;
++    }
++    sprintf(real_task_dir, TASK_DIR_PATTERN,
++            random_local_dir, job_id, task_id);
++    result = mkdirs(real_task_dir, perms); 
++    if( result != 0) {
++      fprintf(LOGFILE, "Failed to create real task dir %s - %s\n",
++              real_task_dir, strerror(errno));
++      result = -1; 
++      goto cleanup;
++    }
++    result = symlink(real_task_dir, link_task_log_dir);
++    if( result != 0) {
++      fprintf(LOGFILE, "Failed to create symlink %s to %s - %s\n",
++              link_task_log_dir, real_task_dir, strerror(errno));
+       result = -1;
++      goto cleanup;
+     }
+-    free(log_dir);
+   }
++
++ cleanup:
++  free(random_local_dir);
++  free(job_task_name);
++  free(link_task_log_dir);
++  free(real_job_dir);
++  free(real_task_dir);
++  free_values(local_dir);
++
+   return result;
+ }
+ 
+@@ -517,7 +617,7 @@ static int change_owner(const char* path, uid_t user, gid_t group) {
+ /**
+  * Create a top level directory for the user.
+  * It assumes that the parent directory is *not* writable by the user.
+- * It creates directories with 02700 permissions owned by the user
++ * It creates directories with 02750 permissions owned by the user
+  * and with the group set to the task tracker group.
+  * return non-0 on failure
+  */
+@@ -627,10 +727,10 @@ static int copy_file(int input, const char* in_filename,
+ /**
+  * Function to initialize the user directories of a user.
+  */
+-int initialize_user(const char *user) {
+-  char **local_dir = get_values(TT_SYS_DIR_KEY);
++int initialize_user(const char *user, const char * good_local_dirs) {
++  char **local_dir = get_mapred_local_dirs(good_local_dirs);
+   if (local_dir == NULL) {
+-    fprintf(LOGFILE, "%s is not configured.\n", TT_SYS_DIR_KEY);
++    fprintf(LOGFILE, "Good mapred local directories could ot be obtained.\n");
+     return INVALID_TT_ROOT;
+   }
+ 
+@@ -656,16 +756,16 @@ int initialize_user(const char *user) {
+ /**
+  * Function to prepare the job directories for the task JVM.
+  */
+-int initialize_job(const char *user, const char *jobid, 
+-		   const char* credentials, const char* job_xml,
+-                   char* const* args) {
++int initialize_job(const char *user, const char * good_local_dirs,
++    const char *jobid, const char* credentials, const char* job_xml,
++    char* const* args) {
+   if (jobid == NULL || user == NULL) {
+     fprintf(LOGFILE, "Either jobid is null or the user passed is null.\n");
+     return INVALID_ARGUMENT_NUMBER;
+   }
+ 
+   // create the user directory
+-  int result = initialize_user(user);
++  int result = initialize_user(user, good_local_dirs);
+   if (result != 0) {
+     return result;
+   }
+@@ -699,10 +799,10 @@ int initialize_job(const char *user, const char *jobid,
+ 
+   // 750
+   mode_t permissions = S_IRWXU | S_IRGRP | S_IXGRP;
+-  char **tt_roots = get_values(TT_SYS_DIR_KEY);
++  char **tt_roots = get_mapred_local_dirs(good_local_dirs);
+ 
+   if (tt_roots == NULL) {
+-    return INVALID_CONFIG_FILE;
++    return INVALID_TT_ROOT;
+   }
+ 
+   char **tt_root;
+@@ -750,10 +850,9 @@ int initialize_job(const char *user, const char *jobid,
+   fclose(stderr);
+   if (chdir(primary_job_dir)) {
+     fprintf(LOGFILE, "Failure to chdir to job dir - %s\n",
+-      strerror(errno));
++            strerror(errno));
+     return -1;
+   }
+-
+   execvp(args[0], args);
+   fprintf(LOGFILE, "Failure to exec job initialization process - %s\n",
+ 	  strerror(errno));
+@@ -768,12 +867,12 @@ int initialize_job(const char *user, const char *jobid,
+  * 4) Does an execlp on the same in order to replace the current image with
+  *    task image.
+  */
+-int run_task_as_user(const char *user, const char *job_id, 
+-                     const char *task_id, const char *work_dir,
+-                     const char *script_name) {
++int run_task_as_user(const char *user, const char * good_local_dirs,
++                     const char *job_id, const char *task_id,
++                     const char *work_dir, const char *script_name) {
+   int exit_code = -1;
+   char *task_script_path = NULL;
+-  if (create_attempt_directories(user, job_id, task_id) != 0) {
++  if (create_attempt_directories(user, good_local_dirs, job_id, task_id) != 0) {
+     goto cleanup;
+   }
+   int task_file_source = open_file_as_task_tracker(script_name);
+@@ -999,15 +1098,15 @@ static int delete_path(const char *full_path,
+  * user: the user doing the delete
+  * subdir: the subdir to delete
+  */
+-int delete_as_user(const char *user,
++int delete_as_user(const char *user, const char * good_local_dirs,
+                    const char *subdir) {
+   int ret = 0;
+ 
+-  char** tt_roots = get_values(TT_SYS_DIR_KEY);
++  char** tt_roots = get_mapred_local_dirs(good_local_dirs);
+   char** ptr;
+   if (tt_roots == NULL || *tt_roots == NULL) {
+-    fprintf(LOGFILE, "No %s defined in the configuration\n", TT_SYS_DIR_KEY);
+-    return INVALID_CONFIG_FILE;
++    fprintf(LOGFILE, "Good mapred local directories could ot be obtained.\n");
++    return INVALID_TT_ROOT;
+   }
+ 
+   // do the delete
+@@ -1027,17 +1126,38 @@ int delete_as_user(const char *user,
+   return ret;
+ }
+ 
+-/**
+- * delete a given log directory
++/*
++ * delete a given job log directory
++ * This function takes jobid and deletes the related logs.
+  */
+-int delete_log_directory(const char *subdir) {
+-  char* log_subdir = get_job_log_directory(subdir);
++int delete_log_directory(const char *subdir, const char * good_local_dirs) {
++  char* job_log_dir = get_job_log_directory(subdir);
++  
+   int ret = -1;
+-  if (log_subdir != NULL) {
+-    ret = delete_path(log_subdir, strchr(subdir, '/') == NULL);
++  if (job_log_dir == NULL) return ret;
++
++  //delete the job log directory in <hadoop.log.dir>/userlogs/jobid
++  delete_path(job_log_dir, true);
++
++  char **local_dir = get_mapred_local_dirs(good_local_dirs);
++
++  char **local_dir_ptr;
++  for(local_dir_ptr = local_dir; *local_dir_ptr != NULL; ++local_dir_ptr) {
++     char *mapred_local_log_dir = concatenate(USER_LOG_PATTERN, 
++				      "mapred local job log dir", 
++			      	      2, *local_dir_ptr, subdir);
++     if (mapred_local_log_dir != NULL) {
++        //delete the job log directory in <mapred.local.dir>/userlogs/jobid
++        delete_path(mapred_local_log_dir, true);
++	free(mapred_local_log_dir);
++     }
++     else
++        fprintf(LOGFILE, "Failed to delete mapred local log dir for jobid %s\n",
++            subdir);
+   }
+-  free(log_subdir);
+-  return ret;
++  free(job_log_dir);
++  free_values(local_dir);
++  return 0;
+ }
+ 
+ /**
+diff --git a/src/c++/task-controller/impl/task-controller.h b/src/c++/task-controller/impl/task-controller.h
+index e2567a1..06213dd 100644
+--- a/src/c++/task-controller/impl/task-controller.h
++++ b/src/c++/task-controller/impl/task-controller.h
+@@ -72,22 +72,23 @@ int check_taskcontroller_permissions(char *executable_file);
+ /**
+  * delete a given log directory as a user
+  */
+-int delete_log_directory(const char *log_dir);
++int delete_log_directory(const char *log_dir, const char * good_local_dirs);
+ 
+ // initialize the job directory
+-int initialize_job(const char *user, const char *jobid,
++int initialize_job(const char *user, const char * good_local_dirs, const char *jobid,
+                    const char *credentials, 
+                    const char *job_xml, char* const* args);
+ 
+ // run the task as the user
+-int run_task_as_user(const char * user, const char *jobid, const char *taskid,
++int run_task_as_user(const char * user, const char * good_local_dirs,
++                     const char *jobid, const char *taskid,
+                      const char *work_dir, const char *script_name);
+ 
+ // send a signal as the user
+ int signal_user_task(const char *user, int pid, int sig);
+ 
+ // delete a directory (or file) recursively as the user.
+-int delete_as_user(const char *user,
++int delete_as_user(const char *user, const char * good_local_dirs,
+                    const char *dir_to_be_deleted);
+ 
+ // run a command as the user
+@@ -141,7 +142,7 @@ int mkdirs(const char* path, mode_t perm);
+ /**
+  * Function to initialize the user directories of a user.
+  */
+-int initialize_user(const char *user);
++int initialize_user(const char *user, const char * good_local_dirs);
+ 
+ /**
+  * Create a top level directory for the user.
+@@ -153,3 +154,9 @@ int initialize_user(const char *user);
+ int create_directory_for_user(const char* path);
+ 
+ int change_user(uid_t user, gid_t group);
++
++/**
++ * Create task attempt related directories as user.
++ */
++int create_attempt_directories(const char* user,
++	const char * good_local_dirs, const char *job_id, const char *task_id);
+diff --git a/src/c++/task-controller/test/test-task-controller.c b/src/c++/task-controller/test/test-task-controller.c
+index e0ed8ac..e205481 100644
+--- a/src/c++/task-controller/test/test-task-controller.c
++++ b/src/c++/task-controller/test/test-task-controller.c
+@@ -24,15 +24,15 @@
+ #include <signal.h>
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <stdbool.h>
+ #include <string.h>
+ #include <sys/stat.h>
+ #include <sys/wait.h>
++#include <limits.h>
+ 
+ #define TEST_ROOT "/tmp/test-task-controller"
+ #define DONT_TOUCH_FILE "dont-touch-me"
+ 
+-extern int check_configuration_permissions(FILE *f);
+-
+ static char* username = NULL;
+ 
+ /**
+@@ -187,6 +187,78 @@ void test_get_task_log_dir() {
+   free(logdir);
+ }
+ 
++void create_userlogs_dir() {
++  char** tt_roots = get_values("mapred.local.dir");
++  char** tt_root;
++  for(tt_root=tt_roots; *tt_root != NULL; ++tt_root) {
++    char buffer[100000];
++    sprintf(buffer, "%s/userlogs", *tt_root);
++    if (mkdir(buffer, 0755) != 0) {
++      printf("FAIL: Can't create directory %s - %s\n", buffer,
++             strerror(errno));
++      exit(1);
++    }
++  }
++  free_values(tt_roots);
++}
++
++void test_create_log_directory() {
++  printf("\nTesting test_create_log_directory\n");
++  create_userlogs_dir();
++  char *job_log_dir = get_job_log_directory("job_7");
++  if (job_log_dir == NULL) {
++    exit(1);
++  }
++  if (create_directory_for_user(job_log_dir) != 0) {
++    exit(1);
++  }
++  free(job_log_dir);
++  char* good_local_dirs = get_value("mapred.local.dir");
++  if (good_local_dirs == NULL) {
++    fprintf(LOGFILE, "Mapred local directories could not be obtained.\n");
++    exit(1);
++  }
++  create_attempt_directories(username, good_local_dirs, "job_7", "task_1");
++
++  //check if symlink got created
++  struct stat file;
++  int status;
++  char actualpath [PATH_MAX+1];
++  char *res;
++  char *filepath = TEST_ROOT "/logs/userlogs/job_7/task_1";
++
++  status = lstat(filepath, &file);
++  if (!S_ISLNK(file.st_mode)) {
++    fprintf(LOGFILE, "Symlink creation failed\n");
++    exit(1);
++  }
++
++  //Check if symlink path exists
++  res = realpath(filepath, actualpath);
++  if(!res) {
++    fprintf(LOGFILE, "Failed to get target for the symlink\n");
++    exit(1);
++  }
++
++  char local_job_dir[PATH_MAX+1];
++  int i;
++  bool found = false;
++  for(i=1; i<5; i++) {
++     sprintf(local_job_dir, TEST_ROOT "/local-%d/userlogs/job_7/task_1", i);
++     if (strcmp(local_job_dir, actualpath) == 0) {
++       found = true;
++       break;
++     }
++  }
++  
++  if(!found) {
++    printf("FAIL: symlink path and target path mismatch\n");
++    exit(1);
++  }
++
++  free(good_local_dirs);
++}
++
+ void test_check_user() {
+   printf("\nTesting test_check_user\n");
+   struct passwd *user = check_user(username);
+@@ -209,34 +281,22 @@ void test_check_user() {
+   }
+ }
+ 
+-static int do_test_configuration_permissions(const char *path) {
+-  FILE *f = fopen(path, "r");
+-  if (f == NULL) {
+-    printf("FAIL: couldn't open path: %s\n", path);
+-    return 0;
+-  }
+-
+-  int ret = check_configuration_permissions(f);
+-  fclose(f);
+-
+-  return ret;
+-}
+-
+ void test_check_configuration_permissions() {
+   printf("\nTesting check_configuration_permissions\n");
+-  if (! do_test_configuration_permissions("/etc/passwd")) {
++  if (check_configuration_permissions("/etc/passwd") != 0) {
+     printf("FAIL: failed permission check on /etc/passwd\n");
+     exit(1);
+   }
+-  if (do_test_configuration_permissions(TEST_ROOT)) {
++  if (check_configuration_permissions(TEST_ROOT) == 0) {
+     printf("FAIL: failed permission check on %s\n", TEST_ROOT);
+     exit(1);
+   }
+ }
+ 
+ void test_delete_task() {
+-  if (initialize_user(username)) {
+-    printf("FAIL: failed to initialized user %s\n", username);
++  char* local_dirs = get_value("mapred.local.dir");
++  if (initialize_user(username, local_dirs)) {
++    printf("FAIL: failed to initialize user %s\n", username);
+     exit(1);
+   }
+   char* job_dir = get_job_directory(TEST_ROOT "/local-2", username, "job_1");
+@@ -269,7 +329,7 @@ void test_delete_task() {
+   run(buffer);
+ 
+   // delete task directory
+-  int ret = delete_as_user(username, "jobcache/job_1/task_1");
++  int ret = delete_as_user(username, local_dirs, "jobcache/job_1/task_1");
+   if (ret != 0) {
+     printf("FAIL: return code from delete_as_user is %d\n", ret);
+     exit(1);
+@@ -297,9 +357,11 @@ void test_delete_task() {
+   free(job_dir);
+   free(task_dir);
+   free(dont_touch);
++  free(local_dirs);
+ }
+ 
+ void test_delete_job() {
++  char* local_dirs = get_value("mapred.local.dir");
+   char* job_dir = get_job_directory(TEST_ROOT "/local-2", username, "job_2");
+   char* dont_touch = get_job_directory(TEST_ROOT "/local-2", username, 
+                                        DONT_TOUCH_FILE);
+@@ -330,7 +392,7 @@ void test_delete_job() {
+   run(buffer);
+ 
+   // delete task directory
+-  int ret = delete_as_user(username, "jobcache/job_2");
++  int ret = delete_as_user(username, local_dirs, "jobcache/job_2");
+   if (ret != 0) {
+     printf("FAIL: return code from delete_as_user is %d\n", ret);
+     exit(1);
+@@ -354,11 +416,13 @@ void test_delete_job() {
+   free(job_dir);
+   free(task_dir);
+   free(dont_touch);
++  free(local_dirs);
+ }
+ 
+ 
+ void test_delete_user() {
+   printf("\nTesting delete_user\n");
++  char* local_dirs = get_value("mapred.local.dir");
+   char* job_dir = get_job_directory(TEST_ROOT "/local-1", username, "job_3");
+   if (mkdirs(job_dir, 0700) != 0) {
+     exit(1);
+@@ -369,7 +433,7 @@ void test_delete_user() {
+     printf("FAIL: directory missing before test\n");
+     exit(1);
+   }
+-  if (delete_as_user(username, "") != 0) {
++  if (delete_as_user(username, local_dirs, "") != 0) {
+     exit(1);
+   }
+   if (access(buffer, R_OK) == 0) {
+@@ -381,10 +445,12 @@ void test_delete_user() {
+     exit(1);
+   }
+   free(job_dir);
++  free(local_dirs);
+ }
+ 
+ void test_delete_log_directory() {
+   printf("\nTesting delete_log_directory\n");
++  char* local_dirs = get_value("mapred.local.dir");
+   char *job_log_dir = get_job_log_directory("job_1");
+   if (job_log_dir == NULL) {
+     exit(1);
+@@ -404,7 +470,7 @@ void test_delete_log_directory() {
+     printf("FAIL: can't access task directory - %s\n", strerror(errno));
+     exit(1);
+   }
+-  if (delete_log_directory("job_1/task_2") != 0) {
++  if (delete_log_directory("job_1/task_2", local_dirs) != 0) {
+     printf("FAIL: can't delete task directory\n");
+     exit(1);
+   }
+@@ -416,7 +482,7 @@ void test_delete_log_directory() {
+     printf("FAIL: job directory not deleted - %s\n", strerror(errno));
+     exit(1);
+   }
+-  if (delete_log_directory("job_1") != 0) {
++  if (delete_log_directory("job_1", local_dirs) != 0) {
+     printf("FAIL: can't delete task directory\n");
+     exit(1);
+   }
+@@ -424,7 +490,25 @@ void test_delete_log_directory() {
+     printf("FAIL: job directory not deleted\n");
+     exit(1);
+   }
++  if (delete_log_directory("job_7", local_dirs) != 0) {
++    printf("FAIL: can't delete job directory\n");
++    exit(1);
++  }
++  if (access(TEST_ROOT "/logs/userlogs/job_7", R_OK) == 0) {
++    printf("FAIL: job log directory not deleted\n");
++    exit(1);
++  }
++  char local_job_dir[PATH_MAX+1];
++  int i;
++  for(i=1; i<5; i++) {
++     sprintf(local_job_dir, TEST_ROOT "/local-%d/userlogs/job_7", i);
++     if (access(local_job_dir, R_OK) == 0) {
++       printf("FAIL: job log directory in mapred local not deleted\n");
++       exit(1);
++     }
++  }
+   free(task_log_dir);
++  free(local_dirs);
+ }
+ 
+ void run_test_in_child(const char* test_name, void (*func)()) {
+@@ -573,7 +657,8 @@ void test_init_job() {
+     exit(1);
+   } else if (child == 0) {
+     char *final_pgm[] = {"touch", "my-touch-file", 0};
+-    if (initialize_job(username, "job_4", TEST_ROOT "/creds.txt", 
++    char* local_dirs = get_value("mapred.local.dir");
++    if (initialize_job(username, local_dirs, "job_4", TEST_ROOT "/creds.txt", 
+                        TEST_ROOT "/job.xml", final_pgm) != 0) {
+       printf("FAIL: failed in child\n");
+       exit(42);
+@@ -646,13 +731,14 @@ void test_run_task() {
+   fflush(stderr);
+   char* task_dir = get_attempt_work_directory(TEST_ROOT "/local-1", 
+ 					      username, "job_4", "task_1");
++  char* local_dirs = get_value("mapred.local.dir");
+   pid_t child = fork();
+   if (child == -1) {
+     printf("FAIL: failed to fork process for init_job - %s\n", 
+ 	   strerror(errno));
+     exit(1);
+   } else if (child == 0) {
+-    if (run_task_as_user(username, "job_4", "task_1", 
++    if (run_task_as_user(username, local_dirs, "job_4", "task_1", 
+                          task_dir, script_name) != 0) {
+       printf("FAIL: failed in child\n");
+       exit(42);
+@@ -706,7 +792,7 @@ int main(int argc, char **argv) {
+   if (write_config_file(TEST_ROOT "/test.cfg") != 0) {
+     exit(1);
+   }
+-  read_config(TEST_ROOT "/test.cfg", 0);
++  read_config(TEST_ROOT "/test.cfg");
+ 
+   create_tt_roots();
+ 
+@@ -754,6 +840,8 @@ int main(int argc, char **argv) {
+ 
+   test_check_user();
+ 
++  test_create_log_directory();
++
+   test_delete_log_directory();
+ 
+   // the tests that change user need to be run in a subshell, so that
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+index a2494c8..9eeae61 100644
+--- a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+@@ -468,7 +468,7 @@ public class TestCapacityScheduler extends TestCase {
+         String ttName = "tt" + i;
+         TaskTracker tt = new TaskTracker(ttName);
+         tt.setStatus(new TaskTrackerStatus(ttName, ttName + ".host", i,
+-                                           new ArrayList<TaskStatus>(), 0, 
++                                           new ArrayList<TaskStatus>(), 0, 0,
+                                            maxMapTasksPerTracker,
+                                            maxReduceTasksPerTracker));
+         trackers.put(ttName, tt);
+@@ -478,7 +478,7 @@ public class TestCapacityScheduler extends TestCase {
+     public void addTaskTracker(String ttName) {
+       TaskTracker tt = new TaskTracker(ttName);
+       tt.setStatus(new TaskTrackerStatus(ttName, ttName + ".host", 1,
+-                                         new ArrayList<TaskStatus>(), 0,
++                                         new ArrayList<TaskStatus>(), 0, 0,
+                                          maxMapTasksPerTracker, 
+                                          maxReduceTasksPerTracker));
+       trackers.put(ttName, tt);
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestCapBasedLoadManager.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestCapBasedLoadManager.java
+index e3648f7..45e29d3 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestCapBasedLoadManager.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestCapBasedLoadManager.java
+@@ -67,7 +67,7 @@ public class TestCapBasedLoadManager extends TestCase {
+       ts.add(getRunningReduceTaskStatus());
+     }
+     TaskTrackerStatus tracker = new TaskTrackerStatus("tracker", 
+-        "tracker_host", 1234, ts, 0, mapCap, reduceCap);
++      "tracker_host", 1234, ts, 0, 0, mapCap, reduceCap);
+     return tracker;
+   }
+ 
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index 30b8c66..74fc591 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -347,7 +347,7 @@ public class TestFairScheduler extends TestCase {
+          System.out.println("Creating TaskTracker tt" + id + " on " + host);
+          TaskTracker tt = new TaskTracker("tt" + id);
+          tt.setStatus(new TaskTrackerStatus("tt" + id, host, 0,
+-             new ArrayList<TaskStatus>(), 0,
++             new ArrayList<TaskStatus>(), 0, 0,
+              maxMapTasksPerTracker, maxReduceTasksPerTracker));
+          trackers.put("tt" + id, tt);
+        }
+@@ -357,14 +357,14 @@ public class TestFairScheduler extends TestCase {
+     public FakeTaskTrackerManager() {
+       TaskTracker tt1 = new TaskTracker("tt1");
+       tt1.setStatus(new TaskTrackerStatus("tt1", "tt1.host", 1,
+-                                          new ArrayList<TaskStatus>(), 0,
++                                          new ArrayList<TaskStatus>(), 0, 0,
+                                           maxMapTasksPerTracker, 
+                                           maxReduceTasksPerTracker));
+       trackers.put("tt1", tt1);
+       
+       TaskTracker tt2 = new TaskTracker("tt2");
+       tt2.setStatus(new TaskTrackerStatus("tt2", "tt2.host", 2,
+-                                          new ArrayList<TaskStatus>(), 0,
++                                          new ArrayList<TaskStatus>(), 0, 0,
+                                           maxMapTasksPerTracker, 
+                                           maxReduceTasksPerTracker));
+       trackers.put("tt2", tt2);
+diff --git a/src/docs/src/documentation/content/xdocs/cluster_setup.xml b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+index 012158c..b4fe76b 100644
+--- a/src/docs/src/documentation/content/xdocs/cluster_setup.xml
++++ b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+@@ -628,13 +628,6 @@
+             </p>
+             <table><tr><th>Name</th><th>Description</th></tr>
+             <tr>
+-            <td>mapred.local.dir</td>
+-            <td>Path to mapred local directories. Should be same as the value 
+-            which was provided to key in mapred-site.xml. This is required to
+-            validate paths passed to the setuid executable in order to prevent
+-            arbitrary paths being passed to it.</td>
+-            </tr>
+-            <tr>
+             <td>hadoop.log.dir</td>
+             <td>Path to hadoop log directory. Should be same as the value which
+             the TaskTracker is started with. This is required to set proper
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index e350d92..4db4fe4 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -1177,6 +1177,16 @@
+   </description>
+ </property>
+ 
++ <property>
++  <name>mapred.disk.healthChecker.interval</name>
++  <value>60000</value>
++  <description>How often the TaskTracker checks the health of its
++  local directories. Configuring this to a value smaller than the
++  heartbeat interval is equivalent to setting this to heartbeat
++  interval value.
++  </description>
++</property>
++
+ <!--  Node health script variables -->
+ 
+ <property>
+diff --git a/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+index 9d1fd78..68ce7c2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+@@ -22,7 +22,6 @@ import java.io.File;
+ import java.io.IOException;
+ import java.net.InetSocketAddress;
+ import java.util.List;
+-import java.util.Map;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -32,9 +31,9 @@ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapreduce.JobID;
+ import org.apache.hadoop.mapreduce.server.tasktracker.JVMInfo;
+ import org.apache.hadoop.mapreduce.server.tasktracker.Localizer;
++import org.apache.hadoop.mapred.TaskTracker.LocalStorage;
+ import org.apache.hadoop.util.ProcessTree.Signal;
+ import org.apache.hadoop.util.ProcessTree;
+-import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Shell.ExitCodeException;
+ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+ 
+@@ -67,6 +66,12 @@ public class DefaultTaskController extends TaskController {
+     }
+   }
+ 
++  @Override
++  public void createLogDir(TaskAttemptID taskID, 
++                           boolean isCleanup) throws IOException {
++    TaskLog.createTaskAttemptLogDir(taskID, isCleanup, localStorage.getDirs());
++  }
++  
+   /**
+    * Create all of the directories for the task and launches the child jvm.
+    * @param user the user name
+@@ -82,9 +87,8 @@ public class DefaultTaskController extends TaskController {
+                                   File currentWorkDirectory,
+                                   String stdout,
+                                   String stderr) throws IOException {
+-    
+     ShellCommandExecutor shExec = null;
+-    try {
++    try {    	            
+       FileSystem localFs = FileSystem.getLocal(getConf());
+       
+       //create the attempt dirs
+@@ -254,7 +258,23 @@ public class DefaultTaskController extends TaskController {
+   public void deleteLogAsUser(String user, 
+                               String subDir) throws IOException {
+     Path dir = new Path(TaskLog.getUserLogDir().getAbsolutePath(), subDir);
+-    fs.delete(dir, true);
++    // Delete the subDir in <hadoop.log.dir>/userlogs
++    File subDirPath = new File(dir.toString());
++    FileUtil.fullyDelete(subDirPath);
++
++    // Delete the subDir in all good <mapred.local.dirs>/userlogs
++    for (String localdir : localStorage.getDirs()) {
++      String dirPath = localdir + File.separatorChar +
++        TaskLog.USERLOGS_DIR_NAME + File.separatorChar + subDir;
++
++      try {
++        FileUtil.fullyDelete(new File(dirPath));
++      } catch(Exception e){
++        // Skip bad dir for later deletion
++        LOG.warn("Could not delete dir: " + dirPath +
++                 " , Reason : " + e.getMessage());
++      }
++    }
+   }
+   
+   @Override
+@@ -270,8 +290,9 @@ public class DefaultTaskController extends TaskController {
+   }
+ 
+   @Override
+-  public void setup(LocalDirAllocator allocator) {
++  public void setup(LocalDirAllocator allocator, LocalStorage localStorage) {
+     this.allocator = allocator;
++    this.localStorage = localStorage;
+   }
+   
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java b/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
+index fa82d7f..404df26 100644
+--- a/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
+@@ -71,8 +71,9 @@ interface InterTrackerProtocol extends VersionedProtocol {
+    * Version 28: Adding user name to the serialized Task for use by TT.
+    * Version 29: Adding available memory and CPU usage information on TT to
+    *             TaskTrackerStatus for MAPREDUCE-1218
++   * Version 30: Adding disk failure to TaskTrackerStatus for MAPREDUCE-3015
+    */
+-  public static final long versionID = 29L;
++  public static final long versionID = 30L;
+   
+   public final static int TRACKERS_OK = 0;
+   public final static int UNKNOWN_TASKTRACKER = 1;
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 81950ac..e301d6a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -1442,7 +1442,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       // III. Create the dummy tasktracker status
+       TaskTrackerStatus ttStatus = 
+         new TaskTrackerStatus(trackerName, trackerHostName, port, ttStatusList, 
+-                              0 , 0, 0);
++                              0 , 0, 0, 0);
+       ttStatus.setLastSeen(clock.getTime());
+ 
+       synchronized (JobTracker.this) {
+@@ -5144,7 +5144,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           put("reduce_slots", redSlots);
+           put("reduce_slots_used", redSlots - tts.getAvailableReduceSlots());
+         }});
+-        put("failures", tts.getFailures());
++        put("failures", tts.getTaskFailures());
++        put("dir_failures", tts.getDirFailures());
+       }});
+     }
+     return info;
+diff --git a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+index 5791387..2f592af 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+@@ -23,7 +23,6 @@ import java.net.InetSocketAddress;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.List;
+-import java.util.Map;
+ import java.util.Map.Entry;
+ 
+ import org.apache.commons.logging.Log;
+@@ -35,6 +34,7 @@ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.mapred.TaskTracker.LocalStorage;
+ import org.apache.hadoop.util.PlatformName;
+ import org.apache.hadoop.util.ProcessTree.Signal;
+ import org.apache.hadoop.util.StringUtils;
+@@ -50,8 +50,10 @@ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+  * JVM and killing it when needed, and also initializing and
+  * finalizing the task environment. 
+  * <p> The setuid executable is launched using the command line:</p>
+- * <p>task-controller user-name command command-args, where</p>
++ * <p>task-controller user-name good-local-dirs command command-args,
++ * where</p>
+  * <p>user-name is the name of the owner who submits the job</p>
++ * <p>good-local-dirs is comma separated list of good mapred local dirs</p>
+  * <p>command is one of the cardinal value of the 
+  * {@link LinuxTaskController.TaskControllerCommands} enumeration</p>
+  * <p>command-args depends on the command being launched.</p>
+@@ -125,11 +127,13 @@ class LinuxTaskController extends TaskController {
+   }
+ 
+   @Override
+-  public void setup(LocalDirAllocator allocator) throws IOException {
++  public void setup(LocalDirAllocator allocator, LocalStorage localStorage)
++      throws IOException {
+ 
+-    // Check the permissions of the task-controller binary by running it plainly.
+-    // If permissions are correct, it returns an error code 1, else it returns
+-    // 24 or something else if some other bugs are also present.
++    // Check the permissions of the task-controller binary by running
++    // it plainly.  If permissions are correct, it returns an error
++    // code 1, else it returns 24 or something else if some other bugs
++    // are also present.
+     String[] taskControllerCmd =
+         new String[] { taskControllerExe };
+     ShellCommandExecutor shExec = new ShellCommandExecutor(taskControllerCmd);
+@@ -145,6 +149,7 @@ class LinuxTaskController extends TaskController {
+       }
+     }
+     this.allocator = allocator;
++    this.localStorage = localStorage;
+   }
+ 
+   @Override
+@@ -154,7 +159,8 @@ class LinuxTaskController extends TaskController {
+                             ) throws IOException {
+     List<String> command = new ArrayList<String>(
+       Arrays.asList(taskControllerExe, 
+-                    user, 
++                    user,
++                    localStorage.getDirsString(),
+                     Integer.toString(Commands.INITIALIZE_JOB.getValue()),
+                     jobid,
+                     credentials.toUri().getPath().toString(),
+@@ -218,6 +224,7 @@ class LinuxTaskController extends TaskController {
+       String[] command = 
+         new String[]{taskControllerExe, 
+           user,
++          localStorage.getDirsString(),
+           Integer.toString(Commands.LAUNCH_TASK_JVM.getValue()),
+           jobId,
+           attemptId,
+@@ -258,6 +265,7 @@ class LinuxTaskController extends TaskController {
+     String[] command = 
+       new String[]{taskControllerExe, 
+                    user,
++                   localStorage.getDirsString(),
+                    Integer.toString(Commands.DELETE_AS_USER.getValue()),
+                    subDir};
+     ShellCommandExecutor shExec = new ShellCommandExecutor(command);
+@@ -267,12 +275,18 @@ class LinuxTaskController extends TaskController {
+     shExec.execute();
+   }
+ 
+-  
++  @Override
++  public void createLogDir(TaskAttemptID taskID,
++                           boolean isCleanup) throws IOException {
++    // Log dirs are created during attempt dir creation when running the task
++  }
++
+   @Override
+   public void deleteLogAsUser(String user, String subDir) throws IOException {
+     String[] command = 
+       new String[]{taskControllerExe, 
+                    user,
++                   localStorage.getDirsString(),
+                    Integer.toString(Commands.DELETE_LOG_AS_USER.getValue()),
+                    subDir};
+     ShellCommandExecutor shExec = new ShellCommandExecutor(command);
+@@ -288,6 +302,7 @@ class LinuxTaskController extends TaskController {
+     String[] command = 
+       new String[]{taskControllerExe, 
+                    user,
++                   localStorage.getDirsString(),
+                    Integer.toString(Commands.SIGNAL_TASK.getValue()),
+                    Integer.toString(taskPid),
+                    Integer.toString(signal.getValue())};
+@@ -314,9 +329,10 @@ class LinuxTaskController extends TaskController {
+     Task firstTask = allAttempts.get(0);
+     String taskid = firstTask.getTaskID().toString();
+     
+-    LocalDirAllocator ldirAlloc = new LocalDirAllocator("mapred.local.dir");
++    LocalDirAllocator ldirAlloc =
++        new LocalDirAllocator(JobConf.MAPRED_LOCAL_DIR_PROPERTY);
+     String taskRanFile = TaskTracker.TT_LOG_TMP_DIR + Path.SEPARATOR + taskid;
+-    Configuration conf = new Configuration();
++    Configuration conf = getConf();
+     
+     //write the serialized task information to a file to pass to the truncater
+     Path taskRanFilePath = 
+@@ -345,13 +361,14 @@ class LinuxTaskController extends TaskController {
+     // main of TaskLogsTruncater
+     command.add(TaskLogsTruncater.class.getName()); 
+     command.add(taskRanFilePath.toString());
+-    String[] taskControllerCmd = new String[3 + command.size()];
++    String[] taskControllerCmd = new String[4 + command.size()];
+     taskControllerCmd[0] = taskControllerExe;
+     taskControllerCmd[1] = user;
+-    taskControllerCmd[2] = Integer.toString(
++    taskControllerCmd[2] = localStorage.getDirsString();
++    taskControllerCmd[3] = Integer.toString(
+         Commands.RUN_COMMAND_AS_USER.getValue());
+ 
+-    int i = 3;
++    int i = 4;
+     for (String cmdArg : command) {
+       taskControllerCmd[i++] = cmdArg;
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/MRConstants.java b/src/mapred/org/apache/hadoop/mapred/MRConstants.java
+index b81861e..f478134 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MRConstants.java
++++ b/src/mapred/org/apache/hadoop/mapred/MRConstants.java
+@@ -29,6 +29,12 @@ interface MRConstants {
+   
+   public static final long COUNTER_UPDATE_INTERVAL = 60 * 1000;
+ 
++  /**
++   * How often TaskTracker needs to check the health of its disks, if not
++   * configured using mapred.disk.healthChecker.interval
++   */
++  public static final long DEFAULT_DISK_HEALTH_CHECK_INTERVAL = 60 * 1000;
++
+   //
+   // Result codes
+   //
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskController.java b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+index 2d649a2..3f2c08e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.mapred.TaskTracker.LocalStorage;
+ import org.apache.hadoop.util.ProcessTree.Signal;
+ 
+ /**
+@@ -57,6 +58,7 @@ public abstract class TaskController implements Configurable {
+   protected static final String COMMAND_FILE = "taskjvm.sh";
+   
+   protected LocalDirAllocator allocator;
++  protected LocalStorage localStorage;
+ 
+   final public static FsPermission TASK_LAUNCH_SCRIPT_PERMISSION =
+   FsPermission.createImmutable((short) 0700); // rwx--------
+@@ -65,6 +67,10 @@ public abstract class TaskController implements Configurable {
+     return conf;
+   }
+ 
++  public String[] getLocalDirs() {
++    return localStorage.getDirs();
++  }
++  
+   public void setConf(Configuration conf) {
+     this.conf = conf;
+   }
+@@ -72,9 +78,10 @@ public abstract class TaskController implements Configurable {
+   /**
+    * Does initialization and setup.
+    * @param allocator the local dir allocator to use
+-   * // TODO(todd) - make sure implementation checks TaskLog directory writability
++   * @param localStorage TaskTracker's LocalStorage object
+    */
+-  public abstract void setup(LocalDirAllocator allocator) throws IOException;
++  public abstract void setup(LocalDirAllocator allocator,
++      LocalStorage localStorage) throws IOException;
+ 
+   /**
+    * Create all of the directories necessary for the job to start and download
+@@ -137,7 +144,15 @@ public abstract class TaskController implements Configurable {
+    */
+   public abstract void deleteAsUser(String user, 
+                                     String subDir) throws IOException;
+-  
++
++  /**
++   * Creates task log dir
++   * @param taskID ID of the task
++   * @param isCleanup If the task is cleanup task or not
++   * @throws IOException
++   */
++  public abstract void createLogDir(TaskAttemptID taskID,
++                                    boolean isCleanup) throws IOException;
+ 
+   /**
+    * Delete the user's files under the userlogs directory.
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskLog.java b/src/mapred/org/apache/hadoop/mapred/TaskLog.java
+index b2ff6bf..109e3a0 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskLog.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskLog.java
+@@ -32,6 +32,7 @@ import java.util.Enumeration;
+ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
++import java.util.concurrent.atomic.AtomicInteger;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -42,8 +43,10 @@ import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.io.SecureIOUtils;
+ import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.mapreduce.server.tasktracker.Localizer;
+ import org.apache.hadoop.util.ProcessTree;
+ import org.apache.hadoop.util.Shell;
+ import org.apache.log4j.Appender;
+@@ -73,7 +76,81 @@ public class TaskLog {
+       LOG_DIR.mkdirs();
+     }
+   }
++  
++  static AtomicInteger rotor = new AtomicInteger(0);
+ 
++  /**
++   * Create log directory for the given attempt. This involves creating the
++   * following and setting proper permissions for the new directories
++   * <br>{hadoop.log.dir}/userlogs/<jobid>
++   * <br>{hadoop.log.dir}/userlogs/<jobid>/<attempt-id-as-symlink>
++   * <br>{one of the mapred-local-dirs}/userlogs/<jobid>
++   * <br>{one of the mapred-local-dirs}/userlogs/<jobid>/<attempt-id>
++   *
++   * @param taskID attempt-id for which log dir is to be created
++   * @param isCleanup Is this attempt a cleanup attempt ?
++   * @param localDirs mapred local directories
++   * @throws IOException
++   */
++  public static void createTaskAttemptLogDir(TaskAttemptID taskID,
++      boolean isCleanup, String[] localDirs) throws IOException {
++    String cleanupSuffix = isCleanup ? ".cleanup" : "";
++    String strAttemptLogDir = getTaskAttemptLogDir(taskID, 
++        cleanupSuffix, localDirs);
++    File attemptLogDir = new File(strAttemptLogDir);
++    if (!attemptLogDir.mkdirs()) {
++      throw new IOException("Creation of " + attemptLogDir + " failed.");
++    }
++    String strLinkAttemptLogDir = getJobDir(
++        taskID.getJobID()).getAbsolutePath() + File.separatorChar + 
++        taskID.toString() + cleanupSuffix;
++    if (FileUtil.symLink(strAttemptLogDir, strLinkAttemptLogDir) != 0) {
++      throw new IOException("Creation of symlink from " + 
++                            strLinkAttemptLogDir + " to " + strAttemptLogDir +
++                            " failed.");
++    }
++
++    FileSystem localFs = FileSystem.getLocal(new Configuration());
++    localFs.setPermission(new Path(attemptLogDir.getPath()),
++                          new FsPermission((short)0700));
++  }
++
++  /**
++   * Get one of the mapred local directory in a round-robin-way.
++   * @param localDirs mapred local directories
++   * @return the next chosen mapred local directory
++   * @throws IOException
++   */
++  private static String getNextLocalDir(String[] localDirs) throws IOException {
++    if (localDirs.length == 0) {
++      throw new IOException ("Not enough mapred.local.dirs ("
++                             + localDirs.length + ")");
++    }
++    return localDirs[Math.abs(rotor.getAndIncrement()) % localDirs.length];  
++  }
++
++  /**
++   * Get attempt log directory path for the given attempt-id under randomly
++   * selected mapred local directory.
++   * @param taskID attempt-id for which log dir path is needed
++   * @param cleanupSuffix ".cleanup" if this attempt is a cleanup attempt 
++   * @param localDirs mapred local directories
++   * @return target task attempt log directory
++   * @throws IOException
++   */
++  public static String getTaskAttemptLogDir(TaskAttemptID taskID, 
++      String cleanupSuffix, String[] localDirs) throws IOException {
++    StringBuilder taskLogDirLocation = new StringBuilder();
++    taskLogDirLocation.append(getNextLocalDir(localDirs));
++    taskLogDirLocation.append(File.separatorChar);
++    taskLogDirLocation.append(USERLOGS_DIR_NAME);
++    taskLogDirLocation.append(File.separatorChar);
++    taskLogDirLocation.append(taskID.getJobID().toString());
++    taskLogDirLocation.append(File.separatorChar);
++    taskLogDirLocation.append(taskID.toString()+cleanupSuffix);
++    return taskLogDirLocation.toString();
++  }
++  
+   public static File getTaskLogFile(TaskAttemptID taskid, boolean isCleanup,
+       LogName filter) {
+     return new File(getAttemptDir(taskid, isCleanup), filter.toString());
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index 34441c6..8925eba 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -284,15 +284,7 @@ abstract class TaskRunner extends Thread {
+         TaskLog.LogName.STDOUT);
+     logFiles[1] = TaskLog.getTaskLogFile(taskid, isCleanup,
+         TaskLog.LogName.STDERR);
+-    File logDir = logFiles[0].getParentFile();
+-    boolean b = logDir.mkdirs();
+-    if (!b) {
+-      LOG.warn("mkdirs failed. Ignoring");
+-    } else {
+-      FileSystem localFs = FileSystem.getLocal(conf);
+-      localFs.setPermission(new Path(logDir.getCanonicalPath()),
+-                            new FsPermission((short)0700));
+-    }
++    getTracker().getTaskController().createLogDir(taskid, isCleanup);
+ 
+     return logFiles;
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 8dcc5c5..a5ba0f5 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -20,7 +20,6 @@ package org.apache.hadoop.mapred;
+ import java.io.File;
+ import java.io.FileInputStream;
+ import java.io.FileNotFoundException;
+-import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.OutputStream;
+ import java.io.RandomAccessFile;
+@@ -37,6 +36,7 @@ import java.util.Iterator;
+ import java.util.LinkedHashMap;
+ import java.util.LinkedList;
+ import java.util.List;
++import java.util.ListIterator;
+ import java.util.Map;
+ import java.util.Random;
+ import java.util.Set;
+@@ -63,7 +63,6 @@ import org.apache.hadoop.mapreduce.server.tasktracker.*;
+ import org.apache.hadoop.mapreduce.server.tasktracker.userlogs.*;
+ import org.apache.hadoop.fs.DF;
+ import org.apache.hadoop.fs.CommonConfigurationKeys;
+-import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FileUtil;
+@@ -78,14 +77,12 @@ import org.apache.hadoop.io.SecureIOUtils;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.ipc.Server;
+-import org.apache.hadoop.mapred.QueueManager.QueueACL;
+ import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
+ import org.apache.hadoop.mapred.TaskLog.LogFileDetail;
+ import org.apache.hadoop.mapred.TaskLog.LogName;
+ import org.apache.hadoop.mapred.TaskStatus.Phase;
+ import org.apache.hadoop.mapred.TaskTrackerStatus.TaskTrackerHealthStatus;
+ import org.apache.hadoop.mapred.pipes.Submitter;
+-import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.mapreduce.security.SecureShuffleUtils;
+ import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
+@@ -173,8 +170,99 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+ 
+   volatile boolean running = true;
+ 
++  /**
++   * Manages TT local storage directories.
++   */
++  static class LocalStorage {
++    private List<String> localDirs;
++    private int numFailures;
++
++    /**
++     * TaskTracker internal only
++     */
++    public LocalStorage(String[] dirs) {
++      localDirs = new ArrayList<String>();
++      localDirs.addAll(Arrays.asList(dirs));
++    }
++
++    /**
++     * @return the number of valid local directories
++     */
++    synchronized int numDirs() {
++      return localDirs.size();
++    }
++
++    /**
++     * @return the current valid directories 
++     */
++    synchronized String[] getDirs() {
++      return localDirs.toArray(new String[localDirs.size()]);
++    }
++
++    /**
++     * @return the current valid directories
++     */
++    synchronized String getDirsString() {
++      return StringUtils.join(",", localDirs);
++    }
++
++    /**
++     * @return the number of directory failures
++     */
++     synchronized int numFailures() {
++       return numFailures;
++     }
++
++    /**
++     * Check the current set of local directories, updating the list
++     * of valid directories if necessary.
++     * @param checkAndFixPermissions should check the permissions of the
++     *        directory and try to fix them if incorrect. This is
++     *        expensive so should only be done at startup.
++     * @throws DiskErrorException if no directories are writable
++     */
++    synchronized void checkDirs(LocalFileSystem fs,
++                                boolean checkAndFixPermissions)
++        throws DiskErrorException {
++      ListIterator<String> it = localDirs.listIterator();
++      while (it.hasNext()) {
++        final String path = it.next();
++        try {
++          File dir = new File(path);
++          if (checkAndFixPermissions) {
++            DiskChecker.checkDir(fs, new Path(path), LOCAL_DIR_PERMISSION);
++            // This version of DiskChecker#checkDir - unlike the one
++            // below - doesn't use File to check if an actual read or
++            // write will fail (it just checks the permissions value)
++            // so we need to check that here.
++            if (!dir.canRead()) {
++              throw new DiskErrorException("Dir is not readable: " + path);
++            }
++            if (!dir.canWrite()) {
++              throw new DiskErrorException("Dir is not writable: " + path);
++            }
++          } else {
++            DiskChecker.checkDir(dir);
++          }
++        } catch (IOException ioe) {
++          LOG.warn("TaskTracker local dir " + path + " error " + 
++              ioe.getMessage() + ", removing from local dirs");
++          it.remove();
++          numFailures++;
++        }
++      }
++
++      if (localDirs.isEmpty()) {
++        throw new DiskErrorException(
++            "No mapred local directories are writable");
++      }
++    }
++  }
++
++  private LocalStorage localStorage;
++  private long lastCheckDirsTime;
++  private int lastNumFailures;
+   private LocalDirAllocator localDirAllocator;
+-  private String[] localdirs;
+   String taskTrackerName;
+   String localHostname;
+   InetSocketAddress jobTrackAddr;
+@@ -268,7 +356,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   private Localizer localizer;
+   private int maxMapSlots;
+   private int maxReduceSlots;
+-  private int failures;
++  private int taskFailures;
+   final long mapRetainSize;
+   final long reduceRetainSize;
+ 
+@@ -335,6 +423,19 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   private JettyBugMonitor jettyBugMonitor;
+ 
+   
++  /**
++   * Configuration property for disk health check interval in milli seconds.
++   * Currently, configuring this to a value smaller than the heartbeat interval
++   * is equivalent to setting this to heartbeat interval value.
++   */
++  static final String DISK_HEALTH_CHECK_INTERVAL_PROPERTY =
++      "mapred.disk.healthChecker.interval";
++  /**
++   * How often TaskTracker needs to check the health of its disks.
++   * Default value is {@link MRConstants#DEFAULT_DISK_HEALTH_CHECK_INTERVAL}
++   */
++  private long diskHealthCheckInterval;
++
+   /*
+    * A list of commitTaskActions for whom commit response has been received 
+    */
+@@ -662,7 +763,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+    * @throws IOException
+    */
+   private void deleteUserDirectories(Configuration conf) throws IOException {
+-    for(String root: localdirs) {
++    for(String root: localStorage.getDirs()) {
+       for(FileStatus status: localFs.listStatus(new Path(root, SUBDIR))) {
+         String owner = status.getOwner();
+         String path = status.getPath().getName();
+@@ -674,45 +775,54 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   }
+ 
+   void initializeDirectories() throws IOException {
+-    localFs = FileSystem.getLocal(fConf);
+-    checkLocalDirs(localFs, localdirs = this.fConf.getLocalDirs(), true);
++    final String dirs = localStorage.getDirsString();
++    fConf.setStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY, dirs);
++    LOG.info("Good mapred local directories are: " + dirs);
++    taskController.setConf(fConf);
++    if (server != null) {
++      server.setAttribute("conf", fConf);
++    }
++
+     deleteUserDirectories(fConf);
++
+     asyncDiskService = new MRAsyncDiskService(fConf);
+     asyncDiskService.cleanupAllVolumes();
+ 
+     final FsPermission ttdir = FsPermission.createImmutable((short) 0755);
+-    for (String s : localdirs) {
++    for (String s : localStorage.getDirs()) {
+       localFs.mkdirs(new Path(s, SUBDIR), ttdir);
+     }
++    // NB: deleteLocalFiles uses the configured local dirs, but does not
++    // fail if a local directory has failed.
+     fConf.deleteLocalFiles(TT_PRIVATE_DIR);
+     final FsPermission priv = FsPermission.createImmutable((short) 0700);
+-    for (String s : localdirs) {
++    for (String s : localStorage.getDirs()) {
+       localFs.mkdirs(new Path(s, TT_PRIVATE_DIR), priv);
+     }
+     fConf.deleteLocalFiles(TT_LOG_TMP_DIR);
+     final FsPermission pub = FsPermission.createImmutable((short) 0755);
+-    for (String s : localdirs) {
++    for (String s : localStorage.getDirs()) {
+       localFs.mkdirs(new Path(s, TT_LOG_TMP_DIR), pub);
+     }
+-
+-    // Set up the user log directory
+-    File taskLog = TaskLog.getUserLogDir();
+-    if (!taskLog.isDirectory() && !taskLog.mkdirs()) {
+-      LOG.warn("Unable to create taskLog directory : " + taskLog.getPath());
+-    } else {
+-      Path taskLogDir = new Path(taskLog.getCanonicalPath());
+-      try {
+-        localFs.setPermission(taskLogDir,
+-                              new FsPermission((short)0755));
+-      } catch (IOException ioe) {
+-        throw new IOException(
+-          "Unable to set permissions on task log directory. " +
+-          taskLogDir + " should be owned by " +
+-          "and accessible by user '" + System.getProperty("user.name") +
+-          "'.", ioe);
++    // Create userlogs directory under all good mapred-local-dirs
++    for (String s : localStorage.getDirs()) {
++      Path userLogsDir = new Path(s, TaskLog.USERLOGS_DIR_NAME);
++      if (!localFs.exists(userLogsDir)) {
++        if (!localFs.mkdirs(userLogsDir, pub)) {
++          LOG.warn("Unable to create task log directory: " + userLogsDir);
++        }
++      } else {
++        try {
++          localFs.setPermission(userLogsDir, new FsPermission((short)0755));
++        } catch (IOException ioe) {
++          throw new IOException(
++            "Unable to set permissions on task log directory. " +
++            userLogsDir + " should be owned by " +
++            "and accessible by user '" + System.getProperty("user.name") +
++            "'.", ioe);
++        }
+       }
+     }
+-    DiskChecker.checkDir(TaskLog.getUserLogDir());
+   }
+ 
+   private void checkSecurityRequirements() throws IOException {
+@@ -868,7 +978,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     reduceLauncher.start();
+ 
+     // create a localizer instance
+-    setLocalizer(new Localizer(localFs, fConf.getLocalDirs()));
++    setLocalizer(new Localizer(localFs, localStorage.getDirs()));
+ 
+     //Start up node health checker service.
+     if (shouldStartHealthMonitor(this.fConf)) {
+@@ -925,7 +1035,9 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+    */
+   @Deprecated
+   public void cleanupStorage() throws IOException {
+-    this.fConf.deleteLocalFiles();
++    this.fConf.deleteLocalFiles(SUBDIR);
++    this.fConf.deleteLocalFiles(TT_PRIVATE_DIR);
++    this.fConf.deleteLocalFiles(TT_LOG_TMP_DIR);
+   }
+ 
+   // Object on wait which MapEventsFetcherThread is going to wait.
+@@ -1326,6 +1438,8 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   private void launchTaskForJob(TaskInProgress tip, JobConf jobConf,
+                                 RunningJob rjob) throws IOException {
+     synchronized (tip) {
++      jobConf.set(JobConf.MAPRED_LOCAL_DIR_PROPERTY,
++                  localStorage.getDirsString());
+       tip.setJobConf(jobConf);
+       tip.setUGI(rjob.ugi);
+       tip.launchTask(rjob);
+@@ -1367,8 +1481,13 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+ 
+     // Clear local storage
+     if (asyncDiskService != null) {
++
+       // Clear local storage
+-      asyncDiskService.cleanupAllVolumes();
++      try {
++        asyncDiskService.cleanupAllVolumes();
++      } catch (Exception ioe) {
++        LOG.warn("IOException shutting down TaskTracker", ioe);
++      }
+       
+       // Shutdown all async deletion threads with up to 10 seconds of delay
+       asyncDiskService.shutdown();
+@@ -1433,6 +1552,14 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     fConf = conf;
+   }
+ 
++  void setLocalStorage(LocalStorage in) {
++    localStorage = in;
++  }
++	  
++  void setLocalDirAllocator(LocalDirAllocator in) {
++    localDirAllocator = in;
++  }
++  
+   /**
+    * Start with the local machine name, and the default JobTracker
+    */
+@@ -1443,6 +1570,8 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+                   "mapred.tasktracker.map.tasks.maximum", 2);
+     maxReduceSlots = conf.getInt(
+                   "mapred.tasktracker.reduce.tasks.maximum", 2);
++    diskHealthCheckInterval = conf.getLong(DISK_HEALTH_CHECK_INTERVAL_PROPERTY,
++                                           DEFAULT_DISK_HEALTH_CHECK_INTERVAL);
+     aclsManager = new ACLsManager(conf, new JobACLsManager(conf), null);
+     this.jobTrackAddr = JobTracker.getAddress(conf);
+     String infoAddr = 
+@@ -1465,9 +1594,15 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     Class<? extends TaskController> taskControllerClass = 
+       conf.getClass("mapred.task.tracker.task-controller", 
+                      DefaultTaskController.class, TaskController.class);
+-   taskController = 
+-     (TaskController) ReflectionUtils.newInstance(taskControllerClass, conf);
+-   taskController.setup(localDirAllocator);
++
++    fConf = new JobConf(conf);
++    localFs = FileSystem.getLocal(fConf);
++    localStorage = new LocalStorage(fConf.getLocalDirs());
++    localStorage.checkDirs(localFs, true);
++    taskController = 
++      (TaskController)ReflectionUtils.newInstance(taskControllerClass, fConf);
++    taskController.setup(localDirAllocator, localStorage);
++    lastNumFailures = localStorage.numFailures();
+ 
+     // create user log manager
+     setUserLogManager(new UserLogManager(conf, taskController));
+@@ -1476,7 +1611,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     initialize();
+     server.setAttribute("task.tracker", this);
+     server.setAttribute("local.file.system", local);
+-    server.setAttribute("conf", conf);
++
+     server.setAttribute("log", LOG);
+     server.setAttribute("localDirAllocator", localDirAllocator);
+     server.setAttribute("shuffleServerMetrics", shuffleServerMetrics);
+@@ -1610,7 +1745,19 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+           systemDirectory = new Path(dir);
+           systemFS = systemDirectory.getFileSystem(fConf);
+         }
+-        
++
++        now = System.currentTimeMillis();
++        if (now > (lastCheckDirsTime + diskHealthCheckInterval)) {
++          localStorage.checkDirs(localFs, false);
++          lastCheckDirsTime = now;
++          int numFailures = localStorage.numFailures();
++          // Re-init the task tracker if there were any new failures
++          if (numFailures > lastNumFailures) {
++            lastNumFailures = numFailures;
++            return State.STALE;
++          }
++        }
++
+         // Send the heartbeat and process the jobtracker's directives
+         HeartbeatResponse heartbeatResponse = transmitHeartBeat(now);
+ 
+@@ -1618,7 +1765,6 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+         // next heartbeat   
+         lastHeartbeat = System.currentTimeMillis();
+         
+-        
+         // Check if the map-event list needs purging
+         Set<JobID> jobs = heartbeatResponse.getRecoveredJobs();
+         if (jobs.size() > 0) {
+@@ -1704,7 +1850,8 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+           jobClient.reportTaskTrackerError(taskTrackerName, 
+                                            "DiskErrorException", msg);
+         }
+-        return State.STALE;
++        // If we caught a DEE here we have no good dirs, therefore shutdown.
++        return State.DENIED;
+       } catch (RemoteException re) {
+         String reClass = re.getClassName();
+         if (DisallowedTaskTrackerException.class.getName().equals(reClass)) {
+@@ -1755,7 +1902,8 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+                                        httpPort, 
+                                        cloneAndResetRunningTaskStatuses(
+                                          sendCounters), 
+-                                       failures, 
++                                       taskFailures,
++                                       localStorage.numFailures(),
+                                        maxMapSlots,
+                                        maxReduceSlots); 
+       }
+@@ -1777,7 +1925,6 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+       localMinSpaceStart = minSpaceStart;
+     }
+     if (askForNewTask) {
+-      checkLocalDirs(localFs, fConf.getLocalDirs(), false);
+       askForNewTask = enoughFreeSpace(localMinSpaceStart);
+       long freeDiskSpace = getFreeSpace();
+       long totVmem = getTotalVirtualMemoryOnTT();
+@@ -2085,7 +2232,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+                                          jobDir.substring(userDir.length()));
+     directoryCleanupThread.addToQueue(jobCleanup);
+     
+-    for (String str : localdirs) {
++    for (String str : localStorage.getDirs()) {
+       Path ttPrivateJobDir = FileSystem.getLocal(fConf).makeQualified(
+         new Path(str, TaskTracker.getPrivateDirForJob(user, jobId.toString())));
+       PathDeletionContext ttPrivateJobCleanup =
+@@ -2207,7 +2354,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   
+   private long getFreeSpace() throws IOException {
+     long biggestSeenSoFar = 0;
+-    String[] localDirs = fConf.getLocalDirs();
++    String[] localDirs = localStorage.getDirs();
+     for (int i = 0; i < localDirs.length; i++) {
+       DF df = null;
+       if (localDirsDf.containsKey(localDirs[i])) {
+@@ -2458,7 +2605,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+       getUserLogManager().start();
+       startCleanupThreads();
+       boolean denied = false;
+-      while (running && !shuttingDown && !denied) {
++      while (running && !shuttingDown) {
+         boolean staleState = false;
+         try {
+           // This while-loop attempts reconnects if we get network errors
+@@ -2482,9 +2629,15 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+             }
+           }
+         } finally {
+-          close();
++          // If denied we'll close via shutdown below. We should close
++          // here even if shuttingDown as shuttingDown can be set even
++          // if shutdown is not called.
++          if (!denied) {
++            close();
++          }
+         }
+         if (shuttingDown) { return; }
++        if (denied) { break; }
+         LOG.warn("Reinitializing local state");
+         initialize();
+       }
+@@ -2495,8 +2648,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+       LOG.error("Got fatal exception while reinitializing TaskTracker: " +
+                 StringUtils.stringifyException(iex));
+       return;
+-    }
+-    catch (InterruptedException i) {
++    } catch (InterruptedException i) {
+       LOG.error("Got interrupted while reinitializing TaskTracker: " +
+           i.getMessage());
+       return;
+@@ -2848,7 +3000,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+         }
+         if (!done) {
+           if (!wasKilled) {
+-            failures += 1;
++            taskFailures++;
+             setTaskFailState(true);
+             // call the script here for the failed tasks.
+             if (debugCommand != null) {
+@@ -3088,7 +3240,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+           isCleaningup()) {
+         wasKilled = true;
+         if (wasFailure) {
+-          failures += 1;
++          taskFailures++;
+         }
+         // runner could be null if task-cleanup attempt is not localized yet
+         if (runner != null) {
+@@ -3097,7 +3249,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+         setTaskFailState(wasFailure);
+       } else if (taskStatus.getRunState() == TaskStatus.State.UNASSIGNED) {
+         if (wasFailure) {
+-          failures += 1;
++          taskFailures++;
+           taskStatus.setRunState(TaskStatus.State.FAILED);
+         } else {
+           taskStatus.setRunState(TaskStatus.State.KILLED);
+@@ -3681,43 +3833,6 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   }
+     
+   /**
+-   * Check if the given local directories
+-   * (and parent directories, if necessary) can be created.
+-   * @param localDirs where the new TaskTracker should keep its local files.
+-   * @param checkAndFixPermissions should check the permissions of the directory
+-   *        and try to fix them if incorrect. This is expensive so should only be
+-   *        done at startup.
+-   * @throws DiskErrorException if all local directories are not writable
+-   */
+-  private static void checkLocalDirs(LocalFileSystem localFs, 
+-                                     String[] localDirs,
+-                                     boolean checkAndFixPermissions) 
+-    throws DiskErrorException {
+-    boolean writable = false;
+-        
+-    if (localDirs != null) {
+-      for (int i = 0; i < localDirs.length; i++) {
+-        try {
+-          if (checkAndFixPermissions) {
+-            DiskChecker.checkDir(localFs, new Path(localDirs[i]),
+-                                 LOCAL_DIR_PERMISSION);
+-          } else {
+-            DiskChecker.checkDir(new File(localDirs[i]));
+-          }
+-
+-          writable = true;
+-        } catch(IOException e) {
+-          LOG.warn("Task Tracker local " + e.getMessage());
+-        }
+-      }
+-    }
+-
+-    if (!writable)
+-      throw new DiskErrorException(
+-                                   "all local directories are not writable");
+-  }
+-    
+-  /**
+    * Is this task tracker idle?
+    * @return has this task tracker finished and cleaned up all of its tasks?
+    */
+@@ -4065,6 +4180,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     return paths;
+   }
+ 
++  // only used by tests
+   FileSystem getLocalFileSystem(){
+     return localFs;
+   }
+@@ -4082,6 +4198,10 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     return maxReduceSlots;
+   }
+ 
++  int getNumDirFailures() {
++    return localStorage.numFailures();
++  }
++
+   //called from unit test
+   synchronized void setMaxMapSlots(int mapSlots) {
+     maxMapSlots = mapSlots;
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTrackerMetricsInst.java b/src/mapred/org/apache/hadoop/mapred/TaskTrackerMetricsInst.java
+index d68fdce..bede64a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTrackerMetricsInst.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTrackerMetricsInst.java
+@@ -71,6 +71,7 @@ class TaskTrackerMetricsInst extends TaskTrackerInstrumentation
+       metricsRecord.setMetric("mapTaskSlots", (short)tt.getMaxCurrentMapTasks());
+       metricsRecord.setMetric("reduceTaskSlots", 
+                                    (short)tt.getMaxCurrentReduceTasks());
++      metricsRecord.setMetric("failedDirs", tt.getNumDirFailures());
+       metricsRecord.incrMetric("tasks_completed", numCompletedTasks);
+       metricsRecord.incrMetric("tasks_failed_timeout", timedoutTasks);
+       metricsRecord.incrMetric("tasks_failed_ping", tasksFailedPing);
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java b/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
+index 8bde436..4d6fa0e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
+@@ -47,7 +47,8 @@ public class TaskTrackerStatus implements Writable {
+   String trackerName;
+   String host;
+   int httpPort;
+-  int failures;
++  int taskFailures;
++  int dirFailures;
+   List<TaskStatus> taskReports;
+     
+   volatile long lastSeen;
+@@ -357,14 +358,15 @@ public class TaskTrackerStatus implements Writable {
+    */
+   public TaskTrackerStatus(String trackerName, String host, 
+                            int httpPort, List<TaskStatus> taskReports, 
+-                           int failures, int maxMapTasks,
+-                           int maxReduceTasks) {
++                           int taskFailures, int dirFailures,
++                           int maxMapTasks, int maxReduceTasks) {
+     this.trackerName = trackerName;
+     this.host = host;
+     this.httpPort = httpPort;
+ 
+     this.taskReports = new ArrayList<TaskStatus>(taskReports);
+-    this.failures = failures;
++    this.taskFailures = taskFailures;
++    this.dirFailures = dirFailures;
+     this.maxMapTasks = maxMapTasks;
+     this.maxReduceTasks = maxReduceTasks;
+     this.resStatus = new ResourceStatus();
+@@ -394,8 +396,16 @@ public class TaskTrackerStatus implements Writable {
+    * Get the number of tasks that have failed on this tracker.
+    * @return The number of failed tasks
+    */
+-  public int getFailures() {
+-    return failures;
++  public int getTaskFailures() {
++    return taskFailures;
++  }
++
++  /**
++   * Get the number of local directories that have failed on this tracker.
++   * @return The number of failed local directories
++   */
++  public int getDirFailures() {
++    return dirFailures;
+   }
+     
+   /**
+@@ -652,7 +662,8 @@ public class TaskTrackerStatus implements Writable {
+     Text.writeString(out, trackerName);
+     Text.writeString(out, host);
+     out.writeInt(httpPort);
+-    out.writeInt(failures);
++    out.writeInt(taskFailures);
++    out.writeInt(dirFailures);
+     out.writeInt(maxMapTasks);
+     out.writeInt(maxReduceTasks);
+     resStatus.write(out);
+@@ -668,7 +679,8 @@ public class TaskTrackerStatus implements Writable {
+     this.trackerName = Text.readString(in);
+     this.host = Text.readString(in);
+     this.httpPort = in.readInt();
+-    this.failures = in.readInt();
++    this.taskFailures = in.readInt();
++    this.dirFailures = in.readInt();
+     this.maxMapTasks = in.readInt();
+     this.maxReduceTasks = in.readInt();
+     resStatus.readFields(in);
+diff --git a/src/mapred/org/apache/hadoop/mapred/UserLogCleaner.java b/src/mapred/org/apache/hadoop/mapred/UserLogCleaner.java
+index deb314c..9de453b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/UserLogCleaner.java
++++ b/src/mapred/org/apache/hadoop/mapred/UserLogCleaner.java
+@@ -123,36 +123,53 @@ public class UserLogCleaner extends Thread {
+   }
+ 
+   /**
+-   * Clears all the logs in userlog directory.
++   * Adds the job log directories for deletion with default retain hours. 
++   * Deletes all other directories, if any. 
+    * 
+-   * Adds the job directories for deletion with default retain hours. Deletes
+-   * all other directories, if any. This is usually called on reinit/restart of
+-   * the TaskTracker
++   * @param loc location of log directory
++   * @param conf 
++   * @throws IOException
++   */
++  public void addOldUserLogsForDeletion(File loc, Configuration conf)  
++      throws IOException  {
++    if (!loc.exists()) {
++      return;
++    }
++    long now = clock.getTime();
++    for (String logDir : loc.list()) {
++      // add all the log dirs to taskLogsMnonitor.
++      JobID jobid = null;
++      try {
++        jobid = JobID.forName(logDir);
++      } catch (IllegalArgumentException ie) {
++        deleteLogPath(logDir);
++        continue;
++      }
++      // add the job log directory for deletion with 
++      // default retain hours, if it is not already added
++      if (!completedJobs.containsKey(jobid)) {
++        JobCompletedEvent jce = 
++          new JobCompletedEvent(jobid, now,getUserlogRetainHours(conf));
++        userLogManager.addLogEvent(jce);
++      }
++    }
++  }
++  
++  /**
++   * Clears all the logs in userlogs directory. This is usually called on 
++   * reinit/restart of the TaskTracker.
+    * 
+    * @param conf
+    * @throws IOException
+    */
+   public void clearOldUserLogs(Configuration conf) throws IOException {
+     File userLogDir = TaskLog.getUserLogDir();
+-    if (userLogDir.exists()) {
+-      long now = clock.getTime();
+-      for(String logDir: userLogDir.list()) {
+-        // add all the log dirs to taskLogsMnonitor.
+-        JobID jobid = null;
+-        try {
+-          jobid = JobID.forName(logDir);
+-        } catch (IllegalArgumentException ie) {
+-          deleteLogPath(logDir);
+-          continue;
+-        }
+-        // add the job log directory for deletion with default retain hours,
+-        // if it is not already added
+-        if (!completedJobs.containsKey(jobid)) {
+-          JobCompletedEvent jce = 
+-            new JobCompletedEvent(jobid, now,getUserlogRetainHours(conf));
+-          userLogManager.addLogEvent(jce);
+-        }
+-      }
++    addOldUserLogsForDeletion(userLogDir, conf);
++    String[] localDirs = conf.getStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY);
++    for (String localDir : localDirs) {
++      File mapredLocalUserLogDir = new File(localDir + 
++        File.separatorChar + TaskLog.USERLOGS_DIR_NAME);
++      addOldUserLogsForDeletion(mapredLocalUserLogDir, conf);
+     }
+   }
+ 
+@@ -196,6 +213,49 @@ public class UserLogCleaner extends Thread {
+   }
+ 
+   /**
++   * Gets the user for the log path.
++   * 
++   * @param logPath
++   * @throws IOException
++   */
++  private String getLogUser(String logPath) throws IOException {
++    // Get user from <hadoop.log.dir>/userlogs/jobid path
++    String logRoot = TaskLog.getUserLogDir().toString();
++    String user = null;
++    try {
++      user = localFs.getFileStatus(new Path(logRoot, logPath)).getOwner();
++    } catch (Exception e) {
++      // Ignore this exception since this path might have been deleted.
++    }
++
++    // If we found the user for this logPath, then return this user
++    if (user != null) {
++      return user;
++    }
++
++    // If <hadoop.log.dir>/userlogs/jobid not found, then get user from 
++    // any one of existing <mapred.local.dir>/userlogs/jobid path(s)
++    String[] localDirs = userLogManager.getTaskController().getLocalDirs();
++    for (String localDir : localDirs) {
++      try {
++        logRoot = localDir + File.separator + TaskLog.USERLOGS_DIR_NAME;
++        user = localFs.getFileStatus(new Path(logRoot, logPath)).getOwner();
++        // If we found the user for this logPath, then break this loop
++        if (user != null) {
++          break;
++        }
++      } catch (Exception e) {
++        // Ignore this exception since this path might have been deleted.
++      }
++    }
++
++    if (user == null) {
++      throw new IOException("Userlog path not found for " + logPath);
++    }
++    return user;
++  }
++  
++  /**
+    * Deletes the log path.
+    * 
+    * This path will be removed through {@link CleanupQueue}
+@@ -205,8 +265,7 @@ public class UserLogCleaner extends Thread {
+    */
+   private void deleteLogPath(String logPath) throws IOException {
+     LOG.info("Deleting user log path " + logPath);
+-    String logRoot = TaskLog.getUserLogDir().toString();
+-    String user = localFs.getFileStatus(new Path(logRoot, logPath)).getOwner();
++    String user = getLogUser(logPath);
+     TaskController controller = userLogManager.getTaskController();
+     PathDeletionContext item = 
+       new TaskController.DeletionContext(controller, true, user, logPath);
+diff --git a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+index 13c81cb..d4c694e 100644
+--- a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
++++ b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+@@ -35,10 +35,12 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.filecache.TaskDistributedCacheManager.CacheFile;
+ import org.apache.hadoop.mapred.DefaultTaskController;
++import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.JobID;
+ import org.apache.hadoop.mapred.JobLocalizer;
+ import org.apache.hadoop.mapred.TaskController;
+ import org.apache.hadoop.mapred.TaskTracker;
++import org.apache.hadoop.mapred.UtilsForTests;
+ import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.filecache.DistributedCache;
+ import org.apache.hadoop.fs.FileStatus;
+@@ -121,7 +123,8 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+         taskControllerClass, conf);
+ 
+     // setup permissions for mapred local dir
+-    taskController.setup(localDirAllocator);
++    UtilsForTests.setupTC(taskController, localDirAllocator,
++        conf.getStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY));
+ 
+     // Create the temporary cache files to be used in the tests.
+     firstCacheFile = new Path(TEST_ROOT_DIR, "firstcachefile");
+@@ -136,7 +139,8 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+   
+   protected void refreshConf(Configuration conf) throws IOException {
+     taskController.setConf(conf);
+-    taskController.setup(localDirAllocator);
++    UtilsForTests.setupTC(taskController, localDirAllocator,
++        conf.getStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY));
+   }
+ 
+   /**
+diff --git a/src/test/org/apache/hadoop/mapred/ClusterMapReduceTestCase.java b/src/test/org/apache/hadoop/mapred/ClusterMapReduceTestCase.java
+index 2db97af..a4dc7c3 100644
+--- a/src/test/org/apache/hadoop/mapred/ClusterMapReduceTestCase.java
++++ b/src/test/org/apache/hadoop/mapred/ClusterMapReduceTestCase.java
+@@ -57,7 +57,8 @@ public abstract class ClusterMapReduceTestCase extends TestCase {
+   }
+ 
+   /**
+-   * Starts the cluster within a testcase.
++   * Starts the cluster within a testcase with single mapred-local-dir per
++   * TaskTracker.
+    * <p/>
+    * Note that the cluster is already started when the testcase method
+    * is invoked. This method is useful if as part of the testcase the
+@@ -69,8 +70,28 @@ public abstract class ClusterMapReduceTestCase extends TestCase {
+    * @param props configuration properties to inject to the mini cluster
+    * @throws Exception if the cluster could not be started
+    */
+-  protected synchronized void startCluster(boolean reformatDFS, Properties props)
+-          throws Exception {
++  protected synchronized void startCluster(boolean reformatDFS,
++      Properties props) throws Exception {
++    startCluster(reformatDFS, props, 1);
++  }
++
++  /**
++   * Starts the cluster within a testcase with the given number of
++   * mapred-local-dirs per TaskTracker.
++   * <p/>
++   * Note that the cluster is already started when the testcase method
++   * is invoked. This method is useful if as part of the testcase the
++   * cluster has to be shutdown and restarted again.
++   * <p/>
++   * If the cluster is already running this method does nothing.
++   * @param reformatDFS indicates if DFS has to be reformated
++   * @param props configuration properties to inject to the mini cluster
++   * @param numDir 
++   * @throws Exception if the cluster could not be started
++   */
++  protected synchronized void startCluster(boolean reformatDFS,
++        Properties props, int numDir) throws Exception {
++      
+     if (dfsCluster == null) {
+       JobConf conf = new JobConf();
+       if (props != null) {
+@@ -83,7 +104,7 @@ public abstract class ClusterMapReduceTestCase extends TestCase {
+       ConfigurableMiniMRCluster.setConfiguration(props);
+       //noinspection deprecation
+       mrCluster = new ConfigurableMiniMRCluster(2, getFileSystem().getName(),
+-                                                1, conf);
++                                                numDir, conf);
+     }
+   }
+ 
+diff --git a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+index 918ba86..608fbc4 100644
+--- a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+@@ -33,9 +33,9 @@ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.fs.permission.FsAction;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.mapred.TaskTracker.LocalStorage;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+ import junit.framework.TestCase;
+@@ -77,14 +77,15 @@ public class ClusterWithLinuxTaskController extends TestCase {
+         + "/task-controller";
+ 
+     @Override
+-    public void setup(LocalDirAllocator allocator) throws IOException {
++    public void setup(LocalDirAllocator allocator, LocalStorage localStorage)
++        throws IOException {
+       // get the current ugi and set the task controller group owner
+       getConf().set(TT_GROUP, taskTrackerSpecialGroup);
+ 
+       // write configuration file
+       configurationFile = createTaskControllerConf(System
+           .getProperty(TASKCONTROLLER_PATH), getConf());
+-      super.setup(allocator);
++      super.setup(allocator, localStorage);
+     }
+ 
+     protected String getTaskControllerExecutablePath() {
+@@ -211,11 +212,7 @@ public class ClusterWithLinuxTaskController extends TestCase {
+     PrintWriter writer =
+         new PrintWriter(new FileOutputStream(configurationFile));
+ 
+-    writer.println(String.format("mapred.local.dir=%s", conf.
+-        get(JobConf.MAPRED_LOCAL_DIR_PROPERTY)));
+-
+-    writer
+-        .println(String.format("hadoop.log.dir=%s", TaskLog.getBaseLogDir()));
++    writer.println(String.format("hadoop.log.dir=%s", TaskLog.getBaseLogDir()));
+     writer.println(String.format(TT_GROUP + "=%s", conf.get(TT_GROUP)));
+ 
+     writer.flush();
+diff --git a/src/test/org/apache/hadoop/mapred/MiniMRCluster.java b/src/test/org/apache/hadoop/mapred/MiniMRCluster.java
+index 6b4b5e0..b383d20 100644
+--- a/src/test/org/apache/hadoop/mapred/MiniMRCluster.java
++++ b/src/test/org/apache/hadoop/mapred/MiniMRCluster.java
+@@ -146,6 +146,7 @@ public class MiniMRCluster {
+     String[] localDirs;
+     volatile boolean isInitialized = false;
+     volatile boolean isDead = false;
++    volatile boolean exited = false;
+     int numDir;
+ 
+     TaskTrackerRunner(int trackerId, int numDir, String hostname, 
+@@ -222,8 +223,9 @@ public class MiniMRCluster {
+         tt = null;
+         LOG.error("task tracker " + trackerId + " crashed", e);
+       }
++      exited = true;
+     }
+-        
++ 
+     /**
+      * Get the local dir for this TaskTracker.
+      * This is there so that we do not break
+diff --git a/src/test/org/apache/hadoop/mapred/TestClusterStatus.java b/src/test/org/apache/hadoop/mapred/TestClusterStatus.java
+index bd6b55d..6620751 100644
+--- a/src/test/org/apache/hadoop/mapred/TestClusterStatus.java
++++ b/src/test/org/apache/hadoop/mapred/TestClusterStatus.java
+@@ -154,7 +154,7 @@ public class TestClusterStatus extends TestCase {
+       List<TaskStatus> taskStatuses) {
+     return new TaskTrackerStatus(trackerName, 
+       JobInProgress.convertTrackerNameToHostName(trackerName), 0,
+-      taskStatuses, 0, mapSlotsPerTracker, reduceSlotsPerTracker);
++      taskStatuses, 0, 0, mapSlotsPerTracker, reduceSlotsPerTracker);
+   }
+   
+   public void testClusterMetrics() throws IOException, InterruptedException {
+@@ -267,10 +267,10 @@ public class TestClusterStatus extends TestCase {
+     TaskTracker tt2 = jobTracker.getTaskTracker(trackers[1]);
+     TaskTrackerStatus status1 = new TaskTrackerStatus(
+         trackers[0],JobInProgress.convertTrackerNameToHostName(
+-            trackers[0]),0,new ArrayList<TaskStatus>(), 0, 2, 2);
++            trackers[0]),0,new ArrayList<TaskStatus>(), 0, 0, 2, 2);
+     TaskTrackerStatus status2 = new TaskTrackerStatus(
+         trackers[1],JobInProgress.convertTrackerNameToHostName(
+-            trackers[1]),0,new ArrayList<TaskStatus>(), 0, 2, 2);
++            trackers[1]),0,new ArrayList<TaskStatus>(), 0, 0, 2, 2);
+     tt1.setStatus(status1);
+     tt2.setStatus(status2);
+     
+diff --git a/src/test/org/apache/hadoop/mapred/TestDiskFailures.java b/src/test/org/apache/hadoop/mapred/TestDiskFailures.java
+new file mode 100644
+index 0000000..7fddf5a
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestDiskFailures.java
+@@ -0,0 +1,151 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.util.StringUtils;
++
++import java.io.File;
++import java.io.IOException;
++import java.util.Properties;
++
++/**
++ * Verify if TaskTracker's in-memory good mapred local dirs list gets updated
++ * properly when disks fail.
++ */
++public class TestDiskFailures extends ClusterMapReduceTestCase {
++
++  private static final Log LOG = LogFactory.getLog(TestDiskFailures.class);
++
++  private static String localPathRoot = System.getProperty(
++      "test.build.data", "/tmp").replace(' ', '+');
++  private String DISK_HEALTH_CHECK_INTERVAL = "1000";//1 sec
++
++  @Override
++  protected void setUp() throws Exception {
++    // Do not start cluster here
++  };
++
++  @Override
++  protected void tearDown() throws Exception {
++    super.tearDown();
++    FileUtil.fullyDelete(new File(localPathRoot));
++  };
++
++  /**
++   * Make some of the the mapred-local-dirs fail/inaccessible and verify if
++   * TaskTracker gets reinited properly.
++   * @throws Exception
++   */
++  public void testDiskFailures() throws Exception {
++
++    FileSystem fs = FileSystem.get(new Configuration());
++    Path dir = new Path(localPathRoot, "mapred_local_dirs_base");
++    FileSystem.mkdirs(fs, dir, new FsPermission((short)0777));
++
++    Properties props = new Properties();
++    props.setProperty(JobConf.MAPRED_LOCAL_DIR_PROPERTY, dir.toUri().getPath());
++    // set disk health check interval to a small value (say 4 sec).
++    props.setProperty(TaskTracker.DISK_HEALTH_CHECK_INTERVAL_PROPERTY,
++        DISK_HEALTH_CHECK_INTERVAL);
++
++    // Let us have 4 mapred-local-dirs per tracker
++    final int numMapredLocalDirs = 4;
++    startCluster(true, props, numMapredLocalDirs);
++
++    MiniMRCluster cluster = getMRCluster();
++    String[] localDirs = cluster.getTaskTrackerLocalDirs(0);
++
++    // Make 1 disk fail and verify if TaskTracker gets re-inited or not and
++    // the good mapred local dirs list gets updated properly in TaskTracker.
++    prepareDirToFail(localDirs[2]);
++    String expectedMapredLocalDirs = localDirs[0] + "," + localDirs[1] + ","
++                                     + localDirs[3];
++    verifyReinitTaskTrackerAfterDiskFailure(expectedMapredLocalDirs, cluster);
++
++    // Make 2 more disks fail and verify if TaskTracker gets re-inited or not
++    // and the good mapred local dirs list gets updated properly in TaskTracker.
++    prepareDirToFail(localDirs[0]);
++    prepareDirToFail(localDirs[3]);
++    expectedMapredLocalDirs = localDirs[1];
++    verifyReinitTaskTrackerAfterDiskFailure(expectedMapredLocalDirs, cluster);
++
++    // Fail the remaining single disk(i.e. the remaining good mapred-local-dir).
++    prepareDirToFail(localDirs[1]);
++    waitForDiskHealthCheck();
++    assertTrue(
++        "Tasktracker is not dead even though all mapred local dirs became bad.",
++        cluster.getTaskTrackerRunner(0).exited);
++  }
++
++  /**
++   * Wait for the TaskTracker to go for the disk-health-check and (possibly)
++   * reinit.
++   * DiskHealthCheckInterval is 1 sec. So this wait time should be greater than
++   * [1 sec + TT_reinit_execution_time]. Let us have this as 4sec.
++   */
++  private void waitForDiskHealthCheck() {
++    try {
++      Thread.sleep(4000);
++    } catch(InterruptedException e) {
++      LOG.error("Interrupted while waiting for TaskTracker reinit.");
++    }
++  }
++
++  /**
++   * Verify if TaskTracker gets reinited properly after disk failure.
++   * @param expectedMapredLocalDirs expected mapred local dirs
++   * @param cluster MiniMRCluster in which 1st TaskTracker is supposed to get
++   *                reinited because of disk failure
++   * @throws IOException
++   */
++  private void verifyReinitTaskTrackerAfterDiskFailure(
++      String expectedMapredLocalDirs, MiniMRCluster cluster)
++      throws IOException {
++    // Wait for the TaskTracker to get reinited. DiskHealthCheckInterval is
++    // 1 sec. So this wait time should be > [1 sec + TT_reinit_execution_time].
++    waitForDiskHealthCheck();
++    String[] updatedLocalDirs = cluster.getTaskTrackerRunner(0)
++        .getTaskTracker().getJobConf().getLocalDirs();
++    String seenMapredLocalDirs = StringUtils.arrayToString(updatedLocalDirs);
++    LOG.info("ExpectedMapredLocalDirs=" + expectedMapredLocalDirs);
++    assertTrue("TaskTracker could not reinit properly after disk failure.",
++        expectedMapredLocalDirs.equals(seenMapredLocalDirs));    
++  }
++
++  /**
++   * Prepare directory for a failure. Replace the given directory on the
++   * local FileSystem with a regular file with the same name.
++   * This would cause failure of creation of directory in DiskChecker.checkDir()
++   * with the same name.
++   * @throws IOException 
++   */
++  private void prepareDirToFail(String dir)
++      throws IOException {
++    File file = new File(dir);
++    FileUtil.fullyDelete(file);
++    file.createNewFile();
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+index d7c7b01..51af55a 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+@@ -130,13 +130,13 @@ public class TestJobQueueTaskScheduler extends TestCase {
+       
+       TaskTracker tt1 = new TaskTracker("tt1");
+       tt1.setStatus(new TaskTrackerStatus("tt1", "tt1.host", 1,
+-                    new ArrayList<TaskStatus>(), 0,
++                    new ArrayList<TaskStatus>(), 0, 0,
+                     maxMapTasksPerTracker, maxReduceTasksPerTracker));
+       trackers.put("tt1", tt1);
+       
+       TaskTracker tt2 = new TaskTracker("tt2");
+       tt2.setStatus(new TaskTrackerStatus("tt2", "tt2.host", 2,
+-                    new ArrayList<TaskStatus>(), 0,
++                    new ArrayList<TaskStatus>(), 0, 0,
+                     maxMapTasksPerTracker, maxReduceTasksPerTracker));
+       trackers.put("tt2", tt2);
+     }
+diff --git a/src/test/org/apache/hadoop/mapred/TestJvmManager.java b/src/test/org/apache/hadoop/mapred/TestJvmManager.java
+index 223e9ef..6e6b30d 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJvmManager.java
++++ b/src/test/org/apache/hadoop/mapred/TestJvmManager.java
+@@ -28,9 +28,9 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.filecache.TrackerDistributedCacheManager;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.LocalDirAllocator;
+-import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapred.JvmManager.JvmManagerForType;
+ import org.apache.hadoop.mapred.JvmManager.JvmManagerForType.JvmRunner;
++import org.apache.hadoop.mapred.TaskTracker.LocalStorage;
+ import org.apache.hadoop.mapred.TaskTracker.RunningJob;
+ import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
+ import org.apache.hadoop.mapred.UtilsForTests.InlineCleanupQueue;
+@@ -75,8 +75,9 @@ public class TestJvmManager {
+     tt.setTaskController((dtc = new DefaultTaskController()));
+     Configuration conf = new Configuration();
+     dtc.setConf(conf);
+-    LocalDirAllocator ldirAlloc = new LocalDirAllocator("mapred.local.dir");
+-    tt.getTaskController().setup(ldirAlloc);
++    LocalDirAllocator ldirAlloc =
++        new LocalDirAllocator(JobConf.MAPRED_LOCAL_DIR_PROPERTY);
++    tt.getTaskController().setup(ldirAlloc, new LocalStorage(ttConf.getLocalDirs()));
+     JobID jobId = new JobID("test", 0);
+     jvmManager = new JvmManager(tt);
+     tt.setJvmManagerInstance(jvmManager);
+diff --git a/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+index 654fc81..6c0f01f 100644
+--- a/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+@@ -23,6 +23,7 @@ import java.io.IOException;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.LocalDirAllocator;
++import org.apache.hadoop.mapred.TaskTracker.LocalStorage;
+ import org.apache.hadoop.util.Shell;
+ 
+ import junit.framework.TestCase;
+@@ -64,7 +65,10 @@ public class TestLinuxTaskController extends TestCase {
+       // task controller setup should fail validating permissions.
+       Throwable th = null;
+       try {
+-        controller.setup(new LocalDirAllocator("mapred.local.dir"));
++        controller.setup(
++            new LocalDirAllocator(JobConf.MAPRED_LOCAL_DIR_PROPERTY),
++            new LocalStorage(controller.getConf().getStrings(
++                JobConf.MAPRED_LOCAL_DIR_PROPERTY)));
+       } catch (IOException ie) {
+         th = ie;
+       }
+@@ -73,7 +77,9 @@ public class TestLinuxTaskController extends TestCase {
+           + exitCode, th.getMessage().contains(
+           "with exit code " + exitCode));
+     } else {
+-      controller.setup(new LocalDirAllocator("mapred.local.dir"));
++      controller.setup(new LocalDirAllocator(JobConf.MAPRED_LOCAL_DIR_PROPERTY),
++          new LocalStorage(controller.getConf().getStrings(
++              JobConf.MAPRED_LOCAL_DIR_PROPERTY)));
+     }
+ 
+     execCommand(confFile, "sudo", "rm");
+diff --git a/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java b/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
+index a0309c0..ab60540 100644
+--- a/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
++++ b/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
+@@ -108,7 +108,6 @@ public class TestNodeRefresh extends TestCase {
+       mr = new MiniMRCluster(0, 0, numHosts * numTrackerPerHost, namenode, 1, 
+                              null, trackerHosts, clusterUgi, jtConf, 
+                              numExcluded * numTrackerPerHost);
+-      
+       jt = mr.getJobTrackerRunner().getJobTracker();
+       
+       // check if trackers from all the desired hosts have connected
+diff --git a/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java b/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
+index 6571e7e..d386944 100644
+--- a/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
++++ b/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
+@@ -91,7 +91,7 @@ public class TestParallelInitialization extends TestCase {
+       JobConf conf = new JobConf();
+       queueManager = new QueueManager(conf);
+       trackers.put("tt1", new TaskTrackerStatus("tt1", "tt1.host", 1,
+-                   new ArrayList<TaskStatus>(), 0,
++                   new ArrayList<TaskStatus>(), 0, 0,
+                    maxMapTasksPerTracker, maxReduceTasksPerTracker));
+     }
+     
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java
+index f932416..008a9ce 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java
+@@ -29,6 +29,8 @@ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.RawLocalFileSystem;
++import org.apache.hadoop.fs.LocalFileSystem;
++import org.apache.hadoop.mapred.TaskTracker.LocalStorage;
+ import org.junit.Test;
+ import org.junit.Before;
+ import org.mockito.Mockito;
+@@ -83,43 +85,38 @@ public class TestTaskTrackerDirectories {
+   }
+   
+   @Test
+-  public void testCreatesLogDir() throws Exception {
+-    File dir = TaskLog.getUserLogDir();
+-    FileUtil.fullyDelete(dir);
+-    
+-    setupTaskTracker(new Configuration());
+-    
+-    checkDir(dir.getAbsolutePath());
+-  }
+-  
+-  /**
+-   * If the log dir can't be created, the TT should fail to start since
+-   * it will be unable to localize or run tasks.
+-   */
+-  @Test
+-  public void testCantCreateLogDir() throws Exception {
+-    File dir = TaskLog.getUserLogDir();
+-    FileUtil.fullyDelete(dir);
+-    assertTrue("Making file in place of log dir",
+-        dir.createNewFile());
++  public void testCreatesLogDirs() throws Exception {
++    String[] dirs = new String[] {
++        TEST_DIR + "/local1",
++        TEST_DIR + "/local2"
++    };
+ 
+-    try {
+-      setupTaskTracker(new Configuration());
+-      fail("Didn't throw!");
+-    } catch (IOException ioe) {
+-      System.err.println("Got expected exception");
+-      ioe.printStackTrace(System.out);
+-    }
++    Path logDir1 = new Path(dirs[0], TaskLog.USERLOGS_DIR_NAME);
++    Path logDir2 = new Path(dirs[1], TaskLog.USERLOGS_DIR_NAME);
++    FileUtil.fullyDelete(new File(logDir1.toString()));
++    FileUtil.fullyDelete(new File(logDir2.toString()));
++
++    Configuration conf = new Configuration();
++    conf.setStrings("mapred.local.dir", dirs);
++    setupTaskTracker(conf);
++
++    checkDir(logDir1.toString());
++    checkDir(logDir2.toString());
+   }
+   
+   @Test
+   public void testFixesLogDirPermissions() throws Exception {
+-    File dir = TaskLog.getUserLogDir();
++    String[] dirs = new String[] {
++         TEST_DIR + "/local1"
++    };
++    File dir = new File(dirs[0]);
+     FileUtil.fullyDelete(dir);
+     dir.mkdirs();
+     FileUtil.chmod(dir.getAbsolutePath(), "000");
+-    
+-    setupTaskTracker(new Configuration());
++
++    Configuration conf = new Configuration();
++    conf.setStrings("mapred.local.dir", dirs);
++    setupTaskTracker(conf);
+     
+     checkDir(dir.getAbsolutePath());
+   }
+@@ -131,13 +128,21 @@ public class TestTaskTrackerDirectories {
+     TaskTracker tt = new TaskTracker();
+     tt.setConf(ttConf);
+     tt.setTaskController(Mockito.mock(TaskController.class));
++    LocalDirAllocator localDirAllocator = 
++      new LocalDirAllocator("mapred.local.dir");
++    tt.setLocalDirAllocator(localDirAllocator);
++    LocalFileSystem localFs = FileSystem.getLocal(conf);
++    LocalStorage localStorage = new LocalStorage(ttConf.getLocalDirs());
++    localStorage.checkDirs(localFs, true);
++    tt.setLocalStorage(localStorage);
++    tt.setLocalFileSystem(localFs);
+     tt.initializeDirectories();
+   }
+ 
+   private void checkDir(String dir) throws IOException {
+     FileSystem fs = RawLocalFileSystem.get(new Configuration());
+     File f = new File(dir);
+-    assertTrue(dir + "should exist", f.exists());
++    assertTrue(dir + " should exist", f.exists());
+     FileStatus stat = fs.getFileStatus(new Path(dir));
+     assertEquals(dir + " has correct permissions",
+         0755, stat.getPermission().toShort());
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+index 5b0e24b..923b174 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+@@ -39,6 +39,7 @@ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapred.JvmManager.JvmEnv;
+ import org.apache.hadoop.mapred.QueueManager.QueueACL;
++import org.apache.hadoop.mapred.TaskTracker.LocalStorage;
+ import org.apache.hadoop.mapred.TaskTracker.RunningJob;
+ import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
+ import org.apache.hadoop.mapred.UtilsForTests.InlineCleanupQueue;
+@@ -187,7 +188,7 @@ public class TestTaskTrackerLocalization extends TestCase {
+     // setup task controller
+     taskController = getTaskController();
+     taskController.setConf(trackerFConf);
+-    taskController.setup(lDirAlloc);
++    taskController.setup(lDirAlloc, new LocalStorage(trackerFConf.getLocalDirs()));
+     tracker.setTaskController(taskController);
+     tracker.setLocalizer(new Localizer(tracker.getLocalFileSystem(),localDirs));
+   }
+diff --git a/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
+index ba8184f..ac1fa66 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
+@@ -28,6 +28,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapred.ClusterWithLinuxTaskController.MyLinuxTaskController;
++import org.apache.hadoop.mapred.TaskTracker.LocalStorage;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.filecache.TestTrackerDistributedCacheManager;
+ 
+@@ -65,7 +66,8 @@ public class TestTrackerDistributedCacheManagerWithLinuxTaskController extends
+     String execPath = path + "/task-controller";
+     ((MyLinuxTaskController)taskController).setTaskControllerExe(execPath);
+     taskController.setConf(conf);
+-    taskController.setup(new LocalDirAllocator("mapred.local.dir"));
++    UtilsForTests.setupTC(taskController, localDirAllocator,
++        conf.getStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY));
+   }
+ 
+   @Override
+diff --git a/src/test/org/apache/hadoop/mapred/TestUserLogCleanup.java b/src/test/org/apache/hadoop/mapred/TestUserLogCleanup.java
+index 5b2b268..fc950ed 100644
+--- a/src/test/org/apache/hadoop/mapred/TestUserLogCleanup.java
++++ b/src/test/org/apache/hadoop/mapred/TestUserLogCleanup.java
+@@ -22,12 +22,16 @@ import java.io.IOException;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.fs.LocalDirAllocator;
++import org.apache.hadoop.mapred.TaskTracker.LocalStorage;
+ import org.apache.hadoop.mapred.UtilsForTests.FakeClock;
+ import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.mapreduce.server.tasktracker.Localizer;
+ import org.apache.hadoop.mapreduce.server.tasktracker.userlogs.*;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.ReflectionUtils;
+ 
+ import static org.junit.Assert.*;
+ 
+@@ -48,15 +52,18 @@ public class TestUserLogCleanup {
+   private JobID jobid4 = new JobID(jtid, 4);
+   private File foo = new File(TaskLog.getUserLogDir(), "foo");
+   private File bar = new File(TaskLog.getUserLogDir(), "bar");
++  private static String TEST_ROOT_DIR = 
++	  				System.getProperty("test.build.data", "/tmp");
+ 
+-  public TestUserLogCleanup() throws IOException {
+-    Configuration conf = new Configuration();
++  public TestUserLogCleanup() throws IOException, InterruptedException {
++    JobConf conf= new JobConf();
+     startTT(conf);
+   }
+ 
+   @After
+   public void tearDown() throws IOException {
+     FileUtil.fullyDelete(TaskLog.getUserLogDir());
++    FileUtil.fullyDelete(new File(TEST_ROOT_DIR));
+   }
+ 
+   private File localizeJob(JobID jobid) throws IOException {
+@@ -77,14 +84,27 @@ public class TestUserLogCleanup {
+     userLogManager.addLogEvent(jce);
+   }
+ 
+-  private void startTT(Configuration conf) throws IOException {
++  private void startTT(JobConf conf) throws IOException, InterruptedException {
+     myClock = new FakeClock(); // clock is reset.
++    String localdirs = TEST_ROOT_DIR + "/userlogs/local/0," + 
++    					TEST_ROOT_DIR + "/userlogs/local/1";
++    conf.set(JobConf.MAPRED_LOCAL_DIR_PROPERTY, localdirs);
+     tt = new TaskTracker();
+     tt.setConf(new JobConf(conf));
++    LocalDirAllocator localDirAllocator = 
++      new LocalDirAllocator("mapred.local.dir");
++    tt.setLocalDirAllocator(localDirAllocator);
++    LocalStorage localStorage = new LocalStorage(conf.getLocalDirs());
++    LocalFileSystem localFs = FileSystem.getLocal(conf);
++    localStorage.checkDirs(localFs, true);
++    tt.setLocalStorage(localStorage);
+     localizer = new Localizer(FileSystem.get(conf), conf
+         .getTrimmedStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY));
+     tt.setLocalizer(localizer);
+     userLogManager = new UtilsForTests.InLineUserLogManager(conf);
++    TaskController taskController = userLogManager.getTaskController();
++    taskController.setup(localDirAllocator, localStorage);
++    tt.setTaskController(taskController);
+     userLogCleaner = userLogManager.getUserLogCleaner();
+     userLogCleaner.setClock(myClock);
+     tt.setUserLogManager(userLogManager);
+@@ -92,13 +112,13 @@ public class TestUserLogCleanup {
+   }
+ 
+   private void ttReinited() throws IOException {
+-    Configuration conf = new Configuration();
++    JobConf conf=new JobConf();
+     conf.setInt(JobContext.USER_LOG_RETAIN_HOURS, 3);
+     userLogManager.clearOldUserLogs(conf);
+   }
+ 
+-  private void ttRestarted() throws IOException {
+-    Configuration conf = new Configuration();
++  private void ttRestarted() throws IOException, InterruptedException {
++    JobConf conf=new JobConf();
+     conf.setInt(JobContext.USER_LOG_RETAIN_HOURS, 3);
+     startTT(conf);
+   }
+@@ -228,9 +248,11 @@ public class TestUserLogCleanup {
+    * restart.
+    * 
+    * @throws IOException
++ * @throws InterruptedException 
+    */
+   @Test
+-  public void testUserLogCleanupAfterRestart() throws IOException {
++  public void testUserLogCleanupAfterRestart() 
++  					throws IOException, InterruptedException {
+     File jobUserlog1 = localizeJob(jobid1);
+     File jobUserlog2 = localizeJob(jobid2);
+     File jobUserlog3 = localizeJob(jobid3);
+diff --git a/src/test/org/apache/hadoop/mapred/UtilsForTests.java b/src/test/org/apache/hadoop/mapred/UtilsForTests.java
+index 06c8e02..727a98f 100644
+--- a/src/test/org/apache/hadoop/mapred/UtilsForTests.java
++++ b/src/test/org/apache/hadoop/mapred/UtilsForTests.java
+@@ -32,6 +32,7 @@ import java.util.Properties;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.commons.logging.Log;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.permission.FsPermission;
+@@ -49,6 +50,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
+ import org.apache.hadoop.mapred.SortValidator.RecordStatsChecker.NonSplitableSequenceFileInputFormat;
++import org.apache.hadoop.mapred.TaskTracker.LocalStorage;
+ import org.apache.hadoop.mapred.lib.IdentityMapper;
+ import org.apache.hadoop.mapred.lib.IdentityReducer;
+ import org.apache.hadoop.mapreduce.server.tasktracker.userlogs.UserLogEvent;
+@@ -871,5 +873,17 @@ public class UtilsForTests {
+     return tmpTaskTracker;
+   }
+ 
++  /**
++   * Setup the given task controller
++   * @param taskController to setup
++   * @param localAlloc local allocator to use
++   * @param dirs to use for local storage
++   * @throws IOException
++   */
++  public static void setupTC(TaskController taskController, 
++      LocalDirAllocator localAlloc, String[] dirs) throws IOException {
++    // Hide LocalStorage from callers
++    taskController.setup(localAlloc, new LocalStorage(dirs));
++  }
+ }
+ 
+diff --git a/src/webapps/job/machines.jsp b/src/webapps/job/machines.jsp
+index 3804ebc..4927562 100644
+--- a/src/webapps/job/machines.jsp
++++ b/src/webapps/job/machines.jsp
+@@ -47,7 +47,8 @@
+                 "<th><b># running tasks</b></th>" +
+                 "<th><b>Max Map Tasks</b></th>" +
+                 "<th><b>Max Reduce Tasks</b></th>" +
+-                "<th><b>Failures</b></th>" +
++                "<th><b>Task Failures</b></th>" +
++                "<th><b>Directory Failures</b></th>" +
+                 "<th><b>Node Health Status</b></th>" +
+                 "<th><b>Seconds Since Node Last Healthy</b></th>");
+       if(type.equals("blacklisted")) {
+@@ -84,18 +85,20 @@
+           it2.next();
+           numCurTasks++;
+         }
+-        int numFailures = tt.getFailures();
+-        if (numFailures > maxFailures) {
+-          maxFailures = numFailures;
++        int numTaskFailures = tt.getTaskFailures();
++        if (numTaskFailures > maxFailures) {
++          maxFailures = numTaskFailures;
+           failureKing = tt.getTrackerName();
+         }
++        int numDirFailures = tt.getDirFailures();
+         out.print("<tr><td><a href=\"http://");
+         out.print(tt.getHost() + ":" + tt.getHttpPort() + "/\">");
+         out.print(tt.getTrackerName() + "</a></td><td>");
+         out.print(tt.getHost() + "</td><td>" + numCurTasks +
+                   "</td><td>" + tt.getMaxMapSlots() +
+                   "</td><td>" + tt.getMaxReduceSlots() + 
+-                  "</td><td>" + numFailures +
++                  "</td><td>" + numTaskFailures +
++                  "</td><td>" + numDirFailures +
+                   "</td><td>" + healthString +
+                   "</td><td>" + sinceHealthCheck); 
+         if(type.equals("blacklisted")) {
+-- 
+1.7.0.4
+

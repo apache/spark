@@ -1,0 +1,49 @@
+From 8bb561e0dc46995cca059b5de334b3b790b8ae17 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Wed, 6 Oct 2010 17:29:17 -0700
+Subject: [PATCH 0729/1179] Amend MAPREDUCE-2096. fsError() when called from within MR should not do authorization
+
+Reason: Fix incorrect authorization exception
+Author: Todd Lipcon / Devaraj Das
+Ref: CDH-648
+---
+ .../org/apache/hadoop/mapred/TaskRunner.java       |    2 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    9 +++++++++
+ 2 files changed, 10 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index ba27e9c..ba66a39 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -219,7 +219,7 @@ abstract class TaskRunner extends Thread {
+     } catch (FSError e) {
+       LOG.fatal("FSError", e);
+       try {
+-        tracker.fsError(t.getTaskID(), e.getMessage());
++        tracker.internalFsError(t.getTaskID(), e.getMessage());
+       } catch (IOException ie) {
+         LOG.fatal(t.getTaskID()+" reporting FSError", ie);
+       }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 25f2594..a4d4b86 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -3254,6 +3254,15 @@ public class TaskTracker
+   public synchronized void fsError(TaskAttemptID taskId, String message) 
+   throws IOException {
+     ensureAuthorizedJVM(taskId.getJobID());
++    internalFsError(taskId, message);
++  }
++
++  /**
++   * Version of fsError() that does not do authorization checks, called by
++   * the TaskRunner.
++   */
++  synchronized void internalFsError(TaskAttemptID taskId, String message)
++  throws IOException {
+     LOG.fatal("Task: " + taskId + " - Killed due to FSError: " + message);
+     TaskInProgress tip = runningTasks.get(taskId);
+     tip.reportDiagnosticInfo("FSError: " + message);
+-- 
+1.7.0.4
+

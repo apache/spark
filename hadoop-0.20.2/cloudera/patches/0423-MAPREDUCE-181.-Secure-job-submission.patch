@@ -1,0 +1,3986 @@
+From 675d02da77a6db7b98e8a30afda2926fe768fe3e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 12 Jan 2010 15:43:25 -0800
+Subject: [PATCH 0423/1179] MAPREDUCE-181. Secure job submission
+
+Patch: https://issues.apache.org/jira/secure/attachment/12430064/181.20.s.3.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12436083/jobclient.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12440358/181.20.s.3.fix.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ .../hadoop/mapred/TestCapacityScheduler.java       |    9 +-
+ .../hadoop/mapred/TestJobTrackerRestartWithCS.java |    5 +-
+ .../apache/hadoop/mapred/TestFairScheduler.java    |   18 +-
+ .../mapred/gridmix/TestGridmixSubmission.java      |    4 +-
+ src/mapred/mapred-default.xml                      |   21 +-
+ .../org/apache/hadoop/mapred/HistoryViewer.java    |    5 +-
+ .../org/apache/hadoop/mapred/IsolationRunner.java  |   18 +-
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |  406 +++++++-------------
+ .../org/apache/hadoop/mapred/JobInProgress.java    |  108 +++---
+ src/mapred/org/apache/hadoop/mapred/JobInfo.java   |   83 ++++
+ .../hadoop/mapred/JobSubmissionProtocol.java       |   18 +-
+ .../org/apache/hadoop/mapred/JobTracker.java       |  138 +++----
+ .../org/apache/hadoop/mapred/LocalJobRunner.java   |   93 ++---
+ src/mapred/org/apache/hadoop/mapred/MapTask.java   |  104 +++---
+ .../org/apache/hadoop/mapred/ReduceTask.java       |    5 +-
+ src/mapred/org/apache/hadoop/mapred/Task.java      |   38 ++-
+ .../org/apache/hadoop/mapred/TaskInProgress.java   |   36 +--
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   21 +-
+ .../hadoop/mapreduce/JobSubmissionFiles.java       |  131 +++++++
+ .../apache/hadoop/mapreduce/split/JobSplit.java    |  215 +++++++++++
+ .../hadoop/mapreduce/split/JobSplitWriter.java     |  170 ++++++++
+ .../mapreduce/split/SplitMetaInfoReader.java       |   79 ++++
+ src/test/org/apache/hadoop/cli/testConf.xml        |    8 +-
+ .../mapred/ClusterWithLinuxTaskController.java     |   11 +-
+ .../hadoop/mapred/GenericMRLoadGenerator.java      |    8 +-
+ .../org/apache/hadoop/mapred/TestJobHistory.java   |   16 +-
+ .../hadoop/mapred/TestJobHistoryParsing.java       |    4 +-
+ .../hadoop/mapred/TestJobQueueTaskScheduler.java   |    8 +-
+ .../apache/hadoop/mapred/TestJobSysDirWithDFS.java |   12 +-
+ .../hadoop/mapred/TestJobTrackerRestart.java       |    5 +-
+ .../TestJobTrackerRestartWithLostTracker.java      |    4 +
+ .../hadoop/mapred/TestJobTrackerSafeMode.java      |    4 +
+ .../apache/hadoop/mapred/TestMiniMRClasspath.java  |   22 +-
+ .../apache/hadoop/mapred/TestMiniMRWithDFS.java    |    4 +-
+ .../mapred/TestMiniMRWithDFSWithDistinctUsers.java |   70 ++++-
+ .../org/apache/hadoop/mapred/TestNodeRefresh.java  |   78 ----
+ .../org/apache/hadoop/mapred/TestQueueManager.java |   15 +-
+ .../apache/hadoop/mapred/TestRecoveryManager.java  |   25 +-
+ .../hadoop/mapred/TestResourceEstimation.java      |   15 +-
+ .../org/apache/hadoop/mapred/TestSubmitJob.java    |  179 ++++++++-
+ .../apache/hadoop/mapred/TestTaskLogsMonitor.java  |   19 +-
+ .../org/apache/hadoop/mapred/UtilsForTests.java    |    4 +-
+ src/tools/org/apache/hadoop/tools/DistCh.java      |    9 +-
+ src/tools/org/apache/hadoop/tools/DistCp.java      |    9 +-
+ .../org/apache/hadoop/tools/HadoopArchives.java    |   13 +-
+ src/webapps/job/analysejobhistory.jsp              |    2 +-
+ src/webapps/job/jobdetailshistory.jsp              |    2 +-
+ src/webapps/job/jobtaskshistory.jsp                |    2 +-
+ src/webapps/job/taskdetailshistory.jsp             |    2 +-
+ 49 files changed, 1530 insertions(+), 745 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/JobInfo.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/JobSubmissionFiles.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/split/JobSplit.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/split/JobSplitWriter.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/split/SplitMetaInfoReader.java
+
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+index fe3f5c4..dfc9bef 100644
+--- a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+@@ -40,6 +40,7 @@ import org.apache.hadoop.conf.Configuration;
+ 
+ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
++import org.apache.hadoop.mapreduce.split.JobSplit;
+ 
+ public class TestCapacityScheduler extends TestCase {
+ 
+@@ -202,8 +203,8 @@ public class TestCapacityScheduler extends TestCase {
+         }
+       }
+       TaskAttemptID attemptId = getTaskAttemptID(true, areAllMapsRunning);
+-      Task task = new MapTask("", attemptId, 0, "", new BytesWritable(), 
+-                              super.numSlotsPerMap, getJobConf().getUser()) {
++      Task task = new MapTask("", attemptId, 0, new JobSplit.TaskSplitIndex(), 
++                              super.numSlotsPerMap) {
+         @Override
+         public String toString() {
+           return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+@@ -245,7 +246,7 @@ public class TestCapacityScheduler extends TestCase {
+         }
+       }
+       TaskAttemptID attemptId = getTaskAttemptID(false, areAllReducesRunning);
+-      Task task = new ReduceTask("", attemptId, 0, 10, super.numSlotsPerReduce, getJobConf().getUser()) {
++      Task task = new ReduceTask("", attemptId, 0, 10, super.numSlotsPerReduce) {
+         @Override
+         public String toString() {
+           return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+@@ -337,7 +338,7 @@ public class TestCapacityScheduler extends TestCase {
+     
+     FakeTaskInProgress(JobID jId, JobConf jobConf, Task t, 
+         boolean isMap, FakeJobInProgress job) {
+-      super(jId, "", new JobClient.RawSplit(), null, jobConf, job, 0, 1);
++      super(jId, "", JobSplit.EMPTY_TASK_SPLIT, null, jobConf, job, 0, 1);
+       this.isMap = isMap;
+       this.fakeJob = job;
+       activeTasks = new TreeMap<TaskAttemptID, String>();
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithCS.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithCS.java
+index 46152b5..a90566d 100644
+--- a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithCS.java
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithCS.java
+@@ -19,8 +19,11 @@ package org.apache.hadoop.mapred;
+ 
+ import java.util.Properties;
+ import org.apache.hadoop.mapred.ControlledMapReduceJob.ControlledMapReduceJobRunner;
++import org.junit.*;
+ 
+-
++/**UNTIL MAPREDUCE-873 is backported, we will not run recovery manager tests
++ */
++@Ignore
+ public class TestJobTrackerRestartWithCS extends ClusterWithCapacityScheduler {
+ 
+   /**
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index 0df00b5..74c2ee4 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -41,6 +41,7 @@ import org.apache.hadoop.net.Node;
+ 
+ import org.apache.hadoop.mapred.FairScheduler.JobInfo;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
++import org.apache.hadoop.mapreduce.split.JobSplit;
+ 
+ public class TestFairScheduler extends TestCase {
+   final static String TEST_DIR = new File(System.getProperty("test.build.data",
+@@ -108,12 +109,13 @@ public class TestFairScheduler extends TestCase {
+       // create maps
+       numMapTasks = conf.getNumMapTasks();
+       maps = new TaskInProgress[numMapTasks];
++      JobSplit.TaskSplitMetaInfo split = JobSplit.EMPTY_TASK_SPLIT;
+       for (int i = 0; i < numMapTasks; i++) {
+         String[] inputLocations = null;
+         if (mapInputLocations != null)
+           inputLocations = mapInputLocations[i];
+         maps[i] = new FakeTaskInProgress(getJobID(), i,
+-            getJobConf(), this, inputLocations);
++            getJobConf(), this, inputLocations, split);
+         if (mapInputLocations == null) // Job has no locality info
+           nonLocalMaps.add(maps[i]);
+       }
+@@ -134,7 +136,8 @@ public class TestFairScheduler extends TestCase {
+         if (!tip.isRunning() && !tip.isComplete() &&
+             getLocalityLevel(tip, tts) < localityLevel) {
+           TaskAttemptID attemptId = getTaskAttemptID(tip);
+-          Task task = new MapTask("", attemptId, 0, "", new BytesWritable(), 1, "user") {
++          JobSplit.TaskSplitMetaInfo split = JobSplit.EMPTY_TASK_SPLIT;
++          Task task = new MapTask("", attemptId, 0, split.getSplitIndex(), 1) {
+             @Override
+             public String toString() {
+               return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+@@ -158,7 +161,7 @@ public class TestFairScheduler extends TestCase {
+           (FakeTaskInProgress) reduces[reduce];
+         if (!tip.isRunning() && !tip.isComplete()) {
+           TaskAttemptID attemptId = getTaskAttemptID(tip);
+-          Task task = new ReduceTask("", attemptId, 0, maps.length, 1, "user") {
++          Task task = new ReduceTask("", attemptId, 0, maps.length, 1) {
+             @Override
+             public String toString() {
+               return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+@@ -227,8 +230,9 @@ public class TestFairScheduler extends TestCase {
+      
+     // Constructor for map
+     FakeTaskInProgress(JobID jId, int id, JobConf jobConf,
+-        FakeJobInProgress job, String[] inputLocations) {
+-      super(jId, "", new JobClient.RawSplit(), null, jobConf, job, id, 1);
++        FakeJobInProgress job, String[] inputLocations,
++        JobSplit.TaskSplitMetaInfo split) {
++      super(jId, "", split, job.jobtracker, jobConf, job, id, 1);
+       this.isMap = true;
+       this.fakeJob = job;
+       this.inputLocations = inputLocations;
+@@ -2576,7 +2580,7 @@ public class TestFairScheduler extends TestCase {
+     jobConf.set(POOL_PROPERTY, "nonsense"); // test that this is overridden
+     jobConf.set(EXPLICIT_POOL_PROPERTY, "poolA");
+     JobInProgress job3 = new FakeJobInProgress(jobConf, taskTrackerManager,
+-        null);
++        null, UtilsForTests.getJobTracker());
+     job3.getStatus().setRunState(JobStatus.RUNNING);
+     taskTrackerManager.submitJob(job3);
+ 
+@@ -2591,7 +2595,7 @@ public class TestFairScheduler extends TestCase {
+     jobConf2.setNumReduceTasks(19);
+     jobConf2.set(POOL_PROPERTY, "poolA");
+     JobInProgress job4 = new FakeJobInProgress(jobConf2, taskTrackerManager,
+-        null);
++        null, UtilsForTests.getJobTracker());
+     job4.getStatus().setRunState(JobStatus.RUNNING);
+     taskTrackerManager.submitJob(job4);
+ 
+diff --git a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java
+index d5c2d68..e4487a4 100644
+--- a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java
++++ b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java
+@@ -36,6 +36,7 @@ import org.apache.hadoop.mapred.JobClient;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.JobID;
+ import org.apache.hadoop.mapred.MiniMRCluster;
++import org.apache.hadoop.mapred.Task;
+ import org.apache.hadoop.mapred.TaskReport;
+ import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.mapreduce.TaskType;
+@@ -165,7 +166,8 @@ public class TestGridmixSubmission {
+         switch (type) {
+           case MAP:
+              runInputBytes[i] = counters.findCounter("FileSystemCounters",
+-                 "HDFS_BYTES_READ").getValue();
++                 "HDFS_BYTES_READ").getValue() - 
++                 counters.findCounter(Task.Counter.SPLIT_RAW_BYTES).getValue();
+              runInputRecords[i] =
+                (int)counters.findCounter(MAP_INPUT_RECORDS).getValue();
+              runOutputBytes[i] =
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index 987c4bf..152b87d 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -127,7 +127,16 @@
+ <property>
+   <name>mapred.system.dir</name>
+   <value>${hadoop.tmp.dir}/mapred/system</value>
+-  <description>The shared directory where MapReduce stores control files.
++  <description>The directory where MapReduce stores control files.
++  </description>
++</property>
++
++<property>
++  <name>mapreduce.jobtracker.staging.root.dir</name>
++  <value>${hadoop.tmp.dir}/mapred/staging</value>
++  <description>The root of the staging area for users' job files
++  In practice, this should be the directory where users' home 
++  directories are located (usually /user)
+   </description>
+ </property>
+ 
+@@ -249,6 +258,16 @@
+ </property>
+ 
+ <property>
++  <name>mapreduce.job.split.metainfo.maxsize</name>
++  <value>10000000</value>
++  <description>The maximum permissible size of the split metainfo file.
++  The JobTracker won't attempt to read split metainfo files bigger than
++  the configured value.
++  No limits if set to -1.
++  </description>
++</property>
++
++<property>
+   <name>mapred.jobtracker.taskScheduler</name>
+   <value>org.apache.hadoop.mapred.JobQueueTaskScheduler</value>
+   <description>The class responsible for scheduling the tasks.</description>
+diff --git a/src/mapred/org/apache/hadoop/mapred/HistoryViewer.java b/src/mapred/org/apache/hadoop/mapred/HistoryViewer.java
+index 2180009..e8d1ec7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/HistoryViewer.java
++++ b/src/mapred/org/apache/hadoop/mapred/HistoryViewer.java
+@@ -84,7 +84,8 @@ class HistoryViewer {
+       }
+       jobLogFile = jobFiles[0].toString();
+       String[] jobDetails = 
+-          JobInfo.decodeJobHistoryFileName(jobFiles[0].getName()).split("_");
++          JobHistory.JobInfo.decodeJobHistoryFileName(jobFiles[0].getName()).
++                             split("_");
+       trackerHostName = jobDetails[0];
+       trackerStartTime = jobDetails[1];
+       jobId = jobDetails[2] + "_" + jobDetails[3] + "_" + jobDetails[4];
+@@ -155,7 +156,7 @@ class HistoryViewer {
+     System.out.println(jobDetails.toString());
+   }
+   
+-  private void printCounters(StringBuffer buff, JobInfo job) 
++  private void printCounters(StringBuffer buff, JobHistory.JobInfo job) 
+       throws ParseException {
+     Counters mapCounters = 
+       Counters.fromEscapedCompactString(job.get(Keys.MAP_COUNTERS));
+diff --git a/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java b/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java
+index ecc73bb..15fc631 100644
+--- a/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java
+@@ -36,6 +36,7 @@ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableComparable;
+ import org.apache.hadoop.mapred.JvmTask;
++import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitIndex;
+ 
+ public class IsolationRunner {
+   private static final Log LOG = 
+@@ -199,20 +200,19 @@ public class IsolationRunner {
+     
+     Task task;
+     if (isMap) {
+-      Path localSplit = new Path(new Path(jobFilename.toString()).getParent(), 
+-                                 "split.dta");
+-      DataInputStream splitFile = FileSystem.getLocal(conf).open(localSplit);
+-      String splitClass = Text.readString(splitFile);
+-      BytesWritable split = new BytesWritable();
+-      split.readFields(splitFile);
++      Path localMetaSplit = 
++        new Path(new Path(jobFilename.toString()).getParent(), "split.info");
++      DataInputStream splitFile = FileSystem.getLocal(conf).open(localMetaSplit);
++      TaskSplitIndex splitIndex = new TaskSplitIndex();
++      splitIndex.readFields(splitFile);
+       splitFile.close();
+-      task = new MapTask(jobFilename.toString(), taskId, partition, 
+-                         splitClass, split, 1, conf.getUser());
++      task =
++        new MapTask(jobFilename.toString(), taskId, partition, splitIndex, 1);
+     } else {
+       int numMaps = conf.getNumMapTasks();
+       fillInMissingMapOutputs(local, taskId, numMaps, conf);
+       task = new ReduceTask(jobFilename.toString(), taskId, partition, numMaps, 
+-                            1, conf.getUser());
++                            1);
+     }
+     task.setConf(conf);
+     task.run(conf, new FakeUmbilical());
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index 3e04707..427ea42 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -65,6 +65,12 @@ import org.apache.hadoop.io.serializer.Serializer;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.mapred.Counters.Counter;
+ import org.apache.hadoop.mapred.Counters.Group;
++import org.apache.hadoop.mapreduce.InputFormat;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.JobSubmissionFiles;
++import org.apache.hadoop.mapreduce.split.JobSplitWriter;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.util.ReflectionUtils;
+@@ -420,6 +426,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+ 
+   private JobSubmissionProtocol jobSubmitClient;
+   private Path sysDir = null;
++  private Path stagingAreaDir = null;
+   
+   private FileSystem fs = null;
+ 
+@@ -450,6 +457,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+   public void init(JobConf conf) throws IOException {
+     String tracker = conf.get("mapred.job.tracker", "local");
+     if ("local".equals(tracker)) {
++      conf.setNumMapTasks(1);
+       this.jobSubmitClient = new LocalJobRunner(conf);
+     } else {
+       this.jobSubmitClient = createRPCProxy(JobTracker.getAddress(conf), conf);
+@@ -570,11 +578,23 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+   /**
+    * configure the jobconf of the user with the command line options of 
+    * -libjars, -files, -archives
+-   * @param conf
++   * @param job the JobConf
++   * @param submitJobDir
+    * @throws IOException
+    */
+-  private void configureCommandLineOptions(JobConf job, Path submitJobDir, Path submitJarFile) 
+-    throws IOException {
++  private void copyAndConfigureFiles(JobConf job, Path jobSubmitDir) 
++  throws IOException {
++    short replication = (short)job.getInt("mapred.submit.replication", 10);
++    copyAndConfigureFiles(job, jobSubmitDir, replication);
++
++    // Set the working directory
++    if (job.getWorkingDirectory() == null) {
++      job.setWorkingDirectory(fs.getWorkingDirectory());          
++    }
++  }
++  
++  private void copyAndConfigureFiles(JobConf job, Path submitJobDir, 
++      short replication) throws IOException {
+     
+     if (!(job.getBoolean("mapred.used.genericoptionsparser", false))) {
+       LOG.warn("Use GenericOptionsParser for parsing the arguments. " +
+@@ -607,15 +627,18 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     // Create a number of filenames in the JobTracker's fs namespace
+     FileSystem fs = getFs();
+     LOG.debug("default FileSystem: " + fs.getUri());
+-    fs.delete(submitJobDir, true);
++    if (fs.exists(submitJobDir)) {
++      throw new IOException("Not submitting job. Job directory " + submitJobDir
++          +" already exists!! This is unexpected.Please check what's there in" +
++          " that directory");
++    }
+     submitJobDir = fs.makeQualified(submitJobDir);
+     submitJobDir = new Path(submitJobDir.toUri().getPath());
+-    FsPermission mapredSysPerms = new FsPermission(JOB_DIR_PERMISSION);
++    FsPermission mapredSysPerms = new FsPermission(JobSubmissionFiles.JOB_DIR_PERMISSION);
+     FileSystem.mkdirs(fs, submitJobDir, mapredSysPerms);
+-    Path filesDir = new Path(submitJobDir, "files");
+-    Path archivesDir = new Path(submitJobDir, "archives");
+-    Path libjarsDir = new Path(submitJobDir, "libjars");
+-    short replication = (short)job.getInt("mapred.submit.replication", 10);
++    Path filesDir = JobSubmissionFiles.getJobDistCacheFiles(submitJobDir);
++    Path archivesDir = JobSubmissionFiles.getJobDistCacheArchives(submitJobDir);
++    Path libjarsDir = JobSubmissionFiles.getJobDistCacheLibjars(submitJobDir);
+     // add all the command line files/ jars and archive
+     // first copy them to jobtrackers filesystem 
+     
+@@ -642,7 +665,8 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+       for (String tmpjars: libjarsArr) {
+         Path tmp = new Path(tmpjars);
+         Path newPath = copyRemoteFiles(fs, libjarsDir, tmp, job, replication);
+-        DistributedCache.addFileToClassPath(newPath, job);
++        DistributedCache.addFileToClassPath(
++            new Path(newPath.toUri().getPath()), job);
+       }
+     }
+     
+@@ -694,10 +718,12 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+       if ("".equals(job.getJobName())){
+         job.setJobName(new Path(originalJarPath).getName());
+       }
++      Path submitJarFile = JobSubmissionFiles.getJobJar(submitJobDir);
+       job.setJar(submitJarFile.toString());
+       fs.copyFromLocalFile(new Path(originalJarPath), submitJarFile);
+       fs.setReplication(submitJarFile, replication);
+-      fs.setPermission(submitJarFile, new FsPermission(JOB_FILE_PERMISSION));
++      fs.setPermission(submitJarFile, 
++          new FsPermission(JobSubmissionFiles.JOB_FILE_PERMISSION));
+     } else {
+       LOG.warn("No job jar file set.  User classes may not be found. "+
+                "See JobConf(Class) or JobConf#setJar(String).");
+@@ -708,10 +734,6 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     if (ugi.getGroupNames().length > 0) {
+       job.set("group.name", ugi.getGroupNames()[0]);
+     }
+-    if (job.getWorkingDirectory() == null) {
+-      job.setWorkingDirectory(fs.getWorkingDirectory());          
+-    }
+-
+   }
+ 
+   private UnixUserGroupInformation getUGI(Configuration job) throws IOException {
+@@ -745,15 +767,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     JobConf job = new JobConf(jobFile);
+     return submitJob(job);
+   }
+-    
+-  // job files are world-wide readable and owner writable
+-  final private static FsPermission JOB_FILE_PERMISSION = 
+-    FsPermission.createImmutable((short) 0644); // rw-r--r--
+-
+-  // job submission directory is world readable/writable/executable
+-  final static FsPermission JOB_DIR_PERMISSION =
+-    FsPermission.createImmutable((short) 0777); // rwx-rwx-rwx
+-   
++      
+   /**
+    * Submit a job to the MR system.
+    * This returns a handle to the {@link RunningJob} which can be used to track
+@@ -794,66 +808,102 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     /*
+      * configure the command line options correctly on the submitting dfs
+      */
+-    
++    Path jobStagingArea = JobSubmissionFiles.getStagingDir(this, job);
+     JobID jobId = jobSubmitClient.getNewJobId();
+-    Path submitJobDir = new Path(getSystemDir(), jobId.toString());
+-    Path submitJarFile = new Path(submitJobDir, "job.jar");
+-    Path submitSplitFile = new Path(submitJobDir, "job.split");
+-    configureCommandLineOptions(job, submitJobDir, submitJarFile);
+-    Path submitJobFile = new Path(submitJobDir, "job.xml");
+-    int reduces = job.getNumReduceTasks();
+-    JobContext context = new JobContext(job, jobId);
+-    
+-    // Check the output specification
+-    if (reduces == 0 ? job.getUseNewMapper() : job.getUseNewReducer()) {
+-      org.apache.hadoop.mapreduce.OutputFormat<?,?> output =
+-        ReflectionUtils.newInstance(context.getOutputFormatClass(), job);
+-      output.checkOutputSpecs(context);
+-    } else {
+-      job.getOutputFormat().checkOutputSpecs(fs, job);
+-    }
++    Path submitJobDir = new Path(jobStagingArea, jobId.toString());
++    job.set("mapreduce.job.dir", submitJobDir.toString());
++    JobStatus status = null;
++    try {
++      copyAndConfigureFiles(job, submitJobDir);
++      Path submitJobFile = JobSubmissionFiles.getJobConfPath(submitJobDir);
++      int reduces = job.getNumReduceTasks();
++      JobContext context = new JobContext(job, jobId);
++      
++      job = (JobConf)context.getConfiguration();
+ 
+-    // Create the splits for the job
+-    LOG.debug("Creating splits at " + fs.makeQualified(submitSplitFile));
+-    int maps;
+-    if (job.getUseNewMapper()) {
+-      maps = writeNewSplits(context, submitSplitFile);
+-    } else {
+-      maps = writeOldSplits(job, submitSplitFile);
+-    }
+-    job.set("mapred.job.split.file", submitSplitFile.toString());
+-    job.setNumMapTasks(maps);
+-        
+-    // Write job file to JobTracker's fs        
+-    FSDataOutputStream out = 
+-      FileSystem.create(fs, submitJobFile,
+-                        new FsPermission(JOB_FILE_PERMISSION));
++      // Check the output specification
++      if (reduces == 0 ? job.getUseNewMapper() : job.getUseNewReducer()) {
++        org.apache.hadoop.mapreduce.OutputFormat<?,?> output =
++          ReflectionUtils.newInstance(context.getOutputFormatClass(), job);
++        output.checkOutputSpecs(context);
++      } else {
++        job.getOutputFormat().checkOutputSpecs(fs, job);
++      }
+ 
+-    try {
+-      job.writeXml(out);
++      // Create the splits for the job
++      LOG.debug("Creating splits at " + fs.makeQualified(submitJobDir));
++      int maps = writeSplits(context, submitJobDir);
++      job.setNumMapTasks(maps);
++
++      // Write job file to JobTracker's fs        
++      FSDataOutputStream out = 
++        FileSystem.create(fs, submitJobFile,
++            new FsPermission(JobSubmissionFiles.JOB_FILE_PERMISSION));
++
++      try {
++        job.writeXml(out);
++      } finally {
++        out.close();
++      }
++
++      //
++      // Now, actually submit the job (using the submit name)
++      //
++      status = jobSubmitClient.submitJob(jobId, submitJobDir.toString());
++      if (status != null) {
++        return new NetworkedJob(status);
++      } else {
++        throw new IOException("Could not launch job");
++      }
+     } finally {
+-      out.close();
++      if (status == null) {
++        LOG.info("Cleaning up the staging area " + submitJobDir);
++        fs.delete(submitJobDir, true);
++      }
+     }
++  }
+ 
+-    //
+-    // Now, actually submit the job (using the submit name)
+-    //
+-    JobStatus status = jobSubmitClient.submitJob(jobId);
+-    if (status != null) {
+-      return new NetworkedJob(status);
++  @SuppressWarnings("unchecked")
++  private <T extends InputSplit>
++  int writeNewSplits(JobContext job, Path jobSubmitDir) throws IOException,
++      InterruptedException, ClassNotFoundException {
++    Configuration conf = job.getConfiguration();
++    InputFormat<?, ?> input =
++      ReflectionUtils.newInstance(job.getInputFormatClass(), conf);
++
++    List<InputSplit> splits = input.getSplits(job);
++    T[] array = (T[]) splits.toArray(new InputSplit[splits.size()]);
++
++    // sort the splits into order based on size, so that the biggest
++    // go first
++    Arrays.sort(array, new SplitComparator());
++    JobSplitWriter.createSplitFiles(jobSubmitDir, conf, array);
++    return array.length;
++  }
++  
++  private int writeSplits(org.apache.hadoop.mapreduce.JobContext job,
++      Path jobSubmitDir) throws IOException,
++      InterruptedException, ClassNotFoundException {
++    JobConf jConf = (JobConf)job.getConfiguration();
++    int maps;
++    if (jConf.getUseNewMapper()) {
++      maps = writeNewSplits(job, jobSubmitDir);
+     } else {
+-      throw new IOException("Could not launch job");
++      maps = writeOldSplits(jConf, jobSubmitDir);
+     }
++    return maps;
+   }
+-
+-  private int writeOldSplits(JobConf job, 
+-                             Path submitSplitFile) throws IOException {
+-    InputSplit[] splits = 
+-      job.getInputFormat().getSplits(job, job.getNumMapTasks());
++  
++  //method to write splits for old api mapper.
++  private int writeOldSplits(JobConf job, Path jobSubmitDir) 
++  throws IOException {
++    org.apache.hadoop.mapred.InputSplit[] splits =
++    job.getInputFormat().getSplits(job, job.getNumMapTasks());
+     // sort the splits into order based on size, so that the biggest
+     // go first
+-    Arrays.sort(splits, new Comparator<InputSplit>() {
+-      public int compare(InputSplit a, InputSplit b) {
++    Arrays.sort(splits, new Comparator<org.apache.hadoop.mapred.InputSplit>() {
++      public int compare(org.apache.hadoop.mapred.InputSplit a,
++                         org.apache.hadoop.mapred.InputSplit b) {
+         try {
+           long left = a.getLength();
+           long right = b.getLength();
+@@ -865,37 +915,17 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+             return -1;
+           }
+         } catch (IOException ie) {
+-          throw new RuntimeException("Problem getting input split size",
+-                                     ie);
++          throw new RuntimeException("Problem getting input split size", ie);
+         }
+       }
+     });
+-    DataOutputStream out = writeSplitsFileHeader(job, submitSplitFile, splits.length);
+-    
+-    try {
+-      DataOutputBuffer buffer = new DataOutputBuffer();
+-      RawSplit rawSplit = new RawSplit();
+-      for(InputSplit split: splits) {
+-        rawSplit.setClassName(split.getClass().getName());
+-        buffer.reset();
+-        split.write(buffer);
+-        rawSplit.setDataLength(split.getLength());
+-        rawSplit.setBytes(buffer.getData(), 0, buffer.getLength());
+-        rawSplit.setLocations(split.getLocations());
+-        rawSplit.write(out);
+-      }
+-    } finally {
+-      out.close();
+-    }
++    JobSplitWriter.createSplitFiles(jobSubmitDir, job, splits);
+     return splits.length;
+   }
+-
+-  private static class NewSplitComparator 
+-    implements Comparator<org.apache.hadoop.mapreduce.InputSplit>{
+-
++  
++  private static class SplitComparator implements Comparator<InputSplit> {
+     @Override
+-    public int compare(org.apache.hadoop.mapreduce.InputSplit o1,
+-                       org.apache.hadoop.mapreduce.InputSplit o2) {
++    public int compare(InputSplit o1, InputSplit o2) {
+       try {
+         long len1 = o1.getLength();
+         long len2 = o2.getLength();
+@@ -909,54 +939,11 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+       } catch (IOException ie) {
+         throw new RuntimeException("exception in compare", ie);
+       } catch (InterruptedException ie) {
+-        throw new RuntimeException("exception in compare", ie);        
++        throw new RuntimeException("exception in compare", ie);
+       }
+     }
+   }
+-
+-  @SuppressWarnings("unchecked")
+-  private <T extends org.apache.hadoop.mapreduce.InputSplit> 
+-  int writeNewSplits(JobContext job, Path submitSplitFile
+-                     ) throws IOException, InterruptedException, 
+-                              ClassNotFoundException {
+-    JobConf conf = job.getJobConf();
+-    org.apache.hadoop.mapreduce.InputFormat<?,?> input =
+-      ReflectionUtils.newInstance(job.getInputFormatClass(), job.getJobConf());
+-    
+-    List<org.apache.hadoop.mapreduce.InputSplit> splits = input.getSplits(job);
+-    T[] array = (T[])
+-      splits.toArray(new org.apache.hadoop.mapreduce.InputSplit[splits.size()]);
+-
+-    // sort the splits into order based on size, so that the biggest
+-    // go first
+-    Arrays.sort(array, new NewSplitComparator());
+-    DataOutputStream out = writeSplitsFileHeader(conf, submitSplitFile, 
+-                                                 array.length);
+-    try {
+-      if (array.length != 0) {
+-        DataOutputBuffer buffer = new DataOutputBuffer();
+-        RawSplit rawSplit = new RawSplit();
+-        SerializationFactory factory = new SerializationFactory(conf);
+-        Serializer<T> serializer = 
+-          factory.getSerializer((Class<T>) array[0].getClass());
+-        serializer.open(buffer);
+-        for(T split: array) {
+-          rawSplit.setClassName(split.getClass().getName());
+-          buffer.reset();
+-          serializer.serialize(split);
+-          rawSplit.setDataLength(split.getLength());
+-          rawSplit.setBytes(buffer.getData(), 0, buffer.getLength());
+-          rawSplit.setLocations(split.getLocations());
+-          rawSplit.write(out);
+-        }
+-        serializer.close();
+-      }
+-    } finally {
+-      out.close();
+-    }
+-    return array.length;
+-  }
+-
++  
+   /** 
+    * Checks if the job directory is clean and has all the required components 
+    * for (re) starting the job
+@@ -980,125 +967,6 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     }
+     return false;
+   }
+-
+-  static class RawSplit implements Writable {
+-    private String splitClass;
+-    private BytesWritable bytes = new BytesWritable();
+-    private String[] locations;
+-    long dataLength;
+-
+-    public void setBytes(byte[] data, int offset, int length) {
+-      bytes.set(data, offset, length);
+-    }
+-
+-    public void setClassName(String className) {
+-      splitClass = className;
+-    }
+-      
+-    public String getClassName() {
+-      return splitClass;
+-    }
+-      
+-    public BytesWritable getBytes() {
+-      return bytes;
+-    }
+-
+-    public void clearBytes() {
+-      bytes = null;
+-    }
+-      
+-    public void setLocations(String[] locations) {
+-      this.locations = locations;
+-    }
+-      
+-    public String[] getLocations() {
+-      return locations;
+-    }
+-      
+-    public void readFields(DataInput in) throws IOException {
+-      splitClass = Text.readString(in);
+-      dataLength = in.readLong();
+-      bytes.readFields(in);
+-      int len = WritableUtils.readVInt(in);
+-      locations = new String[len];
+-      for(int i=0; i < len; ++i) {
+-        locations[i] = Text.readString(in);
+-      }
+-    }
+-      
+-    public void write(DataOutput out) throws IOException {
+-      Text.writeString(out, splitClass);
+-      out.writeLong(dataLength);
+-      bytes.write(out);
+-      WritableUtils.writeVInt(out, locations.length);
+-      for(int i = 0; i < locations.length; i++) {
+-        Text.writeString(out, locations[i]);
+-      }        
+-    }
+-
+-    public long getDataLength() {
+-      return dataLength;
+-    }
+-    public void setDataLength(long l) {
+-      dataLength = l;
+-    }
+-    
+-  }
+-    
+-  private static final int CURRENT_SPLIT_FILE_VERSION = 0;
+-  private static final byte[] SPLIT_FILE_HEADER = "SPL".getBytes();
+-
+-  private DataOutputStream writeSplitsFileHeader(Configuration conf,
+-                                                 Path filename,
+-                                                 int length
+-                                                 ) throws IOException {
+-    // write the splits to a file for the job tracker
+-    FileSystem fs = filename.getFileSystem(conf);
+-    FSDataOutputStream out = 
+-      FileSystem.create(fs, filename, new FsPermission(JOB_FILE_PERMISSION));
+-    out.write(SPLIT_FILE_HEADER);
+-    WritableUtils.writeVInt(out, CURRENT_SPLIT_FILE_VERSION);
+-    WritableUtils.writeVInt(out, length);
+-    return out;
+-  }
+-
+-  /** Create the list of input splits and write them out in a file for
+-   *the JobTracker. The format is:
+-   * <format version>
+-   * <numSplits>
+-   * for each split:
+-   *    <RawSplit>
+-   * @param splits the input splits to write out
+-   * @param out the stream to write to
+-   */
+-  private void writeOldSplitsFile(InputSplit[] splits, 
+-                                  FSDataOutputStream out) throws IOException {
+-  }
+-
+-  /**
+-   * Read a splits file into a list of raw splits
+-   * @param in the stream to read from
+-   * @return the complete list of splits
+-   * @throws IOException
+-   */
+-  static RawSplit[] readSplitFile(DataInput in) throws IOException {
+-    byte[] header = new byte[SPLIT_FILE_HEADER.length];
+-    in.readFully(header);
+-    if (!Arrays.equals(SPLIT_FILE_HEADER, header)) {
+-      throw new IOException("Invalid header on split file");
+-    }
+-    int vers = WritableUtils.readVInt(in);
+-    if (vers != CURRENT_SPLIT_FILE_VERSION) {
+-      throw new IOException("Unsupported split version " + vers);
+-    }
+-    int len = WritableUtils.readVInt(in);
+-    RawSplit[] result = new RawSplit[len];
+-    for(int i=0; i < len; ++i) {
+-      result[i] = new RawSplit();
+-      result[i].readFields(in);
+-    }
+-    return result;
+-  }
+     
+   /**
+    * Get an {@link RunningJob} object to track an ongoing job.  Returns
+@@ -1246,7 +1114,19 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+   public ClusterStatus getClusterStatus(boolean detailed) throws IOException {
+     return jobSubmitClient.getClusterStatus(detailed);
+   }
+-    
++  
++  /**
++   * Grab the jobtracker's view of the staging directory path where 
++   * job-specific files will  be placed.
++   * 
++   * @return the staging directory where job-specific files are to be placed.
++   */
++  public Path getStagingAreaDir() throws IOException {
++    if (stagingAreaDir == null) {
++      stagingAreaDir = new Path(jobSubmitClient.getStagingAreaDir());
++    }
++    return stagingAreaDir;
++  }    
+ 
+   /** 
+    * Get the jobs that are not completed and not failed.
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index d8550d0..594d5b6 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -17,7 +17,6 @@
+  */
+ package org.apache.hadoop.mapred;
+ 
+-import java.io.DataInputStream;
+ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.Collection;
+@@ -49,11 +48,15 @@ import org.apache.hadoop.metrics.MetricsUtil;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.NetworkTopology;
+ import org.apache.hadoop.net.Node;
++import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
++import org.apache.hadoop.mapreduce.JobSubmissionFiles;
++import org.apache.hadoop.mapreduce.split.*;
++import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitMetaInfo;
+ 
+ /*************************************************************
+  * JobInProgress maintains all the info for keeping
+@@ -79,7 +82,7 @@ public class JobInProgress {
+     
+   JobProfile profile;
+   JobStatus status;
+-  Path jobFile = null;
++  String jobFile = null;
+   Path localJobFile = null;
+ 
+   TaskInProgress maps[] = new TaskInProgress[0];
+@@ -266,6 +269,7 @@ public class JobInProgress {
+     new HashMap<TaskTracker, FallowSlotInfo>();
+   private Map<TaskTracker, FallowSlotInfo> trackersReservedForReduces = 
+     new HashMap<TaskTracker, FallowSlotInfo>();
++  private Path jobSubmitDir = null;
+   
+   /**
+    * Create an almost empty JobInProgress, which can be used only for tests
+@@ -292,43 +296,48 @@ public class JobInProgress {
+   
+   public JobInProgress(JobID jobid, JobTracker jobtracker, 
+                        JobConf default_conf, int rCount) throws IOException {
+-    this(jobid, jobtracker, default_conf, null, rCount);
++    this(jobtracker, default_conf, null, rCount);
+   }
+ 
+-  JobInProgress(JobID jobid, JobTracker jobtracker,
+-                JobConf default_conf, String user, int rCount) 
++  JobInProgress(JobTracker jobtracker,
++                JobConf default_conf, JobInfo jobInfo, int rCount) 
+   throws IOException {
+     this.restartCount = rCount;
+-    this.jobId = jobid;
++    this.jobId = JobID.downgrade(jobInfo.getJobID());
+     String url = "http://" + jobtracker.getJobTrackerMachine() + ":" 
+-        + jobtracker.getInfoPort() + "/jobdetails.jsp?jobid=" + jobid;
++        + jobtracker.getInfoPort() + "/jobdetails.jsp?jobid=" + jobId;
+     this.jobtracker = jobtracker;
+-    this.status = new JobStatus(jobid, 0.0f, 0.0f, JobStatus.PREP);
+-    this.jobtracker.getInstrumentation().addPrepJob(conf, jobid);
++    this.status = new JobStatus(jobId, 0.0f, 0.0f, JobStatus.PREP);
++    this.jobtracker.getInstrumentation().addPrepJob(conf, jobId);
+     this.startTime = System.currentTimeMillis();
+     status.setStartTime(startTime);
+     this.localFs = jobtracker.getLocalFileSystem();
+ 
+-    JobConf default_job_conf = new JobConf(default_conf);
+-    this.localJobFile = default_job_conf.getLocalPath(JobTracker.SUBDIR 
+-                                                      +"/"+jobid + ".xml");
+-
+-    if (user == null) {
+-      this.user = conf.getUser();
+-    } else {
+-      this.user = user;
+-    }
+-    LOG.info("User : " +  this.user);
+-
+-    Path jobDir = jobtracker.getSystemDirectoryForJob(jobId);
+-    fs = jobtracker.getFileSystem(jobDir);
+-    jobFile = new Path(jobDir, "job.xml");
+-    fs.copyToLocalFile(jobFile, localJobFile);
++    // use the user supplied token to add user credentials to the conf
++    jobSubmitDir = jobInfo.getJobSubmitDir();
++    String user = jobInfo.getUser().toString();
++    conf = new JobConf();
++    conf.set(UnixUserGroupInformation.UGI_PROPERTY_NAME,
++        new UnixUserGroupInformation(user,
++            new String[]{UnixUserGroupInformation.DEFAULT_GROUP}).toString());
++    fs = jobSubmitDir.getFileSystem(conf);
++    this.localJobFile = default_conf.getLocalPath(JobTracker.SUBDIR
++        +"/"+jobId + ".xml");
++    Path jobFilePath = JobSubmissionFiles.getJobConfPath(jobSubmitDir);
++    jobFile = jobFilePath.toString();
++    fs.copyToLocalFile(jobFilePath, localJobFile);
+     conf = new JobConf(localJobFile);
++    if (conf.getUser() == null) {
++      this.conf.setUser(user);
++    }
++    if (!conf.getUser().equals(user)) {
++      throw new IOException("The username obtained from the conf doesn't " +
++            "match the username the user authenticated as");
++    }
+     this.priority = conf.getJobPriority();
+     this.status.setJobPriority(this.priority);
+-    this.profile = new JobProfile(user, jobid, 
+-                                  jobFile.toString(), url, conf.getJobName(),
++    this.profile = new JobProfile(user, jobId, 
++                                  jobFile, url, conf.getJobName(),
+                                   conf.getQueueName());
+ 
+     this.numMapTasks = conf.getNumMapTasks();
+@@ -349,7 +358,7 @@ public class JobInProgress {
+     this.jobMetrics.setTag("user", conf.getUser());
+     this.jobMetrics.setTag("sessionId", conf.getSessionId());
+     this.jobMetrics.setTag("jobName", conf.getJobName());
+-    this.jobMetrics.setTag("jobId", jobid.toString());
++    this.jobMetrics.setTag("jobId", jobId.toString());
+     hasSpeculativeMaps = conf.getMapSpeculativeExecution();
+     hasSpeculativeReduces = conf.getReduceSpeculativeExecution();
+     this.maxLevel = jobtracker.getNumTaskCacheLevels();
+@@ -411,7 +420,7 @@ public class JobInProgress {
+   }
+   
+   private Map<Node, List<TaskInProgress>> createCache(
+-                         JobClient.RawSplit[] splits, int maxLevel) {
++                                 TaskSplitMetaInfo[] splits, int maxLevel) {
+     Map<Node, List<TaskInProgress>> cache = 
+       new IdentityHashMap<Node, List<TaskInProgress>>(maxLevel);
+     
+@@ -514,7 +523,7 @@ public class JobInProgress {
+     LOG.info("Initializing " + jobId);
+ 
+     // log job info
+-    JobHistory.JobInfo.logSubmitted(getJobID(), conf, jobFile.toString(), 
++    JobHistory.JobInfo.logSubmitted(getJobID(), conf, jobFile, 
+                                     this.startTime, hasRestarted());
+     // log the job priority
+     setPriority(this.priority);
+@@ -522,21 +531,12 @@ public class JobInProgress {
+     //
+     // generate security keys needed by Tasks
+     //
+-    generateJobToken(fs);
++    generateJobToken(jobtracker.getFileSystem());
+     
+     //
+     // read input splits and create a map per a split
+     //
+-    String jobFile = profile.getJobFile();
+-
+-    DataInputStream splitFile =
+-      fs.open(new Path(conf.get("mapred.job.split.file")));
+-    JobClient.RawSplit[] splits;
+-    try {
+-      splits = JobClient.readSplitFile(splitFile);
+-    } finally {
+-      splitFile.close();
+-    }
++    TaskSplitMetaInfo[] splits = createSplits(jobId);
+     numMapTasks = splits.length;
+ 
+ 
+@@ -555,7 +555,7 @@ public class JobInProgress {
+ 
+     maps = new TaskInProgress[numMapTasks];
+     for(int i=0; i < numMapTasks; ++i) {
+-      inputLength += splits[i].getDataLength();
++      inputLength += splits[i].getInputDataLength();
+       maps[i] = new TaskInProgress(jobId, jobFile, 
+                                    splits[i], 
+                                    jobtracker, conf, this, i, numSlotsPerMap);
+@@ -593,7 +593,7 @@ public class JobInProgress {
+ 
+     // cleanup map tip. This map doesn't use any splits. Just assign an empty
+     // split.
+-    JobClient.RawSplit emptySplit = new JobClient.RawSplit();
++    TaskSplitMetaInfo emptySplit = JobSplit.EMPTY_TASK_SPLIT;
+     cleanup[0] = new TaskInProgress(jobId, jobFile, emptySplit, 
+             jobtracker, conf, this, numMapTasks, 1);
+     cleanup[0].setJobCleanupTask();
+@@ -628,6 +628,13 @@ public class JobInProgress {
+     JobHistory.JobInfo.logInited(profile.getJobID(), this.launchTime, 
+                                  numMapTasks, numReduceTasks);
+   }
++  
++  TaskSplitMetaInfo[] createSplits(org.apache.hadoop.mapreduce.JobID jobId)
++  throws IOException {
++    TaskSplitMetaInfo[] allTaskSplitMetaInfo =
++      SplitMetaInfoReader.readSplitMetaInfo(jobId, fs, conf, jobSubmitDir);
++    return allTaskSplitMetaInfo;
++  }
+ 
+   /////////////////////////////////////////////////////
+   // Accessors for the JobInProgress
+@@ -793,14 +800,6 @@ public class JobInProgress {
+   }
+     
+   /**
+-   * Get the job user/owner
+-   * @return the job's user/owner
+-   */ 
+-  String getUser() {
+-    return user;
+-  }
+-
+-  /**
+    * Return a vector of completed TaskInProgress objects
+    */
+   public synchronized Vector<TaskInProgress> reportTasksInProgress(boolean shouldBeMap,
+@@ -2882,15 +2881,6 @@ public class JobInProgress {
+         localJobFile = null;
+       }
+ 
+-      // clean up splits
+-      for (int i = 0; i < maps.length; i++) {
+-        maps[i].clearSplit();
+-      }
+-
+-      // JobClient always creates a new directory with job files
+-      // so we remove that directory to cleanup
+-      // Delete temp dfs dirs created if any, like in case of 
+-      // speculative exn of reduces.  
+       Path tempDir = jobtracker.getSystemDirectoryForJob(getJobID());
+       new CleanupQueue().addToQueue(jobtracker.getFileSystem(tempDir), tempDir); 
+     } catch (IOException e) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInfo.java b/src/mapred/org/apache/hadoop/mapred/JobInfo.java
+new file mode 100644
+index 0000000..bed9abe
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/JobInfo.java
+@@ -0,0 +1,83 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableUtils;
++
++/**
++ * Represents the basic information that is saved per a job when the 
++ * JobTracker receives a submitJob request. The information is saved
++ * so that the JobTracker can recover incomplete jobs upon restart.
++ */
++class JobInfo implements Writable {
++  private org.apache.hadoop.mapreduce.JobID id;
++  private Text user;
++  private Path jobSubmitDir;
++  public JobInfo() {}
++  
++  public JobInfo(org.apache.hadoop.mapreduce.JobID id, 
++      Text user,
++      Path jobSubmitDir) {
++    this.id = id;
++    this.user = user;
++    this.jobSubmitDir = jobSubmitDir;
++  }
++  
++  /**
++   * Get the job id.
++   */
++  public org.apache.hadoop.mapreduce.JobID getJobID() {
++    return id;
++  }
++  
++  /**
++   * Get the configured job's user-name.
++   */
++  public Text getUser() {
++    return user;
++  }
++      
++  /**
++   * Get the job submission directory
++   */
++  public Path getJobSubmitDir() {
++    return this.jobSubmitDir;
++  }
++  
++  public void readFields(DataInput in) throws IOException {
++    id = new org.apache.hadoop.mapreduce.JobID();
++    id.readFields(in);
++    user = new Text();
++    user.readFields(in);
++    jobSubmitDir = new Path(WritableUtils.readString(in));
++  }
++
++  public void write(DataOutput out) throws IOException {
++    id.write(out);
++    user.write(out);
++    WritableUtils.writeString(out, jobSubmitDir.toString());
++  }
++}
+\ No newline at end of file
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+index 50d47f2..e0c3e15 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+@@ -60,8 +60,11 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+    *             interval for HADOOP-4939                     
+    * Version 21: Added method getQueueAclsForCurrentUser to get queue acls info
+    *             for a user
++   * Version 22: Job submission files are uploaded to a staging area under
++   *             user home dir. JobTracker reads the required files from the
++   *             staging area using user credentials passed via the rpc. 
+    */
+-  public static final long versionID = 21L;
++  public static final long versionID = 22L;
+ 
+   /**
+    * Allocate a name for the job.
+@@ -73,9 +76,10 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+   /**
+    * Submit a Job for execution.  Returns the latest profile for
+    * that job.
+-   * The job files should be submitted in <b>system-dir</b>/<b>jobName</b>.
++   * The job files should be submitted in <b>jobSubmitDir</b>.
+    */
+-  public JobStatus submitJob(JobID jobName) throws IOException;
++  public JobStatus submitJob(JobID jobName, String jobSubmitDir) 
++  throws IOException;
+ 
+   /**
+    * Get the current status of the cluster
+@@ -191,6 +195,14 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+   public String getSystemDir();  
+   
+   /**
++   * Get a hint from the JobTracker 
++   * where job-specific files are to be placed.
++   * 
++   * @return the directory where job-specific files are to be placed.
++   */
++  public String getStagingAreaDir() throws IOException;
++  
++  /**
+    * Gets set of Job Queues associated with the Job Tracker
+    * 
+    * @return Array of the Job Queue Information Object
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index c646d71..90eacba 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -22,6 +22,7 @@ import java.io.BufferedReader;
+ import java.io.BufferedWriter;
+ import java.io.File;
+ import java.io.FileInputStream;
++import java.io.FileNotFoundException;
+ import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.PrintWriter;
+@@ -68,6 +69,7 @@ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.http.HttpServer;
++import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.ipc.Server;
+@@ -157,7 +159,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   public static enum State { INITIALIZING, RUNNING }
+   State state = State.INITIALIZING;
+   private static final int FS_ACCESS_RETRY_PERIOD = 10000;
+-
++  static final String JOB_INFO_FILE = "job-info";
+   private DNSToSwitchMapping dnsToSwitchMapping;
+   private NetworkTopology clusterMap = new NetworkTopology();
+   private int numTaskCacheLevels; // the max level to which we cache tasks
+@@ -176,9 +178,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+ 
+   private static final LocalDirAllocator lDirAlloc = 
+                               new LocalDirAllocator("mapred.local.dir");
+-  // system directories are world-wide readable and owner readable
++  //system directory is completely owned by the JobTracker
+   final static FsPermission SYSTEM_DIR_PERMISSION =
+-    FsPermission.createImmutable((short) 0733); // rwx-wx-wx
++    FsPermission.createImmutable((short) 0700); // rwx------
+ 
+   // system files should have 700 permission
+   final static FsPermission SYSTEM_FILE_PERMISSION =
+@@ -1633,7 +1635,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           }
+ 
+           // Create the job
+-          job = new JobInProgress(id, JobTracker.this, conf, user, 
++          /* THIS PART OF THE CODE IS USELESS. JOB RECOVERY SHOULD BE
++           * BACKPORTED (MAPREDUCE-873)
++           */
++          job = new JobInProgress(JobTracker.this, conf, null, 
+                                   restartCount);
+ 
+           // 2. Check if the user has appropriate access
+@@ -1859,10 +1864,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   Map<String, Node> hostnameToNodeMap = 
+     Collections.synchronizedMap(new TreeMap<String, Node>());
+   
+-  // job-id->username during staging
+-  Map<JobID, String> jobToUserMap = 
+-    Collections.synchronizedMap(new TreeMap<JobID, String>()); 
+-
+   // Number of resolved entries
+   int numResolved;
+     
+@@ -2104,6 +2105,18 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         if(systemDir == null) {
+           systemDir = new Path(getSystemDir());    
+         }
++        try {
++          FileStatus systemDirStatus = fs.getFileStatus(systemDir);
++          if (!systemDirStatus.getOwner().equals(mrOwner.getUserName())) {
++            throw new AccessControlException("The systemdir " + systemDir +
++                " is not owned by " + mrOwner.getUserName());
++          }
++          if (!systemDirStatus.getPermission().equals(SYSTEM_DIR_PERMISSION)) {
++            LOG.warn("Incorrect permissions on " + systemDir +
++                ". Setting it to " + SYSTEM_DIR_PERMISSION);
++            fs.setPermission(systemDir, SYSTEM_DIR_PERMISSION);
++          }
++        } catch (FileNotFoundException fnf) {} //ignore
+         // Make sure that the backup data is preserved
+         FileStatus[] systemDirData = fs.listStatus(this.systemDir);
+         // Check if the history is enabled .. as we cant have persistence with 
+@@ -2581,17 +2594,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     // mark the job for cleanup at all the trackers
+     addJobForCleanup(id);
+ 
+-    try {
+-      File userFileForJob =
+-        new File(lDirAlloc.getLocalPathToRead(SUBDIR + "/" + id,
+-                                              conf).toString());
+-      if (userFileForJob != null) {
+-        userFileForJob.delete();
+-      }
+-    } catch (IOException ioe) {
+-      LOG.info("Failed to delete job id mapping for job " + id, ioe);
+-    }
+-
+     // add the blacklisted trackers to potentially faulty list
+     if (job.getStatus().getRunState() == JobStatus.SUCCEEDED) {
+       if (job.getNoOfBlackListedTrackers() > 0) {
+@@ -3548,17 +3550,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * Allocates a new JobId string.
+    */
+   public synchronized JobID getNewJobId() throws IOException {
+-    JobID id = new JobID(getTrackerIdentifier(), nextJobId++);
+-
+-    // get the user group info
+-    UserGroupInformation ugi = UserGroupInformation.getCurrentUGI();
+-
+-    // mark the user for this id
+-    jobToUserMap.put(id, ugi.getUserName());
+-
+-    LOG.info("Job id " + id + " assigned to user " + ugi.getUserName());
+-
+-    return id;
++    return new JobID(getTrackerIdentifier(), nextJobId++);
+   }
+ 
+   /**
+@@ -3569,64 +3561,25 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * of the JobTracker.  But JobInProgress adds info that's useful for
+    * the JobTracker alone.
+    */
+-  public synchronized JobStatus submitJob(JobID jobId) throws IOException {
++  public synchronized JobStatus submitJob(JobID jobId, String jobSubmitDir)
++  throws IOException {
+     if(jobs.containsKey(jobId)) {
+       //job already running, don't start twice
+       return jobs.get(jobId).getStatus();
+     }
+-
+-    // check if the owner is uploding the splits or not
+-    // get the user group info
+     UserGroupInformation ugi = UserGroupInformation.getCurrentUGI();
+-
+-    // check if the user invoking this api is the owner of this job
+-    if (!jobToUserMap.get(jobId).equals(ugi.getUserName())) {
+-      throw new IOException("User " + ugi.getUserName() 
+-                            + " is not the owner of the job " + jobId);
+-    }
+-    
+-    jobToUserMap.remove(jobId);
+-
+-    // persist
+-    File userFileForJob =  
+-      new File(lDirAlloc.getLocalPathForWrite(SUBDIR + "/" + jobId, 
+-                                              conf).toString());
+-    if (userFileForJob == null) {
+-      LOG.info("Failed to create job-id file for job " + jobId + " at " + userFileForJob);
+-    } else {
+-      FileOutputStream fout = new FileOutputStream(userFileForJob);
+-      BufferedWriter writer = null;
+-
+-      try {
+-        writer = new BufferedWriter(new OutputStreamWriter(fout));
+-        writer.write(ugi.getUserName() + "\n");
+-      } finally {
+-        if (writer != null) {
+-          writer.close();
+-        }
+-        fout.close();
+-      }
+-
+-      LOG.info("Job " + jobId + " user info persisted to file : " + userFileForJob);
+-    }
+-
++    JobInfo jobInfo = new JobInfo(jobId, new Text(ugi.getUserName()),
++        new Path(jobSubmitDir));
+     JobInProgress job = null;
+     try {
+-      job = new JobInProgress(jobId, this, this.conf, ugi.getUserName(), 0);
++      job = new JobInProgress(this, this.conf, jobInfo, 0);
+     } catch (Exception e) {
+-      if (userFileForJob != null) {
+-        userFileForJob.delete();
+-      }
+       throw new IOException(e);
+     }
+     
+     String queue = job.getProfile().getQueueName();
+     if(!(queueManager.getQueues().contains(queue))) {      
+-      new CleanupQueue().addToQueue(fs,getSystemDirectoryForJob(jobId));
+       job.fail();
+-      if (userFileForJob != null) {
+-        userFileForJob.delete();
+-      }
+       throw new IOException("Queue \"" + queue + "\" does not exist");        
+     }
+ 
+@@ -3637,10 +3590,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+        LOG.warn("Access denied for user " + job.getJobConf().getUser() 
+                 + ". Ignoring job " + jobId, ioe);
+       job.fail();
+-      if (userFileForJob != null) {
+-        userFileForJob.delete();
+-      }
+-      new CleanupQueue().addToQueue(fs, getSystemDirectoryForJob(jobId));
+       throw ioe;
+     }
+ 
+@@ -3649,11 +3598,35 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     try {
+       checkMemoryRequirements(job);
+     } catch (IOException ioe) {
+-      new CleanupQueue().addToQueue(fs, getSystemDirectoryForJob(jobId));
+       throw ioe;
+     }
++    boolean recovered = true; //TODO: Once the Job recovery code is there,
++                              //(MAPREDUCE-873) we
++                              //must pass the "recovered" flag accurately.
++                              //This is handled in the trunk/0.22
++    if (!recovered) {
++      //Store the information in a file so that the job can be recovered
++      //later (if at all)
++      Path jobDir = getSystemDirectoryForJob(jobId);
++      FileSystem.mkdirs(fs, jobDir, new FsPermission(SYSTEM_DIR_PERMISSION));
++      FSDataOutputStream out = fs.create(getSystemFileForJob(jobId));
++      jobInfo.write(out);
++      out.close();
++    }
++    return addJob(jobId, job);
++  }
+ 
+-   return addJob(jobId, job); 
++  /**
++   * @see org.apache.hadoop.mapred.JobSubmissionProtocol#getStagingAreaDir()
++   */
++  public String getStagingAreaDir() throws IOException {
++    Path stagingRootDir =
++      new Path(conf.get("mapreduce.jobtracker.staging.root.dir",
++          "/tmp/hadoop/mapred/staging"));
++    FileSystem fs = stagingRootDir.getFileSystem(conf);
++    String user = UserGroupInformation.getCurrentUGI().getUserName();
++    return fs.makeQualified(new Path(stagingRootDir,
++                                user+"/.staging")).toString();
+   }
+ 
+   /**
+@@ -4144,6 +4117,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   Path getSystemDirectoryForJob(JobID id) {
+     return new Path(getSystemDir(), id.toString());
+   }
++  
++  //Get the job token file in system directory
++  Path getSystemFileForJob(JobID id) {
++    return new Path(getSystemDirectoryForJob(id)+"/" + JOB_INFO_FILE);
++  }
+ 
+   /**
+    * Change the run-time priority of the given job.
+diff --git a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+index 596c900..6a3fe89 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+@@ -21,20 +21,17 @@ package org.apache.hadoop.mapred;
+ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+-import java.util.List;
++import java.util.Random;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.io.BytesWritable;
+-import org.apache.hadoop.io.DataOutputBuffer;
+-import org.apache.hadoop.io.serializer.SerializationFactory;
+-import org.apache.hadoop.io.serializer.Serializer;
+ import org.apache.hadoop.mapred.JobTrackerMetricsInst;
+ import org.apache.hadoop.mapred.JvmTask;
+-import org.apache.hadoop.mapred.JobClient.RawSplit;
+-import org.apache.hadoop.util.ReflectionUtils;
++import org.apache.hadoop.mapreduce.split.SplitMetaInfoReader;
++import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitMetaInfo;
++import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /** Implements MapReduce locally, in-process, for debugging. */ 
+ class LocalJobRunner implements JobSubmissionProtocol {
+@@ -46,6 +43,7 @@ class LocalJobRunner implements JobSubmissionProtocol {
+   private JobConf conf;
+   private int map_tasks = 0;
+   private int reduce_tasks = 0;
++  final Random rand = new Random();
+ 
+   private JobTrackerInstrumentation myMetrics = null;
+ 
+@@ -60,6 +58,7 @@ class LocalJobRunner implements JobSubmissionProtocol {
+     private Path file;
+     private JobID id;
+     private JobConf job;
++    private Path systemJobDir;
+ 
+     private JobStatus status;
+     private ArrayList<TaskAttemptID> mapIds = new ArrayList<TaskAttemptID>();
+@@ -80,8 +79,9 @@ class LocalJobRunner implements JobSubmissionProtocol {
+       return TaskUmbilicalProtocol.versionID;
+     }
+     
+-    public Job(JobID jobid, JobConf conf) throws IOException {
+-      this.file = new Path(getSystemDir(), jobid + "/job.xml");
++    public Job(JobID jobid, String jobSubmitDir) throws IOException {
++      this.systemJobDir = new Path(jobSubmitDir);
++      this.file = new Path(systemJobDir, "job.xml");
+       this.id = jobid;
+       this.mapoutputFile = new MapOutputFile(jobid);
+       this.mapoutputFile.setConf(conf);
+@@ -111,46 +111,8 @@ class LocalJobRunner implements JobSubmissionProtocol {
+       JobContext jContext = new JobContext(conf, jobId);
+       OutputCommitter outputCommitter = job.getOutputCommitter();
+       try {
+-        // split input into minimum number of splits
+-        RawSplit[] rawSplits;
+-        if (job.getUseNewMapper()) {
+-          org.apache.hadoop.mapreduce.InputFormat<?,?> input =
+-              ReflectionUtils.newInstance(jContext.getInputFormatClass(), jContext.getJobConf());
+-                    
+-          List<org.apache.hadoop.mapreduce.InputSplit> splits = input.getSplits(jContext);
+-          rawSplits = new RawSplit[splits.size()];
+-          DataOutputBuffer buffer = new DataOutputBuffer();
+-          SerializationFactory factory = new SerializationFactory(conf);
+-          Serializer serializer = 
+-            factory.getSerializer(splits.get(0).getClass());
+-          serializer.open(buffer);
+-          for (int i = 0; i < splits.size(); i++) {
+-            buffer.reset();
+-            serializer.serialize(splits.get(i));
+-            RawSplit rawSplit = new RawSplit();
+-            rawSplit.setClassName(splits.get(i).getClass().getName());
+-            rawSplit.setDataLength(splits.get(i).getLength());
+-            rawSplit.setBytes(buffer.getData(), 0, buffer.getLength());
+-            rawSplit.setLocations(splits.get(i).getLocations());
+-            rawSplits[i] = rawSplit;
+-          }
+-
+-        } else {
+-          InputSplit[] splits = job.getInputFormat().getSplits(job, 1);
+-          rawSplits = new RawSplit[splits.length];
+-          DataOutputBuffer buffer = new DataOutputBuffer();
+-          for (int i = 0; i < splits.length; i++) {
+-            buffer.reset();
+-            splits[i].write(buffer);
+-            RawSplit rawSplit = new RawSplit();
+-            rawSplit.setClassName(splits[i].getClass().getName());
+-            rawSplit.setDataLength(splits[i].getLength());
+-            rawSplit.setBytes(buffer.getData(), 0, buffer.getLength());
+-            rawSplit.setLocations(splits[i].getLocations());
+-            rawSplits[i] = rawSplit;
+-          }
+-        }
+-        
++        TaskSplitMetaInfo[] taskSplitMetaInfos =
++          SplitMetaInfoReader.readSplitMetaInfo(jobId, localFs, conf, systemJobDir);        
+         int numReduceTasks = job.getNumReduceTasks();
+         if (numReduceTasks > 1 || numReduceTasks < 0) {
+           // we only allow 0 or 1 reducer in local mode
+@@ -160,15 +122,13 @@ class LocalJobRunner implements JobSubmissionProtocol {
+         outputCommitter.setupJob(jContext);
+         status.setSetupProgress(1.0f);
+         
+-        for (int i = 0; i < rawSplits.length; i++) {
++        for (int i = 0; i < taskSplitMetaInfos.length; i++) {
+           if (!this.isInterrupted()) {
+             TaskAttemptID mapId = new TaskAttemptID(new TaskID(jobId, true, i),0);  
+             mapIds.add(mapId);
+             MapTask map = new MapTask(file.toString(),  
+                                       mapId, i,
+-                                      rawSplits[i].getClassName(),
+-                                      rawSplits[i].getBytes(), 1, 
+-                                      job.getUser());
++                                      taskSplitMetaInfos[i].getSplitIndex(), 1);
+             JobConf localConf = new JobConf(job);
+             map.setJobFile(localFile.toString());
+             map.localizeConfiguration(localConf);
+@@ -208,7 +168,7 @@ class LocalJobRunner implements JobSubmissionProtocol {
+             if (!this.isInterrupted()) {
+               ReduceTask reduce = new ReduceTask(file.toString(), 
+                                                  reduceId, 0, mapIds.size(), 
+-                                                 1, job.getUser());
++                                                 1);
+               JobConf localConf = new JobConf(job);
+               reduce.setJobFile(localFile.toString());
+               reduce.localizeConfiguration(localConf);
+@@ -359,7 +319,7 @@ class LocalJobRunner implements JobSubmissionProtocol {
+   }
+ 
+   public LocalJobRunner(JobConf conf) throws IOException {
+-    this.fs = FileSystem.get(conf);
++    this.fs = FileSystem.getLocal(conf);
+     this.conf = conf;
+     myMetrics = new JobTrackerMetricsInst(null, new JobConf(conf));
+   }
+@@ -371,8 +331,9 @@ class LocalJobRunner implements JobSubmissionProtocol {
+     return new JobID("local", ++jobid);
+   }
+ 
+-  public JobStatus submitJob(JobID jobid) throws IOException {
+-    return new Job(jobid, this.conf).status;
++  public JobStatus submitJob(JobID jobid, String jobSubmitDir) 
++  throws IOException {
++    return new Job(jobid, jobSubmitDir).status;
+   }
+ 
+   public void killJob(JobID id) {
+@@ -460,6 +421,24 @@ class LocalJobRunner implements JobSubmissionProtocol {
+     Path sysDir = new Path(conf.get("mapred.system.dir", "/tmp/hadoop/mapred/system"));  
+     return fs.makeQualified(sysDir).toString();
+   }
++  
++  /**
++   * @see org.apache.hadoop.mapred.JobSubmissionProtocol#getStagingAreaDir()
++   */
++  public String getStagingAreaDir() throws IOException {
++    Path stagingRootDir = 
++      new Path(conf.get("mapreduce.jobtracker.staging.root.dir",
++        "/tmp/hadoop/mapred/staging"));
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUGI();
++    String user;
++    if (ugi != null) {
++      user = ugi.getUserName() + rand.nextInt();
++    } else {
++      user = "dummy" + rand.nextInt();
++    }
++    return fs.makeQualified(new Path(stagingRootDir, user+"/.staging")).toString();
++  }
++
+ 
+   @Override
+   public JobStatus[] getJobsFromQueue(String queue) throws IOException {
+diff --git a/src/mapred/org/apache/hadoop/mapred/MapTask.java b/src/mapred/org/apache/hadoop/mapred/MapTask.java
+index 1bdca71..6fbe237 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MapTask.java
++++ b/src/mapred/org/apache/hadoop/mapred/MapTask.java
+@@ -40,6 +40,7 @@ import java.util.concurrent.locks.ReentrantLock;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.LocalFileSystem;
+@@ -58,6 +59,10 @@ import org.apache.hadoop.io.serializer.Serializer;
+ import org.apache.hadoop.mapred.IFile.Writer;
+ import org.apache.hadoop.mapred.Merger.Segment;
+ import org.apache.hadoop.mapred.SortedRanges.SkipRangeIterator;
++import org.apache.hadoop.mapreduce.split.JobSplit;
++import org.apache.hadoop.mapreduce.split.JobSplit.SplitMetaInfo;
++import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitIndex;
++import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitMetaInfo;
+ import org.apache.hadoop.mapreduce.TaskAttemptContext;
+ import org.apache.hadoop.util.IndexedSortable;
+ import org.apache.hadoop.util.IndexedSorter;
+@@ -74,7 +79,7 @@ class MapTask extends Task {
+   public static final int MAP_OUTPUT_INDEX_RECORD_LENGTH = 24;
+   
+ 
+-  private BytesWritable split = new BytesWritable();
++  private TaskSplitIndex splitMetaInfo = new TaskSplitIndex();
+   private String splitClass;
+   private final static int APPROX_HEADER_LENGTH = 150;
+ 
+@@ -89,11 +94,10 @@ class MapTask extends Task {
+   }
+ 
+   public MapTask(String jobFile, TaskAttemptID taskId, 
+-                 int partition, String splitClass, BytesWritable split,
+-                 int numSlotsRequired, String username) {
+-    super(jobFile, taskId, partition, numSlotsRequired, username);
+-    this.splitClass = splitClass;
+-    this.split = split;
++                 int partition, TaskSplitIndex splitIndex,
++                 int numSlotsRequired) {
++    super(jobFile, taskId, partition, numSlotsRequired);
++    this.splitMetaInfo = splitIndex;
+   }
+ 
+   @Override
+@@ -104,13 +108,13 @@ class MapTask extends Task {
+   @Override
+   public void localizeConfiguration(JobConf conf) throws IOException {
+     super.localizeConfiguration(conf);
+-    if (isMapOrReduce()) {
+-      Path localSplit = new Path(new Path(getJobFile()).getParent(), 
+-                                 "split.dta");
+-      LOG.debug("Writing local split to " + localSplit);
+-      DataOutputStream out = FileSystem.getLocal(conf).create(localSplit);
+-      Text.writeString(out, splitClass);
+-      split.write(out);
++    if (supportIsolationRunner(conf) && isMapOrReduce()) {
++      // localize the split meta-information
++      Path localSplitMeta = new Path(new Path(getJobFile()).getParent(), 
++                                 "split.info");
++      LOG.debug("Writing local split to " + localSplitMeta);
++      DataOutputStream out = FileSystem.getLocal(conf).create(localSplitMeta);
++      splitMetaInfo.write(out);
+       out.close();
+     }
+   }
+@@ -125,9 +129,8 @@ class MapTask extends Task {
+   public void write(DataOutput out) throws IOException {
+     super.write(out);
+     if (isMapOrReduce()) {
+-      Text.writeString(out, splitClass);
+-      split.write(out);
+-      split = null;
++      splitMetaInfo.write(out);
++      splitMetaInfo = null;
+     }
+   }
+   
+@@ -135,8 +138,7 @@ class MapTask extends Task {
+   public void readFields(DataInput in) throws IOException {
+     super.readFields(in);
+     if (isMapOrReduce()) {
+-      splitClass = Text.readString(in);
+-      split.readFields(in);
++      splitMetaInfo.readFields(in);
+     }
+   }
+ 
+@@ -302,36 +304,51 @@ class MapTask extends Task {
+     }
+ 
+     if (useNewApi) {
+-      runNewMapper(job, split, umbilical, reporter);
++      runNewMapper(job, splitMetaInfo, umbilical, reporter);
+     } else {
+-      runOldMapper(job, split, umbilical, reporter);
++      runOldMapper(job, splitMetaInfo, umbilical, reporter);
+     }
+     done(umbilical, reporter);
+   }
+-
++  @SuppressWarnings("unchecked")
++  private <T> T getSplitDetails(Path file, long offset)
++   throws IOException {
++    FileSystem fs = file.getFileSystem(conf);
++    FSDataInputStream inFile = fs.open(file);
++    inFile.seek(offset);
++    String className = Text.readString(inFile);
++    Class<T> cls;
++    try {
++      cls = (Class<T>) conf.getClassByName(className);
++    } catch (ClassNotFoundException ce) {
++      IOException wrap = new IOException("Split class " + className +
++                                          " not found");
++      wrap.initCause(ce);
++      throw wrap;
++    }
++    SerializationFactory factory = new SerializationFactory(conf);
++    Deserializer<T> deserializer =
++      (Deserializer<T>) factory.getDeserializer(cls);
++    deserializer.open(inFile);
++    T split = deserializer.deserialize(null);
++    long pos = inFile.getPos();
++    getCounters().findCounter(
++         Task.Counter.SPLIT_RAW_BYTES).increment(pos - offset);
++    inFile.close();
++    return split;
++  }
++  
+   @SuppressWarnings("unchecked")
+   private <INKEY,INVALUE,OUTKEY,OUTVALUE>
+   void runOldMapper(final JobConf job,
+-                    final BytesWritable rawSplit,
++                    final TaskSplitIndex splitIndex,
+                     final TaskUmbilicalProtocol umbilical,
+                     TaskReporter reporter
+                     ) throws IOException, InterruptedException,
+                              ClassNotFoundException {
+-    InputSplit inputSplit = null;
+-    // reinstantiate the split
+-    try {
+-      inputSplit = (InputSplit) 
+-        ReflectionUtils.newInstance(job.getClassByName(splitClass), job);
+-    } catch (ClassNotFoundException exp) {
+-      IOException wrap = new IOException("Split class " + splitClass + 
+-                                         " not found");
+-      wrap.initCause(exp);
+-      throw wrap;
+-    }
+-    DataInputBuffer splitBuffer = new DataInputBuffer();
+-    splitBuffer.reset(split.getBytes(), 0, split.getLength());
+-    inputSplit.readFields(splitBuffer);
+-    
++    InputSplit inputSplit = getSplitDetails(new Path(splitIndex.getSplitLocation()),
++           splitIndex.getStartOffset());
++
+     updateJobWithSplit(job, inputSplit);
+     reporter.setInputSplit(inputSplit);
+ 
+@@ -557,7 +574,7 @@ class MapTask extends Task {
+   @SuppressWarnings("unchecked")
+   private <INKEY,INVALUE,OUTKEY,OUTVALUE>
+   void runNewMapper(final JobConf job,
+-                    final BytesWritable rawSplit,
++                    final TaskSplitIndex splitIndex,
+                     final TaskUmbilicalProtocol umbilical,
+                     TaskReporter reporter
+                     ) throws IOException, ClassNotFoundException,
+@@ -575,15 +592,8 @@ class MapTask extends Task {
+         ReflectionUtils.newInstance(taskContext.getInputFormatClass(), job);
+     // rebuild the input split
+     org.apache.hadoop.mapreduce.InputSplit split = null;
+-    DataInputBuffer splitBuffer = new DataInputBuffer();
+-    splitBuffer.reset(rawSplit.getBytes(), 0, rawSplit.getLength());
+-    SerializationFactory factory = new SerializationFactory(job);
+-    Deserializer<? extends org.apache.hadoop.mapreduce.InputSplit>
+-      deserializer = 
+-        (Deserializer<? extends org.apache.hadoop.mapreduce.InputSplit>) 
+-        factory.getDeserializer(job.getClassByName(splitClass));
+-    deserializer.open(splitBuffer);
+-    split = deserializer.deserialize(null);
++    split = getSplitDetails(new Path(splitIndex.getSplitLocation()),
++        splitIndex.getStartOffset());
+ 
+     org.apache.hadoop.mapreduce.RecordReader<INKEY,INVALUE> input =
+       new NewTrackingRecordReader<INKEY,INVALUE>
+diff --git a/src/mapred/org/apache/hadoop/mapred/ReduceTask.java b/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
+index 7e2d11c..730b25b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
++++ b/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
+@@ -154,9 +154,8 @@ class ReduceTask extends Task {
+   }
+ 
+   public ReduceTask(String jobFile, TaskAttemptID taskId,
+-                    int partition, int numMaps, int numSlotsRequired,
+-                    String username) {
+-    super(jobFile, taskId, partition, numSlotsRequired, username);
++                    int partition, int numMaps, int numSlotsRequired) {
++    super(jobFile, taskId, partition, numSlotsRequired);
+     this.numMaps = numMaps;
+   }
+   
+diff --git a/src/mapred/org/apache/hadoop/mapred/Task.java b/src/mapred/org/apache/hadoop/mapred/Task.java
+index 288f93c..e72d214 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Task.java
++++ b/src/mapred/org/apache/hadoop/mapred/Task.java
+@@ -80,7 +80,8 @@ abstract public class Task implements Writable, Configurable {
+     REDUCE_OUTPUT_RECORDS,
+     REDUCE_SKIPPED_GROUPS,
+     REDUCE_SKIPPED_RECORDS,
+-    SPILLED_RECORDS
++    SPILLED_RECORDS,
++    SPLIT_RAW_BYTES
+   }
+   
+   /**
+@@ -119,6 +120,7 @@ abstract public class Task implements Writable, Configurable {
+   ////////////////////////////////////////////
+ 
+   private String jobFile;                         // job configuration file
++  private String user;
+   private TaskAttemptID taskId;                   // unique, includes job id
+   private int partition;                          // id within job
+   TaskStatus taskStatus;                          // current status of the task
+@@ -145,7 +147,6 @@ abstract public class Task implements Writable, Configurable {
+   protected TaskAttemptContext taskContext;
+   protected org.apache.hadoop.mapreduce.OutputFormat<?,?> outputFormat;
+   protected org.apache.hadoop.mapreduce.OutputCommitter committer;
+-  protected String username;
+   protected final Counters.Counter spilledRecordsCounter;
+   protected TaskUmbilicalProtocol umbilical;
+   private int numSlotsRequired;
+@@ -162,8 +163,7 @@ abstract public class Task implements Writable, Configurable {
+   }
+ 
+   public Task(String jobFile, TaskAttemptID taskId, int partition, 
+-              int numSlotsRequired, String username) {
+-    this.username = username;
++              int numSlotsRequired) {
+     this.jobFile = jobFile;
+     this.taskId = taskId;
+      
+@@ -364,9 +364,17 @@ abstract public class Task implements Writable, Configurable {
+     return !jobSetup && !jobCleanup && !taskCleanup;
+   }
+   
++  /**
++   * Get the name of the user running the job/task. TaskTracker needs task's
++   * user name even before it's JobConf is localized. So we explicitly serialize
++   * the user name.
++   * 
++   * @return user
++   */
+   String getUser() {
+-    return username;
++    return user;
+   }
++  
+   ////////////////////////////////////////////
+   // Writable methods
+   ////////////////////////////////////////////
+@@ -384,9 +392,9 @@ abstract public class Task implements Writable, Configurable {
+       WritableUtils.writeEnum(out, jobRunStateForCleanup);
+     }
+     out.writeBoolean(jobSetup);
+-    Text.writeString(out, username);
+     out.writeBoolean(writeSkipRecs);
+-    out.writeBoolean(taskCleanup);  
++    out.writeBoolean(taskCleanup); 
++    Text.writeString(out, user);
+   }
+   
+   public void readFields(DataInput in) throws IOException {
+@@ -406,12 +414,12 @@ abstract public class Task implements Writable, Configurable {
+         WritableUtils.readEnum(in, JobStatus.State.class);
+     }
+     jobSetup = in.readBoolean();
+-    username = Text.readString(in);
+     writeSkipRecs = in.readBoolean();
+     taskCleanup = in.readBoolean();
+     if (taskCleanup) {
+       setPhase(TaskStatus.Phase.CLEANUP);
+     }
++    user = Text.readString(in);
+   }
+ 
+   @Override
+@@ -896,9 +904,22 @@ abstract public class Task implements Writable, Configurable {
+                             + JobStatus.State.FAILED + " or "
+                             + JobStatus.State.KILLED);
+     }
++    // delete the staging area for the job
++    JobConf conf = new JobConf(jobContext.getConfiguration());
++    if (!supportIsolationRunner(conf)) {
++      String jobTempDir = conf.get("mapreduce.job.dir");
++      Path jobTempDirPath = new Path(jobTempDir);
++      FileSystem fs = jobTempDirPath.getFileSystem(conf);
++      fs.delete(jobTempDirPath, true);
++    }
+     done(umbilical, reporter);
+   }
+ 
++  protected boolean supportIsolationRunner(JobConf conf) {
++    return (conf.getKeepTaskFilesPattern() != null || conf
++         .getKeepFailedTaskFiles());
++  }
++  
+   protected void runJobSetupTask(TaskUmbilicalProtocol umbilical,
+                              TaskReporter reporter
+                              ) throws IOException, InterruptedException {
+@@ -927,6 +948,7 @@ abstract public class Task implements Writable, Configurable {
+         NetUtils.addStaticResolution(name, resolvedName);
+       }
+     }
++    this.user = this.conf.getUser();
+   }
+ 
+   public Configuration getConf() {
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+index 1cb24b1..7fbdf5d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+@@ -30,9 +30,8 @@ import java.util.TreeSet;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+-import org.apache.hadoop.io.BytesWritable;
+-import org.apache.hadoop.mapred.JobClient.RawSplit;
+ import org.apache.hadoop.mapred.SortedRanges.Range;
++import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitMetaInfo;
+ import org.apache.hadoop.net.Node;
+ 
+ 
+@@ -61,7 +60,7 @@ public class TaskInProgress {
+ 
+   // Defines the TIP
+   private String jobFile = null;
+-  private RawSplit rawSplit;
++  private final TaskSplitMetaInfo splitInfo;
+   private int numMaps;
+   private int partition;
+   private JobTracker jobtracker;
+@@ -131,12 +130,12 @@ public class TaskInProgress {
+    * Constructor for MapTask
+    */
+   public TaskInProgress(JobID jobid, String jobFile, 
+-                        RawSplit rawSplit, 
++                        TaskSplitMetaInfo split, 
+                         JobTracker jobtracker, JobConf conf, 
+                         JobInProgress job, int partition,
+                         int numSlotsRequired) {
+     this.jobFile = jobFile;
+-    this.rawSplit = rawSplit;
++    this.splitInfo = split;
+     this.jobtracker = jobtracker;
+     this.job = job;
+     this.conf = conf;
+@@ -155,6 +154,7 @@ public class TaskInProgress {
+                         int partition, JobTracker jobtracker, JobConf conf,
+                         JobInProgress job, int numSlotsRequired) {
+     this.jobFile = jobFile;
++    this.splitInfo = null;
+     this.numMaps = numMaps;
+     this.partition = partition;
+     this.jobtracker = jobtracker;
+@@ -284,7 +284,7 @@ public class TaskInProgress {
+    * Whether this is a map task
+    */
+   public boolean isMapTask() {
+-    return rawSplit != null;
++    return splitInfo != null;
+   }
+     
+   /**
+@@ -746,7 +746,7 @@ public class TaskInProgress {
+    */
+   public String[] getSplitLocations() {
+     if (isMapTask() && !jobSetup && !jobCleanup) {
+-      return rawSplit.getLocations();
++      return splitInfo.getLocations();
+     }
+     return new String[0];
+   }
+@@ -936,19 +936,11 @@ public class TaskInProgress {
+     if (isMapTask()) {
+       LOG.debug("attempt " + numTaskFailures + " sending skippedRecords "
+           + failedRanges.getIndicesCount());
+-      String splitClass = null;
+-      BytesWritable split;
+-      if (!jobSetup && !jobCleanup) {
+-        splitClass = rawSplit.getClassName();
+-        split = rawSplit.getBytes();
+-      } else {
+-        split = new BytesWritable();
+-      }
+-      t = new MapTask(jobFile, taskid, partition, splitClass, split, 
+-                      numSlotsNeeded, job.getUser());
++      t = new MapTask(jobFile, taskid, partition, splitInfo.getSplitIndex(),
++                      numSlotsNeeded);
+     } else {
+       t = new ReduceTask(jobFile, taskid, partition, numMaps, 
+-                         numSlotsNeeded, job.getUser());
++                         numSlotsNeeded);
+     }
+     if (jobCleanup) {
+       t.setJobCleanupTask();
+@@ -1059,7 +1051,7 @@ public class TaskInProgress {
+     if (!isMapTask() || jobSetup || jobCleanup) {
+       return "";
+     }
+-    String[] splits = rawSplit.getLocations();
++    String[] splits = splitInfo.getLocations();
+     Node[] nodes = new Node[splits.length];
+     for (int i = 0; i < splits.length; i++) {
+       nodes[i] = jobtracker.getNode(splits[i]);
+@@ -1089,16 +1081,12 @@ public class TaskInProgress {
+ 
+   public long getMapInputSize() {
+     if(isMapTask() && !jobSetup && !jobCleanup) {
+-      return rawSplit.getDataLength();
++      return splitInfo.getInputDataLength();
+     } else {
+       return 0;
+     }
+   }
+   
+-  public void clearSplit() {
+-    rawSplit.clearBytes();
+-  }
+-  
+   /**
+    * This class keeps the records to be skipped during further executions 
+    * based on failed records from all the previous attempts.
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index be82d5f..ac71558 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -84,6 +84,8 @@ import org.apache.hadoop.metrics.Updater;
+ import org.apache.hadoop.net.DNS;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.SecurityUtil;
++import org.apache.hadoop.security.UnixUserGroupInformation;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.ConfiguredPolicy;
+ import org.apache.hadoop.security.authorize.PolicyProvider;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+@@ -477,6 +479,13 @@ public class TaskTracker
+ 	return taskDir;
+   }
+ 
++  private void setUgi(String user, Configuration conf) {
++    //The dummy-group used here will not be required once we have UGI
++    //object creation with just the user name.
++    conf.set(UnixUserGroupInformation.UGI_PROPERTY_NAME,
++        user+","+UnixUserGroupInformation.DEFAULT_GROUP);
++  }
++  
+   String getPid(TaskAttemptID tid) {
+     TaskInProgress tip = tasks.get(tid);
+     if (tip != null) {
+@@ -839,12 +848,16 @@ public class TaskTracker
+     Task t = tip.getTask();
+     JobID jobId = t.getJobID();
+     Path jobFile = new Path(t.getJobFile());
++    String userName = t.getUser();
++    JobConf userConf = new JobConf(getJobConf());
++    setUgi(userName, userConf);
++    FileSystem userFs = jobFile.getFileSystem(userConf);
+     // Get sizes of JobFile and JarFile
+     // sizes are -1 if they are not present.
+     FileStatus status = null;
+     long jobFileSize = -1;
+     try {
+-      status = systemFS.getFileStatus(jobFile);
++      status = userFs.getFileStatus(jobFile);
+       jobFileSize = status.getLen();
+     } catch(FileNotFoundException fe) {
+       jobFileSize = -1;
+@@ -870,7 +883,7 @@ public class TaskTracker
+             throw new IOException("Not able to create job directory "
+                                   + jobDir.toString());
+         }
+-        systemFS.copyToLocalFile(jobFile, localJobFile);
++        userFs.copyToLocalFile(jobFile, localJobFile);
+         JobConf localJobConf = new JobConf(localJobFile);
+         
+         // create the 'work' directory
+@@ -891,7 +904,7 @@ public class TaskTracker
+         if (jarFile != null) {
+           Path jarFilePath = new Path(jarFile);
+           try {
+-            status = systemFS.getFileStatus(jarFilePath);
++            status = userFs.getFileStatus(jarFilePath);
+             jarFileSize = status.getLen();
+           } catch(FileNotFoundException fe) {
+             jarFileSize = -1;
+@@ -905,7 +918,7 @@ public class TaskTracker
+           if (!localFs.mkdirs(localJarFile.getParent())) {
+             throw new IOException("Mkdirs failed to create jars directory "); 
+           }
+-          systemFS.copyToLocalFile(jarFilePath, localJarFile);
++          userFs.copyToLocalFile(jarFilePath, localJarFile);
+           localJobConf.setJar(localJarFile.toString());
+           OutputStream out = localFs.create(localJobFile);
+           try {
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/JobSubmissionFiles.java b/src/mapred/org/apache/hadoop/mapreduce/JobSubmissionFiles.java
+new file mode 100644
+index 0000000..42a0095
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/JobSubmissionFiles.java
+@@ -0,0 +1,131 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce;
++
++import java.io.IOException;
++
++import javax.security.auth.login.LoginException;
++
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.mapred.JobClient;
++import org.apache.hadoop.security.UnixUserGroupInformation;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.conf.Configuration;
++/**
++ * A utility to manage job submission files.<br/>
++ * <b><i>Note that this class is for framework internal usage only and is
++ * not to be used by users directly.</i></b>
++ */
++public class JobSubmissionFiles {
++
++  // job submission directory is private!
++  final public static FsPermission JOB_DIR_PERMISSION =
++    FsPermission.createImmutable((short) 0700); // rwx--------
++  //job files are world-wide readable and owner writable
++  final public static FsPermission JOB_FILE_PERMISSION = 
++    FsPermission.createImmutable((short) 0644); // rw-r--r--
++  
++  public static Path getJobSplitFile(Path jobSubmissionDir) {
++    return new Path(jobSubmissionDir, "job.split");
++  }
++
++  public static Path getJobSplitMetaFile(Path jobSubmissionDir) {
++    return new Path(jobSubmissionDir, "job.splitmetainfo");
++  }
++  
++  /**
++   * Get the job conf path.
++   */
++  public static Path getJobConfPath(Path jobSubmitDir) {
++    return new Path(jobSubmitDir, "job.xml");
++  }
++    
++  /**
++   * Get the job jar path.
++   */
++  public static Path getJobJar(Path jobSubmitDir) {
++    return new Path(jobSubmitDir, "job.jar");
++  }
++  
++  /**
++   * Get the job distributed cache files path.
++   * @param jobSubmitDir
++   */
++  public static Path getJobDistCacheFiles(Path jobSubmitDir) {
++    return new Path(jobSubmitDir, "files");
++  }
++  /**
++   * Get the job distributed cache archives path.
++   * @param jobSubmitDir 
++   */
++  public static Path getJobDistCacheArchives(Path jobSubmitDir) {
++    return new Path(jobSubmitDir, "archives");
++  }
++  /**
++   * Get the job distributed cache libjars path.
++   * @param jobSubmitDir 
++   */
++  public static Path getJobDistCacheLibjars(Path jobSubmitDir) {
++    return new Path(jobSubmitDir, "libjars");
++  }
++
++  /**
++   * Initializes the staging directory and returns the path. It also
++   * keeps track of all necessary ownership & permissions
++   * @param cluster
++   * @param conf
++   */
++  public static Path getStagingDir(JobClient client, Configuration conf) 
++  throws IOException {
++    Path stagingArea = client.getStagingAreaDir();
++    FileSystem fs = stagingArea.getFileSystem(conf);
++    String realUser;
++    String currentUser;
++    try {
++      UserGroupInformation ugi = UnixUserGroupInformation.login();
++      realUser = ugi.getUserName();
++      ugi = UnixUserGroupInformation.login(conf);
++      currentUser = ugi.getUserName();
++    } catch (LoginException le) {
++      throw new IOException(le);
++    }
++    if (fs.exists(stagingArea)) {
++      FileStatus fsStatus = fs.getFileStatus(stagingArea);
++      String owner = fsStatus.getOwner();
++      if (!(owner.equals(currentUser) || owner.equals(realUser)) || 
++          !fsStatus.getPermission().
++                               equals(JOB_DIR_PERMISSION)) {
++         throw new IOException("The ownership/permissions on the staging " +
++                      "directory " + stagingArea + " is not as expected. " + 
++                      "It is owned by " + owner + " and permissions are "+ 
++                      fsStatus.getPermission() + ". The directory must " +
++                      "be owned by the submitter " + currentUser + " or " +
++                      "by " + realUser + " and permissions must be rwx------");
++      }
++    } else {
++      fs.mkdirs(stagingArea, 
++          new FsPermission(JOB_DIR_PERMISSION));
++    }
++    return stagingArea;
++  }
++  
++}
+\ No newline at end of file
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/split/JobSplit.java b/src/mapred/org/apache/hadoop/mapreduce/split/JobSplit.java
+new file mode 100644
+index 0000000..30777ec
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/split/JobSplit.java
+@@ -0,0 +1,215 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapreduce.split;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++import java.io.UnsupportedEncodingException;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.mapreduce.InputSplit;
++
++/**
++ * This class groups the fundamental classes associated with
++ * reading/writing splits. The split information is divided into
++ * two parts based on the consumer of the information. The two
++ * parts are the split meta information, and the raw split 
++ * information. The first part is consumed by the JobTracker to
++ * create the tasks' locality data structures. The second part is
++ * used by the maps at runtime to know what to do!
++ * These pieces of information are written to two separate files.
++ * The metainformation file is slurped by the JobTracker during 
++ * job initialization. A map task gets the meta information during
++ * the launch and it reads the raw split bytes directly from the 
++ * file.
++ */
++public class JobSplit {
++  static final int META_SPLIT_VERSION = 1;
++  static final byte[] META_SPLIT_FILE_HEADER;
++  static {
++    try {
++      META_SPLIT_FILE_HEADER = "META-SPL".getBytes("UTF-8");
++    } catch (UnsupportedEncodingException u) {
++      throw new RuntimeException(u);
++    }
++  } 
++  public static final TaskSplitMetaInfo EMPTY_TASK_SPLIT = 
++    new TaskSplitMetaInfo();
++  
++  /**
++   * This represents the meta information about the task split.
++   * The main fields are 
++   *     - start offset in actual split
++   *     - data length that will be processed in this split
++   *     - hosts on which this split is local
++   */
++  public static class SplitMetaInfo implements Writable {
++    private long startOffset;
++    private long inputDataLength;
++    private String[] locations;
++
++    public SplitMetaInfo() {}
++    
++    public SplitMetaInfo(String[] locations, long startOffset, 
++        long inputDataLength) {
++      this.locations = locations;
++      this.startOffset = startOffset;
++      this.inputDataLength = inputDataLength;
++    }
++    
++    public SplitMetaInfo(InputSplit split, long startOffset) throws IOException {
++      try {
++        this.locations = split.getLocations();
++        this.inputDataLength = split.getLength();
++        this.startOffset = startOffset;
++      } catch (InterruptedException ie) {
++        throw new IOException(ie);
++      }
++    }
++    
++    public String[] getLocations() {
++      return locations;
++    }
++  
++    public long getStartOffset() {
++      return startOffset;
++    }
++      
++    public long getInputDataLength() {
++      return inputDataLength;
++    }
++    
++    public void setInputDataLocations(String[] locations) {
++      this.locations = locations;
++    }
++    
++    public void setInputDataLength(long length) {
++      this.inputDataLength = length;
++    }
++    
++    public void readFields(DataInput in) throws IOException {
++      int len = WritableUtils.readVInt(in);
++      locations = new String[len];
++      for (int i = 0; i < locations.length; i++) {
++        locations[i] = Text.readString(in);
++      }
++      startOffset = WritableUtils.readVLong(in);
++      inputDataLength = WritableUtils.readVLong(in);
++    }
++  
++    public void write(DataOutput out) throws IOException {
++      WritableUtils.writeVInt(out, locations.length);
++      for (int i = 0; i < locations.length; i++) {
++        Text.writeString(out, locations[i]);
++      }
++      WritableUtils.writeVLong(out, startOffset);
++      WritableUtils.writeVLong(out, inputDataLength);
++    }
++    
++    @Override
++    public String toString() {
++      StringBuffer buf = new StringBuffer();
++      buf.append("data-size : " + inputDataLength + "\n");
++      buf.append("start-offset : " + startOffset + "\n");
++      buf.append("locations : " + "\n");
++      for (String loc : locations) {
++        buf.append("  " + loc + "\n");
++      }
++      return buf.toString();
++    }
++  }
++  /**
++   * This represents the meta information about the task split that the 
++   * JobTracker creates
++   */
++  public static class TaskSplitMetaInfo {
++    private TaskSplitIndex splitIndex;
++    private long inputDataLength;
++    private String[] locations;
++    public TaskSplitMetaInfo(){
++      this.splitIndex = new TaskSplitIndex();
++      this.locations = new String[0];
++    }
++    public TaskSplitMetaInfo(TaskSplitIndex splitIndex, String[] locations, 
++        long inputDataLength) {
++      this.splitIndex = splitIndex;
++      this.locations = locations;
++      this.inputDataLength = inputDataLength;
++    }
++    public TaskSplitMetaInfo(InputSplit split, long startOffset) 
++    throws InterruptedException, IOException {
++      this(new TaskSplitIndex("", startOffset), split.getLocations(), 
++          split.getLength());
++    }
++    
++    public TaskSplitMetaInfo(String[] locations, long startOffset, 
++        long inputDataLength) {
++      this(new TaskSplitIndex("",startOffset), locations, inputDataLength);
++    }
++    
++    public TaskSplitIndex getSplitIndex() {
++      return splitIndex;
++    }
++    
++    public String getSplitLocation() {
++      return splitIndex.getSplitLocation();
++    }
++    public long getInputDataLength() {
++      return inputDataLength;
++    }
++    public String[] getLocations() {
++      return locations;
++    }
++    public long getStartOffset() {
++      return splitIndex.getStartOffset();
++    }
++  }
++  
++  /**
++   * This represents the meta information about the task split that the 
++   * task gets
++   */
++  public static class TaskSplitIndex {
++    private String splitLocation;
++    private long startOffset;
++    public TaskSplitIndex(){
++      this("", 0);
++    }
++    public TaskSplitIndex(String splitLocation, long startOffset) {
++      this.splitLocation = splitLocation;
++      this.startOffset = startOffset;
++    }
++    public long getStartOffset() {
++      return startOffset;
++    }
++    public String getSplitLocation() {
++      return splitLocation;
++    }
++    public void readFields(DataInput in) throws IOException {
++      splitLocation = Text.readString(in);
++      startOffset = WritableUtils.readVLong(in);
++    }
++    public void write(DataOutput out) throws IOException {
++      Text.writeString(out, splitLocation);
++      WritableUtils.writeVLong(out, startOffset);
++    }
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/split/JobSplitWriter.java b/src/mapred/org/apache/hadoop/mapreduce/split/JobSplitWriter.java
+new file mode 100644
+index 0000000..3b8a752
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/split/JobSplitWriter.java
+@@ -0,0 +1,170 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.split;
++
++import java.io.IOException;
++import java.io.UnsupportedEncodingException;
++import java.util.List;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.io.serializer.SerializationFactory;
++import org.apache.hadoop.io.serializer.Serializer;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.JobSubmissionFiles;
++import org.apache.hadoop.mapreduce.split.JobSplit.SplitMetaInfo;
++
++/**
++ * The class that is used by the Job clients to write splits (both the meta
++ * and the raw bytes parts)
++ */
++public class JobSplitWriter {
++
++  private static final int splitVersion = JobSplit.META_SPLIT_VERSION;
++  private static final byte[] SPLIT_FILE_HEADER;
++  static {
++    try {
++      SPLIT_FILE_HEADER = "SPL".getBytes("UTF-8");
++    } catch (UnsupportedEncodingException u) {
++      throw new RuntimeException(u);
++    }
++  }
++  
++  @SuppressWarnings("unchecked")
++  public static <T extends InputSplit> void createSplitFiles(Path jobSubmitDir, 
++      Configuration conf, List<InputSplit> splits) 
++  throws IOException, InterruptedException {
++    T[] array = (T[]) splits.toArray(new InputSplit[splits.size()]);
++    createSplitFiles(jobSubmitDir, conf, array);
++  }
++  
++  public static <T extends InputSplit> void createSplitFiles(Path jobSubmitDir, 
++      Configuration conf,T[] splits) 
++  throws IOException, InterruptedException {
++    FileSystem fs = jobSubmitDir.getFileSystem(conf);
++    FSDataOutputStream out = createFile(fs, 
++        JobSubmissionFiles.getJobSplitFile(jobSubmitDir), conf);
++    SplitMetaInfo[] info = writeNewSplits(conf, splits, out);
++    out.close();
++    writeJobSplitMetaInfo(fs,JobSubmissionFiles.getJobSplitMetaFile(jobSubmitDir), 
++        new FsPermission(JobSubmissionFiles.JOB_FILE_PERMISSION), splitVersion,
++        info);
++  }
++  
++  public static void createSplitFiles(Path jobSubmitDir, 
++      Configuration conf, org.apache.hadoop.mapred.InputSplit[] splits) 
++  throws IOException {
++    FileSystem fs = jobSubmitDir.getFileSystem(conf);
++    FSDataOutputStream out = createFile(fs, 
++        JobSubmissionFiles.getJobSplitFile(jobSubmitDir), conf);
++    SplitMetaInfo[] info = writeOldSplits(splits, out);
++    out.close();
++    writeJobSplitMetaInfo(fs,JobSubmissionFiles.getJobSplitMetaFile(jobSubmitDir), 
++        new FsPermission(JobSubmissionFiles.JOB_FILE_PERMISSION), splitVersion,
++        info);
++  }
++  
++  private static FSDataOutputStream createFile(FileSystem fs, Path splitFile, 
++      Configuration job)  throws IOException {
++    FSDataOutputStream out = FileSystem.create(fs, splitFile, 
++        new FsPermission(JobSubmissionFiles.JOB_FILE_PERMISSION));
++    int replication = job.getInt("mapred.submit.replication", 10);
++    fs.setReplication(splitFile, (short)replication);
++    writeSplitHeader(out);
++    return out;
++  }
++  private static void writeSplitHeader(FSDataOutputStream out) 
++  throws IOException {
++    out.write(SPLIT_FILE_HEADER);
++    out.writeInt(splitVersion);
++  }
++  
++  @SuppressWarnings("unchecked")
++  private static <T extends InputSplit> 
++  SplitMetaInfo[] writeNewSplits(Configuration conf, 
++      T[] array, FSDataOutputStream out)
++  throws IOException, InterruptedException {
++
++    SplitMetaInfo[] info = new SplitMetaInfo[array.length];
++    if (array.length != 0) {
++      SerializationFactory factory = new SerializationFactory(conf);
++      int i = 0;
++      long offset = out.size();
++      for(T split: array) {
++        int prevCount = out.size();
++        Text.writeString(out, split.getClass().getName());
++        Serializer<T> serializer = 
++          factory.getSerializer((Class<T>) split.getClass());
++        serializer.open(out);
++        serializer.serialize(split);
++        int currCount = out.size();
++        info[i++] = 
++          new JobSplit.SplitMetaInfo( 
++              split.getLocations(), offset,
++              split.getLength());
++        offset += currCount - prevCount;
++      }
++    }
++    return info;
++  }
++  
++  private static SplitMetaInfo[] writeOldSplits(
++      org.apache.hadoop.mapred.InputSplit[] splits,
++      FSDataOutputStream out) throws IOException {
++    SplitMetaInfo[] info = new SplitMetaInfo[splits.length];
++    if (splits.length != 0) {
++      int i = 0;
++      long offset = out.size();
++      for(org.apache.hadoop.mapred.InputSplit split: splits) {
++        int prevLen = out.size();
++        Text.writeString(out, split.getClass().getName());
++        split.write(out);
++        int currLen = out.size();
++        info[i++] = new JobSplit.SplitMetaInfo( 
++            split.getLocations(), offset,
++            split.getLength());
++        offset += currLen - prevLen;
++      }
++    }
++    return info;
++  }
++
++  private static void writeJobSplitMetaInfo(FileSystem fs, Path filename, 
++      FsPermission p, int splitMetaInfoVersion, 
++      JobSplit.SplitMetaInfo[] allSplitMetaInfo) 
++  throws IOException {
++    // write the splits meta-info to a file for the job tracker
++    FSDataOutputStream out = 
++      FileSystem.create(fs, filename, p);
++    out.write(JobSplit.META_SPLIT_FILE_HEADER);
++    WritableUtils.writeVInt(out, splitMetaInfoVersion);
++    WritableUtils.writeVInt(out, allSplitMetaInfo.length);
++    for (JobSplit.SplitMetaInfo splitMetaInfo : allSplitMetaInfo) {
++      splitMetaInfo.write(out);
++    }
++    out.close();
++  }
++}
++
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/split/SplitMetaInfoReader.java b/src/mapred/org/apache/hadoop/mapreduce/split/SplitMetaInfoReader.java
+new file mode 100644
+index 0000000..6c220d2
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/split/SplitMetaInfoReader.java
+@@ -0,0 +1,79 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.split;
++
++import java.io.IOException;
++import java.util.Arrays;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataInputStream;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.mapreduce.JobSubmissionFiles;
++
++/**
++ * A (internal) utility that reads the split meta info and creates
++ * split meta info objects
++ */
++
++public class SplitMetaInfoReader {
++  
++  public static JobSplit.TaskSplitMetaInfo[] readSplitMetaInfo(
++      JobID jobId, FileSystem fs, Configuration conf, Path jobSubmitDir) 
++  throws IOException {
++    long maxMetaInfoSize = conf.getLong("mapreduce.job.split.metainfo.maxsize", 
++        10000000L);
++    Path metaSplitFile = JobSubmissionFiles.getJobSplitMetaFile(jobSubmitDir);
++    FileStatus fStatus = fs.getFileStatus(metaSplitFile);
++    if (maxMetaInfoSize > 0 && fStatus.getLen() > maxMetaInfoSize) {
++      throw new IOException("Split metadata size exceeded " +
++          maxMetaInfoSize +". Aborting job " + jobId);
++    }
++    FSDataInputStream in = fs.open(metaSplitFile);
++    byte[] header = new byte[JobSplit.META_SPLIT_FILE_HEADER.length];
++    in.readFully(header);
++    if (!Arrays.equals(JobSplit.META_SPLIT_FILE_HEADER, header)) {
++      throw new IOException("Invalid header on split file");
++    }
++    int vers = WritableUtils.readVInt(in);
++    if (vers != JobSplit.META_SPLIT_VERSION) {
++      in.close();
++      throw new IOException("Unsupported split version " + vers);
++    }
++    int numSplits = WritableUtils.readVInt(in); //TODO: check for insane values
++    JobSplit.TaskSplitMetaInfo[] allSplitMetaInfo = 
++      new JobSplit.TaskSplitMetaInfo[numSplits];
++    for (int i = 0; i < numSplits; i++) {
++      JobSplit.SplitMetaInfo splitMetaInfo = new JobSplit.SplitMetaInfo();
++      splitMetaInfo.readFields(in);
++      JobSplit.TaskSplitIndex splitIndex = new JobSplit.TaskSplitIndex(
++          JobSubmissionFiles.getJobSplitFile(jobSubmitDir).toString(), 
++          splitMetaInfo.getStartOffset());
++      allSplitMetaInfo[i] = new JobSplit.TaskSplitMetaInfo(splitIndex, 
++          splitMetaInfo.getLocations(), 
++          splitMetaInfo.getInputDataLength());
++    }
++    in.close();
++    return allSplitMetaInfo;
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/cli/testConf.xml b/src/test/org/apache/hadoop/cli/testConf.xml
+index ef0f526..283f47d 100644
+--- a/src/test/org/apache/hadoop/cli/testConf.xml
++++ b/src/test/org/apache/hadoop/cli/testConf.xml
+@@ -91,11 +91,11 @@
+     <test> <!-- TESTED -->
+       <description>ls: directory using absolute path</description>
+       <test-commands>
+-        <command>-fs NAMENODE -mkdir /dir1</command>
+-        <command>-fs NAMENODE -ls /</command>
++        <command>-fs NAMENODE -mkdir /dir1/dir2</command>
++        <command>-fs NAMENODE -ls /dir1</command>
+       </test-commands>
+       <cleanup-commands>
+-        <command>-fs NAMENODE -rmr /dir1</command>
++        <command>-fs NAMENODE -rmr /dir1/dir2</command>
+       </cleanup-commands>
+       <comparators>
+         <comparator>
+@@ -104,7 +104,7 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/dir1</expected-output>
++          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/dir1/dir2</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+diff --git a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+index 521c758..e6144e8 100644
+--- a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+@@ -28,6 +28,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation;
+@@ -113,10 +114,10 @@ public class ClusterWithLinuxTaskController extends TestCase {
+     String[] splits = ugi.split(",");
+     taskControllerUser = new UnixUserGroupInformation(splits);
+     clusterConf.set(UnixUserGroupInformation.UGI_PROPERTY_NAME, ugi);
+-    createHomeDirectory(clusterConf);
++    createHomeAndStagingDirectory(clusterConf);
+   }
+ 
+-  private void createHomeDirectory(JobConf conf)
++  private void createHomeAndStagingDirectory(JobConf conf)
+       throws IOException {
+     FileSystem fs = dfsCluster.getFileSystem();
+     String path = "/user/" + taskControllerUser.getUserName();
+@@ -124,6 +125,12 @@ public class ClusterWithLinuxTaskController extends TestCase {
+     LOG.info("Creating Home directory : " + homeDirectory);
+     fs.mkdirs(homeDirectory);
+     changePermission(conf, homeDirectory);
++    Path stagingArea = 
++      new Path(conf.get("mapreduce.jobtracker.staging.root.dir",
++          "/tmp/hadoop/mapred/staging"));
++    LOG.info("Creating Staging root directory : " + stagingArea);
++    fs.mkdirs(stagingArea);
++    fs.setPermission(stagingArea, new FsPermission((short)0777));
+   }
+ 
+   private void changePermission(JobConf conf, Path p)
+diff --git a/src/test/org/apache/hadoop/mapred/GenericMRLoadGenerator.java b/src/test/org/apache/hadoop/mapred/GenericMRLoadGenerator.java
+index fb145ac..5ad0e6a 100644
+--- a/src/test/org/apache/hadoop/mapred/GenericMRLoadGenerator.java
++++ b/src/test/org/apache/hadoop/mapred/GenericMRLoadGenerator.java
+@@ -135,14 +135,14 @@ public class GenericMRLoadGenerator extends Configured implements Tool {
+       confRandom(job);
+     } else if (null != job.getClass("mapred.indirect.input.format", null)) {
+       // specified IndirectInputFormat? Build src list
+-      JobClient jClient = new JobClient(job);  
+-      Path sysdir = jClient.getSystemDir();
++      JobClient jClient = new JobClient(job);
++      Path tmpDir = new Path(jClient.getFs().getHomeDirectory(), ".staging");
+       Random r = new Random();
+-      Path indirInputFile = new Path(sysdir,
++      Path indirInputFile = new Path(tmpDir,
+           Integer.toString(r.nextInt(Integer.MAX_VALUE), 36) + "_files");
+       job.set("mapred.indirect.input.file", indirInputFile.toString());
+       SequenceFile.Writer writer = SequenceFile.createWriter(
+-          sysdir.getFileSystem(job), job, indirInputFile,
++          tmpDir.getFileSystem(job), job, indirInputFile,
+           LongWritable.class, Text.class,
+           SequenceFile.CompressionType.NONE);
+       try {
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistory.java b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+index 81c6d4c..2d536bd 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistory.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+@@ -107,7 +107,7 @@ public class TestJobHistory extends TestCase {
+     boolean isJobLaunched;
+     boolean isJTRestarted;
+ 
+-    TestListener(JobInfo job) {
++    TestListener(JobHistory.JobInfo job) {
+       super(job);
+       lineNum = 0;
+       isJobLaunched = false;
+@@ -293,7 +293,7 @@ public class TestJobHistory extends TestCase {
+   }
+ 
+   // Validate Format of Task Level Keys, Values read from history file
+-  private static void validateTaskLevelKeyValuesFormat(JobInfo job,
++  private static void validateTaskLevelKeyValuesFormat(JobHistory.JobInfo job,
+                                   boolean splitsCanBeEmpty) {
+     Map<String, JobHistory.Task> tasks = job.getAllTasks();
+ 
+@@ -340,7 +340,7 @@ public class TestJobHistory extends TestCase {
+   }
+ 
+   // Validate foramt of Task Attempt Level Keys, Values read from history file
+-  private static void validateTaskAttemptLevelKeyValuesFormat(JobInfo job) {
++  private static void validateTaskAttemptLevelKeyValuesFormat(JobHistory.JobInfo job) {
+     Map<String, JobHistory.Task> tasks = job.getAllTasks();
+ 
+     // For each task
+@@ -515,7 +515,7 @@ public class TestJobHistory extends TestCase {
+   // Validate Job Level Keys, Values read from history file by
+   // comparing them with the actual values from JT.
+   private static void validateJobLevelKeyValues(MiniMRCluster mr,
+-          RunningJob job, JobInfo jobInfo, JobConf conf) throws IOException  {
++          RunningJob job, JobHistory.JobInfo jobInfo, JobConf conf) throws IOException  {
+ 
+     JobTracker jt = mr.getJobTrackerRunner().getJobTracker();
+     JobInProgress jip = jt.getJob(job.getID());
+@@ -543,11 +543,11 @@ public class TestJobHistory extends TestCase {
+                values.get(Keys.JOB_PRIORITY)));
+ 
+     assertTrue("Job Name of job obtained from history file did not " +
+-               "match the expected value", JobInfo.getJobName(conf).equals(
++               "match the expected value", JobHistory.JobInfo.getJobName(conf).equals(
+                values.get(Keys.JOBNAME)));
+ 
+     assertTrue("User Name of job obtained from history file did not " +
+-               "match the expected value", JobInfo.getUserName(conf).equals(
++               "match the expected value", JobHistory.JobInfo.getUserName(conf).equals(
+                values.get(Keys.USER)));
+ 
+     // Validate job counters
+@@ -594,7 +594,7 @@ public class TestJobHistory extends TestCase {
+   // Validate Task Level Keys, Values read from history file by
+   // comparing them with the actual values from JT.
+   private static void validateTaskLevelKeyValues(MiniMRCluster mr,
+-                      RunningJob job, JobInfo jobInfo) throws IOException  {
++                      RunningJob job, JobHistory.JobInfo jobInfo) throws IOException  {
+ 
+     JobTracker jt = mr.getJobTrackerRunner().getJobTracker();
+     JobInProgress jip = jt.getJob(job.getID());
+@@ -676,7 +676,7 @@ public class TestJobHistory extends TestCase {
+   // Validate Task Attempt Level Keys, Values read from history file by
+   // comparing them with the actual values from JT.
+   private static void validateTaskAttemptLevelKeyValues(MiniMRCluster mr,
+-                      RunningJob job, JobInfo jobInfo) throws IOException  {
++                      RunningJob job, JobHistory.JobInfo jobInfo) throws IOException  {
+ 
+     JobTracker jt = mr.getJobTrackerRunner().getJobTracker();
+     JobInProgress jip = jt.getJob(job.getID());
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java b/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java
+index 5f709f2..122421f 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java
+@@ -37,9 +37,9 @@ public class TestJobHistoryParsing  extends TestCase {
+    * object with data from log file. 
+    */
+   static class TestListener implements Listener {
+-    JobInfo job;
++    JobHistory.JobInfo job;
+ 
+-    TestListener(JobInfo job) {
++    TestListener(JobHistory.JobInfo job) {
+       this.job = job;
+     }
+     // JobHistory.Listener implementation 
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+index 1566bf9..4bba6a6 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+@@ -28,6 +28,7 @@ import junit.framework.TestCase;
+ 
+ import org.apache.hadoop.io.BytesWritable;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
++import org.apache.hadoop.mapreduce.split.JobSplit;
+ 
+ public class TestJobQueueTaskScheduler extends TestCase {
+   
+@@ -77,8 +78,8 @@ public class TestJobQueueTaskScheduler extends TestCase {
+     public Task obtainNewMapTask(final TaskTrackerStatus tts, int clusterSize,
+         int ignored) throws IOException {
+       TaskAttemptID attemptId = getTaskAttemptID(true);
+-      Task task = new MapTask("", attemptId, 0, "", new BytesWritable(), 1, 
+-                              getJobConf().getUser()) {
++      Task task = new MapTask("", attemptId, 0, new JobSplit.TaskSplitIndex(),
++          1) {
+         @Override
+         public String toString() {
+           return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+@@ -93,8 +94,7 @@ public class TestJobQueueTaskScheduler extends TestCase {
+     public Task obtainNewReduceTask(final TaskTrackerStatus tts,
+         int clusterSize, int ignored) throws IOException {
+       TaskAttemptID attemptId = getTaskAttemptID(false);
+-      Task task = new ReduceTask("", attemptId, 0, 10, 1, 
+-                                 getJobConf().getUser()) {
++      Task task = new ReduceTask("", attemptId, 0, 10, 1) {
+         @Override
+         public String toString() {
+           return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobSysDirWithDFS.java b/src/test/org/apache/hadoop/mapred/TestJobSysDirWithDFS.java
+index 5ced114..dde7f7f 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobSysDirWithDFS.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobSysDirWithDFS.java
+@@ -55,7 +55,8 @@ public class TestJobSysDirWithDFS extends TestCase {
+                                            Path outDir,
+                                            String input,
+                                            int numMaps,
+-                                           int numReduces) throws IOException {
++                                           int numReduces,
++                                           String sysDir) throws IOException {
+     FileSystem inFs = inDir.getFileSystem(conf);
+     FileSystem outFs = outDir.getFileSystem(conf);
+     outFs.delete(outDir, true);
+@@ -88,14 +89,15 @@ public class TestJobSysDirWithDFS extends TestCase {
+     // Checking that the Job Client system dir is not used
+     assertFalse(FileSystem.get(conf).exists(new Path(conf.get("mapred.system.dir")))); 
+     // Check if the Job Tracker system dir is propogated to client
+-    String sysDir = jobClient.getSystemDir().toString();
++    sysDir = jobClient.getSystemDir().toString();
+     System.out.println("Job sys dir -->" + sysDir);
+     assertFalse(sysDir.contains("/tmp/subru/mapred/system"));
+     assertTrue(sysDir.contains("custom"));
+     return new TestResult(job, TestMiniMRWithDFS.readOutput(outDir, conf));
+   }
+ 
+- static void runWordCount(MiniMRCluster mr, JobConf jobConf) throws IOException {
++ static void runWordCount(MiniMRCluster mr, JobConf jobConf, String sysDir)
++ throws IOException {
+     LOG.info("runWordCount");
+     // Run a word count example
+     // Keeping tasks that match this pattern
+@@ -105,7 +107,7 @@ public class TestJobSysDirWithDFS extends TestCase {
+     result = launchWordCount(jobConf, inDir, outDir,
+                              "The quick brown fox\nhas many silly\n" + 
+                              "red fox sox\n",
+-                             3, 1);
++                             3, 1, sysDir);
+     assertEquals("The\t1\nbrown\t1\nfox\t2\nhas\t1\nmany\t1\n" +
+                  "quick\t1\nred\t1\nsilly\t1\nsox\t1\n", result.output);
+     // Checking if the Job ran successfully in spite of different system dir config
+@@ -126,7 +128,7 @@ public class TestJobSysDirWithDFS extends TestCase {
+       fileSys = dfs.getFileSystem();
+       mr = new MiniMRCluster(taskTrackers, fileSys.getUri().toString(), 1, null, null, conf);
+ 
+-      runWordCount(mr, mr.createJobConf());
++      runWordCount(mr, mr.createJobConf(), conf.get("mapred.system.dir"));
+     } finally {
+       if (dfs != null) { dfs.shutdown(); }
+       if (mr != null) { mr.shutdown();
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobTrackerRestart.java b/src/test/org/apache/hadoop/mapred/TestJobTrackerRestart.java
+index ef9149e..26559b0 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobTrackerRestart.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobTrackerRestart.java
+@@ -27,12 +27,15 @@ import junit.framework.TestCase;
+ import java.io.*;
+ import java.util.ArrayList;
+ import java.util.List;
+-
++import org.junit.*;
+ /** 
+  * TestJobTrackerRestart checks if the jobtracker can restart. JobTracker 
+  * should be able to continue running the previously running jobs and also 
+  * recover previosuly submitted jobs.
+  */
++/**UNTIL MAPREDUCE-873 is backported, we will not run recovery manager tests
++ */
++@Ignore
+ public class TestJobTrackerRestart extends TestCase {
+   static final Path testDir = 
+     new Path(System.getProperty("test.build.data","/tmp"), 
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithLostTracker.java b/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithLostTracker.java
+index 8b83083..2b27379 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithLostTracker.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithLostTracker.java
+@@ -24,11 +24,15 @@ import org.apache.hadoop.mapred.TestJobTrackerRestart;
+ 
+ import junit.framework.TestCase;
+ import java.io.*;
++import org.junit.*;
+ 
+ /** 
+  * This test checks if the jobtracker can detect and recover a tracker that was
+  * lost while the jobtracker was down.
+  */
++/**UNTIL MAPREDUCE-873 is backported, we will not run recovery manager tests
++ */
++@Ignore
+ public class TestJobTrackerRestartWithLostTracker extends TestCase {
+   final Path testDir = new Path("/jt-restart-lost-tt-testing");
+   final Path inDir = new Path(testDir, "input");
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobTrackerSafeMode.java b/src/test/org/apache/hadoop/mapred/TestJobTrackerSafeMode.java
+index f11b901..bef870d 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobTrackerSafeMode.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobTrackerSafeMode.java
+@@ -27,12 +27,16 @@ import junit.framework.TestCase;
+ import java.io.*;
+ import java.util.HashSet;
+ import java.util.Set;
++import org.junit.*;
+ 
+ /** 
+  * This test checks jobtracker in safe mode. In safe mode the jobtracker upon 
+  * restart doesnt schedule any new tasks and waits for the (old) trackers to 
+  * join back.
+  */
++/**UNTIL MAPREDUCE-873 is backported, we will not run recovery manager tests
++ */
++@Ignore
+ public class TestJobTrackerSafeMode extends TestCase {
+   final Path testDir = 
+     new Path(System.getProperty("test.build.data", "/tmp"), "jt-safemode");
+diff --git a/src/test/org/apache/hadoop/mapred/TestMiniMRClasspath.java b/src/test/org/apache/hadoop/mapred/TestMiniMRClasspath.java
+index f673ffe..280d655 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMiniMRClasspath.java
++++ b/src/test/org/apache/hadoop/mapred/TestMiniMRClasspath.java
+@@ -19,6 +19,8 @@
+ package org.apache.hadoop.mapred;
+ 
+ import java.io.*;
++import java.net.URI;
++
+ import junit.framework.TestCase;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+@@ -35,15 +37,13 @@ import org.apache.hadoop.io.Text;
+ public class TestMiniMRClasspath extends TestCase {
+   
+   
+-  static String launchWordCount(String fileSys,
++  static void configureWordCount(FileSystem fs,
+                                 String jobTracker,
+                                 JobConf conf,
+                                 String input,
+                                 int numMaps,
+-                                int numReduces) throws IOException {
+-    final Path inDir = new Path("/testing/wc/input");
+-    final Path outDir = new Path("/testing/wc/output");
+-    FileSystem fs = FileSystem.getNamed(fileSys, conf);
++                                int numReduces,
++                                Path inDir, Path outDir) throws IOException {
+     fs.delete(outDir, true);
+     if (!fs.mkdirs(inDir)) {
+       throw new IOException("Mkdirs failed to create " + inDir.toString());
+@@ -53,7 +53,7 @@ public class TestMiniMRClasspath extends TestCase {
+       file.writeBytes(input);
+       file.close();
+     }
+-    FileSystem.setDefaultUri(conf, fileSys);
++    FileSystem.setDefaultUri(conf, fs.getUri());
+     conf.set("mapred.job.tracker", jobTracker);
+     conf.setJobName("wordcount");
+     conf.setInputFormat(TextInputFormat.class);
+@@ -72,6 +72,16 @@ public class TestMiniMRClasspath extends TestCase {
+     conf.setNumReduceTasks(numReduces);
+     //pass a job.jar already included in the hadoop build
+     conf.setJar("build/test/testjar/testjob.jar");
++  }
++
++  static String launchWordCount(String fileSys, String jobTracker, JobConf conf,
++                                String input, int numMaps, int numReduces)
++  throws IOException {
++    final Path inDir = new Path("/testing/wc/input");
++    final Path outDir = new Path("/testing/wc/output");
++    FileSystem fs = FileSystem.getNamed(fileSys, conf);
++    configureWordCount(fs, jobTracker, conf, input, numMaps, numReduces, inDir,
++                       outDir);
+     JobClient.runJob(conf);
+     StringBuffer result = new StringBuffer();
+     {
+diff --git a/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java b/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java
+index b94f446..576d2c7 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java
++++ b/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java
+@@ -210,8 +210,10 @@ public class TestMiniMRWithDFS extends TestCase {
+     long hdfsWrite = 
+       counters.findCounter(Task.FILESYSTEM_COUNTER_GROUP, 
+           Task.getFileSystemCounterNames("hdfs")[1]).getCounter();
++    long rawSplitBytesRead =
++      counters.findCounter(Task.Counter.SPLIT_RAW_BYTES).getCounter();
+     assertEquals(result.output.length(), hdfsWrite);
+-    assertEquals(input.length(), hdfsRead);
++    assertEquals(input.length() + rawSplitBytesRead, hdfsRead);
+ 
+     // Run a job with input and output going to localfs even though the 
+     // default fs is hdfs.
+diff --git a/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFSWithDistinctUsers.java b/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFSWithDistinctUsers.java
+index 15f0813..62f6dce 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFSWithDistinctUsers.java
++++ b/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFSWithDistinctUsers.java
+@@ -23,6 +23,8 @@ import junit.framework.TestCase;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.mapreduce.JobSubmissionFiles;
++import org.apache.hadoop.mapreduce.split.JobSplitWriter;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+@@ -43,8 +45,10 @@ public class TestMiniMRWithDFSWithDistinctUsers extends TestCase {
+   }
+   
+   static JobConf createJobConf(MiniMRCluster mr, UnixUserGroupInformation ugi) {
+-    JobConf jobconf = mr.createJobConf();
+-    UnixUserGroupInformation.saveToConf(jobconf,
++    return createJobConf(mr.createJobConf(), ugi);
++  }
++  static JobConf createJobConf(JobConf conf, UnixUserGroupInformation ugi) {
++    JobConf jobconf = new JobConf(conf);    UnixUserGroupInformation.saveToConf(jobconf,
+         UnixUserGroupInformation.UGI_PROPERTY_NAME, ugi);
+     return jobconf;
+   }
+@@ -55,6 +59,50 @@ public class TestMiniMRWithDFSWithDistinctUsers extends TestCase {
+     fs.setPermission(p, new FsPermission((short)0777));
+   }
+ 
++  // runs a sample job as a user (ugi)
++  RunningJob runJobAsUser(JobConf job, UserGroupInformation ugi)
++  throws Exception {
++    JobSubmissionProtocol jobSubmitClient =
++      TestSubmitJob.getJobSubmitClient(job, ugi);
++    JobID id = jobSubmitClient.getNewJobId();
++   
++    InputSplit[] splits = computeJobSplit(JobID.downgrade(id), job);
++    Path jobSubmitDir = new Path(id.toString());
++    FileSystem fs = jobSubmitDir.getFileSystem(job);
++    jobSubmitDir = jobSubmitDir.makeQualified(fs);
++    uploadJobFiles(JobID.downgrade(id), splits, jobSubmitDir, job);
++   
++    jobSubmitClient.submitJob(id, jobSubmitDir.toString());
++   
++    JobClient jc = new JobClient(job);
++    return jc.getJob(JobID.downgrade(id));
++  }
++ 
++  // a helper api for split computation
++  private InputSplit[] computeJobSplit(JobID id, JobConf conf)
++  throws IOException {
++    InputSplit[] splits =
++      conf.getInputFormat().getSplits(conf, conf.getNumMapTasks());
++    conf.setNumMapTasks(splits.length);
++    return splits;
++  }
++
++
++  // a helper api for split submission
++  private void uploadJobFiles(JobID id, InputSplit[] splits,
++                             Path jobSubmitDir, JobConf conf)
++  throws IOException {
++    Path confLocation = JobSubmissionFiles.getJobConfPath(jobSubmitDir);
++    JobSplitWriter.createSplitFiles(jobSubmitDir, conf, splits);
++    FileSystem fs = confLocation.getFileSystem(conf);
++    FsPermission perm = new FsPermission((short)0700);
++   
++    // localize conf
++    DataOutputStream confOut = FileSystem.create(fs, confLocation, perm);
++    conf.writeXml(confOut);
++    confOut.close();
++  }
++ 
+   public void testDistinctUsers() throws Exception {
+     MiniDFSCluster dfs = null;
+     MiniMRCluster mr = null;
+@@ -72,9 +120,21 @@ public class TestMiniMRWithDFSWithDistinctUsers extends TestCase {
+       mr = new MiniMRCluster(0, 0, 4, dfs.getFileSystem().getUri().toString(),
+            1, null, null, MR_UGI);
+ 
+-      JobConf pi = createJobConf(mr, PI_UGI);
+-      TestMiniMRWithDFS.runPI(mr, pi);
+-
++      String jobTrackerName = "localhost:" + mr.getJobTrackerPort();
++      JobConf job1 = mr.createJobConf();
++      String input = "The quick brown fox\nhas many silly\n"
++                     + "red fox sox\n";
++      Path inDir = new Path("/testing/distinct/input");
++      Path outDir = new Path("/testing/distinct/output");
++      TestMiniMRClasspath.configureWordCount(fs, jobTrackerName, job1,
++                                             input, 2, 1, inDir, outDir);
++      JobConf job2 = mr.createJobConf();
++      Path inDir2 = new Path("/testing/distinct/input2");
++      Path outDir2 = new Path("/testing/distinct/output2");
++      TestMiniMRClasspath.configureWordCount(fs, jobTrackerName, job2,
++                                             input, 2, 1, inDir2, outDir2);
++      job2 = createJobConf(job2, WC_UGI);
++      runJobAsUser(job2, WC_UGI);
+       JobConf wc = createJobConf(mr, WC_UGI);
+       TestMiniMRWithDFS.runWordCount(mr, wc);
+     } finally {
+diff --git a/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java b/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
+index c679d23..e2fb3e8 100644
+--- a/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
++++ b/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
+@@ -387,82 +387,4 @@ public class TestNodeRefresh extends TestCase {
+     
+     stopCluster();
+   }
+-
+-  /** 
+-    * Check if excluded hosts are decommissioned across restart   
+-    */ 
+-   public void testMRExcludeHostsAcrossRestarts() throws IOException { 
+-     // start a cluster with 2 hosts and empty exclude-hosts file 
+-     Configuration conf = new Configuration(); 
+-     conf.setBoolean("mapred.jobtracker.restart.recover", true); 
+-  
+-     File file = new File("hosts.exclude"); 
+-     file.delete(); 
+-     startCluster(2, 1, 0, conf); 
+-     String hostToDecommission = getHostname(1); 
+-     conf = mr.createJobConf(new JobConf(conf)); 
+-  
+-     // submit a job 
+-     Path inDir = new Path("input"); 
+-     Path outDir = new Path("output"); 
+-     Path signalFilename = new Path("share"); 
+-     JobConf newConf = new JobConf(conf); 
+-     UtilsForTests.configureWaitingJobConf(newConf, inDir, outDir, 30, 1,  
+-         "restart-decommission", signalFilename.toString(),  
+-         signalFilename.toString()); 
+-      
+-     JobClient jobClient = new JobClient(newConf); 
+-     RunningJob job = jobClient.submitJob(newConf); 
+-     JobID id = job.getID(); 
+-      
+-     // wait for 50% 
+-     while (job.mapProgress() < 0.5f) { 
+-       UtilsForTests.waitFor(100); 
+-     } 
+-      
+-     // change the exclude-hosts file to include one host 
+-     FileOutputStream out = new FileOutputStream(file); 
+-     LOG.info("Writing excluded nodes to log file " + file.toString()); 
+-     BufferedWriter writer = null; 
+-     try { 
+-       writer = new BufferedWriter(new OutputStreamWriter(out)); 
+-       writer.write( hostToDecommission + "\n"); // decommission first host 
+-     } finally { 
+-       if (writer != null) { 
+-         writer.close(); 
+-       } 
+-       out.close(); 
+-     } 
+-     file.deleteOnExit(); 
+-  
+-     // restart the jobtracker 
+-     mr.stopJobTracker(); 
+-     mr.startJobTracker(); 
+-     // Wait for the JT to be ready 
+-     UtilsForTests.waitForJobTracker(jobClient); 
+-  
+-     jt = mr.getJobTrackerRunner().getJobTracker(); 
+-     UtilsForTests.signalTasks(dfs, dfs.getFileSystem(),  
+-         signalFilename.toString(), signalFilename.toString(), 1); 
+-  
+-     assertTrue("Decommissioning of tracker has no effect restarted job",  
+-         jt.getJob(job.getID()).failedMapTasks > 0); 
+-      
+-     // check the cluster status and tracker size 
+-     assertEquals("Tracker is not lost upon host decommissioning",  
+-                  1, jt.getClusterStatus(false).getTaskTrackers()); 
+-     assertEquals("Excluded node count is incorrect",  
+-                  1, jt.getClusterStatus(false).getNumExcludedNodes()); 
+-      
+-     // check if the host is disallowed 
+-     for (TaskTrackerStatus status : jt.taskTrackers()) { 
+-       assertFalse("Tracker from decommissioned host still exist",  
+-                   status.getHost().equals(hostToDecommission)); 
+-     } 
+-  
+-     // wait for the job 
+-     job.waitForCompletion(); 
+-  
+-     stopCluster(); 
+-   } 
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/TestQueueManager.java b/src/test/org/apache/hadoop/mapred/TestQueueManager.java
+index 910f90f..d2767c9 100644
+--- a/src/test/org/apache/hadoop/mapred/TestQueueManager.java
++++ b/src/test/org/apache/hadoop/mapred/TestQueueManager.java
+@@ -480,7 +480,10 @@ public class TestQueueManager extends TestCase {
+ 
+       //try to kill as self
+       try {
+-        rjob.killJob();
++        conf.set("mapred.job.tracker", "localhost:"
++            + miniMRCluster.getJobTrackerPort());
++        JobClient jc = new JobClient(conf);
++        jc.getJob(rjob.getJobID()).killJob();
+         if (!shouldSucceed) {
+           fail("should fail kill operation");  
+         }
+@@ -519,7 +522,10 @@ public class TestQueueManager extends TestCase {
+       
+       // try to change priority as self
+       try {
+-        rjob.setJobPriority("VERY_LOW");
++        conf.set("mapred.job.tracker", "localhost:"
++            + miniMRCluster.getJobTrackerPort());
++        JobClient jc = new JobClient(conf);
++        jc.getJob(rjob.getJobID()).setJobPriority("VERY_LOW");
+         if (!shouldSucceed) {
+           fail("changing priority should fail.");
+         }
+@@ -546,6 +552,9 @@ public class TestQueueManager extends TestCase {
+   private void setUpCluster(JobConf conf) throws IOException {
+     miniDFSCluster = new MiniDFSCluster(conf, 1, true, null);
+     FileSystem fileSys = miniDFSCluster.getFileSystem();
++    TestMiniMRWithDFSWithDistinctUsers.mkdir(fileSys,
++        conf.get("mapreduce.jobtracker.staging.root.dir",
++            "/tmp/hadoop/mapred/staging"));
+     String namenode = fileSys.getUri().toString();
+     miniMRCluster = new MiniMRCluster(1, namenode, 3, 
+                       null, null, conf);
+@@ -596,7 +605,7 @@ public class TestQueueManager extends TestCase {
+     if (shouldComplete) {
+       rJob = JobClient.runJob(jc);  
+     } else {
+-      rJob = new JobClient(clientConf).submitJob(jc);
++      rJob = new JobClient(jc).submitJob(jc);
+     }
+     return rJob;
+   }
+diff --git a/src/test/org/apache/hadoop/mapred/TestRecoveryManager.java b/src/test/org/apache/hadoop/mapred/TestRecoveryManager.java
+index 5e854c6..1a130fa 100644
+--- a/src/test/org/apache/hadoop/mapred/TestRecoveryManager.java
++++ b/src/test/org/apache/hadoop/mapred/TestRecoveryManager.java
+@@ -29,16 +29,19 @@ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+-import org.apache.hadoop.mapred.JobTracker.RecoveryManager;
+ import org.apache.hadoop.mapred.MiniMRCluster.JobTrackerRunner;
+ import org.apache.hadoop.mapred.TestJobInProgressListener.MyScheduler;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.junit.*;
+ 
+ /**
+  * Test whether the {@link RecoveryManager} is able to tolerate job-recovery 
+  * failures and the jobtracker is able to tolerate {@link RecoveryManager}
+  * failure.
+  */
++/**UNTIL MAPREDUCE-873 is backported, we will not run recovery manager tests
++ */
++@Ignore
+ public class TestRecoveryManager extends TestCase {
+   private static final Log LOG = 
+     LogFactory.getLog(TestRecoveryManager.class);
+@@ -51,8 +54,7 @@ public class TestRecoveryManager extends TestCase {
+    * {@link JobTracker.RecoveryManager}. It does the following :
+    *  - submits 2 jobs
+    *  - kills the jobtracker
+-   *  - Garble job.xml for one job causing it to fail in constructor 
+-   *    and job.split for another causing it to fail in init.
++   *  - deletes the info file for one job
+    *  - restarts the jobtracker
+    *  - checks if the jobtraker starts normally
+    */
+@@ -106,26 +108,15 @@ public class TestRecoveryManager extends TestCase {
+     
+     // delete the job.xml of job #1 causing the job to fail in constructor
+     Path jobFile = 
+-      new Path(sysDir, rJob1.getID().toString() + Path.SEPARATOR + "job.xml");
+-    LOG.info("Deleting job.xml file : " + jobFile.toString());
++      new Path(sysDir, rJob1.getID().toString() + "/" + JobTracker.JOB_INFO_FILE);
++    LOG.info("Deleting job token file : " + jobFile.toString());
+     fs.delete(jobFile, false); // delete the job.xml file
+     
+-    // create the job.xml file with 0 bytes
++    // create the job.xml file with 1 bytes
+     FSDataOutputStream out = fs.create(jobFile);
+     out.write(1);
+     out.close();
+ 
+-    // delete the job.split of job #2 causing the job to fail in initTasks
+-    Path jobSplitFile = 
+-      new Path(sysDir, rJob2.getID().toString() + Path.SEPARATOR + "job.split");
+-    LOG.info("Deleting job.split file : " + jobSplitFile.toString());
+-    fs.delete(jobSplitFile, false); // delete the job.split file
+-    
+-    // create the job.split file with 0 bytes
+-    out = fs.create(jobSplitFile);
+-    out.write(1);
+-    out.close();
+-
+     // make sure that the jobtracker is in recovery mode
+     mr.getJobTrackerConf().setBoolean("mapred.jobtracker.restart.recover", 
+                                       true);
+diff --git a/src/test/org/apache/hadoop/mapred/TestResourceEstimation.java b/src/test/org/apache/hadoop/mapred/TestResourceEstimation.java
+index de73872..dc243a2 100644
+--- a/src/test/org/apache/hadoop/mapred/TestResourceEstimation.java
++++ b/src/test/org/apache/hadoop/mapred/TestResourceEstimation.java
+@@ -18,7 +18,7 @@
+ package org.apache.hadoop.mapred;
+ 
+ import junit.framework.TestCase;
+-import org.apache.hadoop.mapred.JobClient.RawSplit;
++import org.apache.hadoop.mapreduce.split.JobSplit;
+ 
+ public class TestResourceEstimation extends TestCase {
+   
+@@ -45,8 +45,8 @@ public class TestResourceEstimation extends TestCase {
+       
+       TaskStatus ts = new MapTaskStatus();
+       ts.setOutputSize(singleMapOutputSize);
+-      RawSplit split = new RawSplit();
+-      split.setDataLength(0);
++      JobSplit.TaskSplitMetaInfo split =
++          new JobSplit.TaskSplitMetaInfo(new String[0], 0, 0);
+       TaskInProgress tip = 
+         new TaskInProgress(jid, "", split, null, jc, jip, 0, 1);
+       re.updateWithCompletedTask(ts, tip);
+@@ -82,8 +82,9 @@ public class TestResourceEstimation extends TestCase {
+       
+       TaskStatus ts = new MapTaskStatus();
+       ts.setOutputSize(singleMapOutputSize);
+-      RawSplit split = new RawSplit();
+-      split.setDataLength(singleMapInputSize);
++      JobSplit.TaskSplitMetaInfo split =
++              new JobSplit.TaskSplitMetaInfo(new String[0], 0,
++                                           singleMapInputSize);
+       TaskInProgress tip = 
+         new TaskInProgress(jid, "", split, null, jc, jip, 0, 1);
+       re.updateWithCompletedTask(ts, tip);
+@@ -95,8 +96,8 @@ public class TestResourceEstimation extends TestCase {
+     //add one more map task with input size as 0
+     TaskStatus ts = new MapTaskStatus();
+     ts.setOutputSize(singleMapOutputSize);
+-    RawSplit split = new RawSplit();
+-    split.setDataLength(0);
++    JobSplit.TaskSplitMetaInfo split =
++        new JobSplit.TaskSplitMetaInfo(new String[0], 0, 0);
+     TaskInProgress tip = 
+       new TaskInProgress(jid, "", split, null, jc, jip, 0, 1);
+     re.updateWithCompletedTask(ts, tip);
+diff --git a/src/test/org/apache/hadoop/mapred/TestSubmitJob.java b/src/test/org/apache/hadoop/mapred/TestSubmitJob.java
+index 28ebaa2..648ea19 100644
+--- a/src/test/org/apache/hadoop/mapred/TestSubmitJob.java
++++ b/src/test/org/apache/hadoop/mapred/TestSubmitJob.java
+@@ -18,24 +18,58 @@
+ package org.apache.hadoop.mapred;
+ 
+ import java.io.IOException;
++import java.net.URI;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.examples.SleepJob;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.server.namenode.NameNode;
++import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
++import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.UnixUserGroupInformation;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.ToolRunner;
+ 
+ import junit.framework.TestCase;
+ 
+ public class TestSubmitJob extends TestCase {
+-  private MiniMRCluster miniMRCluster;
++  static final Log LOG = LogFactory.getLog(TestSubmitJob.class);
++  private MiniMRCluster mrCluster;
+ 
+-  @Override
+-  protected void tearDown()
+-      throws Exception {
+-    if (miniMRCluster != null) {
+-      miniMRCluster.shutdown();
+-    }
++  private MiniDFSCluster dfsCluster;
++  private JobTracker jt;
++  private FileSystem fs;
++  private static Path TEST_DIR =
++    new Path(System.getProperty("test.build.data","/tmp"),
++             "job-submission-testing");
++  private static int numSlaves = 1;
++
++  private void startCluster() throws Exception {
++    super.setUp();
++    Configuration conf = new Configuration();
++    dfsCluster = new MiniDFSCluster(conf, numSlaves, true, null);
++    JobConf jConf = new JobConf(conf);
++    jConf.setLong("mapred.job.submission.expiry.interval", 6 * 1000);
++    mrCluster = new MiniMRCluster(0, 0, numSlaves,
++        dfsCluster.getFileSystem().getUri().toString(), 1, null, null, null,
++        jConf);
++    jt = mrCluster.getJobTrackerRunner().getJobTracker();
++    fs = FileSystem.get(mrCluster.createJobConf());
+   }
+ 
++  private void stopCluster() throws Exception {
++    mrCluster.shutdown();
++    mrCluster = null;
++    dfsCluster.shutdown();
++    dfsCluster = null;
++    jt = null;
++    fs = null;
++  }
+   /**
+    * Test to verify that jobs with invalid memory requirements are killed at the
+    * JT.
+@@ -54,9 +88,9 @@ public class TestSubmitJob extends TestCase {
+     jtConf.setLong(JobTracker.MAPRED_CLUSTER_MAX_REDUCE_MEMORY_MB_PROPERTY,
+         4 * 1024L);
+ 
+-    miniMRCluster = new MiniMRCluster(0, "file:///", 0, null, null, jtConf);
++    mrCluster = new MiniMRCluster(0, "file:///", 0, null, null, jtConf);
+ 
+-    JobConf clusterConf = miniMRCluster.createJobConf();
++    JobConf clusterConf = mrCluster.createJobConf();
+ 
+     // No map-memory configuration
+     JobConf jobConf = new JobConf(clusterConf);
+@@ -83,6 +117,9 @@ public class TestSubmitJob extends TestCase {
+     jobConf.setMemoryForReduceTask(5 * 1024L);
+     runJobAndVerifyFailure(jobConf, 1 * 1024L, 5 * 1024L,
+         "Exceeds the cluster's max-memory-limit.");
++    
++    mrCluster.shutdown();
++    mrCluster = null;
+   }
+ 
+   private void runJobAndVerifyFailure(JobConf jobConf, long memForMapTasks,
+@@ -108,4 +145,126 @@ public class TestSubmitJob extends TestCase {
+         + " - doesn't contain expected message - " + overallExpectedMsg, msg
+         .contains(overallExpectedMsg));
+   }
+-}
++  static JobSubmissionProtocol getJobSubmitClient(JobConf conf,
++                                            UserGroupInformation ugi)
++   throws IOException {
++    return (JobSubmissionProtocol) RPC.getProxy(JobSubmissionProtocol.class,
++        JobSubmissionProtocol.versionID, JobTracker.getAddress(conf), ugi,
++         conf, NetUtils.getSocketFactory(conf, JobSubmissionProtocol.class));
++   }
++ 
++  static org.apache.hadoop.hdfs.protocol.ClientProtocol getDFSClient(
++        Configuration conf, UserGroupInformation ugi)
++    throws IOException {
++     return (org.apache.hadoop.hdfs.protocol.ClientProtocol)
++        RPC.getProxy(org.apache.hadoop.hdfs.protocol.ClientProtocol.class,
++           org.apache.hadoop.hdfs.protocol.ClientProtocol.versionID,
++           NameNode.getAddress(conf), ugi,
++           conf,
++           NetUtils.getSocketFactory(conf,
++               org.apache.hadoop.hdfs.protocol.ClientProtocol.class));
++  }
++ 
++   /**
++    * Submit a job and check if the files are accessible to other users.
++    */
++  public void testSecureJobExecution() throws Exception {
++    LOG.info("Testing secure job submission/execution");
++    MiniDFSCluster dfs = null;
++    MiniMRCluster mr = null;
++    try {
++      Configuration conf = new Configuration();
++      UnixUserGroupInformation.saveToConf(conf,
++          UnixUserGroupInformation.UGI_PROPERTY_NAME,
++          TestMiniMRWithDFSWithDistinctUsers.DFS_UGI);
++      dfs = new MiniDFSCluster(conf, 1, true, null);
++      FileSystem fs = dfs.getFileSystem();
++      TestMiniMRWithDFSWithDistinctUsers.mkdir(fs, "/user");
++      TestMiniMRWithDFSWithDistinctUsers.mkdir(fs, "/mapred");
++      TestMiniMRWithDFSWithDistinctUsers.mkdir(fs,
++          conf.get("mapreduce.jobtracker.staging.root.dir",
++              "/tmp/hadoop/mapred/staging"));
++      UnixUserGroupInformation MR_UGI =
++        TestMiniMRWithDFSWithDistinctUsers.createUGI(
++            UnixUserGroupInformation.login().getUserName(), false);
++      mr = new MiniMRCluster(0, 0, 1, dfs.getFileSystem().getUri().toString(),
++          1, null, null, MR_UGI);
++      JobTracker jt = mr.getJobTrackerRunner().getJobTracker();
++      String jobTrackerName = "localhost:" + mr.getJobTrackerPort();
++      // cleanup
++      dfs.getFileSystem().delete(TEST_DIR, true);
++
++      final Path mapSignalFile = new Path(TEST_DIR, "map-signal");
++      final Path reduceSignalFile = new Path(TEST_DIR, "reduce-signal");
++
++      // create a ugi for user 1
++      UnixUserGroupInformation user1 =
++        TestMiniMRWithDFSWithDistinctUsers.createUGI("user1", false);
++      Path inDir = new Path("/user/input");
++      Path outDir = new Path("/user/output");
++      JobConf job =
++        TestMiniMRWithDFSWithDistinctUsers.createJobConf(mr, user1);
++
++      UtilsForTests.configureWaitingJobConf(job, inDir, outDir, 2, 0,
++          "test-submit-job", mapSignalFile.toString(),
++          reduceSignalFile.toString());
++      job.set(UtilsForTests.getTaskSignalParameter(true),
++          mapSignalFile.toString());
++      job.set(UtilsForTests.getTaskSignalParameter(false),
++          reduceSignalFile.toString());
++      LOG.info("Submit job as the actual user (" + user1.getUserName() + ")");
++      JobClient jClient = new JobClient(job);
++      RunningJob rJob = jClient.submitJob(job);
++      JobID id = rJob.getID();
++      LOG.info("Running job " + id);
++
++      // create user2
++      UnixUserGroupInformation user2 =
++        TestMiniMRWithDFSWithDistinctUsers.createUGI("user2", false);
++      JobConf conf_other =
++        TestMiniMRWithDFSWithDistinctUsers.createJobConf(mr, user2);
++      org.apache.hadoop.hdfs.protocol.ClientProtocol client =
++        getDFSClient(conf_other, user2);
++
++      // try accessing mapred.system.dir/jobid/*
++      boolean failed = false;
++      try {
++        Path path = new Path(new URI(jt.getSystemDir()).getPath());
++        LOG.info("Try listing the mapred-system-dir as the user ("
++            + user2.getUserName() + ")");
++        client.getListing(path.toString());
++      } catch (IOException ioe) {
++        failed = true;
++      }
++      assertTrue("JobTracker system dir is accessible to others", failed);
++      // try accessing ~/.staging/jobid/*
++      failed = false;
++      JobInProgress jip = jt.getJob(id);
++      Path jobSubmitDirpath =
++        new Path(jip.getJobConf().get("mapreduce.job.dir"));
++      try {
++        LOG.info("Try accessing the job folder for job " + id + " as the user ("
++            + user2.getUserName() + ")");
++        client.getListing(jobSubmitDirpath.toString());
++      } catch (IOException ioe) {
++        failed = true;
++      }
++      assertTrue("User's staging folder is accessible to others", failed);
++      UtilsForTests.signalTasks(dfs, fs, true, mapSignalFile.toString(),
++          reduceSignalFile.toString());
++      // wait for job to be done
++      UtilsForTests.waitTillDone(jClient);
++
++      // check if the staging area is cleaned up
++      LOG.info("Check if job submit dir is cleanup or not");
++      assertFalse(fs.exists(jobSubmitDirpath));
++    } finally {
++      if (mr != null) {
++        mr.shutdown();
++      }
++      if (dfs != null) {
++        dfs.shutdown();
++      }
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskLogsMonitor.java b/src/test/org/apache/hadoop/mapred/TestTaskLogsMonitor.java
+index d1c2c2c..3da285a 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskLogsMonitor.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskLogsMonitor.java
+@@ -40,6 +40,7 @@ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.TaskLog.LogFileDetail;
+ import org.apache.hadoop.mapred.TaskLog.LogName;
+ import org.apache.hadoop.mapred.lib.IdentityMapper;
++import org.apache.hadoop.mapreduce.split.JobSplit;
+ 
+ import org.junit.After;
+ import org.junit.Test;
+@@ -140,7 +141,8 @@ public class TestTaskLogsMonitor {
+     int taskcount = 0;
+ 
+     TaskAttemptID attemptID = new TaskAttemptID(baseId, taskcount++);
+-    Task task = new MapTask(null, attemptID, 0, null, null, 0, null);
++    Task task = new MapTask(null, attemptID, 0, new JobSplit.TaskSplitIndex(),
++                            0);
+ 
+     // Let the tasks write logs within retain-size
+     writeRealBytes(attemptID, attemptID, LogName.SYSLOG, 500, 'H');
+@@ -181,7 +183,8 @@ public class TestTaskLogsMonitor {
+     int taskcount = 0;
+ 
+     TaskAttemptID attemptID = new TaskAttemptID(baseId, taskcount++);
+-    Task task = new MapTask(null, attemptID, 0, null, null, 0, null);
++    Task task = new MapTask(null, attemptID, 0, new JobSplit.TaskSplitIndex(),
++                            0);
+ 
+     // Let the tasks write some logs
+     writeRealBytes(attemptID, attemptID, LogName.SYSLOG, 1500, 'H');
+@@ -218,7 +221,8 @@ public class TestTaskLogsMonitor {
+     int taskcount = 0;
+ 
+     TaskAttemptID attemptID = new TaskAttemptID(baseId, taskcount++);
+-    Task task = new MapTask(null, attemptID, 0, null, null, 0, null);
++    Task task = new MapTask(null, attemptID, 0, new JobSplit.TaskSplitIndex(), 
++                            0);
+ 
+     // Let the tasks write logs more than retain-size
+     writeRealBytes(attemptID, attemptID, LogName.SYSLOG, 1500, 'H');
+@@ -259,7 +263,8 @@ public class TestTaskLogsMonitor {
+ 
+     // Assuming the job's retain size is 150
+     TaskAttemptID attempt1 = new TaskAttemptID(baseTaskID, attemptsCount++);
+-    Task task1 = new MapTask(null, attempt1, 0, null, null, 0, null);
++    Task task1 = new MapTask(null, attempt1, 0, new JobSplit.TaskSplitIndex(),
++                             0);
+ 
+     // Let the tasks write logs more than retain-size
+     writeRealBytes(attempt1, attempt1, LogName.SYSLOG, 200, 'A');
+@@ -271,7 +276,8 @@ public class TestTaskLogsMonitor {
+ 
+     // Start another attempt in the same JVM
+     TaskAttemptID attempt2 = new TaskAttemptID(baseTaskID, attemptsCount++);
+-    Task task2 = new MapTask(null, attempt2, 0, null, null, 0, null);
++    Task task2 = new MapTask(null, attempt2, 0, new JobSplit.TaskSplitIndex(),
++                             0);
+     logsMonitor.monitorTaskLogs();
+ 
+     // Let attempt2 also write some logs
+@@ -280,7 +286,8 @@ public class TestTaskLogsMonitor {
+ 
+     // Start yet another attempt in the same JVM
+     TaskAttemptID attempt3 = new TaskAttemptID(baseTaskID, attemptsCount++);
+-    Task task3 = new MapTask(null, attempt3, 0, null, null, 0, null);
++    Task task3 = new MapTask(null, attempt3, 0, new JobSplit.TaskSplitIndex(),
++                             0);
+     logsMonitor.monitorTaskLogs();
+ 
+     // Let attempt3 also write some logs
+diff --git a/src/test/org/apache/hadoop/mapred/UtilsForTests.java b/src/test/org/apache/hadoop/mapred/UtilsForTests.java
+index 67d13fc..d8560dd 100644
+--- a/src/test/org/apache/hadoop/mapred/UtilsForTests.java
++++ b/src/test/org/apache/hadoop/mapred/UtilsForTests.java
+@@ -254,7 +254,9 @@ public class UtilsForTests {
+     while (true) {
+       boolean shouldWait = false;
+       for (JobStatus jobStatuses : jobClient.getAllJobs()) {
+-        if (jobStatuses.getRunState() == JobStatus.RUNNING) {
++        if (jobStatuses.getRunState() != JobStatus.SUCCEEDED
++            && jobStatuses.getRunState() != JobStatus.FAILED
++            && jobStatuses.getRunState() != JobStatus.KILLED) {
+           shouldWait = true;
+           break;
+         }
+diff --git a/src/tools/org/apache/hadoop/tools/DistCh.java b/src/tools/org/apache/hadoop/tools/DistCh.java
+index 7a5f166..92c9758 100644
+--- a/src/tools/org/apache/hadoop/tools/DistCh.java
++++ b/src/tools/org/apache/hadoop/tools/DistCh.java
+@@ -45,6 +45,7 @@ import org.apache.hadoop.mapred.OutputCollector;
+ import org.apache.hadoop.mapred.RecordReader;
+ import org.apache.hadoop.mapred.Reporter;
+ import org.apache.hadoop.mapred.SequenceFileRecordReader;
++import org.apache.hadoop.mapreduce.JobSubmissionFiles;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.ToolRunner;
+ 
+@@ -423,7 +424,13 @@ public class DistCh extends DistTool {
+   private boolean setup(List<FileOperation> ops, Path log) throws IOException {
+     final String randomId = getRandomId();
+     JobClient jClient = new JobClient(jobconf);
+-    Path jobdir = new Path(jClient.getSystemDir(), NAME + "_" + randomId);
++    Path stagingArea;
++    stagingArea = JobSubmissionFiles.getStagingDir(
++                     jClient, jobconf);
++    Path jobdir = new Path(stagingArea + NAME + "_" + randomId);
++    FsPermission mapredSysPerms =
++      new FsPermission(JobSubmissionFiles.JOB_DIR_PERMISSION);
++    FileSystem.mkdirs(jClient.getFs(), jobdir, mapredSysPerms);
+     LOG.info(JOB_DIR_LABEL + "=" + jobdir);
+ 
+     if (log == null) {
+diff --git a/src/tools/org/apache/hadoop/tools/DistCp.java b/src/tools/org/apache/hadoop/tools/DistCp.java
+index c22385f..b10dc59 100644
+--- a/src/tools/org/apache/hadoop/tools/DistCp.java
++++ b/src/tools/org/apache/hadoop/tools/DistCp.java
+@@ -62,6 +62,7 @@ import org.apache.hadoop.mapred.OutputCollector;
+ import org.apache.hadoop.mapred.RecordReader;
+ import org.apache.hadoop.mapred.Reporter;
+ import org.apache.hadoop.mapred.SequenceFileRecordReader;
++import org.apache.hadoop.mapreduce.JobSubmissionFiles;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Tool;
+@@ -1006,7 +1007,13 @@ public class DistCp implements Tool {
+ 
+     final String randomId = getRandomId();
+     JobClient jClient = new JobClient(jobConf);
+-    Path jobDirectory = new Path(jClient.getSystemDir(), NAME + "_" + randomId);
++    Path stagingArea;
++    stagingArea = JobSubmissionFiles.getStagingDir(jClient, conf);
++    
++    Path jobDirectory = new Path(stagingArea + NAME + "_" + randomId);
++    FsPermission mapredSysPerms =
++      new FsPermission(JobSubmissionFiles.JOB_DIR_PERMISSION);
++    FileSystem.mkdirs(jClient.getFs(), jobDirectory, mapredSysPerms);
+     jobConf.set(JOB_DIR_LABEL, jobDirectory.toString());
+ 
+     long maxBytesPerMap = conf.getLong(BYTES_PER_MAP_LABEL, BYTES_PER_MAP);
+diff --git a/src/tools/org/apache/hadoop/tools/HadoopArchives.java b/src/tools/org/apache/hadoop/tools/HadoopArchives.java
+index 4612722..fffcb30 100644
+--- a/src/tools/org/apache/hadoop/tools/HadoopArchives.java
++++ b/src/tools/org/apache/hadoop/tools/HadoopArchives.java
+@@ -38,6 +38,7 @@ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.HarFileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.io.IntWritable;
+ import org.apache.hadoop.io.LongWritable;
+ import org.apache.hadoop.io.SequenceFile;
+@@ -56,6 +57,7 @@ import org.apache.hadoop.mapred.Reducer;
+ import org.apache.hadoop.mapred.SequenceFileRecordReader;
+ import org.apache.hadoop.mapred.Reporter;
+ import org.apache.hadoop.mapred.lib.NullOutputFormat;
++import org.apache.hadoop.mapreduce.JobSubmissionFiles;
+ import org.apache.hadoop.util.Tool;
+ import org.apache.hadoop.util.ToolRunner;
+ 
+@@ -359,8 +361,15 @@ public class HadoopArchives implements Tool {
+     }
+     conf.set(DST_DIR_LABEL, outputPath.toString());
+     final String randomId = DistCp.getRandomId();
+-    Path jobDirectory = new Path(new JobClient(conf).getSystemDir(),
+-                          NAME + "_" + randomId);
++    Path stagingArea;
++    stagingArea = JobSubmissionFiles.getStagingDir(new JobClient(conf),
++          conf);
++    Path jobDirectory = new Path(stagingArea,
++                               NAME + "_" + randomId);
++    FsPermission mapredSysPerms =
++      new FsPermission(JobSubmissionFiles.JOB_DIR_PERMISSION);
++    FileSystem.mkdirs(jobDirectory.getFileSystem(conf), jobDirectory,
++                      mapredSysPerms);
+     conf.set(JOB_DIR_LABEL, jobDirectory.toString());
+     //get a tmp directory for input splits
+     FileSystem jobfs = jobDirectory.getFileSystem(conf);
+diff --git a/src/webapps/job/analysejobhistory.jsp b/src/webapps/job/analysejobhistory.jsp
+index 106fd85..27540b3 100644
+--- a/src/webapps/job/analysejobhistory.jsp
++++ b/src/webapps/job/analysejobhistory.jsp
+@@ -26,7 +26,7 @@
+     showTasks = Integer.parseInt(numTasks);  
+   }
+   FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+-  JobInfo job = JSPUtil.getJobInfo(request, fs);
++  JobHistory.JobInfo job = JSPUtil.getJobInfo(request, fs);
+ %>
+ <head>
+   <title>Analyze Job - Hadoop Job <%=jobid %></title>
+diff --git a/src/webapps/job/jobdetailshistory.jsp b/src/webapps/job/jobdetailshistory.jsp
+index 6e47b8b..a3f9faa 100644
+--- a/src/webapps/job/jobdetailshistory.jsp
++++ b/src/webapps/job/jobdetailshistory.jsp
+@@ -22,7 +22,7 @@
+     String jobUniqueString = jobDetails[0] + "_" +jobDetails[1] + "_" + jobid ;
+ 	
+     FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+-    JobInfo job = JSPUtil.getJobInfo(request, fs);
++    JobHistory.JobInfo job = JSPUtil.getJobInfo(request, fs);
+ %>
+ <html>
+ <head>
+diff --git a/src/webapps/job/jobtaskshistory.jsp b/src/webapps/job/jobtaskshistory.jsp
+index 4c48efb..1eb3baf 100644
+--- a/src/webapps/job/jobtaskshistory.jsp
++++ b/src/webapps/job/jobtaskshistory.jsp
+@@ -25,7 +25,7 @@
+   String taskType = request.getParameter("taskType"); 
+   
+   FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+-  JobInfo job = JSPUtil.getJobInfo(request, fs);
++  JobHistory.JobInfo job = JSPUtil.getJobInfo(request, fs);
+   Map<String, JobHistory.Task> tasks = job.getAllTasks(); 
+ %>
+ <html>
+diff --git a/src/webapps/job/taskdetailshistory.jsp b/src/webapps/job/taskdetailshistory.jsp
+index 21d5189..761225b 100644
+--- a/src/webapps/job/taskdetailshistory.jsp
++++ b/src/webapps/job/taskdetailshistory.jsp
+@@ -20,7 +20,7 @@
+   String encodedLogFileName = JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
+   String taskid = request.getParameter("taskid"); 
+   FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+-  JobInfo job = JSPUtil.getJobInfo(request, fs);
++  JobHistory.JobInfo job = JSPUtil.getJobInfo(request, fs);
+   JobHistory.Task task = job.getAllTasks().get(taskid); 
+   String type = task.get(Keys.TASK_TYPE);
+ %>
+-- 
+1.7.0.4
+

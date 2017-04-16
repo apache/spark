@@ -1,0 +1,28 @@
+From f831304f9adfd7668283310e73ea66185674adc6 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 20 May 2010 11:51:43 -0700
+Subject: [PATCH 0660/1179] HADOOP-6781. Security audit log shouldn't have exceptions in it.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12445092/HADOOP-6781-BP20.patch
+Author: Boris Shkolnik
+Ref: YDH
+---
+ src/core/org/apache/hadoop/ipc/Server.java |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index f8644e3..13d67f4 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -937,7 +937,7 @@ public abstract class Server {
+           rpcMetrics.authenticationFailures.inc();
+           String clientIP = this.toString();
+           // attempting user could be null
+-          AUDITLOG.warn(AUTH_FAILED_FOR + clientIP + ":" + attemptingUser, e);
++          AUDITLOG.warn(AUTH_FAILED_FOR + clientIP + ":" + attemptingUser);
+           throw e;
+         }
+         if (replyToken != null) {
+-- 
+1.7.0.4
+

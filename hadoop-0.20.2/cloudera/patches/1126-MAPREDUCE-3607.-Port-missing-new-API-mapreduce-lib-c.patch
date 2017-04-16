@@ -1,0 +1,5105 @@
+From d3c862bdb692263affb6f09d2d2a29e8e0803e3c Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Tue, 27 Dec 2011 14:46:52 -0800
+Subject: [PATCH 1126/1179] MAPREDUCE-3607. Port missing new API mapreduce lib classes to 1.x.
+
+Reason: Compatibility
+Author: Tom White
+Ref: CDH-4006
+---
+ .../mapreduce/lib/input/NLineInputFormat.java      |  151 +++++++
+ .../lib/input/SequenceFileAsBinaryInputFormat.java |  150 +++++++
+ .../lib/input/SequenceFileAsTextInputFormat.java   |   45 +++
+ .../lib/input/SequenceFileAsTextRecordReader.java  |   91 +++++
+ .../lib/input/SequenceFileInputFilter.java         |  321 +++++++++++++++
+ .../mapreduce/lib/jobcontrol/ControlledJob.java    |  326 +++++++++++++++
+ .../mapreduce/lib/jobcontrol/JobControl.java       |  296 ++++++++++++++
+ .../hadoop/mapreduce/lib/map/RegexMapper.java      |   54 +++
+ .../mapreduce/lib/output/FilterOutputFormat.java   |  107 +++++
+ .../mapreduce/lib/output/LazyOutputFormat.java     |  120 ++++++
+ .../mapreduce/lib/output/MapFileOutputFormat.java  |  107 +++++
+ .../output/SequenceFileAsBinaryOutputFormat.java   |  194 +++++++++
+ .../mapreduce/lib/partition/InputSampler.java      |  414 ++++++++++++++++++++
+ .../lib/partition/KeyFieldBasedComparator.java     |  370 +++++++++++++++++
+ .../lib/partition/KeyFieldBasedPartitioner.java    |  152 +++++++
+ .../mapreduce/lib/partition/KeyFieldHelper.java    |  296 ++++++++++++++
+ .../lib/partition/TotalOrderPartitioner.java       |  398 +++++++++++++++++++
+ .../org/apache/hadoop/mapred/UtilsForTests.java    |    2 +-
+ .../TestMRSequenceFileAsBinaryInputFormat.java     |  115 ++++++
+ .../input/TestMRSequenceFileAsTextInputFormat.java |  118 ++++++
+ .../lib/input/TestMRSequenceFileInputFilter.java   |  194 +++++++++
+ .../mapreduce/lib/input/TestNLineInputFormat.java  |  114 ++++++
+ .../lib/jobcontrol/TestControlledJob.java          |   46 +++
+ .../TestMapReduceJobControlWithMocks.java          |  142 +++++++
+ .../TestMRSequenceFileAsBinaryOutputFormat.java    |  212 ++++++++++
+ .../mapreduce/lib/partition/TestInputSampler.java  |  149 +++++++
+ .../lib/partition/TestTotalOrderPartitioner.java   |  187 +++++++++
+ 27 files changed, 4870 insertions(+), 1 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/input/NLineInputFormat.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsBinaryInputFormat.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsTextInputFormat.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsTextRecordReader.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileInputFilter.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/jobcontrol/ControlledJob.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/jobcontrol/JobControl.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/map/RegexMapper.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/output/FilterOutputFormat.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/output/LazyOutputFormat.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/output/MapFileOutputFormat.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/output/SequenceFileAsBinaryOutputFormat.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/partition/InputSampler.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldBasedComparator.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldBasedPartitioner.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldHelper.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/partition/TotalOrderPartitioner.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileAsBinaryInputFormat.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileAsTextInputFormat.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileInputFilter.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/input/TestNLineInputFormat.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/jobcontrol/TestControlledJob.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/jobcontrol/TestMapReduceJobControlWithMocks.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/output/TestMRSequenceFileAsBinaryOutputFormat.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/partition/TestInputSampler.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/partition/TestTotalOrderPartitioner.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/input/NLineInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/input/NLineInputFormat.java
+new file mode 100644
+index 0000000..a71cc9a
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/input/NLineInputFormat.java
+@@ -0,0 +1,151 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.input;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataInputStream;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.LongWritable;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++import org.apache.hadoop.util.LineReader;
++
++/**
++ * NLineInputFormat which splits N lines of input as one split.
++ *
++ * In many "pleasantly" parallel applications, each process/mapper 
++ * processes the same input file (s), but with computations are 
++ * controlled by different parameters.(Referred to as "parameter sweeps").
++ * One way to achieve this, is to specify a set of parameters 
++ * (one set per line) as input in a control file 
++ * (which is the input path to the map-reduce application,
++ * where as the input dataset is specified 
++ * via a config variable in JobConf.).
++ * 
++ * The NLineInputFormat can be used in such applications, that splits 
++ * the input file such that by default, one line is fed as
++ * a value to one map task, and key is the offset.
++ * i.e. (k,v) is (LongWritable, Text).
++ * The location hints will span the whole mapred cluster.
++ */
++public class NLineInputFormat extends FileInputFormat<LongWritable, Text> { 
++  public static final String LINES_PER_MAP = 
++    "mapreduce.input.lineinputformat.linespermap";
++
++  public RecordReader<LongWritable, Text> createRecordReader(
++      InputSplit genericSplit, TaskAttemptContext context) 
++      throws IOException {
++    context.setStatus(genericSplit.toString());
++    return new LineRecordReader();
++  }
++
++  /** 
++   * Logically splits the set of input files for the job, splits N lines
++   * of the input as one split.
++   * 
++   * @see FileInputFormat#getSplits(JobContext)
++   */
++  public List<InputSplit> getSplits(JobContext job)
++  throws IOException {
++    List<InputSplit> splits = new ArrayList<InputSplit>();
++    int numLinesPerSplit = getNumLinesPerSplit(job);
++    for (FileStatus status : listStatus(job)) {
++      splits.addAll(getSplitsForFile(status,
++        job.getConfiguration(), numLinesPerSplit));
++    }
++    return splits;
++  }
++  
++  public static List<FileSplit> getSplitsForFile(FileStatus status,
++      Configuration conf, int numLinesPerSplit) throws IOException {
++    List<FileSplit> splits = new ArrayList<FileSplit> ();
++    Path fileName = status.getPath();
++    if (status.isDir()) {
++      throw new IOException("Not a file: " + fileName);
++    }
++    FileSystem  fs = fileName.getFileSystem(conf);
++    LineReader lr = null;
++    try {
++      FSDataInputStream in  = fs.open(fileName);
++      lr = new LineReader(in, conf);
++      Text line = new Text();
++      int numLines = 0;
++      long begin = 0;
++      long length = 0;
++      int num = -1;
++      while ((num = lr.readLine(line)) > 0) {
++        numLines++;
++        length += num;
++        if (numLines == numLinesPerSplit) {
++          // NLineInputFormat uses LineRecordReader, which always reads
++          // (and consumes) at least one character out of its upper split
++          // boundary. So to make sure that each mapper gets N lines, we
++          // move back the upper split limits of each split 
++          // by one character here.
++          if (begin == 0) {
++            splits.add(new FileSplit(fileName, begin, length - 1,
++              new String[] {}));
++          } else {
++            splits.add(new FileSplit(fileName, begin - 1, length,
++              new String[] {}));
++          }
++          begin += length;
++          length = 0;
++          numLines = 0;
++        }
++      }
++      if (numLines != 0) {
++        splits.add(new FileSplit(fileName, begin, length, new String[]{}));
++      }
++    } finally {
++      if (lr != null) {
++        lr.close();
++      }
++    }
++    return splits; 
++  }
++  
++  /**
++   * Set the number of lines per split
++   * @param job the job to modify
++   * @param numLines the number of lines per split
++   */
++  public static void setNumLinesPerSplit(Job job, int numLines) {
++    job.getConfiguration().setInt(LINES_PER_MAP, numLines);
++  }
++
++  /**
++   * Get the number of lines per split
++   * @param job the job
++   * @return the number of lines per split
++   */
++  public static int getNumLinesPerSplit(JobContext job) {
++    return job.getConfiguration().getInt(LINES_PER_MAP, 1);
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsBinaryInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsBinaryInputFormat.java
+new file mode 100644
+index 0000000..c1fe9b9
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsBinaryInputFormat.java
+@@ -0,0 +1,150 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapreduce.lib.input;
++
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.BytesWritable;
++import org.apache.hadoop.io.DataOutputBuffer;
++import org.apache.hadoop.io.SequenceFile;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++
++/**
++ * InputFormat reading keys, values from SequenceFiles in binary (raw)
++ * format.
++ */
++public class SequenceFileAsBinaryInputFormat
++    extends SequenceFileInputFormat<BytesWritable,BytesWritable> {
++
++  public SequenceFileAsBinaryInputFormat() {
++    super();
++  }
++
++  public RecordReader<BytesWritable,BytesWritable> createRecordReader(
++      InputSplit split, TaskAttemptContext context)
++      throws IOException {
++    return new SequenceFileAsBinaryRecordReader();
++  }
++
++  /**
++   * Read records from a SequenceFile as binary (raw) bytes.
++   */
++  public static class SequenceFileAsBinaryRecordReader
++      extends RecordReader<BytesWritable,BytesWritable> {
++    private SequenceFile.Reader in;
++    private long start;
++    private long end;
++    private boolean done = false;
++    private DataOutputBuffer buffer = new DataOutputBuffer();
++    private SequenceFile.ValueBytes vbytes;
++    private BytesWritable key = null;
++    private BytesWritable value = null;
++
++    public void initialize(InputSplit split, TaskAttemptContext context) 
++        throws IOException, InterruptedException {
++      Path path = ((FileSplit)split).getPath();
++      Configuration conf = context.getConfiguration();
++      FileSystem fs = path.getFileSystem(conf);
++      this.in = new SequenceFile.Reader(fs, path, conf);
++      this.end = ((FileSplit)split).getStart() + split.getLength();
++      if (((FileSplit)split).getStart() > in.getPosition()) {
++        in.sync(((FileSplit)split).getStart());    // sync to start
++      }
++      this.start = in.getPosition();
++      vbytes = in.createValueBytes();
++      done = start >= end;
++    }
++    
++    @Override
++    public BytesWritable getCurrentKey() 
++        throws IOException, InterruptedException {
++      return key;
++    }
++    
++    @Override
++    public BytesWritable getCurrentValue() 
++        throws IOException, InterruptedException {
++      return value;
++    }
++
++    /**
++     * Retrieve the name of the key class for this SequenceFile.
++     * @see org.apache.hadoop.io.SequenceFile.Reader#getKeyClassName
++     */
++    public String getKeyClassName() {
++      return in.getKeyClassName();
++    }
++
++    /**
++     * Retrieve the name of the value class for this SequenceFile.
++     * @see org.apache.hadoop.io.SequenceFile.Reader#getValueClassName
++     */
++    public String getValueClassName() {
++      return in.getValueClassName();
++    }
++
++    /**
++     * Read raw bytes from a SequenceFile.
++     */
++    public synchronized boolean nextKeyValue()
++        throws IOException, InterruptedException {
++      if (done) {
++        return false;
++      }
++      long pos = in.getPosition();
++      boolean eof = -1 == in.nextRawKey(buffer);
++      if (!eof) {
++        if (key == null) {
++          key = new BytesWritable();
++        }
++        if (value == null) {
++          value = new BytesWritable();
++        }
++        key.set(buffer.getData(), 0, buffer.getLength());
++        buffer.reset();
++        in.nextRawValue(vbytes);
++        vbytes.writeUncompressedBytes(buffer);
++        value.set(buffer.getData(), 0, buffer.getLength());
++        buffer.reset();
++      }
++      return !(done = (eof || (pos >= end && in.syncSeen())));
++    }
++
++    public void close() throws IOException {
++      in.close();
++    }
++
++    /**
++     * Return the progress within the input split
++     * @return 0.0 to 1.0 of the input byte range
++     */
++    public float getProgress() throws IOException, InterruptedException {
++      if (end == start) {
++        return 0.0f;
++      } else {
++        return Math.min(1.0f, (float)((in.getPosition() - start) /
++                                      (double)(end - start)));
++      }
++    }
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsTextInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsTextInputFormat.java
+new file mode 100644
+index 0000000..0feeca9
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsTextInputFormat.java
+@@ -0,0 +1,45 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.input;
++
++import java.io.IOException;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++
++/**
++ * This class is similar to SequenceFileInputFormat, except it generates
++ * SequenceFileAsTextRecordReader which converts the input keys and values
++ * to their String forms by calling toString() method. 
++ */
++public class SequenceFileAsTextInputFormat
++  extends SequenceFileInputFormat<Text, Text> {
++
++  public SequenceFileAsTextInputFormat() {
++    super();
++  }
++
++  public RecordReader<Text, Text> createRecordReader(InputSplit split,
++      TaskAttemptContext context) throws IOException {
++    context.setStatus(split.toString());
++    return new SequenceFileAsTextRecordReader();
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsTextRecordReader.java b/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsTextRecordReader.java
+new file mode 100644
+index 0000000..8a89aba
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileAsTextRecordReader.java
+@@ -0,0 +1,91 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.input;
++
++import java.io.IOException;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++
++/**
++ * This class converts the input keys and values to their String forms by
++ * calling toString() method. This class to SequenceFileAsTextInputFormat
++ * class is as LineRecordReader class to TextInputFormat class.
++ */
++public class SequenceFileAsTextRecordReader
++  extends RecordReader<Text, Text> {
++  
++  private final SequenceFileRecordReader<WritableComparable<?>, Writable>
++    sequenceFileRecordReader;
++
++  private Text key;
++  private Text value;
++
++  public SequenceFileAsTextRecordReader()
++    throws IOException {
++    sequenceFileRecordReader =
++      new SequenceFileRecordReader<WritableComparable<?>, Writable>();
++  }
++
++  public void initialize(InputSplit split, TaskAttemptContext context)
++      throws IOException, InterruptedException {
++    sequenceFileRecordReader.initialize(split, context);
++  }
++
++  @Override
++  public Text getCurrentKey() 
++      throws IOException, InterruptedException {
++    return key;
++  }
++  
++  @Override
++  public Text getCurrentValue() 
++      throws IOException, InterruptedException {
++    return value;
++  }
++  
++  /** Read key/value pair in a line. */
++  public synchronized boolean nextKeyValue() 
++      throws IOException, InterruptedException {
++    if (!sequenceFileRecordReader.nextKeyValue()) {
++      return false;
++    }
++    if (key == null) {
++      key = new Text(); 
++    }
++    if (value == null) {
++      value = new Text(); 
++    }
++    key.set(sequenceFileRecordReader.getCurrentKey().toString());
++    value.set(sequenceFileRecordReader.getCurrentValue().toString());
++    return true;
++  }
++  
++  public float getProgress() throws IOException,  InterruptedException {
++    return sequenceFileRecordReader.getProgress();
++  }
++  
++  public synchronized void close() throws IOException {
++    sequenceFileRecordReader.close();
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileInputFilter.java b/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileInputFilter.java
+new file mode 100644
+index 0000000..bbbfa3d
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/input/SequenceFileInputFilter.java
+@@ -0,0 +1,321 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++ 
++package org.apache.hadoop.mapreduce.lib.input;
++
++import java.io.IOException;
++import java.nio.ByteBuffer;
++import java.security.DigestException;
++import java.security.MessageDigest;
++import java.security.NoSuchAlgorithmException;
++import java.util.regex.Pattern;
++import java.util.regex.PatternSyntaxException;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configurable;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.BytesWritable;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++import org.apache.hadoop.util.ReflectionUtils;
++
++/**
++ * A class that allows a map/red job to work on a sample of sequence files.
++ * The sample is decided by the filter class set by the job.
++ */
++public class SequenceFileInputFilter<K, V>
++    extends SequenceFileInputFormat<K, V> {
++  public static final Log LOG = LogFactory.getLog(FileInputFormat.class);
++  
++  final public static String FILTER_CLASS = 
++    "mapreduce.input.sequencefileinputfilter.class";
++  final public static String FILTER_FREQUENCY = 
++    "mapreduce.input.sequencefileinputfilter.frequency";
++  final public static String FILTER_REGEX = 
++    "mapreduce.input.sequencefileinputfilter.regex";
++    
++  public SequenceFileInputFilter() {
++  }
++    
++  /** Create a record reader for the given split
++   * @param split file split
++   * @param context the task-attempt context
++   * @return RecordReader
++   */
++  public RecordReader<K, V> createRecordReader(InputSplit split,
++      TaskAttemptContext context) throws IOException {
++    context.setStatus(split.toString());
++    return new FilterRecordReader<K, V>(context.getConfiguration());
++  }
++
++
++  /** set the filter class
++   * 
++   * @param job The job
++   * @param filterClass filter class
++   */
++  public static void setFilterClass(Job job, Class<?> filterClass) {
++    job.getConfiguration().set(FILTER_CLASS, filterClass.getName());
++  }
++
++         
++  /**
++   * filter interface
++   */
++  public interface Filter extends Configurable {
++    /** filter function
++     * Decide if a record should be filtered or not
++     * @param key record key
++     * @return true if a record is accepted; return false otherwise
++     */
++    public abstract boolean accept(Object key);
++  }
++    
++  /**
++   * base class for Filters
++   */
++  public static abstract class FilterBase implements Filter {
++    Configuration conf;
++        
++    public Configuration getConf() {
++      return conf;
++    }
++  }
++    
++  /** Records filter by matching key to regex
++   */
++  public static class RegexFilter extends FilterBase {
++    private Pattern p;
++    /** Define the filtering regex and stores it in conf
++     * @param conf where the regex is set
++     * @param regex regex used as a filter
++     */
++    public static void setPattern(Configuration conf, String regex)
++        throws PatternSyntaxException {
++      try {
++        Pattern.compile(regex);
++      } catch (PatternSyntaxException e) {
++        throw new IllegalArgumentException("Invalid pattern: "+regex);
++      }
++      conf.set(FILTER_REGEX, regex);
++    }
++        
++    public RegexFilter() { }
++        
++    /** configure the Filter by checking the configuration
++     */
++    public void setConf(Configuration conf) {
++      String regex = conf.get(FILTER_REGEX);
++      if (regex == null)
++        throw new RuntimeException(FILTER_REGEX + "not set");
++      this.p = Pattern.compile(regex);
++      this.conf = conf;
++    }
++
++
++    /** Filtering method
++     * If key matches the regex, return true; otherwise return false
++     * @see Filter#accept(Object)
++     */
++    public boolean accept(Object key) {
++      return p.matcher(key.toString()).matches();
++    }
++  }
++
++  /** This class returns a percentage of records
++   * The percentage is determined by a filtering frequency <i>f</i> using
++   * the criteria record# % f == 0.
++   * For example, if the frequency is 10, one out of 10 records is returned.
++   */
++  public static class PercentFilter extends FilterBase {
++    private int frequency;
++    private int count;
++
++    /** set the frequency and stores it in conf
++     * @param conf configuration
++     * @param frequency filtering frequencey
++     */
++    public static void setFrequency(Configuration conf, int frequency) {
++      if (frequency <= 0)
++        throw new IllegalArgumentException(
++          "Negative " + FILTER_FREQUENCY + ": " + frequency);
++      conf.setInt(FILTER_FREQUENCY, frequency);
++    }
++        
++    public PercentFilter() { }
++        
++    /** configure the filter by checking the configuration
++     * 
++     * @param conf configuration
++     */
++    public void setConf(Configuration conf) {
++      this.frequency = conf.getInt(FILTER_FREQUENCY, 10);
++      if (this.frequency <= 0) {
++        throw new RuntimeException(
++          "Negative "+FILTER_FREQUENCY + ": " + this.frequency);
++      }
++      this.conf = conf;
++    }
++
++    /** Filtering method
++     * If record# % frequency==0, return true; otherwise return false
++     * @see Filter#accept(Object)
++     */
++    public boolean accept(Object key) {
++      boolean accepted = false;
++      if (count == 0)
++        accepted = true;
++      if (++count == frequency) {
++        count = 0;
++      }
++      return accepted;
++    }
++  }
++
++  /** This class returns a set of records by examing the MD5 digest of its
++   * key against a filtering frequency <i>f</i>. The filtering criteria is
++   * MD5(key) % f == 0.
++   */
++  public static class MD5Filter extends FilterBase {
++    private int frequency;
++    private static final MessageDigest DIGESTER;
++    public static final int MD5_LEN = 16;
++    private byte [] digest = new byte[MD5_LEN];
++        
++    static {
++      try {
++        DIGESTER = MessageDigest.getInstance("MD5");
++      } catch (NoSuchAlgorithmException e) {
++        throw new RuntimeException(e);
++      }
++    }
++
++
++    /** set the filtering frequency in configuration
++     * 
++     * @param conf configuration
++     * @param frequency filtering frequency
++     */
++    public static void setFrequency(Configuration conf, int frequency) {
++      if (frequency <= 0)
++        throw new IllegalArgumentException(
++          "Negative " + FILTER_FREQUENCY + ": " + frequency);
++      conf.setInt(FILTER_FREQUENCY, frequency);
++    }
++        
++    public MD5Filter() { }
++        
++    /** configure the filter according to configuration
++     * 
++     * @param conf configuration
++     */
++    public void setConf(Configuration conf) {
++      this.frequency = conf.getInt(FILTER_FREQUENCY, 10);
++      if (this.frequency <= 0) {
++        throw new RuntimeException(
++          "Negative " + FILTER_FREQUENCY + ": " + this.frequency);
++      }
++      this.conf = conf;
++    }
++
++    /** Filtering method
++     * If MD5(key) % frequency==0, return true; otherwise return false
++     * @see Filter#accept(Object)
++     */
++    public boolean accept(Object key) {
++      try {
++        long hashcode;
++        if (key instanceof Text) {
++          hashcode = MD5Hashcode((Text)key);
++        } else if (key instanceof BytesWritable) {
++          hashcode = MD5Hashcode((BytesWritable)key);
++        } else {
++          ByteBuffer bb;
++          bb = Text.encode(key.toString());
++          hashcode = MD5Hashcode(bb.array(), 0, bb.limit());
++        }
++        if (hashcode / frequency * frequency == hashcode)
++          return true;
++      } catch(Exception e) {
++        LOG.warn(e);
++        throw new RuntimeException(e);
++      }
++      return false;
++    }
++        
++    private long MD5Hashcode(Text key) throws DigestException {
++      return MD5Hashcode(key.getBytes(), 0, key.getLength());
++    }
++        
++    private long MD5Hashcode(BytesWritable key) throws DigestException {
++      return MD5Hashcode(key.getBytes(), 0, key.getLength());
++    }
++    
++    synchronized private long MD5Hashcode(byte[] bytes, 
++        int start, int length) throws DigestException {
++      DIGESTER.update(bytes, 0, length);
++      DIGESTER.digest(digest, 0, MD5_LEN);
++      long hashcode=0;
++      for (int i = 0; i < 8; i++)
++        hashcode |= ((digest[i] & 0xffL) << (8 * (7 - i)));
++      return hashcode;
++    }
++  }
++    
++  private static class FilterRecordReader<K, V>
++      extends SequenceFileRecordReader<K, V> {
++    
++    private Filter filter;
++    private K key;
++    private V value;
++        
++    public FilterRecordReader(Configuration conf)
++        throws IOException {
++      super();
++      // instantiate filter
++      filter = (Filter)ReflectionUtils.newInstance(
++        conf.getClass(FILTER_CLASS, PercentFilter.class), conf);
++    }
++    
++    public synchronized boolean nextKeyValue() 
++        throws IOException, InterruptedException {
++      while (super.nextKeyValue()) {
++        key = super.getCurrentKey();
++        if (filter.accept(key)) {
++          value = super.getCurrentValue();
++          return true;
++        }
++      }
++      return false;
++    }
++    
++    @Override
++    public K getCurrentKey() {
++      return key;
++    }
++    
++    @Override
++    public V getCurrentValue() {
++      return value;
++    }
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/jobcontrol/ControlledJob.java b/src/mapred/org/apache/hadoop/mapreduce/lib/jobcontrol/ControlledJob.java
+new file mode 100644
+index 0000000..fb993d5
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/jobcontrol/ControlledJob.java
+@@ -0,0 +1,326 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.jobcontrol;
++
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
++import org.apache.hadoop.util.StringUtils;
++
++/** 
++ *  This class encapsulates a MapReduce job and its dependency. It monitors 
++ *  the states of the depending jobs and updates the state of this job.
++ *  A job starts in the WAITING state. If it does not have any depending jobs,
++ *  or all of the depending jobs are in SUCCESS state, then the job state 
++ *  will become READY. If any depending jobs fail, the job will fail too. 
++ *  When in READY state, the job can be submitted to Hadoop for execution, with
++ *  the state changing into RUNNING state. From RUNNING state, the job 
++ *  can get into SUCCESS or FAILED state, depending 
++ *  the status of the job execution.
++ */
++public class ControlledJob {
++
++  // A job will be in one of the following states
++  public static enum State {SUCCESS, WAITING, RUNNING, READY, FAILED,
++                            DEPENDENT_FAILED}; 
++  public static final String CREATE_DIR = "mapreduce.jobcontrol.createdir.ifnotexist";
++  private State state;
++  private String controlID;     // assigned and used by JobControl class
++  private Job job;               // mapreduce job to be executed.
++  // some info for human consumption, e.g. the reason why the job failed
++  private String message;
++  // the jobs the current job depends on
++  private List<ControlledJob> dependingJobs;
++	
++  /** 
++   * Construct a job.
++   * @param job a mapreduce job to be executed.
++   * @param dependingJobs an array of jobs the current job depends on
++   */
++  public ControlledJob(Job job, List<ControlledJob> dependingJobs) 
++      throws IOException {
++    this.job = job;
++    this.dependingJobs = dependingJobs;
++    this.state = State.WAITING;
++    this.controlID = "unassigned";
++    this.message = "just initialized";
++  }
++  
++  /**
++   * Construct a job.
++   * 
++   * @param conf mapred job configuration representing a job to be executed.
++   * @throws IOException
++   */
++  public ControlledJob(Configuration conf) throws IOException {
++    this(new Job(conf), null);
++  }
++	
++  @Override
++  public String toString() {
++    StringBuffer sb = new StringBuffer();
++    sb.append("job name:\t").append(this.job.getJobName()).append("\n");
++    sb.append("job id:\t").append(this.controlID).append("\n");
++    sb.append("job state:\t").append(this.state).append("\n");
++    sb.append("job mapred id:\t").append(this.job.getJobID()).append("\n");
++    sb.append("job message:\t").append(this.message).append("\n");
++		
++    if (this.dependingJobs == null || this.dependingJobs.size() == 0) {
++      sb.append("job has no depending job:\t").append("\n");
++    } else {
++      sb.append("job has ").append(this.dependingJobs.size()).
++         append(" dependeng jobs:\n");
++      for (int i = 0; i < this.dependingJobs.size(); i++) {
++        sb.append("\t depending job ").append(i).append(":\t");
++        sb.append((this.dependingJobs.get(i)).getJobName()).append("\n");
++      }
++    }
++    return sb.toString();
++  }
++	
++  /**
++   * @return the job name of this job
++   */
++  public String getJobName() {
++    return job.getJobName();
++  }
++	
++  /**
++   * Set the job name for  this job.
++   * @param jobName the job name
++   */
++  public void setJobName(String jobName) {
++    job.setJobName(jobName);
++  }
++	
++  /**
++   * @return the job ID of this job assigned by JobControl
++   */
++  public String getJobID() {
++    return this.controlID;
++  }
++	
++  /**
++   * Set the job ID for  this job.
++   * @param id the job ID
++   */
++  public void setJobID(String id) {
++    this.controlID = id;
++  }
++	
++  /**
++   * @return the mapred ID of this job as assigned by the 
++   * mapred framework.
++   */
++  public JobID getMapredJobID() {
++    return this.job.getJobID();
++  }
++  
++  /**
++   * @return the mapreduce job 
++   */
++  public synchronized Job getJob() {
++    return this.job;
++  }
++
++  /**
++   * Set the mapreduce job
++   * @param job the mapreduce job for this job.
++   */
++  public synchronized void setJob(Job job) {
++    this.job = job;
++  }
++
++  /**
++   * @return the state of this job
++   */
++  public synchronized State getJobState() {
++    return this.state;
++  }
++	
++  /**
++   * Set the state for this job.
++   * @param state the new state for this job.
++   */
++  protected synchronized void setJobState(State state) {
++    this.state = state;
++  }
++	
++  /**
++   * @return the message of this job
++   */
++  public synchronized String getMessage() {
++    return this.message;
++  }
++
++  /**
++   * Set the message for this job.
++   * @param message the message for this job.
++   */
++  public synchronized void setMessage(String message) {
++    this.message = message;
++  }
++
++  /**
++   * @return the depending jobs of this job
++   */
++  public List<ControlledJob> getDependentJobs() {
++    return this.dependingJobs;
++  }
++  
++  /**
++   * Add a job to this jobs' dependency list. 
++   * Dependent jobs can only be added while a Job 
++   * is waiting to run, not during or afterwards.
++   * 
++   * @param dependingJob Job that this Job depends on.
++   * @return <tt>true</tt> if the Job was added.
++   */
++  public synchronized boolean addDependingJob(ControlledJob dependingJob) {
++    if (this.state == State.WAITING) { //only allowed to add jobs when waiting
++      if (this.dependingJobs == null) {
++        this.dependingJobs = new ArrayList<ControlledJob>();
++      }
++      return this.dependingJobs.add(dependingJob);
++    } else {
++      return false;
++    }
++  }
++	
++  /**
++   * @return true if this job is in a complete state
++   */
++  public synchronized boolean isCompleted() {
++    return this.state == State.FAILED || 
++      this.state == State.DEPENDENT_FAILED ||
++      this.state == State.SUCCESS;
++  }
++	
++  /**
++   * @return true if this job is in READY state
++   */
++  public synchronized boolean isReady() {
++    return this.state == State.READY;
++  }
++
++  public void killJob() throws IOException, InterruptedException {
++    job.killJob();
++  }
++  
++  /**
++   * Check the state of this running job. The state may 
++   * remain the same, become SUCCESS or FAILED.
++   */
++  private void checkRunningState() throws IOException, InterruptedException {
++    try {
++      if (job.isComplete()) {
++        if (job.isSuccessful()) {
++          this.state = State.SUCCESS;
++        } else {
++          this.state = State.FAILED;
++          this.message = "Job failed!";
++        }
++      }
++    } catch (IOException ioe) {
++      this.state = State.FAILED;
++      this.message = StringUtils.stringifyException(ioe);
++      try {
++        if (job != null) {
++          job.killJob();
++        }
++      } catch (IOException e) {}
++    }
++  }
++	
++  /**
++   * Check and update the state of this job. The state changes  
++   * depending on its current state and the states of the depending jobs.
++   */
++   synchronized State checkState() throws IOException, InterruptedException {
++    if (this.state == State.RUNNING) {
++      checkRunningState();
++    }
++    if (this.state != State.WAITING) {
++      return this.state;
++    }
++    if (this.dependingJobs == null || this.dependingJobs.size() == 0) {
++      this.state = State.READY;
++      return this.state;
++    }
++    ControlledJob pred = null;
++    int n = this.dependingJobs.size();
++    for (int i = 0; i < n; i++) {
++      pred = this.dependingJobs.get(i);
++      State s = pred.checkState();
++      if (s == State.WAITING || s == State.READY || s == State.RUNNING) {
++        break; // a pred is still not completed, continue in WAITING
++        // state
++      }
++      if (s == State.FAILED || s == State.DEPENDENT_FAILED) {
++        this.state = State.DEPENDENT_FAILED;
++        this.message = "depending job " + i + " with jobID "
++          + pred.getJobID() + " failed. " + pred.getMessage();
++        break;
++      }
++      // pred must be in success state
++      if (i == n - 1) {
++        this.state = State.READY;
++      }
++    }
++
++    return this.state;
++  }
++	
++  /**
++   * Submit this job to mapred. The state becomes RUNNING if submission 
++   * is successful, FAILED otherwise.  
++   */
++  protected synchronized void submit() {
++    try {
++      Configuration conf = job.getConfiguration();
++      if (conf.getBoolean(CREATE_DIR, false)) {
++        FileSystem fs = FileSystem.get(conf);
++        Path inputPaths[] = FileInputFormat.getInputPaths(job);
++        for (int i = 0; i < inputPaths.length; i++) {
++          if (!fs.exists(inputPaths[i])) {
++            try {
++              fs.mkdirs(inputPaths[i]);
++            } catch (IOException e) {
++
++            }
++          }
++        }
++      }
++      job.submit();
++      this.state = State.RUNNING;
++    } catch (Exception ioe) {
++      this.state = State.FAILED;
++      this.message = StringUtils.stringifyException(ioe);
++    }
++  }
++	
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/jobcontrol/JobControl.java b/src/mapred/org/apache/hadoop/mapreduce/lib/jobcontrol/JobControl.java
+new file mode 100644
+index 0000000..62b864e
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/jobcontrol/JobControl.java
+@@ -0,0 +1,296 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.jobcontrol;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.Hashtable;
++import java.util.List;
++import java.util.Map;
++
++import org.apache.hadoop.mapreduce.lib.jobcontrol.ControlledJob.State;
++
++/** 
++ *  This class encapsulates a set of MapReduce jobs and its dependency.
++ *   
++ *  It tracks the states of the jobs by placing them into different tables
++ *  according to their states. 
++ *  
++ *  This class provides APIs for the client app to add a job to the group 
++ *  and to get the jobs in the group in different states. When a job is 
++ *  added, an ID unique to the group is assigned to the job. 
++ *  
++ *  This class has a thread that submits jobs when they become ready, 
++ *  monitors the states of the running jobs, and updates the states of jobs
++ *  based on the state changes of their depending jobs states. The class 
++ *  provides APIs for suspending/resuming the thread, and 
++ *  for stopping the thread.
++ *  
++ */
++public class JobControl implements Runnable {
++
++  // The thread can be in one of the following state
++  public static enum ThreadState {RUNNING, SUSPENDED,STOPPED, STOPPING, READY};
++	
++  private ThreadState runnerState;			// the thread state
++	
++  private Map<String, ControlledJob> waitingJobs;
++  private Map<String, ControlledJob> readyJobs;
++  private Map<String, ControlledJob> runningJobs;
++  private Map<String, ControlledJob> successfulJobs;
++  private Map<String, ControlledJob> failedJobs;
++	
++  private long nextJobID;
++  private String groupName;
++	
++  /** 
++   * Construct a job control for a group of jobs.
++   * @param groupName a name identifying this group
++   */
++  public JobControl(String groupName) {
++    this.waitingJobs = new Hashtable<String, ControlledJob>();
++    this.readyJobs = new Hashtable<String, ControlledJob>();
++    this.runningJobs = new Hashtable<String, ControlledJob>();
++    this.successfulJobs = new Hashtable<String, ControlledJob>();
++    this.failedJobs = new Hashtable<String, ControlledJob>();
++    this.nextJobID = -1;
++    this.groupName = groupName;
++    this.runnerState = ThreadState.READY;
++  }
++	
++  private static List<ControlledJob> toList(
++                   Map<String, ControlledJob> jobs) {
++    ArrayList<ControlledJob> retv = new ArrayList<ControlledJob>();
++    synchronized (jobs) {
++      for (ControlledJob job : jobs.values()) {
++        retv.add(job);
++      }
++    }
++    return retv;
++  }
++	
++  /**
++   * @return the jobs in the waiting state
++   */
++  public List<ControlledJob> getWaitingJobList() {
++    return toList(this.waitingJobs);
++  }
++	
++  /**
++   * @return the jobs in the running state
++   */
++  public List<ControlledJob> getRunningJobList() {
++    return toList(this.runningJobs);
++  }
++	
++  /**
++   * @return the jobs in the ready state
++   */
++  public List<ControlledJob> getReadyJobsList() {
++    return toList(this.readyJobs);
++  }
++	
++  /**
++   * @return the jobs in the success state
++   */
++  public List<ControlledJob> getSuccessfulJobList() {
++    return toList(this.successfulJobs);
++  }
++	
++  public List<ControlledJob> getFailedJobList() {
++    return toList(this.failedJobs);
++  }
++	
++  private String getNextJobID() {
++    nextJobID += 1;
++    return this.groupName + this.nextJobID;
++  }
++	
++  private static void addToQueue(ControlledJob aJob, 
++                                 Map<String, ControlledJob> queue) {
++    synchronized(queue) {
++      queue.put(aJob.getJobID(), aJob);
++    }		
++  }
++	
++  private void addToQueue(ControlledJob aJob) {
++    Map<String, ControlledJob> queue = getQueue(aJob.getJobState());
++    addToQueue(aJob, queue);	
++  }
++	
++  private Map<String, ControlledJob> getQueue(State state) {
++    Map<String, ControlledJob> retv = null;
++    if (state == State.WAITING) {
++      retv = this.waitingJobs;
++    } else if (state == State.READY) {
++      retv = this.readyJobs;
++    } else if (state == State.RUNNING) {
++      retv = this.runningJobs;
++    } else if (state == State.SUCCESS) {
++      retv = this.successfulJobs;
++    } else if (state == State.FAILED || state == State.DEPENDENT_FAILED) {
++      retv = this.failedJobs;
++    } 
++    return retv;
++  }
++
++  /**
++   * Add a new job.
++   * @param aJob the new job
++   */
++  synchronized public String addJob(ControlledJob aJob) {
++    String id = this.getNextJobID();
++    aJob.setJobID(id);
++    aJob.setJobState(State.WAITING);
++    this.addToQueue(aJob);
++    return id;	
++  }
++	
++  /**
++   * Add a collection of jobs
++   * 
++   * @param jobs
++   */
++  public void addJobCollection(Collection<ControlledJob> jobs) {
++    for (ControlledJob job : jobs) {
++      addJob(job);
++    }
++  }
++	
++  /**
++   * @return the thread state
++   */
++  public ThreadState getThreadState() {
++    return this.runnerState;
++  }
++	
++  /**
++   * set the thread state to STOPPING so that the 
++   * thread will stop when it wakes up.
++   */
++  public void stop() {
++    this.runnerState = ThreadState.STOPPING;
++  }
++	
++  /**
++   * suspend the running thread
++   */
++  public void suspend () {
++    if (this.runnerState == ThreadState.RUNNING) {
++      this.runnerState = ThreadState.SUSPENDED;
++    }
++  }
++	
++  /**
++   * resume the suspended thread
++   */
++  public void resume () {
++    if (this.runnerState == ThreadState.SUSPENDED) {
++      this.runnerState = ThreadState.RUNNING;
++    }
++  }
++	
++  synchronized private void checkRunningJobs() 
++      throws IOException, InterruptedException {
++		
++    Map<String, ControlledJob> oldJobs = null;
++    oldJobs = this.runningJobs;
++    this.runningJobs = new Hashtable<String, ControlledJob>();
++		
++    for (ControlledJob nextJob : oldJobs.values()) {
++      nextJob.checkState();
++      this.addToQueue(nextJob);
++    }
++  }
++	
++  synchronized private void checkWaitingJobs() 
++      throws IOException, InterruptedException {
++    Map<String, ControlledJob> oldJobs = null;
++    oldJobs = this.waitingJobs;
++    this.waitingJobs = new Hashtable<String, ControlledJob>();
++		
++    for (ControlledJob nextJob : oldJobs.values()) {
++      nextJob.checkState();
++      this.addToQueue(nextJob);
++    }
++  }
++	
++  synchronized private void startReadyJobs() {
++    Map<String, ControlledJob> oldJobs = null;
++    oldJobs = this.readyJobs;
++    this.readyJobs = new Hashtable<String, ControlledJob>();
++		
++    for (ControlledJob nextJob : oldJobs.values()) {
++      //Submitting Job to Hadoop
++      nextJob.submit();
++      this.addToQueue(nextJob);
++    }	
++  }
++	
++  synchronized public boolean allFinished() {
++    return this.waitingJobs.size() == 0 &&
++      this.readyJobs.size() == 0 &&
++      this.runningJobs.size() == 0;
++  }
++	
++  /**
++   *  The main loop for the thread.
++   *  The loop does the following:
++   *  	Check the states of the running jobs
++   *  	Update the states of waiting jobs
++   *  	Submit the jobs in ready state
++   */
++  public void run() {
++    this.runnerState = ThreadState.RUNNING;
++    while (true) {
++      while (this.runnerState == ThreadState.SUSPENDED) {
++        try {
++          Thread.sleep(5000);
++        }
++        catch (Exception e) {
++					
++        }
++      }
++      try {
++        checkRunningJobs();	
++        checkWaitingJobs();
++        startReadyJobs();
++      } catch (Exception e) {
++  	    this.runnerState = ThreadState.STOPPED;
++      }
++      if (this.runnerState != ThreadState.RUNNING && 
++          this.runnerState != ThreadState.SUSPENDED) {
++        break;
++      }
++      try {
++        Thread.sleep(5000);
++      }
++      catch (Exception e) {
++				
++      }
++      if (this.runnerState != ThreadState.RUNNING && 
++          this.runnerState != ThreadState.SUSPENDED) {
++        break;
++      }
++    }
++    this.runnerState = ThreadState.STOPPED;
++  }
++
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/map/RegexMapper.java b/src/mapred/org/apache/hadoop/mapreduce/lib/map/RegexMapper.java
+new file mode 100644
+index 0000000..fa0d725
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/map/RegexMapper.java
+@@ -0,0 +1,54 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.map;
++
++import java.io.IOException;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.LongWritable;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Mapper;
++
++
++/** A {@link Mapper} that extracts text matching a regular expression. */
++public class RegexMapper<K> extends Mapper<K, Text, Text, LongWritable> {
++
++  public static String PATTERN = "mapreduce.mapper.regex";
++  public static String GROUP = "mapreduce.mapper.regexmapper..group";
++  private Pattern pattern;
++  private int group;
++
++  public void setup(Context context) {
++    Configuration conf = context.getConfiguration();
++    pattern = Pattern.compile(conf.get(PATTERN));
++    group = conf.getInt(GROUP, 0);
++  }
++
++  public void map(K key, Text value,
++                  Context context)
++    throws IOException, InterruptedException {
++    String text = value.toString();
++    Matcher matcher = pattern.matcher(text);
++    while (matcher.find()) {
++      context.write(new Text(matcher.group(group)), new LongWritable(1));
++    }
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/output/FilterOutputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/output/FilterOutputFormat.java
+new file mode 100644
+index 0000000..aa41839
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/output/FilterOutputFormat.java
+@@ -0,0 +1,107 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.output;
++
++import java.io.IOException;
++
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.OutputCommitter;
++import org.apache.hadoop.mapreduce.OutputFormat;
++import org.apache.hadoop.mapreduce.RecordWriter;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++
++/**
++ * FilterOutputFormat is a convenience class that wraps OutputFormat. 
++ */
++public class FilterOutputFormat <K,V> extends OutputFormat<K, V> {
++
++  protected OutputFormat<K,V> baseOut;
++
++  public FilterOutputFormat() {
++    this.baseOut = null;
++  }
++  
++  /**
++   * Create a FilterOutputFormat based on the underlying output format.
++   * @param baseOut the underlying OutputFormat
++   */
++  public FilterOutputFormat(OutputFormat<K,V> baseOut) {
++    this.baseOut = baseOut;
++  }
++
++  @Override
++  public RecordWriter<K, V> getRecordWriter(TaskAttemptContext context) 
++  throws IOException, InterruptedException {
++    return getBaseOut().getRecordWriter(context);
++  }
++
++  @Override
++  public void checkOutputSpecs(JobContext context) 
++  throws IOException, InterruptedException {
++    getBaseOut().checkOutputSpecs(context);
++  }
++
++  @Override
++  public OutputCommitter getOutputCommitter(TaskAttemptContext context) 
++  throws IOException, InterruptedException {
++    return getBaseOut().getOutputCommitter(context);
++  }
++
++  private OutputFormat<K,V> getBaseOut() throws IOException {
++    if (baseOut == null) {
++      throw new IOException("OutputFormat not set for FilterOutputFormat");
++    }
++    return baseOut;
++  }
++  /**
++   * <code>FilterRecordWriter</code> is a convenience wrapper
++   * class that extends the {@link RecordWriter}.
++   */
++
++  public static class FilterRecordWriter<K,V> extends RecordWriter<K,V> {
++
++    protected RecordWriter<K,V> rawWriter = null;
++
++    public FilterRecordWriter() {
++      rawWriter = null;
++    }
++    
++    public FilterRecordWriter(RecordWriter<K,V> rwriter) {
++      this.rawWriter = rwriter;
++    }
++    
++    @Override
++    public void write(K key, V value) throws IOException, InterruptedException {
++      getRawWriter().write(key, value);
++    }
++
++    @Override
++    public void close(TaskAttemptContext context) 
++    throws IOException, InterruptedException {
++      getRawWriter().close(context);
++    }
++    
++    private RecordWriter<K,V> getRawWriter() throws IOException {
++      if (rawWriter == null) {
++        throw new IOException("Record Writer not set for FilterRecordWriter");
++      }
++      return rawWriter;
++    }
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/output/LazyOutputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/output/LazyOutputFormat.java
+new file mode 100644
+index 0000000..e69f870
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/output/LazyOutputFormat.java
+@@ -0,0 +1,120 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.output;
++
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.OutputCommitter;
++import org.apache.hadoop.mapreduce.OutputFormat;
++import org.apache.hadoop.mapreduce.RecordWriter;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++import org.apache.hadoop.util.ReflectionUtils;
++
++/**
++ * A Convenience class that creates output lazily.  
++ */
++public class LazyOutputFormat <K,V> extends FilterOutputFormat<K, V> {
++  public static String OUTPUT_FORMAT = 
++    "mapreduce.output.lazyoutputformat.outputformat";
++  /**
++   * Set the underlying output format for LazyOutputFormat.
++   * @param job the {@link Job} to modify
++   * @param theClass the underlying class
++   */
++  @SuppressWarnings("unchecked")
++  public static void  setOutputFormatClass(Job job, 
++                                     Class<? extends OutputFormat> theClass) {
++      job.setOutputFormatClass(LazyOutputFormat.class);
++      job.getConfiguration().setClass(OUTPUT_FORMAT, 
++          theClass, OutputFormat.class);
++  }
++
++  @SuppressWarnings("unchecked")
++  private void getBaseOutputFormat(Configuration conf) 
++  throws IOException {
++    baseOut =  ((OutputFormat<K, V>) ReflectionUtils.newInstance(
++      conf.getClass(OUTPUT_FORMAT, null), conf));
++    if (baseOut == null) {
++      throw new IOException("Output Format not set for LazyOutputFormat");
++    }
++  }
++
++  @Override
++  public RecordWriter<K, V> getRecordWriter(TaskAttemptContext context)
++  throws IOException, InterruptedException {
++    if (baseOut == null) {
++      getBaseOutputFormat(context.getConfiguration());
++    }
++    return new LazyRecordWriter<K, V>(baseOut, context);
++  }
++  
++  @Override
++  public void checkOutputSpecs(JobContext context) 
++  throws IOException, InterruptedException {
++    if (baseOut == null) {
++      getBaseOutputFormat(context.getConfiguration());
++    }
++   super.checkOutputSpecs(context);
++  }
++  
++  @Override
++  public OutputCommitter getOutputCommitter(TaskAttemptContext context) 
++  throws IOException, InterruptedException {
++    if (baseOut == null) {
++      getBaseOutputFormat(context.getConfiguration());
++    }
++    return super.getOutputCommitter(context);
++  }
++  
++  /**
++   * A convenience class to be used with LazyOutputFormat
++   */
++  private static class LazyRecordWriter<K,V> extends FilterRecordWriter<K,V> {
++
++    final OutputFormat<K,V> outputFormat;
++    final TaskAttemptContext taskContext;
++
++    public LazyRecordWriter(OutputFormat<K,V> out, 
++                            TaskAttemptContext taskContext)
++    throws IOException, InterruptedException {
++      this.outputFormat = out;
++      this.taskContext = taskContext;
++    }
++
++    @Override
++    public void write(K key, V value) throws IOException, InterruptedException {
++      if (rawWriter == null) {
++        rawWriter = outputFormat.getRecordWriter(taskContext);
++      }
++      rawWriter.write(key, value);
++    }
++
++    @Override
++    public void close(TaskAttemptContext context) 
++    throws IOException, InterruptedException {
++      if (rawWriter != null) {
++        rawWriter.close(context);
++      }
++    }
++
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/output/MapFileOutputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/output/MapFileOutputFormat.java
+new file mode 100644
+index 0000000..13967d7
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/output/MapFileOutputFormat.java
+@@ -0,0 +1,107 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.output;
++
++import java.io.IOException;
++import java.util.Arrays;
++
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.FileUtil;
++
++import org.apache.hadoop.io.MapFile;
++import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.SequenceFile.CompressionType;
++import org.apache.hadoop.io.compress.CompressionCodec;
++import org.apache.hadoop.io.compress.DefaultCodec;
++import org.apache.hadoop.mapreduce.Partitioner;
++import org.apache.hadoop.mapreduce.RecordWriter;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++import org.apache.hadoop.util.ReflectionUtils;
++import org.apache.hadoop.conf.Configuration;
++
++/** 
++ * An {@link org.apache.hadoop.mapreduce.OutputFormat} that writes 
++ * {@link MapFile}s.
++ */
++public class MapFileOutputFormat 
++    extends FileOutputFormat<WritableComparable<?>, Writable> {
++
++  public RecordWriter<WritableComparable<?>, Writable> getRecordWriter(
++      TaskAttemptContext context) throws IOException {
++    Configuration conf = context.getConfiguration();
++    CompressionCodec codec = null;
++    CompressionType compressionType = CompressionType.NONE;
++    if (getCompressOutput(context)) {
++      // find the kind of compression to do
++      compressionType = SequenceFileOutputFormat.getOutputCompressionType(context);
++
++      // find the right codec
++      Class<?> codecClass = getOutputCompressorClass(context,
++	                          DefaultCodec.class);
++      codec = (CompressionCodec) ReflectionUtils.newInstance(codecClass, conf);
++    }
++
++    Path file = getDefaultWorkFile(context, "");
++    FileSystem fs = file.getFileSystem(conf);
++    // ignore the progress parameter, since MapFile is local
++    final MapFile.Writer out =
++      new MapFile.Writer(conf, fs, file.toString(),
++        context.getOutputKeyClass().asSubclass(WritableComparable.class),
++        context.getOutputValueClass().asSubclass(Writable.class),
++        compressionType, codec, context);
++
++    return new RecordWriter<WritableComparable<?>, Writable>() {
++        public void write(WritableComparable<?> key, Writable value)
++            throws IOException {
++          out.append(key, value);
++        }
++
++        public void close(TaskAttemptContext context) throws IOException { 
++          out.close();
++        }
++      };
++  }
++
++  /** Open the output generated by this format. */
++  public static MapFile.Reader[] getReaders(Path dir,
++      Configuration conf) throws IOException {
++    FileSystem fs = dir.getFileSystem(conf);
++    Path[] names = FileUtil.stat2Paths(fs.listStatus(dir));
++
++    // sort names, so that hash partitioning works
++    Arrays.sort(names);
++    
++    MapFile.Reader[] parts = new MapFile.Reader[names.length];
++    for (int i = 0; i < names.length; i++) {
++      parts[i] = new MapFile.Reader(fs, names[i].toString(), conf);
++    }
++    return parts;
++  }
++    
++  /** Get an entry from output generated by this class. */
++  public static <K extends WritableComparable<?>, V extends Writable>
++      Writable getEntry(MapFile.Reader[] readers, 
++      Partitioner<K, V> partitioner, K key, V value) throws IOException {
++    int part = partitioner.getPartition(key, value, readers.length);
++    return readers[part].get(key, value);
++  }
++}
++
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/output/SequenceFileAsBinaryOutputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/output/SequenceFileAsBinaryOutputFormat.java
+new file mode 100644
+index 0000000..716be91
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/output/SequenceFileAsBinaryOutputFormat.java
+@@ -0,0 +1,194 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapreduce.lib.output;
++
++import java.io.IOException;
++import java.io.DataOutputStream;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.BytesWritable;
++import org.apache.hadoop.io.SequenceFile;
++import org.apache.hadoop.io.SequenceFile.CompressionType;
++import org.apache.hadoop.io.SequenceFile.ValueBytes;
++import org.apache.hadoop.io.compress.CompressionCodec;
++import org.apache.hadoop.io.compress.DefaultCodec;
++import org.apache.hadoop.mapred.InvalidJobConfException;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.RecordWriter;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++import org.apache.hadoop.util.ReflectionUtils;
++
++/** 
++ * An {@link org.apache.hadoop.mapreduce.OutputFormat} that writes keys, 
++ * values to {@link SequenceFile}s in binary(raw) format
++ */
++public class SequenceFileAsBinaryOutputFormat 
++    extends SequenceFileOutputFormat <BytesWritable,BytesWritable> {
++  public static String KEY_CLASS = "mapreduce.output.seqbinaryoutputformat.key.class"; 
++  public static String VALUE_CLASS = "mapreduce.output.seqbinaryoutputformat.value.class"; 
++
++  /** 
++   * Inner class used for appendRaw
++   */
++  static public class WritableValueBytes implements ValueBytes {
++    private BytesWritable value;
++
++    public WritableValueBytes() {
++      this.value = null;
++    }
++    
++    public WritableValueBytes(BytesWritable value) {
++      this.value = value;
++    }
++
++    public void reset(BytesWritable value) {
++      this.value = value;
++    }
++
++    public void writeUncompressedBytes(DataOutputStream outStream)
++        throws IOException {
++      outStream.write(value.getBytes(), 0, value.getLength());
++    }
++
++    public void writeCompressedBytes(DataOutputStream outStream)
++        throws IllegalArgumentException, IOException {
++      throw new UnsupportedOperationException(
++        "WritableValueBytes doesn't support RECORD compression"); 
++    }
++    
++    public int getSize(){
++      return value.getLength();
++    }
++  }
++
++  /**
++   * Set the key class for the {@link SequenceFile}
++   * <p>This allows the user to specify the key class to be different 
++   * from the actual class ({@link BytesWritable}) used for writing </p>
++   * 
++   * @param job the {@link Job} to modify
++   * @param theClass the SequenceFile output key class.
++   */
++  static public void setSequenceFileOutputKeyClass(Job job, 
++      Class<?> theClass) {
++    job.getConfiguration().setClass(KEY_CLASS,
++      theClass, Object.class);
++  }
++
++  /**
++   * Set the value class for the {@link SequenceFile}
++   * <p>This allows the user to specify the value class to be different 
++   * from the actual class ({@link BytesWritable}) used for writing </p>
++   * 
++   * @param job the {@link Job} to modify
++   * @param theClass the SequenceFile output key class.
++   */
++  static public void setSequenceFileOutputValueClass(Job job, 
++      Class<?> theClass) {
++    job.getConfiguration().setClass(VALUE_CLASS, 
++                  theClass, Object.class);
++  }
++
++  /**
++   * Get the key class for the {@link SequenceFile}
++   * 
++   * @return the key class of the {@link SequenceFile}
++   */
++  static public Class<? extends WritableComparable> 
++      getSequenceFileOutputKeyClass(JobContext job) { 
++    return job.getConfiguration().getClass(KEY_CLASS,
++      job.getOutputKeyClass().asSubclass(WritableComparable.class), 
++      WritableComparable.class);
++  }
++
++  /**
++   * Get the value class for the {@link SequenceFile}
++   * 
++   * @return the value class of the {@link SequenceFile}
++   */
++  static public Class<? extends Writable> getSequenceFileOutputValueClass(
++      JobContext job) { 
++    return job.getConfiguration().getClass(VALUE_CLASS, 
++      job.getOutputValueClass().asSubclass(Writable.class), Writable.class);
++  }
++  
++  @Override 
++  public RecordWriter<BytesWritable, BytesWritable> getRecordWriter(
++      TaskAttemptContext context) throws IOException {
++    final SequenceFile.Writer out = getSequenceWriter(context,
++      getSequenceFileOutputKeyClass(context),
++      getSequenceFileOutputValueClass(context)); 
++
++    return new RecordWriter<BytesWritable, BytesWritable>() {
++      private WritableValueBytes wvaluebytes = new WritableValueBytes();
++
++      public void write(BytesWritable bkey, BytesWritable bvalue)
++        throws IOException {
++        wvaluebytes.reset(bvalue);
++        out.appendRaw(bkey.getBytes(), 0, bkey.getLength(), wvaluebytes);
++        wvaluebytes.reset(null);
++      }
++
++      public void close(TaskAttemptContext context) throws IOException { 
++        out.close();
++      }
++    };
++  }
++
++  protected SequenceFile.Writer getSequenceWriter(TaskAttemptContext context,
++      Class<?> keyClass, Class<?> valueClass)
++      throws IOException {
++    Configuration conf = context.getConfiguration();
++
++    CompressionCodec codec = null;
++    CompressionType compressionType = CompressionType.NONE;
++    if (getCompressOutput(context)) {
++      // find the kind of compression to do
++      compressionType = getOutputCompressionType(context);
++      // find the right codec
++      Class<?> codecClass = getOutputCompressorClass(context,
++                                                     DefaultCodec.class);
++      codec = (CompressionCodec)
++        ReflectionUtils.newInstance(codecClass, conf);
++    }
++    // get the path of the temporary output file
++    Path file = getDefaultWorkFile(context, "");
++    FileSystem fs = file.getFileSystem(conf);
++    return SequenceFile.createWriter(fs, conf, file,
++             keyClass,
++             valueClass,
++             compressionType,
++             codec,
++             context);
++  }
++
++  @Override 
++  public void checkOutputSpecs(JobContext job) throws IOException {
++    super.checkOutputSpecs(job);
++    if (getCompressOutput(job) && 
++        getOutputCompressionType(job) == CompressionType.RECORD ) {
++      throw new InvalidJobConfException("SequenceFileAsBinaryOutputFormat "
++        + "doesn't support Record Compression" );
++    }
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/partition/InputSampler.java b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/InputSampler.java
+new file mode 100644
+index 0000000..b1a36a1
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/InputSampler.java
+@@ -0,0 +1,414 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.partition;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.List;
++import java.util.Random;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.conf.Configured;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.NullWritable;
++import org.apache.hadoop.io.RawComparator;
++import org.apache.hadoop.io.SequenceFile;
++import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.mapreduce.InputFormat;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++import org.apache.hadoop.mapreduce.TaskAttemptID;
++import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
++import org.apache.hadoop.util.ReflectionUtils;
++import org.apache.hadoop.util.Tool;
++import org.apache.hadoop.util.ToolRunner;
++
++/**
++ * Utility for collecting samples and writing a partition file for
++ * {@link TotalOrderPartitioner}.
++ */
++public class InputSampler<K,V> extends Configured implements Tool  {
++
++  private static final Log LOG = LogFactory.getLog(InputSampler.class);
++
++  static int printUsage() {
++    System.out.println("sampler -r <reduces>\n" +
++      "      [-inFormat <input format class>]\n" +
++      "      [-keyClass <map input & output key class>]\n" +
++      "      [-splitRandom <double pcnt> <numSamples> <maxsplits> | " +
++      "             // Sample from random splits at random (general)\n" +
++      "       -splitSample <numSamples> <maxsplits> | " +
++      "             // Sample from first records in splits (random data)\n"+
++      "       -splitInterval <double pcnt> <maxsplits>]" +
++      "             // Sample from splits at intervals (sorted data)");
++    System.out.println("Default sampler: -splitRandom 0.1 10000 10");
++    ToolRunner.printGenericCommandUsage(System.out);
++    return -1;
++  }
++
++  public InputSampler(Configuration conf) {
++    setConf(conf);
++  }
++
++  /**
++   * Interface to sample using an 
++   * {@link org.apache.hadoop.mapreduce.InputFormat}.
++   */
++  public interface Sampler<K,V> {
++    /**
++     * For a given job, collect and return a subset of the keys from the
++     * input data.
++     */
++    K[] getSample(InputFormat<K,V> inf, Job job) 
++    throws IOException, InterruptedException;
++  }
++
++  /**
++   * Samples the first n records from s splits.
++   * Inexpensive way to sample random data.
++   */
++  public static class SplitSampler<K,V> implements Sampler<K,V> {
++
++    private final int numSamples;
++    private final int maxSplitsSampled;
++
++    /**
++     * Create a SplitSampler sampling <em>all</em> splits.
++     * Takes the first numSamples / numSplits records from each split.
++     * @param numSamples Total number of samples to obtain from all selected
++     *                   splits.
++     */
++    public SplitSampler(int numSamples) {
++      this(numSamples, Integer.MAX_VALUE);
++    }
++
++    /**
++     * Create a new SplitSampler.
++     * @param numSamples Total number of samples to obtain from all selected
++     *                   splits.
++     * @param maxSplitsSampled The maximum number of splits to examine.
++     */
++    public SplitSampler(int numSamples, int maxSplitsSampled) {
++      this.numSamples = numSamples;
++      this.maxSplitsSampled = maxSplitsSampled;
++    }
++
++    /**
++     * From each split sampled, take the first numSamples / numSplits records.
++     */
++    @SuppressWarnings("unchecked") // ArrayList::toArray doesn't preserve type
++    public K[] getSample(InputFormat<K,V> inf, Job job) 
++        throws IOException, InterruptedException {
++      List<InputSplit> splits = inf.getSplits(job);
++      ArrayList<K> samples = new ArrayList<K>(numSamples);
++      int splitsToSample = Math.min(maxSplitsSampled, splits.size());
++      int samplesPerSplit = numSamples / splitsToSample;
++      long records = 0;
++      for (int i = 0; i < splitsToSample; ++i) {
++        TaskAttemptContext samplingContext = new TaskAttemptContext(
++            job.getConfiguration(), new TaskAttemptID());
++        RecordReader<K,V> reader = inf.createRecordReader(
++            splits.get(i), samplingContext);
++        reader.initialize(splits.get(i), samplingContext);
++        while (reader.nextKeyValue()) {
++          samples.add(ReflectionUtils.copy(job.getConfiguration(),
++                                           reader.getCurrentKey(), null));
++          ++records;
++          if ((i+1) * samplesPerSplit <= records) {
++            break;
++          }
++        }
++        reader.close();
++      }
++      return (K[])samples.toArray();
++    }
++  }
++
++  /**
++   * Sample from random points in the input.
++   * General-purpose sampler. Takes numSamples / maxSplitsSampled inputs from
++   * each split.
++   */
++  public static class RandomSampler<K,V> implements Sampler<K,V> {
++    private double freq;
++    private final int numSamples;
++    private final int maxSplitsSampled;
++
++    /**
++     * Create a new RandomSampler sampling <em>all</em> splits.
++     * This will read every split at the client, which is very expensive.
++     * @param freq Probability with which a key will be chosen.
++     * @param numSamples Total number of samples to obtain from all selected
++     *                   splits.
++     */
++    public RandomSampler(double freq, int numSamples) {
++      this(freq, numSamples, Integer.MAX_VALUE);
++    }
++
++    /**
++     * Create a new RandomSampler.
++     * @param freq Probability with which a key will be chosen.
++     * @param numSamples Total number of samples to obtain from all selected
++     *                   splits.
++     * @param maxSplitsSampled The maximum number of splits to examine.
++     */
++    public RandomSampler(double freq, int numSamples, int maxSplitsSampled) {
++      this.freq = freq;
++      this.numSamples = numSamples;
++      this.maxSplitsSampled = maxSplitsSampled;
++    }
++
++    /**
++     * Randomize the split order, then take the specified number of keys from
++     * each split sampled, where each key is selected with the specified
++     * probability and possibly replaced by a subsequently selected key when
++     * the quota of keys from that split is satisfied.
++     */
++    @SuppressWarnings("unchecked") // ArrayList::toArray doesn't preserve type
++    public K[] getSample(InputFormat<K,V> inf, Job job) 
++        throws IOException, InterruptedException {
++      List<InputSplit> splits = inf.getSplits(job);
++      ArrayList<K> samples = new ArrayList<K>(numSamples);
++      int splitsToSample = Math.min(maxSplitsSampled, splits.size());
++
++      Random r = new Random();
++      long seed = r.nextLong();
++      r.setSeed(seed);
++      LOG.debug("seed: " + seed);
++      // shuffle splits
++      for (int i = 0; i < splits.size(); ++i) {
++        InputSplit tmp = splits.get(i);
++        int j = r.nextInt(splits.size());
++        splits.set(i, splits.get(j));
++        splits.set(j, tmp);
++      }
++      // our target rate is in terms of the maximum number of sample splits,
++      // but we accept the possibility of sampling additional splits to hit
++      // the target sample keyset
++      for (int i = 0; i < splitsToSample ||
++                     (i < splits.size() && samples.size() < numSamples); ++i) {
++        TaskAttemptContext samplingContext = new TaskAttemptContext(
++            job.getConfiguration(), new TaskAttemptID());
++        RecordReader<K,V> reader = inf.createRecordReader(
++            splits.get(i), samplingContext);
++        reader.initialize(splits.get(i), samplingContext);
++        while (reader.nextKeyValue()) {
++          if (r.nextDouble() <= freq) {
++            if (samples.size() < numSamples) {
++              samples.add(ReflectionUtils.copy(job.getConfiguration(),
++                                               reader.getCurrentKey(), null));
++            } else {
++              // When exceeding the maximum number of samples, replace a
++              // random element with this one, then adjust the frequency
++              // to reflect the possibility of existing elements being
++              // pushed out
++              int ind = r.nextInt(numSamples);
++              if (ind != numSamples) {
++                samples.set(ind, ReflectionUtils.copy(job.getConfiguration(),
++                                 reader.getCurrentKey(), null));
++              }
++              freq *= (numSamples - 1) / (double) numSamples;
++            }
++          }
++        }
++        reader.close();
++      }
++      return (K[])samples.toArray();
++    }
++  }
++
++  /**
++   * Sample from s splits at regular intervals.
++   * Useful for sorted data.
++   */
++  public static class IntervalSampler<K,V> implements Sampler<K,V> {
++    private final double freq;
++    private final int maxSplitsSampled;
++
++    /**
++     * Create a new IntervalSampler sampling <em>all</em> splits.
++     * @param freq The frequency with which records will be emitted.
++     */
++    public IntervalSampler(double freq) {
++      this(freq, Integer.MAX_VALUE);
++    }
++
++    /**
++     * Create a new IntervalSampler.
++     * @param freq The frequency with which records will be emitted.
++     * @param maxSplitsSampled The maximum number of splits to examine.
++     * @see #getSample
++     */
++    public IntervalSampler(double freq, int maxSplitsSampled) {
++      this.freq = freq;
++      this.maxSplitsSampled = maxSplitsSampled;
++    }
++
++    /**
++     * For each split sampled, emit when the ratio of the number of records
++     * retained to the total record count is less than the specified
++     * frequency.
++     */
++    @SuppressWarnings("unchecked") // ArrayList::toArray doesn't preserve type
++    public K[] getSample(InputFormat<K,V> inf, Job job) 
++        throws IOException, InterruptedException {
++      List<InputSplit> splits = inf.getSplits(job);
++      ArrayList<K> samples = new ArrayList<K>();
++      int splitsToSample = Math.min(maxSplitsSampled, splits.size());
++      long records = 0;
++      long kept = 0;
++      for (int i = 0; i < splitsToSample; ++i) {
++        TaskAttemptContext samplingContext = new TaskAttemptContext(
++            job.getConfiguration(), new TaskAttemptID());
++        RecordReader<K,V> reader = inf.createRecordReader(
++            splits.get(i), samplingContext);
++        reader.initialize(splits.get(i), samplingContext);
++        while (reader.nextKeyValue()) {
++          ++records;
++          if ((double) kept / records < freq) {
++            samples.add(ReflectionUtils.copy(job.getConfiguration(),
++                                 reader.getCurrentKey(), null));
++            ++kept;
++          }
++        }
++        reader.close();
++      }
++      return (K[])samples.toArray();
++    }
++  }
++
++  /**
++   * Write a partition file for the given job, using the Sampler provided.
++   * Queries the sampler for a sample keyset, sorts by the output key
++   * comparator, selects the keys for each rank, and writes to the destination
++   * returned from {@link TotalOrderPartitioner#getPartitionFile}.
++   */
++  @SuppressWarnings("unchecked") // getInputFormat, getOutputKeyComparator
++  public static <K,V> void writePartitionFile(Job job, Sampler<K,V> sampler) 
++      throws IOException, ClassNotFoundException, InterruptedException {
++    Configuration conf = job.getConfiguration();
++    final InputFormat inf = 
++        ReflectionUtils.newInstance(job.getInputFormatClass(), conf);
++    int numPartitions = job.getNumReduceTasks();
++    K[] samples = sampler.getSample(inf, job);
++    LOG.info("Using " + samples.length + " samples");
++    RawComparator<K> comparator =
++      (RawComparator<K>) job.getSortComparator();
++    Arrays.sort(samples, comparator);
++    Path dst = new Path(TotalOrderPartitioner.getPartitionFile(conf));
++    FileSystem fs = dst.getFileSystem(conf);
++    if (fs.exists(dst)) {
++      fs.delete(dst, false);
++    }
++    SequenceFile.Writer writer = SequenceFile.createWriter(fs, 
++      conf, dst, job.getMapOutputKeyClass(), NullWritable.class);
++    NullWritable nullValue = NullWritable.get();
++    float stepSize = samples.length / (float) numPartitions;
++    int last = -1;
++    for(int i = 1; i < numPartitions; ++i) {
++      int k = Math.round(stepSize * i);
++      while (last >= k && comparator.compare(samples[last], samples[k]) == 0) {
++        ++k;
++      }
++      writer.append(samples[k], nullValue);
++      last = k;
++    }
++    writer.close();
++  }
++
++  /**
++   * Driver for InputSampler from the command line.
++   * Configures a JobConf instance and calls {@link #writePartitionFile}.
++   */
++  public int run(String[] args) throws Exception {
++    Job job = new Job(getConf());
++    ArrayList<String> otherArgs = new ArrayList<String>();
++    Sampler<K,V> sampler = null;
++    for(int i=0; i < args.length; ++i) {
++      try {
++        if ("-r".equals(args[i])) {
++          job.setNumReduceTasks(Integer.parseInt(args[++i]));
++        } else if ("-inFormat".equals(args[i])) {
++          job.setInputFormatClass(
++              Class.forName(args[++i]).asSubclass(InputFormat.class));
++        } else if ("-keyClass".equals(args[i])) {
++          job.setMapOutputKeyClass(
++              Class.forName(args[++i]).asSubclass(WritableComparable.class));
++        } else if ("-splitSample".equals(args[i])) {
++          int numSamples = Integer.parseInt(args[++i]);
++          int maxSplits = Integer.parseInt(args[++i]);
++          if (0 >= maxSplits) maxSplits = Integer.MAX_VALUE;
++          sampler = new SplitSampler<K,V>(numSamples, maxSplits);
++        } else if ("-splitRandom".equals(args[i])) {
++          double pcnt = Double.parseDouble(args[++i]);
++          int numSamples = Integer.parseInt(args[++i]);
++          int maxSplits = Integer.parseInt(args[++i]);
++          if (0 >= maxSplits) maxSplits = Integer.MAX_VALUE;
++          sampler = new RandomSampler<K,V>(pcnt, numSamples, maxSplits);
++        } else if ("-splitInterval".equals(args[i])) {
++          double pcnt = Double.parseDouble(args[++i]);
++          int maxSplits = Integer.parseInt(args[++i]);
++          if (0 >= maxSplits) maxSplits = Integer.MAX_VALUE;
++          sampler = new IntervalSampler<K,V>(pcnt, maxSplits);
++        } else {
++          otherArgs.add(args[i]);
++        }
++      } catch (NumberFormatException except) {
++        System.out.println("ERROR: Integer expected instead of " + args[i]);
++        return printUsage();
++      } catch (ArrayIndexOutOfBoundsException except) {
++        System.out.println("ERROR: Required parameter missing from " +
++            args[i-1]);
++        return printUsage();
++      }
++    }
++    if (job.getNumReduceTasks() <= 1) {
++      System.err.println("Sampler requires more than one reducer");
++      return printUsage();
++    }
++    if (otherArgs.size() < 2) {
++      System.out.println("ERROR: Wrong number of parameters: ");
++      return printUsage();
++    }
++    if (null == sampler) {
++      sampler = new RandomSampler<K,V>(0.1, 10000, 10);
++    }
++
++    Path outf = new Path(otherArgs.remove(otherArgs.size() - 1));
++    TotalOrderPartitioner.setPartitionFile(getConf(), outf);
++    for (String s : otherArgs) {
++      FileInputFormat.addInputPath(job, new Path(s));
++    }
++    InputSampler.<K,V>writePartitionFile(job, sampler);
++
++    return 0;
++  }
++
++  public static void main(String[] args) throws Exception {
++    InputSampler<?,?> sampler = new InputSampler(new Configuration());
++    int res = ToolRunner.run(sampler, args);
++    System.exit(res);
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldBasedComparator.java b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldBasedComparator.java
+new file mode 100644
+index 0000000..f621a4d
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldBasedComparator.java
+@@ -0,0 +1,370 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.partition;
++
++import java.util.List;
++
++import org.apache.hadoop.conf.Configurable;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.WritableComparator;
++import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.lib.partition.KeyFieldHelper.KeyDescription;
++
++
++/**
++ * This comparator implementation provides a subset of the features provided
++ * by the Unix/GNU Sort. In particular, the supported features are:
++ * -n, (Sort numerically)
++ * -r, (Reverse the result of comparison)
++ * -k pos1[,pos2], where pos is of the form f[.c][opts], where f is the number
++ *  of the field to use, and c is the number of the first character from the
++ *  beginning of the field. Fields and character posns are numbered starting
++ *  with 1; a character position of zero in pos2 indicates the field's last
++ *  character. If '.c' is omitted from pos1, it defaults to 1 (the beginning
++ *  of the field); if omitted from pos2, it defaults to 0 (the end of the
++ *  field). opts are ordering options (any of 'nr' as described above). 
++ * We assume that the fields in the key are separated by 
++ * {@link JobContext#MAP_OUTPUT_KEY_FIELD_SEPERATOR}.
++ */
++public class KeyFieldBasedComparator<K, V> extends WritableComparator 
++    implements Configurable {
++  private KeyFieldHelper keyFieldHelper = new KeyFieldHelper();
++  public static String COMPARATOR_OPTIONS = "mapreduce.partition.keycomparator.options";
++  private static final byte NEGATIVE = (byte)'-';
++  private static final byte ZERO = (byte)'0';
++  private static final byte DECIMAL = (byte)'.';
++  private Configuration conf;
++
++  public void setConf(Configuration conf) {
++    this.conf = conf;
++    String option = conf.get(COMPARATOR_OPTIONS);
++    String keyFieldSeparator = conf.get("mapreduce.map.output.key.field.separator","\t");
++    keyFieldHelper.setKeyFieldSeparator(keyFieldSeparator);
++    keyFieldHelper.parseOption(option);
++  }
++
++  public Configuration getConf() {
++    return conf;
++  }
++  
++  public KeyFieldBasedComparator() {
++    super(Text.class);
++  }
++    
++  public int compare(byte[] b1, int s1, int l1,
++      byte[] b2, int s2, int l2) {
++    int n1 = WritableUtils.decodeVIntSize(b1[s1]);
++    int n2 = WritableUtils.decodeVIntSize(b2[s2]);
++    List <KeyDescription> allKeySpecs = keyFieldHelper.keySpecs();
++
++    if (allKeySpecs.size() == 0) {
++      return compareBytes(b1, s1 + n1, l1 - n1, b2, s2 + n2, l2 - n2);
++    }
++    
++    int []lengthIndicesFirst = 
++      keyFieldHelper.getWordLengths(b1, s1 + n1, s1 + l1);
++    int []lengthIndicesSecond = 
++      keyFieldHelper.getWordLengths(b2, s2 + n2, s2 + l2);
++    
++    for (KeyDescription keySpec : allKeySpecs) {
++      int startCharFirst = keyFieldHelper.getStartOffset(b1, s1 + n1, s1 + l1,
++        lengthIndicesFirst, keySpec);
++      int endCharFirst = keyFieldHelper.getEndOffset(b1, s1 + n1, s1 + l1, 
++        lengthIndicesFirst, keySpec);
++      int startCharSecond = keyFieldHelper.getStartOffset(b2, s2 + n2, s2 + l2,
++        lengthIndicesSecond, keySpec);
++      int endCharSecond = keyFieldHelper.getEndOffset(b2, s2 + n2, s2 + l2, 
++        lengthIndicesSecond, keySpec);
++      int result;
++      if ((result = compareByteSequence(b1, startCharFirst, endCharFirst, b2, 
++          startCharSecond, endCharSecond, keySpec)) != 0) {
++        return result;
++      }
++    }
++    return 0;
++  }
++  
++  private int compareByteSequence(byte[] first, int start1, int end1, 
++      byte[] second, int start2, int end2, KeyDescription key) {
++    if (start1 == -1) {
++      if (key.reverse) {
++        return 1;
++      }
++      return -1;
++    }
++    if (start2 == -1) {
++      if (key.reverse) {
++        return -1; 
++      }
++      return 1;
++    }
++    int compareResult = 0;
++    if (!key.numeric) {
++      compareResult = compareBytes(first, start1, end1-start1 + 1, second,
++        start2, end2 - start2 + 1);
++    }
++    if (key.numeric) {
++      compareResult = numericalCompare (first, start1, end1, second, start2,
++        end2);
++    }
++    if (key.reverse) {
++      return -compareResult;
++    }
++    return compareResult;
++  }
++  
++  private int numericalCompare (byte[] a, int start1, int end1, 
++      byte[] b, int start2, int end2) {
++    int i = start1;
++    int j = start2;
++    int mul = 1;
++    byte first_a = a[i];
++    byte first_b = b[j];
++    if (first_a == NEGATIVE) {
++      if (first_b != NEGATIVE) {
++        //check for cases like -0.0 and 0.0 (they should be declared equal)
++        return oneNegativeCompare(a, start1 + 1, end1, b, start2, end2);
++      }
++      i++;
++    }
++    if (first_b == NEGATIVE) {
++      if (first_a != NEGATIVE) {
++        //check for cases like 0.0 and -0.0 (they should be declared equal)
++        return -oneNegativeCompare(b, start2+1, end2, a, start1, end1);
++      }
++      j++;
++    }
++    if (first_b == NEGATIVE && first_a == NEGATIVE) {
++      mul = -1;
++    }
++
++    //skip over ZEROs
++    while (i <= end1) {
++      if (a[i] != ZERO) {
++        break;
++      }
++      i++;
++    }
++    while (j <= end2) {
++      if (b[j] != ZERO) {
++        break;
++      }
++      j++;
++    }
++    
++    //skip over equal characters and stopping at the first nondigit char
++    //The nondigit character could be '.'
++    while (i <= end1 && j <= end2) {
++      if (!isdigit(a[i]) || a[i] != b[j]) {
++        break;
++      }
++      i++; j++;
++    }
++    if (i <= end1) {
++      first_a = a[i];
++    }
++    if (j <= end2) {
++      first_b = b[j];
++    }
++    //store the result of the difference. This could be final result if the
++    //number of digits in the mantissa is the same in both the numbers 
++    int firstResult = first_a - first_b;
++    
++    //check whether we hit a decimal in the earlier scan
++    if ((first_a == DECIMAL && (!isdigit(first_b) || j > end2)) ||
++            (first_b == DECIMAL && (!isdigit(first_a) || i > end1))) {
++      return ((mul < 0) ? -decimalCompare(a, i, end1, b, j, end2) : 
++        decimalCompare(a, i, end1, b, j, end2));
++    }
++    //check the number of digits in the mantissa of the numbers
++    int numRemainDigits_a = 0;
++    int numRemainDigits_b = 0;
++    while (i <= end1) {
++      //if we encounter a non-digit treat the corresponding number as being 
++      //smaller      
++      if (isdigit(a[i++])) {
++        numRemainDigits_a++;
++      } else break;
++    }
++    while (j <= end2) {
++      //if we encounter a non-digit treat the corresponding number as being 
++      //smaller
++      if (isdigit(b[j++])) {
++        numRemainDigits_b++;
++      } else break;
++    }
++    int ret = numRemainDigits_a - numRemainDigits_b;
++    if (ret == 0) { 
++      return ((mul < 0) ? -firstResult : firstResult);
++    } else {
++      return ((mul < 0) ? -ret : ret);
++    }
++  }
++  private boolean isdigit(byte b) {
++    if ('0' <= b && b <= '9') {
++      return true;
++    }
++    return false;
++  }
++  private int decimalCompare(byte[] a, int i, int end1, 
++                             byte[] b, int j, int end2) {
++    if (i > end1) {
++      //if a[] has nothing remaining
++      return -decimalCompare1(b, ++j, end2);
++    }
++    if (j > end2) {
++      //if b[] has nothing remaining
++      return decimalCompare1(a, ++i, end1);
++    }
++    if (a[i] == DECIMAL && b[j] == DECIMAL) {
++      while (i <= end1 && j <= end2) {
++        if (a[i] != b[j]) {
++          if (isdigit(a[i]) && isdigit(b[j])) {
++            return a[i] - b[j];
++          }
++          if (isdigit(a[i])) {
++            return 1;
++          }
++          if (isdigit(b[j])) {
++            return -1;
++          }
++          return 0;
++        }
++        i++; j++;
++      }
++      if (i > end1 && j > end2) {
++        return 0;
++      }
++        
++      if (i > end1) {
++        //check whether there is a non-ZERO digit after potentially
++        //a number of ZEROs (e.g., a=.4444, b=.444400004)
++        return -decimalCompare1(b, j, end2);
++      }
++      if (j > end2) {
++        //check whether there is a non-ZERO digit after potentially
++        //a number of ZEROs (e.g., b=.4444, a=.444400004)
++        return decimalCompare1(a, i, end1);
++      }
++    }
++    else if (a[i] == DECIMAL) {
++      return decimalCompare1(a, ++i, end1);
++    }
++    else if (b[j] == DECIMAL) {
++      return -decimalCompare1(b, ++j, end2);
++    }
++    return 0;
++  }
++  
++  private int decimalCompare1(byte[] a, int i, int end) {
++    while (i <= end) {
++      if (a[i] == ZERO) {
++        i++;
++        continue;
++      }
++      if (isdigit(a[i])) {
++        return 1;
++      } else {
++        return 0;
++      }
++    }
++    return 0;
++  }
++  
++  private int oneNegativeCompare(byte[] a, int start1, int end1, 
++      byte[] b, int start2, int end2) {
++    //here a[] is negative and b[] is positive
++    //We have to ascertain whether the number contains any digits.
++    //If it does, then it is a smaller number for sure. If not,
++    //then we need to scan b[] to find out whether b[] has a digit
++    //If b[] does contain a digit, then b[] is certainly
++    //greater. If not, that is, both a[] and b[] don't contain
++    //digits then they should be considered equal.
++    if (!isZero(a, start1, end1)) {
++      return -1;
++    }
++    //reached here - this means that a[] is a ZERO
++    if (!isZero(b, start2, end2)) {
++      return -1;
++    }
++    //reached here - both numbers are basically ZEROs and hence
++    //they should compare equal
++    return 0;
++  }
++  
++  private boolean isZero(byte a[], int start, int end) {
++    //check for zeros in the significand part as well as the decimal part
++    //note that we treat the non-digit characters as ZERO
++    int i = start;
++    //we check the significand for being a ZERO
++    while (i <= end) {
++      if (a[i] != ZERO) {
++        if (a[i] != DECIMAL && isdigit(a[i])) {
++          return false;
++        }
++        break;
++      }
++      i++;
++    }
++
++    if (i != (end+1) && a[i++] == DECIMAL) {
++      //we check the decimal part for being a ZERO
++      while (i <= end) {
++        if (a[i] != ZERO) {
++          if (isdigit(a[i])) {
++            return false;
++          }
++          break;
++        }
++        i++;
++      }
++    }
++    return true;
++  }
++  /**
++   * Set the {@link KeyFieldBasedComparator} options used to compare keys.
++   * 
++   * @param keySpec the key specification of the form -k pos1[,pos2], where,
++   *  pos is of the form f[.c][opts], where f is the number
++   *  of the key field to use, and c is the number of the first character from
++   *  the beginning of the field. Fields and character posns are numbered 
++   *  starting with 1; a character position of zero in pos2 indicates the
++   *  field's last character. If '.c' is omitted from pos1, it defaults to 1
++   *  (the beginning of the field); if omitted from pos2, it defaults to 0 
++   *  (the end of the field). opts are ordering options. The supported options
++   *  are:
++   *    -n, (Sort numerically)
++   *    -r, (Reverse the result of comparison)                 
++   */
++  public static void setKeyFieldComparatorOptions(Job job, String keySpec) {
++    job.getConfiguration().set(COMPARATOR_OPTIONS, keySpec);
++  }
++  
++  /**
++   * Get the {@link KeyFieldBasedComparator} options
++   */
++  public static String getKeyFieldComparatorOption(JobContext job) {
++    return job.getConfiguration().get(COMPARATOR_OPTIONS);
++  }
++
++
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldBasedPartitioner.java b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldBasedPartitioner.java
+new file mode 100644
+index 0000000..d86d1b2
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldBasedPartitioner.java
+@@ -0,0 +1,152 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.partition;
++
++import java.io.UnsupportedEncodingException;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configurable;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.Partitioner;
++import org.apache.hadoop.mapreduce.lib.partition.KeyFieldHelper.KeyDescription;
++
++ /**   
++  *  Defines a way to partition keys based on certain key fields (also see
++  *  {@link KeyFieldBasedComparator}.
++  *  The key specification supported is of the form -k pos1[,pos2], where,
++  *  pos is of the form f[.c][opts], where f is the number
++  *  of the key field to use, and c is the number of the first character from
++  *  the beginning of the field. Fields and character posns are numbered 
++  *  starting with 1; a character position of zero in pos2 indicates the
++  *  field's last character. If '.c' is omitted from pos1, it defaults to 1
++  *  (the beginning of the field); if omitted from pos2, it defaults to 0 
++  *  (the end of the field).
++  * 
++  */
++public class KeyFieldBasedPartitioner<K2, V2> extends Partitioner<K2, V2> 
++    implements Configurable {
++
++  private static final Log LOG = LogFactory.getLog(
++                                   KeyFieldBasedPartitioner.class.getName());
++  public static String PARTITIONER_OPTIONS = 
++    "mapreduce.partition.keypartitioner.options";
++  private int numOfPartitionFields;
++  
++  private KeyFieldHelper keyFieldHelper = new KeyFieldHelper();
++  
++  private Configuration conf;
++
++  public void setConf(Configuration conf) {
++    this.conf = conf;
++    String keyFieldSeparator = 
++      conf.get("mapreduce.map.output.key.field.separator", "\t");
++    keyFieldHelper.setKeyFieldSeparator(keyFieldSeparator);
++    if (conf.get("num.key.fields.for.partition") != null) {
++      LOG.warn("Using deprecated num.key.fields.for.partition. " +
++      		"Use mapreduce.partition.keypartitioner.options instead");
++      this.numOfPartitionFields = conf.getInt("num.key.fields.for.partition",0);
++      keyFieldHelper.setKeyFieldSpec(1,numOfPartitionFields);
++    } else {
++      String option = conf.get(PARTITIONER_OPTIONS);
++      keyFieldHelper.parseOption(option);
++    }
++  }
++
++  public Configuration getConf() {
++    return conf;
++  }
++  
++  public int getPartition(K2 key, V2 value, int numReduceTasks) {
++    byte[] keyBytes;
++
++    List <KeyDescription> allKeySpecs = keyFieldHelper.keySpecs();
++    if (allKeySpecs.size() == 0) {
++      return getPartition(key.toString().hashCode(), numReduceTasks);
++    }
++
++    try {
++      keyBytes = key.toString().getBytes("UTF-8");
++    } catch (UnsupportedEncodingException e) {
++      throw new RuntimeException("The current system does not " +
++          "support UTF-8 encoding!", e);
++    }
++    // return 0 if the key is empty
++    if (keyBytes.length == 0) {
++      return 0;
++    }
++    
++    int []lengthIndicesFirst = keyFieldHelper.getWordLengths(keyBytes, 0, 
++        keyBytes.length);
++    int currentHash = 0;
++    for (KeyDescription keySpec : allKeySpecs) {
++      int startChar = keyFieldHelper.getStartOffset(keyBytes, 0, 
++        keyBytes.length, lengthIndicesFirst, keySpec);
++       // no key found! continue
++      if (startChar < 0) {
++        continue;
++      }
++      int endChar = keyFieldHelper.getEndOffset(keyBytes, 0, keyBytes.length, 
++          lengthIndicesFirst, keySpec);
++      currentHash = hashCode(keyBytes, startChar, endChar, 
++          currentHash);
++    }
++    return getPartition(currentHash, numReduceTasks);
++  }
++  
++  protected int hashCode(byte[] b, int start, int end, int currentHash) {
++    for (int i = start; i <= end; i++) {
++      currentHash = 31*currentHash + b[i];
++    }
++    return currentHash;
++  }
++
++  protected int getPartition(int hash, int numReduceTasks) {
++    return (hash & Integer.MAX_VALUE) % numReduceTasks;
++  }
++  
++  /**
++   * Set the {@link KeyFieldBasedPartitioner} options used for 
++   * {@link Partitioner}
++   * 
++   * @param keySpec the key specification of the form -k pos1[,pos2], where,
++   *  pos is of the form f[.c][opts], where f is the number
++   *  of the key field to use, and c is the number of the first character from
++   *  the beginning of the field. Fields and character posns are numbered 
++   *  starting with 1; a character position of zero in pos2 indicates the
++   *  field's last character. If '.c' is omitted from pos1, it defaults to 1
++   *  (the beginning of the field); if omitted from pos2, it defaults to 0 
++   *  (the end of the field).
++   */
++  public void setKeyFieldPartitionerOptions(Job job, String keySpec) {
++    job.getConfiguration().set(PARTITIONER_OPTIONS, keySpec);
++  }
++  
++  /**
++   * Get the {@link KeyFieldBasedPartitioner} options
++   */
++  public String getKeyFieldPartitionerOption(JobContext job) {
++    return job.getConfiguration().get(PARTITIONER_OPTIONS);
++  }
++
++
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldHelper.java b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldHelper.java
+new file mode 100644
+index 0000000..21ca3fa
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/KeyFieldHelper.java
+@@ -0,0 +1,296 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.partition;
++
++import java.io.UnsupportedEncodingException;
++import java.util.List;
++import java.util.ArrayList;
++import java.util.StringTokenizer;
++
++import org.apache.hadoop.util.UTF8ByteArrayUtils;
++
++/**
++ * This is used in {@link KeyFieldBasedComparator} & 
++ * {@link KeyFieldBasedPartitioner}. Defines all the methods
++ * for parsing key specifications. The key specification is of the form:
++ * -k pos1[,pos2], where pos is of the form f[.c][opts], where f is the number
++ *  of the field to use, and c is the number of the first character from the
++ *  beginning of the field. Fields and character posns are numbered starting
++ *  with 1; a character position of zero in pos2 indicates the field's last
++ *  character. If '.c' is omitted from pos1, it defaults to 1 (the beginning
++ *  of the field); if omitted from pos2, it defaults to 0 (the end of the
++ *  field). opts are ordering options (supported options are 'nr'). 
++ */
++
++class KeyFieldHelper {
++  
++  protected static class KeyDescription {
++    int beginFieldIdx = 1;
++    int beginChar = 1;
++    int endFieldIdx = 0;
++    int endChar = 0;
++    boolean numeric;
++    boolean reverse;
++    @Override
++    public String toString() {
++      return "-k" 
++             + beginFieldIdx + "." + beginChar + "," 
++             + endFieldIdx + "." + endChar 
++             + (numeric ? "n" : "") + (reverse ? "r" : "");
++    }
++  }
++  
++  private List<KeyDescription> allKeySpecs = new ArrayList<KeyDescription>();
++  private byte[] keyFieldSeparator;
++  private boolean keySpecSeen = false;
++  
++  public void setKeyFieldSeparator(String keyFieldSeparator) {
++    try {
++      this.keyFieldSeparator =
++        keyFieldSeparator.getBytes("UTF-8");
++    } catch (UnsupportedEncodingException e) {
++      throw new RuntimeException("The current system does not " +
++          "support UTF-8 encoding!", e);
++    }    
++  }
++  
++  /** Required for backcompatibility with num.key.fields.for.partition in
++   * {@link KeyFieldBasedPartitioner} */
++  public void setKeyFieldSpec(int start, int end) {
++    if (end >= start) {
++      KeyDescription k = new KeyDescription();
++      k.beginFieldIdx = start;
++      k.endFieldIdx = end;
++      keySpecSeen = true;
++      allKeySpecs.add(k);
++    }
++  }
++  
++  public List<KeyDescription> keySpecs() {
++    return allKeySpecs;
++  }
++    
++  public int[] getWordLengths(byte []b, int start, int end) {
++    //Given a string like "hello how are you", it returns an array
++    //like [4 5, 3, 3, 3], where the first element is the number of
++	//fields
++    if (!keySpecSeen) {
++      //if there were no key specs, then the whole key is one word
++      return new int[] {1};
++    }
++    int[] lengths = new int[10];
++    int currLenLengths = lengths.length;
++    int idx = 1;
++    int pos;
++    while ((pos = UTF8ByteArrayUtils.findBytes(b, start, end, 
++        keyFieldSeparator)) != -1) {
++      if (++idx == currLenLengths) {
++        int[] temp = lengths;
++        lengths = new int[(currLenLengths = currLenLengths*2)];
++        System.arraycopy(temp, 0, lengths, 0, temp.length);
++      }
++      lengths[idx - 1] = pos - start;
++      start = pos + 1;
++    }
++    
++    if (start != end) {
++      lengths[idx] = end - start;
++    }
++    lengths[0] = idx; //number of words is the first element
++    return lengths;
++  }
++  public int getStartOffset(byte[]b, int start, int end, 
++      int []lengthIndices, KeyDescription k) {
++    //if -k2.5,2 is the keyspec, the startChar is lengthIndices[1] + 5
++    //note that the [0]'th element is the number of fields in the key
++    if (lengthIndices[0] >= k.beginFieldIdx) {
++      int position = 0;
++      for (int i = 1; i < k.beginFieldIdx; i++) {
++        position += lengthIndices[i] + keyFieldSeparator.length; 
++      }
++      if (position + k.beginChar <= (end - start)) {
++        return start + position + k.beginChar - 1; 
++      }
++    }
++    return -1;
++  }
++  public int getEndOffset(byte[]b, int start, int end, 
++      int []lengthIndices, KeyDescription k) {
++    //if -k2,2.8 is the keyspec, the endChar is lengthIndices[1] + 8
++    //note that the [0]'th element is the number of fields in the key
++    if (k.endFieldIdx == 0) {
++      //there is no end field specified for this keyspec. So the remaining
++      //part of the key is considered in its entirety.
++      return end - 1; 
++    }
++    if (lengthIndices[0] >= k.endFieldIdx) {
++      int position = 0;
++      int i;
++      for (i = 1; i < k.endFieldIdx; i++) {
++        position += lengthIndices[i] + keyFieldSeparator.length;
++      }
++      if (k.endChar == 0) { 
++        position += lengthIndices[i];
++      }
++      if (position + k.endChar <= (end - start)) {
++        return start + position + k.endChar - 1;
++      }
++      return end - 1;
++    }
++    return end - 1;
++  }
++  public void parseOption(String option) {
++    if (option == null || option.equals("")) {
++      //we will have only default comparison
++      return;
++    }
++    StringTokenizer args = new StringTokenizer(option);
++    KeyDescription global = new KeyDescription();
++    while (args.hasMoreTokens()) {
++      String arg = args.nextToken();
++      if (arg.equals("-n")) {  
++        global.numeric = true;
++      }
++      if (arg.equals("-r")) {
++        global.reverse = true;
++      }
++      if (arg.equals("-nr")) {
++        global.numeric = true;
++        global.reverse = true;
++      }
++      if (arg.startsWith("-k")) {
++        KeyDescription k = parseKey(arg, args);
++        if (k != null) {
++          allKeySpecs.add(k);
++          keySpecSeen = true;
++        }
++      }
++    }
++    for (KeyDescription key : allKeySpecs) {
++      if (!(key.reverse | key.numeric)) {
++        key.reverse = global.reverse;
++        key.numeric = global.numeric;
++      }
++    }
++    if (allKeySpecs.size() == 0) {
++      allKeySpecs.add(global);
++    }
++  }
++  
++  private KeyDescription parseKey(String arg, StringTokenizer args) {
++    //we allow for -k<arg> and -k <arg>
++    String keyArgs = null;
++    if (arg.length() == 2) {
++      if (args.hasMoreTokens()) {
++        keyArgs = args.nextToken();
++      }
++    } else {
++      keyArgs = arg.substring(2);
++    }
++    if (keyArgs == null || keyArgs.length() == 0) {
++      return null;
++    }
++    StringTokenizer st = new StringTokenizer(keyArgs,"nr.,",true);
++       
++    KeyDescription key = new KeyDescription();
++    
++    String token;
++    //the key is of the form 1[.3][nr][,1.5][nr]
++    if (st.hasMoreTokens()) {
++      token = st.nextToken();
++      //the first token must be a number
++      key.beginFieldIdx = Integer.parseInt(token);
++    }
++    if (st.hasMoreTokens()) {
++      token = st.nextToken();
++      if (token.equals(".")) {
++        token = st.nextToken();
++        key.beginChar = Integer.parseInt(token);
++        if (st.hasMoreTokens()) {
++          token = st.nextToken();
++        } else {
++          return key;
++        }
++      } 
++      do {
++        if (token.equals("n")) {
++          key.numeric = true;
++        }
++        else if (token.equals("r")) {
++          key.reverse = true;
++        }
++        else break;
++        if (st.hasMoreTokens()) {
++          token = st.nextToken();
++        } else {
++          return key;
++        }
++      } while (true);
++      if (token.equals(",")) {
++        token = st.nextToken();
++        //the first token must be a number
++        key.endFieldIdx = Integer.parseInt(token);
++        if (st.hasMoreTokens()) {
++          token = st.nextToken();
++          if (token.equals(".")) {
++            token = st.nextToken();
++            key.endChar = Integer.parseInt(token);
++            if (st.hasMoreTokens()) {
++              token = st.nextToken();
++            } else {
++              return key;
++            }
++          }
++          do {
++            if (token.equals("n")) {
++              key.numeric = true;
++            }
++            else if (token.equals("r")) {
++              key.reverse = true;
++            }
++            else { 
++              throw new IllegalArgumentException("Invalid -k argument. " +
++               "Must be of the form -k pos1,[pos2], where pos is of the form " +
++               "f[.c]nr");
++            }
++            if (st.hasMoreTokens()) {
++              token = st.nextToken();
++            } else {
++              break;
++            }
++          } while (true);
++        }
++        return key;
++      }
++      throw new IllegalArgumentException("Invalid -k argument. " +
++          "Must be of the form -k pos1,[pos2], where pos is of the form " +
++          "f[.c]nr");
++    }
++    return key;
++  }
++  private void printKey(KeyDescription key) {
++    System.out.println("key.beginFieldIdx: " + key.beginFieldIdx);
++    System.out.println("key.beginChar: " + key.beginChar);
++    System.out.println("key.endFieldIdx: " + key.endFieldIdx);
++    System.out.println("key.endChar: " + key.endChar);
++    System.out.println("key.numeric: " + key.numeric);
++    System.out.println("key.reverse: " + key.reverse);
++    System.out.println("parseKey over");
++  }  
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/partition/TotalOrderPartitioner.java b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/TotalOrderPartitioner.java
+new file mode 100644
+index 0000000..4a5990e
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/TotalOrderPartitioner.java
+@@ -0,0 +1,398 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.partition;
++
++import java.io.IOException;
++import java.lang.reflect.Array;
++import java.util.ArrayList;
++import java.util.Arrays;
++
++import org.apache.hadoop.conf.Configurable;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.BinaryComparable;
++import org.apache.hadoop.io.NullWritable;
++import org.apache.hadoop.io.SequenceFile;
++import org.apache.hadoop.io.RawComparator;
++import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.Partitioner;
++import org.apache.hadoop.util.ReflectionUtils;
++
++/**
++ * Partitioner effecting a total order by reading split points from
++ * an externally generated source.
++ */
++public class TotalOrderPartitioner<K extends WritableComparable<?>,V>
++    extends Partitioner<K,V> implements Configurable {
++
++  private Node partitions;
++  public static final String DEFAULT_PATH = "_partition.lst";
++  public static final String PARTITIONER_PATH = 
++    "mapreduce.totalorderpartitioner.path";
++  public static final String MAX_TRIE_DEPTH = 
++    "mapreduce.totalorderpartitioner.trie.maxdepth"; 
++  public static final String NATURAL_ORDER = 
++    "mapreduce.totalorderpartitioner.naturalorder";
++  Configuration conf;
++
++  public TotalOrderPartitioner() { }
++
++  /**
++   * Read in the partition file and build indexing data structures.
++   * If the keytype is {@link org.apache.hadoop.io.BinaryComparable} and
++   * <tt>total.order.partitioner.natural.order</tt> is not false, a trie
++   * of the first <tt>total.order.partitioner.max.trie.depth</tt>(2) + 1 bytes
++   * will be built. Otherwise, keys will be located using a binary search of
++   * the partition keyset using the {@link org.apache.hadoop.io.RawComparator}
++   * defined for this job. The input file must be sorted with the same
++   * comparator and contain {@link Job#getNumReduceTasks()} - 1 keys.
++   */
++  @SuppressWarnings("unchecked") // keytype from conf not static
++  public void setConf(Configuration conf) {
++    try {
++      this.conf = conf;
++      String parts = getPartitionFile(conf);
++      final Path partFile = new Path(parts);
++      final FileSystem fs = (DEFAULT_PATH.equals(parts))
++        ? FileSystem.getLocal(conf)     // assume in DistributedCache
++        : partFile.getFileSystem(conf);
++
++      Job job = new Job(conf);
++      Class<K> keyClass = (Class<K>)job.getMapOutputKeyClass();
++      K[] splitPoints = readPartitions(fs, partFile, keyClass, conf);
++      if (splitPoints.length != job.getNumReduceTasks() - 1) {
++        throw new IOException("Wrong number of partitions in keyset");
++      }
++      RawComparator<K> comparator =
++        (RawComparator<K>) job.getSortComparator();
++      for (int i = 0; i < splitPoints.length - 1; ++i) {
++        if (comparator.compare(splitPoints[i], splitPoints[i+1]) >= 0) {
++          throw new IOException("Split points are out of order");
++        }
++      }
++      boolean natOrder =
++        conf.getBoolean(NATURAL_ORDER, true);
++      if (natOrder && BinaryComparable.class.isAssignableFrom(keyClass)) {
++        partitions = buildTrie((BinaryComparable[])splitPoints, 0,
++            splitPoints.length, new byte[0],
++            // Now that blocks of identical splitless trie nodes are 
++            // represented reentrantly, and we develop a leaf for any trie
++            // node with only one split point, the only reason for a depth
++            // limit is to refute stack overflow or bloat in the pathological
++            // case where the split points are long and mostly look like bytes 
++            // iii...iixii...iii   .  Therefore, we make the default depth
++            // limit large but not huge.
++            conf.getInt(MAX_TRIE_DEPTH, 200));
++      } else {
++        partitions = new BinarySearchNode(splitPoints, comparator);
++      }
++    } catch (IOException e) {
++      throw new IllegalArgumentException("Can't read partitions file", e);
++    }
++  }
++
++  public Configuration getConf() {
++    return conf;
++  }
++  
++  // by construction, we know if our keytype
++  @SuppressWarnings("unchecked") // is memcmp-able and uses the trie
++  public int getPartition(K key, V value, int numPartitions) {
++    return partitions.findPartition(key);
++  }
++
++  /**
++   * Set the path to the SequenceFile storing the sorted partition keyset.
++   * It must be the case that for <tt>R</tt> reduces, there are <tt>R-1</tt>
++   * keys in the SequenceFile.
++   */
++  public static void setPartitionFile(Configuration conf, Path p) {
++    conf.set(PARTITIONER_PATH, p.toString());
++  }
++
++  /**
++   * Get the path to the SequenceFile storing the sorted partition keyset.
++   * @see #setPartitionFile(Configuration, Path)
++   */
++  public static String getPartitionFile(Configuration conf) {
++    return conf.get(PARTITIONER_PATH, DEFAULT_PATH);
++  }
++
++  /**
++   * Interface to the partitioner to locate a key in the partition keyset.
++   */
++  interface Node<T> {
++    /**
++     * Locate partition in keyset K, st [Ki..Ki+1) defines a partition,
++     * with implicit K0 = -inf, Kn = +inf, and |K| = #partitions - 1.
++     */
++    int findPartition(T key);
++  }
++
++  /**
++   * Base class for trie nodes. If the keytype is memcomp-able, this builds
++   * tries of the first <tt>total.order.partitioner.max.trie.depth</tt>
++   * bytes.
++   */
++  static abstract class TrieNode implements Node<BinaryComparable> {
++    private final int level;
++    TrieNode(int level) {
++      this.level = level;
++    }
++    int getLevel() {
++      return level;
++    }
++  }
++
++  /**
++   * For types that are not {@link org.apache.hadoop.io.BinaryComparable} or
++   * where disabled by <tt>total.order.partitioner.natural.order</tt>,
++   * search the partition keyset with a binary search.
++   */
++  class BinarySearchNode implements Node<K> {
++    private final K[] splitPoints;
++    private final RawComparator<K> comparator;
++    BinarySearchNode(K[] splitPoints, RawComparator<K> comparator) {
++      this.splitPoints = splitPoints;
++      this.comparator = comparator;
++    }
++    public int findPartition(K key) {
++      final int pos = Arrays.binarySearch(splitPoints, key, comparator) + 1;
++      return (pos < 0) ? -pos : pos;
++    }
++  }
++
++  /**
++   * An inner trie node that contains 256 children based on the next
++   * character.
++   */
++  class InnerTrieNode extends TrieNode {
++    private TrieNode[] child = new TrieNode[256];
++
++    InnerTrieNode(int level) {
++      super(level);
++    }
++    public int findPartition(BinaryComparable key) {
++      int level = getLevel();
++      if (key.getLength() <= level) {
++        return child[0].findPartition(key);
++      }
++      return child[0xFF & key.getBytes()[level]].findPartition(key);
++    }
++  }
++  
++  /**
++   * @param level        the tree depth at this node
++   * @param splitPoints  the full split point vector, which holds
++   *                     the split point or points this leaf node
++   *                     should contain
++   * @param lower        first INcluded element of splitPoints
++   * @param upper        first EXcluded element of splitPoints
++   * @return  a leaf node.  They come in three kinds: no split points 
++   *          [and the findParttion returns a canned index], one split
++   *          point [and we compare with a single comparand], or more
++   *          than one [and we do a binary search].  The last case is
++   *          rare.
++   */
++  private TrieNode LeafTrieNodeFactory
++             (int level, BinaryComparable[] splitPoints, int lower, int upper) {
++      switch (upper - lower) {
++      case 0:
++          return new UnsplitTrieNode(level, lower);
++          
++      case 1:
++          return new SinglySplitTrieNode(level, splitPoints, lower);
++          
++      default:
++          return new LeafTrieNode(level, splitPoints, lower, upper);
++      }
++  }
++
++  /**
++   * A leaf trie node that scans for the key between lower..upper.
++   * 
++   * We don't generate many of these now, since we usually continue trie-ing 
++   * when more than one split point remains at this level. and we make different
++   * objects for nodes with 0 or 1 split point.
++   */
++  private class LeafTrieNode extends TrieNode {
++    final int lower;
++    final int upper;
++    final BinaryComparable[] splitPoints;
++    LeafTrieNode(int level, BinaryComparable[] splitPoints, int lower, int upper) {
++      super(level);
++      this.lower = lower;
++      this.upper = upper;
++      this.splitPoints = splitPoints;
++    }
++    public int findPartition(BinaryComparable key) {
++      final int pos = Arrays.binarySearch(splitPoints, lower, upper, key) + 1;
++      return (pos < 0) ? -pos : pos;
++    }
++  }
++  
++  private class UnsplitTrieNode extends TrieNode {
++      final int result;
++      
++      UnsplitTrieNode(int level, int value) {
++          super(level);
++          this.result = value;
++      }
++      
++      public int findPartition(BinaryComparable key) {
++          return result;
++      }
++  }
++  
++  private class SinglySplitTrieNode extends TrieNode {
++      final int               lower;
++      final BinaryComparable  mySplitPoint;
++      
++      SinglySplitTrieNode(int level, BinaryComparable[] splitPoints, int lower) {
++          super(level);
++          this.lower = lower;
++          this.mySplitPoint = splitPoints[lower];
++      }
++      
++      public int findPartition(BinaryComparable key) {
++          return lower + (key.compareTo(mySplitPoint) < 0 ? 0 : 1);
++      }
++  }
++
++
++  /**
++   * Read the cut points from the given IFile.
++   * @param fs The file system
++   * @param p The path to read
++   * @param keyClass The map output key class
++   * @param job The job config
++   * @throws IOException
++   */
++                                 // matching key types enforced by passing in
++  @SuppressWarnings("unchecked") // map output key class
++  private K[] readPartitions(FileSystem fs, Path p, Class<K> keyClass,
++      Configuration conf) throws IOException {
++    SequenceFile.Reader reader = new SequenceFile.Reader(fs, p, conf);
++    ArrayList<K> parts = new ArrayList<K>();
++    K key = ReflectionUtils.newInstance(keyClass, conf);
++    NullWritable value = NullWritable.get();
++    while (reader.next(key, value)) {
++      parts.add(key);
++      key = ReflectionUtils.newInstance(keyClass, conf);
++    }
++    reader.close();
++    return parts.toArray((K[])Array.newInstance(keyClass, parts.size()));
++  }
++  
++  /**
++   * 
++   * This object contains a TrieNodeRef if there is such a thing that
++   * can be repeated.  Two adjacent trie node slots that contain no 
++   * split points can be filled with the same trie node, even if they
++   * are not on the same level.  See buildTreeRec, below.
++   *
++   */  
++  private class CarriedTrieNodeRef
++  {
++      TrieNode   content;
++      
++      CarriedTrieNodeRef() {
++          content = null;
++      }
++  }
++
++  
++  /**
++   * Given a sorted set of cut points, build a trie that will find the correct
++   * partition quickly.
++   * @param splits the list of cut points
++   * @param lower the lower bound of partitions 0..numPartitions-1
++   * @param upper the upper bound of partitions 0..numPartitions-1
++   * @param prefix the prefix that we have already checked against
++   * @param maxDepth the maximum depth we will build a trie for
++   * @return the trie node that will divide the splits correctly
++   */
++  private TrieNode buildTrie(BinaryComparable[] splits, int lower,
++          int upper, byte[] prefix, int maxDepth) {
++      return buildTrieRec
++               (splits, lower, upper, prefix, maxDepth, new CarriedTrieNodeRef());
++  }
++  
++  /**
++   * This is the core of buildTrie.  The interface, and stub, above, just adds
++   * an empty CarriedTrieNodeRef.  
++   * 
++   * We build trie nodes in depth first order, which is also in key space
++   * order.  Every leaf node is referenced as a slot in a parent internal
++   * node.  If two adjacent slots [in the DFO] hold leaf nodes that have
++   * no split point, then they are not separated by a split point either, 
++   * because there's no place in key space for that split point to exist.
++   * 
++   * When that happens, the leaf nodes would be semantically identical, and
++   * we reuse the object.  A single CarriedTrieNodeRef "ref" lives for the 
++   * duration of the tree-walk.  ref carries a potentially reusable, unsplit
++   * leaf node for such reuse until a leaf node with a split arises, which 
++   * breaks the chain until we need to make a new unsplit leaf node.
++   * 
++   * Note that this use of CarriedTrieNodeRef means that for internal nodes, 
++   * for internal nodes if this code is modified in any way we still need 
++   * to make or fill in the subnodes in key space order.
++   */
++  private TrieNode buildTrieRec(BinaryComparable[] splits, int lower,
++      int upper, byte[] prefix, int maxDepth, CarriedTrieNodeRef ref) {
++    final int depth = prefix.length;
++    // We generate leaves for a single split point as well as for 
++    // no split points.
++    if (depth >= maxDepth || lower >= upper - 1) {
++        // If we have two consecutive requests for an unsplit trie node, we
++        // can deliver the same one the second time.
++        if (lower == upper && ref.content != null) {
++            return ref.content;
++        }
++        TrieNode  result = LeafTrieNodeFactory(depth, splits, lower, upper);
++        ref.content = lower == upper ? result : null;
++        return result;
++    }
++    InnerTrieNode result = new InnerTrieNode(depth);
++    byte[] trial = Arrays.copyOf(prefix, prefix.length + 1);
++    // append an extra byte on to the prefix
++    int         currentBound = lower;
++    for(int ch = 0; ch < 0xFF; ++ch) {
++      trial[depth] = (byte) (ch + 1);
++      lower = currentBound;
++      while (currentBound < upper) {
++        if (splits[currentBound].compareTo(trial, 0, trial.length) >= 0) {
++          break;
++        }
++        currentBound += 1;
++      }
++      trial[depth] = (byte) ch;
++      result.child[0xFF & ch]
++                   = buildTrieRec(splits, lower, currentBound, trial, maxDepth, ref);
++    }
++    // pick up the rest
++    trial[depth] = (byte)0xFF;
++    result.child[0xFF] 
++                 = buildTrieRec(splits, lower, currentBound, trial, maxDepth, ref);
++    
++    return result;
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapred/UtilsForTests.java b/src/test/org/apache/hadoop/mapred/UtilsForTests.java
+index 727a98f..d80f1a0 100644
+--- a/src/test/org/apache/hadoop/mapred/UtilsForTests.java
++++ b/src/test/org/apache/hadoop/mapred/UtilsForTests.java
+@@ -159,7 +159,7 @@ public class UtilsForTests {
+     }
+   }
+ 
+-  static String slurp(File f) throws IOException {
++  public static String slurp(File f) throws IOException {
+     int len = (int) f.length();
+     byte[] buf = new byte[len];
+     FileInputStream in = new FileInputStream(f);
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileAsBinaryInputFormat.java b/src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileAsBinaryInputFormat.java
+new file mode 100644
+index 0000000..ced7330
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileAsBinaryInputFormat.java
+@@ -0,0 +1,115 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.input;
++
++import java.io.IOException;
++import java.util.Random;
++
++import org.apache.hadoop.fs.*;
++import org.apache.hadoop.io.*;
++import org.apache.hadoop.mapreduce.InputFormat;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.MapContext;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++
++import junit.framework.TestCase;
++
++public class TestMRSequenceFileAsBinaryInputFormat extends TestCase {
++  private static final int RECORDS = 10000;
++
++  public void testBinary() throws IOException, InterruptedException {
++    Job job = new Job();
++    FileSystem fs = FileSystem.getLocal(job.getConfiguration());
++    Path dir = new Path(System.getProperty("test.build.data",".") + "/mapred");
++    Path file = new Path(dir, "testbinary.seq");
++    Random r = new Random();
++    long seed = r.nextLong();
++    r.setSeed(seed);
++
++    fs.delete(dir, true);
++    FileInputFormat.setInputPaths(job, dir);
++
++    Text tkey = new Text();
++    Text tval = new Text();
++
++    SequenceFile.Writer writer = new SequenceFile.Writer(fs,
++      job.getConfiguration(), file, Text.class, Text.class);
++    try {
++      for (int i = 0; i < RECORDS; ++i) {
++        tkey.set(Integer.toString(r.nextInt(), 36));
++        tval.set(Long.toString(r.nextLong(), 36));
++        writer.append(tkey, tval);
++      }
++    } finally {
++      writer.close();
++    }
++    TaskAttemptContext context = MapReduceTestUtil.
++      createDummyMapTaskAttemptContext(job.getConfiguration());
++    InputFormat<BytesWritable,BytesWritable> bformat =
++      new SequenceFileAsBinaryInputFormat();
++
++    int count = 0;
++    r.setSeed(seed);
++    BytesWritable bkey = new BytesWritable();
++    BytesWritable bval = new BytesWritable();
++    Text cmpkey = new Text();
++    Text cmpval = new Text();
++    DataInputBuffer buf = new DataInputBuffer();
++    FileInputFormat.setInputPaths(job, file);
++    for (InputSplit split : bformat.getSplits(job)) {
++      RecordReader<BytesWritable, BytesWritable> reader =
++            bformat.createRecordReader(split, context);
++      MapContext<BytesWritable, BytesWritable, BytesWritable, BytesWritable> 
++        mcontext = new MapContext<BytesWritable, BytesWritable,
++          BytesWritable, BytesWritable>(job.getConfiguration(), 
++          context.getTaskAttemptID(), reader, null, null, 
++          MapReduceTestUtil.createDummyReporter(), 
++          split);
++      reader.initialize(split, mcontext);
++      try {
++        while (reader.nextKeyValue()) {
++          bkey = reader.getCurrentKey();
++          bval = reader.getCurrentValue();
++          tkey.set(Integer.toString(r.nextInt(), 36));
++          tval.set(Long.toString(r.nextLong(), 36));
++          buf.reset(bkey.getBytes(), bkey.getLength());
++          cmpkey.readFields(buf);
++          buf.reset(bval.getBytes(), bval.getLength());
++          cmpval.readFields(buf);
++          assertTrue(
++            "Keys don't match: " + "*" + cmpkey.toString() + ":" +
++            tkey.toString() + "*",
++            cmpkey.toString().equals(tkey.toString()));
++          assertTrue(
++            "Vals don't match: " + "*" + cmpval.toString() + ":" +
++            tval.toString() + "*",
++            cmpval.toString().equals(tval.toString()));
++          ++count;
++        }
++      } finally {
++        reader.close();
++      }
++    }
++    assertEquals("Some records not found", RECORDS, count);
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileAsTextInputFormat.java b/src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileAsTextInputFormat.java
+new file mode 100644
+index 0000000..25a59a3
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileAsTextInputFormat.java
+@@ -0,0 +1,118 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.input;
++
++import java.util.*;
++import junit.framework.TestCase;
++
++import org.apache.hadoop.fs.*;
++import org.apache.hadoop.io.*;
++import org.apache.hadoop.mapreduce.InputFormat;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.MapContext;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++import org.apache.hadoop.conf.*;
++
++public class TestMRSequenceFileAsTextInputFormat extends TestCase {
++  private static int MAX_LENGTH = 10000;
++  private static Configuration conf = new Configuration();
++
++  public void testFormat() throws Exception {
++    Job job = new Job(conf);
++    FileSystem fs = FileSystem.getLocal(conf);
++    Path dir = new Path(System.getProperty("test.build.data",".") + "/mapred");
++    Path file = new Path(dir, "test.seq");
++    
++    int seed = new Random().nextInt();
++    Random random = new Random(seed);
++
++    fs.delete(dir, true);
++
++    FileInputFormat.setInputPaths(job, dir);
++
++    // for a variety of lengths
++    for (int length = 0; length < MAX_LENGTH;
++         length += random.nextInt(MAX_LENGTH / 10) + 1) {
++
++      // create a file with length entries
++      SequenceFile.Writer writer =
++        SequenceFile.createWriter(fs, conf, file,
++          IntWritable.class, LongWritable.class);
++      try {
++        for (int i = 0; i < length; i++) {
++          IntWritable key = new IntWritable(i);
++          LongWritable value = new LongWritable(10 * i);
++          writer.append(key, value);
++        }
++      } finally {
++        writer.close();
++      }
++
++      TaskAttemptContext context = MapReduceTestUtil.
++        createDummyMapTaskAttemptContext(job.getConfiguration());
++      // try splitting the file in a variety of sizes
++      InputFormat<Text, Text> format =
++        new SequenceFileAsTextInputFormat();
++      
++      for (int i = 0; i < 3; i++) {
++        // check each split
++        BitSet bits = new BitSet(length);
++        int numSplits =
++          random.nextInt(MAX_LENGTH / (SequenceFile.SYNC_INTERVAL / 20)) + 1;
++        FileInputFormat.setMaxInputSplitSize(job, 
++          fs.getFileStatus(file).getLen() / numSplits);
++        for (InputSplit split : format.getSplits(job)) {
++          RecordReader<Text, Text> reader =
++            format.createRecordReader(split, context);
++          MapContext<Text, Text, Text, Text> mcontext = 
++            new MapContext<Text, Text, Text, Text>(job.getConfiguration(), 
++            context.getTaskAttemptID(), reader, null, null, 
++            MapReduceTestUtil.createDummyReporter(), 
++            split);
++          reader.initialize(split, mcontext);
++          Class<?> readerClass = reader.getClass();
++          assertEquals("reader class is SequenceFileAsTextRecordReader.",
++            SequenceFileAsTextRecordReader.class, readerClass);        
++          Text key;
++          try {
++            int count = 0;
++            while (reader.nextKeyValue()) {
++              key = reader.getCurrentKey();
++              int keyInt = Integer.parseInt(key.toString());
++              assertFalse("Key in multiple partitions.", bits.get(keyInt));
++              bits.set(keyInt);
++              count++;
++            }
++          } finally {
++            reader.close();
++          }
++        }
++        assertEquals("Some keys in no partition.", length, bits.cardinality());
++      }
++
++    }
++  }
++
++  public static void main(String[] args) throws Exception {
++    new TestMRSequenceFileAsTextInputFormat().testFormat();
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileInputFilter.java b/src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileInputFilter.java
+new file mode 100644
+index 0000000..d92f0ff
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/input/TestMRSequenceFileInputFilter.java
+@@ -0,0 +1,194 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.input;
++
++import java.io.*;
++import java.util.*;
++import junit.framework.TestCase;
++
++import org.apache.commons.logging.*;
++
++import org.apache.hadoop.fs.*;
++import org.apache.hadoop.io.*;
++import org.apache.hadoop.mapreduce.InputFormat;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.MapContext;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++import org.apache.hadoop.conf.*;
++
++public class TestMRSequenceFileInputFilter extends TestCase {
++  private static final Log LOG = 
++    LogFactory.getLog(TestMRSequenceFileInputFilter.class.getName());
++
++  private static final int MAX_LENGTH = 15000;
++  private static final Configuration conf = new Configuration();
++  private static final Job job;
++  private static final FileSystem fs;
++  private static final Path inDir = 
++    new Path(System.getProperty("test.build.data",".") + "/mapred");
++  private static final Path inFile = new Path(inDir, "test.seq");
++  private static final Random random = new Random(1);
++  
++  static {
++    try {
++      job = new Job(conf);
++      FileInputFormat.setInputPaths(job, inDir);
++      fs = FileSystem.getLocal(conf);
++    } catch (IOException e) {
++      e.printStackTrace();
++      throw new RuntimeException(e);
++    }
++  }
++
++  private static void createSequenceFile(int numRecords) throws Exception {
++    // create a file with length entries
++    SequenceFile.Writer writer =
++      SequenceFile.createWriter(fs, conf, inFile,
++                                Text.class, BytesWritable.class);
++    try {
++      for (int i = 1; i <= numRecords; i++) {
++        Text key = new Text(Integer.toString(i));
++        byte[] data = new byte[random.nextInt(10)];
++        random.nextBytes(data);
++        BytesWritable value = new BytesWritable(data);
++        writer.append(key, value);
++      }
++    } finally {
++      writer.close();
++    }
++  }
++
++
++  private int countRecords(int numSplits) 
++      throws IOException, InterruptedException {
++    InputFormat<Text, BytesWritable> format =
++      new SequenceFileInputFilter<Text, BytesWritable>();
++    if (numSplits == 0) {
++      numSplits =
++        random.nextInt(MAX_LENGTH / (SequenceFile.SYNC_INTERVAL / 20)) + 1;
++    }
++    FileInputFormat.setMaxInputSplitSize(job, 
++      fs.getFileStatus(inFile).getLen() / numSplits);
++    TaskAttemptContext context = MapReduceTestUtil.
++      createDummyMapTaskAttemptContext(job.getConfiguration());
++    // check each split
++    int count = 0;
++    for (InputSplit split : format.getSplits(job)) {
++      RecordReader<Text, BytesWritable> reader =
++        format.createRecordReader(split, context);
++      MapContext<Text, BytesWritable, Text, BytesWritable> mcontext = 
++        new MapContext<Text, BytesWritable, Text, BytesWritable>(
++        job.getConfiguration(), 
++        context.getTaskAttemptID(), reader, null, null, 
++        MapReduceTestUtil.createDummyReporter(), split);
++      reader.initialize(split, mcontext);
++      try {
++        while (reader.nextKeyValue()) {
++          LOG.info("Accept record " + reader.getCurrentKey().toString());
++          count++;
++        }
++      } finally {
++        reader.close();
++      }
++    }
++    return count;
++  }
++  
++  public void testRegexFilter() throws Exception {
++    // set the filter class
++    LOG.info("Testing Regex Filter with patter: \\A10*");
++    SequenceFileInputFilter.setFilterClass(job, 
++      SequenceFileInputFilter.RegexFilter.class);
++    SequenceFileInputFilter.RegexFilter.setPattern(
++      job.getConfiguration(), "\\A10*");
++    
++    // clean input dir
++    fs.delete(inDir, true);
++  
++    // for a variety of lengths
++    for (int length = 1; length < MAX_LENGTH;
++         length += random.nextInt(MAX_LENGTH / 10) + 1) {
++      LOG.info("******Number of records: " + length);
++      createSequenceFile(length);
++      int count = countRecords(0);
++      assertEquals(count, length==0 ? 0 : (int)Math.log10(length) + 1);
++    }
++    
++    // clean up
++    fs.delete(inDir, true);
++  }
++
++  public void testPercentFilter() throws Exception {
++    LOG.info("Testing Percent Filter with frequency: 1000");
++    // set the filter class
++    SequenceFileInputFilter.setFilterClass(job, 
++      SequenceFileInputFilter.PercentFilter.class);
++    SequenceFileInputFilter.PercentFilter.setFrequency(
++      job.getConfiguration(), 1000);
++      
++    // clean input dir
++    fs.delete(inDir, true);
++    
++    // for a variety of lengths
++    for (int length = 0; length < MAX_LENGTH;
++         length += random.nextInt(MAX_LENGTH / 10) + 1) {
++      LOG.info("******Number of records: "+length);
++      createSequenceFile(length);
++      int count = countRecords(1);
++      LOG.info("Accepted " + count + " records");
++      int expectedCount = length / 1000;
++      if (expectedCount * 1000 != length)
++        expectedCount++;
++      assertEquals(count, expectedCount);
++    }
++      
++    // clean up
++    fs.delete(inDir, true);
++  }
++  
++  public void testMD5Filter() throws Exception {
++    // set the filter class
++    LOG.info("Testing MD5 Filter with frequency: 1000");
++    SequenceFileInputFilter.setFilterClass(job, 
++      SequenceFileInputFilter.MD5Filter.class);
++    SequenceFileInputFilter.MD5Filter.setFrequency(
++      job.getConfiguration(), 1000);
++      
++    // clean input dir
++    fs.delete(inDir, true);
++    
++    // for a variety of lengths
++    for (int length = 0; length < MAX_LENGTH;
++         length += random.nextInt(MAX_LENGTH / 10) + 1) {
++      LOG.info("******Number of records: " + length);
++      createSequenceFile(length);
++      LOG.info("Accepted " + countRecords(0) + " records");
++    }
++    // clean up
++    fs.delete(inDir, true);
++  }
++
++  public static void main(String[] args) throws Exception {
++    TestMRSequenceFileInputFilter filter = new TestMRSequenceFileInputFilter();
++    filter.testRegexFilter();
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/input/TestNLineInputFormat.java b/src/test/org/apache/hadoop/mapreduce/lib/input/TestNLineInputFormat.java
+new file mode 100644
+index 0000000..47d0c74
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/input/TestNLineInputFormat.java
+@@ -0,0 +1,114 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.input;
++
++import java.io.*;
++import java.util.*;
++import junit.framework.TestCase;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.*;
++import org.apache.hadoop.io.*;
++import org.apache.hadoop.mapreduce.*;
++
++public class TestNLineInputFormat extends TestCase {
++  private static int MAX_LENGTH = 200;
++  
++  private static Configuration conf = new Configuration();
++  private static FileSystem localFs = null; 
++
++  static {
++    try {
++      localFs = FileSystem.getLocal(conf);
++    } catch (IOException e) {
++      throw new RuntimeException("init failure", e);
++    }
++  }
++
++  private static Path workDir = 
++    new Path(new Path(System.getProperty("test.build.data", "."), "data"),
++             "TestNLineInputFormat");
++  
++  public void testFormat() throws Exception {
++    Job job = new Job(conf);
++    Path file = new Path(workDir, "test.txt");
++
++    int seed = new Random().nextInt();
++    Random random = new Random(seed);
++
++    localFs.delete(workDir, true);
++    FileInputFormat.setInputPaths(job, workDir);
++    int numLinesPerMap = 5;
++    NLineInputFormat.setNumLinesPerSplit(job, numLinesPerMap);
++    // for a variety of lengths
++    for (int length = 0; length < MAX_LENGTH;
++         length += random.nextInt(MAX_LENGTH / 10) + 1) {
++      // create a file with length entries
++      Writer writer = new OutputStreamWriter(localFs.create(file));
++      try {
++        for (int i = 0; i < length; i++) {
++          writer.write(Integer.toString(i));
++          writer.write("\n");
++        }
++      } finally {
++        writer.close();
++      }
++      checkFormat(job, numLinesPerMap);
++    }
++  }
++
++  void checkFormat(Job job, int expectedN) 
++      throws IOException, InterruptedException {
++    NLineInputFormat format = new NLineInputFormat();
++    List<InputSplit> splits = format.getSplits(job);
++    // check all splits except last one
++    int count = 0;
++    for (int i = 0; i < splits.size() -1; i++) {
++      assertEquals("There are no split locations", 0,
++                   splits.get(i).getLocations().length);
++      TaskAttemptContext context = MapReduceTestUtil.
++        createDummyMapTaskAttemptContext(job.getConfiguration());
++      RecordReader<LongWritable, Text> reader = format.createRecordReader(
++        splits.get(i), context);
++      Class<?> clazz = reader.getClass();
++      assertEquals("reader class is LineRecordReader.", 
++        LineRecordReader.class, clazz);
++      MapContext<LongWritable, Text, LongWritable, Text> mcontext = 
++        new MapContext<LongWritable, Text, LongWritable, Text>(
++          job.getConfiguration(), context.getTaskAttemptID(), reader, null,
++          null, MapReduceTestUtil.createDummyReporter(), splits.get(i));
++      reader.initialize(splits.get(i), mcontext);
++         
++      try {
++        count = 0;
++        while (reader.nextKeyValue()) {
++          count++;
++        }
++      } finally {
++        reader.close();
++      }
++      assertEquals("number of lines in split is " + expectedN ,
++                   expectedN, count);
++    }
++  }
++  
++  public static void main(String[] args) throws Exception {
++    new TestNLineInputFormat().testFormat();
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/jobcontrol/TestControlledJob.java b/src/test/org/apache/hadoop/mapreduce/lib/jobcontrol/TestControlledJob.java
+new file mode 100644
+index 0000000..b893fe1
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/jobcontrol/TestControlledJob.java
+@@ -0,0 +1,46 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.jobcontrol;
++
++import static org.junit.Assert.assertFalse;
++
++import org.apache.hadoop.conf.Configuration;
++import org.junit.Test;
++
++/**
++ */
++public class TestControlledJob {
++  
++  @Test
++  public void testAddingDependingJobToRunningJobFails() throws Exception {
++    Configuration conf = new Configuration();
++    ControlledJob job1 = new ControlledJob(conf);
++    job1.setJobState(ControlledJob.State.RUNNING);
++    assertFalse(job1.addDependingJob(new ControlledJob(conf)));
++  }
++
++  @Test
++  public void testAddingDependingJobToCompletedJobFails() throws Exception {
++    Configuration conf = new Configuration();
++    ControlledJob job1 = new ControlledJob(conf);
++    job1.setJobState(ControlledJob.State.SUCCESS);
++    assertFalse(job1.addDependingJob(new ControlledJob(conf)));
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/jobcontrol/TestMapReduceJobControlWithMocks.java b/src/test/org/apache/hadoop/mapreduce/lib/jobcontrol/TestMapReduceJobControlWithMocks.java
+new file mode 100644
+index 0000000..cc72949
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/jobcontrol/TestMapReduceJobControlWithMocks.java
+@@ -0,0 +1,142 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.jobcontrol;
++
++import static junit.framework.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.verify;
++import static org.mockito.Mockito.when;
++
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.List;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapreduce.Job;
++import org.junit.Test;
++
++/**
++ * Tests the JobControl API using mock and stub Job instances.
++ */
++public class TestMapReduceJobControlWithMocks {
++
++  @Test
++  public void testSuccessfulJobs() throws Exception {
++    JobControl jobControl = new JobControl("Test");
++    
++    ControlledJob job1 = createSuccessfulControlledJob(jobControl);
++    ControlledJob job2 = createSuccessfulControlledJob(jobControl);
++    ControlledJob job3 = createSuccessfulControlledJob(jobControl, job1, job2);
++    ControlledJob job4 = createSuccessfulControlledJob(jobControl, job3);
++    
++    runJobControl(jobControl);
++    
++    assertEquals("Success list", 4, jobControl.getSuccessfulJobList().size());
++    assertEquals("Failed list", 0, jobControl.getFailedJobList().size());
++    
++    assertTrue(job1.getJobState() == ControlledJob.State.SUCCESS);
++    assertTrue(job2.getJobState() == ControlledJob.State.SUCCESS);
++    assertTrue(job3.getJobState() == ControlledJob.State.SUCCESS);
++    assertTrue(job4.getJobState() == ControlledJob.State.SUCCESS);
++    
++    jobControl.stop();
++  }
++  
++  @Test
++  public void testFailedJob() throws Exception {
++    JobControl jobControl = new JobControl("Test");
++    
++    ControlledJob job1 = createFailedControlledJob(jobControl);
++    ControlledJob job2 = createSuccessfulControlledJob(jobControl);
++    ControlledJob job3 = createSuccessfulControlledJob(jobControl, job1, job2);
++    ControlledJob job4 = createSuccessfulControlledJob(jobControl, job3);
++    
++    runJobControl(jobControl);
++    
++    assertEquals("Success list", 1, jobControl.getSuccessfulJobList().size());
++    assertEquals("Failed list", 3, jobControl.getFailedJobList().size());
++
++    assertTrue(job1.getJobState() == ControlledJob.State.FAILED);
++    assertTrue(job2.getJobState() == ControlledJob.State.SUCCESS);
++    assertTrue(job3.getJobState() == ControlledJob.State.DEPENDENT_FAILED);
++    assertTrue(job4.getJobState() == ControlledJob.State.DEPENDENT_FAILED);
++    
++    jobControl.stop();
++  }
++  
++  @Test
++  public void testKillJob() throws Exception {
++    JobControl jobControl = new JobControl("Test");
++    
++    ControlledJob job = createFailedControlledJob(jobControl);
++    
++    job.killJob();
++
++    // Verify that killJob() was called on the mock Job
++    verify(job.getJob()).killJob();
++  }
++  
++  private Job createJob(boolean complete, boolean successful)
++  	throws IOException, InterruptedException {
++    // Create a stub Job that responds in a controlled way
++    Job mockJob = mock(Job.class);
++    when(mockJob.getConfiguration()).thenReturn(new Configuration());
++    when(mockJob.isComplete()).thenReturn(complete);
++    when(mockJob.isSuccessful()).thenReturn(successful);
++    return mockJob;
++  }
++  
++  private ControlledJob createControlledJob(JobControl jobControl,
++      	boolean successful, ControlledJob... dependingJobs)
++      	throws IOException, InterruptedException {
++    List<ControlledJob> dependingJobsList = dependingJobs == null ? null :
++      Arrays.asList(dependingJobs);
++    ControlledJob job = new ControlledJob(createJob(true, successful),
++	dependingJobsList);
++    jobControl.addJob(job);
++    return job;
++  }
++  
++  private ControlledJob createSuccessfulControlledJob(JobControl jobControl,
++      ControlledJob... dependingJobs) throws IOException, InterruptedException {
++    return createControlledJob(jobControl, true, dependingJobs);
++  }
++
++  private ControlledJob createFailedControlledJob(JobControl jobControl,
++      ControlledJob... dependingJobs) throws IOException, InterruptedException {
++    return createControlledJob(jobControl, false, dependingJobs);
++  }
++
++  private void runJobControl(JobControl jobControl) {
++    Thread controller = new Thread(jobControl);
++    controller.start();
++    waitTillAllFinished(jobControl);
++  }
++
++  private void waitTillAllFinished(JobControl jobControl) {
++    while (!jobControl.allFinished()) {
++      try {
++        Thread.sleep(100);
++      } catch (InterruptedException e) {
++	// ignore
++      }
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/output/TestMRSequenceFileAsBinaryOutputFormat.java b/src/test/org/apache/hadoop/mapreduce/lib/output/TestMRSequenceFileAsBinaryOutputFormat.java
+new file mode 100644
+index 0000000..5ed5c17
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/output/TestMRSequenceFileAsBinaryOutputFormat.java
+@@ -0,0 +1,212 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.output;
++
++import java.io.IOException;
++import java.util.Random;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.*;
++import org.apache.hadoop.io.*;
++import org.apache.hadoop.io.SequenceFile.CompressionType;
++import org.apache.hadoop.mapred.InvalidJobConfException;
++import org.apache.hadoop.mapreduce.InputFormat;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.MapContext;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
++import org.apache.hadoop.mapreduce.OutputCommitter;
++import org.apache.hadoop.mapreduce.OutputFormat;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.RecordWriter;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
++
++import junit.framework.TestCase;
++import org.apache.commons.logging.*;
++
++public class TestMRSequenceFileAsBinaryOutputFormat extends TestCase {
++  private static final Log LOG =
++    LogFactory.getLog(TestMRSequenceFileAsBinaryOutputFormat.class.getName());
++
++  private static final int RECORDS = 10000;
++  
++  public void testBinary() throws IOException, InterruptedException {
++    Configuration conf = new Configuration();
++    Job job = new Job(conf);
++    
++    Path outdir = new Path(System.getProperty("test.build.data", "/tmp"),
++                    "outseq");
++    Random r = new Random();
++    long seed = r.nextLong();
++    r.setSeed(seed);
++
++    FileOutputFormat.setOutputPath(job, outdir);
++
++    SequenceFileAsBinaryOutputFormat.setSequenceFileOutputKeyClass(job, 
++                                          IntWritable.class );
++    SequenceFileAsBinaryOutputFormat.setSequenceFileOutputValueClass(job, 
++                                          DoubleWritable.class ); 
++
++    SequenceFileAsBinaryOutputFormat.setCompressOutput(job, true);
++    SequenceFileAsBinaryOutputFormat.setOutputCompressionType(job, 
++                                                       CompressionType.BLOCK);
++
++    BytesWritable bkey = new BytesWritable();
++    BytesWritable bval = new BytesWritable();
++
++    TaskAttemptContext context = 
++      MapReduceTestUtil.createDummyMapTaskAttemptContext(job.getConfiguration());
++    OutputFormat<BytesWritable, BytesWritable> outputFormat = 
++      new SequenceFileAsBinaryOutputFormat();
++    OutputCommitter committer = outputFormat.getOutputCommitter(context);
++    committer.setupJob(job);
++    RecordWriter<BytesWritable, BytesWritable> writer = outputFormat.
++      getRecordWriter(context);
++
++    IntWritable iwritable = new IntWritable();
++    DoubleWritable dwritable = new DoubleWritable();
++    DataOutputBuffer outbuf = new DataOutputBuffer();
++    LOG.info("Creating data by SequenceFileAsBinaryOutputFormat");
++    try {
++      for (int i = 0; i < RECORDS; ++i) {
++        iwritable = new IntWritable(r.nextInt());
++        iwritable.write(outbuf);
++        bkey.set(outbuf.getData(), 0, outbuf.getLength());
++        outbuf.reset();
++        dwritable = new DoubleWritable(r.nextDouble());
++        dwritable.write(outbuf);
++        bval.set(outbuf.getData(), 0, outbuf.getLength());
++        outbuf.reset();
++        writer.write(bkey, bval);
++      }
++    } finally {
++      writer.close(context);
++    }
++    committer.commitTask(context);
++    committer.commitJob(job);
++
++    InputFormat<IntWritable, DoubleWritable> iformat =
++      new SequenceFileInputFormat<IntWritable, DoubleWritable>();
++    int count = 0;
++    r.setSeed(seed);
++    SequenceFileInputFormat.setInputPaths(job, outdir);
++    LOG.info("Reading data by SequenceFileInputFormat");
++    for (InputSplit split : iformat.getSplits(job)) {
++      RecordReader<IntWritable, DoubleWritable> reader =
++        iformat.createRecordReader(split, context);
++      MapContext<IntWritable, DoubleWritable, BytesWritable, BytesWritable> 
++        mcontext = new MapContext<IntWritable, DoubleWritable,
++          BytesWritable, BytesWritable>(job.getConfiguration(), 
++          context.getTaskAttemptID(), reader, null, null, 
++          MapReduceTestUtil.createDummyReporter(), 
++          split);
++      reader.initialize(split, mcontext);
++      try {
++        int sourceInt;
++        double sourceDouble;
++        while (reader.nextKeyValue()) {
++          sourceInt = r.nextInt();
++          sourceDouble = r.nextDouble();
++          iwritable = reader.getCurrentKey();
++          dwritable = reader.getCurrentValue();
++          assertEquals(
++              "Keys don't match: " + "*" + iwritable.get() + ":" + 
++                                           sourceInt + "*",
++              sourceInt, iwritable.get());
++          assertTrue(
++              "Vals don't match: " + "*" + dwritable.get() + ":" +
++                                           sourceDouble + "*",
++              Double.compare(dwritable.get(), sourceDouble) == 0 );
++          ++count;
++        }
++      } finally {
++        reader.close();
++      }
++    }
++    assertEquals("Some records not found", RECORDS, count);
++  }
++
++  public void testSequenceOutputClassDefaultsToMapRedOutputClass() 
++         throws IOException {
++    Job job = new Job();
++    // Setting Random class to test getSequenceFileOutput{Key,Value}Class
++    job.setOutputKeyClass(FloatWritable.class);
++    job.setOutputValueClass(BooleanWritable.class);
++
++    assertEquals("SequenceFileOutputKeyClass should default to ouputKeyClass", 
++      FloatWritable.class,
++      SequenceFileAsBinaryOutputFormat.getSequenceFileOutputKeyClass(job));
++    assertEquals("SequenceFileOutputValueClass should default to " 
++      + "ouputValueClass", 
++      BooleanWritable.class,
++      SequenceFileAsBinaryOutputFormat.getSequenceFileOutputValueClass(job));
++
++    SequenceFileAsBinaryOutputFormat.setSequenceFileOutputKeyClass(job, 
++      IntWritable.class );
++    SequenceFileAsBinaryOutputFormat.setSequenceFileOutputValueClass(job, 
++      DoubleWritable.class ); 
++
++    assertEquals("SequenceFileOutputKeyClass not updated", 
++      IntWritable.class,
++      SequenceFileAsBinaryOutputFormat.getSequenceFileOutputKeyClass(job));
++    assertEquals("SequenceFileOutputValueClass not updated", 
++      DoubleWritable.class,
++      SequenceFileAsBinaryOutputFormat.getSequenceFileOutputValueClass(job));
++  }
++
++  public void testcheckOutputSpecsForbidRecordCompression() 
++      throws IOException {
++    Job job = new Job();
++    FileSystem fs = FileSystem.getLocal(job.getConfiguration());
++    Path outputdir = new Path(System.getProperty("test.build.data", "/tmp") 
++                              + "/output");
++    fs.delete(outputdir, true);
++
++    // Without outputpath, FileOutputFormat.checkoutputspecs will throw 
++    // InvalidJobConfException
++    FileOutputFormat.setOutputPath(job, outputdir);
++
++    // SequenceFileAsBinaryOutputFormat doesn't support record compression
++    // It should throw an exception when checked by checkOutputSpecs
++    SequenceFileAsBinaryOutputFormat.setCompressOutput(job, true);
++
++    SequenceFileAsBinaryOutputFormat.setOutputCompressionType(job, 
++      CompressionType.BLOCK);
++    try {
++      new SequenceFileAsBinaryOutputFormat().checkOutputSpecs(job);
++    } catch (Exception e) {
++      fail("Block compression should be allowed for " 
++        + "SequenceFileAsBinaryOutputFormat:Caught " + e.getClass().getName());
++    }
++
++    SequenceFileAsBinaryOutputFormat.setOutputCompressionType(job, 
++      CompressionType.RECORD);
++    try {
++      new SequenceFileAsBinaryOutputFormat().checkOutputSpecs(job);
++      fail("Record compression should not be allowed for " 
++        + "SequenceFileAsBinaryOutputFormat");
++    } catch (InvalidJobConfException ie) {
++      // expected
++    } catch (Exception e) {
++      fail("Expected " + InvalidJobConfException.class.getName() 
++        + "but caught " + e.getClass().getName() );
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/partition/TestInputSampler.java b/src/test/org/apache/hadoop/mapreduce/lib/partition/TestInputSampler.java
+new file mode 100644
+index 0000000..0850d62
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/partition/TestInputSampler.java
+@@ -0,0 +1,149 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapreduce.lib.partition;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.List;
++
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++import org.apache.hadoop.io.IntWritable;
++import org.apache.hadoop.io.NullWritable;
++import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.mapreduce.InputFormat;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++
++public class TestInputSampler {
++
++  static class SequentialSplit extends InputSplit {
++    private int i;
++    SequentialSplit(int i) {
++      this.i = i;
++    }
++    public long getLength() { return 0; }
++    public String[] getLocations() { return new String[0]; }
++    public int getInit() { return i; }
++  }
++
++  static class TestInputSamplerIF
++      extends InputFormat<IntWritable,NullWritable> {
++
++    final int maxDepth;
++    final ArrayList<InputSplit> splits = new ArrayList<InputSplit>();
++
++    TestInputSamplerIF(int maxDepth, int numSplits, int... splitInit) {
++      this.maxDepth = maxDepth;
++      assert splitInit.length == numSplits;
++      for (int i = 0; i < numSplits; ++i) {
++        splits.add(new SequentialSplit(splitInit[i]));
++      }
++    }
++
++    public List<InputSplit> getSplits(JobContext context)
++        throws IOException, InterruptedException {
++      return splits;
++    }
++
++    public RecordReader<IntWritable,NullWritable> createRecordReader(
++        final InputSplit split, TaskAttemptContext context)
++        throws IOException, InterruptedException {
++      return new RecordReader<IntWritable,NullWritable>() {
++        private int maxVal;
++        private final IntWritable i = new IntWritable();
++        public void initialize(InputSplit split, TaskAttemptContext context)
++            throws IOException, InterruptedException {
++          i.set(((SequentialSplit)split).getInit() - 1);
++          maxVal = i.get() + maxDepth + 1;
++        }
++        public boolean nextKeyValue() {
++          i.set(i.get() + 1);
++          return i.get() < maxVal;
++        }
++        public IntWritable getCurrentKey() { return i; }
++        public NullWritable getCurrentValue() { return NullWritable.get(); }
++        public float getProgress() { return 1.0f; }
++        public void close() { }
++      };
++    }
++
++  }
++
++  /**
++   * Verify SplitSampler contract, that an equal number of records are taken
++   * from the first splits.
++   */
++  @Test
++  @SuppressWarnings("unchecked") // IntWritable comparator not typesafe
++  public void testSplitSampler() throws Exception {
++    final int TOT_SPLITS = 15;
++    final int NUM_SPLITS = 5;
++    final int STEP_SAMPLE = 5;
++    final int NUM_SAMPLES = NUM_SPLITS * STEP_SAMPLE;
++    InputSampler.Sampler<IntWritable,NullWritable> sampler =
++      new InputSampler.SplitSampler<IntWritable,NullWritable>(
++          NUM_SAMPLES, NUM_SPLITS);
++    int inits[] = new int[TOT_SPLITS];
++    for (int i = 0; i < TOT_SPLITS; ++i) {
++      inits[i] = i * STEP_SAMPLE;
++    }
++    Job ignored = new Job();
++    Object[] samples = sampler.getSample(
++        new TestInputSamplerIF(100000, TOT_SPLITS, inits), ignored);
++    assertEquals(NUM_SAMPLES, samples.length);
++    Arrays.sort(samples, new IntWritable.Comparator());
++    for (int i = 0; i < NUM_SAMPLES; ++i) {
++      assertEquals(i, ((IntWritable)samples[i]).get());
++    }
++  }
++
++  /**
++   * Verify IntervalSampler contract, that samples are taken at regular
++   * intervals from the given splits.
++   */
++  @Test
++  @SuppressWarnings("unchecked") // IntWritable comparator not typesafe
++  public void testIntervalSampler() throws Exception {
++    final int TOT_SPLITS = 16;
++    final int PER_SPLIT_SAMPLE = 4;
++    final int NUM_SAMPLES = TOT_SPLITS * PER_SPLIT_SAMPLE;
++    final double FREQ = 1.0 / TOT_SPLITS;
++    InputSampler.Sampler<IntWritable,NullWritable> sampler =
++      new InputSampler.IntervalSampler<IntWritable,NullWritable>(
++          FREQ, NUM_SAMPLES);
++    int inits[] = new int[TOT_SPLITS];
++    for (int i = 0; i < TOT_SPLITS; ++i) {
++      inits[i] = i;
++    }
++    Job ignored = new Job();
++    Object[] samples = sampler.getSample(new TestInputSamplerIF(
++          NUM_SAMPLES, TOT_SPLITS, inits), ignored);
++    assertEquals(NUM_SAMPLES, samples.length);
++    Arrays.sort(samples, new IntWritable.Comparator());
++    for (int i = 0; i < NUM_SAMPLES; ++i) {
++      assertEquals(i, ((IntWritable)samples[i]).get());
++    }
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/partition/TestTotalOrderPartitioner.java b/src/test/org/apache/hadoop/mapreduce/lib/partition/TestTotalOrderPartitioner.java
+new file mode 100644
+index 0000000..644a411
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/partition/TestTotalOrderPartitioner.java
+@@ -0,0 +1,187 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.partition;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Arrays;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.NullWritable;
++import org.apache.hadoop.io.RawComparator;
++import org.apache.hadoop.io.SequenceFile;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.io.WritableComparator;
++import org.apache.hadoop.io.WritableUtils;
++
++public class TestTotalOrderPartitioner extends TestCase {
++
++  private static final Text[] splitStrings = new Text[] {
++    // -inf            // 0
++    new Text("aabbb"), // 1
++    new Text("babbb"), // 2
++    new Text("daddd"), // 3
++    new Text("dddee"), // 4
++    new Text("ddhee"), // 5
++    new Text("dingo"), // 6
++    new Text("hijjj"), // 7
++    new Text("n"),     // 8
++    new Text("yak"),   // 9
++  };
++
++  static class Check<T> {
++    T data;
++    int part;
++    Check(T data, int part) {
++      this.data = data;
++      this.part = part;
++    }
++  }
++
++  private static final ArrayList<Check<Text>> testStrings =
++    new ArrayList<Check<Text>>();
++  static {
++    testStrings.add(new Check<Text>(new Text("aaaaa"), 0));
++    testStrings.add(new Check<Text>(new Text("aaabb"), 0));
++    testStrings.add(new Check<Text>(new Text("aabbb"), 1));
++    testStrings.add(new Check<Text>(new Text("aaaaa"), 0));
++    testStrings.add(new Check<Text>(new Text("babbb"), 2));
++    testStrings.add(new Check<Text>(new Text("baabb"), 1));
++    testStrings.add(new Check<Text>(new Text("yai"), 8));
++    testStrings.add(new Check<Text>(new Text("yak"), 9));
++    testStrings.add(new Check<Text>(new Text("z"), 9));
++    testStrings.add(new Check<Text>(new Text("ddngo"), 5));
++    testStrings.add(new Check<Text>(new Text("hi"), 6));
++  };
++
++  private static <T extends WritableComparable<?>> Path writePartitionFile(
++      String testname, Configuration conf, T[] splits) throws IOException {
++    final FileSystem fs = FileSystem.getLocal(conf);
++    final Path testdir = new Path(System.getProperty("test.build.data", "/tmp")
++                                 ).makeQualified(fs);
++    Path p = new Path(testdir, testname + "/_partition.lst");
++    TotalOrderPartitioner.setPartitionFile(conf, p);
++    conf.setInt("mapred.reduce.tasks", splits.length + 1);
++    SequenceFile.Writer w = null;
++    try {
++      w = SequenceFile.createWriter(fs, conf, p,
++          splits[0].getClass(), NullWritable.class,
++          SequenceFile.CompressionType.NONE);
++      for (int i = 0; i < splits.length; ++i) {
++        w.append(splits[i], NullWritable.get());
++      }
++    } finally {
++      if (null != w)
++        w.close();
++    }
++    return p;
++  }
++
++  public void testTotalOrderMemCmp() throws Exception {
++    TotalOrderPartitioner<Text,NullWritable> partitioner =
++      new TotalOrderPartitioner<Text,NullWritable>();
++    Configuration conf = new Configuration();
++    Path p = TestTotalOrderPartitioner.<Text>writePartitionFile(
++        "totalordermemcmp", conf, splitStrings);
++    conf.setClass("mapred.mapoutput.key.class", Text.class, Object.class);
++    try {
++      partitioner.setConf(conf);
++      NullWritable nw = NullWritable.get();
++      for (Check<Text> chk : testStrings) {
++        assertEquals(chk.data.toString(), chk.part,
++            partitioner.getPartition(chk.data, nw, splitStrings.length + 1));
++      }
++    } finally {
++      p.getFileSystem(conf).delete(p, true);
++    }
++  }
++
++  public void testTotalOrderBinarySearch() throws Exception {
++    TotalOrderPartitioner<Text,NullWritable> partitioner =
++      new TotalOrderPartitioner<Text,NullWritable>();
++    Configuration conf = new Configuration();
++    Path p = TestTotalOrderPartitioner.<Text>writePartitionFile(
++        "totalorderbinarysearch", conf, splitStrings);
++    conf.setBoolean(TotalOrderPartitioner.NATURAL_ORDER, false);
++    conf.setClass("mapred.mapoutput.key.class", Text.class, Object.class);
++    try {
++      partitioner.setConf(conf);
++      NullWritable nw = NullWritable.get();
++      for (Check<Text> chk : testStrings) {
++        assertEquals(chk.data.toString(), chk.part,
++            partitioner.getPartition(chk.data, nw, splitStrings.length + 1));
++      }
++    } finally {
++      p.getFileSystem(conf).delete(p, true);
++    }
++  }
++
++  public static class ReverseStringComparator implements RawComparator<Text> {
++    public int compare(Text a, Text b) {
++      return -a.compareTo(b);
++    }
++    public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2) {
++      int n1 = WritableUtils.decodeVIntSize(b1[s1]);
++      int n2 = WritableUtils.decodeVIntSize(b2[s2]);
++      return -1 * WritableComparator.compareBytes(b1, s1+n1, l1-n1,
++                                                  b2, s2+n2, l2-n2);
++    }
++  }
++
++  public void testTotalOrderCustomComparator() throws Exception {
++    TotalOrderPartitioner<Text,NullWritable> partitioner =
++      new TotalOrderPartitioner<Text,NullWritable>();
++    Configuration conf = new Configuration();
++    Text[] revSplitStrings = Arrays.copyOf(splitStrings, splitStrings.length);
++    Arrays.sort(revSplitStrings, new ReverseStringComparator());
++    Path p = TestTotalOrderPartitioner.<Text>writePartitionFile(
++        "totalordercustomcomparator", conf, revSplitStrings);
++    conf.setBoolean(TotalOrderPartitioner.NATURAL_ORDER, false);
++    conf.setClass("mapred.mapoutput.key.class", Text.class, Object.class);
++    conf.setClass("mapred.output.key.comparator.class",
++      ReverseStringComparator.class, RawComparator.class);
++    ArrayList<Check<Text>> revCheck = new ArrayList<Check<Text>>();
++    revCheck.add(new Check<Text>(new Text("aaaaa"), 9));
++    revCheck.add(new Check<Text>(new Text("aaabb"), 9));
++    revCheck.add(new Check<Text>(new Text("aabbb"), 9));
++    revCheck.add(new Check<Text>(new Text("aaaaa"), 9));
++    revCheck.add(new Check<Text>(new Text("babbb"), 8));
++    revCheck.add(new Check<Text>(new Text("baabb"), 8));
++    revCheck.add(new Check<Text>(new Text("yai"), 1));
++    revCheck.add(new Check<Text>(new Text("yak"), 1));
++    revCheck.add(new Check<Text>(new Text("z"), 0));
++    revCheck.add(new Check<Text>(new Text("ddngo"), 4));
++    revCheck.add(new Check<Text>(new Text("hi"), 3));
++    try {
++      partitioner.setConf(conf);
++      NullWritable nw = NullWritable.get();
++      for (Check<Text> chk : revCheck) {
++        assertEquals(chk.data.toString(), chk.part,
++            partitioner.getPartition(chk.data, nw, splitStrings.length + 1));
++      }
++    } finally {
++      p.getFileSystem(conf).delete(p, true);
++    }
++  }
++}
+-- 
+1.7.0.4
+

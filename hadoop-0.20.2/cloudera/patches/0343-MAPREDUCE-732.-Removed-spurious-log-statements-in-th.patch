@@ -1,0 +1,36 @@
+From 5c24b7d50ba0960f694bce33332e61fe7c5abe68 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:41 -0700
+Subject: [PATCH 0343/1179] MAPREDUCE-732. Removed spurious log statements in the node blacklisting logic.
+
+Author: Sreekanth Ramakrishnan
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |   11 +++--------
+ 1 files changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index aab6111..6cd3f52 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -631,14 +631,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       FaultInfo fi = getFaultInfo(hostName, true);
+       boolean blackListed = fi.isBlacklisted();
+       if(blackListed) {
+-        if(fi.getReasonforblacklisting().contains(rfb)) {
+-          return;
+-        } else {
+-          LOG.info("Adding blacklisted reason for tracker : " + hostName 
+-              + " Reason for blacklisting is : " + rfb);
+-          fi.addBlackListedReason(rfb, reason);
+-        }
+-        return;
++        LOG.info("Adding blacklisted reason for tracker : " + hostName 
++            + " Reason for blacklisting is : " + rfb);
++        fi.addBlackListedReason(rfb, reason);
+       } else {
+         LOG.info("Blacklisting tracker : " + hostName 
+             + " Reason for blacklisting is : " + rfb);
+-- 
+1.7.0.4
+

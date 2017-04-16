@@ -1,0 +1,38 @@
+From 5dfcc6d2d7806636c6237996e1b28a00ba075b4b Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:43:05 -0800
+Subject: [PATCH 0198/1179] HADOOP-6503. contrib projects should pull in the ivy-fetched libs from the root project
+
+Description: On branch-20 currently, I get an error just running "ant contrib -Dtestcase=TestHdfsProxy". In a full "ant test" build sometimes this doesn't appear to be an issue. The problem is that the contrib projects don't automatically pull in the dependencies of the "Hadoop" ivy project. Thus, they each have to declare all of the common dependencies like commons-cli, etc. Some are missing and this causes test failures.
+Reason: Build system improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ src/contrib/build-contrib.xml |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/build-contrib.xml b/src/contrib/build-contrib.xml
+index c8381e5..1014fce 100644
+--- a/src/contrib/build-contrib.xml
++++ b/src/contrib/build-contrib.xml
+@@ -76,6 +76,7 @@
+   <property name="build.ivy.lib.dir" location="${build.ivy.dir}/lib" />
+   <property name="build.ivy.report.dir" location="${build.ivy.dir}/report" />
+   <property name="common.ivy.lib.dir" location="${build.ivy.lib.dir}/${ant.project.name}/common"/> 
++  <property name="hadoop.ivy.lib.dir" location="${build.ivy.lib.dir}/Hadoop/common"/>
+ 
+   <!--this is the naming policy for artifacts we want pulled down-->
+   <property name="ivy.artifact.retrieve.pattern"
+@@ -86,6 +87,9 @@
+     <pathelement location="${build.classes}"/>
+     <fileset refid="lib.jars"/>
+     <pathelement location="${hadoop.root}/build/classes"/>
++    <fileset dir="${hadoop.ivy.lib.dir}">
++      <include name="*.jar" />
++    </fileset>
+     <fileset dir="${hadoop.root}/lib">
+       <include name="**/*.jar" />
+     </fileset>
+-- 
+1.7.0.4
+

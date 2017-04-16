@@ -1,0 +1,109 @@
+From 689eb75cdd88b4b7a080ab3883f2a317cfb2c664 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 20 Apr 2010 01:08:10 +0530
+Subject: [PATCH 0617/1179] HDFS-1010. HDFSProxy: Retrieve group information from UnixUserGroupInformation instead of LdapEntry
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439437/HDFS-1010-bp-y20s.patch
+Author: Srikanth Sundarrajan
+Ref: YDH
+---
+ .../apache/hadoop/hdfsproxy/LdapIpDirFilter.java   |   18 +++---------------
+ 1 files changed, 3 insertions(+), 15 deletions(-)
+
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
+index e586246..b07f9a3 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
+@@ -42,19 +42,16 @@ public class LdapIpDirFilter implements Filter {
+   private static String hdfsIpSchemaStr;
+   private static String hdfsIpSchemaStrPrefix;
+   private static String hdfsUidSchemaStr;
+-  private static String hdfsGroupSchemaStr;
+   private static String hdfsPathSchemaStr;
+ 
+   private InitialLdapContext lctx;
+ 
+   private class LdapRoleEntry {
+     String userId;
+-    String groupNames;
+     ArrayList<Path> paths;
+ 
+-    void init(String userId, String groupNames, ArrayList<Path> paths) {
++    void init(String userId, ArrayList<Path> paths) {
+       this.userId = userId;
+-      this.groupNames = groupNames;
+       this.paths = paths;
+     }
+ 
+@@ -65,7 +62,6 @@ public class LdapIpDirFilter implements Filter {
+     @Override
+     public String toString() {
+       return "LdapRoleEntry{" +
+-          "groupName='" + groupNames + '\'' +
+           ", userId='" + userId + '\'' +
+           ", paths=" + paths +
+           '}';
+@@ -78,7 +74,6 @@ public class LdapIpDirFilter implements Filter {
+     hdfsIpSchemaStr = "uniqueMember";
+     hdfsIpSchemaStrPrefix = "cn=";
+     hdfsUidSchemaStr = "uid";
+-    hdfsGroupSchemaStr = "userClass";
+     hdfsPathSchemaStr = "documentLocation";
+     lctx = ctx;
+   }
+@@ -122,7 +117,6 @@ public class LdapIpDirFilter implements Filter {
+       hdfsIpSchemaStrPrefix = conf.get(
+           "hdfsproxy.ldap.ip.schema.string.prefix", "cn=");
+       hdfsUidSchemaStr = conf.get("hdfsproxy.ldap.uid.schema.string", "uid");
+-      hdfsGroupSchemaStr = conf.get("hdfsproxy.ldap.group.schema.string", "userClass");
+       hdfsPathSchemaStr = conf.get("hdfsproxy.ldap.hdfs.path.schema.string",
+           "documentLocation");
+     }
+@@ -182,8 +176,6 @@ public class LdapIpDirFilter implements Filter {
+     // different classloaders in different war file, we have to use String attribute.
+     rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.userID",
+         ldapent.userId);
+-    rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.role",
+-        ldapent.groupNames);
+     rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.paths",
+         ldapent.paths);
+ 
+@@ -204,16 +196,14 @@ public class LdapIpDirFilter implements Filter {
+     Attributes matchAttrs = new BasicAttributes(true);
+     matchAttrs.put(new BasicAttribute(hdfsIpSchemaStr, ipMember));
+     matchAttrs.put(new BasicAttribute(hdfsUidSchemaStr));
+-    matchAttrs.put(new BasicAttribute(hdfsGroupSchemaStr));
+     matchAttrs.put(new BasicAttribute(hdfsPathSchemaStr));
+ 
+-    String[] attrIDs = { hdfsUidSchemaStr, hdfsGroupSchemaStr, hdfsPathSchemaStr };
++    String[] attrIDs = { hdfsUidSchemaStr, hdfsPathSchemaStr };
+ 
+     NamingEnumeration<SearchResult> results = lctx.search(baseName, matchAttrs,
+         attrIDs);
+     if (results.hasMore()) {
+       String userId = null;
+-      String groupNames = null;
+       ArrayList<Path> paths = new ArrayList<Path>();
+       SearchResult sr = results.next();
+       Attributes attrs = sr.getAttributes();
+@@ -221,8 +211,6 @@ public class LdapIpDirFilter implements Filter {
+         Attribute attr = (Attribute) ne.next();
+         if (hdfsUidSchemaStr.equalsIgnoreCase(attr.getID())) {
+           userId = (String) attr.get();
+-        } else if (hdfsGroupSchemaStr.equalsIgnoreCase(attr.getID())) {
+-          groupNames = (String) attr.get();
+         } else if (hdfsPathSchemaStr.equalsIgnoreCase(attr.getID())) {
+           for (NamingEnumeration e = attr.getAll(); e.hasMore();) {
+             String pathStr = (String) e.next();
+@@ -230,7 +218,7 @@ public class LdapIpDirFilter implements Filter {
+           }
+         }
+       }
+-      ldapent.init(userId, groupNames, paths);
++      ldapent.init(userId, paths);
+       if (LOG.isDebugEnabled()) LOG.debug(ldapent);
+       return true;
+     }
+-- 
+1.7.0.4
+

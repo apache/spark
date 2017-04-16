@@ -1,0 +1,85 @@
+From c9d77f6e1fdbb24b45675e363e3bd5111533893a Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:24:10 -0800
+Subject: [PATCH 0145/1179] HDFS-464. Memory leaks in libhdfs
+
+Description: hdfsExists does not call destroyLocalReference for jPath anytime,<br/>
+hdfsDelete does not call it when it fails, and<br/>
+hdfsRename does not call it for jOldPath and jNewPath when it fails
+Reason: bugfix
+Author: Christian Kunz
+Ref: UNKNOWN
+---
+ src/c++/libhdfs/hdfs.c |   11 +++++++++++
+ 1 files changed, 11 insertions(+), 0 deletions(-)
+
+diff --git a/src/c++/libhdfs/hdfs.c b/src/c++/libhdfs/hdfs.c
+index 81e03b0..6e5eab2 100644
+--- a/src/c++/libhdfs/hdfs.c
++++ b/src/c++/libhdfs/hdfs.c
+@@ -218,6 +218,7 @@ hdfsFS hdfsConnectAsUser(const char* host, tPort port, const char *user , const
+       if (groups == NULL || groups_size <= 0) {
+         fprintf(stderr, "ERROR: groups must not be empty/null\n");
+         errno = EINVAL;
++        destroyLocalReference(env, jConfiguration);
+         return NULL;
+       }
+ 
+@@ -226,6 +227,8 @@ hdfsFS hdfsConnectAsUser(const char* host, tPort port, const char *user , const
+       if (jGroups == NULL) {
+         errno = EINTERNAL;
+         fprintf(stderr, "ERROR: could not construct groups array\n");
++        destroyLocalReference(env, jConfiguration);
++        destroyLocalReference(env, jUserString);
+         return NULL;
+       }
+ 
+@@ -401,6 +404,7 @@ hdfsFS hdfsConnectAsUserNewInstance(const char* host, tPort port, const char *us
+       if (groups == NULL || groups_size <= 0) {
+         fprintf(stderr, "ERROR: groups must not be empty/null\n");
+         errno = EINVAL;
++        destroyLocalReference(env, jConfiguration);
+         return NULL;
+       }
+ 
+@@ -409,6 +413,8 @@ hdfsFS hdfsConnectAsUserNewInstance(const char* host, tPort port, const char *us
+       if (jGroups == NULL) {
+         errno = EINTERNAL;
+         fprintf(stderr, "ERROR: could not construct groups array\n");
++        destroyLocalReference(env, jConfiguration);
++        destroyLocalReference(env, jUserString);
+         return NULL;
+       }
+ 
+@@ -812,9 +818,11 @@ int hdfsExists(hdfsFS fs, const char *path)
+                      jPath) != 0) {
+         errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
+                                    "FileSystem::exists");
++        destroyLocalReference(env, jPath);
+         return -1;
+     }
+ 
++    destroyLocalReference(env, jPath);
+     return jVal.z ? 0 : -1;
+ }
+ 
+@@ -1330,6 +1338,7 @@ int hdfsDelete(hdfsFS fs, const char* path)
+                      jPath) != 0) {
+         errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
+                                    "FileSystem::delete");
++        destroyLocalReference(env, jPath);
+         return -1;
+     }
+ 
+@@ -1380,6 +1389,8 @@ int hdfsRename(hdfsFS fs, const char* oldPath, const char* newPath)
+                      jOldPath, jNewPath) != 0) {
+         errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
+                                    "FileSystem::rename");
++        destroyLocalReference(env, jOldPath);
++        destroyLocalReference(env, jNewPath);
+         return -1;
+     }
+ 
+-- 
+1.7.0.4
+

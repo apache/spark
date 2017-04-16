@@ -1,0 +1,106 @@
+From ae699cda01c093097ae723224553773247577aa2 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:52:32 -0800
+Subject: [PATCH 0220/1179] HDFS-961. dfs_readdir incorrectly parses paths
+
+Description: fuse-dfs dfs_readdir assumes that DistributedFileSystem#listStatus returns Paths with the same scheme/authority as the dfs.name.dir used to connect. If NameNode.DEFAULT_PORT port is used listStatus returns Paths that have authorities without the port (see <a href="http://issues.apache.org/jira/browse/HDFS-960" title="DistributedFileSystem#makeQualified port inconsistency">HDFS-960</a>), which breaks the following code.
+
+<div class="code panel" style="border-width: 1px;"><div class="codeContent panelContent">
+<pre class="code-java"><span class="code-comment">// hack city: todo fix the below to something nicer and more maintainable but
+</span><span class="code-comment">// with good performance
+</span><span class="code-comment">// strip off the path but be careful <span class="code-keyword">if</span> the path is solely '/'
+</span><span class="code-comment">// NOTE - <span class="code-keyword">this</span> API started returning filenames as full dfs uris
+</span><span class="code-keyword">const</span> <span class="code-object">char</span> *<span class="code-keyword">const</span> str = info[i].mName + dfs-&gt;dfs_uri_len + path_len + ((path_len == 1 &amp;&amp; *path == '/') ? 0 : 1);</pre>
+</div></div>
+
+<p>Let's make the path parsing here more robust. listStatus returns normalized paths so we can find the start of the path by searching for the 3rd slash. A more long term solution is to have hdfsFileInfo maintain a path object or at least pointers to the relevant URI components.</p>
+Reason: bugfix
+Author: Eli Collins
+Ref: UNKNOWN
+---
+ src/contrib/fuse-dfs/src/fuse_context_handle.h |    4 ----
+ src/contrib/fuse-dfs/src/fuse_impls_readdir.c  |   19 +++++++++++--------
+ src/contrib/fuse-dfs/src/fuse_init.c           |    7 +------
+ 3 files changed, 12 insertions(+), 18 deletions(-)
+
+diff --git a/src/contrib/fuse-dfs/src/fuse_context_handle.h b/src/contrib/fuse-dfs/src/fuse_context_handle.h
+index 73abf39..a67855d 100644
+--- a/src/contrib/fuse-dfs/src/fuse_context_handle.h
++++ b/src/contrib/fuse-dfs/src/fuse_context_handle.h
+@@ -39,10 +39,6 @@ typedef struct dfs_context_struct {
+   int direct_io;
+   char **protectedpaths;
+   size_t rdbuffer_size;
+-  // todo:
+-  // total hack city - use this to strip off the dfs url from the filenames. (in fuse_impls_readdir.c)
+-  char dfs_uri[1024];
+-  int dfs_uri_len;
+ } dfs_context;
+ 
+ #endif
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_readdir.c b/src/contrib/fuse-dfs/src/fuse_impls_readdir.c
+index 5f29463..ea1068f 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_readdir.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_readdir.c
+@@ -46,9 +46,10 @@ int dfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+     return -EIO;
+   }
+ 
+-  // call dfs to read the dir
++  // Read dirents. Calling a variant that just returns the final path
++  // component (HDFS-975) would save us from parsing it out below.
+   int numEntries = 0;
+-  hdfsFileInfo *info = hdfsListDirectory(userFS,path,&numEntries);
++  hdfsFileInfo *info = hdfsListDirectory(userFS, path, &numEntries);
+   userFS = NULL;
+ 
+   // NULL means either the directory doesn't exist or maybe IO error.
+@@ -59,7 +60,6 @@ int dfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+   int i ;
+   for (i = 0; i < numEntries; i++) {
+ 
+-    // check the info[i] struct
+     if (NULL == info[i].mName) {
+       syslog(LOG_ERR,"ERROR: for <%s> info[%d].mName==NULL %s:%d", path, i, __FILE__,__LINE__);
+       continue;
+@@ -68,11 +68,14 @@ int dfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+     struct stat st;
+     fill_stat_structure(&info[i], &st);
+ 
+-    // hack city: todo fix the below to something nicer and more maintainable but
+-    // with good performance
+-    // strip off the path but be careful if the path is solely '/'
+-    // NOTE - this API started returning filenames as full dfs uris
+-    const char *const str = info[i].mName + dfs->dfs_uri_len + path_len + ((path_len == 1 && *path == '/') ? 0 : 1);
++    // Find the final path component
++    const char *str = strrchr(info[i].mName, '/');
++    if (NULL == str) {
++      syslog(LOG_ERR, "ERROR: invalid URI %s %s:%d",
++             info[i].mName, __FILE__,__LINE__);
++      continue;
++    }
++    str++;
+ 
+     // pack this entry into the fuse buffer
+     int res = 0;
+diff --git a/src/contrib/fuse-dfs/src/fuse_init.c b/src/contrib/fuse-dfs/src/fuse_init.c
+index 902a380..0e1edfc 100644
+--- a/src/contrib/fuse-dfs/src/fuse_init.c
++++ b/src/contrib/fuse-dfs/src/fuse_init.c
+@@ -112,12 +112,7 @@ void *dfs_init()
+   dfs->rdbuffer_size         = options.rdbuffer_size;
+   dfs->direct_io             = options.direct_io;
+ 
+-  bzero(dfs->dfs_uri,0);
+-  sprintf(dfs->dfs_uri,"dfs://%s:%d/",dfs->nn_hostname,dfs->nn_port);
+-  dfs->dfs_uri_len = strlen(dfs->dfs_uri);
+-
+-  // use ERR level to ensure it makes it into the log.
+-  syslog(LOG_ERR, "mounting %s", dfs->dfs_uri);
++  syslog(LOG_INFO, "mounting %s:%d", dfs->nn_hostname, dfs->nn_port);
+ 
+   init_protectedpaths(dfs);
+   assert(dfs->protectedpaths != NULL);
+-- 
+1.7.0.4
+

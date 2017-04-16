@@ -1,0 +1,27 @@
+From 0dee7a8262a12b12e448a4342b636842646c16d0 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 26 Aug 2010 20:15:54 -0700
+Subject: [PATCH 0676/1179] HADOOP-6833. IPC leaks call parameters when exceptions thrown.
+
+Reason: Bug
+Author: Todd Lipcon
+Ref: CDH-2063
+---
+ src/core/org/apache/hadoop/ipc/Client.java |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index 326b902..3c74857 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -792,6 +792,7 @@ public class Client {
+         } else if (state == Status.ERROR.state) {
+           call.setException(new RemoteException(WritableUtils.readString(in),
+                                                 WritableUtils.readString(in)));
++          calls.remove(id);
+         } else if (state == Status.FATAL.state) {
+           // Close the connection
+           markClosed(new RemoteException(WritableUtils.readString(in), 
+-- 
+1.7.0.4
+

@@ -1,0 +1,26 @@
+From 1ff4b594c6f9926cf49842672740a229bf06491d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 16 Feb 2011 11:15:12 -0800
+Subject: [PATCH 0885/1179] Amend MAPREDUCE-2178. Add log message when task JVM fails to fork
+
+Author: Todd Lipcon
+Ref: CDH-2671
+---
+ .../hadoop/mapred/DefaultTaskController.java       |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+index 6ae1604..d7882a6 100644
+--- a/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+@@ -126,6 +126,7 @@ public class DefaultTaskController extends TaskController {
+       shExec.execute();
+     } catch (Exception e) {
+       if (shExec == null) {
++        LOG.error("Unable to launch task JVM", e);
+         return -1;
+       }
+       int exitCode = shExec.getExitCode();
+-- 
+1.7.0.4
+

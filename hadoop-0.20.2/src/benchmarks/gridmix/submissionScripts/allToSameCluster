@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+PROCESSES=""
+
+$GRID_MIX_HOME/submissionScripts/maxentToSameCluster 2>&1 > maxentToSameCluster.out &
+PROCESSES="${PROCESSES} $!"
+sleep 20
+$GRID_MIX_HOME/submissionScripts/textSortToSameCluster 2>&1 > textSortToSameCluster.out  &
+PROCESSES="${PROCESSES} $!"
+sleep 20
+$GRID_MIX_HOME/submissionScripts/monsterQueriesToSameCluster 2>&1 > monsterQueriesToSameCluster.out &
+PROCESSES="${PROCESSES} $!"
+sleep 20
+$GRID_MIX_HOME/submissionScripts/webdataScanToSameCluster 2>&1 > webdataScanToSameCluster.out &
+PROCESSES="${PROCESSES} $!"
+sleep 20
+$GRID_MIX_HOME/submissionScripts/webdataSortToSameCluster  2>&1 > webdataSortToSameCluster.out &
+PROCESSES="${PROCESSES} $!"
+
+echo "Waiting for processes: ${PROCESSES}"
+for APROC in ${PROCESSES}; do
+  wait ${APROC}
+done
+

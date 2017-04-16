@@ -1,0 +1,28 @@
+From 67048e890eff6c9cd548dcdc980f5ff3072234cc Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 2 Jul 2010 22:53:21 -0700
+Subject: [PATCH 0669/1179] MAPREDUCE-1682. Fix speculative execution to ensure tasks are not scheduled after job failure.
+
+Author: Arun C Murthy
+Reason: Fixes potential wasted task slots
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 2ee4763..5700617 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -1975,7 +1975,7 @@ public class JobInProgress {
+     while (iter.hasNext()) {
+       TaskInProgress tip = iter.next();
+       // should never be true! (since we delete completed/failed tasks)
+-      if (!tip.isRunning()) {
++      if (!tip.isRunning() || !tip.isRunnable()) {
+         iter.remove();
+         continue;
+       }
+-- 
+1.7.0.4
+

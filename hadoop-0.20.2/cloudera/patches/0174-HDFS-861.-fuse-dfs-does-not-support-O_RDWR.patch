@@ -1,0 +1,42 @@
+From 4ca1c78e1b257eefa10b5ed94479df8a6473d3e9 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:32:50 -0800
+Subject: [PATCH 0174/1179] HDFS-861. fuse-dfs does not support O_RDWR
+
+Description: Some applications (for us, the big one is rsync) will open a file in read-write mode when it really only intends to read xor write (not both).  fuse-dfs should try to not fail until the application actually tries to write to a pre-existing file or read from a newly created file.
+Reason: bugfix
+Author: Brian Bockelman
+Ref: UNKNOWN
+---
+ src/contrib/fuse-dfs/src/fuse_impls_open.c |   15 +++++++++++++++
+ 1 files changed, 15 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_open.c b/src/contrib/fuse-dfs/src/fuse_impls_open.c
+index 73a1e34..aa9a3a2 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_open.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_open.c
+@@ -50,6 +50,21 @@ int dfs_open(const char *path, struct fuse_file_info *fi)
+     return -EIO;
+   }
+ 
++  if (flags & O_RDWR) {
++    hdfsFileInfo *info = hdfsGetPathInfo(dfs->fs,path);
++    if (info == NULL) {
++      // File does not exist (maybe?); interpret it as a O_WRONLY
++      // If the actual error was something else, we'll get it again when
++      // we try to open the file.
++      flags ^= O_RDWR;
++      flags |= O_WRONLY;
++    } else {
++      // File exists; open this as read only.
++      flags ^= O_RDWR;
++      flags |= O_RDONLY;
++    }
++  }
++
+   if ((fh->hdfsFH = hdfsOpenFile(fh->fs, path, flags,  0, 0, 0)) == NULL) {
+     syslog(LOG_ERR, "ERROR: could not connect open file %s:%d\n", __FILE__, __LINE__);
+     syslog(LOG_ERR, "ERROR: errno %d\n", errno);
+-- 
+1.7.0.4
+

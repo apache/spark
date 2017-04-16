@@ -1,0 +1,28 @@
+From 892b49d1fd8725323dfbbb19269ec16debe05c57 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 15 Sep 2010 20:08:16 -0700
+Subject: [PATCH 0691/1179] HDFS-1267. fuse-dfs does not compile.
+
+Reason: Bug
+Author: Devaraj Das
+Ref: CDH-2134
+---
+ src/contrib/fuse-dfs/src/fuse_connect.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/fuse-dfs/src/fuse_connect.c b/src/contrib/fuse-dfs/src/fuse_connect.c
+index 1a2461e..4ac4886 100644
+--- a/src/contrib/fuse-dfs/src/fuse_connect.c
++++ b/src/contrib/fuse-dfs/src/fuse_connect.c
+@@ -37,7 +37,7 @@ hdfsFS doConnectAsUser(const char *hostname, int port) {
+     return NULL;
+   int numgroups = 0;
+   char **groups = getGroups(uid, &numgroups);
+-  hdfsFS fs = hdfsConnectAsUser(hostname, port, user, (const char **)groups, numgroups);
++  hdfsFS fs = hdfsConnectAsUser(hostname, port, user);
+   freeGroups(groups, numgroups);
+   if (user) 
+     free(user);
+-- 
+1.7.0.4
+

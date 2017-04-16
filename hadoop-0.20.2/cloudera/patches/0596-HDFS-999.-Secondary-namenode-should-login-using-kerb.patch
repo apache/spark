@@ -1,0 +1,39 @@
+From 2de11fbbf173eef5b35a3ae10777c87728492355 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 9 Apr 2010 15:31:59 -0700
+Subject: [PATCH 0596/1179] HDFS-999. Secondary namenode should login using kerberos if security is configured.
+
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index ebacf4c..116278b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -310,6 +310,10 @@ public class SecondaryNameNode implements Runnable {
+         break;
+       }
+       try {
++        // We may have lost our ticket since last checkpoint, log in again, just in case
++        if(UserGroupInformation.isSecurityEnabled())
++          UserGroupInformation.getCurrentUser().reloginFromKeytab();
++        
+         long now = System.currentTimeMillis();
+ 
+         long size = namenode.getEditLogSize();
+@@ -419,9 +423,6 @@ public class SecondaryNameNode implements Runnable {
+                             "after creating edits.new");
+     }
+ 
+-    // We may have lost our ticket since last checkpoint, log in again, just in case
+-    if(UserGroupInformation.isSecurityEnabled())
+-      UserGroupInformation.getCurrentUser().reloginFromKeytab();
+     downloadCheckpointFiles(sig);   // Fetch fsimage and edits
+     doMerge(sig);                   // Do the merge
+   
+-- 
+1.7.0.4
+

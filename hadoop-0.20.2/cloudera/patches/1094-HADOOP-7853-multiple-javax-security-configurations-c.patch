@@ -1,0 +1,366 @@
+From caa7d7ddd79b0775edb780c6a9cbf71d23bc4a99 Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu@cloudera.com>
+Date: Tue, 29 Nov 2011 11:49:09 -0800
+Subject: [PATCH 1094/1179] HADOOP-7853 multiple javax security configurations cause conflicts.
+
+  Reason: Hadoop-auth initialization and UGI initialization issues due to global config.
+  Author: Daryn Sharp
+  Ref: CDH-3865
+---
+ .../org/apache/hadoop/security/SecurityUtil.java   |    2 +-
+ .../hadoop/security/UserGroupInformation.java      |   58 ++++++++++++++++----
+ .../client/KerberosAuthenticator.java              |    7 +--
+ .../TestDistributedCacheAlternateFileSystem.java   |    4 +-
+ .../hadoop/security/TestDoAsEffectiveUser.java     |   12 ++--
+ .../hadoop/security/TestUserGroupInformation.java  |   48 +++++------------
+ 6 files changed, 72 insertions(+), 59 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/SecurityUtil.java b/src/core/org/apache/hadoop/security/SecurityUtil.java
+index 37d5149..dfaa50f 100644
+--- a/src/core/org/apache/hadoop/security/SecurityUtil.java
++++ b/src/core/org/apache/hadoop/security/SecurityUtil.java
+@@ -60,7 +60,7 @@ public class SecurityUtil {
+       if (isOriginalTGT(t.getServer().getName()))
+         return t;
+     }
+-    throw new IOException("Failed to find TGT from current Subject");
++    throw new IOException("Failed to find TGT from current Subject:"+current);
+   }
+   
+   // Original TGT must be of form "krbtgt/FOO@FOO". Verify this
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 2ff7666..8fc38fe 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -135,18 +135,30 @@ public class UserGroupInformation {
+ 
+     @Override
+     public boolean commit() throws LoginException {
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("hadoop login commit");
++      }
+       // if we already have a user, we are done.
+       if (!subject.getPrincipals(User.class).isEmpty()) {
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("using existing subject:"+subject.getPrincipals());
++        }
+         return true;
+       }
+       Principal user = null;
+       // if we are using kerberos, try it out
+       if (useKerberos) {
+         user = getCanonicalUser(KerberosPrincipal.class);
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("using kerberos user:"+user);
++        }
+       }
+       // if we don't have a kerberos user, use the OS user
+       if (user == null) {
+         user = getCanonicalUser(OS_PRINCIPAL_CLASS);
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("using local user:"+user);
++        }
+       }
+       // if we found the user, add our principal
+       if (user != null) {
+@@ -165,11 +177,17 @@ public class UserGroupInformation {
+ 
+     @Override
+     public boolean login() throws LoginException {
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("hadoop login");
++      }
+       return true;
+     }
+ 
+     @Override
+     public boolean logout() throws LoginException {
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("hadoop logout");
++      }
+       return true;
+     }
+   }
+@@ -433,6 +451,11 @@ public class UserGroupInformation {
+     }
+   }
+   
++  private static LoginContext
++  newLoginContext(String appName, Subject subject) throws LoginException {
++    return new LoginContext(appName, subject, null, new HadoopConfiguration(null));
++  }
++  
+   private LoginContext getLogin() {
+     return user.getLogin();
+   }
+@@ -488,9 +511,9 @@ public class UserGroupInformation {
+         Subject subject = new Subject();
+         LoginContext login;
+         if (isSecurityEnabled()) {
+-          login = new LoginContext(HadoopConfiguration.USER_KERBEROS_CONFIG_NAME, subject);
++          login = newLoginContext(HadoopConfiguration.USER_KERBEROS_CONFIG_NAME, subject);
+         } else {
+-          login = new LoginContext(HadoopConfiguration.SIMPLE_CONFIG_NAME, subject);
++          login = newLoginContext(HadoopConfiguration.SIMPLE_CONFIG_NAME, subject);
+         }
+         login.login();
+         loginUser = new UserGroupInformation(subject);
+@@ -513,6 +536,9 @@ public class UserGroupInformation {
+       } catch (LoginException le) {
+         throw new IOException("failure to login", le);
+       }
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("UGI loginUser:"+loginUser);
++      }
+     }
+     return loginUser;
+   }
+@@ -624,7 +650,7 @@ public class UserGroupInformation {
+     long start = 0;
+     try {
+       login = 
+-        new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, subject);
++        newLoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, subject);
+       start = System.currentTimeMillis();
+       login.login();
+       metrics.loginSuccess.inc(System.currentTimeMillis() - start);
+@@ -670,7 +696,7 @@ public class UserGroupInformation {
+       //login and also update the subject field of this instance to 
+       //have the new credentials (pass it to the LoginContext constructor)
+       login = 
+-        new LoginContext(HadoopConfiguration.USER_KERBEROS_CONFIG_NAME, 
++        newLoginContext(HadoopConfiguration.USER_KERBEROS_CONFIG_NAME, 
+             getSubject());
+       LOG.info("Initiating re-login for " + getUserName());
+       login.login();
+@@ -707,7 +733,7 @@ public class UserGroupInformation {
+       Subject subject = new Subject();
+       
+       LoginContext login = 
+-        new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, subject); 
++        newLoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, subject); 
+        
+       start = System.currentTimeMillis();
+       login.login();
+@@ -781,7 +807,7 @@ public class UserGroupInformation {
+         //login and also update the subject field of this instance to 
+         //have the new credentials (pass it to the LoginContext constructor)
+         login = 
+-          new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, 
++          newLoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, 
+                            getSubject());
+         LOG.info("Initiating re-login for " + keytabPrincipal);
+         start = System.currentTimeMillis();
+@@ -1044,11 +1070,10 @@ public class UserGroupInformation {
+    */
+   @Override
+   public String toString() {
+-    if (getRealUser() != null) {
+-      return getUserName() + " via " +  getRealUser().toString();
+-    } else {
+-      return getUserName();
+-    }
++    String me = (getRealUser() != null)
++      ? getUserName() + " via " +  getRealUser().toString()
++      : getUserName();
++    return me + " (auth:"+getAuthenticationMethod()+")";
+   }
+ 
+   /**
+@@ -1107,6 +1132,7 @@ public class UserGroupInformation {
+    * @return the value from the run method
+    */
+   public <T> T doAs(PrivilegedAction<T> action) {
++    logPriviledgedAction(subject, action);
+     return Subject.doAs(subject, action);
+   }
+   
+@@ -1124,9 +1150,11 @@ public class UserGroupInformation {
+   public <T> T doAs(PrivilegedExceptionAction<T> action
+                     ) throws IOException, InterruptedException {
+     try {
++      logPriviledgedAction(subject, action);
+       return Subject.doAs(subject, action);
+     } catch (PrivilegedActionException pae) {
+       Throwable cause = pae.getCause();
++      LOG.error("PriviledgedActionException as:"+this+" cause:"+cause);
+       if (cause instanceof IOException) {
+         throw (IOException) cause;
+       } else if (cause instanceof Error) {
+@@ -1141,6 +1169,14 @@ public class UserGroupInformation {
+     }
+   }
+ 
++  private void logPriviledgedAction(Subject subject, Object action) {
++    if (LOG.isDebugEnabled()) {
++      // would be nice if action included a descriptive toString()
++      String where = new Throwable().getStackTrace()[2].toString();
++      LOG.debug("PriviledgedAction as:"+this+" from:"+where);
++    }
++  }
++
+   private void print() throws IOException {
+     System.out.println("User: " + getUserName());
+     System.out.print("Group Ids: ");
+diff --git a/src/core/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java b/src/core/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java
+index b3dc6fe..7338cda 100644
+--- a/src/core/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java
++++ b/src/core/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java
+@@ -110,10 +110,6 @@ public class KerberosAuthenticator implements Authenticator {
+     }
+   }
+ 
+-  static {
+-    javax.security.auth.login.Configuration.setConfiguration(new KerberosConfiguration());
+-  }
+-
+   private URL url;
+   private HttpURLConnection conn;
+   private Base64 base64;
+@@ -187,7 +183,8 @@ public class KerberosAuthenticator implements Authenticator {
+       Subject subject = Subject.getSubject(context);
+       if (subject == null) {
+         subject = new Subject();
+-        LoginContext login = new LoginContext("", subject);
++        LoginContext login = new LoginContext("", subject,
++            null, new KerberosConfiguration());
+         login.login();
+       }
+       Subject.doAs(subject, new PrivilegedExceptionAction<Void>() {
+diff --git a/src/test/org/apache/hadoop/security/TestDistributedCacheAlternateFileSystem.java b/src/test/org/apache/hadoop/security/TestDistributedCacheAlternateFileSystem.java
+index 4743c11..d4e4c24 100644
+--- a/src/test/org/apache/hadoop/security/TestDistributedCacheAlternateFileSystem.java
++++ b/src/test/org/apache/hadoop/security/TestDistributedCacheAlternateFileSystem.java
+@@ -177,8 +177,8 @@ public class TestDistributedCacheAlternateFileSystem {
+             return UserGroupInformation.getCurrentUser();
+           }
+         });
+-    Assert.assertTrue(curUGI.toString().equals(
+-        PROXY_USER_NAME + " via " + REAL_USER_NAME));
++    Assert.assertEquals(curUGI.toString(),
++        PROXY_USER_NAME + " via " + REAL_USER_NAME + " (auth:SIMPLE) (auth:PROXY)");
+ 
+ 
+     final Configuration conf = new Configuration();
+diff --git a/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java b/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
+index 7a5e7d4..67c15bf 100644
+--- a/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
++++ b/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
+@@ -115,8 +115,8 @@ public class TestDoAsEffectiveUser {
+             return UserGroupInformation.getCurrentUser();
+           }
+         });
+-    Assert.assertTrue(curUGI.toString().equals(
+-        PROXY_USER_NAME + " via " + REAL_USER_NAME));
++    Assert.assertEquals(curUGI.toString(),
++        PROXY_USER_NAME + " via " + REAL_USER_NAME + " (auth:SIMPLE) (auth:PROXY)");
+   }
+ 
+   @TokenInfo(TestTokenSelector.class)
+@@ -169,7 +169,7 @@ public class TestDoAsEffectiveUser {
+             }
+           });
+ 
+-      Assert.assertEquals(PROXY_USER_NAME + " via " + REAL_USER_NAME, retVal);
++      Assert.assertEquals(PROXY_USER_NAME + " via " + REAL_USER_NAME + " (auth:SIMPLE) (auth:SIMPLE)", retVal);
+     } catch (Exception e) {
+       e.printStackTrace();
+       Assert.fail();
+@@ -212,7 +212,7 @@ public class TestDoAsEffectiveUser {
+             }
+           });
+ 
+-      Assert.assertEquals(PROXY_USER_NAME + " via " + REAL_USER_NAME, retVal);
++      Assert.assertEquals(PROXY_USER_NAME + " via " + REAL_USER_NAME + " (auth:SIMPLE) (auth:SIMPLE)", retVal);
+     } catch (Exception e) {
+       e.printStackTrace();
+       Assert.fail();
+@@ -446,7 +446,7 @@ public class TestDoAsEffectiveUser {
+       }
+     });
+     //The user returned by server must be the one in the token.
+-    Assert.assertEquals(REAL_USER_NAME + " via SomeSuperUser", retVal);
++    Assert.assertEquals(REAL_USER_NAME + " via SomeSuperUser (auth:SIMPLE) (auth:TOKEN)", retVal);
+   }
+ 
+   /*
+@@ -497,7 +497,7 @@ public class TestDoAsEffectiveUser {
+         }
+       }
+     });
+-    String expected = REAL_USER_NAME + " via SomeSuperUser";
++    String expected = REAL_USER_NAME + " via SomeSuperUser (auth:SIMPLE) (auth:TOKEN)";
+     Assert.assertEquals(retVal + "!=" + expected, expected, retVal);
+   }
+   
+diff --git a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+index bbeda64..30abfb1 100644
+--- a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
++++ b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+@@ -49,11 +49,22 @@ public class TestUserGroupInformation {
+   final private static String[] GROUP_NAMES = 
+     new String[]{GROUP1_NAME, GROUP2_NAME, GROUP3_NAME};
+ 
+-  private static javax.security.auth.login.Configuration mockJaasConf;
+-
++   // UGI should not use the default security conf, else it will collide
++   // with other classes that may change the default conf.  Using this dummy
++   // class that simply throws an exception will ensure that the tests fail
++   // if UGI uses the static default config instead of its own config
++   private static class DummyLoginConfiguration extends
++     javax.security.auth.login.Configuration
++   {
++     @Override
++     public AppConfigurationEntry[] getAppConfigurationEntry(String name) {
++       throw new RuntimeException("UGI is not using its own security conf!");
++     }
++   }
+ 
+   static {
+-    setupMockJaasParent();
++    javax.security.auth.login.Configuration.setConfiguration(
++              new DummyLoginConfiguration());
+ 
+     Configuration conf = new Configuration();
+     conf.set("hadoop.security.auth_to_local",
+@@ -327,37 +338,6 @@ public class TestUserGroupInformation {
+   }
+ 
+   /**
+-   * Setup a JAAS Configuration that handles a fake app.
+-   * This runs before UserGroupInformation has been initialized,
+-   * so UGI picks up this Configuration as the parent.
+-   */
+-  private static void setupMockJaasParent() {
+-    javax.security.auth.login.Configuration existing = null;
+-    try {
+-      existing =javax.security.auth.login.Configuration.getConfiguration();
+-      assertFalse("setupMockJaasParent should run before the Hadoop " +
+-                  "configuration provider is installed.",
+-                  existing.getClass().getCanonicalName()
+-                  .startsWith("org.apache.hadoop"));
+-    } catch (SecurityException se) {
+-      // We get this if no configuration has been set. So it's OK.
+-    }
+-
+-    mockJaasConf = mock(javax.security.auth.login.Configuration.class);
+-    Mockito.doReturn(new AppConfigurationEntry[] {})
+-      .when(mockJaasConf)
+-      .getAppConfigurationEntry("foobar-app");
+-    javax.security.auth.login.Configuration.setConfiguration(mockJaasConf);
+-  }
+-
+-  @Test
+-  public void testDelegateJaasConfiguration() throws Exception {
+-    // This will throw if the Configuration doesn't have any entries
+-    // for "foobar"
+-    LoginContext login = new LoginContext("foobar-app");
+-  }
+-
+-  /**
+    * Test for the case that UserGroupInformation.getCurrentUser()
+    * is called when the AccessControlContext has a Subject associated
+    * with it, but that Subject was not created by Hadoop (ie it has no
+-- 
+1.7.0.4
+

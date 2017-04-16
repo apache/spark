@@ -1,0 +1,32 @@
+From ca46366798e704396bd2de8e3ef4bc1b074b88a9 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Mar 2011 18:34:37 -0700
+Subject: [PATCH 0932/1179] CLOUDERA-BUILD. Default cloudera.hash to empty string
+
+This restores the proper behavior of inferring the git hash from the
+current repository, if it's not overridden on the command line.
+
+Author: Todd Lipcon
+Ref: CDH-2829
+---
+ build.xml |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index fccca36..3bc0e11 100644
+--- a/build.xml
++++ b/build.xml
+@@ -58,6 +58,10 @@
+   <property name="final.name" value="${name}-${version}"/>
+   <property name="test.final.name" value="${name}-test-${version}"/>
+   <property name="year" value="2009"/>
++
++  <!-- This gets overridden during package builds to contain the
++       revision the patch series was generated from -->
++  <property name="cloudera.hash" value="" />
+   
+ 
+   <property name="core.final.name" value="${name}-core-${version}"/>
+-- 
+1.7.0.4
+

@@ -1,0 +1,121 @@
+From 516adbfc45e739130bdbb047e45f068a38e72988 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 19 Jan 2011 00:27:37 -0800
+Subject: [PATCH 0780/1179] HDFS-1330. Make RPCs to DataNodes timeout.
+
+Reason: Customer request
+Author: Hairong Kuang
+Ref: CDH-2044
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   11 +++++++----
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    9 ++++++---
+ .../org/apache/hadoop/hdfs/TestLeaseRecovery.java  |    2 +-
+ .../server/datanode/TestInterDatanodeProtocol.java |    2 +-
+ 4 files changed, 15 insertions(+), 9 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 1cf9db2..547aaa5 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -138,7 +138,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   }
+ 
+   static ClientDatanodeProtocol createClientDatanodeProtocolProxy (
+-      DatanodeID datanodeid, Configuration conf, 
++      DatanodeID datanodeid, Configuration conf, int socketTimeout,
+       Block block, Token<BlockTokenIdentifier> token) throws IOException {
+     InetSocketAddress addr = NetUtils.createSocketAddr(
+       datanodeid.getHost() + ":" + datanodeid.getIpcPort());
+@@ -150,7 +150,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     ticket.addToken(token);
+     return (ClientDatanodeProtocol)RPC.getProxy(ClientDatanodeProtocol.class,
+         ClientDatanodeProtocol.versionID, addr, ticket, conf, NetUtils
+-        .getDefaultSocketFactory(conf));
++        .getDefaultSocketFactory(conf), socketTimeout);
+   }
+         
+   /**
+@@ -1611,7 +1611,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           DatanodeInfo primaryNode = last.getLocations()[0];
+           try {
+             primary = createClientDatanodeProtocolProxy(
+-              primaryNode, conf, last.getBlock(), last.getBlockToken());
++              primaryNode, conf, DFSClient.this.socketTimeout,
++              last.getBlock(), last.getBlockToken());
+             Block newBlock = primary.getBlockInfo(last.getBlock());
+             long newBlockSize = newBlock.getNumBytes();
+             long delta = newBlockSize - last.getBlockSize();
+@@ -2778,7 +2779,9 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         try {
+           // Pick the "least" datanode as the primary datanode to avoid deadlock.
+           primaryNode = Collections.min(Arrays.asList(newnodes));
+-          primary = createClientDatanodeProtocolProxy(primaryNode, conf, block, accessToken);
++          primary = createClientDatanodeProtocolProxy(
++              primaryNode, conf, DFSClient.this.socketTimeout,
++              block, accessToken);
+           newBlock = primary.recoverBlock(block, isAppend, newnodes);
+         } catch (IOException e) {
+           LOG.warn("Failed recovery attempt #" + recoveryErrorCount +
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 31062ea..5492de4 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -531,7 +531,8 @@ public class DataNode extends Configured
+   } 
+ 
+   public static InterDatanodeProtocol createInterDataNodeProtocolProxy(
+-      DatanodeID datanodeid, final Configuration conf) throws IOException {
++      DatanodeID datanodeid, final Configuration conf, final int socketTimeout)
++    throws IOException {
+     final InetSocketAddress addr = NetUtils.createSocketAddr(
+         datanodeid.getHost() + ":" + datanodeid.getIpcPort());
+     if (InterDatanodeProtocol.LOG.isDebugEnabled()) {
+@@ -545,7 +546,8 @@ public class DataNode extends Configured
+             public InterDatanodeProtocol run() throws IOException {
+               return (InterDatanodeProtocol) RPC.getProxy(
+                   InterDatanodeProtocol.class, InterDatanodeProtocol.versionID,
+-                  addr, conf);
++                  addr, UserGroupInformation.getCurrentUser(), conf,
++                  NetUtils.getDefaultSocketFactory(conf), socketTimeout);
+             }
+           });
+     } catch (InterruptedException ie) {
+@@ -1725,7 +1727,8 @@ public class DataNode extends Configured
+               dnRegistration.getIpcPort() == id.getIpcPort()) {
+             datanode = this;
+           } else {
+-            datanode = DataNode.createInterDataNodeProtocolProxy(id, getConf());
++            datanode = DataNode.createInterDataNodeProtocolProxy(id, getConf(),
++                socketTimeout);
+           }
+           BlockRecoveryInfo info = datanode.startBlockRecovery(block);
+           if (info == null) {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
+index 2131306..c57bc56 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
++++ b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
+@@ -95,7 +95,7 @@ public class TestLeaseRecovery extends junit.framework.TestCase {
+       InterDatanodeProtocol[] idps = new InterDatanodeProtocol[REPLICATION_NUM];
+       DataNode[] datanodes = new DataNode[REPLICATION_NUM];
+       for(int i = 0; i < REPLICATION_NUM; i++) {
+-        idps[i] = DataNode.createInterDataNodeProtocolProxy(datanodeinfos[i], conf);
++        idps[i] = DataNode.createInterDataNodeProtocolProxy(datanodeinfos[i], conf, 0);
+         datanodes[i] = cluster.getDataNode(datanodeinfos[i].getIpcPort());
+         assertTrue(datanodes[i] != null);
+       }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestInterDatanodeProtocol.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestInterDatanodeProtocol.java
+index 926c4de..652cd94 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestInterDatanodeProtocol.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestInterDatanodeProtocol.java
+@@ -89,7 +89,7 @@ public class TestInterDatanodeProtocol extends junit.framework.TestCase {
+ 
+       //connect to a data node
+       InterDatanodeProtocol idp = DataNode.createInterDataNodeProtocolProxy(
+-          datanodeinfo[0], conf);
++          datanodeinfo[0], conf, 0);
+       DataNode datanode = cluster.getDataNode(datanodeinfo[0].getIpcPort());
+       assertTrue(datanode != null);
+       
+-- 
+1.7.0.4
+

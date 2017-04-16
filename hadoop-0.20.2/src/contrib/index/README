@@ -1,0 +1,43 @@
+This contrib package provides a utility to build or update an index
+using Map/Reduce.
+
+A distributed "index" is partitioned into "shards". Each shard corresponds
+to a Lucene instance. org.apache.hadoop.contrib.index.main.UpdateIndex
+contains the main() method which uses a Map/Reduce job to analyze documents
+and update Lucene instances in parallel.
+
+The Map phase of the Map/Reduce job formats, analyzes and parses the input
+(in parallel), while the Reduce phase collects and applies the updates to
+each Lucene instance (again in parallel). The updates are applied using the
+local file system where a Reduce task runs and then copied back to HDFS.
+For example, if the updates caused a new Lucene segment to be created, the
+new segment would be created on the local file system first, and then
+copied back to HDFS.
+
+When the Map/Reduce job completes, a "new version" of the index is ready
+to be queried. It is important to note that the new version of the index
+is not derived from scratch. By leveraging Lucene's update algorithm, the
+new version of each Lucene instance will share as many files as possible
+as the previous version.
+
+The main() method in UpdateIndex requires the following information for
+updating the shards:
+  - Input formatter. This specifies how to format the input documents.
+  - Analysis. This defines the analyzer to use on the input. The analyzer
+    determines whether a document is being inserted, updated, or deleted.
+    For inserts or updates, the analyzer also converts each input document
+    into a Lucene document.
+  - Input paths. This provides the location(s) of updated documents,
+    e.g., HDFS files or directories, or HBase tables.
+  - Shard paths, or index path with the number of shards. Either specify
+    the path for each shard, or specify an index path and the shards are
+    the sub-directories of the index directory.
+  - Output path. When the update to a shard is done, a message is put here.
+  - Number of map tasks.
+
+All of the information can be specified in a configuration file. All but
+the first two can also be specified as command line options. Check out
+conf/index-config.xml.template for other configurable parameters.
+
+Note: Because of the parallel nature of Map/Reduce, the behaviour of
+multiple inserts, deletes or updates to the same document is undefined.

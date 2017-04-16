@@ -1,0 +1,38 @@
+From a390e45180fbaaf4a3ea84d97ec0316c182ec8c9 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 20 Nov 2011 11:22:14 -0800
+Subject: [PATCH 1084/1179] HADOOP-6614. RunJar should provide more diags when it can't create a temp file.
+
+Author: Jonathan Hsieh
+Ref: CDH-3841
+---
+ src/core/org/apache/hadoop/util/RunJar.java |   13 ++++++++++++-
+ 1 files changed, 12 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/util/RunJar.java b/src/core/org/apache/hadoop/util/RunJar.java
+index cb59ba4..e012072 100644
+--- a/src/core/org/apache/hadoop/util/RunJar.java
++++ b/src/core/org/apache/hadoop/util/RunJar.java
+@@ -143,7 +143,18 @@ public class RunJar {
+     File tmpDir = new File(new Configuration().get("hadoop.tmp.dir"));
+     ensureDirectory(tmpDir);
+ 
+-    final File workDir = File.createTempFile("hadoop-unjar", "", tmpDir);
++    final File workDir;
++    try { 
++      workDir = File.createTempFile("hadoop-unjar", "", tmpDir);
++    } catch (IOException ioe) {
++      // if user has insufficient perms to write to tmpDir, default  
++      // "Permission denied" message doesn't specify a filename. 
++      System.err.println("Error creating temp dir in hadoop.tmp.dir "
++                         + tmpDir + " due to " + ioe.getMessage());
++      System.exit(-1);
++      return;
++    }
++
+     if (!workDir.delete()) {
+       System.err.println("Delete failed for " + workDir);
+       System.exit(-1);
+-- 
+1.7.0.4
+

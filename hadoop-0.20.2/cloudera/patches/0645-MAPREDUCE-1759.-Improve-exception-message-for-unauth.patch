@@ -1,0 +1,360 @@
+From 6951f1e5bbac61b1a1cc3587b712598ed993c729 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 7 May 2010 23:50:08 +0530
+Subject: [PATCH 0645/1179] MAPREDUCE-1759. Improve exception message for unauthorized user doing killJob, killTask, setJobPriority
+
+Patch: https://issues.apache.org/jira/secure/attachment/12443983/1759.20S.1.patch.
+Author: Ravi Gummadi
+Reason: Security
+Ref: CDH-648
+---
+ .../org/apache/hadoop/mapred/ACLsManager.java      |   45 +++++++++++---------
+ .../hadoop/mapred/CompletedJobStatusStore.java     |    3 +-
+ src/mapred/org/apache/hadoop/mapred/JSPUtil.java   |    6 ++-
+ .../org/apache/hadoop/mapred/JobTracker.java       |   28 +++++++-----
+ .../org/apache/hadoop/mapred/TaskLogServlet.java   |    2 +-
+ .../org/apache/hadoop/mapred/TestQueueManager.java |    6 +-
+ 6 files changed, 52 insertions(+), 38 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/ACLsManager.java b/src/mapred/org/apache/hadoop/mapred/ACLsManager.java
+index a47b530..958028a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ACLsManager.java
++++ b/src/mapred/org/apache/hadoop/mapred/ACLsManager.java
+@@ -111,7 +111,7 @@ class ACLsManager {
+    */
+   void checkAccess(JobInProgress job,
+       UserGroupInformation callerUGI, QueueOperation qOperation,
+-      JobACL jobOperation) throws AccessControlException {
++      JobACL jobOperation, String operationName) throws AccessControlException {
+ 
+     String queue = job.getProfile().getQueueName();
+     String jobId = job.getJobID().toString();
+@@ -120,7 +120,7 @@ class ACLsManager {
+     AccessControlList jobAcl = jobStatus.getJobACLs().get(jobOperation);
+ 
+     checkAccess(jobId, callerUGI, queue, qOperation,
+-        jobOperation, jobOwner, jobAcl);
++        jobOperation, jobOwner, jobAcl, operationName);
+   }
+ 
+   /**
+@@ -133,14 +133,15 @@ class ACLsManager {
+    * </ul>
+    */
+   void checkAccess(JobStatus jobStatus, UserGroupInformation callerUGI,
+-      JobACL jobOperation) throws AccessControlException {
++      JobACL jobOperation, String operationName) throws AccessControlException {
+ 
+     String jobId = jobStatus.getJobID().toString();
+     String jobOwner = jobStatus.getUsername();
+     AccessControlList jobAcl = jobStatus.getJobACLs().get(jobOperation);
+ 
+     // If acls are enabled, check if jobOwner, cluster admin or part of job ACL
+-    checkAccess(jobId, callerUGI, jobOperation, jobOwner, jobAcl);
++    checkAccess(jobId, callerUGI, jobOperation, jobOwner, jobAcl,
++        operationName);
+   }
+ 
+   /**
+@@ -153,10 +154,12 @@ class ACLsManager {
+    * </ul>
+    */
+   void checkAccess(String jobId, UserGroupInformation callerUGI,
+-      JobACL jobOperation, String jobOwner, AccessControlList jobAcl)
++      JobACL jobOperation, String jobOwner, AccessControlList jobAcl,
++      String operationName)
+       throws AccessControlException {
+     // TODO: Queue admins are to be allowed to do the job view operation.
+-    checkAccess(jobId, callerUGI, null, null, jobOperation, jobOwner, jobAcl);
++    checkAccess(jobId, callerUGI, null, null, jobOperation, jobOwner, jobAcl,
++        operationName);
+   }
+ 
+   /**
+@@ -178,7 +181,8 @@ class ACLsManager {
+    */
+   void checkAccess(String jobId, UserGroupInformation callerUGI,
+       String queue, QueueOperation qOperation,
+-      JobACL jobOperation, String jobOwner, AccessControlList jobAcl)
++      JobACL jobOperation, String jobOwner, AccessControlList jobAcl,
++      String operationName)
+       throws AccessControlException {
+     if (!aclsEnabled) {
+       return;
+@@ -190,9 +194,9 @@ class ACLsManager {
+     // any job operation
+     if (isMRAdmin(callerUGI)) {
+       if (qOperation == QueueOperation.SUBMIT_JOB) {
+-        AuditLogger.logSuccess(user, qOperation.name(), queue);
++        AuditLogger.logSuccess(user, operationName, queue);
+       } else {
+-        AuditLogger.logSuccess(user, jobOperation.name(), jobId);
++        AuditLogger.logSuccess(user, operationName, jobId);
+       }
+       return;
+     }
+@@ -201,16 +205,16 @@ class ACLsManager {
+       // This is strictly queue operation(not a job operation) like
+       // submit-job-to-queue.
+       if (!queueManager.hasAccess(queue, qOperation, callerUGI)) {
+-        AuditLogger.logFailure(user, qOperation.name(), null, queue,
++        AuditLogger.logFailure(user, operationName, null, queue,
+             Constants.UNAUTHORIZED_USER + ", job : " + jobId);
+ 
+         throw new AccessControlException("User "
+             + callerUGI.getShortUserName() + " cannot perform "
+-            + "operation " + qOperation + " on queue " + queue
++            + "operation " + operationName + " on queue " + queue
+             + ".\n Please run \"hadoop queue -showacls\" "
+             + "command to find the queues you have access to .");
+       } else {
+-        AuditLogger.logSuccess(user, qOperation.name(), queue);
++        AuditLogger.logSuccess(user, operationName, queue);
+         return;
+       }
+     }
+@@ -219,41 +223,42 @@ class ACLsManager {
+       // check if jobOwner or part of acl-view-job
+       if (jobACLsManager.checkAccess(callerUGI, jobOperation,
+           jobOwner, jobAcl)) {
+-        AuditLogger.logSuccess(user, jobOperation.name(), jobId.toString());
++        AuditLogger.logSuccess(user, operationName, jobId.toString());
+         return;
+       }
+       else {
+-        AuditLogger.logFailure(user, jobOperation.name(), null,
++        AuditLogger.logFailure(user, operationName, null,
+             jobId.toString(), Constants.UNAUTHORIZED_USER);
+         throw new AccessControlException("User "
+             + callerUGI.getShortUserName() + " cannot perform operation "
+-            + jobOperation + " on " + jobId);
++            + operationName + " on " + jobId);
+       }
+     }
+ 
+     if (jobOperation == JobACL.MODIFY_JOB) {
+       // check if queueAdmin, jobOwner or part of acl-modify-job
+       if (queueManager.hasAccess(queue, qOperation, callerUGI)) {
+-        AuditLogger.logSuccess(user, qOperation.name(), queue);
++        AuditLogger.logSuccess(user, operationName, queue);
+         return;
+       } else if (jobACLsManager.checkAccess(callerUGI, jobOperation,
+                  jobOwner, jobAcl)) {
+-        AuditLogger.logSuccess(user, jobOperation.name(), jobId);
++        AuditLogger.logSuccess(user, operationName, jobId);
+         return;
+       }
+-      AuditLogger.logFailure(user, jobOperation.name(), null,
++      AuditLogger.logFailure(user, operationName, null,
+           jobId.toString(), Constants.UNAUTHORIZED_USER + ", queue : "
+           + queue);
+ 
+       throw new AccessControlException("User "
+           + callerUGI.getShortUserName() + " cannot perform operation "
+-          + jobOperation + " on " + jobId + " that is in the queue "
++          + operationName + " on " + jobId + " that is in the queue "
+           + queue);
+     }
+ 
+     throw new AccessControlException("Unsupported queue operation "
+         + qOperation + " on queue " + queue + ", job operation "
+-        + jobOperation + " on job " + jobId);
++        + jobOperation + " on job " + jobId + " and the actual-operation "
++        + operationName);
+   }
+ 
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java b/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java
+index e6a532c..f5cdd97 100644
+--- a/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java
++++ b/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java
+@@ -302,7 +302,8 @@ class CompletedJobStatusStore implements Runnable {
+           JobStatus jobStatus = readJobStatus(dataIn);
+           // authorize the user for job view access
+           aclsManager.checkAccess(jobStatus,
+-              UserGroupInformation.getCurrentUser(), JobACL.VIEW_JOB);
++              UserGroupInformation.getCurrentUser(), JobACL.VIEW_JOB,
++              JobACL.VIEW_JOB.name());
+           readJobProfile(dataIn);
+           counters = readCounters(dataIn);
+           dataIn.close();
+diff --git a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+index 694617a..0575e8b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
++++ b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+@@ -110,7 +110,8 @@ class JSPUtil {
+           public Void run() throws IOException, ServletException {
+ 
+             // checks job view permission
+-            jt.getACLsManager().checkAccess(job, ugi, null, JobACL.VIEW_JOB);
++            jt.getACLsManager().checkAccess(job, ugi, null, JobACL.VIEW_JOB,
++                JobACL.VIEW_JOB.name());
+             return null;
+           }
+         });
+@@ -495,7 +496,8 @@ class JSPUtil {
+ 
+     // Authorize the user for view access of this job
+     jobTracker.getACLsManager().checkAccess(jobid, currentUser, JobACL.VIEW_JOB,
+-        jobInfo.get(Keys.USER), jobInfo.getJobACLs().get(JobACL.VIEW_JOB));
++        jobInfo.get(Keys.USER), jobInfo.getJobACLs().get(JobACL.VIEW_JOB),
++        JobACL.VIEW_JOB.name());
+ 
+     return jobInfo;
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index e5149d8..3fe0016 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -1707,7 +1707,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           // check the access
+           try {
+             aclsManager.checkAccess(job, ugi,
+-                QueueManager.QueueOperation.SUBMIT_JOB, null);
++                QueueManager.QueueOperation.SUBMIT_JOB, null,
++                QueueManager.QueueOperation.SUBMIT_JOB.name());
+           } catch (Throwable t) {
+             LOG.warn("Access denied for user " + ugi.getShortUserName() 
+                      + " in groups : [" 
+@@ -3715,7 +3716,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       // check for access
+       try {
+         aclsManager.checkAccess(job, ugi,
+-            QueueManager.QueueOperation.SUBMIT_JOB, null);
++            QueueManager.QueueOperation.SUBMIT_JOB, null,
++            QueueManager.QueueOperation.SUBMIT_JOB.name());
+       } catch (IOException ioe) {
+         LOG.warn("Access denied for user " + job.getJobConf().getUser()
+             + ". Ignoring job " + jobId, ioe);
+@@ -3874,7 +3876,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         
+     // check both queue-level and job-level access
+     aclsManager.checkAccess(job, UserGroupInformation.getCurrentUser(),
+-        QueueManager.QueueOperation.ADMINISTER_JOBS, JobACL.MODIFY_JOB);
++        QueueManager.QueueOperation.ADMINISTER_JOBS, JobACL.MODIFY_JOB,
++        "KILL_JOB");
+ 
+     killJob(job);
+   }
+@@ -4080,7 +4083,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       if (job != null) {
+ 
+         // check the job-access
+-        aclsManager.checkAccess(job, callerUGI, null, JobACL.VIEW_JOB);
++        aclsManager.checkAccess(job, callerUGI, null, JobACL.VIEW_JOB,
++            JobACL.VIEW_JOB.name());
+ 
+         return isJobInited(job) ? job.getCounters() : EMPTY_COUNTERS;
+       } 
+@@ -4097,7 +4101,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     if (job != null) {
+       // Check authorization
+       aclsManager.checkAccess(job, UserGroupInformation.getCurrentUser(), null,
+-          JobACL.VIEW_JOB);
++          JobACL.VIEW_JOB, JobACL.VIEW_JOB.name());
+     }
+     if (job == null || !isJobInited(job)) {
+       return EMPTY_TASK_REPORTS;
+@@ -4125,7 +4129,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     if (job != null) {
+       // Check authorization
+       aclsManager.checkAccess(job, UserGroupInformation.getCurrentUser(), null,
+-          JobACL.VIEW_JOB);
++          JobACL.VIEW_JOB, JobACL.VIEW_JOB.name());
+     }
+     if (job == null || !isJobInited(job)) {
+       return EMPTY_TASK_REPORTS;
+@@ -4151,7 +4155,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     if (job != null) {
+       // Check authorization
+       aclsManager.checkAccess(job, UserGroupInformation.getCurrentUser(), null,
+-          JobACL.VIEW_JOB);
++          JobACL.VIEW_JOB, JobACL.VIEW_JOB.name());
+     }
+     if (job == null || !isJobInited(job)) {
+       return EMPTY_TASK_REPORTS;
+@@ -4180,7 +4184,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     if (job != null) {
+       // Check authorization
+       aclsManager.checkAccess(job, UserGroupInformation.getCurrentUser(), null,
+-          JobACL.VIEW_JOB);
++          JobACL.VIEW_JOB, JobACL.VIEW_JOB.name());
+     }
+     if (job == null || !isJobInited(job)) {
+       return EMPTY_TASK_REPORTS;
+@@ -4247,7 +4251,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     if (job != null) {
+       // Check authorization
+       aclsManager.checkAccess(job, UserGroupInformation.getCurrentUser(), null,
+-          JobACL.VIEW_JOB);
++          JobACL.VIEW_JOB, JobACL.VIEW_JOB.name());
+     }
+     if (job != null && isJobInited(job)) {
+       TaskInProgress tip = job.getTaskInProgress(tipId);
+@@ -4308,7 +4312,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       // check both queue-level and job-level access
+       aclsManager.checkAccess(tip.getJob(),
+           UserGroupInformation.getCurrentUser(),
+-          QueueManager.QueueOperation.ADMINISTER_JOBS, JobACL.MODIFY_JOB);
++          QueueManager.QueueOperation.ADMINISTER_JOBS, JobACL.MODIFY_JOB,
++          shouldFail ? "FAIL_TASK" : "KILL_TASK");
+ 
+       return tip.killTask(taskid, shouldFail);
+     }
+@@ -4380,7 +4385,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+ 
+       // check both queue-level and job-level access
+       aclsManager.checkAccess(job, UserGroupInformation.getCurrentUser(),
+-          QueueManager.QueueOperation.ADMINISTER_JOBS, JobACL.MODIFY_JOB);
++          QueueManager.QueueOperation.ADMINISTER_JOBS, JobACL.MODIFY_JOB,
++          "SET_JOB_PRIORITY");
+ 
+       synchronized (taskScheduler) {
+         JobStatus oldStatus = (JobStatus)job.getStatus().clone();
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java b/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
+index 25e2325..c3e19bf 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
+@@ -133,7 +133,7 @@ public class TaskLogServlet extends HttpServlet {
+         UserGroupInformation.createRemoteUser(user);
+ 
+     tracker.getACLsManager().checkAccess(jobId, callerUGI, JobACL.VIEW_JOB,
+-        jobOwner, jobViewACL);
++        jobOwner, jobViewACL, JobACL.VIEW_JOB.name());
+   }
+ 
+   /**
+diff --git a/src/test/org/apache/hadoop/mapred/TestQueueManager.java b/src/test/org/apache/hadoop/mapred/TestQueueManager.java
+index 0add176..26869f1 100644
+--- a/src/test/org/apache/hadoop/mapred/TestQueueManager.java
++++ b/src/test/org/apache/hadoop/mapred/TestQueueManager.java
+@@ -655,7 +655,7 @@ public class TestQueueManager extends TestCase {
+       } else {
+         LOG.info("exception while submitting/killing job: " + ioe.getMessage());
+         assertTrue(ioe.getMessage().
+-            contains(" cannot perform operation MODIFY_JOB on "));
++            contains(" cannot perform operation KILL_JOB on "));
+       }
+     } finally {
+       tearDownCluster();
+@@ -690,7 +690,7 @@ public class TestQueueManager extends TestCase {
+         LOG.info("exception while killing job: " + ioe.getMessage());
+         assertTrue(ioe.getMessage().
+                         contains("cannot perform operation " +
+-                                    "ADMINISTER_JOBS on queue default"));
++                                    "KILL_JOB on queue default"));
+       }
+       //wait for job to complete on its own
+       while (!rjob.isComplete()) {
+@@ -745,7 +745,7 @@ public class TestQueueManager extends TestCase {
+             LOG.info("exception while changing priority of job: " +
+                      ioe.getMessage());
+             assertTrue(ioe.getMessage().
+-                contains(" cannot perform operation MODIFY_JOB on "));
++                contains(" cannot perform operation SET_JOB_PRIORITY on "));
+           }
+           return null;
+         }
+-- 
+1.7.0.4
+

@@ -1,0 +1,558 @@
+From 96e17e1e593b818a888c8dfc177b8fb36e514e8f Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:50:18 -0800
+Subject: [PATCH 0214/1179] MAPREDUCE-967. (version 2) TaskTracker does not need to fully unjar job jars
+
+Description:
+    This is a performance improvement for jobs that contain a large number of
+    classes. The unpacking of these jars consumes a large amount of time, as
+    does the resulting cleanup. This patch changes the classpath to simply
+    include the jar itself, and only unpacks the lib/ directory out of the
+    jar in order to add those dependencies to the classpath.
+
+    Users who previously depended on this functionality for shipping non-code
+    dependencies can use the undocumented configuration parameter
+    "mapreduce.job.jar.unpack.pattern" to cause specific jar contents to be unpacked
+
+    This new patch version fixes a streaming regression where the "-file" argument
+    no longer worked. It includes a new unit test, TestFileArgs, to protect
+    against this regression.
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/streaming/StreamJob.java     |    9 ++
+ .../org/apache/hadoop/streaming/TestFileArgs.java  |   95 +++++++++++++++++++
+ .../org/apache/hadoop/streaming/TestStreaming.java |    1 -
+ src/core/org/apache/hadoop/conf/Configuration.java |   40 ++++++++
+ src/core/org/apache/hadoop/util/RunJar.java        |   98 +++++++++++++-------
+ .../content/xdocs/mapred_tutorial.xml              |    8 +-
+ src/mapred/org/apache/hadoop/mapred/JobConf.java   |   13 +++
+ .../org/apache/hadoop/mapred/TaskRunner.java       |    3 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    9 +-
+ .../org/apache/hadoop/mapreduce/JobContext.java    |    1 +
+ .../org/apache/hadoop/conf/TestConfiguration.java  |   33 +++++++-
+ 11 files changed, 266 insertions(+), 44 deletions(-)
+ create mode 100644 src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java
+
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/StreamJob.java b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/StreamJob.java
+index 567f667..3b8c0c5 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/StreamJob.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/StreamJob.java
+@@ -29,6 +29,7 @@ import java.util.Iterator;
+ import java.util.List;
+ import java.util.ListIterator;
+ import java.util.Map;
++import java.util.regex.Pattern;
+ import java.util.TreeMap;
+ import java.util.TreeSet;
+ 
+@@ -62,6 +63,7 @@ import org.apache.hadoop.mapred.TextInputFormat;
+ import org.apache.hadoop.mapred.TextOutputFormat;
+ import org.apache.hadoop.mapred.lib.aggregate.ValueAggregatorCombiner;
+ import org.apache.hadoop.mapred.lib.aggregate.ValueAggregatorReducer;
++import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.streaming.io.IdentifierResolver;
+ import org.apache.hadoop.streaming.io.InputWriter;
+ import org.apache.hadoop.streaming.io.OutputReader;
+@@ -266,9 +268,16 @@ public class StreamJob implements Tool {
+       
+       values = cmdLine.getOptionValues("file");
+       if (values != null && values.length > 0) {
++        StringBuilder unpackRegex = new StringBuilder(
++          config_.getPattern(JobContext.JAR_UNPACK_PATTERN,
++                             JobConf.UNPACK_JAR_PATTERN_DEFAULT).pattern());
+         for (String file : values) {
+           packageFiles_.add(file);
++          String fname = new File(file).getName();
++          unpackRegex.append("|(?:").append(Pattern.quote(fname)).append(")");
+         }
++        config_.setPattern(JobContext.JAR_UNPACK_PATTERN,
++                           Pattern.compile(unpackRegex.toString()));
+         validate(packageFiles_);
+       }
+ 
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java
+new file mode 100644
+index 0000000..b8e1b6b
+--- /dev/null
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java
+@@ -0,0 +1,95 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.streaming;
++
++import java.io.DataOutputStream;
++import java.io.File;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.net.URI;
++import java.util.zip.GZIPOutputStream;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapred.MiniMRCluster;
++
++/**
++ * This class tests that the '-file' argument to streaming results
++ * in files being unpacked in the job working directory.
++ */
++public class TestFileArgs extends TestStreaming
++{
++  private MiniMRCluster mr = null;
++  private FileSystem fileSys = null;
++  private String strJobTracker = null;
++  private Configuration conf = null;
++  private MiniDFSCluster dfs = null;
++  private String strNamenode = null;
++  private String namenode = null;
++
++  private File SIDE_FILE;
++  
++  private static final String LS_PATH = "/bin/ls";
++  
++  public TestFileArgs() throws IOException {
++    super();
++    outputExpect = "job.jar\t\nsidefile\t\ntmp\t\n";
++
++    conf = new Configuration();
++    dfs = new MiniDFSCluster(conf, 1, true, null);
++    fileSys = dfs.getFileSystem();
++    namenode = fileSys.getUri().getAuthority();
++    mr  = new MiniMRCluster(1, namenode, 1);
++    strJobTracker = "mapred.job.tracker=" + "localhost:" + mr.getJobTrackerPort();
++    strNamenode = "fs.default.name=" + namenode;
++  }
++
++  @Override
++  protected void createInput() throws IOException {
++    super.createInput();
++
++    SIDE_FILE = new File(TEST_DIR, "sidefile");
++    DataOutputStream dos = new DataOutputStream(
++      new FileOutputStream(SIDE_FILE.getAbsoluteFile()));
++    dos.write("hello world\n".getBytes("UTF-8"));
++    dos.close();
++  }
++
++  @Override
++  protected String[] genArgs() {
++    return new String[] {
++      "-input", "file://" + INPUT_FILE.getAbsolutePath(),
++      "-output", "file://" + OUTPUT_DIR.getAbsolutePath(),
++      "-file", SIDE_FILE.getAbsolutePath(),
++      "-mapper", LS_PATH,
++      "-numReduceTasks", "0",
++      "-jobconf", strNamenode,
++      "-jobconf", strJobTracker,
++      "-jobconf", "stream.tmpdir=" + System.getProperty("test.build.data","/tmp")
++    };
++  }
++
++
++  public static void main(String[]args) throws Exception
++  {
++    new TestFileArgs().testCommandLine();
++  }
++
++}
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreaming.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreaming.java
+index d4a155f..23fccfc 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreaming.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreaming.java
+@@ -46,7 +46,6 @@ public class TestStreaming extends TestCase
+   {
+     UtilTest utilTest = new UtilTest(getClass().getName());
+     utilTest.checkUserDir();
+-    utilTest.redirectIfAntJunit();
+     TEST_DIR = new File(getClass().getName()).getAbsoluteFile();
+     OUTPUT_DIR = new File(TEST_DIR, "out");
+     INPUT_FILE = new File(TEST_DIR, "input.txt");
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index 4a507ec..be46780 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -49,6 +49,7 @@ import java.util.concurrent.ConcurrentMap;
+ import java.util.concurrent.ConcurrentHashMap;
+ import java.util.regex.Matcher;
+ import java.util.regex.Pattern;
++import java.util.regex.PatternSyntaxException;
+ 
+ import javax.xml.parsers.DocumentBuilder;
+ import javax.xml.parsers.DocumentBuilderFactory;
+@@ -639,6 +640,45 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+   }
+ 
+   /**
++   * Get the value of the <code>name</code> property as a <ocde>Pattern</code>.
++   * If no such property is specified, or if the specified value is not a valid
++   * <code>Pattern</code>, then <code>DefaultValue</code> is returned.
++   *
++   * @param name property name
++   * @param defaultValue default value
++   * @return property value as a compiled Pattern, or defaultValue
++   */
++  public Pattern getPattern(String name, Pattern defaultValue) {
++    String valString = get(name);
++    if (null == valString || "".equals(valString)) {
++      return defaultValue;
++    }
++    try {
++      return Pattern.compile(valString);
++    } catch (PatternSyntaxException pse) {
++      LOG.warn("Regular expression '" + valString + "' for property '" +
++               name + "' not valid. Using default", pse);
++      return defaultValue;
++    }
++  }
++
++  /**
++   * Set the given property to <code>Pattern</code>.
++   * If the pattern is passed as null, sets the empty pattern which results in
++   * further calls to getPattern(...) returning the default value.
++   *
++   * @param name property name
++   * @param pattern new value
++   */
++  public void setPattern(String name, Pattern pattern) {
++    if (null == pattern) {
++      set(name, null);
++    } else {
++      set(name, pattern.pattern());
++    }
++  }
++
++  /**
+    * A class that represents a set of positive integer ranges. It parses 
+    * strings of the form: "2-3,5,7-" where ranges are separated by comma and 
+    * the lower/upper bounds are separated by dash. Either the lower or upper 
+diff --git a/src/core/org/apache/hadoop/util/RunJar.java b/src/core/org/apache/hadoop/util/RunJar.java
+index a7a8c95..cb59ba4 100644
+--- a/src/core/org/apache/hadoop/util/RunJar.java
++++ b/src/core/org/apache/hadoop/util/RunJar.java
+@@ -15,46 +15,68 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  */
+-
+ package org.apache.hadoop.util;
+ 
+-import java.util.jar.*;
+-import java.lang.reflect.*;
++import java.lang.reflect.Array;
++import java.lang.reflect.Method;
++import java.lang.reflect.InvocationTargetException;
+ import java.net.URL;
+ import java.net.URLClassLoader;
+-import java.io.*;
+-import java.util.*;
+-
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++import java.io.File;
++import java.util.regex.Pattern;
++import java.util.Arrays;
++import java.util.ArrayList;
++import java.util.Enumeration;
++import java.util.jar.JarFile;
++import java.util.jar.JarEntry;
++import java.util.jar.Manifest;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.io.IOUtils;
+ 
+ /** Run a Hadoop job jar. */
+ public class RunJar {
+ 
+-  /** Unpack a jar file into a directory. */
++  /** Pattern that matches any string */
++  public static final Pattern MATCH_ANY = Pattern.compile(".*");
++
++  /**
++   * Unpack a jar file into a directory.
++   *
++   * This version unpacks all files inside the jar regardless of filename.
++   */
+   public static void unJar(File jarFile, File toDir) throws IOException {
++    unJar(jarFile, toDir, MATCH_ANY);
++  }
++
++  /**
++   * Unpack matching files from a jar. Entries inside the jar that do
++   * not match the given pattern will be skipped.
++   *
++   * @param jarFile the .jar file to unpack
++   * @param toDir the destination directory into which to unpack the jar
++   * @param unpackRegex the pattern to match jar entries against
++   */
++  public static void unJar(File jarFile, File toDir, Pattern unpackRegex)
++    throws IOException {
+     JarFile jar = new JarFile(jarFile);
+     try {
+-      Enumeration entries = jar.entries();
++      Enumeration<JarEntry> entries = jar.entries();
+       while (entries.hasMoreElements()) {
+         JarEntry entry = (JarEntry)entries.nextElement();
+-        if (!entry.isDirectory()) {
++        if (!entry.isDirectory() &&
++            unpackRegex.matcher(entry.getName()).matches()) {
+           InputStream in = jar.getInputStream(entry);
+           try {
+             File file = new File(toDir, entry.getName());
+-            if (!file.getParentFile().mkdirs()) {
+-              if (!file.getParentFile().isDirectory()) {
+-                throw new IOException("Mkdirs failed to create " + 
+-                                      file.getParentFile().toString());
+-              }
+-            }
++            ensureDirectory(file.getParentFile());
+             OutputStream out = new FileOutputStream(file);
+             try {
+-              byte[] buffer = new byte[8192];
+-              int i;
+-              while ((i = in.read(buffer)) != -1) {
+-                out.write(buffer, 0, i);
+-              }
++              IOUtils.copyBytes(in, out, 8192, false);
+             } finally {
+               out.close();
+             }
+@@ -68,6 +90,18 @@ public class RunJar {
+     }
+   }
+ 
++  /**
++   * Ensure the existence of a given directory.
++   *
++   * @throws IOException if it cannot be created and does not already exist
++   */
++  private static void ensureDirectory(File dir) throws IOException {
++    if (!dir.mkdirs() && !dir.isDirectory()) {
++      throw new IOException("Mkdirs failed to create " +
++                            dir.toString());
++    }
++  }
++
+   /** Run a Hadoop job jar.  If the main class is not in the jar's manifest,
+    * then it must be provided on the command line. */
+   public static void main(String[] args) throws Throwable {
+@@ -107,18 +141,14 @@ public class RunJar {
+     mainClassName = mainClassName.replaceAll("/", ".");
+ 
+     File tmpDir = new File(new Configuration().get("hadoop.tmp.dir"));
+-    tmpDir.mkdirs();
+-    if (!tmpDir.isDirectory()) { 
+-      System.err.println("Mkdirs failed to create " + tmpDir);
+-      System.exit(-1);
+-    }
++    ensureDirectory(tmpDir);
++
+     final File workDir = File.createTempFile("hadoop-unjar", "", tmpDir);
+-    workDir.delete();
+-    workDir.mkdirs();
+-    if (!workDir.isDirectory()) {
+-      System.err.println("Mkdirs failed to create " + workDir);
++    if (!workDir.delete()) {
++      System.err.println("Delete failed for " + workDir);
+       System.exit(-1);
+     }
++    ensureDirectory(workDir);
+ 
+     Runtime.getRuntime().addShutdownHook(new Thread() {
+         public void run() {
+@@ -130,15 +160,15 @@ public class RunJar {
+       });
+ 
+     unJar(file, workDir);
+-    
++
+     ArrayList<URL> classPath = new ArrayList<URL>();
+-    classPath.add(new File(workDir+"/").toURL());
+-    classPath.add(file.toURL());
+-    classPath.add(new File(workDir, "classes/").toURL());
++    classPath.add(new File(workDir+"/").toURI().toURL());
++    classPath.add(file.toURI().toURL());
++    classPath.add(new File(workDir, "classes/").toURI().toURL());
+     File[] libs = new File(workDir, "lib").listFiles();
+     if (libs != null) {
+       for (int i = 0; i < libs.length; i++) {
+-        classPath.add(libs[i].toURL());
++        classPath.add(libs[i].toURI().toURL());
+       }
+     }
+     
+diff --git a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+index 022fd97..2959824 100644
+--- a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
++++ b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+@@ -1297,9 +1297,11 @@
+         <li><code>${mapred.local.dir}/taskTracker/jobcache/$jobid/jars/</code>
+         : The jars directory, which has the job jar file and expanded jar.
+         The <code>job.jar</code> is the application's jar file that is
+-        automatically distributed to each machine. It is expanded in jars
+-        directory before the tasks for the job start. The job.jar location
+-        is accessible to the application through the api
++        automatically distributed to each machine. Any library jars that are dependencies
++        of the application code may be packaged inside this jar in a <code>lib/</code> directory.
++        This directory is extracted from <code>job.jar</code> and its contents are
++        automatically added to the classpath for each task.
++        The job.jar location is accessible to the application through the api
+         <a href="ext:api/org/apache/hadoop/mapred/jobconf/getjar"> 
+         JobConf.getJar() </a>. To access the unjarred directory,
+         JobConf.getJar().getParent() can be called.</li>
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobConf.java b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+index 65de522..fea26dd 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobConf.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+@@ -24,6 +24,7 @@ import java.io.IOException;
+ import java.net.URL;
+ import java.net.URLDecoder;
+ import java.util.Enumeration;
++import java.util.regex.Pattern;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -158,6 +159,10 @@ public class JobConf extends Configuration {
+   static final String MAPRED_JOB_REDUCE_MEMORY_MB_PROPERTY =
+       "mapred.job.reduce.memory.mb";
+ 
++  /** Pattern for the default unpacking behavior for job jars */
++  public static final Pattern UNPACK_JAR_PATTERN_DEFAULT =
++    Pattern.compile("(?:classes/|lib/).*");
++
+   /**
+    * Construct a map/reduce job configuration.
+    */
+@@ -241,6 +246,14 @@ public class JobConf extends Configuration {
+    * @param jar the user jar for the map-reduce job.
+    */
+   public void setJar(String jar) { set("mapred.jar", jar); }
++
++  /**
++   * Get the pattern for jar contents to unpack on the tasktracker
++   */
++  public Pattern getJarUnpackPattern() {
++    return getPattern(JobContext.JAR_UNPACK_PATTERN, UNPACK_JAR_PATTERN_DEFAULT);
++  }
++
+   
+   /**
+    * Set the job's jar file by finding an example class location.
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index f83bd46..ee14b90 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -220,8 +220,7 @@ abstract class TaskRunner extends Thread {
+         classPath.append(sep);
+         classPath.append(new File(jobCacheDir, "classes"));
+         classPath.append(sep);
+-        classPath.append(jobCacheDir);
+-       
++        classPath.append(new File(jobCacheDir, "job.jar"));
+       }
+ 
+       // include the user specified classpath
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 5c5666b..70d8386 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -812,9 +812,12 @@ public class TaskTracker
+           } finally {
+             out.close();
+           }
+-          // also unjar the job.jar files 
+-          RunJar.unJar(new File(localJarFile.toString()),
+-                       new File(localJarFile.getParent().toString()));
++          // also unjar the parts of the job.jar that need to end up on the
++          // classpath, or explicitly requested by the user.
++          RunJar.unJar(
++            new File(localJarFile.toString()),
++            new File(localJarFile.getParent().toString()),
++            localJobConf.getJarUnpackPattern());
+         }
+         rjob.keepJobFiles = ((localJobConf.getKeepTaskFilesPattern() != null) ||
+                              localJobConf.getKeepFailedTaskFiles());
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+index 0800c05..110a160 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+@@ -44,6 +44,7 @@ public class JobContext {
+     "mapreduce.outputformat.class";
+   protected static final String PARTITIONER_CLASS_ATTR = 
+     "mapreduce.partitioner.class";
++  public static final String JAR_UNPACK_PATTERN = "mapreduce.job.jar.unpack.pattern";
+ 
+   protected final org.apache.hadoop.mapred.JobConf conf;
+   private final JobID jobId;
+diff --git a/src/test/org/apache/hadoop/conf/TestConfiguration.java b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+index 0d01dac..07d54b8 100644
+--- a/src/test/org/apache/hadoop/conf/TestConfiguration.java
++++ b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+@@ -29,6 +29,7 @@ import java.io.StringWriter;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.Random;
++import java.util.regex.Pattern;
+ 
+ import junit.framework.TestCase;
+ 
+@@ -329,7 +330,37 @@ public class TestConfiguration extends TestCase {
+     assertEquals(-20, conf.getInt("test.int3", 0));
+     assertEquals(-20, conf.getLong("test.int3", 0));
+   }
+-	
++
++  public void testPattern() throws IOException {
++    out = new BufferedWriter(new FileWriter(CONFIG));
++    startConfig();
++    appendProperty("test.pattern1", "");
++    appendProperty("test.pattern2", "(");
++    appendProperty("test.pattern3", "a+b");
++    endConfig();
++    Path fileResource = new Path(CONFIG);
++    conf.addResource(fileResource);
++
++    Pattern defaultPattern = Pattern.compile("x+");
++    // Return default if missing
++    assertEquals(defaultPattern.pattern(),
++                 conf.getPattern("xxxxx", defaultPattern).pattern());
++    // Return null if empty and default is null
++    assertNull(conf.getPattern("test.pattern1", null));
++    // Return default for empty
++    assertEquals(defaultPattern.pattern(),
++                 conf.getPattern("test.pattern1", defaultPattern).pattern());
++    // Return default for malformed
++    assertEquals(defaultPattern.pattern(),
++                 conf.getPattern("test.pattern2", defaultPattern).pattern());
++    // Works for correct patterns
++    assertEquals("a+b",
++                 conf.getPattern("test.pattern3", defaultPattern).pattern());
++  }
++
++
++
++
+   public void testReload() throws IOException {
+     out=new BufferedWriter(new FileWriter(CONFIG));
+     startConfig();
+-- 
+1.7.0.4
+

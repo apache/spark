@@ -1,0 +1,536 @@
+From 8bf3439ff69762a33967dca4abb15c0cd2bb8417 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:47:45 -0800
+Subject: [PATCH 0210/1179] MAPREDUCE-1395. Sqoop does not check return value of Job.waitForCompletion()
+
+Description: Old code depended on JobClient.runJob() throwing IOException on failure. Job.waitForCompletion can fail in that manner, or it can fail by returning false. Sqoop needs to check for this condition.
+Reason: bugfix
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../src/java/org/apache/hadoop/sqoop/Sqoop.java    |    9 ++
+ .../java/org/apache/hadoop/sqoop/SqoopOptions.java |   16 ++-
+ .../sqoop/mapreduce/DataDrivenImportJob.java       |   36 +++++-
+ .../apache/hadoop/sqoop/mapreduce/ExportJob.java   |   10 ++-
+ .../apache/hadoop/sqoop/util/ExportException.java  |    6 +
+ .../apache/hadoop/sqoop/util/ImportException.java  |    6 +
+ .../apache/hadoop/sqoop/hive/TestHiveImport.java   |    2 +-
+ .../apache/hadoop/sqoop/manager/MySQLAuthTest.java |   90 +++++++++------
+ .../hadoop/sqoop/mapreduce/MapreduceTests.java     |    1 +
+ .../hadoop/sqoop/mapreduce/TestImportJob.java      |  117 ++++++++++++++++++++
+ .../hadoop/sqoop/testutil/ImportJobTestCase.java   |    2 +-
+ 11 files changed, 245 insertions(+), 50 deletions(-)
+ create mode 100644 src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/mapreduce/TestImportJob.java
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java
+index 6ddd37d..b489821 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java
+@@ -63,6 +63,15 @@ public class Sqoop extends Configured implements Tool {
+   private List<String> generatedJarFiles;
+ 
+   public Sqoop() {
++    init();
++  }
++
++  public Sqoop(Configuration conf) {
++    init();
++    setConf(conf);
++  }
++
++  private void init() {
+     generatedJarFiles = new ArrayList<String>();
+   }
+ 
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
+index 0db319e..90d82b9 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
+@@ -134,7 +134,11 @@ public class SqoopOptions {
+   private String [] extraArgs;
+ 
+   public SqoopOptions() {
+-    initDefaults();
++    initDefaults(null);
++  }
++
++  public SqoopOptions(Configuration conf) {
++    initDefaults(conf);
+   }
+ 
+   /**
+@@ -144,7 +148,7 @@ public class SqoopOptions {
+    * @param table Table to read
+    */
+   public SqoopOptions(final String connect, final String table) {
+-    initDefaults();
++    initDefaults(null);
+ 
+     this.connectString = connect;
+     this.tableName = table;
+@@ -223,7 +227,7 @@ public class SqoopOptions {
+     return this.tmpDir;
+   }
+ 
+-  private void initDefaults() {
++  private void initDefaults(Configuration baseConfiguration) {
+     // first, set the true defaults if nothing else happens.
+     // default action is to run the full pipeline.
+     this.action = ControlAction.FullImport;
+@@ -263,7 +267,11 @@ public class SqoopOptions {
+     this.useCompression = false;
+     this.directSplitSize = 0;
+ 
+-    this.conf = new Configuration();
++    if (null == baseConfiguration) {
++      this.conf = new Configuration();
++    } else {
++      this.conf = new Configuration(baseConfiguration);
++    }
+ 
+     this.extraArgs = null;
+ 
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/DataDrivenImportJob.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/DataDrivenImportJob.java
+index 90d532f..d6e5a2f 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/DataDrivenImportJob.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/DataDrivenImportJob.java
+@@ -32,6 +32,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType;
+ import org.apache.hadoop.io.compress.GzipCodec;
+ import org.apache.hadoop.mapreduce.Counters;
+ import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.Mapper;
+ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+ import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
+ import org.apache.hadoop.mapreduce.lib.db.DBConfiguration;
+@@ -43,6 +44,7 @@ import org.apache.hadoop.sqoop.SqoopOptions;
+ import org.apache.hadoop.sqoop.manager.ConnManager;
+ import org.apache.hadoop.sqoop.orm.TableClassName;
+ import org.apache.hadoop.sqoop.util.ClassLoaderStack;
++import org.apache.hadoop.sqoop.util.ImportException;
+ import org.apache.hadoop.sqoop.util.PerfCounters;
+ 
+ /**
+@@ -53,12 +55,22 @@ public class DataDrivenImportJob {
+ 
+   public static final Log LOG = LogFactory.getLog(DataDrivenImportJob.class.getName());
+ 
+-  private SqoopOptions options;
++  private final SqoopOptions options;
++  private final Class<Mapper> mapperClass;
+ 
++  // For dependency-injection purposes, we can specify a mapper class
++  // to use during tests.
++  public final static String DATA_DRIVEN_MAPPER_KEY =
++      "sqoop.data.driven.mapper.class";
++
++  @SuppressWarnings("unchecked")
+   public DataDrivenImportJob(final SqoopOptions opts) {
+     this.options = opts;
++    this.mapperClass = (Class<Mapper>) opts.getConf().getClass(
++        DATA_DRIVEN_MAPPER_KEY, null);
+   }
+ 
++
+   /**
+    * Run an import job to read a table in to HDFS
+    *
+@@ -66,9 +78,11 @@ public class DataDrivenImportJob {
+    * @param ormJarFile the Jar file to insert into the dcache classpath. (may be null)
+    * @param splitByCol the column of the database table to use to split the import
+    * @param conf A fresh Hadoop Configuration to use to build an MR job.
++   * @throws IOException if the job encountered an IO problem
++   * @throws ImportException if the job failed unexpectedly or was misconfigured.
+    */
+   public void runImport(String tableName, String ormJarFile, String splitByCol,
+-      Configuration conf) throws IOException {
++      Configuration conf) throws IOException, ImportException {
+ 
+     LOG.info("Beginning data-driven import of " + tableName);
+ 
+@@ -103,7 +117,11 @@ public class DataDrivenImportJob {
+ 
+       if (options.getFileLayout() == SqoopOptions.FileLayout.TextFile) {
+         job.setOutputFormatClass(RawKeyTextOutputFormat.class);
+-        job.setMapperClass(TextImportMapper.class);
++        if (null == mapperClass) {
++          job.setMapperClass(TextImportMapper.class);
++        } else {
++          job.setMapperClass(mapperClass);
++        }
+         job.setOutputKeyClass(Text.class);
+         job.setOutputValueClass(NullWritable.class);
+         if (options.shouldUseCompression()) {
+@@ -112,7 +130,11 @@ public class DataDrivenImportJob {
+         }
+       } else if (options.getFileLayout() == SqoopOptions.FileLayout.SequenceFile) {
+         job.setOutputFormatClass(SequenceFileOutputFormat.class);
+-        job.setMapperClass(AutoProgressMapper.class);
++        if (null == mapperClass) {
++          job.setMapperClass(AutoProgressMapper.class);
++        } else {
++          job.setMapperClass(mapperClass);
++        }
+         if (options.shouldUseCompression()) {
+           SequenceFileOutputFormat.setCompressOutput(job, true);
+           SequenceFileOutputFormat.setOutputCompressionType(job, CompressionType.BLOCK);
+@@ -171,8 +193,9 @@ public class DataDrivenImportJob {
+       PerfCounters counters = new PerfCounters();
+       counters.startClock();
+ 
++      boolean success;
+       try {
+-        job.waitForCompletion(false);
++        success = job.waitForCompletion(false);
+       } catch (InterruptedException ie) {
+         throw new IOException(ie);
+       } catch (ClassNotFoundException cnfe) {
+@@ -183,6 +206,9 @@ public class DataDrivenImportJob {
+       counters.addBytes(job.getCounters().getGroup("FileSystemCounters")
+           .findCounter("HDFS_BYTES_WRITTEN").getValue());
+       LOG.info("Transferred " + counters.toString());
++      if (!success) {
++        throw new ImportException("import job failed!");
++      }
+     } finally {
+       if (isLocal && null != prevClassLoader) {
+         // unload the special classloader for this jar.
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/ExportJob.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/ExportJob.java
+index 7f45655..e3aed3a 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/ExportJob.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/ExportJob.java
+@@ -45,6 +45,7 @@ import org.apache.hadoop.sqoop.manager.ConnManager;
+ import org.apache.hadoop.sqoop.manager.ExportJobContext;
+ import org.apache.hadoop.sqoop.orm.TableClassName;
+ import org.apache.hadoop.sqoop.util.ClassLoaderStack;
++import org.apache.hadoop.sqoop.util.ExportException;
+ 
+ /**
+  * Actually runs a jdbc export job using the ORM files generated by the sqoop.orm package.
+@@ -128,8 +129,10 @@ public class ExportJob {
+ 
+   /**
+    * Run an export job to dump a table from HDFS to a database
++   * @throws IOException if the export job encounters an IO error
++   * @throws ExportException if the job fails unexpectedly or is misconfigured.
+    */
+-  public void runExport() throws IOException {
++  public void runExport() throws ExportException, IOException {
+ 
+     SqoopOptions options = context.getOptions();
+     Configuration conf = options.getConf();
+@@ -191,7 +194,10 @@ public class ExportJob {
+       job.setMapOutputValueClass(NullWritable.class);
+ 
+       try {
+-        job.waitForCompletion(false);
++        boolean success = job.waitForCompletion(false);
++        if (!success) {
++          throw new ExportException("Export job failed!");
++        }
+       } catch (InterruptedException ie) {
+         throw new IOException(ie);
+       } catch (ClassNotFoundException cnfe) {
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/util/ExportException.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/util/ExportException.java
+index 0043544..ffc0e75 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/util/ExportException.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/util/ExportException.java
+@@ -39,4 +39,10 @@ public class ExportException extends Exception {
+   public ExportException(final String message, final Throwable cause) {
+     super(message, cause);
+   }
++
++  @Override
++  public String toString() {
++    String msg = getMessage();
++    return (null == msg) ? "ExportException" : msg;
++  }
+ }
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/util/ImportException.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/util/ImportException.java
+index b2ab6e0..c6381a2 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/util/ImportException.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/util/ImportException.java
+@@ -41,4 +41,10 @@ public class ImportException extends Exception {
+   public ImportException(final String message, final Throwable cause) {
+     super(message, cause);
+   }
++
++  @Override
++  public String toString() {
++    String msg = getMessage();
++    return (null == msg) ? "ImportException" : msg;
++  }
+ }
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
+index 2467c1e..25f87c7 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
+@@ -43,7 +43,7 @@ public class TestHiveImport extends ImportJobTestCase {
+    * Create the argv to pass to Sqoop
+    * @return the argv as an array of strings.
+    */
+-  private String [] getArgv(boolean includeHadoopFlags, String [] moreArgs) {
++  protected String [] getArgv(boolean includeHadoopFlags, String [] moreArgs) {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+     if (includeHadoopFlags) {
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
+index 7b73d22..9ce82a9 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
+@@ -256,52 +256,68 @@ public class MySQLAuthTest extends ImportJobTestCase {
+   public void doZeroTimestampTest(int testNum, boolean expectSuccess,
+       String connectString) throws IOException, SQLException {
+ 
+-    final String tableName = "mysqlTimestampTable" + Integer.toString(testNum);
++    LOG.info("Beginning zero-timestamp test #" + testNum);
+ 
+-    // Create a table containing a full-zeros timestamp.
+-    SqoopOptions options = new SqoopOptions(connectString, tableName);
+-    options.setUsername(AUTH_TEST_USER);
+-    options.setPassword(AUTH_TEST_PASS);
++    try {
++      final String tableName = "mysqlTimestampTable" + Integer.toString(testNum);
+ 
+-    manager = new LocalMySQLManager(options);
++      // Create a table containing a full-zeros timestamp.
++      SqoopOptions options = new SqoopOptions(connectString, tableName);
++      options.setUsername(AUTH_TEST_USER);
++      options.setPassword(AUTH_TEST_PASS);
+ 
+-    Connection connection = null;
+-    Statement st = null;
++      manager = new LocalMySQLManager(options);
+ 
+-    connection = manager.getConnection();
+-    connection.setAutoCommit(false);
+-    st = connection.createStatement();
++      Connection connection = null;
++      Statement st = null;
+ 
+-    // create the database table and populate it with data. 
+-    st.executeUpdate("DROP TABLE IF EXISTS " + tableName);
+-    st.executeUpdate("CREATE TABLE " + tableName + " ("
+-        + "id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, "
+-        + "ts TIMESTAMP NOT NULL)");
++      connection = manager.getConnection();
++      connection.setAutoCommit(false);
++      st = connection.createStatement();
+ 
+-    st.executeUpdate("INSERT INTO " + tableName + " VALUES("
+-        + "NULL,'0000-00-00 00:00:00.0')");
+-    connection.commit();
+-    st.close();
+-    connection.close();
++      // create the database table and populate it with data. 
++      st.executeUpdate("DROP TABLE IF EXISTS " + tableName);
++      st.executeUpdate("CREATE TABLE " + tableName + " ("
++          + "id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, "
++          + "ts TIMESTAMP NOT NULL)");
+ 
+-    // Run the import.
+-    String [] argv = getArgv(true, false, connectString, tableName);
+-    runImport(argv);
++      st.executeUpdate("INSERT INTO " + tableName + " VALUES("
++          + "NULL,'0000-00-00 00:00:00.0')");
++      connection.commit();
++      st.close();
++      connection.close();
+ 
+-    // Make sure the result file is there.
+-    Path warehousePath = new Path(this.getWarehouseDir());
+-    Path tablePath = new Path(warehousePath, tableName);
+-    Path filePath = new Path(tablePath, "part-m-00000");
++      // Run the import.
++      String [] argv = getArgv(true, false, connectString, tableName);
++      try {
++        runImport(argv);
++      } catch (Exception e) {
++        if (expectSuccess) {
++          // This is unexpected. rethrow.
++          throw new RuntimeException(e);
++        } else {
++          // We expected an error.
++          LOG.info("Got exception running import (expected). msg: " + e);
++        }
++      }
+ 
+-    File f = new File(filePath.toString());
+-    if (expectSuccess) {
+-      assertTrue("Could not find imported data file", f.exists());
+-      BufferedReader r = new BufferedReader(new InputStreamReader(
+-          new FileInputStream(f)));
+-      assertEquals("1,null", r.readLine());
+-      IOUtils.closeStream(r);
+-    } else {
+-      assertFalse("Imported data when expected failure", f.exists());
++      // Make sure the result file is there.
++      Path warehousePath = new Path(this.getWarehouseDir());
++      Path tablePath = new Path(warehousePath, tableName);
++      Path filePath = new Path(tablePath, "part-m-00000");
++
++      File f = new File(filePath.toString());
++      if (expectSuccess) {
++        assertTrue("Could not find imported data file", f.exists());
++        BufferedReader r = new BufferedReader(new InputStreamReader(
++            new FileInputStream(f)));
++        assertEquals("1,null", r.readLine());
++        IOUtils.closeStream(r);
++      } else {
++        assertFalse("Imported data when expected failure", f.exists());
++      }
++    } finally {
++      LOG.info("Finished zero timestamp test #" + testNum);
+     }
+   }
+ }
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/mapreduce/MapreduceTests.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/mapreduce/MapreduceTests.java
+index 6ec9270..441fac9 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/mapreduce/MapreduceTests.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/mapreduce/MapreduceTests.java
+@@ -31,6 +31,7 @@ public final class MapreduceTests {
+   public static Test suite() {
+     TestSuite suite = new TestSuite("Tests for org.apache.hadoop.sqoop.mapreduce");
+     suite.addTestSuite(TestTextImportMapper.class);
++    suite.addTestSuite(TestImportJob.class);
+     return suite;
+   }
+ }
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/mapreduce/TestImportJob.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/mapreduce/TestImportJob.java
+new file mode 100644
+index 0000000..643e508
+--- /dev/null
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/mapreduce/TestImportJob.java
+@@ -0,0 +1,117 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.sqoop.mapreduce;
++
++import java.io.BufferedReader;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.IOException;
++import java.io.InputStreamReader;
++import java.sql.SQLException;
++import java.util.ArrayList;
++import java.util.List;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.IOUtils;
++import org.junit.Before;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.io.LongWritable;
++import org.apache.hadoop.io.NullWritable;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Mapper;
++import org.apache.hadoop.mapreduce.lib.db.DBWritable;
++import org.apache.hadoop.sqoop.Sqoop;
++import org.apache.hadoop.sqoop.mapreduce.AutoProgressMapper;
++import org.apache.hadoop.sqoop.testutil.CommonArgs;
++import org.apache.hadoop.sqoop.testutil.HsqldbTestServer;
++import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
++import org.apache.hadoop.util.ToolRunner;
++
++/**
++ * Test aspects of the DataDrivenImportJob class
++ */
++public class TestImportJob extends ImportJobTestCase {
++
++  public void testFailedImportDueToIOException() throws IOException {
++    // Make sure that if a MapReduce job to do the import fails due
++    // to an IOException, we tell the user about it.
++
++    // Create a table to attempt to import.
++    createTableForColType("VARCHAR(32)", "'meep'");
++
++    // Make the output dir exist so we know the job will fail via IOException.
++    Path outputPath = new Path(new Path(getWarehouseDir()), getTableName());
++    FileSystem fs = FileSystem.getLocal(new Configuration());
++    fs.mkdirs(outputPath);
++
++    assertTrue(fs.exists(outputPath));
++
++    String [] argv = getArgv(true, new String [] { "DATA_COL0" });
++
++    Sqoop importer = new Sqoop();
++    try {
++      ToolRunner.run(importer, argv);
++      fail("Expected IOException running this job.");
++    } catch (Exception e) {
++      // In debug mode, IOException is wrapped in RuntimeException.
++      LOG.info("Got exceptional return (expected: ok). msg is: " + e);
++    }
++  }
++
++  // A mapper that is guaranteed to cause the task to fail.
++  public static class NullDereferenceMapper
++      extends AutoProgressMapper<LongWritable, DBWritable, Text, NullWritable> {
++
++    public void map(LongWritable key, DBWritable val, Context c)
++        throws IOException, InterruptedException {
++      String s = null;
++      s.length(); // This will throw a NullPointerException.
++    }
++  }
++
++  public void testFailedImportDueToJobFail() throws IOException {
++    // Test that if the job returns 'false' it still fails and informs
++    // the user.
++
++    // Create a table to attempt to import.
++    createTableForColType("VARCHAR(32)", "'meep'");
++
++    String [] argv = getArgv(true, new String [] { "DATA_COL0" });
++
++    // Use dependency injection to specify a mapper that we know
++    // will fail.
++    Configuration conf = new Configuration();
++    conf.setClass(DataDrivenImportJob.DATA_DRIVEN_MAPPER_KEY,
++        NullDereferenceMapper.class,
++        Mapper.class);
++
++    Sqoop importer = new Sqoop(conf);
++    try {
++      ToolRunner.run(importer, argv);
++      fail("Expected ImportException running this job.");
++    } catch (Exception e) {
++      // In debug mode, ImportException is wrapped in RuntimeException.
++      LOG.info("Got exceptional return (expected: ok). msg is: " + e);
++    }
++  }
++
++}
++
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java
+index 28f1710..91e8d82 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/ImportJobTestCase.java
+@@ -51,7 +51,7 @@ public class ImportJobTestCase extends BaseSqoopTestCase {
+    * @param colNames the columns to import. If null, all columns are used.
+    * @return the argv as an array of strings.
+    */
+-  private String [] getArgv(boolean includeHadoopFlags, String [] colNames) {
++  protected String [] getArgv(boolean includeHadoopFlags, String [] colNames) {
+     if (null == colNames) {
+       colNames = getColNames();
+     }
+-- 
+1.7.0.4
+

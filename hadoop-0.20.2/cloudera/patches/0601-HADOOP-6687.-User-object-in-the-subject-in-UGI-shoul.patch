@@ -1,0 +1,30 @@
+From 6ddae27ba50b6895509839bb89a7a8e2a0550284 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 12 Apr 2010 13:03:29 -0700
+Subject: [PATCH 0601/1179] HADOOP-6687. User object in the subject in UGI  should be reused in case of a relogin.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12440979/HADOOP-6687-y20.2.patch
+Author: Jitendra Nath Pandey
+Ref: YDH
+---
+ .../hadoop/security/UserGroupInformation.java      |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index dceadde..08e469a 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -93,6 +93,10 @@ public class UserGroupInformation {
+ 
+     @Override
+     public boolean commit() throws LoginException {
++      // if we already have a user, we are done.
++      if (!subject.getPrincipals(User.class).isEmpty()) {
++        return true;
++      }
+       Principal user = null;
+       // if we are using kerberos, try it out
+       if (useKerberos) {
+-- 
+1.7.0.4
+

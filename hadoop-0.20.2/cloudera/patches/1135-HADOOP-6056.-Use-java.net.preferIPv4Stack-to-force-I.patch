@@ -1,0 +1,33 @@
+From 0ae25905defef0f846f60ab6287fb52cee23f98b Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 11 Mar 2012 18:28:41 -0700
+Subject: [PATCH 1135/1179] HADOOP-6056. Use java.net.preferIPv4Stack to force IPv4.
+
+This was mentioned on HADOOP-3427, there is a property,
+java.net.preferIPv4Stack, which you set to true for the java net
+process to switch to IPv4 everywhere. As Hadoop doesn't work on IPv6,
+this should be set to true in the startup scripts.
+
+Reason: Improvement
+Author: Todd Lipcon
+Ref: CDH-4803
+---
+ bin/hadoop |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 61409b7..b7b1062 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -334,6 +334,8 @@ if [ "x$JAVA_LIBRARY_PATH" != "x" ]; then
+ fi  
+ HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.policy.file=$HADOOP_POLICYFILE"
+ 
++# Disable ipv6 as it can cause issues
++HADOOP_OPTS="$HADOOP_OPTS -Djava.net.preferIPv4Stack=true"
+ 
+ ###########################################################################
+ # DAEMON SETTINGS
+-- 
+1.7.0.4
+

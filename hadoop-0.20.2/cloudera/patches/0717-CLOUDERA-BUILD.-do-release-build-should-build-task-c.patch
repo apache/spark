@@ -1,0 +1,32 @@
+From 766c6c6e77514164afbd5f14ca171419106d93de Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 3 Oct 2010 17:45:22 -0700
+Subject: [PATCH 0717/1179] CLOUDERA-BUILD. do-release-build should build task controller
+
+---
+ cloudera/do-release-build |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index edb7442..58d0f76 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -80,6 +80,7 @@ JAVA_HOME=$JAVA32_HOME \
+   -Dcompile.c++=true \
+   -Djava5.home=$JAVA5_HOME \
+   -Dforrest.home=$FORREST_HOME \
++  -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+   -propertyfile cloudera/build.properties \
+   clean package-native
+ 
+@@ -102,5 +103,6 @@ JAVA_HOME=$JAVA64_HOME \
+   -Dcompile.c++=true \
+   -Djava5.home=$JAVA5_HOME \
+   -Dforrest.home=$FORREST_HOME \
++  -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+   -propertyfile cloudera/build.properties \
+-  compile-core-native compile-c++ compile-c++-examples tar
++  compile-core-native compile-c++ compile-c++-examples task-controller tar
+-- 
+1.7.0.4
+

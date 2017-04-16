@@ -1,0 +1,70 @@
+From eb3c35987b4434c85fb0203c866a7f8fd56674aa Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 14 Apr 2010 13:20:06 +0530
+Subject: [PATCH 0604/1179] MAPREDUCE-1985. Fix for java.lang.ArrayIndexOutOfBoundsException in analysejobhistory.jsp of jobs with 0 maps
+
+Author: Vinod Kumar
+Ref: YDH
+---
+ src/webapps/job/analysejobhistory.jsp |   31 ++++++++++++++++++-------------
+ 1 files changed, 18 insertions(+), 13 deletions(-)
+
+diff --git a/src/webapps/job/analysejobhistory.jsp b/src/webapps/job/analysejobhistory.jsp
+index ecbf533..47bfdcc 100644
+--- a/src/webapps/job/analysejobhistory.jsp
++++ b/src/webapps/job/analysejobhistory.jsp
+@@ -112,9 +112,19 @@
+                 t2.getLong(Keys.START_TIME); 
+       return (l2<l1 ? -1 : (l2==l1 ? 0 : 1));
+     }
+-  }; 
+-  Arrays.sort(mapTasks, cMap);
+-  JobHistory.Task minMap = mapTasks[mapTasks.length-1] ;
++  };
++  Comparator<JobHistory.Task> cFinishMapRed = 
++    new Comparator<JobHistory.Task>() {
++    public int compare(JobHistory.Task t1, JobHistory.Task t2){
++      long l1 = t1.getLong(Keys.FINISH_TIME); 
++      long l2 = t2.getLong(Keys.FINISH_TIME);
++      return (l2<l1 ? -1 : (l2==l1 ? 0 : 1));
++    }
++  };
++
++  if (mapTasks.length > 0) {
++    Arrays.sort(mapTasks, cMap);
++    JobHistory.Task minMap = mapTasks[mapTasks.length-1] ;
+ %>
+ 
+ <h3>Time taken by best performing Map task 
+@@ -142,16 +152,9 @@
+ </tbody>
+ </table>
+ <%  
+-  Comparator<JobHistory.Task> cFinishMapRed = 
+-    new Comparator<JobHistory.Task>() {
+-    public int compare(JobHistory.Task t1, JobHistory.Task t2){
+-      long l1 = t1.getLong(Keys.FINISH_TIME); 
+-      long l2 = t2.getLong(Keys.FINISH_TIME);
+-      return (l2<l1 ? -1 : (l2==l1 ? 0 : 1));
+-    }
+-  };
+-  Arrays.sort(mapTasks, cFinishMapRed);
+-  JobHistory.Task lastMap = mapTasks[0] ;
++
++    Arrays.sort(mapTasks, cFinishMapRed);
++    JobHistory.Task lastMap = mapTasks[0] ;
+ %>
+ 
+ <h3>The last Map task 
+@@ -164,6 +167,8 @@ finished at (relative to the Job launch time):
+ <hr/>
+ 
+ <%
++  }//end if(mapTasks.length > 0)
++
+   if (reduceTasks.length <= 0) return;
+   Arrays.sort(reduceTasks, cShuffle); 
+   JobHistory.Task minShuffle = reduceTasks[reduceTasks.length-1] ;
+-- 
+1.7.0.4
+

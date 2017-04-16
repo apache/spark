@@ -1,0 +1,38 @@
+From 19c038a6af07e3999e83a2178d2328535e00dedb Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:16:55 -0800
+Subject: [PATCH 0124/1179] CLOUDERA-BUILD. Generate the sqoop documentation and ensure that it's in the release tarball
+
+Author: Matt Massie
+---
+ cloudera/do-release-build |   14 ++++++++++++++
+ 1 files changed, 14 insertions(+), 0 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 4d268cd..a94572d 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -82,6 +82,20 @@ ant \
+   -propertyfile cloudera/build.properties api-report
+ fi
+ 
++# Build the sqoop docs
++pushd $RELEASE_DIR/src/contrib/sqoop
++JAVA_HOME=$JAVA64_HOME \
++  ant \
++  -Djava5.home=$JAVA5_HOME \
++  -Dforrest.home=$FORREST_HOME \
++  -propertyfile cloudera/build.properties \
++  doc
++popd
++# Copy them into the main build directory to be included in the tarball
++mkdir -p build/hadoop-$FULL_VERSION/docs/
++cp -r build/contrib/sqoop/doc/ build/hadoop-$FULL_VERSION/docs/sqoop
++
++
+ JAVA_HOME=$JAVA64_HOME \
+   CFLAGS=-m64 \
+   CXXFLAGS=-m64 \
+-- 
+1.7.0.4
+

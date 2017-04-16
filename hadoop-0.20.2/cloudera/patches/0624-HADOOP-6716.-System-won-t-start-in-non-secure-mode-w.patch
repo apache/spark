@@ -1,0 +1,39 @@
+From 82b157a5b805c10485712ddb108aa8248ad0df0c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 22 Apr 2010 10:13:04 -0700
+Subject: [PATCH 0624/1179] HADOOP-6716. System won't start in non-secure mode when kerb5.conf (edu.mit.kerberos on Mac) is not present
+
+Patch: https://issues.apache.org/jira/secure/attachment/12442487/HADOOP-6716-BP20-3.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ .../org/apache/hadoop/security/KerberosName.java   |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/KerberosName.java b/src/core/org/apache/hadoop/security/KerberosName.java
+index 08094d9..d17efff 100644
+--- a/src/core/org/apache/hadoop/security/KerberosName.java
++++ b/src/core/org/apache/hadoop/security/KerberosName.java
+@@ -73,14 +73,17 @@ public class KerberosName {
+   private static List<Rule> rules;
+ 
+   private static String defaultRealm;
+-  private static final Config kerbConf;
++  private static Config kerbConf;
+   
+   static {
+     try {
+       kerbConf = Config.getInstance();
+       defaultRealm = kerbConf.getDefaultRealm();
+     } catch (KrbException ke) {
+-      throw new IllegalArgumentException("Can't get Kerberos configuration",ke);
++      if(UserGroupInformation.isSecurityEnabled())
++        throw new IllegalArgumentException("Can't get Kerberos configuration",ke);
++      else 
++        defaultRealm="";
+     }
+   }
+ 
+-- 
+1.7.0.4
+

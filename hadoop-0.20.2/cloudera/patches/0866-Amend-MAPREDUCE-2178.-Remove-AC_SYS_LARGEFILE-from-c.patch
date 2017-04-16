@@ -1,0 +1,31 @@
+From 5a57891c772488d8b02bcf54f4247f8fffa81d1f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Feb 2011 13:06:26 -0800
+Subject: [PATCH 0866/1179] Amend MAPREDUCE-2178. Remove AC_SYS_LARGEFILE from configure.ac
+
+This flag allows opening of files >2GB, but the task-controller doesn't need
+to do this. The removal is important because some RHEL5 systems have an
+fts.h which is incompatible with the resultant CFLAG when building 32-bit.
+
+Reason: RHEL5 32-bit build
+Author: Todd Lipcon
+Ref: CDH-2623
+---
+ src/c++/task-controller/configure.ac |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
+
+diff --git a/src/c++/task-controller/configure.ac b/src/c++/task-controller/configure.ac
+index 091fc01..4ed8d63 100644
+--- a/src/c++/task-controller/configure.ac
++++ b/src/c++/task-controller/configure.ac
+@@ -20,7 +20,6 @@
+ AC_PREREQ(2.59)
+ AC_INIT(linux-task-controller, 1.0.0, mapreduce-dev@hadoop.apache.org)
+ AC_GNU_SOURCE
+-AC_SYS_LARGEFILE
+ 
+ AM_INIT_AUTOMAKE([subdir-objects foreign no-dist])
+ 
+-- 
+1.7.0.4
+

@@ -1,0 +1,35 @@
+From d1c4359e1abc3f3e5e4fa16ee1c83a3d7f015da3 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 14 Apr 2010 14:59:39 -0700
+Subject: [PATCH 0278/1179] HDFS-1211. BlockReceiver logs too much at INFO level when using sync()
+
+Description: Reduces the log level from INFO to DEBUG for a common message
+             in the datanode log when using the sync feature.
+Reason: Substantially reduces DN log chattiness for syncing clients.
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../hadoop/hdfs/server/datanode/BlockReceiver.java |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+index 6d62d28..e8c8454 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+@@ -628,10 +628,12 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+       computePartialChunkCrc(offsetInBlock, offsetInChecksum, bytesPerChecksum);
+     }
+ 
+-    LOG.info("Changing block file offset of block " + block + " from " + 
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Changing block file offset of block " + block + " from " + 
+         datanode.data.getChannelPosition(block, streams) +
+              " to " + offsetInBlock +
+              " meta file offset to " + offsetInChecksum);
++    }
+ 
+     // set the position of the block file
+     datanode.data.setChannelPosition(block, streams, offsetInBlock, offsetInChecksum);
+-- 
+1.7.0.4
+

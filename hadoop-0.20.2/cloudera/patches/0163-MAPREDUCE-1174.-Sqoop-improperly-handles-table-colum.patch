@@ -1,0 +1,426 @@
+From 23c116b6ab5615bdb846e22b61a41e92ca287bdf Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:29:47 -0800
+Subject: [PATCH 0163/1179] MAPREDUCE-1174. Sqoop improperly handles table/column names which are reserved sql words
+
+Description: In some databases it is legal to name tables and columns with terms that overlap SQL reserved keywords (e.g., <tt>CREATE</tt>, <tt>table</tt>, etc.). In such cases, the database allows you to escape the table and column names. We should always escape table and column names when possible.
+Reason: Bugfix
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../apache/hadoop/sqoop/manager/ConnManager.java   |   24 ++++
+ .../apache/hadoop/sqoop/manager/MySQLManager.java  |   32 +++++-
+ .../apache/hadoop/sqoop/manager/OracleManager.java |    2 +-
+ .../hadoop/sqoop/manager/PostgresqlManager.java    |    2 +-
+ .../apache/hadoop/sqoop/manager/SqlManager.java    |    8 +-
+ .../sqoop/mapreduce/DataDrivenImportJob.java       |   13 ++-
+ .../hadoop/sqoop/manager/LocalMySQLTest.java       |  142 ++++++++++++++++++--
+ .../hadoop/sqoop/manager/PostgresqlTest.java       |    4 +-
+ 8 files changed, 202 insertions(+), 25 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java
+index ba9165c..dfcd61c 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java
+@@ -95,6 +95,30 @@ public abstract class ConnManager {
+       throws IOException, ImportException;
+ 
+   /**
++   * When using a column name in a generated SQL query, how (if at all)
++   * should we escape that column name? e.g., a column named "table"
++   * may need to be quoted with backtiks: "`table`".
++   *
++   * @param colName the column name as provided by the user, etc.
++   * @return how the column name should be rendered in the sql text.
++   */
++  public String escapeColName(String colName) {
++    return colName;
++  }
++
++  /**
++   * When using a table name in a generated SQL query, how (if at all)
++   * should we escape that column name? e.g., a table named "table"
++   * may need to be quoted with backtiks: "`table`".
++   *
++   * @param tableName the table name as provided by the user, etc.
++   * @return how the table name should be rendered in the sql text.
++   */
++  public String escapeTableName(String tableName) {
++    return tableName;
++  }
++
++  /**
+    * Perform any shutdown operations on the connection.
+    */
+   public abstract void close() throws SQLException;
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
+index b49e0ea..cadd729 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
+@@ -56,7 +56,7 @@ public class MySQLManager extends GenericJdbcManager {
+   @Override
+   protected String getColNamesQuery(String tableName) {
+     // Use mysql-specific hints and LIMIT to return fast
+-    return "SELECT t.* FROM " + tableName + " AS t LIMIT 1";
++    return "SELECT t.* FROM " + escapeTableName(tableName) + " AS t LIMIT 1";
+   }
+ 
+   @Override
+@@ -141,5 +141,35 @@ public class MySQLManager extends GenericJdbcManager {
+     LOG.info("Executing SQL statement: " + stmt);
+     return statement.executeQuery();
+   }
++
++  /**
++   * When using a column name in a generated SQL query, how (if at all)
++   * should we escape that column name? e.g., a column named "table"
++   * may need to be quoted with backtiks: "`table`".
++   *
++   * @param colName the column name as provided by the user, etc.
++   * @return how the column name should be rendered in the sql text.
++   */
++  public String escapeColName(String colName) {
++    if (null == colName) {
++      return null;
++    }
++    return "`" + colName + "`";
++  }
++
++  /**
++   * When using a table name in a generated SQL query, how (if at all)
++   * should we escape that column name? e.g., a table named "table"
++   * may need to be quoted with backtiks: "`table`".
++   *
++   * @param tableName the table name as provided by the user, etc.
++   * @return how the table name should be rendered in the sql text.
++   */
++  public String escapeTableName(String tableName) {
++    if (null == tableName) {
++      return null;
++    }
++    return "`" + tableName + "`";
++  }
+ }
+ 
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/OracleManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/OracleManager.java
+index a9a5479..f16d178 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/OracleManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/OracleManager.java
+@@ -50,7 +50,7 @@ public class OracleManager extends GenericJdbcManager {
+ 
+   protected String getColNamesQuery(String tableName) {
+     // SqlManager uses "tableName AS t" which doesn't work in Oracle.
+-    return "SELECT t.* FROM " + tableName + " t";
++    return "SELECT t.* FROM " + escapeTableName(tableName) + " t";
+   }
+ 
+   /**
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/PostgresqlManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/PostgresqlManager.java
+index 656a558..283d741 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/PostgresqlManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/PostgresqlManager.java
+@@ -67,7 +67,7 @@ public class PostgresqlManager extends GenericJdbcManager {
+   @Override
+   protected String getColNamesQuery(String tableName) {
+     // Use LIMIT to return fast
+-    return "SELECT t.* FROM " + tableName + " AS t LIMIT 1";
++    return "SELECT t.* FROM " + escapeTableName(tableName) + " AS t LIMIT 1";
+   }
+ 
+   @Override
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
+index fc9aafc..808efcc 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
+@@ -68,7 +68,7 @@ public abstract class SqlManager extends ConnManager {
+    */
+   protected String getColNamesQuery(String tableName) {
+     // adding where clause to prevent loading a big table
+-    return "SELECT t.* FROM " + tableName + " AS t WHERE 1=0";
++    return "SELECT t.* FROM " + escapeTableName(tableName) + " AS t WHERE 1=0";
+   }
+ 
+   @Override
+@@ -170,13 +170,13 @@ public abstract class SqlManager extends ConnManager {
+       if (!first) {
+         sb.append(", ");
+       }
+-      sb.append(col);
++      sb.append(escapeColName(col));
+       first = false;
+     }
+     sb.append(" FROM ");
+-    sb.append(tableName);
++    sb.append(escapeTableName(tableName));
+     sb.append(" AS ");   // needed for hsqldb; doesn't hurt anyone else.
+-    sb.append(tableName);
++    sb.append(escapeTableName(tableName));
+ 
+     return execute(sb.toString());
+   }
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/DataDrivenImportJob.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/DataDrivenImportJob.java
+index 4376021..90d532f 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/DataDrivenImportJob.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/DataDrivenImportJob.java
+@@ -149,14 +149,23 @@ public class DataDrivenImportJob {
+         colNames = mgr.getColumnNames(tableName);
+       }
+ 
++      String [] sqlColNames = null;
++      if (null != colNames) {
++        sqlColNames = new String[colNames.length];
++        for (int i = 0; i < colNames.length; i++) {
++          sqlColNames[i] = mgr.escapeColName(colNames[i]);
++        }
++      }
++
+       // It's ok if the where clause is null in DBInputFormat.setInput.
+       String whereClause = options.getWhereClause();
+ 
+       // We can't set the class properly in here, because we may not have the
+       // jar loaded in this JVM. So we start by calling setInput() with DBWritable,
+       // and then overriding the string manually.
+-      DataDrivenDBInputFormat.setInput(job, DBWritable.class, tableName, whereClause,
+-          splitByCol, colNames);
++      DataDrivenDBInputFormat.setInput(job, DBWritable.class,
++          mgr.escapeTableName(tableName), whereClause,
++          mgr.escapeColName(splitByCol), sqlColNames);
+       job.getConfiguration().set(DBConfiguration.INPUT_CLASS_PROPERTY, tableClassName);
+ 
+       PerfCounters counters = new PerfCounters();
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
+index ca74dec..0bf694c 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
+@@ -38,6 +38,7 @@ import org.junit.Test;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.sqoop.SqoopOptions;
++import org.apache.hadoop.sqoop.testutil.CommonArgs;
+ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+ import org.apache.hadoop.sqoop.util.FileListing;
+ 
+@@ -181,19 +182,21 @@ public class LocalMySQLTest extends ImportJobTestCase {
+     }
+   }
+ 
+-  private String [] getArgv(boolean mysqlOutputDelims, String... extraArgs) {
++  private String [] getArgv(boolean mysqlOutputDelims, boolean isDirect,
++      String tableName, String... extraArgs) {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+-    args.add("-D");
+-    args.add("fs.default.name=file:///");
++    CommonArgs.addHadoopFlags(args);
+ 
+     args.add("--table");
+-    args.add(TABLE_NAME);
++    args.add(tableName);
+     args.add("--warehouse-dir");
+     args.add(getWarehouseDir());
+     args.add("--connect");
+     args.add(CONNECT_STRING);
+-    args.add("--direct");
++    if (isDirect) {
++      args.add("--direct");
++    }
+     args.add("--username");
+     args.add(getCurrentUser());
+     args.add("--where");
+@@ -214,12 +217,19 @@ public class LocalMySQLTest extends ImportJobTestCase {
+     return args.toArray(new String[0]);
+   }
+ 
+-  private void doLocalBulkImport(boolean mysqlOutputDelims,
+-      String [] expectedResults, String [] extraArgs) throws IOException {
++  private void doImport(boolean mysqlOutputDelims, boolean isDirect,
++      String tableName, String [] expectedResults, String [] extraArgs)
++      throws IOException {
+ 
+     Path warehousePath = new Path(this.getWarehouseDir());
+-    Path tablePath = new Path(warehousePath, TABLE_NAME);
+-    Path filePath = new Path(tablePath, "data-00000");
++    Path tablePath = new Path(warehousePath, tableName);
++
++    Path filePath;
++    if (isDirect) {
++      filePath = new Path(tablePath, "data-00000");
++    } else {
++      filePath = new Path(tablePath, "part-m-00000");
++    }
+ 
+     File tableFile = new File(tablePath.toString());
+     if (tableFile.exists() && tableFile.isDirectory()) {
+@@ -227,7 +237,7 @@ public class LocalMySQLTest extends ImportJobTestCase {
+       FileListing.recursiveDeleteDir(tableFile);
+     }
+ 
+-    String [] argv = getArgv(mysqlOutputDelims, extraArgs);
++    String [] argv = getArgv(mysqlOutputDelims, isDirect, tableName, extraArgs);
+     try {
+       runImport(argv);
+     } catch (IOException ioe) {
+@@ -237,7 +247,7 @@ public class LocalMySQLTest extends ImportJobTestCase {
+     }
+ 
+     File f = new File(filePath.toString());
+-    assertTrue("Could not find imported data file", f.exists());
++    assertTrue("Could not find imported data file: " + f, f.exists());
+     BufferedReader r = null;
+     try {
+       // Read through the file and make sure it's all there.
+@@ -262,7 +272,7 @@ public class LocalMySQLTest extends ImportJobTestCase {
+         "3,Fred,2009-01-23,15,marketing"
+     };
+ 
+-    doLocalBulkImport(false, expectedResults, null);
++    doImport(false, true, TABLE_NAME, expectedResults, null);
+   }
+ 
+   @Test
+@@ -275,7 +285,7 @@ public class LocalMySQLTest extends ImportJobTestCase {
+ 
+     String [] extraArgs = { "-", "--lock-tables" };
+ 
+-    doLocalBulkImport(false, expectedResults, extraArgs);
++    doImport(false, true, TABLE_NAME, expectedResults, extraArgs);
+   }
+ 
+   @Test
+@@ -286,6 +296,110 @@ public class LocalMySQLTest extends ImportJobTestCase {
+         "3,'Fred','2009-01-23',15,'marketing'"
+     };
+ 
+-    doLocalBulkImport(true, expectedResults, null);
++    doImport(true, true, TABLE_NAME, expectedResults, null);
++  }
++
++  @Test
++  public void testMysqlJdbcImport() throws IOException {
++    String [] expectedResults = {
++        "2,Bob,2009-04-20,400.0,sales",
++        "3,Fred,2009-01-23,15.0,marketing"
++    };
++
++    doImport(false, false, TABLE_NAME, expectedResults, null);
++  }
++
++  @Test
++  public void testJdbcEscapedTableName() throws Exception {
++    // Test a JDBC-based import of a table whose name is
++    // a reserved sql keyword (and is thus `quoted`)
++    final String reservedTableName = "TABLE";
++    SqoopOptions options = new SqoopOptions(CONNECT_STRING,
++        reservedTableName);
++    options.setUsername(getCurrentUser());
++    ConnManager mgr = new MySQLManager(options);
++
++    Connection connection = null;
++    Statement st = null;
++
++    try {
++      connection = mgr.getConnection();
++      connection.setAutoCommit(false);
++      st = connection.createStatement();
++
++      // create the database table and populate it with data.
++      st.executeUpdate("DROP TABLE IF EXISTS `" + reservedTableName + "`");
++      st.executeUpdate("CREATE TABLE `" + reservedTableName + "` ("
++          + "id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, "
++          + "name VARCHAR(24) NOT NULL, "
++          + "start_date DATE, "
++          + "salary FLOAT, "
++          + "dept VARCHAR(32))");
++
++      st.executeUpdate("INSERT INTO `" + reservedTableName + "` VALUES("
++          + "2,'Aaron','2009-05-14',1000000.00,'engineering')");
++      connection.commit();
++    } finally {
++      if (null != st) {
++        st.close();
++      }
++
++      if (null != connection) {
++        connection.close();
++      }
++    }
++
++    String [] expectedResults = {
++        "2,Aaron,2009-05-14,1000000.0,engineering"
++    };
++
++    doImport(false, false, reservedTableName, expectedResults, null);
++  }
++
++  @Test
++  public void testJdbcEscapedColumnName() throws Exception {
++    // Test a JDBC-based import of a table with a column whose name is
++    // a reserved sql keyword (and is thus `quoted`)
++    final String tableName = "mysql_escaped_col_table";
++    SqoopOptions options = new SqoopOptions(CONNECT_STRING,
++        tableName);
++    options.setUsername(getCurrentUser());
++    ConnManager mgr = new MySQLManager(options);
++
++    Connection connection = null;
++    Statement st = null;
++
++    try {
++      connection = mgr.getConnection();
++      connection.setAutoCommit(false);
++      st = connection.createStatement();
++
++      // create the database table and populate it with data.
++      st.executeUpdate("DROP TABLE IF EXISTS " + tableName);
++      st.executeUpdate("CREATE TABLE " + tableName + " ("
++          + "id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, "
++          + "`table` VARCHAR(24) NOT NULL, "
++          + "`CREATE` DATE, "
++          + "salary FLOAT, "
++          + "dept VARCHAR(32))");
++
++      st.executeUpdate("INSERT INTO " + tableName + " VALUES("
++          + "2,'Aaron','2009-05-14',1000000.00,'engineering')");
++      connection.commit();
++    } finally {
++      if (null != st) {
++        st.close();
++      }
++
++      if (null != connection) {
++        connection.close();
++      }
++    }
++
++    String [] expectedResults = {
++        "2,Aaron,2009-05-14,1000000.0,engineering"
++    };
++
++    doImport(false, false, tableName, expectedResults, null);
+   }
+ }
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/PostgresqlTest.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/PostgresqlTest.java
+index 41cd142..d4a066f 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/PostgresqlTest.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/PostgresqlTest.java
+@@ -36,6 +36,7 @@ import org.junit.Test;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.sqoop.SqoopOptions;
++import org.apache.hadoop.sqoop.testutil.CommonArgs;
+ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+ import org.apache.hadoop.sqoop.util.FileListing;
+ 
+@@ -150,8 +151,7 @@ public class PostgresqlTest extends ImportJobTestCase {
+   private String [] getArgv(boolean isDirect) {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+-    args.add("-D");
+-    args.add("fs.default.name=file:///");
++    CommonArgs.addHadoopFlags(args);
+ 
+     args.add("--table");
+     args.add(TABLE_NAME);
+-- 
+1.7.0.4
+

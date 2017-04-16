@@ -1,0 +1,43 @@
+From 024eb44082b7a1e316776e453b078f323634fd86 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 17 Feb 2012 11:12:45 -0800
+Subject: [PATCH 1125/1179] HADOOP-8027. Visiting /jmx on the daemon web interfaces may print unnecessary error in logs.
+
+Reason: Improvement
+Author: Aaron T. Myers
+Ref: CDH-4348
+---
+ src/core/org/apache/hadoop/jmx/JMXJsonServlet.java |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/jmx/JMXJsonServlet.java b/src/core/org/apache/hadoop/jmx/JMXJsonServlet.java
+index 2c8f797..a427d2f 100644
+--- a/src/core/org/apache/hadoop/jmx/JMXJsonServlet.java
++++ b/src/core/org/apache/hadoop/jmx/JMXJsonServlet.java
+@@ -34,6 +34,7 @@ import javax.management.MBeanServer;
+ import javax.management.MalformedObjectNameException;
+ import javax.management.ObjectName;
+ import javax.management.ReflectionException;
++import javax.management.RuntimeMBeanException;
+ import javax.management.openmbean.CompositeData;
+ import javax.management.openmbean.CompositeType;
+ import javax.management.openmbean.TabularData;
+@@ -312,6 +313,15 @@ public class JMXJsonServlet extends HttpServlet {
+     Object value = null;
+     try {
+       value = mBeanServer.getAttribute(oname, attName);
++    } catch (RuntimeMBeanException e) {
++      // UnsupportedOperationExceptions happen in the normal course of business,
++      // so no need to log them as errors all the time.
++      if (e.getCause() instanceof UnsupportedOperationException) {
++        LOG.debug("getting attribute "+attName+" of "+oname+" threw an exception", e);
++      } else {
++        LOG.error("getting attribute "+attName+" of "+oname+" threw an exception", e);
++      }
++      return;
+     } catch (AttributeNotFoundException e) {
+       //Ignored the attribute was not found, which should never happen because the bean
+       //just told us that it has this attribute, but if this happens just don't output
+-- 
+1.7.0.4
+

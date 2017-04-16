@@ -1,0 +1,142 @@
+From e8d93d35b92d602d8095657bb08a949bfb5aeea8 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 30 Aug 2010 11:14:20 -0700
+Subject: [PATCH 0679/1179] HADOOP-5861. s3n files are not getting split by default.
+
+Reason: Bug
+Author: Tom White
+Ref: CDH-2011
+---
+ src/core/core-default.xml                          |    6 ++++++
+ src/core/org/apache/hadoop/fs/s3/S3FileSystem.java |    5 +++++
+ .../hadoop/fs/s3native/NativeS3FileSystem.java     |   11 +++++++----
+ .../hadoop/fs/s3/S3FileSystemContractBaseTest.java |   12 ++++++++++++
+ .../NativeS3FileSystemContractBaseTest.java        |   14 ++++++++++++++
+ 5 files changed, 44 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index d73ba90..be2f455 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -277,6 +277,12 @@
+   </description>
+ </property>
+ 
++<property>
++  <name>fs.s3n.block.size</name>
++  <value>67108864</value>
++  <description>Block size to use when reading files using the native S3
++  filesystem (s3n: URIs).</description>
++</property>
+ 
+ <property>
+   <name>local.cache.size</name>
+diff --git a/src/core/org/apache/hadoop/fs/s3/S3FileSystem.java b/src/core/org/apache/hadoop/fs/s3/S3FileSystem.java
+index e9b8007..e6a0c90 100644
+--- a/src/core/org/apache/hadoop/fs/s3/S3FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/s3/S3FileSystem.java
+@@ -335,6 +335,11 @@ public class S3FileSystem extends FileSystem {
+     }
+     return new S3FileStatus(f.makeQualified(this), inode);
+   }
++  
++  @Override
++  public long getDefaultBlockSize() {
++    return getConf().getLong("fs.s3.block.size", 64 * 1024 * 1024);
++  }
+ 
+   // diagnostic methods
+ 
+diff --git a/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java b/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
+index f7e636f..5e7fe4f 100644
+--- a/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
+@@ -70,7 +70,6 @@ public class NativeS3FileSystem extends FileSystem {
+     LogFactory.getLog(NativeS3FileSystem.class);
+   
+   private static final String FOLDER_SUFFIX = "_$folder$";
+-  private static final long MAX_S3_FILE_SIZE = 5 * 1024 * 1024 * 1024L;
+   static final String PATH_DELIMITER = Path.SEPARATOR;
+   private static final int S3_MAX_LISTING_LENGTH = 1000;
+   
+@@ -431,13 +430,12 @@ public class NativeS3FileSystem extends FileSystem {
+   }
+   
+   private FileStatus newFile(FileMetadata meta, Path path) {
+-    return new FileStatus(meta.getLength(), false, 1, MAX_S3_FILE_SIZE,
++    return new FileStatus(meta.getLength(), false, 1, getDefaultBlockSize(),
+         meta.getLastModified(), path.makeQualified(this));
+   }
+   
+   private FileStatus newDirectory(Path path) {
+-    return new FileStatus(0, true, 1, MAX_S3_FILE_SIZE, 0,
+-        path.makeQualified(this));
++    return new FileStatus(0, true, 1, 0, 0, path.makeQualified(this));
+   }
+ 
+   @Override
+@@ -603,5 +601,10 @@ public class NativeS3FileSystem extends FileSystem {
+   public Path getWorkingDirectory() {
+     return workingDir;
+   }
++  
++  @Override
++  public long getDefaultBlockSize() {
++    return getConf().getLong("fs.s3n.block.size", 64 * 1024 * 1024);
++  }
+ 
+ }
+diff --git a/src/test/org/apache/hadoop/fs/s3/S3FileSystemContractBaseTest.java b/src/test/org/apache/hadoop/fs/s3/S3FileSystemContractBaseTest.java
+index 8d6744a..d245804 100644
+--- a/src/test/org/apache/hadoop/fs/s3/S3FileSystemContractBaseTest.java
++++ b/src/test/org/apache/hadoop/fs/s3/S3FileSystemContractBaseTest.java
+@@ -23,6 +23,7 @@ import java.net.URI;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystemContractBaseTest;
++import org.apache.hadoop.fs.Path;
+ 
+ public abstract class S3FileSystemContractBaseTest
+   extends FileSystemContractBaseTest {
+@@ -45,4 +46,15 @@ public abstract class S3FileSystemContractBaseTest
+     super.tearDown();
+   }
+   
++  public void testBlockSize() throws Exception {
++    
++    long newBlockSize = fs.getDefaultBlockSize() * 2;
++    fs.getConf().setLong("fs.s3.block.size", newBlockSize);
++    
++    Path file = path("/test/hadoop/file");
++    createFile(file);
++    assertEquals("Double default block size", newBlockSize,
++	fs.getFileStatus(file).getBlockSize());
++  }
++  
+ }
+diff --git a/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java b/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
+index 362b52e..db11374 100644
+--- a/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
++++ b/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
+@@ -61,4 +61,18 @@ public abstract class NativeS3FileSystemContractBaseTest
+   public void testNoTrailingBackslashOnBucket() throws Exception {
+     assertTrue(fs.getFileStatus(new Path(fs.getUri().toString())).isDir());
+   }
++  
++  public void testBlockSize() throws Exception {
++    Path file = path("/test/hadoop/file");
++    createFile(file);
++    assertEquals("Default block size", fs.getDefaultBlockSize(),
++    fs.getFileStatus(file).getBlockSize());
++
++    // Block size is determined at read time
++    long newBlockSize = fs.getDefaultBlockSize() * 2;
++    fs.getConf().setLong("fs.s3n.block.size", newBlockSize);
++    assertEquals("Double default block size", newBlockSize,
++    fs.getFileStatus(file).getBlockSize());
++  }
++
+ }
+-- 
+1.7.0.4
+

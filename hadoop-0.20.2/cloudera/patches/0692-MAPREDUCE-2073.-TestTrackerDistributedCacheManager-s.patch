@@ -1,0 +1,82 @@
+From b7679d80577d1d3625f520fc01787b4f75faab1d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 15 Sep 2010 22:43:18 -0700
+Subject: [PATCH 0692/1179] MAPREDUCE-2073. TestTrackerDistributedCacheManager should be explicit about test environment requirements
+
+Reason: Assist testing
+Author: Todd Lipcon
+Ref: CDH-648
+---
+ .../filecache/TrackerDistributedCacheManager.java  |   13 ++++++++++++-
+ .../TestTrackerDistributedCacheManager.java        |   16 +++++++++++++---
+ 2 files changed, 25 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java b/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
+index 0e72aa3..e4cbc62 100644
+--- a/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
++++ b/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
+@@ -396,7 +396,17 @@ public class TrackerDistributedCacheManager {
+     if (!checkPermissionOfOther(fs, current, FsAction.READ)) {
+       return false;
+     }
+-    current = current.getParent();
++    return ancestorsHaveExecutePermissions(fs, current.getParent());
++  }
++
++  /**
++   * Returns true if all ancestors of the specified path have the 'execute'
++   * permission set for all users (i.e. that other users can traverse
++   * the directory heirarchy to the given path)
++   */
++  static boolean ancestorsHaveExecutePermissions(FileSystem fs, Path path)
++    throws IOException {
++    Path current = path;
+     while (current != null) {
+       //the subdirs in the path should have execute permissions for others
+       if (!checkPermissionOfOther(fs, current, FsAction.EXECUTE)) {
+@@ -406,6 +416,7 @@ public class TrackerDistributedCacheManager {
+     }
+     return true;
+   }
++
+   /**
+    * Checks for a given path whether the Other permissions on it 
+    * imply the permission in the passed FsAction
+diff --git a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+index bbcf06c..9d055de 100644
+--- a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
++++ b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+@@ -84,6 +84,19 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+       TEST_ROOT.mkdirs();
+     }
+ 
++    conf = new Configuration();
++    conf.set(FileSystem.FS_DEFAULT_NAME_KEY, "file:///");
++    fs = FileSystem.get(conf);
++
++    // This test suite will fail if any ancestor directory of the
++    // test directory is not world-searchable (ie +x).
++    // We prefer to fail the test in an obvious manner up front
++    // during setUp() rather than in a subtle way later.
++    assertTrue("Test root directory " + TEST_ROOT + " and all of its " +
++               "parent directories must have a+x permissions",
++               TrackerDistributedCacheManager.ancestorsHaveExecutePermissions(
++                 fs, new Path(TEST_ROOT.toString())));
++
+     // Prepare the tests' mapred-local-dir
+     ROOT_MAPRED_LOCAL_DIR = new File(TEST_ROOT_DIR, "mapred/local");
+     ROOT_MAPRED_LOCAL_DIR.mkdirs();
+@@ -95,10 +108,7 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+       localDir.mkdir();
+     }
+ 
+-    conf = new Configuration();
+     conf.setStrings("mapred.local.dir", localDirs);
+-    conf.set(FileSystem.FS_DEFAULT_NAME_KEY, "file:///");
+-    fs = FileSystem.get(conf);
+     Class<? extends TaskController> taskControllerClass = conf.getClass(
+         "mapred.task.tracker.task-controller", DefaultTaskController.class,
+         TaskController.class);
+-- 
+1.7.0.4
+

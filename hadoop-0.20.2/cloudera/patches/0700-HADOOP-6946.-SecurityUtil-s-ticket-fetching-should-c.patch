@@ -1,0 +1,63 @@
+From 6931d93bec73254f13ba08cbe49589a747eb399d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 8 Sep 2010 21:51:47 -0400
+Subject: [PATCH 0700/1179] HADOOP-6946. SecurityUtil's ticket-fetching should call UGI.getCurrentUser rather than directly accessing JAAS
+
+This fixes a bug where a daemon could call login() and thus set the loginUser(),
+and then still have a null Subject, leading to an inability to fetch TGTs.
+This impacted, for example, the "-checkpoint force" start-up option of the 2NN.
+
+Reason: Fix 2NN startup with forced checkpoint
+Author: Todd Lipcon
+Ref: CDH-648
+---
+ .../org/apache/hadoop/security/SecurityUtil.java   |   11 +++++++----
+ 1 files changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/SecurityUtil.java b/src/core/org/apache/hadoop/security/SecurityUtil.java
+index 9db2602..6c49ce4 100644
+--- a/src/core/org/apache/hadoop/security/SecurityUtil.java
++++ b/src/core/org/apache/hadoop/security/SecurityUtil.java
+@@ -21,7 +21,6 @@ import java.net.InetAddress;
+ import java.net.URI;
+ import java.net.URL;
+ import java.net.UnknownHostException;
+-import java.security.AccessController;
+ import java.util.Set;
+ 
+ import javax.security.auth.Subject;
+@@ -50,7 +49,7 @@ public class SecurityUtil {
+    *           if TGT can't be found
+    */
+   private static KerberosTicket getTgtFromSubject() throws IOException {
+-    Subject current = Subject.getSubject(AccessController.getContext());
++    Subject current = UserGroupInformation.getCurrentUser().getSubject();
+     if (current == null) {
+       throw new IOException(
+           "Can't get TGT from current Subject, because it is null");
+@@ -109,7 +108,7 @@ public class SecurityUtil {
+     if (serviceCred == null) {
+       throw new IOException("Can't get service ticket for " + serviceName);
+     }
+-    Subject.getSubject(AccessController.getContext()).getPrivateCredentials()
++    UserGroupInformation.getCurrentUser().getSubject().getPrivateCredentials()
+         .add(Krb5Util.credsToTicket(serviceCred));
+   }
+   
+@@ -188,8 +187,12 @@ public class SecurityUtil {
+       final String keytabFileKey, final String userNameKey, String hostname)
+       throws IOException {
+     String keytabFilename = conf.get(keytabFileKey);
+-    if (keytabFilename == null)
++    if (keytabFilename == null) {
++      if (UserGroupInformation.isSecurityEnabled()) {
++        LOG.warn("No keytab file '" + keytabFileKey + "' configured.");
++      }
+       return;
++    }
+ 
+     String principalConfig = conf.get(userNameKey, System
+         .getProperty("user.name"));
+-- 
+1.7.0.4
+

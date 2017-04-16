@@ -1,0 +1,29 @@
+From 46bb5af895747384e2698de9a628b8bea86093d0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 5 Apr 2010 16:28:56 -0700
+Subject: [PATCH 0592/1179] HDFS-1080. SecondaryNameNode image transfer should use the defined http address rather than local ip address
+
+Patch: https://issues.apache.org/jira/secure/attachment/12440810/HDFS-1080-Y20.patch
+Author: Jakob Homan
+Ref: YDH
+---
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index dfb3700..5cbe705 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -377,8 +377,7 @@ public class SecondaryNameNode implements Runnable {
+    */
+   private void putFSImage(CheckpointSignature sig) throws IOException {
+     String fileid = "putimage=1&port=" + imagePort +
+-      "&machine=" +
+-      InetAddress.getLocalHost().getHostAddress() +
++      "&machine=" + infoBindAddress +
+       "&token=" + sig.toString();
+     LOG.info("Posted URL " + fsName + fileid);
+     TransferFsImage.getFileClient(fsName, fileid, (File[])null);
+-- 
+1.7.0.4
+

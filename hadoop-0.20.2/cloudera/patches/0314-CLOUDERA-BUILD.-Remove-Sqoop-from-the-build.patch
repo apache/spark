@@ -1,0 +1,60 @@
+From 829497f4867a0e92da712faf02f83c7087df07ce Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 18 Jun 2010 19:31:58 -0700
+Subject: [PATCH 0314/1179] CLOUDERA-BUILD. Remove Sqoop from the build.
+
+---
+ cloudera/do-release-build  |   13 -------------
+ cloudera/install_hadoop.sh |    3 +--
+ 2 files changed, 1 insertions(+), 15 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index b160c37..edb7442 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -90,21 +90,8 @@ ant \
+   -propertyfile cloudera/build.properties api-report
+ fi
+ 
+-# Build the sqoop docs
+-pushd $RELEASE_DIR/src/contrib/sqoop
+-JAVA_HOME=$JAVA64_HOME \
+-  ant \
+-  -Djava5.home=$JAVA5_HOME \
+-  -Dforrest.home=$FORREST_HOME \
+-  -propertyfile cloudera/build.properties \
+-  doc
+-popd
+ # Copy them into the main build directory to be included in the tarball
+ mkdir -p build/hadoop-$FULL_VERSION/docs/
+-cp -r build/contrib/sqoop/doc/ build/hadoop-$FULL_VERSION/docs/sqoop
+-
+-cp build/hadoop-$FULL_VERSION/docs/sqoop/sqoop.1.gz \
+-   build/hadoop-$FULL_VERSION/docs/sqoop/sqoop-0.20.1.gz
+ 
+ JAVA_HOME=$JAVA64_HOME \
+   CFLAGS=-m64 \
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 3dc69a6..ae65ae6 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -121,7 +121,7 @@ done
+ # Make bin wrappers
+ mkdir -p $BIN_DIR
+ 
+-for bin_wrapper in hadoop sqoop ; do
++for bin_wrapper in hadoop ; do
+   wrapper=$BIN_DIR/$bin_wrapper-$APACHE_BRANCH
+   cat > $wrapper <<EOF
+ #!/bin/sh
+@@ -184,7 +184,6 @@ done
+ # man pages
+ mkdir -p $MAN_DIR/man1
+ cp ${CLOUDERA_SOURCE_DIR}/hadoop-$APACHE_BRANCH.1.gz $MAN_DIR/man1/
+-cp ${BUILD_DIR}/../../docs/sqoop/sqoop.1.gz $MAN_DIR/man1/sqoop-$APACHE_BRANCH.1.gz
+ 
+ ############################################################
+ # ARCH DEPENDENT STUFF
+-- 
+1.7.0.4
+

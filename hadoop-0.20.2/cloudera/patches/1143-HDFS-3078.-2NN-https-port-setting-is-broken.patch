@@ -1,0 +1,30 @@
+From fa4e0b8d682230dcb49bdf5939244f180ae86232 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 12 Mar 2012 17:02:17 -0700
+Subject: [PATCH 1143/1179] HDFS-3078. 2NN https port setting is broken.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-4820
+---
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index 9c87b79..266761a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -224,8 +224,8 @@ public class SecondaryNameNode implements Runnable {
+             System.setProperty("https.cipherSuites", 
+                 Krb5AndCertsSslSocketConnector.KRB5_CIPHER_SUITES.get(0));
+             InetSocketAddress secInfoSocAddr = 
+-              NetUtils.createSocketAddr(infoBindAddress + ":"+ conf.get(
+-                "dfs.secondary.https.port", infoBindAddress + ":" + 0));
++              NetUtils.createSocketAddr(infoBindAddress + ":" + conf.getInt(
++                "dfs.secondary.https.port", 50490));
+             imagePort = secInfoSocAddr.getPort();
+             infoServer.addSslListener(secInfoSocAddr, conf, false, true);
+           }
+-- 
+1.7.0.4
+

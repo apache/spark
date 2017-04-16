@@ -1,0 +1,51 @@
+From e37a57a386abb6f03336097f2d7b0d54d4ec6a82 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 31 Aug 2009 10:23:19 -0700
+Subject: [PATCH 0358/1179] HADOOP-5780: Fix slightly confusing log from "-metaSave" on NameNode.
+
+Patch https://issues.apache.org/jira/secure/attachment/12417831/HADOOP-5780.hadoop-0.20.patch
+Author: Raghu Angadi
+Ref: YDH
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   18 ++++++++++++++----
+ 1 files changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index ab296eb..442dc06 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -527,17 +527,27 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+         int usableReplicas = numReplicas.liveReplicas() + 
+                              numReplicas.decommissionedReplicas(); 
+         // l: == live:, d: == decommissioned c: == corrupt e: == excess
+-        out.print(block + " (replicas:" +
++        out.print(block + ((usableReplicas > 0)? "" : " MISSING") +
++                  " (replicas:" +
+                   " l: " + numReplicas.liveReplicas() + 
+                   " d: " + numReplicas.decommissionedReplicas() + 
+                   " c: " + numReplicas.corruptReplicas() + 
+-                  " e: " + numReplicas.excessReplicas() + 
+-                  ((usableReplicas > 0)? "" : " MISSING") + ")"); 
++                  " e: " + numReplicas.excessReplicas() + ") ");
++
++        Collection<DatanodeDescriptor> corruptNodes =
++                                       corruptReplicas.getNodes(block);
+ 
+         for (Iterator<DatanodeDescriptor> jt = blocksMap.nodeIterator(block);
+              jt.hasNext();) {
+           DatanodeDescriptor node = jt.next();
+-          out.print(" " + node + " : ");
++          String state = "";
++          if (corruptNodes != null && corruptNodes.contains(node)) {
++            state = "(corrupt)";
++          } else if (node.isDecommissioned() ||
++                     node.isDecommissionInProgress()) {
++            state = "(decommissioned)";
++          }
++          out.print(" " + node + state + " : ");
+         }
+         out.println("");
+       }
+-- 
+1.7.0.4
+

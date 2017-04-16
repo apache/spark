@@ -1,0 +1,537 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8">
+<meta name="Forrest-skin-name" content="pelt">
+<title>Native Libraries Guide</title>
+<link type="text/css" href="skin/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="skin/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="skin/print.css" rel="stylesheet">
+<link type="text/css" href="skin/profile.css" rel="stylesheet">
+<script src="skin/getBlank.js" language="javascript" type="text/javascript"></script><script src="skin/getMenu.js" language="javascript" type="text/javascript"></script><script src="skin/fontsize.js" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="images/favicon.ico">
+</head>
+<body onload="init()">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+<a href="http://www.apache.org/">Apache</a> &gt; <a href="http://hadoop.apache.org/">Hadoop</a> &gt; <a href="http://hadoop.apache.org/core/">Core</a><script src="skin/breadcrumbs.js" language="JavaScript" type="text/javascript"></script>
+</div>
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<div class="grouplogo">
+<a href="http://hadoop.apache.org/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo.jpg" title="Apache Hadoop"></a>
+</div>
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogo">
+<a href="http://hadoop.apache.org/core/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo-2.gif" title="Scalable Computing Platform"></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="archive.cloudera.com" name="sitesearch" type="hidden"><input onFocus="getBlank (this, 'Search the site with google');" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://hadoop.apache.org/core/">Project</a>
+</li>
+<li>
+<a class="unselected" href="http://wiki.apache.org/hadoop">Wiki</a>
+</li>
+<li class="current">
+<a class="selected" href="index.html">Hadoop 0.20 Documentation</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu('menu_1.1', 'skin/')" id="menu_1.1Title" class="menutitle">Getting Started</div>
+<div id="menu_1.1" class="menuitemgroup">
+<div class="menuitem">
+<a href="index.html">Overview</a>
+</div>
+<div class="menuitem">
+<a href="single_node_setup.html">Single Node Setup</a>
+</div>
+<div class="menuitem">
+<a href="cluster_setup.html">Cluster Setup</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.2', 'skin/')" id="menu_1.2Title" class="menutitle">Guides</div>
+<div id="menu_1.2" class="menuitemgroup">
+<div class="menuitem">
+<a href="HttpAuthentication.html">Authentication for Hadoop HTTP web-consoles</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.3', 'skin/')" id="menu_1.3Title" class="menutitle">MapReduce</div>
+<div id="menu_1.3" class="menuitemgroup">
+<div class="menuitem">
+<a href="mapred_tutorial.html">MapReduce Tutorial</a>
+</div>
+<div class="menuitem">
+<a href="streaming.html">Hadoop Streaming</a>
+</div>
+<div class="menuitem">
+<a href="commands_manual.html">Hadoop Commands</a>
+</div>
+<div class="menuitem">
+<a href="distcp.html">DistCp</a>
+</div>
+<div class="menuitem">
+<a href="vaidya.html">Vaidya</a>
+</div>
+<div class="menuitem">
+<a href="hadoop_archives.html">Hadoop Archives</a>
+</div>
+<div class="menuitem">
+<a href="gridmix.html">Gridmix</a>
+</div>
+<div class="menuitem">
+<a href="capacity_scheduler.html">Capacity Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="fair_scheduler.html">Fair Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="hod_scheduler.html">Hod Scheduler</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.4', 'skin/')" id="menu_1.4Title" class="menutitle">HDFS</div>
+<div id="menu_1.4" class="menuitemgroup">
+<div class="menuitem">
+<a href="hdfs_user_guide.html">HDFS Users </a>
+</div>
+<div class="menuitem">
+<a href="hdfs_design.html">HDFS Architecture</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_permissions_guide.html">Permissions</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_quota_admin_guide.html">Quotas</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_imageviewer.html">Offline Image Viewer Guide</a>
+</div>
+<div class="menuitem">
+<a href="SLG_user_guide.html">Synthetic Load Generator</a>
+</div>
+<div class="menuitem">
+<a href="libhdfs.html">C API libhdfs</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_selected_1.5', 'skin/')" id="menu_selected_1.5Title" class="menutitle" style="background-image: url('skin/images/chapter_open.gif');">Common</div>
+<div id="menu_selected_1.5" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="file_system_shell.html">File System Shell</a>
+</div>
+<div class="menuitem">
+<a href="service_level_auth.html">Service Level Authorization</a>
+</div>
+<div class="menupage">
+<div class="menupagetitle">Native Libraries</div>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.6', 'skin/')" id="menu_1.6Title" class="menutitle">Miscellaneous</div>
+<div id="menu_1.6" class="menuitemgroup">
+<div class="menuitem">
+<a href="Secure_Impersonation.html">Secure Impersonation</a>
+</div>
+<div class="menuitem">
+<a href="api/index.html">API Docs</a>
+</div>
+<div class="menuitem">
+<a href="jdiff/changes.html">API Changes</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/">Wiki</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>
+</div>
+<div class="menuitem">
+<a href="releasenotes.html">Release Notes</a>
+</div>
+<div class="menuitem">
+<a href="changes.html">Change Log</a>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="skin/images/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="native_libraries.pdf"><img alt="PDF -icon" src="skin/images/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1>Native Libraries Guide</h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="#Overview">Overview</a>
+</li>
+<li>
+<a href="#Native+Hadoop+Library">Native Hadoop Library </a>
+<ul class="minitoc">
+<li>
+<a href="#Usage">Usage</a>
+</li>
+<li>
+<a href="#Components">Components</a>
+</li>
+<li>
+<a href="#Supported+Platforms">Supported Platforms</a>
+</li>
+<li>
+<a href="#Download">Download</a>
+</li>
+<li>
+<a href="#Build">Build</a>
+</li>
+<li>
+<a href="#Runtime">Runtime</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="#Native+Shared+Libraries">Native Shared Libraries</a>
+</li>
+</ul>
+</div>
+  
+  
+<a name="N1000D"></a><a name="Overview"></a>
+<h2 class="h3">Overview</h2>
+<div class="section">
+<p>This guide describes the native hadoop library and includes a small discussion about native shared libraries.</p>
+<p>
+<strong>Note:</strong> Depending on your environment, the term "native libraries" <em>could</em> 
+      refer to all *.so's you need to compile; and, the term "native compression" <em>could</em> refer to all *.so's 
+      you need to compile that are specifically related to compression.
+      Currently, however, this document only addresses the native hadoop library (<em>libhadoop.so</em>).</p>
+</div>
+  
+    
+<a name="N10025"></a><a name="Native+Hadoop+Library"></a>
+<h2 class="h3">Native Hadoop Library </h2>
+<div class="section">
+<p>Hadoop has native implementations of certain components for  
+      performance reasons and for non-availability of Java implementations. These 
+      components are available in a single, dynamically-linked native library called
+       the native hadoop library. On the *nix platforms the library is named <em>libhadoop.so</em>. </p>
+<a name="N10031"></a><a name="Usage"></a>
+<h3 class="h4">Usage</h3>
+<p>It is fairly easy to use the native hadoop library:</p>
+<ol>
+              
+<li>
+          Review the <a href="#Components">components</a>.
+        </li>
+        
+<li>
+          Review the <a href="#Supported+Platforms">supported platforms</a>.
+        </li>
+        
+<li>
+          Either <a href="#Download">download</a> a hadoop release, which will 
+          include a pre-built version of the native hadoop library, or
+          <a href="#Build">build</a> your own version of the 
+          native hadoop library. Whether you download or build, the name for the library is 
+          the same: <em>libhadoop.so</em>
+        
+</li>
+        
+<li>
+          Install the compression codec development packages 
+          (<strong>&gt;zlib-1.2</strong>, <strong>&gt;gzip-1.2</strong>):
+          <ul>
+              
+<li>If you download the library, install one or more development packages - 
+              whichever compression codecs you want to use with your deployment.</li>
+              
+<li>If you build the library, it is <strong>mandatory</strong> 
+              to install both development packages.</li>
+          
+</ul>
+        
+</li>
+         
+<li>
+          Check the <a href="#Runtime">runtime</a> log files.
+        </li>
+      
+</ol>
+<a name="N10076"></a><a name="Components"></a>
+<h3 class="h4">Components</h3>
+<p>The native hadoop library includes two components, the zlib and gzip 
+      <a href="http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/compress/CompressionCodec.html"> 
+      compression codecs</a>:
+      </p>
+<ul>
+        
+<li>
+<a href="http://www.zlib.net/">zlib</a>
+</li>
+        
+<li>
+<a href="http://www.gzip.org/">gzip</a>
+</li>
+      
+</ul>
+<p>The native hadoop library is imperative for gzip to work.</p>
+<a name="N10094"></a><a name="Supported+Platforms"></a>
+<h3 class="h4">Supported Platforms</h3>
+<p>The native hadoop library is supported on *nix platforms only.
+      The library does not to work with <a href="http://www.cygwin.com/">Cygwin</a> 
+      or the <a href="http://www.apple.com/macosx">Mac OS X</a> platform.</p>
+<p>The native hadoop library is mainly used on the GNU/Linus platform and 
+      has been tested on these distributions:</p>
+<ul>
+        
+<li>
+          
+<a href="http://www.redhat.com/rhel/">RHEL4</a>/<a href="http://fedoraproject.org/">Fedora</a>
+        
+</li>
+        
+<li>
+<a href="http://www.ubuntu.com/">Ubuntu</a>
+</li>
+        
+<li>
+<a href="http://www.gentoo.org/">Gentoo</a>
+</li>
+      
+</ul>
+<p>On all the above distributions a 32/64 bit native hadoop library will work 
+      with a respective 32/64 bit jvm.</p>
+<a name="N100C4"></a><a name="Download"></a>
+<h3 class="h4">Download</h3>
+<p>The pre-built 32-bit i386-Linux native hadoop library is available as part of the 
+      hadoop distribution and is located in the <span class="codefrag">lib/native</span> directory. You can download the 
+      hadoop distribution from <a href="http://hadoop.apache.org/core/releases.html#Download">Hadoop Common Releases</a>.</p>
+<p>Be sure to install the zlib and/or gzip development packages - whichever compression 
+      codecs you want to use with your deployment.</p>
+<a name="N100D8"></a><a name="Build"></a>
+<h3 class="h4">Build</h3>
+<p>The native hadoop library is written in <a href="http://en.wikipedia.org/wiki/ANSI_C">ANSI C</a> 
+      and is built using the GNU autotools-chain (autoconf, autoheader, automake, autoscan, libtool). 
+      This means it should be straight-forward to build the library on any platform with a standards-compliant 
+      C compiler and the GNU autotools-chain (see the <a href="#Supported+Platforms">supported platforms</a>).</p>
+<p>The packages you need to install on the target platform are:</p>
+<ul>
+        
+<li>
+          C compiler (e.g. <a href="http://gcc.gnu.org/">GNU C Compiler</a>)
+        </li>
+        
+<li>
+          GNU Autools Chain: 
+          <a href="http://www.gnu.org/software/autoconf/">autoconf</a>, 
+          <a href="http://www.gnu.org/software/automake/">automake</a>, 
+          <a href="http://www.gnu.org/software/libtool/">libtool</a>
+        
+</li>
+        
+<li> 
+          zlib-development package (stable version &gt;= 1.2.0)
+        </li>
+      
+</ul>
+<p>Once you installed the prerequisite packages use the standard hadoop <span class="codefrag">build.xml</span> 
+      file and pass along the <span class="codefrag">compile.native</span> flag (set to <span class="codefrag">true</span>) to build the native hadoop library:</p>
+<p>
+<span class="codefrag">$ ant -Dcompile.native=true &lt;target&gt;</span>
+</p>
+<p>You should see the newly-built library in:</p>
+<p>
+<span class="codefrag">$ build/native/&lt;platform&gt;/lib</span>
+</p>
+<p>where &lt;<span class="codefrag">platform</span>&gt; is a combination of the system-properties: 
+      <span class="codefrag">${os.name}-${os.arch}-${sun.arch.data.model}</span> (for example, Linux-i386-32).</p>
+<p>Please note the following:</p>
+<ul>
+          
+<li>
+            It is <strong>mandatory</strong> to install both the zlib and gzip
+            development packages on the target platform in order to build the 
+            native hadoop library; however, for deployment it is sufficient to 
+            install just one package if you wish to use only one codec.
+          </li>
+          
+<li>
+            It is necessary to have the correct 32/64 libraries for zlib,  
+            depending on the 32/64 bit jvm for the target platform, in order to 
+            build and deploy the native hadoop library.
+          </li>
+        
+</ul>
+<a name="N10138"></a><a name="Runtime"></a>
+<h3 class="h4">Runtime</h3>
+<p>The <span class="codefrag">bin/hadoop</span> script ensures that the native hadoop
+      library is on the library path via the system property: <br>
+      
+<em>-Djava.library.path=&lt;path&gt;</em>
+</p>
+<p>During runtime, check the hadoop log files for your MapReduce tasks.</p>
+<ul>
+         
+<li>If everything is all right, then:<br>
+<br>
+          
+<span class="codefrag"> DEBUG util.NativeCodeLoader - Trying to load the custom-built native-hadoop library...  </span>
+<br>
+          
+<span class="codefrag"> INFO  util.NativeCodeLoader - Loaded the native-hadoop library </span>
+<br>
+         
+</li>
+         
+         
+<li>If something goes wrong, then:<br>
+<br>
+         
+<span class="codefrag">
+          INFO util.NativeCodeLoader - Unable to load native-hadoop library for 
+          your platform... using builtin-java classes where applicable
+        </span>
+         
+         
+</li>
+      
+</ul>
+</div>
+    
+    
+<a name="N10167"></a><a name="Native+Shared+Libraries"></a>
+<h2 class="h3">Native Shared Libraries</h2>
+<div class="section">
+<p>You can load <strong>any</strong> native shared library using  
+      <a href="mapred_tutorial.html#DistributedCache">DistributedCache</a> 
+      for <em>distributing</em> and <em>symlinking</em> the library files.</p>
+<p>This example shows you how to distribute a shared library, <span class="codefrag">mylib.so</span>, 
+      and load it from a MapReduce task.</p>
+<ol>
+      
+<li> First copy the library to the HDFS: <br>
+      
+<span class="codefrag">bin/hadoop fs -copyFromLocal mylib.so.1 /libraries/mylib.so.1</span>
+      
+</li>
+      
+<li> The job launching program should contain the following: <br>
+      
+<span class="codefrag"> DistributedCache.createSymlink(conf); </span> 
+<br>
+      
+<span class="codefrag"> DistributedCache.addCacheFile("hdfs://host:port/libraries/mylib.so.1#mylib.so", conf);
+      </span>
+      
+</li>
+      
+<li> The MapReduce task can contain: <br>
+      
+<span class="codefrag"> System.loadLibrary("mylib.so"); </span>
+      
+</li>
+      
+</ol>
+<p>
+<br>
+<strong>Note:</strong> If you downloaded or built the native hadoop library, you don&rsquo;t need to use DistibutedCache to 
+     make the library available to your MapReduce tasks.</p>
+</div>
+  
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<div class="copyright">
+        Copyright &copy;
+         2008 <a href="http://www.apache.org/licenses/">The Apache Software Foundation.</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+</body>
+</html>

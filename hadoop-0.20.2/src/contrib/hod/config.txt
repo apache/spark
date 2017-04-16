@@ -1,0 +1,172 @@
+                     HOD Configuration
+                     =================
+
+1. Introduction:
+================
+
+Configuration options for HOD are organized as sections and options 
+within them. They can be specified in two ways: a configuration file 
+in the INI format, and as command line options to the HOD shell, 
+specified in the format --section.option[=value]. If the same option is 
+specified in both places, the value specified on the command line 
+overrides the value in the configuration file.
+
+To get a simple description of all configuration options, you can type
+    hod --verbose-help
+
+This document explains some of the most important or commonly used
+configuration options in some more detail.
+
+2. Sections:
+============
+
+The following are the various sections in the HOD configuration:
+
+    * hod:                  Options for the HOD client
+    * resource_manager:     Options for specifying which resource 
+                            manager to use, and other parameters for 
+                            using that resource manager
+    * ringmaster:           Options for the RingMaster process, 
+    * hodring:              Options for the HodRing processes
+    * gridservice-mapred:   Options for the MapReduce daemons
+    * gridservice-hdfs:     Options for the HDFS daemons.
+
+The following are some of the important options in the HOD 
+configuration:
+
+3. Important / Commonly Used Configuration Options:
+===================================================
+
+3.1. Common configuration options:
+----------------------------------
+
+Certain configuration options are defined in most of the sections of 
+the HOD configuration. Options defined in a section, are used by the
+process for which that section applies. These options have the same
+meaning, but can have different values in each section.
+
+* temp-dir: Temporary directory for usage by the HOD processes. Make 
+            sure that the users who will run hod have rights to create 
+            directories under the directory specified here.
+
+* debug: A numeric value from 1-4. 4 produces the most log information,
+         and 1 the least.
+
+* log-dir: Directory where log files are stored. By default, this is
+           <install-location>/logs/. The restrictions and notes for the
+           temp-dir variable apply here too.
+
+* xrs-port-range: A range of ports, among which an available port shall
+                  be picked for use to run an XML-RPC server.
+
+* http-port-range: A range of ports, among which an available port shall
+                   be picked for use to run an HTTP server.
+
+* java-home: Location of Java to be used by Hadoop.
+
+3.2 hod options:
+----------------
+
+* cluster: A descriptive name given to the cluster. For Torque, this is
+           specified as a 'Node property' for every node in the cluster.
+           HOD uses this value to compute the number of available nodes.
+
+* client-params: A comma-separated list of hadoop config parameters
+                 specified as key-value pairs. These will be used to
+                 generate a hadoop-site.xml on the submit node that 
+                 should be used for running MapReduce jobs.
+
+3.3 resource_manager options:
+-----------------------------
+
+* queue: Name of the queue configured in the resource manager to which
+         jobs are to be submitted.
+
+* batch-home: Install directory to which 'bin' is appended and under 
+              which the executables of the resource manager can be 
+              found. 
+
+* env-vars: This is a comma separated list of key-value pairs, 
+            expressed as key=value, which would be passed to the jobs 
+            launched on the compute nodes. 
+            For example, if the python installation is 
+            in a non-standard location, one can set the environment
+            variable 'HOD_PYTHON_HOME' to the path to the python 
+            executable. The HOD processes launched on the compute nodes
+            can then use this variable.
+
+3.4 ringmaster options:
+-----------------------
+
+* work-dirs: These are a list of comma separated paths that will serve
+             as the root for directories that HOD generates and passes
+             to Hadoop for use to store DFS / MapReduce data. For e.g.
+             this is where DFS data blocks will be stored. Typically,
+             as many paths are specified as there are disks available
+             to ensure all disks are being utilized. The restrictions
+             and notes for the temp-dir variable apply here too.
+
+3.5 gridservice-hdfs options:
+-----------------------------
+
+* external: If false, this indicates that a HDFS cluster must be 
+            bought up by the HOD system, on the nodes which it 
+            allocates via the allocate command. Note that in that case,
+            when the cluster is de-allocated, it will bring down the 
+            HDFS cluster, and all the data will be lost.
+            If true, it will try and connect to an externally configured
+            HDFS system.
+            Typically, because input for jobs are placed into HDFS
+            before jobs are run, and also the output from jobs in HDFS 
+            is required to be persistent, an internal HDFS cluster is 
+            of little value in a production system. However, it allows 
+            for quick testing.
+
+* host: Hostname of the externally configured NameNode, if any
+
+* fs_port: Port to which NameNode RPC server is bound.
+
+* info_port: Port to which the NameNode web UI server is bound.
+
+* pkgs: Installation directory, under which bin/hadoop executable is 
+        located. This can be used to use a pre-installed version of
+        Hadoop on the cluster.
+
+* server-params: A comma-separated list of hadoop config parameters
+                 specified key-value pairs. These will be used to
+                 generate a hadoop-site.xml that will be used by the
+                 NameNode and DataNodes.
+
+* final-server-params: Same as above, except they will be marked final.
+
+
+3.6 gridservice-mapred options:
+-------------------------------
+
+* external: If false, this indicates that a MapReduce cluster must be
+            bought up by the HOD system on the nodes which it allocates
+            via the allocate command.
+            If true, if will try and connect to an externally 
+            configured MapReduce system.
+
+* host: Hostname of the externally configured JobTracker, if any
+
+* tracker_port: Port to which the JobTracker RPC server is bound
+
+* info_port: Port to which the JobTracker web UI server is bound.
+
+* pkgs: Installation directory, under which bin/hadoop executable is 
+        located
+
+* server-params: A comma-separated list of hadoop config parameters
+                 specified key-value pairs. These will be used to
+                 generate a hadoop-site.xml that will be used by the
+                 JobTracker and TaskTrackers
+
+* final-server-params: Same as above, except they will be marked final.
+
+4. Known Issues:
+================
+
+HOD does not currently handle special characters such as space, comma
+and equals in configuration values.

@@ -1,0 +1,36 @@
+From cdd93ee3bca2b400f7b193c5b6527705262c4769 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:47 -0700
+Subject: [PATCH 0349/1179] MAPREDUCE-771. Setup and cleanup tasks remain in UNASSIGNED state for a long
+ time on tasktrackers with long running high RAM tasks.
+
+Author: Hemanth Yamijala
+Reason: Bug fix
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 568d30d..f8d34e8 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -3282,12 +3282,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   }
+   
+   // returns cleanup tasks first, then setup tasks.
+-  private synchronized List<Task> getSetupAndCleanupTasks(
++  synchronized List<Task> getSetupAndCleanupTasks(
+     TaskTrackerStatus taskTracker) throws IOException {
+     int maxMapTasks = taskTracker.getMaxMapSlots();
+     int maxReduceTasks = taskTracker.getMaxReduceSlots();
+-    int numMaps = taskTracker.countMapTasks();
+-    int numReduces = taskTracker.countReduceTasks();
++    int numMaps = taskTracker.countOccupiedMapSlots();
++    int numReduces = taskTracker.countOccupiedReduceSlots();
+     int numTaskTrackers = getClusterStatus().getTaskTrackers();
+     int numUniqueHosts = getNumberOfUniqueHosts();
+ 
+-- 
+1.7.0.4
+

@@ -1,0 +1,70 @@
+From 2ac40e32af497c4c0d69c5921bd1504356b11086 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Feb 2011 10:47:43 -0800
+Subject: [PATCH 0879/1179] Amend MAPREDUCE-1441. Reapply trimming of whitespace in mapred.local.dir configurations
+
+Reason: User bug report - regression from b2 to b3
+Author: Todd Lipcon
+Ref: CDH-2662
+---
+ .../hadoop/mapred/DefaultTaskController.java       |    2 +-
+ .../org/apache/hadoop/mapred/JobLocalizer.java     |    2 +-
+ .../org/apache/hadoop/mapred/TaskRunner.java       |    2 +-
+ .../apache/hadoop/mapred/TestUserLogCleanup.java   |    2 +-
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+index 159e357..6ae1604 100644
+--- a/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+@@ -88,7 +88,7 @@ public class DefaultTaskController extends TaskController {
+       
+       //create the attempt dirs
+       new Localizer(localFs, 
+-          getConf().getStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY)).
++          getConf().getTrimmedStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY)).
+           initializeAttemptDirs(user, jobId, attemptId);
+       
+       // create the working-directory of the task 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java b/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java
+index df13e45..b526565 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java
+@@ -95,7 +95,7 @@ public class JobLocalizer {
+   public JobLocalizer(JobConf ttConf, String user, String jobid)
+       throws IOException {
+     this(ttConf, user, jobid,
+-        ttConf.getStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY));
++        ttConf.getTrimmedStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY));
+   }
+ 
+   public JobLocalizer(JobConf ttConf, String user, String jobid,
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index 09c0011..37e494f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -624,7 +624,7 @@ abstract class TaskRunner extends Thread {
+    * process space.
+    */
+   static void setupChildMapredLocalDirs(Task t, JobConf conf) {
+-    String[] localDirs = conf.getStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY);
++    String[] localDirs = conf.getTrimmedStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY);
+     String jobId = t.getJobID().toString();
+     String taskId = t.getTaskID().toString();
+     boolean isCleanup = t.isTaskCleanupTask();
+diff --git a/src/test/org/apache/hadoop/mapred/TestUserLogCleanup.java b/src/test/org/apache/hadoop/mapred/TestUserLogCleanup.java
+index f144012..5b2b268 100644
+--- a/src/test/org/apache/hadoop/mapred/TestUserLogCleanup.java
++++ b/src/test/org/apache/hadoop/mapred/TestUserLogCleanup.java
+@@ -82,7 +82,7 @@ public class TestUserLogCleanup {
+     tt = new TaskTracker();
+     tt.setConf(new JobConf(conf));
+     localizer = new Localizer(FileSystem.get(conf), conf
+-        .getStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY));
++        .getTrimmedStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY));
+     tt.setLocalizer(localizer);
+     userLogManager = new UtilsForTests.InLineUserLogManager(conf);
+     userLogCleaner = userLogManager.getUserLogCleaner();
+-- 
+1.7.0.4
+

@@ -1,0 +1,34 @@
+From 2bb607d29d9080a7ca3bce72739ccef654d5392d Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:30:46 -0800
+Subject: [PATCH 0022/1179] HADOOP-5175. Option to prohibit jars unpacking
+
+Description: The task tracker moves all unpacked jars into
+${hadoop.tmp.dir}/mapred/local/taskTracker. When using a lot of external
+libraries via -libjars, this results in several thousand unpacked files.
+The amount of time needed to `du` these directories can increase to the point
+where tasks time out before starting. This patch provides an option to
+suppress jar unpacking.
+Reason: Scalability improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index b4132ba..c0e25ab 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -601,7 +601,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+       for (String tmpjars: libjarsArr) {
+         Path tmp = new Path(tmpjars);
+         Path newPath = copyRemoteFiles(fs, libjarsDir, tmp, job, replication);
+-        DistributedCache.addArchiveToClassPath(newPath, job);
++        DistributedCache.addFileToClassPath(newPath, job);
+       }
+     }
+     
+-- 
+1.7.0.4
+

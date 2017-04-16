@@ -1,0 +1,184 @@
+From b65e0a12168ed5ed9f9bbb88895f186762c4d5dc Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 11 Mar 2012 21:18:10 -0700
+Subject: [PATCH 1140/1179] HDFS-2132. Potential resource leak in EditLogFileOutputStream.close.
+
+EditLogFileOutputStream.close(...) sequentially closes a series of
+underlying resources. If any of the calls to close() throw before the
+last one, the later resources will never be closed.
+
+Reason: Bug
+Author: Aaron T. Myers
+Ref: CDH-3317
+---
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |   67 +++++++++++++-------
+ .../server/namenode/NameNodeResourceChecker.java   |    4 +-
+ .../namenode/TestEditLogFileOutputStream.java      |   27 ++++++++
+ 3 files changed, 72 insertions(+), 26 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index 1ade6df..24abd8b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -50,6 +50,8 @@ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.permission.*;
+ import org.apache.hadoop.security.token.delegation.DelegationKey;
+ 
++import org.apache.hadoop.thirdparty.guava.common.annotations.VisibleForTesting;
++
+ /**
+  * FSEditLog maintains a log of the namespace modifications.
+  * 
+@@ -181,31 +183,38 @@ public class FSEditLog {
+ 
+     @Override
+     public void close() throws IOException {
+-      // close should have been called after all pending transactions 
+-      // have been flushed & synced.
+-      if (bufCurrent != null) {
+-        int bufSize = bufCurrent.size();
+-        if (bufSize != 0) {
+-          throw new IOException("FSEditStream has " + bufSize +
+-                                " bytes still to be flushed and cannot " +
+-                                "be closed.");
+-        } 
+-        bufCurrent.close();
+-        bufCurrent = null;
+-      }
++      try {
++        // close should have been called after all pending transactions 
++        // have been flushed & synced.
++        if (bufCurrent != null) {
++          int bufSize = bufCurrent.size();
++          if (bufSize != 0) {
++            throw new IOException("FSEditStream has " + bufSize +
++                                  " bytes still to be flushed and cannot " +
++                                  "be closed.");
++          } 
++          bufCurrent.close();
++          bufCurrent = null;
++        }
+       
+-      if (bufReady != null) {
+-        bufReady.close();
+-        bufReady = null;
+-      }
++        if (bufReady != null) {
++          bufReady.close();
++          bufReady = null;
++        }
+ 
+-      // remove the last INVALID marker from transaction log.
+-      if (fc != null && fc.isOpen()) {
+-        fc.truncate(fc.position());
+-        fc.close();
+-      }
+-      if (fp != null) {
+-        fp.close();
++        // remove the last INVALID marker from transaction log.
++        if (fc != null && fc.isOpen()) {
++          fc.truncate(fc.position());
++          fc.close();
++        }
++        if (fp != null) {
++          fp.close();
++        }
++      } finally {
++        IOUtils.cleanup(FSNamesystem.LOG, bufCurrent, bufReady, fc, fp);
++        bufCurrent = bufReady = null;
++        fc = null;
++        fp = null;
+       }
+     }
+ 
+@@ -265,6 +274,16 @@ public class FSEditLog {
+     File getFile() {
+       return file;
+     }
++
++    @VisibleForTesting
++    public void setFileChannelForTesting(FileChannel fc) {
++      this.fc = fc;
++    }
++  
++    @VisibleForTesting
++    public FileChannel getFileChannelForTesting() {
++      return fc;
++    }
+   }
+ 
+   static class EditLogFileInputStream extends EditLogInputStream {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
+index 962353f..e0c4058 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
+@@ -30,7 +30,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.DF;
+ import org.apache.hadoop.hdfs.DFSConfigKeys;
+ 
+-//import com.google.common.annotations.VisibleForTesting;
++import org.apache.hadoop.thirdparty.guava.common.annotations.VisibleForTesting;
+ 
+ /**
+  * 
+@@ -133,7 +133,7 @@ public class NameNodeResourceChecker {
+     return lowVolumes;
+   }
+ 
+-  //@VisibleForTesting
++  @VisibleForTesting
+   void setVolumes(Map<String, DF> volumes) {
+     this.volumes = volumes;
+   }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogFileOutputStream.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogFileOutputStream.java
+index bc3d3cc..2bb6c45 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogFileOutputStream.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogFileOutputStream.java
+@@ -22,12 +22,15 @@ import static org.junit.Assert.*;
+ 
+ import java.io.File;
+ import java.io.IOException;
++import java.nio.channels.FileChannel;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.DU;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.hdfs.server.namenode.FSEditLog.EditLogFileOutputStream;
+ import org.junit.Test;
++import org.mockito.Mockito;
+ 
+ public class TestEditLogFileOutputStream {
+ 
+@@ -56,4 +59,28 @@ public class TestEditLogFileOutputStream {
+         257 * 4096 <= new DU(editLog, conf).getUsed());
+   }
+ 
++  @Test
++  public void testClose() throws IOException {
++    String errorMessage = "TESTING: fc.truncate() threw IOE";
++    
++    File testDir = new File(System.getProperty("test.build.data", "/tmp"));
++    assertTrue("could not create test directory", testDir.exists() || testDir.mkdirs());
++    File f = new File(testDir, "edits");
++    assertTrue("could not create test file", f.createNewFile());
++    EditLogFileOutputStream elos = new EditLogFileOutputStream(f);
++    
++    FileChannel mockFc = Mockito.spy(elos.getFileChannelForTesting());
++    Mockito.doThrow(new IOException(errorMessage)).when(mockFc).truncate(Mockito.anyLong());
++    elos.setFileChannelForTesting(mockFc);
++    
++    try {
++      elos.close();
++      fail("elos.close() succeeded, but should have thrown");
++    } catch (IOException e) {
++      assertEquals("wrong IOE thrown from elos.close()", e.getMessage(), errorMessage);
++    }
++    
++    assertEquals("fc was not nulled when elos.close() failed", elos.getFileChannelForTesting(), null);
++  }
++
+ }
+-- 
+1.7.0.4
+

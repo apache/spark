@@ -1,0 +1,475 @@
+From 8b29bcbea6d6886e84d6dfced7179439f219543e Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 27 Nov 2011 21:57:11 -0800
+Subject: [PATCH 1095/1179] HDFS-854. Datanode should scan devices in parallel to generate block report.
+
+A Datanode should scan its disk devices in parallel so that the time
+to generate a block report is reduced. This will reduce the startup
+time of a cluster.
+
+Author: Dmytro Molkov, Eli Collins
+Ref: CDH-3853
+---
+ src/hdfs/hdfs-default.xml                          |    8 ++
+ .../hdfs/server/datanode/DataBlockScanner.java     |    6 +-
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |   93 +++++++++++++++-----
+ .../hdfs/server/datanode/FSDatasetInterface.java   |    3 +-
+ .../org/apache/hadoop/hdfs/MiniDFSCluster.java     |    6 +-
+ src/test/org/apache/hadoop/hdfs/TestDFSShell.java  |    5 +-
+ .../hadoop/hdfs/TestDatanodeBlockScanner.java      |    8 ++-
+ .../hdfs/TestInjectionForSimulatedStorage.java     |    9 +--
+ .../server/datanode/TestBlockReportGeneration.java |    1 +
+ .../server/datanode/TestDataNodeVolumeFailure.java |    2 +-
+ .../server/datanode/TestSimulatedFSDataset.java    |    6 +-
+ 11 files changed, 107 insertions(+), 40 deletions(-)
+
+diff --git a/src/hdfs/hdfs-default.xml b/src/hdfs/hdfs-default.xml
+index 4cd1dfa..cfc9ca6 100644
+--- a/src/hdfs/hdfs-default.xml
++++ b/src/hdfs/hdfs-default.xml
+@@ -287,6 +287,14 @@ creations/deletions), or "all".</description>
+ </property>
+ 
+ <property>
++  <name>dfs.datanode.directoryscan.threads</name>
++  <value>1</value>
++  <description>Number of threads to use when scanning volumes to
++  generate block reports. A value greater than one means means
++  volumes will be scanned in parallel.</description>
++</property>
++
++<property>
+   <name>dfs.heartbeat.interval</name>
+   <value>3</value>
+   <description>Determines datanode heartbeat interval in seconds.</description>
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java
+index 6dcc765..e576273 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java
+@@ -197,7 +197,7 @@ class DataBlockScanner implements Runnable {
+     }
+   }
+ 
+-  private void init() {
++  private void init() throws InterruptedException {
+     
+     // get the list of blocks and arrange them in random order
+     Block arr[] = dataset.getBlockReport();
+@@ -627,9 +627,11 @@ class DataBlockScanner implements Runnable {
+           } catch (InterruptedException ignored) {}
+         }
+       }
++    } catch (InterruptedException ie) {
++      LOG.info("DataBlockScanner interrupted");
+     } catch (RuntimeException e) {
+       LOG.warn("RuntimeException during DataBlockScanner.run() : " +
+-               StringUtils.stringifyException(e));
++          e.getMessage() + "  " + StringUtils.stringifyException(e));
+       throw e;
+     } finally {
+       shutdown();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index 8df9d9c..b8ffedf 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -27,6 +27,7 @@ import java.io.RandomAccessFile;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Collection;
++import java.util.Collections;
+ import java.util.HashMap;
+ import java.util.Iterator;
+ import java.util.List;
+@@ -34,6 +35,12 @@ import java.util.Map;
+ import java.util.Random;
+ import java.util.Set;
+ import java.util.TreeSet;
++import java.util.concurrent.ArrayBlockingQueue;
++import java.util.concurrent.Callable;
++import java.util.concurrent.ExecutionException;
++import java.util.concurrent.Future;
++import java.util.concurrent.ThreadPoolExecutor;
++import java.util.concurrent.TimeUnit;
+ 
+ import javax.management.NotCompliantMBeanException;
+ import javax.management.ObjectName;
+@@ -55,6 +62,8 @@ import org.apache.hadoop.util.DiskChecker;
+ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+ import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
+ 
++import org.apache.hadoop.thirdparty.guava.common.util.concurrent.ThreadFactoryBuilder;
++
+ /**************************************************
+  * FSDataset manages a set of data blocks.  Each block
+  * has a unique name and an extent on disk.
+@@ -635,14 +644,37 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     }
+   }
+     
++  private static class VolumeScanner implements Callable<Void> {
++    private FSVolume vol;
++    private Map<Block, File> blocks;
++
++    public VolumeScanner(FSVolume vol, Map<Block, File> blocks) {
++      this.vol = vol;
++      this.blocks = blocks;
++    }
++
++    @Override
++    public Void call() throws Exception {
++      vol.scanBlockFilesInconsistent(blocks);
++      return null;
++    }
++  }
++
+   static class FSVolumeSet {
+     FSVolume[] volumes = null;
+     int curVolume = 0;
+     int numFailedVolumes;
++    private final ThreadPoolExecutor pool;
+ 
+-    FSVolumeSet(FSVolume[] volumes, int failedVols) {
++    FSVolumeSet(FSVolume[] volumes, int failedVols, int scannerThreads) {
+       this.volumes = volumes;
+       this.numFailedVolumes = failedVols;
++      pool = new ThreadPoolExecutor(scannerThreads, scannerThreads, 0L,
++          TimeUnit.SECONDS, new ArrayBlockingQueue<Runnable>(volumes.length));
++      pool.setThreadFactory(new ThreadFactoryBuilder()
++        .setDaemon(true)
++        .setNameFormat("Block Scanner Thread #%d")
++        .build());
+     }
+     
+     private int numberOfVolumes() {
+@@ -701,16 +733,27 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       return remaining;
+     }
+ 
+-    void scanBlockFilesInconsistent(Map<Block, File> results) {
++    void scanBlockFilesInconsistent(Map<Block, File> seenOnDisk)
++        throws InterruptedException {
+       // Make a local consistent copy of the volume list, since
+       // it might change due to a disk failure
+       FSVolume volumesCopy[];
+       synchronized (this) {
+         volumesCopy = Arrays.copyOf(volumes, volumes.length);
+       }
+-      
++
++      ArrayList<Future<Void>> results =
++        new ArrayList<Future<Void>>(volumes.length);
++
+       for (FSVolume vol : volumesCopy) {
+-        vol.scanBlockFilesInconsistent(results);
++        results.add(pool.submit(new VolumeScanner(vol, seenOnDisk)));
++      }
++      for (Future<Void> result : results) {
++        try {
++          result.get();
++        } catch (ExecutionException ee) {
++          throw new RuntimeException(ee.getCause());
++        }
+       }
+     }
+     
+@@ -785,6 +828,15 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       }
+       return sb.toString();
+     }
++
++    void shutdown() {
++      pool.shutdown();
++      for (FSVolume volume : volumes) {
++        if (volume != null) {
++          volume.dfsUsage.shutdown();
++        }
++      }
++    }
+   }
+   
+   //////////////////////////////////////////////////////
+@@ -979,12 +1031,13 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+         + ", volumes failed: " + volsFailed
+         + ", volume failures tolerated: " + volFailuresTolerated);
+     }
++    int scannerThreads = conf.getInt("dfs.datanode.directoryscan.threads", 1);
+ 
+     FSVolume[] volArray = new FSVolume[storage.getNumStorageDirs()];
+     for (int idx = 0; idx < storage.getNumStorageDirs(); idx++) {
+       volArray[idx] = new FSVolume(storage.getStorageDir(idx).getCurrentDir(), conf);
+     }
+-    volumes = new FSVolumeSet(volArray, volsFailed);
++    volumes = new FSVolumeSet(volArray, volsFailed, scannerThreads);
+     volumes.getVolumeMap(volumeMap);
+     File[] roots = new File[storage.getNumStorageDirs()];
+     for (int idx = 0; idx < storage.getNumStorageDirs(); idx++) {
+@@ -1707,7 +1760,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+   
+   @Override
+   public Block[] retrieveAsyncBlockReport() {
+-    HashMap<Block, File> seenOnDisk = asyncBlockReport.getAndReset();
++    Map<Block, File> seenOnDisk = asyncBlockReport.getAndReset();
+     return reconcileRoughBlockScan(seenOnDisk);
+   }
+   
+@@ -1715,9 +1768,9 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+    * Return a table of block data. This method is synchronous, and is used
+    * by tests and during block scanner startup.
+    */
+-  public Block[] getBlockReport() {
++  public Block[] getBlockReport() throws InterruptedException {
+     long st = System.currentTimeMillis();
+-    HashMap<Block, File> seenOnDisk = roughBlockScan();
++    Map<Block, File> seenOnDisk = roughBlockScan();
+     // the above results are inconsistent since modifications
+     // happened concurrently. Now check any diffs
+     DataNode.LOG.info("Generated rough (lockless) block report in "
+@@ -1725,7 +1778,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     return reconcileRoughBlockScan(seenOnDisk);
+   }
+ 
+-  private Block[] reconcileRoughBlockScan(HashMap<Block, File> seenOnDisk) {
++  private Block[] reconcileRoughBlockScan(Map<Block, File> seenOnDisk) {
+     Set<Block> blockReport;
+     synchronized (this) {
+       long st = System.currentTimeMillis();
+@@ -1746,13 +1799,13 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+    * locks. This generates a "rough" block report, since there
+    * may be concurrent modifications to the disk structure.
+    */
+-  HashMap<Block, File> roughBlockScan() {
++  Map<Block, File> roughBlockScan() throws InterruptedException {
+     int expectedNumBlocks;
+     synchronized (this) {
+       expectedNumBlocks = volumeMap.size();
+     }
+-    HashMap<Block, File> seenOnDisk =
+-        new HashMap<Block, File>(expectedNumBlocks, 1.1f);
++    Map<Block, File> seenOnDisk = Collections.synchronizedMap(
++        new HashMap<Block,File>(expectedNumBlocks, 1.1f));
+     volumes.scanBlockFilesInconsistent(seenOnDisk);
+     return seenOnDisk;
+   }
+@@ -2089,12 +2142,8 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       asyncBlockReport.shutdown();
+     }
+     
+-    if(volumes != null) {
+-      for (FSVolume volume : volumes.volumes) {
+-        if(volume != null) {
+-          volume.dfsUsage.shutdown();
+-        }
+-      }
++    if (volumes != null) {
++      volumes.shutdown();
+     }
+   }
+ 
+@@ -2196,7 +2245,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+ 
+     boolean requested = false;
+     boolean shouldRun = true;
+-    private HashMap<Block, File> scan = null;
++    private Map<Block, File> scan = null;
+     
+     AsyncBlockReport(FSDataset fsd) {
+       this.fsd = fsd;
+@@ -2217,11 +2266,11 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       return scan != null;
+     }
+ 
+-    synchronized HashMap<Block, File> getAndReset() {
++    synchronized Map<Block, File> getAndReset() {
+       if (!isReady()) {
+         throw new IllegalStateException("report not ready!");
+       }
+-      HashMap<Block, File> ret = scan;
++      Map<Block, File> ret = scan;
+       scan = null;
+       requested = false;
+       return ret;
+@@ -2241,7 +2290,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+           
+           DataNode.LOG.info("Starting asynchronous block report scan");
+           long st = System.currentTimeMillis();
+-          HashMap<Block, File> result = fsd.roughBlockScan();
++          Map<Block, File> result = fsd.roughBlockScan();
+           DataNode.LOG.info("Finished asynchronous block report scan in "
+               + (System.currentTimeMillis() - st) + "ms");
+           
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
+index d696f07..d72a90b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
+@@ -232,8 +232,9 @@ public interface FSDatasetInterface extends FSDatasetMBean {
+    * Returns the block report - the full list of blocks stored
+    * Returns only finalized blocks
+    * @return - the block report - the full list of blocks stored
++   * @throws InterruptedException
+    */
+-  public Block[] getBlockReport();
++  public Block[] getBlockReport() throws InterruptedException;
+   
+   /**
+    * Request that a block report be prepared.
+diff --git a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+index 7547b35..052a194 100644
+--- a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
++++ b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+@@ -925,8 +925,9 @@ public class MiniDFSCluster {
+    * 
+    * @param dataNodeIndex - data node whose block report is desired - the index is same as for getDataNodes()
+    * @return the block report for the specified data node
++   * @throws InterruptedException
+    */
+-  public Block[] getBlockReport(int dataNodeIndex) {
++  public Block[] getBlockReport(int dataNodeIndex) throws InterruptedException {
+     if (dataNodeIndex < 0 || dataNodeIndex > dataNodes.size()) {
+       throw new IndexOutOfBoundsException();
+     }
+@@ -938,8 +939,9 @@ public class MiniDFSCluster {
+    * 
+    * @return block reports from all data nodes
+    *    Block[] is indexed in the same order as the list of datanodes returned by getDataNodes()
++   * @throws InterruptedException
+    */
+-  public Block[][] getAllBlockReports() {
++  public Block[][] getAllBlockReports() throws InterruptedException {
+     int numDataNodes = dataNodes.size();
+     Block[][] result = new Block[numDataNodes][];
+     for (int i = 0; i < numDataNodes; ++i) {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSShell.java b/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
+index 1bd5f03..7aaa852 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
+@@ -1148,7 +1148,8 @@ public class TestDFSShell extends TestCase {
+     }
+   }
+ 
+-  static List<File> getBlockFiles(MiniDFSCluster cluster) throws IOException {
++  static List<File> getBlockFiles(MiniDFSCluster cluster) 
++      throws IOException, InterruptedException {
+     List<File> files = new ArrayList<File>();
+     List<DataNode> datanodes = cluster.getDataNodes();
+     Block[][] blocks = cluster.getAllBlockReports();
+@@ -1219,7 +1220,7 @@ public class TestDFSShell extends TestCase {
+     }
+   }
+   
+-  public void testGet() throws IOException {
++  public void testGet() throws IOException, InterruptedException {
+     DFSTestUtil.setLogLevel2All(FSInputChecker.LOG);
+     final Configuration conf = new Configuration();
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, 2, true, null);
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDatanodeBlockScanner.java b/src/test/org/apache/hadoop/hdfs/TestDatanodeBlockScanner.java
+index 4388ddc..28386e6 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDatanodeBlockScanner.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDatanodeBlockScanner.java
+@@ -99,10 +99,16 @@ public class TestDatanodeBlockScanner extends TestCase {
+   }
+ 
+   public void testDatanodeBlockScanner() throws IOException {
+-    
++    for (int threads = 1; threads < 4; threads++) {
++      runTestDatanodeBlockScanner(threads);
++    }
++  }
++
++  public void runTestDatanodeBlockScanner(int numThreads) throws IOException {
+     long startTime = System.currentTimeMillis();
+     
+     Configuration conf = new Configuration();
++    conf.setInt("dfs.datanode.directoryscan.threads", numThreads);
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, 1, true, null);
+     cluster.waitActive();
+     
+diff --git a/src/test/org/apache/hadoop/hdfs/TestInjectionForSimulatedStorage.java b/src/test/org/apache/hadoop/hdfs/TestInjectionForSimulatedStorage.java
+index 23c2329..a1baccc 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestInjectionForSimulatedStorage.java
++++ b/src/test/org/apache/hadoop/hdfs/TestInjectionForSimulatedStorage.java
+@@ -150,15 +150,11 @@ public class TestInjectionForSimulatedStorage extends TestCase {
+       
+       waitForBlockReplication(testFile, dfsClient.namenode, numDataNodes, 20);
+ 
+-      
+       Block[][] blocksList = cluster.getAllBlockReports();
+-                    
+-      
++
+       cluster.shutdown();
+       cluster = null;
+       
+-
+-      
+       /* Start the MiniDFSCluster with more datanodes since once a writeBlock
+        * to a datanode node fails, same block can not be written to it
+        * immediately. In our case some replication attempts will fail.
+@@ -189,7 +185,8 @@ public class TestInjectionForSimulatedStorage extends TestCase {
+                                   conf);
+       
+       waitForBlockReplication(testFile, dfsClient.namenode, numDataNodes, -1);
+-      
++    } catch (InterruptedException ie) {
++      // Ignore
+     } finally {
+       if (cluster != null) {
+         cluster.shutdown();
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestBlockReportGeneration.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestBlockReportGeneration.java
+index 84bf394..9c7d3d2 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestBlockReportGeneration.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestBlockReportGeneration.java
+@@ -24,6 +24,7 @@ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
+ 
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.hdfs.protocol.Block;
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailure.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailure.java
+index bf7b999..aea155e 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailure.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailure.java
+@@ -98,7 +98,7 @@ public class TestDataNodeVolumeFailure {
+    * failure if the configuration parameter allows this.
+    */
+   @Test
+-  public void testVolumeFailure() throws IOException {
++  public void testVolumeFailure() throws IOException, InterruptedException {
+     FileSystem fs = cluster.getFileSystem();
+     dataDir = new File(cluster.getDataDirectory());
+     System.out.println("Data dir: is " +  dataDir.getPath());
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestSimulatedFSDataset.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestSimulatedFSDataset.java
+index 90b02c4..fbc3a82 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestSimulatedFSDataset.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestSimulatedFSDataset.java
+@@ -138,7 +138,7 @@ public class TestSimulatedFSDataset extends TestCase {
+ 
+ 
+ 
+-  public void testGetBlockReport() throws IOException {
++  public void testGetBlockReport() throws IOException, InterruptedException {
+     FSDatasetInterface fsdataset = new SimulatedFSDataset(conf); 
+     Block[] blockReport = fsdataset.getBlockReport();
+     assertEquals(0, blockReport.length);
+@@ -150,7 +150,7 @@ public class TestSimulatedFSDataset extends TestCase {
+       assertEquals(blockIdToLen(b.getBlockId()), b.getNumBytes());
+     }
+   }
+-  public void testInjectionEmpty() throws IOException {
++  public void testInjectionEmpty() throws IOException, InterruptedException {
+     FSDatasetInterface fsdataset = new SimulatedFSDataset(conf); 
+     Block[] blockReport = fsdataset.getBlockReport();
+     assertEquals(0, blockReport.length);
+@@ -179,7 +179,7 @@ public class TestSimulatedFSDataset extends TestCase {
+     assertEquals(sfsdataset.getCapacity()-bytesAdded, sfsdataset.getRemaining());
+   }
+ 
+-  public void testInjectionNonEmpty() throws IOException {
++  public void testInjectionNonEmpty() throws IOException, InterruptedException {
+     FSDatasetInterface fsdataset = new SimulatedFSDataset(conf); 
+     
+     Block[] blockReport = fsdataset.getBlockReport();
+-- 
+1.7.0.4
+

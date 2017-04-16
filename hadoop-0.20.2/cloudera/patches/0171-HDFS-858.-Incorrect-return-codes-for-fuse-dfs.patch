@@ -1,0 +1,66 @@
+From 9a38b9c423aca358307aa6455977432f34aef990 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:31:45 -0800
+Subject: [PATCH 0171/1179] HDFS-858. Incorrect return codes for fuse-dfs
+
+Description: fuse-dfs doesn't pass proper error codes from libhdfs; places I'd like to correct are hdfsFileOpen (which can result in permission denied or quota violations) and hdfsWrite (which can result in quota violations).
+
+<p>By returning the correct error codes, command line utilities return much better error messages - especially for quota violations, which can be a devil to debug.</p>
+Reason: bugfix
+Author: Brian Bockelman
+Ref: UNKNOWN
+---
+ src/contrib/fuse-dfs/src/fuse_impls_open.c  |    6 +++++-
+ src/contrib/fuse-dfs/src/fuse_impls_write.c |   14 ++++++++++----
+ 2 files changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_open.c b/src/contrib/fuse-dfs/src/fuse_impls_open.c
+index 569b52c..73a1e34 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_open.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_open.c
+@@ -52,7 +52,11 @@ int dfs_open(const char *path, struct fuse_file_info *fi)
+ 
+   if ((fh->hdfsFH = hdfsOpenFile(fh->fs, path, flags,  0, 0, 0)) == NULL) {
+     syslog(LOG_ERR, "ERROR: could not connect open file %s:%d\n", __FILE__, __LINE__);
+-    return -EIO;
++    syslog(LOG_ERR, "ERROR: errno %d\n", errno);
++    if (errno == 0 || errno == EINTERNAL) {
++      return -EIO;
++    }
++    return -errno;
+   }
+ 
+   // 
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_write.c b/src/contrib/fuse-dfs/src/fuse_impls_write.c
+index c9aad0b..3e16977 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_write.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_write.c
+@@ -53,15 +53,21 @@ int dfs_write(const char *path, const char *buf, size_t size,
+   tOffset cur_offset = hdfsTell(fh->fs, file_handle);
+   if (cur_offset != offset) {
+     syslog(LOG_ERR, "ERROR: user trying to random access write to a file %d!=%d for %s %s:%d\n",(int)cur_offset, (int)offset,path, __FILE__, __LINE__);
+-    ret =  -EIO;
++    ret =  -ENOTSUP;
+   } else {
+     length = hdfsWrite(fh->fs, file_handle, buf, size);
+     if (length <= 0) {
+-      syslog(LOG_ERR, "ERROR: fuse problem - could not write all the bytes for %s %d!=%d%s:%d\n",path,length,(int)size, __FILE__, __LINE__);
+-      ret = -EIO;
++      syslog(LOG_ERR, "ERROR: could not write all the bytes for %s %d!=%d%s:%d\n", path, length, (int)size, __FILE__, __LINE__);
++      syslog(LOG_ERR, "ERROR: errno %d\n", errno);
++      if (errno == 0 || errno == EINTERNAL) {
++        ret = -EIO;
++      } else {
++        ret = -errno;
++      }
+     } 
+     if (length != size) {
+-      syslog(LOG_ERR, "WARN: fuse problem - could not write all the bytes for %s %d!=%d%s:%d\n",path,length,(int)size, __FILE__, __LINE__);
++      syslog(LOG_ERR, "ERROR: could not write all the bytes for %s %d!=%d%s:%d\n", path, length, (int)size, __FILE__, __LINE__);
++      syslog(LOG_ERR, "ERROR: errno - %d\n", errno);
+     }
+   }
+ 
+-- 
+1.7.0.4
+

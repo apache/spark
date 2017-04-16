@@ -1,0 +1,549 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8">
+<meta name="Forrest-skin-name" content="pelt">
+<title>Synthetic Load Generator Guide </title>
+<link type="text/css" href="skin/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="skin/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="skin/print.css" rel="stylesheet">
+<link type="text/css" href="skin/profile.css" rel="stylesheet">
+<script src="skin/getBlank.js" language="javascript" type="text/javascript"></script><script src="skin/getMenu.js" language="javascript" type="text/javascript"></script><script src="skin/fontsize.js" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="images/favicon.ico">
+</head>
+<body onload="init()">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+<a href="http://www.apache.org/">Apache</a> &gt; <a href="http://hadoop.apache.org/">Hadoop</a> &gt; <a href="http://hadoop.apache.org/core/">Core</a><script src="skin/breadcrumbs.js" language="JavaScript" type="text/javascript"></script>
+</div>
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<div class="grouplogo">
+<a href="http://hadoop.apache.org/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo.jpg" title="Apache Hadoop"></a>
+</div>
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogo">
+<a href="http://hadoop.apache.org/core/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo-2.gif" title="Scalable Computing Platform"></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="archive.cloudera.com" name="sitesearch" type="hidden"><input onFocus="getBlank (this, 'Search the site with google');" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://hadoop.apache.org/core/">Project</a>
+</li>
+<li>
+<a class="unselected" href="http://wiki.apache.org/hadoop">Wiki</a>
+</li>
+<li class="current">
+<a class="selected" href="index.html">Hadoop 0.20 Documentation</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu('menu_1.1', 'skin/')" id="menu_1.1Title" class="menutitle">Getting Started</div>
+<div id="menu_1.1" class="menuitemgroup">
+<div class="menuitem">
+<a href="index.html">Overview</a>
+</div>
+<div class="menuitem">
+<a href="single_node_setup.html">Single Node Setup</a>
+</div>
+<div class="menuitem">
+<a href="cluster_setup.html">Cluster Setup</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.2', 'skin/')" id="menu_1.2Title" class="menutitle">Guides</div>
+<div id="menu_1.2" class="menuitemgroup">
+<div class="menuitem">
+<a href="HttpAuthentication.html">Authentication for Hadoop HTTP web-consoles</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.3', 'skin/')" id="menu_1.3Title" class="menutitle">MapReduce</div>
+<div id="menu_1.3" class="menuitemgroup">
+<div class="menuitem">
+<a href="mapred_tutorial.html">MapReduce Tutorial</a>
+</div>
+<div class="menuitem">
+<a href="streaming.html">Hadoop Streaming</a>
+</div>
+<div class="menuitem">
+<a href="commands_manual.html">Hadoop Commands</a>
+</div>
+<div class="menuitem">
+<a href="distcp.html">DistCp</a>
+</div>
+<div class="menuitem">
+<a href="vaidya.html">Vaidya</a>
+</div>
+<div class="menuitem">
+<a href="hadoop_archives.html">Hadoop Archives</a>
+</div>
+<div class="menuitem">
+<a href="gridmix.html">Gridmix</a>
+</div>
+<div class="menuitem">
+<a href="capacity_scheduler.html">Capacity Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="fair_scheduler.html">Fair Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="hod_scheduler.html">Hod Scheduler</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_selected_1.4', 'skin/')" id="menu_selected_1.4Title" class="menutitle" style="background-image: url('skin/images/chapter_open.gif');">HDFS</div>
+<div id="menu_selected_1.4" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="hdfs_user_guide.html">HDFS Users </a>
+</div>
+<div class="menuitem">
+<a href="hdfs_design.html">HDFS Architecture</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_permissions_guide.html">Permissions</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_quota_admin_guide.html">Quotas</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_imageviewer.html">Offline Image Viewer Guide</a>
+</div>
+<div class="menupage">
+<div class="menupagetitle">Synthetic Load Generator</div>
+</div>
+<div class="menuitem">
+<a href="libhdfs.html">C API libhdfs</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.5', 'skin/')" id="menu_1.5Title" class="menutitle">Common</div>
+<div id="menu_1.5" class="menuitemgroup">
+<div class="menuitem">
+<a href="file_system_shell.html">File System Shell</a>
+</div>
+<div class="menuitem">
+<a href="service_level_auth.html">Service Level Authorization</a>
+</div>
+<div class="menuitem">
+<a href="native_libraries.html">Native Libraries</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.6', 'skin/')" id="menu_1.6Title" class="menutitle">Miscellaneous</div>
+<div id="menu_1.6" class="menuitemgroup">
+<div class="menuitem">
+<a href="Secure_Impersonation.html">Secure Impersonation</a>
+</div>
+<div class="menuitem">
+<a href="api/index.html">API Docs</a>
+</div>
+<div class="menuitem">
+<a href="jdiff/changes.html">API Changes</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/">Wiki</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>
+</div>
+<div class="menuitem">
+<a href="releasenotes.html">Release Notes</a>
+</div>
+<div class="menuitem">
+<a href="changes.html">Change Log</a>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="skin/images/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="SLG_user_guide.pdf"><img alt="PDF -icon" src="skin/images/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1>Synthetic Load Generator Guide </h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="#Overview">Overview</a>
+</li>
+<li>
+<a href="#Synopsis"> Synopsis </a>
+</li>
+<li>
+<a href="#Test+Space+Population"> Test Space Population </a>
+<ul class="minitoc">
+<li>
+<a href="#Structure+Generator"> Structure Generator </a>
+</li>
+<li>
+<a href="#Data+Generator">Data Generator </a>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+	
+<a name="N1000D"></a><a name="Overview"></a>
+<h2 class="h3">Overview</h2>
+<div class="section">
+<p>
+        The synthetic load generator (SLG) is a tool for testing NameNode behavior
+        under different client loads. The user can generate different mixes 
+        of read, write, and list requests by specifying the probabilities of
+        read and write. The user controls the intensity of the load by adjusting
+        parameters for the number of worker threads and the delay between 
+        operations. While load generators are running, the user can profile and
+        monitor the running of the NameNode. When a load generator exits, it
+        prints some NameNode statistics like the average execution time of each
+        kind of operation and the NameNode throughput.
+        </p>
+</div>
+                
+	
+<a name="N10017"></a><a name="Synopsis"></a>
+<h2 class="h3"> Synopsis </h2>
+<div class="section">
+<p>
+        The synopsis of the command is:
+      </p>
+<pre class="code">java LoadGenerator [options]</pre>
+<p> Options include:</p>
+<ul>
+    
+<li>
+        
+<span class="codefrag">-readProbability &lt;read probability&gt;</span>
+<br>
+        The probability of the read operation; default is 0.3333.
+    </li>
+ 
+    
+<li>               
+        
+<span class="codefrag">-writeProbability &lt;write probability&gt;</span>
+<br>
+        The probability of the write operations; default is 0.3333.
+    </li>
+
+   
+<li>            
+        
+<span class="codefrag">-root &lt;test space root&gt;</span>
+<br>
+        The root of the test space; default is /testLoadSpace.
+    </li> 
+
+    
+<li>           
+        
+<span class="codefrag">-maxDelayBetweenOps &lt;maxDelayBetweenOpsInMillis&gt;</span>
+<br> 
+        The maximum delay between two consecutive operations in a thread; default is 0 indicating no delay.
+    </li> 
+
+    
+<li>            
+        
+<span class="codefrag">-numOfThreads &lt;numOfThreads&gt;</span>
+<br>
+        The number of threads to spawn; default is 200.
+    </li>
+
+     
+<li>          
+        
+<span class="codefrag">-elapsedTime &lt;elapsedTimeInSecs&gt;</span>
+<br>
+        The number of seconds that the program 
+        will run; A value of zero indicates that the program runs
+        forever. The default value is 0.
+     </li> 
+
+    
+<li>            
+        
+<span class="codefrag">-startTime &lt;startTimeInMillis&gt;</span>
+<br> 
+        The time that all worker threads 
+                start to run. By default it is 10 seconds after the main 
+                program starts running.This creates a barrier if more than
+                one load generator is running.
+      </li>
+    
+    
+<li>     
+        
+<span class="codefrag">-seed &lt;seed&gt;</span>
+<br>
+        The random generator seed for repeating 
+                requests to NameNode when running with a single thread;
+                default is the current time.
+     </li>
+			
+	
+</ul>
+<p>
+        After command line argument parsing, the load generator traverses 
+        the test space and builds a table of all directories and another table
+        of all files in the test space. It then waits until the start time to
+        spawn the number of worker threads as specified by the user. 
+        
+        Each thread sends a stream of requests to NameNode. At each iteration, 
+        it first decides if it is going to read a file, create a file, or
+        list a directory following the read and write probabilities specified
+        by the user. The listing probability is equal to 
+        <em>1-read probability-write probability</em>. When reading, 
+        it randomly picks a file in the test space and reads the entire file. 
+        When writing, it randomly picks a directory in the test space and 
+        creates a file there. 
+    </p>
+<p>
+        To avoid two threads with the same load 
+        generator or from two different load generators creating the same 
+        file, the file name consists of the current machine's host name 
+        and the thread id. The length of the file follows Gaussian 
+        distribution with an average size of 2 blocks and the standard 
+        deviation of 1. The new file is filled with byte 'a'. To avoid the test 
+        space growing indefinitely, the file is deleted immediately
+        after the file creation completes. While listing, it randomly picks 
+        a directory in the test space and lists its content. 
+     </p>
+<p>   
+        After an operation completes, the thread pauses for a random 
+        amount of time in the range of [0, maxDelayBetweenOps] if the 
+        specified maximum delay is not zero. All threads are stopped when 
+        the specified elapsed time is passed. Before exiting, the program 
+        prints the average execution for each kind of NameNode operations, 
+        and the number of requests served by the NameNode per second.
+    </p>
+</div>
+                
+     
+<a name="N1006F"></a><a name="Test+Space+Population"></a>
+<h2 class="h3"> Test Space Population </h2>
+<div class="section">
+<p>
+        The user needs to populate a test space before running a 
+        load generator. The structure generator generates a random 
+        test space structure and the data generator creates the files 
+        and directories of the test space in Hadoop distributed file system.
+     </p>
+<a name="N10078"></a><a name="Structure+Generator"></a>
+<h3 class="h4"> Structure Generator </h3>
+<p>
+        This tool generates a random namespace structure with the 
+        following constraints:
+     </p>
+<ol>
+        
+<li>The number of subdirectories that a directory can have is 
+            a random number in [minWidth, maxWidth].</li>
+        
+<li>The maximum depth of each subdirectory is a random number 
+            [2*maxDepth/3, maxDepth].</li>
+        
+<li>Files are randomly placed in leaf directories. The size of 
+            each file follows Gaussian distribution with an average size 
+            of 1 block and a standard deviation of 1.</li>
+     
+</ol>
+<p>
+        The generated namespace structure is described by two files in 
+        the output directory. Each line of the first file contains the 
+        full name of a leaf directory. Each line of the second file 
+        contains the full name of a file and its size, separated by a blank.
+      </p>
+<p>
+        The synopsis of the command is:
+      </p>
+<pre class="code">java StructureGenerator [options]</pre>
+<p>Options include:</p>
+<ul>
+     
+<li>
+        
+<span class="codefrag">-maxDepth &lt;maxDepth&gt;</span>
+<br>
+        Maximum depth of the directory tree; default is 5.
+     </li>
+
+     
+<li>    
+        
+<span class="codefrag">-minWidth &lt;minWidth&gt;</span>
+<br> 
+        Minimum number of subdirectories per directories; default is 1.
+     </li> 
+
+     
+<li>  
+        
+<span class="codefrag">-maxWidth &lt;maxWidth&gt;</span>
+<br> 
+        Maximum number of subdirectories per directories; default is 5.
+      </li>
+
+     
+<li>           
+        
+<span class="codefrag">-numOfFiles &lt;#OfFiles&gt;</span>
+<br> 
+        The total number of files in the test space; default is 10.
+      </li>
+
+     
+<li>          
+        
+<span class="codefrag">-avgFileSize &lt;avgFileSizeInBlocks&gt;</span>
+<br>
+        Average size of blocks; default is 1.
+      </li> 
+
+     
+<li>           
+        
+<span class="codefrag">-outDir &lt;outDir&gt;</span>
+<br>
+        Output directory; default is the current directory.
+     </li>
+
+     
+<li>           
+        
+<span class="codefrag">-seed &lt;seed&gt;</span>
+<br>
+        Random number generator seed; default is the current time.
+    </li>            
+     
+</ul>
+<a name="N100CF"></a><a name="Data+Generator"></a>
+<h3 class="h4">Data Generator </h3>
+<p>
+        This tool reads the directory structure and file structure from 
+        the input directory and creates the namespace in Hadoop distributed
+        file system. All files are filled with byte 'a'.
+        </p>
+<p>
+        The synopsis of the command is:
+         </p>
+<pre class="code">java DataGenerator [options]</pre>
+<p>Options include:</p>
+<ul>
+    
+<li>
+        
+<span class="codefrag">-inDir &lt;inDir&gt;</span>
+<br>
+        Input directory name where directory/file
+        structures are stored; default is the current directory.
+    </li>
+    
+<li>
+        
+<span class="codefrag">-root &lt;test space root&gt;</span>
+<br>
+        The name of the root directory which the 
+        new namespace is going to be placed under; 
+        default is "/testLoadSpace".
+    </li>
+     
+</ul>
+</div>
+	
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<div class="copyright">
+        Copyright &copy;
+         2008 <a href="http://www.apache.org/licenses/">The Apache Software Foundation.</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+</body>
+</html>

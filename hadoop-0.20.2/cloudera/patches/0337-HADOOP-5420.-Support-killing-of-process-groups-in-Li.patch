@@ -1,0 +1,344 @@
+From d37609510f33ad26bbe6bf3c3d235b34b804f93a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:28 -0700
+Subject: [PATCH 0337/1179] HADOOP-5420. Support killing of process groups in LinuxTaskController binary
+
+Reason: Security - prevent orphaning forked child processes
+Author: Sreekanth Ramakrishnan
+Ref: CDH-648
+---
+ src/c++/task-controller/task-controller.c |  135 +++++++++++++++++++++--------
+ src/c++/task-controller/task-controller.h |   12 ++-
+ 2 files changed, 106 insertions(+), 41 deletions(-)
+
+diff --git a/src/c++/task-controller/task-controller.c b/src/c++/task-controller/task-controller.c
+index 8a5a3b6..c56f6b9 100644
+--- a/src/c++/task-controller/task-controller.c
++++ b/src/c++/task-controller/task-controller.c
+@@ -36,34 +36,35 @@ int change_user(const char * user) {
+   if (get_user_details(user) < 0) {
+     return -1;
+   }
++
++  if(initgroups(user_detail->pw_name, user_detail->pw_gid) != 0) {
++    cleanup();
++    return SETUID_OPER_FAILED;
++  }
+ #ifdef DEBUG
+   fprintf(LOGFILE,"change_user : setting user as %s ", user_detail->pw_name);
+ #endif
+   errno = 0;
+   setgid(user_detail->pw_gid);
+   if (errno != 0) {
+-    fprintf(LOGFILE, "unable to setgid : %s\n", strerror(errno));
+     cleanup();
+     return SETUID_OPER_FAILED;
+   }
+ 
+   setegid(user_detail->pw_gid);
+   if (errno != 0) {
+-    fprintf(LOGFILE, "unable to setegid : %s\n", strerror(errno));
+     cleanup();
+     return SETUID_OPER_FAILED;
+   }
+ 
+   setuid(user_detail->pw_uid);
+   if (errno != 0) {
+-    fprintf(LOGFILE, "unable to setuid : %s\n", strerror(errno));
+     cleanup();
+     return SETUID_OPER_FAILED;
+   }
+ 
+   seteuid(user_detail->pw_uid);
+   if (errno != 0) {
+-    fprintf(LOGFILE, "unable to seteuid : %s\n", strerror(errno));
+     cleanup();
+     return SETUID_OPER_FAILED;
+   }
+@@ -125,9 +126,39 @@ int check_tt_root(const char *tt_root) {
+   return found;
+ 
+ }
++/**
++ * Function to check if the constructed path and absolute
++ * path resolve to one and same.
++ */
+ 
++int check_path(char *path) {
++  char * resolved_path = (char *) canonicalize_file_name(path);
++  if(resolved_path == NULL) {
++    return ERROR_RESOLVING_FILE_PATH;
++  }
++  if(strcmp(resolved_path, path) !=0) {
++    free(resolved_path);
++    return RELATIVE_PATH_COMPONENTS_IN_FILE_PATH;
++  }
++  free(resolved_path);
++  return 0;
++}
++/**
++ * Function to check if a user actually owns the file.
++ */
++int check_owner(uid_t uid, char *path) {
++  struct stat filestat;
++  if(stat(path, &filestat)!=0) {
++    return UNABLE_TO_STAT_FILE;
++  }
++  //check owner.
++  if(uid != filestat.st_uid){
++    return FILE_NOT_OWNED_BY_TASKTRACKER;
++  }
++  return 0;
++}
+ /*
+- *d function which would return .pid file path which is used while running
++ *Function which would return .pid file path which is used while running
+  * and killing of the tasks by the user.
+  *
+  * check TT_SYS_DIR for pattern
+@@ -196,7 +227,7 @@ void get_task_file_path(const char * jobid, const char * taskid,
+ //end of private functions
+ void display_usage(FILE *stream) {
+   fprintf(stream,
+-      "Usage: task-controller [-l logile] user command command-args\n");
++      "Usage: task-controller [-l logfile] user command command-args\n");
+ }
+ 
+ //function used to populate and user_details structure.
+@@ -222,7 +253,7 @@ int get_user_details(const char *user) {
+  *
+  * THen writes its pid into the file.
+  *
+- * Then changes the permission of the pid file into 777
++ * Then changes the permission of the pid file into 600
+  *
+  * Then uses get_task_file_path to fetch the task script file path.
+  *
+@@ -238,7 +269,7 @@ int run_task_as_user(const char * user, const char *jobid, const char *taskid,
+   char *task_script = NULL;
+   FILE *file_handle = NULL;
+   int exit_code = 0;
+-  int i = 0;
++  uid_t uid = getuid();
+ 
+ #ifdef DEBUG
+   fprintf(LOGFILE,"run_task_as_user : Job id : %s \n", jobid);
+@@ -254,13 +285,11 @@ int run_task_as_user(const char * user, const char *jobid, const char *taskid,
+   }
+ 
+   get_pid_path(jobid, taskid, tt_root, &pid_path);
+-
+   if (pid_path == NULL) {
+     fprintf(LOGFILE, "Invalid task-pid path provided");
+     cleanup();
+     return INVALID_PID_PATH;
+   }
+-
+   errno = 0;
+   file_handle = fopen(pid_path, "w");
+ 
+@@ -280,12 +309,11 @@ int run_task_as_user(const char * user, const char *jobid, const char *taskid,
+ 
+   fflush(file_handle);
+   fclose(file_handle);
++  file_handle = NULL;
+   //change the permissions of the file
+   errno = 0;
+-  //setting permission to 777
+-
+-  if (chmod(pid_path, S_IREAD | S_IEXEC | S_IWRITE | S_IROTH | S_IWOTH
+-      | S_IXOTH | S_IRGRP | S_IWGRP | S_IXGRP) < 0) {
++  //setting permission to 600
++  if (chmod(pid_path, S_IREAD | S_IWRITE) < 0) {
+     fprintf(LOGFILE, "Error changing permission of %s task-pid file : %s",
+         pid_path, strerror(errno));
+     errno = 0;
+@@ -298,56 +326,71 @@ int run_task_as_user(const char * user, const char *jobid, const char *taskid,
+     }
+     goto cleanup;
+   }
+-#ifdef DEBUG
+-  fprintf(LOGFILE,"changing file ownership\n");
+-  fprintf(LOGFILE, "run_task_as_user : uid id %d \n", getuid());
+-  fprintf(LOGFILE, "run_task_as_user : gid id %d \n", getgid());
+-#endif
+-  //change the owner ship of the file to the launching user.
+-  if(chown(pid_path, getuid(), getgid()) <0 ) {
+-    fprintf(LOGFILE, "Error changing ownership of %s task-pid file : %s",
+-        pid_path, strerror(errno));
+-    if(remove(pid_path) < 0) {
++
++  if(chown(pid_path, uid, getgid()) < 0) {
++    fprintf(LOGFILE, "Error changing ownershipt of %s task-pid file : %s\n",
++      pid_path, strerror(errno));
++    errno = 0;
++    if (remove(pid_path) < 0) {
+       fprintf(LOGFILE, "Error deleting %s task-pid file : %s", pid_path,
+           strerror(errno));
+-      exit_code = UNABLE_TO_CHANGE_OWNERSHIP_OF_PID_FILE_AND_DELETE_PID_FILE;
++      exit_code = UNABLE_TO_CHANGE_OWNERSHIP_AND_DELETE_PID_FILE;
+     } else {
+       exit_code = UNABLE_TO_CHANGE_OWNERSHIP_OF_PID_FILE;
+     }
+     goto cleanup;
+   }
+-
++  //while checking path make sure the target of the path exists otherwise
++  //check_paths would fail always. So write out .pid file then check if
++  //it correctly resolves. If not delete the pid file and bail out.
++  errno = 0;
++  exit_code = check_path(pid_path);
++  if(exit_code != 0) {
++    remove(pid_path);
++    goto cleanup;
++  }
+ 
+   //free pid_t path which is allocated
+   free(pid_path);
++  pid_path = NULL;
+ 
+   //change the user
+   fcloseall();
+   fclose(LOGFILE);
+   umask(0);
+   if (change_user(user) != 0) {
+-    cleanup();
+-    return SETUID_OPER_FAILED;
++    exit_code = SETUID_OPER_FAILED;
++    goto cleanup;
+   }
++
+   //change set the launching process as the session leader.
+   if(setsid() < 0) {
+-    fprintf(LOGFILE,"Set sid failed %s\n", strerror(errno));
+-    cleanup();
+-    return SETSID_FAILED;
++    exit_code = SETSID_FAILED;
++    goto cleanup;
+   }
+ 
+   get_task_file_path(jobid, taskid, tt_root, &task_script_path);
+ 
+   if (task_script_path == NULL) {
+-    fprintf(LOGFILE, "Unable to locate task script");
+-    cleanup();
+-    return INVALID_TASK_SCRIPT_PATH;
++    exit_code = INVALID_TASK_SCRIPT_PATH;
++    goto cleanup;
++  }
++  //resolve paths.
++  errno = 0;
++  exit_code = check_path(task_script_path);
++  if(exit_code !=0) {
++    goto cleanup;
++  }
++  errno = 0;
++  //get stat of the task file.
++  exit_code = check_owner(uid, task_script_path);
++  if(exit_code != 0) {
++    goto cleanup;
+   }
+   errno = 0;
+   cleanup();
+   execlp(task_script_path, task_script_path, NULL);
+   if (errno != 0) {
+-    fprintf(LOGFILE, "Error execing script %s", strerror(errno));
+     free(task_script_path);
+     exit_code = UNABLE_TO_EXECUTE_TASK_SCRIPT;
+   }
+@@ -390,6 +433,8 @@ int kill_user_task(const char *user, const char *jobid, const char *taskid,
+   FILE *file_handle = NULL;
+   const char *sleep_interval_char;
+   int sleep_interval = 0;
++  uid_t uid = getuid();
++  int exit_code = 0;
+ #ifdef DEBUG
+   fprintf(LOGFILE,"kill_user_task : Job id : %s \n", jobid);
+   fprintf(LOGFILE,"kill_user_task : task id : %s \n", taskid);
+@@ -406,10 +451,27 @@ int kill_user_task(const char *user, const char *jobid, const char *taskid,
+     cleanup();
+     return INVALID_PID_PATH;
+   }
++  errno = 0;
++  exit_code = check_path(pid_path);
++  if(exit_code != 0) {
++    free(pid_path);
++    cleanup();
++    return exit_code;
++  }
++  errno = 0;
++  exit_code = check_owner(uid, pid_path);
++
++  if(exit_code != 0) {
++    free(pid_path);
++    cleanup();
++    return exit_code;
++  }
++
+ #ifdef DEBUG
+   fprintf(LOGFILE,"kill_user_task : task-pid path :%s \n",pid_path);
+   fflush(LOGFILE);
+ #endif
++  errno = 0;
+   file_handle = fopen(pid_path, "r");
+   if (file_handle == NULL) {
+     fprintf(LOGFILE, "unable to open task-pid file :%s \n", pid_path);
+@@ -419,9 +481,9 @@ int kill_user_task(const char *user, const char *jobid, const char *taskid,
+   }
+   fscanf(file_handle, "%d", &pid);
+   fclose(file_handle);
++  fclose(LOGFILE);
+   free(pid_path);
+   if (pid == 0) {
+-    fprintf(LOGFILE, "Unable to read task-pid from path: %s \n", pid_path);
+     cleanup();
+     return UNABLE_TO_READ_PID;
+   }
+@@ -452,7 +514,6 @@ int kill_user_task(const char *user, const char *jobid, const char *taskid,
+       //ignore no such pid present.
+       if(errno != ESRCH) {
+         //log error ,exit unclean
+-        fprintf(LOGFILE,"%s\n",strerror(errno));
+         cleanup();
+         return UNABLE_TO_KILL_TASK;
+       }
+diff --git a/src/c++/task-controller/task-controller.h b/src/c++/task-controller/task-controller.h
+index 661845a..4b4ad2f 100644
+--- a/src/c++/task-controller/task-controller.h
++++ b/src/c++/task-controller/task-controller.h
+@@ -28,6 +28,7 @@
+ #include <sys/stat.h>
+ #include <sys/signal.h>
+ #include <getopt.h>
++#include <grp.h>
+ #include "configuration.h"
+ 
+ //command definitions
+@@ -49,17 +50,20 @@ enum errorcodes {
+   UNABLE_TO_WRITE_TO_PID_FILE,
+   UNABLE_TO_CHANGE_PERMISSION_OF_PID_FILE,
+   UNABLE_TO_CHANGE_PERMISSION_AND_DELETE_PID_FILE,
+-  UNABLE_TO_CHANGE_OWNERSHIP_OF_PID_FILE,
+-  UNABLE_TO_CHANGE_OWNERSHIP_OF_PID_FILE_AND_DELETE_PID_FILE,
+   SETUID_OPER_FAILED,
+   INVALID_TASK_SCRIPT_PATH,
+   UNABLE_TO_EXECUTE_TASK_SCRIPT,
+   UNABLE_TO_READ_PID,
+   UNABLE_TO_KILL_TASK,
+   UNABLE_TO_FIND_PARENT_PID_FILE,
+-  TASK_CONTROLLER_SPAWNED_BY_INVALID_PARENT_PROCESS,
+   UNABLE_TO_READ_PARENT_PID,
+-  SETSID_FAILED
++  SETSID_FAILED,
++  ERROR_RESOLVING_FILE_PATH,
++  RELATIVE_PATH_COMPONENTS_IN_FILE_PATH,
++  UNABLE_TO_STAT_FILE,
++  FILE_NOT_OWNED_BY_TASKTRACKER,
++  UNABLE_TO_CHANGE_OWNERSHIP_OF_PID_FILE,
++  UNABLE_TO_CHANGE_OWNERSHIP_AND_DELETE_PID_FILE
+ };
+ 
+ 
+-- 
+1.7.0.4
+

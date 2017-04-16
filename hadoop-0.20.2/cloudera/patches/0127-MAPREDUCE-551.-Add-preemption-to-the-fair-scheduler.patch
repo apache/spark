@@ -1,0 +1,3049 @@
+From 34ca2a5547398f9435a5d3d22603d0f7da420226 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:17:48 -0800
+Subject: [PATCH 0127/1179] MAPREDUCE-551. Add preemption to the fair scheduler
+
+Description: Task preemption is necessary in a multi-user Hadoop cluster for two reasons: users might submit long-running tasks by mistake (e.g. an infinite loop in a map program), or tasks may be long due to having to process large amounts of data. The Fair Scheduler (<a href="http://issues.apache.org/jira/browse/HADOOP-3746" title="A fair sharing job scheduler"><del>HADOOP-3746</del></a>) has a concept of guaranteed capacity for certain queues, as well as a goal of providing good performance for interactive jobs on average through fair sharing. Therefore, it will support preempting under two conditions:<br/>
+1) A job isn't getting its <em>guaranteed</em> share of the cluster for at least T1 seconds.<br/>
+2) A job is getting significantly less than its <em>fair</em> share for T2 seconds (e.g. less than half its share).
+
+<p>T1 will be chosen smaller than T2 (and will be configurable per queue) to meet guarantees quickly. T2 is meant as a last resort in case non-critical jobs in queues with no guaranteed capacity are being starved.</p>
+
+<p>When deciding which tasks to kill to make room for the job, we will use the following heuristics:</p>
+<ul class="alternate" type="square">
+	<li>Look for tasks to kill only in jobs that have more than their fair share, ordering these by deficit (most overscheduled jobs first).</li>
+	<li>For maps: kill tasks that have run for the least amount of time (limiting wasted time).</li>
+	<li>For reduces: similar to maps, but give extra preference for reduces in the copy phase where there is not much map output per task (at Facebook, we have observed this to be the main time we need preemption - when a job has a long map phase and its reducers are mostly sitting idle and filling up slots).</li>
+</ul>
+
+This fixes an error in the previous backport where the
+EagerTaskInitializationListener wasn't properly passed the
+TaskTrackerManager before starting.
+
+Reason: New feature
+Author: Matei Zaharia
+Ref: UNKNOWN
+---
+ conf/fair-scheduler.xml                            |   70 ++
+ conf/fair-scheduler.xml.template                   |   70 ++
+ .../hadoop/mapred/TestCapacityScheduler.java       |    5 +
+ .../org/apache/hadoop/mapred/FairScheduler.java    |  464 ++++++++++-
+ .../hadoop/mapred/FairSchedulerEventLog.java       |  142 ++++
+ .../apache/hadoop/mapred/FairSchedulerServlet.java |    2 +-
+ .../java/org/apache/hadoop/mapred/LoadManager.java |    7 +-
+ .../java/org/apache/hadoop/mapred/PoolManager.java |   68 ++-
+ .../apache/hadoop/mapred/TestFairScheduler.java    |  885 +++++++++++++++++---
+ .../documentation/content/xdocs/fair_scheduler.xml |  554 ++++++++-----
+ .../apache/hadoop/mapred/TaskTrackerManager.java   |   10 +
+ .../hadoop/mapred/TestJobQueueTaskScheduler.java   |    6 +
+ .../hadoop/mapred/TestParallelInitialization.java  |    5 +
+ 13 files changed, 1929 insertions(+), 359 deletions(-)
+ create mode 100644 conf/fair-scheduler.xml
+ create mode 100644 conf/fair-scheduler.xml.template
+ create mode 100644 src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerEventLog.java
+
+diff --git a/conf/fair-scheduler.xml b/conf/fair-scheduler.xml
+new file mode 100644
+index 0000000..bea9d13
+--- /dev/null
++++ b/conf/fair-scheduler.xml
+@@ -0,0 +1,70 @@
++<?xml version="1.0"?>
++
++<!--
++  This is a sample configuration file for the Fair Scheduler. For details
++  on the options, please refer to the fair scheduler documentation at
++  http://hadoop.apache.org/core/docs/r0.21.0/fair_scheduler.html.
++
++  To create your own configuration, copy this file to conf/fair-scheduler.xml
++  and add the following property in mapred-site.xml to point Hadoop to the
++  file, replacing [HADOOP_HOME] with the path to your installation directory:
++    <property>
++      <name>mapred.fairscheduler.allocation.file</name>
++      <value>[HADOOP_HOME]/conf/fair-scheduler.xml</value>
++    </property>
++
++  Note that all the parameters in the configuration file below are optional,
++  including the parameters inside <pool> and <user> elements. It is only
++  necessary to set the ones you want to differ from the defaults.
++-->
++
++<allocations>
++
++  <!-- Example element for configuring a pool -->
++  <pool name="pool1">
++    <!-- Minimum shares of map and reduce slots. Defaults to 0. -->
++    <minMaps>10</minMaps>
++    <minReduces>5</minReduces>
++
++    <!-- Limit on running jobs in the pool. If more jobs are submitted,
++      only the first <maxRunningJobs> will be scheduled at any given time.
++      Defaults to infinity or the global poolMaxJobsDefault value below. -->
++    <maxRunningJobs>5</maxRunningJobs>
++
++    <!-- Number of seconds after which the pool can preempt other pools'
++      tasks to achieve its min share. Requires preemption to be enabled in
++      mapred-site.xml by setting mapred.fairscheduler.preemption to true.
++      Defaults to infinity (no preemption). -->
++    <minSharePreemptionTimeout>300</minSharePreemptionTimeout>
++
++    <!-- Pool's weight in fair sharing calculations. Defaulti is 1.0. -->
++    <weight>1.0</weight>
++  </pool>
++
++  <!-- Example element for configuring a user -->
++  <user name="user1">
++    <!-- Limit on running jobs for the user across all pools. If more
++      jobs than this are submitted, only the first <maxRunningJobs> will
++      be scheduled at any given time. Defaults to infinity or the
++      userMaxJobsDefault value set below. -->
++    <maxRunningJobs>10</maxRunningJobs>
++  </user>
++
++  <!-- Default running job limit pools where it is not explicitly set. -->
++  <poolMaxJobsDefault>20</poolMaxJobsDefault>
++
++  <!-- Default running job limit users where it is not explicitly set. -->
++  <userMaxJobsDefault>10</userMaxJobsDefault>
++
++  <!-- Default min share preemption timeout for pools where it is not
++    explicitly configured, in seconds. Requires mapred.fairscheduler.preemption
++    to be set to true in your mapred-site.xml. -->
++  <defaultMinSharePreemptionTimeout>600</defaultMinSharePreemptionTimeout>
++
++  <!-- Preemption timeout for jobs below their fair share, in seconds. 
++    If a job is below half its fair share for this amount of time, it
++    is allowed to kill tasks from other jobs to go up to its fair share.
++    Requires mapred.fairscheduler.preemption to be true in mapred-site.xml. -->
++  <fairSharePreemptionTimeout>600</fairSharePreemptionTimeout>
++
++</allocations>
+diff --git a/conf/fair-scheduler.xml.template b/conf/fair-scheduler.xml.template
+new file mode 100644
+index 0000000..bea9d13
+--- /dev/null
++++ b/conf/fair-scheduler.xml.template
+@@ -0,0 +1,70 @@
++<?xml version="1.0"?>
++
++<!--
++  This is a sample configuration file for the Fair Scheduler. For details
++  on the options, please refer to the fair scheduler documentation at
++  http://hadoop.apache.org/core/docs/r0.21.0/fair_scheduler.html.
++
++  To create your own configuration, copy this file to conf/fair-scheduler.xml
++  and add the following property in mapred-site.xml to point Hadoop to the
++  file, replacing [HADOOP_HOME] with the path to your installation directory:
++    <property>
++      <name>mapred.fairscheduler.allocation.file</name>
++      <value>[HADOOP_HOME]/conf/fair-scheduler.xml</value>
++    </property>
++
++  Note that all the parameters in the configuration file below are optional,
++  including the parameters inside <pool> and <user> elements. It is only
++  necessary to set the ones you want to differ from the defaults.
++-->
++
++<allocations>
++
++  <!-- Example element for configuring a pool -->
++  <pool name="pool1">
++    <!-- Minimum shares of map and reduce slots. Defaults to 0. -->
++    <minMaps>10</minMaps>
++    <minReduces>5</minReduces>
++
++    <!-- Limit on running jobs in the pool. If more jobs are submitted,
++      only the first <maxRunningJobs> will be scheduled at any given time.
++      Defaults to infinity or the global poolMaxJobsDefault value below. -->
++    <maxRunningJobs>5</maxRunningJobs>
++
++    <!-- Number of seconds after which the pool can preempt other pools'
++      tasks to achieve its min share. Requires preemption to be enabled in
++      mapred-site.xml by setting mapred.fairscheduler.preemption to true.
++      Defaults to infinity (no preemption). -->
++    <minSharePreemptionTimeout>300</minSharePreemptionTimeout>
++
++    <!-- Pool's weight in fair sharing calculations. Defaulti is 1.0. -->
++    <weight>1.0</weight>
++  </pool>
++
++  <!-- Example element for configuring a user -->
++  <user name="user1">
++    <!-- Limit on running jobs for the user across all pools. If more
++      jobs than this are submitted, only the first <maxRunningJobs> will
++      be scheduled at any given time. Defaults to infinity or the
++      userMaxJobsDefault value set below. -->
++    <maxRunningJobs>10</maxRunningJobs>
++  </user>
++
++  <!-- Default running job limit pools where it is not explicitly set. -->
++  <poolMaxJobsDefault>20</poolMaxJobsDefault>
++
++  <!-- Default running job limit users where it is not explicitly set. -->
++  <userMaxJobsDefault>10</userMaxJobsDefault>
++
++  <!-- Default min share preemption timeout for pools where it is not
++    explicitly configured, in seconds. Requires mapred.fairscheduler.preemption
++    to be set to true in your mapred-site.xml. -->
++  <defaultMinSharePreemptionTimeout>600</defaultMinSharePreemptionTimeout>
++
++  <!-- Preemption timeout for jobs below their fair share, in seconds. 
++    If a job is below half its fair share for this amount of time, it
++    is allowed to kill tasks from other jobs to go up to its fair share.
++    Requires mapred.fairscheduler.preemption to be true in mapred-site.xml. -->
++  <fairSharePreemptionTimeout>600</fairSharePreemptionTimeout>
++
++</allocations>
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+index 977d238..5ee40ff 100644
+--- a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+@@ -621,6 +621,11 @@ public class TestCapacityScheduler extends TestCase {
+     public QueueManager getQueueManager() {
+       return qm;
+     }
++
++    @Override
++    public boolean killTask(TaskAttemptID taskid, boolean shouldFail) {
++      return true;
++    }
+   }
+   
+   // represents a fake queue configuration info
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+index 992641f..22ba480 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+@@ -35,18 +35,29 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.http.HttpServer;
+-import org.apache.hadoop.mapred.JobStatus;
+ import org.apache.hadoop.util.ReflectionUtils;
+ 
+ /**
+  * A {@link TaskScheduler} that implements fair sharing.
+  */
+ public class FairScheduler extends TaskScheduler {
+-  /** How often fair shares are re-calculated */
+-  public static final long UPDATE_INTERVAL = 500;
+   public static final Log LOG = LogFactory.getLog(
+       "org.apache.hadoop.mapred.FairScheduler");
++
++  // How often fair shares are re-calculated
++  protected long updateInterval = 500;
++
++  // How often to dump scheduler state to the event log
++  protected long dumpInterval = 10000;
+   
++  // How often tasks are preempted (must be longer than a couple
++  // of heartbeats to give task-kill commands a chance to act).
++  protected long preemptionInterval = 15000;
++  
++  // Used to iterate through map and reduce task types
++  private static final TaskType[] MAP_AND_REDUCE = 
++    new TaskType[] {TaskType.MAP, TaskType.REDUCE};
++
+   protected PoolManager poolMgr;
+   protected LoadManager loadMgr;
+   protected TaskSelector taskSelector;
+@@ -60,11 +71,21 @@ public class FairScheduler extends TaskScheduler {
+   protected boolean assignMultiple; // Simultaneously assign map and reduce?
+   protected boolean sizeBasedWeight; // Give larger weights to larger jobs
+   protected boolean waitForMapsBeforeLaunchingReduces = true;
++  protected boolean preemptionEnabled;
++  protected boolean onlyLogPreemption; // Only log when tasks should be killed
++
+   private Clock clock;
+-  private boolean runBackgroundUpdates; // Can be set to false for testing
++
+   private EagerTaskInitializationListener eagerInitListener;
+   private JobListener jobListener;
+-  
++  private boolean mockMode; // Used for unit tests; disables background updates
++                            // and scheduler event log
++  private FairSchedulerEventLog eventLog;
++  protected long lastDumpTime;       // Time when we last dumped state to log
++  protected long lastHeartbeatTime;  // Time we last ran assignTasks 
++  private long lastPreemptCheckTime; // Time we last ran preemptTasksIfNecessary
++   
++
+   /**
+    * A class for holding per-job scheduler variables. These always contain the
+    * values of the variables at the last update(), and are used along with a
+@@ -84,6 +105,19 @@ public class FairScheduler extends TaskScheduler {
+     int minReduces = 0;         // Minimum reduces as guaranteed by pool
+     double mapFairShare = 0;    // Fair share of map slots at last update
+     double reduceFairShare = 0; // Fair share of reduce slots at last update
++
++    // Variables used for preemption
++    long lastTimeAtMapMinShare;      // When was the job last at its min maps?
++    long lastTimeAtReduceMinShare;   // Similar for reduces.
++    long lastTimeAtMapHalfFairShare; // When was the job last at half fair maps?
++    long lastTimeAtReduceHalfFairShare;  // Similar for reduces.
++    
++    public JobInfo(long currentTime) {
++      lastTimeAtMapMinShare = currentTime;
++      lastTimeAtReduceMinShare = currentTime;
++      lastTimeAtMapHalfFairShare = currentTime;
++      lastTimeAtReduceHalfFairShare = currentTime;
++    }
+   }
+   
+   /**
+@@ -96,15 +130,15 @@ public class FairScheduler extends TaskScheduler {
+   }
+   
+   public FairScheduler() {
+-    this(new Clock(), true);
++    this(new Clock(), false);
+   }
+   
+   /**
+    * Constructor used for tests, which can change the clock and disable updates.
+    */
+-  protected FairScheduler(Clock clock, boolean runBackgroundUpdates) {
++  protected FairScheduler(Clock clock, boolean mockMode) {
+     this.clock = clock;
+-    this.runBackgroundUpdates = runBackgroundUpdates;
++    this.mockMode = mockMode;
+     this.jobListener = new JobListener();
+   }
+ 
+@@ -112,16 +146,32 @@ public class FairScheduler extends TaskScheduler {
+   public void start() {
+     try {
+       Configuration conf = getConf();
+-      this.eagerInitListener = new EagerTaskInitializationListener(conf);
+-      eagerInitListener.setTaskTrackerManager(taskTrackerManager);
+-      eagerInitListener.start();
+-      taskTrackerManager.addJobInProgressListener(eagerInitListener);
++      // Create scheduling log and initialize it if it is enabled
++      eventLog = new FairSchedulerEventLog();
++      boolean logEnabled = conf.getBoolean(
++          "mapred.fairscheduler.eventlog.enabled", false);
++      if (!mockMode && logEnabled) {
++        String hostname = "localhost";
++        if (taskTrackerManager instanceof JobTracker) {
++          hostname = ((JobTracker) taskTrackerManager).getJobTrackerMachine();
++        }
++        eventLog.init(conf, hostname);
++      }
++      // Initialize other pieces of the scheduler
+       taskTrackerManager.addJobInProgressListener(jobListener);
++      if (!mockMode) {
++        eagerInitListener = new EagerTaskInitializationListener(conf);
++        eagerInitListener.setTaskTrackerManager(taskTrackerManager);
++        eagerInitListener.start();
++        taskTrackerManager.addJobInProgressListener(eagerInitListener);
++      }
++
+       poolMgr = new PoolManager(conf);
+       loadMgr = (LoadManager) ReflectionUtils.newInstance(
+           conf.getClass("mapred.fairscheduler.loadmanager", 
+               CapBasedLoadManager.class, LoadManager.class), conf);
+       loadMgr.setTaskTrackerManager(taskTrackerManager);
++      loadMgr.setEventLog(eventLog);
+       loadMgr.start();
+       taskSelector = (TaskSelector) ReflectionUtils.newInstance(
+           conf.getClass("mapred.fairscheduler.taskselector", 
+@@ -134,16 +184,30 @@ public class FairScheduler extends TaskScheduler {
+         weightAdjuster = (WeightAdjuster) ReflectionUtils.newInstance(
+             weightAdjClass, conf);
+       }
+-      assignMultiple = conf.getBoolean("mapred.fairscheduler.assignmultiple",
+-          false);
+-      sizeBasedWeight = conf.getBoolean("mapred.fairscheduler.sizebasedweight",
+-          false);
++
++      updateInterval = conf.getLong(
++          "mapred.fairscheduler.update.interval", 500);
++      dumpInterval = conf.getLong(
++          "mapred.fairscheduler.dump.interval", 10000);
++      preemptionInterval = conf.getLong(
++          "mapred.fairscheduler.preemption.interval", 15000);
++      assignMultiple = conf.getBoolean(
++          "mapred.fairscheduler.assignmultiple", true);
++      sizeBasedWeight = conf.getBoolean(
++          "mapred.fairscheduler.sizebasedweight", false);
++      preemptionEnabled = conf.getBoolean(
++          "mapred.fairscheduler.preemption", false);
++      onlyLogPreemption = conf.getBoolean(
++          "mapred.fairscheduler.preemption.only.log", false);
++
++
+       initialized = true;
+       running = true;
+       lastUpdateTime = clock.getTime();
+       // Start a thread to update deficits every UPDATE_INTERVAL
+-      if (runBackgroundUpdates)
++      if (!mockMode) {
+         new UpdateThread().start();
++      }
+       // Register servlet with JobTracker's Jetty server
+       if (taskTrackerManager instanceof JobTracker) {
+         JobTracker jobTracker = (JobTracker) taskTrackerManager;
+@@ -152,6 +216,7 @@ public class FairScheduler extends TaskScheduler {
+         infoServer.addServlet("scheduler", "/scheduler",
+             FairSchedulerServlet.class);
+       }
++      eventLog.log("INITIALIZED");
+     } catch (Exception e) {
+       // Can't load one of the managers - crash the JobTracker now while it is
+       // starting up so that the user notices.
+@@ -162,11 +227,15 @@ public class FairScheduler extends TaskScheduler {
+ 
+   @Override
+   public void terminate() throws IOException {
++    if (eventLog != null)
++      eventLog.log("SHUTDOWN");
+     running = false;
+     if (jobListener != null)
+       taskTrackerManager.removeJobInProgressListener(jobListener);
+     if (eagerInitListener != null)
+       taskTrackerManager.removeJobInProgressListener(eagerInitListener);
++    if (eventLog != null)
++      eventLog.shutdown();
+   }
+   
+   /**
+@@ -176,8 +245,9 @@ public class FairScheduler extends TaskScheduler {
+     @Override
+     public void jobAdded(JobInProgress job) {
+       synchronized (FairScheduler.this) {
++        eventLog.log("JOB_ADDED", job.getJobID());
+         poolMgr.addJob(job);
+-        JobInfo info = new JobInfo();
++        JobInfo info = new JobInfo(clock.getTime());
+         infos.put(job, info);
+         update();
+       }
+@@ -186,6 +256,7 @@ public class FairScheduler extends TaskScheduler {
+     @Override
+     public void jobRemoved(JobInProgress job) {
+       synchronized (FairScheduler.this) {
++        eventLog.log("JOB_REMOVED", job.getJobID());
+         poolMgr.removeJob(job);
+         infos.remove(job);
+       }
+@@ -193,6 +264,7 @@ public class FairScheduler extends TaskScheduler {
+   
+     @Override
+     public void jobUpdated(JobChangeEvent event) {
++      eventLog.log("JOB_UPDATED", event.getJobInProgress().getJobID());
+     }
+   }
+ 
+@@ -208,10 +280,12 @@ public class FairScheduler extends TaskScheduler {
+     public void run() {
+       while (running) {
+         try {
+-          Thread.sleep(UPDATE_INTERVAL);
++          Thread.sleep(updateInterval);
+           update();
++          dumpIfNecessary();
++          preemptTasksIfNecessary();
+         } catch (Exception e) {
+-          LOG.error("Failed to update fair share calculations", e);
++          LOG.error("Exception in fair scheduler UpdateThread", e);
+         }
+       }
+     }
+@@ -222,16 +296,22 @@ public class FairScheduler extends TaskScheduler {
+       throws IOException {
+     if (!initialized) // Don't try to assign tasks if we haven't yet started up
+       return null;
+-    
++    String trackerName = tracker.getTrackerName();
++    eventLog.log("HEARTBEAT", trackerName);
++
+     // Reload allocations file if it hasn't been loaded in a while
+     poolMgr.reloadAllocsIfNecessary();
+     
+-    // Compute total runnable maps and reduces
++    // Compute total runnable maps and reduces, and currently running ones
+     int runnableMaps = 0;
++    int runningMaps = 0;
+     int runnableReduces = 0;
++    int runningReduces = 0;
+     for (JobInProgress job: infos.keySet()) {
+       runnableMaps += runnableTasks(job, TaskType.MAP);
++      runningMaps += runningTasks(job, TaskType.MAP);
+       runnableReduces += runnableTasks(job, TaskType.REDUCE);
++      runningReduces += runningTasks(job, TaskType.REDUCE);
+     }
+ 
+     ClusterStatus clusterStatus = taskTrackerManager.getClusterStatus();
+@@ -241,10 +321,17 @@ public class FairScheduler extends TaskScheduler {
+     int totalMapSlots = getTotalSlots(TaskType.MAP, clusterStatus);
+     int totalReduceSlots = getTotalSlots(TaskType.REDUCE, clusterStatus);
+     
++    eventLog.log("RUNNABLE_TASKS", 
++        runnableMaps, runningMaps, runnableReduces, runningReduces);
++
+     // Scan to see whether any job needs to run a map, then a reduce
+     ArrayList<Task> tasks = new ArrayList<Task>();
+-    TaskType[] types = new TaskType[] {TaskType.MAP, TaskType.REDUCE};
+-    for (TaskType taskType: types) {
++    for (TaskType taskType: MAP_AND_REDUCE) {
++      // Continue if all runnable tasks of this type are already running
++      if (taskType == TaskType.MAP && runningMaps == runnableMaps ||
++          taskType == TaskType.REDUCE && runningReduces == runnableReduces)
++        continue;
++      // Continue if the node can't support another task of the given type
+       boolean canAssign = (taskType == TaskType.MAP) ? 
+           loadMgr.canAssignMap(tracker, runnableMaps, totalMapSlots) :
+           loadMgr.canAssignReduce(tracker, runnableReduces, totalReduceSlots);
+@@ -262,10 +349,17 @@ public class FairScheduler extends TaskScheduler {
+             new FifoJobComparator() : new DeficitComparator(taskType);
+         Collections.sort(candidates, comparator);
+         for (JobInProgress job: candidates) {
+-          Task task = (taskType == TaskType.MAP ? 
+-              taskSelector.obtainNewMapTask(tracker, job) :
+-              taskSelector.obtainNewReduceTask(tracker, job));
++          eventLog.log("INFO", 
++              "Checking for " + taskType + " task in " + job.getJobID());
++          Task task;
++          if (taskType == TaskType.MAP) {
++            task = taskSelector.obtainNewMapTask(tracker, job);
++          } else {
++            task = taskSelector.obtainNewReduceTask(tracker, job);
++          }
+           if (task != null) {
++            eventLog.log("ASSIGN", trackerName, taskType,
++                job.getJobID(), task.getTaskID());
+             // Update the JobInfo for this job so we account for the launched
+             // tasks during this update interval and don't try to launch more
+             // tasks than the job needed on future heartbeats
+@@ -277,12 +371,18 @@ public class FairScheduler extends TaskScheduler {
+               info.runningReduces++;
+               info.neededReduces--;
+             }
++            // Add task to the list of assignments
+             tasks.add(task);
++            // If not allowed to assign multiple tasks per heartbeat, return
+             if (!assignMultiple)
+               return tasks;
+             break;
+           }
+         }
++      } else {
++        eventLog.log("INFO", 
++            "Can't assign another " + taskType + " to " + trackerName);
++
+       }
+     }
+     
+@@ -308,7 +408,7 @@ public class FairScheduler extends TaskScheduler {
+       // by deficit so as to put jobs with higher deficit ahead.
+       JobInfo j1Info = infos.get(j1);
+       JobInfo j2Info = infos.get(j2);
+-      long deficitDif;
++      double deficitDif;
+       boolean j1Needy, j2Needy;
+       if (taskType == TaskType.MAP) {
+         j1Needy = j1.runningMaps() < Math.floor(j1Info.minMaps);
+@@ -361,6 +461,8 @@ public class FairScheduler extends TaskScheduler {
+       updateWeights();
+       updateMinSlots();
+       updateFairShares(clusterStatus);
++      if (preemptionEnabled)
++        updatePreemptionVariables();
+       lastUpdateTime = now;
+     }
+   }
+@@ -406,9 +508,10 @@ public class FairScheduler extends TaskScheduler {
+     for (Map.Entry<JobInProgress, JobInfo> entry: infos.entrySet()) {
+       JobInProgress job = entry.getKey();
+       JobInfo info = entry.getValue();
+-      if (job.getStatus().getRunState() != JobStatus.RUNNING)
+-        continue; // Job is still in PREP state and tasks aren't initialized
+-      // Count maps
++      if (job.getStatus().getRunState() != JobStatus.RUNNING) {
++        // Job is still in PREP state and tasks aren't initialized; skip it.
++        continue;
++      }
+       int totalMaps = job.numMapTasks;
+       int finishedMaps = 0;
+       int runningMaps = 0;
+@@ -525,7 +628,7 @@ public class FairScheduler extends TaskScheduler {
+     // need all its allocation, we leave the leftover slots for general use.
+     PoolManager poolMgr = getPoolManager();
+     for (Pool pool: poolMgr.getPools()) {
+-      for (final TaskType type: TaskType.values()) {
++      for (final TaskType type: MAP_AND_REDUCE) {
+         Set<JobInProgress> jobs = new HashSet<JobInProgress>(pool.getJobs());
+         int slotsLeft = poolMgr.getAllocation(pool.getName(), type);
+         // Keep assigning slots until none are left
+@@ -615,7 +718,7 @@ public class FairScheduler extends TaskScheduler {
+     // left over. This continues until all jobs' minSlots are less than their
+     // fair allocation, and at this point we know that we've met everyone's
+     // guarantee and we've split the excess capacity fairly among jobs left.
+-    for (TaskType type: TaskType.values()) {
++    for (TaskType type: MAP_AND_REDUCE) {
+       // Select only jobs that still need this type of task
+       HashSet<JobInfo> jobsLeft = new HashSet<JobInfo>();
+       for (Entry<JobInProgress, JobInfo> entry: infos.entrySet()) {
+@@ -709,6 +812,229 @@ public class FairScheduler extends TaskScheduler {
+       clusterStatus.getMaxMapTasks() : clusterStatus.getMaxReduceTasks());
+   }
+ 
++  /**
++   * Update the preemption JobInfo fields for all jobs, i.e. the times since
++   * each job last was at its guaranteed share and at > 1/2 of its fair share
++   * for each type of task.
++   */
++  private void updatePreemptionVariables() {
++    long now = clock.getTime();
++    for (Map.Entry<JobInProgress, JobInfo> entry: infos.entrySet()) {
++      JobInProgress job = entry.getKey();
++      JobInfo info = entry.getValue();
++      if (job.getStatus().getRunState() != JobStatus.RUNNING) {
++        // Job is still in PREP state and tasks aren't initialized. Count it as
++        // both at min and fair share since we shouldn't start any timeouts now.
++        info.lastTimeAtMapMinShare = now;
++        info.lastTimeAtReduceMinShare = now;
++        info.lastTimeAtMapHalfFairShare = now;
++        info.lastTimeAtReduceHalfFairShare = now;
++      } else {
++        if (!isStarvedForMinShare(job, TaskType.MAP))
++          info.lastTimeAtMapMinShare = now;
++        if (!isStarvedForMinShare(job, TaskType.REDUCE))
++          info.lastTimeAtReduceMinShare = now;
++        if (!isStarvedForFairShare(job, TaskType.MAP))
++          info.lastTimeAtMapHalfFairShare = now;
++        if (!isStarvedForFairShare(job, TaskType.REDUCE))
++          info.lastTimeAtReduceHalfFairShare = now;
++      }
++      eventLog.log("PREEMPT_VARS", job.getJobID(),
++          now - info.lastTimeAtMapMinShare,
++          now - info.lastTimeAtMapHalfFairShare);
++    }
++  }
++
++  /**
++   * Is a job below its min share for the given task type?
++   */
++  boolean isStarvedForMinShare(JobInProgress job, TaskType taskType) {
++    return runningTasks(job, taskType) < minTasks(job, taskType);
++  }
++  
++  /**
++   * Is a job being starved for fair share for the given task type?
++   * This is defined as being below half its fair share *and* having a
++   * positive deficit.
++   */
++  boolean isStarvedForFairShare(JobInProgress job, TaskType type) {
++    int desiredFairShare = (int) Math.floor(Math.min(
++        fairTasks(job, type) / 2, neededTasks(job, type)));
++    return (runningTasks(job, type) < desiredFairShare &&
++            deficit(job, type) > 0);
++  }
++  
++  /**
++   * Check for jobs that need tasks preempted, either because they have been
++   * below their guaranteed share for their pool's preemptionTimeout or they
++   * have been below half their fair share for the fairSharePreemptionTimeout.
++   * If such jobs exist, compute how many tasks of each type need to be
++   * preempted and then select the right ones using selectTasksToPreempt.
++   * 
++   * This method computes and logs the number of tasks we want to preempt even
++   * if preemption is disabled, for debugging purposes.
++   */
++  protected void preemptTasksIfNecessary() {
++    if (!preemptionEnabled || useFifo)
++      return;
++    
++    long curTime = clock.getTime();
++    if (curTime - lastPreemptCheckTime < preemptionInterval)
++      return;
++    lastPreemptCheckTime = curTime;
++    
++    // Acquire locks on both the JobTracker (task tracker manager) and this
++    // because we might need to call some JobTracker methods (killTask).
++    synchronized (taskTrackerManager) {
++      synchronized (this) {
++        List<JobInProgress> jobs = new ArrayList<JobInProgress>(infos.keySet());
++        for (TaskType type: MAP_AND_REDUCE) {
++          int tasksToPreempt = 0;
++          for (JobInProgress job: jobs) {
++            tasksToPreempt += tasksToPreempt(job, type, curTime);
++          }
++          if (tasksToPreempt > 0) {
++            eventLog.log("SHOULD_PREEMPT", type, tasksToPreempt);
++            if (!onlyLogPreemption) {
++              // Actually preempt the tasks. The policy for this is to pick
++              // tasks from jobs that are above their min share and have very 
++              // negative deficits (meaning they've been over-scheduled). 
++              // However, we also want to minimize the amount of computation
++              // wasted by preemption, so prefer tasks that started recently.
++              // We go through all jobs in order of deficit (highest first), 
++              // and for each job, we preempt tasks in order of start time 
++              // until we hit either minTasks or fairTasks tasks left (so as
++              // not to create a new starved job).
++              Collections.sort(jobs, new DeficitComparator(type));
++              for (int i = jobs.size() - 1; i >= 0; i--) {
++                JobInProgress job = jobs.get(i);
++                int tasksPreempted = preemptTasks(job, type, tasksToPreempt);
++                tasksToPreempt -= tasksPreempted;
++                if (tasksToPreempt == 0) break;
++              }
++            }
++          }
++        }
++      }
++    }
++  }
++
++  /**
++   * Count how many tasks of a given type the job needs to preempt, if any.
++   * If the job has been below its min share for at least its pool's preemption
++   * timeout, it should preempt the difference between its current share and
++   * this min share. If it has been below half its fair share for at least the
++   * fairSharePreemptionTimeout, it should preempt enough tasks to get up to
++   * its full fair share. If both situations hold, we preempt the max of the
++   * two amounts (this shouldn't happen unless someone sets the timeouts to
++   * be identical for some reason).
++   */
++  protected int tasksToPreempt(JobInProgress job, TaskType type, long curTime) {
++    JobInfo info = infos.get(job);
++    if (info == null) return 0;
++    String pool = poolMgr.getPoolName(job);
++    long minShareTimeout = poolMgr.getMinSharePreemptionTimeout(pool);
++    long fairShareTimeout = poolMgr.getFairSharePreemptionTimeout();
++    int tasksDueToMinShare = 0;
++    int tasksDueToFairShare = 0;
++    if (type == TaskType.MAP) {
++      if (curTime - info.lastTimeAtMapMinShare > minShareTimeout) {
++        tasksDueToMinShare = info.minMaps - info.runningMaps;
++      }
++      if (curTime - info.lastTimeAtMapHalfFairShare > fairShareTimeout) {
++        double fairShare = Math.min(info.mapFairShare, info.neededMaps);
++        tasksDueToFairShare = (int) (fairShare - info.runningMaps);
++      }
++    } else { // type == TaskType.REDUCE
++      if (curTime - info.lastTimeAtReduceMinShare > minShareTimeout) {
++        tasksDueToMinShare = info.minReduces - info.runningReduces;
++      }
++      if (curTime - info.lastTimeAtReduceHalfFairShare > fairShareTimeout) {
++        double fairShare = Math.min(info.reduceFairShare, info.neededReduces);
++        tasksDueToFairShare = (int) (fairShare - info.runningReduces);
++      }
++    }
++    int tasksToPreempt = Math.max(tasksDueToMinShare, tasksDueToFairShare);
++    if (tasksToPreempt > 0) {
++      String message = "Should preempt " + tasksToPreempt + " " 
++          + type + " tasks for " + job.getJobID() 
++          + ": tasksDueToMinShare = " + tasksDueToMinShare
++          + ", tasksDueToFairShare = " + tasksDueToFairShare;
++      eventLog.log("INFO", message);
++      LOG.info(message);
++    }
++    return tasksToPreempt;
++  }
++
++  /**
++   * Preempt up to maxToPreempt tasks of the given type from the given job,
++   * without having it go below its min share or below half its fair share.
++   * Selects the tasks so as to preempt the least recently launched one first,
++   * thus minimizing wasted compute time. Returns the number of tasks preempted.
++   */
++  private int preemptTasks(JobInProgress job, TaskType type, int maxToPreempt) {
++    // Figure out how many tasks to preempt. NOTE: We use the runningTasks, etc
++    // values in JobInfo rather than re-counting them, but this should be safe
++    // because we are being called only inside update(), which has a lock on
++    // the JobTracker, so all the values are fresh.
++    int desiredFairShare = (int) Math.floor(Math.min(
++        fairTasks(job, type) / 2, neededTasks(job, type)));
++    int tasksToLeave = Math.max(minTasks(job, type), desiredFairShare);
++    int tasksToPreempt = Math.min(
++        maxToPreempt, runningTasks(job, type) - tasksToLeave);
++    if (tasksToPreempt == 0)
++      return 0;
++    // Create a list of all running TaskInProgress'es in the job
++    List<TaskInProgress> tips = new ArrayList<TaskInProgress>();
++    if (type == TaskType.MAP) {
++      // Jobs may have both "non-local maps" which have a split with no locality
++      // info (e.g. the input file is not in HDFS), and maps with locality info,
++      // which are stored in the runningMapCache map from location to task list
++      tips.addAll(job.nonLocalRunningMaps);
++      for (Set<TaskInProgress> set: job.runningMapCache.values()) {
++        tips.addAll(set);
++      }
++    }
++    else {
++      tips.addAll(job.runningReduces);
++    }
++    // Get the active TaskStatus'es for each TaskInProgress (there may be
++    // more than one if the task has multiple copies active due to speculation)
++    List<TaskStatus> statuses = new ArrayList<TaskStatus>();
++    for (TaskInProgress tip: tips) {
++      for (TaskAttemptID id: tip.getActiveTasks().keySet()) {
++        statuses.add(tip.getTaskStatus(id));
++      }
++    }
++    // Sort the statuses in order of start time, with the latest launched first
++    Collections.sort(statuses, new Comparator<TaskStatus>() {
++      public int compare(TaskStatus t1, TaskStatus t2) {
++        return (int) Math.signum(t2.getStartTime() - t1.getStartTime());
++      }
++    });
++    // Preempt the tasks in order of start time until we've done enough
++    int numKilled = 0;
++    for (int i = 0; i < tasksToPreempt; i++) {
++      if (i > statuses.size() - tasksToLeave) {
++        // Sanity check in case we computed maxToPreempt incorrectly due to
++        // stale data in JobInfos. Shouldn't happen if we are called from update.
++        LOG.error("Stale task counts in the JobInfos in preemptTasks - "
++            + "probaly due to calling preemptTasks() from outside update(). ");
++        break;
++      }
++      TaskStatus status = statuses.get(i);
++      eventLog.log("PREEMPT", status.getTaskID(), status.getTaskTracker());
++      try {
++        taskTrackerManager.killTask(status.getTaskID(), false);
++        numKilled++;
++      } catch (IOException e) {
++        LOG.error("Failed to kill task " + status.getTaskID(), e);
++      }
++    }
++    return numKilled;
++  }
++
++
+   public synchronized boolean getUseFifo() {
+     return useFifo;
+   }
+@@ -742,6 +1068,12 @@ public class FairScheduler extends TaskScheduler {
+     return (type == TaskType.MAP) ? info.minMaps : info.minReduces;
+   }
+ 
++  protected double fairTasks(JobInProgress job, TaskType type) {
++    JobInfo info = infos.get(job);
++    if (info == null) return 0;
++    return (type == TaskType.MAP) ? info.mapFairShare : info.reduceFairShare;
++  }
++
+   protected double weight(JobInProgress job, TaskType taskType) {
+     JobInfo info = infos.get(job);
+     if (info == null) return 0;
+@@ -765,4 +1097,70 @@ public class FairScheduler extends TaskScheduler {
+     Pool myJobPool = poolMgr.getPool(queueName);
+     return myJobPool.getJobs();
+   }
++
++  protected void dumpIfNecessary() {
++    long now = clock.getTime();
++    long timeDelta = now - lastDumpTime;
++    if (timeDelta > dumpInterval && eventLog.isEnabled()) {
++      dump();
++      lastDumpTime = now;
++    }
++  }
++
++  /**
++   * Dump scheduler state to the fairscheduler log.
++   */
++  private synchronized void dump() {
++    synchronized (eventLog) {
++      eventLog.log("BEGIN_DUMP");
++      // List jobs in order of submit time
++      ArrayList<JobInProgress> jobs = 
++        new ArrayList<JobInProgress>(infos.keySet());
++      Collections.sort(jobs, new Comparator<JobInProgress>() {
++        public int compare(JobInProgress j1, JobInProgress j2) {
++          return (int) Math.signum(j1.getStartTime() - j2.getStartTime());
++        }
++      });
++      // Dump info for each job
++      for (JobInProgress job: jobs) {
++        JobProfile profile = job.getProfile();
++        JobInfo info = infos.get(job);
++        eventLog.log("JOB",
++            profile.getJobID(), profile.name, profile.user,
++            job.getPriority(), poolMgr.getPoolName(job),
++            job.numMapTasks, info.runningMaps, info.neededMaps, 
++            info.mapFairShare, info.mapWeight, info.mapDeficit,
++            job.numReduceTasks, info.runningReduces, info.neededReduces, 
++            info.reduceFairShare, info.reduceWeight, info.reduceDeficit);
++      }
++      // List pools in alphabetical order
++      List<Pool> pools = new ArrayList<Pool>(poolMgr.getPools());
++      Collections.sort(pools, new Comparator<Pool>() {
++        public int compare(Pool p1, Pool p2) {
++          if (p1.isDefaultPool())
++            return 1;
++          else if (p2.isDefaultPool())
++            return -1;
++          else return p1.getName().compareTo(p2.getName());
++        }});
++      for (Pool pool: pools) {
++        int runningMaps = 0;
++        int runningReduces = 0;
++        for (JobInProgress job: pool.getJobs()) {
++          JobInfo info = infos.get(job);
++          if (info != null) {
++            runningMaps += info.runningMaps;
++            runningReduces += info.runningReduces;
++          }
++        }
++        String name = pool.getName();
++        eventLog.log("POOL",
++            name, poolMgr.getPoolWeight(name), pool.getJobs().size(),
++            poolMgr.getAllocation(name, TaskType.MAP), runningMaps,
++            poolMgr.getAllocation(name, TaskType.REDUCE), runningReduces);
++      }
++      // Dump info for each pool
++      eventLog.log("END_DUMP");
++    }
++  }
+ }
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerEventLog.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerEventLog.java
+new file mode 100644
+index 0000000..df126e0
+--- /dev/null
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerEventLog.java
+@@ -0,0 +1,142 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.File;
++import java.io.IOException;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.log4j.DailyRollingFileAppender;
++import org.apache.log4j.Level;
++import org.apache.log4j.Logger;
++import org.apache.log4j.PatternLayout;
++import org.apache.log4j.spi.LoggingEvent;
++
++/**
++ * Event log used by the fair scheduler for machine-readable debug info.
++ * This class uses a log4j rolling file appender to write the log, but uses
++ * a custom tab-separated event format of the form:
++ * <pre>
++ * DATE    EVENT_TYPE   PARAM_1   PARAM_2   ...
++ * </pre>
++ * Various event types are used by the fair scheduler. The purpose of logging
++ * in this format is to enable tools to parse the history log easily and read
++ * internal scheduler variables, rather than trying to make the log human
++ * readable. The fair scheduler also logs human readable messages in the
++ * JobTracker's main log.
++ * 
++ * Constructing this class creates a disabled log. It must be initialized
++ * using {@link FairSchedulerEventLog#init(Configuration, String)} to begin
++ * writing to the file.
++ */
++class FairSchedulerEventLog {
++  private static final Log LOG = LogFactory.getLog(
++    "org.apache.hadoop.mapred.FairSchedulerEventLog");
++  
++  /** Set to true if logging is disabled due to an error. */
++  private boolean logDisabled = true;
++  
++  /**
++   * Log directory, set by mapred.fairscheduler.eventlog.location in conf file;
++   * defaults to {hadoop.log.dir}/fairscheduler.
++   */
++  private String logDir;
++  
++  /** 
++   * Active log file, which is {LOG_DIR}/hadoop-{user}-fairscheduler.{host}.log.
++   * Older files are also stored as {LOG_FILE}.date (date format YYYY-MM-DD).
++   */ 
++  private String logFile;
++  
++  /** Log4j appender used to write to the log file */
++  private DailyRollingFileAppender appender;
++
++  boolean init(Configuration conf, String jobtrackerHostname) {
++    try {
++      logDir = conf.get("mapred.fairscheduler.eventlog.location",
++          new File(System.getProperty("hadoop.log.dir")).getAbsolutePath()
++          + File.separator + "fairscheduler");
++      Path logDirPath = new Path(logDir);
++      FileSystem fs = logDirPath.getFileSystem(conf);
++      if (!fs.exists(logDirPath)) {
++        if (!fs.mkdirs(logDirPath)) {
++          throw new IOException(
++              "Mkdirs failed to create " + logDirPath.toString());
++        }
++      }
++      String username = System.getProperty("user.name");
++      logFile = String.format("%s%shadoop-%s-fairscheduler-%s.log",
++          logDir, File.separator, username, jobtrackerHostname);
++      logDisabled = false;
++      PatternLayout layout = new PatternLayout("%d{ISO8601}\t%m%n");
++      appender = new DailyRollingFileAppender(layout, logFile, "'.'yyyy-MM-dd");
++      appender.activateOptions();
++      LOG.info("Initialized fair scheduler event log, logging to " + logFile);
++    } catch (IOException e) {
++      LOG.error(
++          "Failed to initialize fair scheduler event log. Disabling it.", e);
++      logDisabled = true;
++    }
++    return !(logDisabled);
++  }
++  
++  /**
++   * Log an event, writing a line in the log file of the form
++   * <pre>
++   * DATE    EVENT_TYPE   PARAM_1   PARAM_2   ...
++   * </pre>
++   */
++  synchronized void log(String eventType, Object... params) {
++    try {
++      if (logDisabled)
++        return;
++      StringBuffer buffer = new StringBuffer();
++      buffer.append(eventType);
++      for (Object param: params) {
++        buffer.append("\t");
++        buffer.append(param);
++      }
++      String message = buffer.toString();
++      Logger logger = Logger.getLogger(getClass());
++      appender.append(new LoggingEvent("", logger, Level.INFO, message, null));
++    } catch (Exception e) {
++      LOG.error("Failed to append to fair scheduler event log", e);
++      logDisabled = true;
++    }
++  }
++  
++  /**
++   * Flush and close the log.
++   */
++  void shutdown() {
++    try {
++      if (appender != null)
++        appender.close();
++    } catch (Exception e) {}
++    logDisabled = true;
++  }
++
++  boolean isEnabled() {
++    return !logDisabled;
++  }
++}
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java
+index 468c864..cbb8109 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java
+@@ -225,7 +225,7 @@ public class FairSchedulerServlet extends HttpServlet {
+           JobProfile profile = job.getProfile();
+           JobInfo info = scheduler.infos.get(job);
+           if (info == null) { // Job finished, but let's show 0's for info
+-            info = new JobInfo();
++            info = new JobInfo(0);
+           }
+           out.print("<tr>\n");
+           out.printf("<td>%s</td>\n", DATE_FORMAT.format(
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/LoadManager.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/LoadManager.java
+index 07ae95f..2e6f3aa 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/LoadManager.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/LoadManager.java
+@@ -30,6 +30,7 @@ import org.apache.hadoop.conf.Configuration;
+ public abstract class LoadManager implements Configurable {
+   protected Configuration conf;
+   protected TaskTrackerManager taskTrackerManager;
++  protected FairSchedulerEventLog schedulingLog;
+   
+   public Configuration getConf() {
+     return conf;
+@@ -43,7 +44,11 @@ public abstract class LoadManager implements Configurable {
+       TaskTrackerManager taskTrackerManager) {
+     this.taskTrackerManager = taskTrackerManager;
+   }
+-  
++
++  public void setEventLog(FairSchedulerEventLog schedulingLog) {
++    this.schedulingLog = schedulingLog;
++  }
++ 
+   /**
+    * Lifecycle method to allow the LoadManager to start any work in separate
+    * threads.
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+index 08bb3e4..f41ee4f 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+@@ -42,7 +42,8 @@ import org.w3c.dom.Text;
+ import org.xml.sax.SAXException;
+ 
+ /**
+- * Maintains a hierarchy of pools.
++ * Maintains a list of pools as well as scheduling parameters for each pool,
++ * such as guaranteed share allocations, from the fair scheduler config file.
+  */
+ public class PoolManager {
+   public static final Log LOG = LogFactory.getLog(
+@@ -71,9 +72,24 @@ public class PoolManager {
+   private int userMaxJobsDefault = Integer.MAX_VALUE;
+   private int poolMaxJobsDefault = Integer.MAX_VALUE;
+ 
++  // Min share preemption timeout for each pool in seconds. If a job in the pool
++  // waits this long without receiving its guaranteed share, it is allowed to
++  // preempt other jobs' tasks.
++  private Map<String, Long> minSharePreemptionTimeouts =
++    new HashMap<String, Long>();
++  
++  // Default min share preemption timeout for pools where it is not set
++  // explicitly.
++  private long defaultMinSharePreemptionTimeout = Long.MAX_VALUE;
++  
++  // Preemption timeout for jobs below fair share in seconds. If a job remains
++  // below half its fair share for this long, it is allowed to preempt tasks.
++  private long fairSharePreemptionTimeout = Long.MAX_VALUE;
++
++
+   private String allocFile; // Path to XML file containing allocations
+   private String poolNameProperty; // Jobconf property to use for determining a
+-                                   // job's pool name (default: mapred.job.queue.name)
++                                   // job's pool name (default: user.name)
+   
+   private Map<String, Pool> pools = new HashMap<String, Pool>();
+   
+@@ -132,7 +148,7 @@ public class PoolManager {
+         // We log the error only on the first failure so we don't fill up the
+         // JobTracker's log with these messages.
+         if (!lastReloadAttemptFailed) {
+-          LOG.error("Failed to reload allocations file - " +
++          LOG.error("Failed to reload fair scheduler config file - " +
+               "will use existing allocations.", e);
+         }
+         lastReloadAttemptFailed = true;
+@@ -167,11 +183,14 @@ public class PoolManager {
+     Map<String, Integer> poolMaxJobs = new HashMap<String, Integer>();
+     Map<String, Integer> userMaxJobs = new HashMap<String, Integer>();
+     Map<String, Double> poolWeights = new HashMap<String, Double>();
++    Map<String, Long> minSharePreemptionTimeouts = new HashMap<String, Long>();
+     int userMaxJobsDefault = Integer.MAX_VALUE;
+     int poolMaxJobsDefault = Integer.MAX_VALUE;
+     
+     // Remember all pool names so we can display them on web UI, etc.
+     List<String> poolNamesInAllocFile = new ArrayList<String>();
++    long fairSharePreemptionTimeout = Long.MAX_VALUE;
++    long defaultMinSharePreemptionTimeout = Long.MAX_VALUE;
+     
+     // Read and parse the allocations file.
+     DocumentBuilderFactory docBuilderFactory =
+@@ -181,8 +200,8 @@ public class PoolManager {
+     Document doc = builder.parse(new File(allocFile));
+     Element root = doc.getDocumentElement();
+     if (!"allocations".equals(root.getTagName()))
+-      throw new AllocationConfigurationException("Bad allocations file: " + 
+-          "top-level element not <allocations>");
++      throw new AllocationConfigurationException("Bad fair scheduler config " + 
++          "file: top-level element not <allocations>");
+     NodeList elements = root.getChildNodes();
+     for (int i = 0; i < elements.getLength(); i++) {
+       Node node = elements.item(i);
+@@ -214,6 +233,10 @@ public class PoolManager {
+             String text = ((Text)field.getFirstChild()).getData().trim();
+             double val = Double.parseDouble(text);
+             poolWeights.put(poolName, val);
++          } else if ("minSharePreemptionTimeout".equals(field.getTagName())) {
++            String text = ((Text)field.getFirstChild()).getData().trim();
++            long val = Long.parseLong(text) * 1000L;
++            minSharePreemptionTimeouts.put(poolName, val);
+           }
+         }
+       } else if ("user".equals(element.getTagName())) {
+@@ -238,6 +261,14 @@ public class PoolManager {
+         String text = ((Text)element.getFirstChild()).getData().trim();
+         int val = Integer.parseInt(text);
+         poolMaxJobsDefault = val;
++      } else if ("fairSharePreemptionTimeout".equals(element.getTagName())) {
++        String text = ((Text)element.getFirstChild()).getData().trim();
++        long val = Long.parseLong(text) * 1000L;
++        fairSharePreemptionTimeout = val;
++      } else if ("defaultMinSharePreemptionTimeout".equals(element.getTagName())) {
++        String text = ((Text)element.getFirstChild()).getData().trim();
++        long val = Long.parseLong(text) * 1000L;
++        defaultMinSharePreemptionTimeout = val;
+       } else {
+         LOG.warn("Bad element in allocations file: " + element.getTagName());
+       }
+@@ -253,6 +284,9 @@ public class PoolManager {
+       this.userMaxJobsDefault = userMaxJobsDefault;
+       this.poolMaxJobsDefault = poolMaxJobsDefault;
+       this.poolWeights = poolWeights;
++      this.minSharePreemptionTimeouts = minSharePreemptionTimeouts;
++      this.fairSharePreemptionTimeout = fairSharePreemptionTimeout;
++      this.defaultMinSharePreemptionTimeout = defaultMinSharePreemptionTimeout;
+       for (String name: poolNamesInAllocFile) {
+         getPool(name);
+       }
+@@ -305,7 +339,7 @@ public class PoolManager {
+    * "mapred.fairscheduler.poolnameproperty".
+    */
+   public String getPoolName(JobInProgress job) {
+-    JobConf conf = job.getJobConf();
++    Configuration conf = job.getJobConf();
+     return conf.get(poolNameProperty, Pool.DEFAULT_POOL_NAME).trim();
+   }
+ 
+@@ -345,4 +379,26 @@ public class PoolManager {
+       return 1.0;
+     }
+   }
++
++  /**
++   * Get a pool's min share preemption timeout, in milliseconds. This is the
++   * time after which jobs in the pool may kill other pools' tasks if they
++   * are below their min share.
++   */
++  public long getMinSharePreemptionTimeout(String pool) {
++    if (minSharePreemptionTimeouts.containsKey(pool)) {
++      return minSharePreemptionTimeouts.get(pool);
++    } else {
++      return defaultMinSharePreemptionTimeout;
++    }
++  }
++  
++  /**
++   * Get the fair share preemption, in milliseconds. This is the time
++   * after which any job may kill other jobs' tasks if it is below half
++   * its fair share.
++   */
++  public long getFairSharePreemptionTimeout() {
++    return fairSharePreemptionTimeout;
++  }
+ }
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index 26afeb2..2e88a38 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -25,13 +25,20 @@ import java.io.PrintWriter;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.HashMap;
++import java.util.IdentityHashMap;
++import java.util.LinkedHashSet;
++import java.util.LinkedList;
+ import java.util.List;
+ import java.util.Map;
++import java.util.Set;
++import java.util.TreeMap;
+ 
+ import junit.framework.TestCase;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.BytesWritable;
+-import org.apache.hadoop.mapred.JobStatus;
++import org.apache.hadoop.net.Node;
++
+ import org.apache.hadoop.mapred.FairScheduler.JobInfo;
+ 
+ public class TestFairScheduler extends TestCase {
+@@ -43,11 +50,12 @@ public class TestFairScheduler extends TestCase {
+   private static final String POOL_PROPERTY = "pool";
+   
+   private static int jobCounter;
+-  private static int taskCounter;
+   
+-  static class FakeJobInProgress extends JobInProgress {
++  class FakeJobInProgress extends JobInProgress {
+     
+     private FakeTaskTrackerManager taskTrackerManager;
++    private int mapCounter = 0;
++    private int reduceCounter = 0;
+     
+     public FakeJobInProgress(JobConf jobConf,
+         FakeTaskTrackerManager taskTrackerManager) throws IOException {
+@@ -56,16 +64,62 @@ public class TestFairScheduler extends TestCase {
+       this.startTime = System.currentTimeMillis();
+       this.status = new JobStatus();
+       this.status.setRunState(JobStatus.PREP);
++      this.nonLocalMaps = new LinkedList<TaskInProgress>();
++      this.nonLocalRunningMaps = new LinkedHashSet<TaskInProgress>();
++      this.runningMapCache = new IdentityHashMap<Node, Set<TaskInProgress>>();
++      this.nonRunningReduces = new LinkedList<TaskInProgress>();   
++      this.runningReduces = new LinkedHashSet<TaskInProgress>();
++      initTasks();
+     }
+     
+     @Override
+     public synchronized void initTasks() throws IOException {
+-      // do nothing
+-    }
++      // initTasks is needed to create non-empty cleanup and setup TIP
++      // arrays, otherwise calls such as job.getTaskInProgress will fail
++      JobID jobId = getJobID();
++      JobConf conf = getJobConf();
++      String jobFile = "";
++      // create two cleanup tips, one map and one reduce.
++      cleanup = new TaskInProgress[2];
++      // cleanup map tip.
++      cleanup[0] = new TaskInProgress(jobId, jobFile, null, 
++              jobtracker, conf, this, numMapTasks);
++      cleanup[0].setJobCleanupTask();
++      // cleanup reduce tip.
++      cleanup[1] = new TaskInProgress(jobId, jobFile, numMapTasks,
++                         numReduceTasks, jobtracker, conf, this);
++      cleanup[1].setJobCleanupTask();
++      // create two setup tips, one map and one reduce.
++      setup = new TaskInProgress[2];
++      // setup map tip.
++      setup[0] = new TaskInProgress(jobId, jobFile, null, 
++              jobtracker, conf, this, numMapTasks + 1);
++      setup[0].setJobSetupTask();
++      // setup reduce tip.
++      setup[1] = new TaskInProgress(jobId, jobFile, numMapTasks,
++                         numReduceTasks + 1, jobtracker, conf, this);
++      setup[1].setJobSetupTask();
++      // create maps
++      numMapTasks = conf.getNumMapTasks();
++      System.out.println("numMapTasks = " + numMapTasks);
++      maps = new TaskInProgress[numMapTasks];
++      for (int i = 0; i < numMapTasks; i++) {
++        maps[i] = new FakeTaskInProgress(getJobID(), 
++            getJobConf(), true, this);
++      }
++      // create reduces
++      numReduceTasks = conf.getNumReduceTasks();
++      System.out.println("numReduceTasks = " + numReduceTasks);
++      reduces = new TaskInProgress[numReduceTasks];
++      for (int i = 0; i < numReduceTasks; i++) {
++        reduces[i] = new FakeTaskInProgress(getJobID(), 
++            getJobConf(), false, this);
++      }
++   }
+ 
+     @Override
+     public Task obtainNewMapTask(final TaskTrackerStatus tts, int clusterSize,
+-        int ignored) throws IOException {
++        int numUniqueHosts) throws IOException {
+       TaskAttemptID attemptId = getTaskAttemptID(true);
+       Task task = new MapTask("", attemptId, 0, "", new BytesWritable()) {
+         @Override
+@@ -73,9 +127,13 @@ public class TestFairScheduler extends TestCase {
+           return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+         }
+       };
+-      taskTrackerManager.startTask(tts.getTrackerName(), task);
+       runningMapTasks++;
+-      return task;
++      FakeTaskInProgress tip = 
++        (FakeTaskInProgress) maps[attemptId.getTaskID().getId()];
++      tip.createTaskAttempt(task, tts.getTrackerName());
++      nonLocalRunningMaps.add(tip);
++      taskTrackerManager.startTask(tts.getTrackerName(), task, tip);
++     return task;
+     }
+     
+     @Override
+@@ -88,15 +146,118 @@ public class TestFairScheduler extends TestCase {
+           return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+         }
+       };
+-      taskTrackerManager.startTask(tts.getTrackerName(), task);
+       runningReduceTasks++;
++      FakeTaskInProgress tip = 
++        (FakeTaskInProgress) reduces[attemptId.getTaskID().getId()];
++      tip.createTaskAttempt(task, tts.getTrackerName());
++      runningReduces.add(tip);
++      taskTrackerManager.startTask(tts.getTrackerName(), task, tip);
+       return task;
+     }
++
++    public void mapTaskFinished(TaskInProgress tip) {
++      runningMapTasks--;
++      finishedMapTasks++;
++      nonLocalRunningMaps.remove(tip);
++    }
+     
++    public void reduceTaskFinished(TaskInProgress tip) {
++      runningReduceTasks--;
++      finishedReduceTasks++;
++      runningReduces.remove(tip);
++    }    
++
+     private TaskAttemptID getTaskAttemptID(boolean isMap) {
+       JobID jobId = getJobID();
+-      return new TaskAttemptID(jobId.getJtIdentifier(),
+-          jobId.getId(), isMap, ++taskCounter, 0);
++      TaskType t = TaskType.REDUCE;
++      if (isMap) {
++        t = TaskType.MAP;
++        return new TaskAttemptID(jobId.getJtIdentifier(),
++            jobId.getId(), isMap, mapCounter++, 0);
++      } else {
++        return new TaskAttemptID(jobId.getJtIdentifier(),
++            jobId.getId(), isMap, reduceCounter++, 0);
++      }
++    }    
++  }
++
++  class FakeTaskInProgress extends TaskInProgress {
++    private boolean isMap;
++    private FakeJobInProgress fakeJob;
++    private TreeMap<TaskAttemptID, String> activeTasks;
++    private TaskStatus taskStatus;
++    private boolean isComplete = false;
++    
++    FakeTaskInProgress(JobID jId, JobConf jobConf, boolean isMap,
++                       FakeJobInProgress job) {
++      super(jId, "", new JobClient.RawSplit(), null, jobConf, job, 0);
++      this.isMap = isMap;
++      this.fakeJob = job;
++      activeTasks = new TreeMap<TaskAttemptID, String>();
++      taskStatus = TaskStatus.createTaskStatus(isMap);
++      taskStatus.setRunState(TaskStatus.State.UNASSIGNED);
++    }
++
++    private void createTaskAttempt(Task task, String taskTracker) {
++      activeTasks.put(task.getTaskID(), taskTracker);
++      taskStatus = TaskStatus.createTaskStatus(isMap, task.getTaskID(),
++                                               0.5f, TaskStatus.State.RUNNING, "", "", "", 
++                                               TaskStatus.Phase.STARTING, new Counters());
++      taskStatus.setStartTime(clock.getTime());
++    }
++    
++    @Override
++    TreeMap<TaskAttemptID, String> getActiveTasks() {
++      return activeTasks;
++    }
++    
++    public synchronized boolean isComplete() {
++      return isComplete;
++    }
++    
++    public boolean isRunning() {
++      return activeTasks.size() > 0;
++    }
++    
++    @Override
++    public TaskStatus getTaskStatus(TaskAttemptID taskid) {
++      return taskStatus;
++    }
++    
++    void killAttempt() {
++      if (isMap) {
++        fakeJob.mapTaskFinished(this);
++      }
++      else {
++        fakeJob.reduceTaskFinished(this);
++      }
++      activeTasks.clear();
++      taskStatus.setRunState(TaskStatus.State.UNASSIGNED);
++    }
++    
++    void finishAttempt() {
++      isComplete = true;
++      if (isMap) {
++        fakeJob.mapTaskFinished(this);
++      }
++      else {
++        fakeJob.reduceTaskFinished(this);
++      }
++      activeTasks.clear();
++      taskStatus.setRunState(TaskStatus.State.UNASSIGNED);
++    }
++  }
++  
++  static class FakeQueueManager extends QueueManager {
++    private Set<String> queues = null;
++    FakeQueueManager() {
++      super(new Configuration());
++    }
++    void setQueues(Set<String> queues) {
++      this.queues = queues;
++    }
++    public synchronized Set<String> getQueues() {
++      return queues;
+     }
+   }
+   
+@@ -110,18 +271,23 @@ public class TestFairScheduler extends TestCase {
+     
+     private Map<String, TaskTrackerStatus> trackers =
+       new HashMap<String, TaskTrackerStatus>();
+-    private Map<String, TaskStatus> taskStatuses = 
++    private Map<String, TaskStatus> statuses = 
+       new HashMap<String, TaskStatus>();
++    private Map<String, FakeTaskInProgress> tips = 
++      new HashMap<String, FakeTaskInProgress>();
++    private Map<String, TaskTrackerStatus> trackerForTip =
++      new HashMap<String, TaskTrackerStatus>();
++
+ 
+-    public FakeTaskTrackerManager() {
+-      trackers.put("tt1", new TaskTrackerStatus("tt1", "tt1.host", 1,
+-          new ArrayList<TaskStatus>(), 0,
+-          maxMapTasksPerTracker, maxReduceTasksPerTracker));
+-      trackers.put("tt2", new TaskTrackerStatus("tt2", "tt2.host", 2,
+-          new ArrayList<TaskStatus>(), 0,
+-          maxMapTasksPerTracker, maxReduceTasksPerTracker));
++    public FakeTaskTrackerManager(int numTrackers) {
++      for (int i = 1; i <= numTrackers; i++) {
++        TaskTrackerStatus tt = new TaskTrackerStatus("tt" + i,  "host" + i, i,
++            new ArrayList<TaskStatus>(), 0,
++            maxMapTasksPerTracker, maxReduceTasksPerTracker);
++        trackers.put("tt" + i, tt);
++      }
+     }
+-    
++
+     @Override
+     public ClusterStatus getClusterStatus() {
+       int numTrackers = trackers.size();
+@@ -192,31 +358,48 @@ public class TestFairScheduler extends TestCase {
+       return trackers.get(trackerID);
+     }
+     
+-    public void startTask(String taskTrackerName, final Task t) {
+-      if (t.isMapTask()) {
++    public void startTask(String trackerName, Task t, FakeTaskInProgress tip) {
++      final boolean isMap = t.isMapTask();
++      if (isMap) {
+         maps++;
+       } else {
+         reduces++;
+       }
+-      TaskStatus status = new TaskStatus() {
+-        @Override
+-        public boolean getIsMap() {
+-          return t.isMapTask();
+-        }
+-      };
+-      taskStatuses.put(t.getTaskID().toString(), status);
++      String attemptId = t.getTaskID().toString();
++      TaskStatus status = tip.getTaskStatus(t.getTaskID());
++      TaskTrackerStatus trackerStatus = trackers.get(trackerName);
++      tips.put(attemptId, tip);
++      statuses.put(attemptId, status);
++      trackerForTip.put(attemptId, trackerStatus);
+       status.setRunState(TaskStatus.State.RUNNING);
+-      trackers.get(taskTrackerName).getTaskReports().add(status);
++      trackerStatus.getTaskReports().add(status);
+     }
+     
+-    public void finishTask(String taskTrackerName, String tipId) {
+-      TaskStatus status = taskStatuses.get(tipId);
+-      if (status.getIsMap()) {
++    public void finishTask(String taskTrackerName, String attemptId) {
++      FakeTaskInProgress tip = tips.get(attemptId);
++      if (tip.isMapTask()) {
+         maps--;
+       } else {
+         reduces--;
+       }
+-      status.setRunState(TaskStatus.State.SUCCEEDED);
++      tip.finishAttempt();
++      TaskStatus status = statuses.get(attemptId);
++      trackers.get(taskTrackerName).getTaskReports().remove(status);
++    }
++
++    @Override
++    public boolean killTask(TaskAttemptID attemptId, boolean shouldFail) {
++      String attemptIdStr = attemptId.toString();
++      FakeTaskInProgress tip = tips.get(attemptIdStr);
++      if (tip.isMapTask()) {
++        maps--;
++      } else {
++        reduces--;
++      }
++      tip.killAttempt();
++      TaskStatus status = statuses.get(attemptIdStr);
++      trackerForTip.get(attemptIdStr).getTaskReports().remove(status);
++      return true;
+     }
+   }
+   
+@@ -241,19 +424,23 @@ public class TestFairScheduler extends TestCase {
+   @Override
+   protected void setUp() throws Exception {
+     jobCounter = 0;
+-    taskCounter = 0;
+     new File(TEST_DIR).mkdirs(); // Make sure data directory exists
+     // Create an empty pools file (so we can add/remove pools later)
+     FileWriter fileWriter = new FileWriter(ALLOC_FILE);
+     fileWriter.write("<?xml version=\"1.0\"?>\n");
+     fileWriter.write("<allocations />\n");
+     fileWriter.close();
++    setUpCluster(2);
++  }
++
++  private void setUpCluster(int numTaskTrackers) {
+     conf = new JobConf();
+     conf.set("mapred.fairscheduler.allocation.file", ALLOC_FILE);
+     conf.set("mapred.fairscheduler.poolnameproperty", POOL_PROPERTY);
+-    taskTrackerManager = new FakeTaskTrackerManager();
++    conf.set("mapred.fairscheduler.assignmultiple", "false");
++    taskTrackerManager = new FakeTaskTrackerManager(numTaskTrackers);
+     clock = new FakeClock();
+-    scheduler = new FairScheduler(clock, false);
++    scheduler = new FairScheduler(clock, true);
+     scheduler.waitForMapsBeforeLaunchingReduces = false;
+     scheduler.setConf(conf);
+     scheduler.setTaskTrackerManager(taskTrackerManager);
+@@ -315,6 +502,10 @@ public class TestFairScheduler extends TestCase {
+     out.println("<pool name=\"poolD\">");
+     out.println("<maxRunningJobs>3</maxRunningJobs>");
+     out.println("</pool>");
++    // Give pool E a preemption timeout of one minute
++    out.println("<pool name=\"poolE\">");
++    out.println("<minSharePreemptionTimeout>60</minSharePreemptionTimeout>");
++    out.println("</pool>");
+     // Set default limit of jobs per pool to 15
+     out.println("<poolMaxJobsDefault>15</poolMaxJobsDefault>");
+     // Set default limit of jobs per user to 5
+@@ -323,13 +514,18 @@ public class TestFairScheduler extends TestCase {
+     out.println("<user name=\"user1\">");
+     out.println("<maxRunningJobs>10</maxRunningJobs>");
+     out.println("</user>");
++    // Set default min share preemption timeout to 2 minutes
++    out.println("<defaultMinSharePreemptionTimeout>120" 
++        + "</defaultMinSharePreemptionTimeout>"); 
++    // Set fair share preemption timeout to 5 minutes
++    out.println("<fairSharePreemptionTimeout>300</fairSharePreemptionTimeout>"); 
+     out.println("</allocations>"); 
+     out.close();
+     
+     PoolManager poolManager = scheduler.getPoolManager();
+     poolManager.reloadAllocs();
+     
+-    assertEquals(5, poolManager.getPools().size()); // 4 in file + default pool
++    assertEquals(6, poolManager.getPools().size()); // 5 in file + default pool
+     assertEquals(0, poolManager.getAllocation(Pool.DEFAULT_POOL_NAME,
+         TaskType.MAP));
+     assertEquals(0, poolManager.getAllocation(Pool.DEFAULT_POOL_NAME,
+@@ -342,12 +538,24 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(0, poolManager.getAllocation("poolC", TaskType.REDUCE));
+     assertEquals(0, poolManager.getAllocation("poolD", TaskType.MAP));
+     assertEquals(0, poolManager.getAllocation("poolD", TaskType.REDUCE));
++    assertEquals(0, poolManager.getAllocation("poolE", TaskType.MAP));
++    assertEquals(0, poolManager.getAllocation("poolE", TaskType.REDUCE));
++    assertEquals(15, poolManager.getPoolMaxJobs(Pool.DEFAULT_POOL_NAME));
+     assertEquals(15, poolManager.getPoolMaxJobs("poolA"));
+     assertEquals(15, poolManager.getPoolMaxJobs("poolB"));
+     assertEquals(15, poolManager.getPoolMaxJobs("poolC"));
+     assertEquals(3, poolManager.getPoolMaxJobs("poolD"));
+     assertEquals(10, poolManager.getUserMaxJobs("user1"));
+     assertEquals(5, poolManager.getUserMaxJobs("user2"));
++    assertEquals(120000, poolManager.getMinSharePreemptionTimeout(
++        Pool.DEFAULT_POOL_NAME));
++    assertEquals(120000, poolManager.getMinSharePreemptionTimeout("poolA"));
++    assertEquals(120000, poolManager.getMinSharePreemptionTimeout("poolB"));
++    assertEquals(120000, poolManager.getMinSharePreemptionTimeout("poolC"));
++    assertEquals(120000, poolManager.getMinSharePreemptionTimeout("poolD"));
++    assertEquals(120000, poolManager.getMinSharePreemptionTimeout("poolA"));
++    assertEquals(60000, poolManager.getMinSharePreemptionTimeout("poolE"));
++    assertEquals(300000, poolManager.getFairSharePreemptionTimeout());
+   }
+   
+   public void testTaskNotAssignedWhenNoJobsArePresent() throws IOException {
+@@ -409,12 +617,12 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(2.0,  info2.reduceFairShare);
+     
+     // Assign tasks and check that all slots are filled with j1, then j2
++    checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
+     checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_m_000002_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_r_000003_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_r_000004_0 on tt1");
+-    checkAssignment("tt2", "attempt_test_0002_m_000005_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_r_000006_0 on tt2");
++    checkAssignment("tt1", "attempt_test_0001_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0002_r_000000_0 on tt1");
++    checkAssignment("tt2", "attempt_test_0002_m_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000001_0 on tt2");
+     assertNull(scheduler.assignTasks(tracker("tt2")));
+     
+     // Check that the scheduler has started counting the tasks as running
+@@ -480,14 +688,18 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(2.0,  info2.reduceFairShare);
+     
+     // Assign tasks and check that all slots are initially filled with job 1
++    checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
+     checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_m_000002_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_r_000003_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_r_000004_0 on tt1");
+-    checkAssignment("tt2", "attempt_test_0001_m_000005_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0001_m_000006_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0001_r_000007_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0001_r_000008_0 on tt2");
++    checkAssignment("tt1", "attempt_test_0001_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000001_0 on tt1");
++    checkAssignment("tt2", "attempt_test_0001_m_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_m_000003_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000003_0 on tt2");
++    
++    // Check that no new tasks can be launched once the tasktrackers are full
++    assertNull(scheduler.assignTasks(tracker("tt1")));
++    assertNull(scheduler.assignTasks(tracker("tt2")));
+     
+     // Check that the scheduler has started counting the tasks as running
+     // as soon as it launched them.
+@@ -504,14 +716,14 @@ public class TestFairScheduler extends TestCase {
+     // the task since FakeJobInProgress does not properly maintain running
+     // tasks, so the scheduler will always get an empty task list from
+     // the JobInProgress's getMapTasks/getReduceTasks and think they finished.
++    taskTrackerManager.finishTask("tt1", "attempt_test_0001_m_000000_0");
+     taskTrackerManager.finishTask("tt1", "attempt_test_0001_m_000001_0");
+-    taskTrackerManager.finishTask("tt1", "attempt_test_0001_m_000002_0");
+-    taskTrackerManager.finishTask("tt1", "attempt_test_0001_r_000003_0");
+-    taskTrackerManager.finishTask("tt1", "attempt_test_0001_r_000004_0");
+-    taskTrackerManager.finishTask("tt2", "attempt_test_0001_m_000005_0");
+-    taskTrackerManager.finishTask("tt2", "attempt_test_0001_m_000006_0");
+-    taskTrackerManager.finishTask("tt2", "attempt_test_0001_r_000007_0");
+-    taskTrackerManager.finishTask("tt2", "attempt_test_0001_r_000008_0");
++    taskTrackerManager.finishTask("tt1", "attempt_test_0001_r_000000_0");
++    taskTrackerManager.finishTask("tt1", "attempt_test_0001_r_000001_0");
++    taskTrackerManager.finishTask("tt2", "attempt_test_0001_m_000002_0");
++    taskTrackerManager.finishTask("tt2", "attempt_test_0001_m_000003_0");
++    taskTrackerManager.finishTask("tt2", "attempt_test_0001_r_000002_0");
++    taskTrackerManager.finishTask("tt2", "attempt_test_0001_r_000003_0");
+     advanceTime(200);
+     assertEquals(0,   info1.runningMaps);
+     assertEquals(0,   info1.runningReduces);
+@@ -523,24 +735,24 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(400, info2.reduceDeficit);
+ 
+     // Assign tasks and check that all slots are now filled with job 2
+-    checkAssignment("tt1", "attempt_test_0002_m_000009_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_m_000010_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_r_000011_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_r_000012_0 on tt1");
+-    checkAssignment("tt2", "attempt_test_0002_m_000013_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_m_000014_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_r_000015_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_r_000016_0 on tt2");
++    checkAssignment("tt1", "attempt_test_0002_m_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0002_m_000001_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0002_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0002_r_000001_0 on tt1");
++    checkAssignment("tt2", "attempt_test_0002_m_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_m_000003_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000003_0 on tt2");
+ 
+     // Finish up the tasks and advance time again, but give job 2 only 50ms.
+-    taskTrackerManager.finishTask("tt1", "attempt_test_0002_m_000009_0");
+-    taskTrackerManager.finishTask("tt1", "attempt_test_0002_m_000010_0");
+-    taskTrackerManager.finishTask("tt1", "attempt_test_0002_r_000011_0");
+-    taskTrackerManager.finishTask("tt1", "attempt_test_0002_r_000012_0");
+-    taskTrackerManager.finishTask("tt2", "attempt_test_0002_m_000013_0");
+-    taskTrackerManager.finishTask("tt2", "attempt_test_0002_m_000014_0");
+-    taskTrackerManager.finishTask("tt2", "attempt_test_0002_r_000015_0");
+-    taskTrackerManager.finishTask("tt2", "attempt_test_0002_r_000016_0");
++    taskTrackerManager.finishTask("tt1", "attempt_test_0002_m_000000_0");
++    taskTrackerManager.finishTask("tt1", "attempt_test_0002_m_000001_0");
++    taskTrackerManager.finishTask("tt1", "attempt_test_0002_r_000000_0");
++    taskTrackerManager.finishTask("tt1", "attempt_test_0002_r_000001_0");
++    taskTrackerManager.finishTask("tt2", "attempt_test_0002_m_000002_0");
++    taskTrackerManager.finishTask("tt2", "attempt_test_0002_m_000003_0");
++    taskTrackerManager.finishTask("tt2", "attempt_test_0002_r_000002_0");
++    taskTrackerManager.finishTask("tt2", "attempt_test_0002_r_000003_0");
+     advanceTime(50);
+     assertEquals(0,   info1.runningMaps);
+     assertEquals(0,   info1.runningReduces);
+@@ -552,14 +764,14 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(300, info2.reduceDeficit);
+ 
+     // Assign tasks and check that all slots are now still with job 2
+-    checkAssignment("tt1", "attempt_test_0002_m_000017_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_m_000018_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_r_000019_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_r_000020_0 on tt1");
+-    checkAssignment("tt2", "attempt_test_0002_m_000021_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_m_000022_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_r_000023_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_r_000024_0 on tt2");
++    checkAssignment("tt1", "attempt_test_0002_m_000004_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0002_m_000005_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0002_r_000004_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0002_r_000005_0 on tt1");
++    checkAssignment("tt2", "attempt_test_0002_m_000006_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_m_000007_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000006_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000007_0 on tt2");
+   }
+   
+ 
+@@ -602,14 +814,14 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(266,  info2.reduceDeficit, 1.0);
+     
+     // Assign tasks and check that all slots are filled with j1, then j2
++    checkAssignment("tt1", "attempt_test_0002_m_000000_0 on tt1");
+     checkAssignment("tt1", "attempt_test_0002_m_000001_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_m_000002_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_r_000003_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_r_000004_0 on tt1");
+-    checkAssignment("tt2", "attempt_test_0002_m_000005_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_m_000006_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_r_000007_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_r_000008_0 on tt2");
++    checkAssignment("tt1", "attempt_test_0002_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0002_r_000001_0 on tt1");
++    checkAssignment("tt2", "attempt_test_0002_m_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_m_000003_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000003_0 on tt2");
+   }
+   
+   /**
+@@ -693,14 +905,14 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(100,  info3.reduceDeficit);
+     
+     // Assign tasks and check that slots are first given to needy jobs
++    checkAssignment("tt1", "attempt_test_0003_m_000000_0 on tt1");
+     checkAssignment("tt1", "attempt_test_0003_m_000001_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0003_m_000002_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_r_000003_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_r_000004_0 on tt1");
+-    checkAssignment("tt2", "attempt_test_0002_m_000005_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0001_m_000006_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0003_r_000007_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0001_r_000008_0 on tt2");
++    checkAssignment("tt1", "attempt_test_0002_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0002_r_000001_0 on tt1");
++    checkAssignment("tt2", "attempt_test_0002_m_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_m_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0003_r_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000000_0 on tt2");
+   }
+ 
+   /**
+@@ -793,14 +1005,14 @@ public class TestFairScheduler extends TestCase {
+     
+     // Assign tasks and check that slots are first given to needy jobs, but
+     // that job 1 gets two tasks after due to having a larger deficit.
+-    checkAssignment("tt1", "attempt_test_0002_m_000001_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0003_m_000002_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_r_000003_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0003_r_000004_0 on tt1");
+-    checkAssignment("tt2", "attempt_test_0001_m_000005_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0001_m_000006_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0001_r_000007_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0001_r_000008_0 on tt2");
++    checkAssignment("tt1", "attempt_test_0002_m_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0003_m_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0002_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0003_r_000000_0 on tt1");
++    checkAssignment("tt2", "attempt_test_0001_m_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_m_000001_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000001_0 on tt2");
+   }
+   
+   /**
+@@ -853,14 +1065,14 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(2.0,  info2.reduceFairShare);
+     
+     // Assign tasks and check that slots are first given to needy jobs
+-    checkAssignment("tt1", "attempt_test_0002_m_000001_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_m_000002_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0002_r_000003_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_r_000004_0 on tt1");
+-    checkAssignment("tt2", "attempt_test_0001_m_000005_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0001_m_000006_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0001_r_000007_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0001_r_000008_0 on tt2");
++    checkAssignment("tt1", "attempt_test_0002_m_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0002_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000000_0 on tt1");
++    checkAssignment("tt2", "attempt_test_0001_m_000001_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_m_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000001_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000002_0 on tt2");
+   }
+   
+   /**
+@@ -905,15 +1117,15 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(0.0,  info4.reduceFairShare);
+     
+     // Assign tasks and check that slots are first to jobs 1 and 2
++    checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
+     checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_m_000002_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_r_000003_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_r_000004_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000001_0 on tt1");
+     advanceTime(100);
+-    checkAssignment("tt2", "attempt_test_0002_m_000005_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_m_000006_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_r_000007_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0002_r_000008_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_m_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_m_000001_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000001_0 on tt2");
+   }
+ 
+   /**
+@@ -962,15 +1174,15 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(1.33,  info4.reduceFairShare, 0.1);
+     
+     // Assign tasks and check that slots are first to jobs 1 and 3
++    checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
+     checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_m_000002_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_r_000003_0 on tt1");
+-    checkAssignment("tt1", "attempt_test_0001_r_000004_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000001_0 on tt1");
+     advanceTime(100);
+-    checkAssignment("tt2", "attempt_test_0003_m_000005_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0003_m_000006_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0003_r_000007_0 on tt2");
+-    checkAssignment("tt2", "attempt_test_0003_r_000008_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0003_m_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0003_m_000001_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0003_r_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0003_r_000001_0 on tt2");
+   }
+   
+   /**
+@@ -1226,6 +1438,429 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(5, loadMgr.getCap(200, 5, 100));
+   }
+   
++  /**
++   * This test starts by launching a job in the default pool that takes
++   * all the slots in the cluster. We then submit a job in a pool with
++   * min share of 2 maps and 1 reduce task. After the min share preemption
++   * timeout, this job should be allowed to preempt tasks. 
++   */
++  public void testMinSharePreemption() throws Exception {
++    // Enable preemption in scheduler
++    scheduler.preemptionEnabled = true;
++    // Set up pools file
++    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
++    out.println("<?xml version=\"1.0\"?>");
++    out.println("<allocations>");
++    // Give pool A a min share of 2 maps and 1 reduce, and a preemption
++    // timeout of 1 minute
++    out.println("<pool name=\"poolA\">");
++    out.println("<minMaps>2</minMaps>");
++    out.println("<minReduces>1</minReduces>");
++    out.println("<minSharePreemptionTimeout>60</minSharePreemptionTimeout>");
++    out.println("</pool>");
++    out.println("</allocations>");
++    out.close();
++    scheduler.getPoolManager().reloadAllocs();
++
++    // Submit job 1 and assign all slots to it. Sleep a bit before assigning
++    // tasks on tt1 and tt2 to ensure that the ones on tt2 get preempted first.
++    JobInProgress job1 = submitJob(JobStatus.RUNNING, 10, 10);
++    checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000001_0 on tt1");
++    advanceTime(100);
++    checkAssignment("tt2", "attempt_test_0001_m_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_m_000003_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000003_0 on tt2");
++    
++    // Ten seconds later, submit job 2.
++    advanceTime(10000);
++    JobInProgress job2 = submitJob(JobStatus.RUNNING, 10, 10, "poolA");
++    
++    // Ten seconds later, check that job 2 is not able to preempt tasks.
++    advanceTime(10000);
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.REDUCE,
++        clock.getTime()));
++    
++    // Advance time by 49 more seconds, putting us at 59s after the
++    // submission of job 2. It should still not be able to preempt.
++    advanceTime(49000);
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.REDUCE,
++        clock.getTime()));
++    
++    // Advance time by 2 seconds, putting us at 61s after the submission
++    // of job 2. It should now be able to preempt 2 maps and 1 reduce.
++    advanceTime(2000);
++    assertEquals(2, scheduler.tasksToPreempt(job2, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(1, scheduler.tasksToPreempt(job2, TaskType.REDUCE,
++        clock.getTime()));
++
++    // Test that the tasks actually get preempted and we can assign new ones
++    scheduler.preemptTasksIfNecessary();
++    scheduler.update();
++    assertEquals(2, scheduler.runningTasks(job1, TaskType.MAP));
++    assertEquals(3, scheduler.runningTasks(job1, TaskType.REDUCE));
++    checkAssignment("tt2", "attempt_test_0002_m_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_m_000001_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000000_0 on tt2");
++    assertNull(scheduler.assignTasks(tracker("tt1")));
++    assertNull(scheduler.assignTasks(tracker("tt2")));
++  }
++
++  /**
++   * This test starts by launching a job in the default pool that takes
++   * all the slots in the cluster. We then submit a job in a pool with
++   * min share of 3 maps and 3 reduce tasks, but which only actually
++   * needs 1 map and 2 reduces. We check that this job does not prempt
++   * more than this many tasks despite its min share being higher. 
++   */
++  public void testMinSharePreemptionWithSmallJob() throws Exception {
++    // Enable preemption in scheduler
++    scheduler.preemptionEnabled = true;
++    // Set up pools file
++    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
++    out.println("<?xml version=\"1.0\"?>");
++    out.println("<allocations>");
++    // Give pool A a min share of 2 maps and 1 reduce, and a preemption
++    // timeout of 1 minute
++    out.println("<pool name=\"poolA\">");
++    out.println("<minMaps>3</minMaps>");
++    out.println("<minReduces>3</minReduces>");
++    out.println("<minSharePreemptionTimeout>60</minSharePreemptionTimeout>");
++    out.println("</pool>");
++    out.println("</allocations>");
++    out.close();
++    scheduler.getPoolManager().reloadAllocs();
++
++    // Submit job 1 and assign all slots to it. Sleep a bit before assigning
++    // tasks on tt1 and tt2 to ensure that the ones on tt2 get preempted first.
++    JobInProgress job1 = submitJob(JobStatus.RUNNING, 10, 10);
++    checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000001_0 on tt1");
++    advanceTime(100);
++    checkAssignment("tt2", "attempt_test_0001_m_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_m_000003_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000003_0 on tt2");
++    
++    // Ten seconds later, submit job 2.
++    advanceTime(10000);
++    JobInProgress job2 = submitJob(JobStatus.RUNNING, 1, 2, "poolA");
++    
++    // Advance time by 59 seconds and check that no preemption occurs.
++    advanceTime(59000);
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.REDUCE,
++        clock.getTime()));
++    
++    // Advance time by 2 seconds, putting us at 61s after the submission
++    // of job 2. Job 2 should now preempt 1 map and 2 reduces.
++    advanceTime(2000);
++    assertEquals(1, scheduler.tasksToPreempt(job2, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(2, scheduler.tasksToPreempt(job2, TaskType.REDUCE,
++        clock.getTime()));
++
++    // Test that the tasks actually get preempted and we can assign new ones
++    scheduler.preemptTasksIfNecessary();
++    scheduler.update();
++    assertEquals(3, scheduler.runningTasks(job1, TaskType.MAP));
++    assertEquals(2, scheduler.runningTasks(job1, TaskType.REDUCE));
++    checkAssignment("tt2", "attempt_test_0002_m_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000001_0 on tt2");
++    assertNull(scheduler.assignTasks(tracker("tt1")));
++    assertNull(scheduler.assignTasks(tracker("tt2")));
++  }
++
++  /**
++   * This test runs on a 4-node (8-slot) cluster to allow 3 jobs with fair
++   * shares greater than 2 slots to coexist (which makes the half-fair-share 
++   * of each job more than 1 so that fair share preemption can kick in). 
++   * 
++   * The test first launches job 1, which takes 6 map slots and 6 reduce slots. 
++   * We then submit job 2, which takes 2 slots of each type. Finally, we submit 
++   * a third job, job 3, which gets no slots. At this point the fair share
++   * of each job will be 8/3 ~= 2.7 slots. Job 1 will be above its fair share,
++   * job 2 will be below it but at half fair share, and job 3 will
++   * be below half fair share. Therefore job 3 should be allowed to
++   * preempt a task (after a timeout) but jobs 1 and 2 shouldn't. 
++   */
++  public void testFairSharePreemption() throws Exception {
++    // Create a bigger cluster than normal (4 tasktrackers instead of 2)
++    setUpCluster(4);
++    // Enable preemption in scheduler
++    scheduler.preemptionEnabled = true;
++    // Set up pools file with a fair share preemtion timeout of 1 minute
++    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
++    out.println("<?xml version=\"1.0\"?>");
++    out.println("<allocations>");
++    out.println("<fairSharePreemptionTimeout>60</fairSharePreemptionTimeout>");
++    out.println("</allocations>");
++    out.close();
++    scheduler.getPoolManager().reloadAllocs();
++
++    // Submit jobs 1 and 2. We advance time by 100 between each task tracker
++    // assignment stage to ensure that the tasks from job1 on tt3 are the ones
++    // that are deterministically preempted first (being the latest launched
++    // tasks in an over-allocated job).
++    JobInProgress job1 = submitJob(JobStatus.RUNNING, 6, 6);
++    advanceTime(100); // Makes job 1 deterministically launch before job 2
++    JobInProgress job2 = submitJob(JobStatus.RUNNING, 10, 10);
++    checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000001_0 on tt1");
++    advanceTime(100);
++    checkAssignment("tt2", "attempt_test_0001_m_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_m_000003_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000003_0 on tt2");
++    advanceTime(100);
++    checkAssignment("tt3", "attempt_test_0001_m_000004_0 on tt3");
++    checkAssignment("tt3", "attempt_test_0001_m_000005_0 on tt3");
++    checkAssignment("tt3", "attempt_test_0001_r_000004_0 on tt3");
++    checkAssignment("tt3", "attempt_test_0001_r_000005_0 on tt3");
++    advanceTime(100);
++    checkAssignment("tt4", "attempt_test_0002_m_000000_0 on tt4");
++    checkAssignment("tt4", "attempt_test_0002_m_000001_0 on tt4");
++    checkAssignment("tt4", "attempt_test_0002_r_000000_0 on tt4");
++    checkAssignment("tt4", "attempt_test_0002_r_000001_0 on tt4");
++    
++    // Submit job 3.
++    JobInProgress job3 = submitJob(JobStatus.RUNNING, 10, 10);
++    
++    // Check that after 59 seconds, neither job can preempt
++    advanceTime(59000);
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.REDUCE,
++        clock.getTime()));
++    assertEquals(0, scheduler.tasksToPreempt(job3, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(0, scheduler.tasksToPreempt(job3, TaskType.REDUCE,
++        clock.getTime()));
++    
++    // Wait 2 more seconds, so that job 3 has now been in the system for 61s.
++    // Now job 3 should be able to preempt 1 task but job 2 shouldn't.
++    advanceTime(2000);
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.REDUCE,
++        clock.getTime()));
++    assertEquals(2, scheduler.tasksToPreempt(job3, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(2, scheduler.tasksToPreempt(job3, TaskType.REDUCE,
++        clock.getTime()));
++    
++    // Test that the tasks actually get preempted and we can assign new ones
++    scheduler.preemptTasksIfNecessary();
++    scheduler.update();
++    assertEquals(4, scheduler.runningTasks(job1, TaskType.MAP));
++    assertEquals(4, scheduler.runningTasks(job1, TaskType.REDUCE));
++    checkAssignment("tt3", "attempt_test_0003_m_000000_0 on tt3");
++    checkAssignment("tt3", "attempt_test_0003_m_000001_0 on tt3");
++    checkAssignment("tt3", "attempt_test_0003_r_000000_0 on tt3");
++    checkAssignment("tt3", "attempt_test_0003_r_000001_0 on tt3");
++    assertNull(scheduler.assignTasks(tracker("tt1")));
++    assertNull(scheduler.assignTasks(tracker("tt2")));
++    assertNull(scheduler.assignTasks(tracker("tt3")));
++    assertNull(scheduler.assignTasks(tracker("tt4")));
++  }
++  
++  /**
++   * This test submits a job that takes all 4 slots, and then a second
++   * job that has both a min share of 2 slots with a 60s timeout and a
++   * fair share timeout of 60s. After 60 seconds, this job will be starved
++   * of both min share (2 slots of each type) and fair share (2 slots of each
++   * type), and we test that it does not kill more than 2 tasks of each type
++   * in total.
++   */
++  public void testMinAndFairSharePreemption() throws Exception {
++    // Enable preemption in scheduler
++    scheduler.preemptionEnabled = true;
++    // Set up pools file
++    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
++    out.println("<?xml version=\"1.0\"?>");
++    out.println("<allocations>");
++    // Give pool A a min share of 2 maps and 1 reduce, and a preemption
++    // timeout of 1 minute
++    out.println("<pool name=\"poolA\">");
++    out.println("<minMaps>2</minMaps>");
++    out.println("<minReduces>2</minReduces>");
++    out.println("<minSharePreemptionTimeout>60</minSharePreemptionTimeout>");
++    out.println("</pool>");
++    out.println("<fairSharePreemptionTimeout>60</fairSharePreemptionTimeout>");
++    out.println("</allocations>");
++    out.close();
++    scheduler.getPoolManager().reloadAllocs();
++
++    // Submit job 1 and assign all slots to it. Sleep a bit before assigning
++    // tasks on tt1 and tt2 to ensure that the ones on tt2 get preempted first.
++    JobInProgress job1 = submitJob(JobStatus.RUNNING, 10, 10);
++    checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000001_0 on tt1");
++    advanceTime(100);
++    checkAssignment("tt2", "attempt_test_0001_m_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_m_000003_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000003_0 on tt2");
++    
++    // Ten seconds later, submit job 2.
++    advanceTime(10000);
++    JobInProgress job2 = submitJob(JobStatus.RUNNING, 10, 10, "poolA");
++    
++    // Ten seconds later, check that job 2 is not able to preempt tasks.
++    advanceTime(10000);
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.REDUCE,
++        clock.getTime()));
++    
++    // Advance time by 49 more seconds, putting us at 59s after the
++    // submission of job 2. It should still not be able to preempt.
++    advanceTime(49000);
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(0, scheduler.tasksToPreempt(job2, TaskType.REDUCE,
++        clock.getTime()));
++    
++    // Advance time by 2 seconds, putting us at 61s after the submission
++    // of job 2. It should now be able to preempt 2 maps and 1 reduce.
++    advanceTime(2000);
++    assertEquals(2, scheduler.tasksToPreempt(job2, TaskType.MAP,
++        clock.getTime()));
++    assertEquals(2, scheduler.tasksToPreempt(job2, TaskType.REDUCE,
++        clock.getTime()));
++
++    // Test that the tasks actually get preempted and we can assign new ones
++    scheduler.preemptTasksIfNecessary();
++    scheduler.update();
++    assertEquals(2, scheduler.runningTasks(job1, TaskType.MAP));
++    assertEquals(2, scheduler.runningTasks(job1, TaskType.REDUCE));
++    checkAssignment("tt2", "attempt_test_0002_m_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_m_000001_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000000_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0002_r_000001_0 on tt2");
++    assertNull(scheduler.assignTasks(tracker("tt1")));
++    assertNull(scheduler.assignTasks(tracker("tt2")));
++  }
++  
++  /**
++   * This is a copy of testMinAndFairSharePreemption that turns preemption
++   * off and verifies that no tasks get killed.
++   */
++  public void testNoPreemptionIfDisabled() throws Exception {
++    // Set up pools file
++    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
++    out.println("<?xml version=\"1.0\"?>");
++    out.println("<allocations>");
++    // Give pool A a min share of 2 maps and 1 reduce, and a preemption
++    // timeout of 1 minute
++    out.println("<pool name=\"poolA\">");
++    out.println("<minMaps>2</minMaps>");
++    out.println("<minReduces>2</minReduces>");
++    out.println("<minSharePreemptionTimeout>60</minSharePreemptionTimeout>");
++    out.println("</pool>");
++    out.println("<fairSharePreemptionTimeout>60</fairSharePreemptionTimeout>");
++    out.println("</allocations>");
++    out.close();
++    scheduler.getPoolManager().reloadAllocs();
++
++    // Submit job 1 and assign all slots to it. Sleep a bit before assigning
++    // tasks on tt1 and tt2 to ensure that the ones on tt2 get preempted first.
++    JobInProgress job1 = submitJob(JobStatus.RUNNING, 10, 10);
++    checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000001_0 on tt1");
++    advanceTime(100);
++    checkAssignment("tt2", "attempt_test_0001_m_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_m_000003_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000003_0 on tt2");
++    
++    // Ten seconds later, submit job 2.
++    advanceTime(10000);
++    JobInProgress job2 = submitJob(JobStatus.RUNNING, 10, 10, "poolA");
++    
++    // Advance time by 61s, putting us past the preemption timeout,
++    // and check that no tasks get preempted.
++    advanceTime(61000);
++    scheduler.preemptTasksIfNecessary();
++    scheduler.update();
++    assertEquals(4, scheduler.runningTasks(job1, TaskType.MAP));
++    assertEquals(4, scheduler.runningTasks(job1, TaskType.REDUCE));
++    assertNull(scheduler.assignTasks(tracker("tt1")));
++    assertNull(scheduler.assignTasks(tracker("tt2")));
++  }
++
++  /**
++   * This is a copy of testMinAndFairSharePreemption that turns preemption
++   * on but also turns on mapred.fairscheduler.preemption.only.log (the
++   * "dry run" parameter for testing out preemption) and verifies that no
++   * tasks get killed.
++   */
++  public void testNoPreemptionIfOnlyLogging() throws Exception {
++    // Turn on preemption, but for logging only
++    scheduler.preemptionEnabled = true;
++    scheduler.onlyLogPreemption = true;
++    // Set up pools file
++    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
++    out.println("<?xml version=\"1.0\"?>");
++    out.println("<allocations>");
++    // Give pool A a min share of 2 maps and 1 reduce, and a preemption
++    // timeout of 1 minute
++    out.println("<pool name=\"poolA\">");
++    out.println("<minMaps>2</minMaps>");
++    out.println("<minReduces>2</minReduces>");
++    out.println("<minSharePreemptionTimeout>60</minSharePreemptionTimeout>");
++    out.println("</pool>");
++    out.println("<fairSharePreemptionTimeout>60</fairSharePreemptionTimeout>");
++    out.println("</allocations>");
++    out.close();
++    scheduler.getPoolManager().reloadAllocs();
++
++    // Submit job 1 and assign all slots to it. Sleep a bit before assigning
++    // tasks on tt1 and tt2 to ensure that the ones on tt2 get preempted first.
++    JobInProgress job1 = submitJob(JobStatus.RUNNING, 10, 10);
++    checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000000_0 on tt1");
++    checkAssignment("tt1", "attempt_test_0001_r_000001_0 on tt1");
++    advanceTime(100);
++    checkAssignment("tt2", "attempt_test_0001_m_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_m_000003_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000002_0 on tt2");
++    checkAssignment("tt2", "attempt_test_0001_r_000003_0 on tt2");
++    
++    // Ten seconds later, submit job 2.
++    advanceTime(10000);
++    JobInProgress job2 = submitJob(JobStatus.RUNNING, 10, 10, "poolA");
++    
++    // Advance time by 61s, putting us past the preemption timeout,
++    // and check that no tasks get preempted.
++    advanceTime(61000);
++    scheduler.preemptTasksIfNecessary();
++    scheduler.update();
++    assertEquals(4, scheduler.runningTasks(job1, TaskType.MAP));
++    assertEquals(4, scheduler.runningTasks(job1, TaskType.REDUCE));
++    assertNull(scheduler.assignTasks(tracker("tt1")));
++    assertNull(scheduler.assignTasks(tracker("tt2")));
++  }
++
+   private void advanceTime(long time) {
+     clock.advance(time);
+     scheduler.update();
+diff --git a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+index 6066196..26826ca 100644
+--- a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
++++ b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+@@ -39,52 +39,61 @@
+         free up are assigned to the new jobs, so that each job gets
+         roughly the same amount of CPU time. Unlike the default Hadoop
+         scheduler, which forms a queue of jobs, this lets short jobs finish
+-        in reasonable time while not starving long jobs. It is also a 
+-        reasonable way to share a cluster between a number of users. Finally, 
+-        fair sharing can also work with job priorities - the priorities are
++        in reasonable time while not starving long jobs. It is also an easy
++        way to share a cluster between multiple of users.
++        Fair sharing can also work with job priorities - the priorities are
+         used as weights to determine the fraction of total compute time that
+-        each job should get.
++        each job gets.
+       </p>
+       <p>
+-        The scheduler actually organizes jobs further into "pools", and 
+-        shares resources fairly between these pools. By default, there is a 
++        The fair scheduler organizes jobs into <em>pools</em>, and 
++        divides resources fairly between these pools. By default, there is a 
+         separate pool for each user, so that each user gets the same share 
+-        of the cluster no matter how many jobs they submit. However, it is 
+-        also possible to set a job's pool based on the user's Unix group or
+-        any other jobconf property, such as the queue name property used by 
+-        <a href="capacity_scheduler.html">Capacity Scheduler</a>. 
+-        Within each pool, fair sharing is used to share capacity between 
++        of the cluster no matter how many jobs they submit. It is also
++        possible to set a job's pool based on the user's Unix group or
++        any jobconf property. 
++        Within each pool, fair sharing is used to divide capacity between 
+         the running jobs. Pools can also be given weights to share the 
+-        cluster non-proportionally in the config file.
++        cluster non-proportionally.
+       </p>
+       <p>
+         In addition to providing fair sharing, the Fair Scheduler allows
+-        assigning guaranteed minimum shares to pools, which is useful for
+-        ensuring that certain users, groups or production applications
++        assigning guaranteed <em>minimum shares</em> to pools, which is useful
++        for ensuring that certain users, groups or production applications
+         always get sufficient resources. When a pool contains jobs, it gets
+         at least its minimum share, but when the pool does not need its full
+-        guaranteed share, the excess is split between other running jobs.
+-        This lets the scheduler guarantee capacity for pools while utilizing
+-        resources efficiently when these pools don't contain jobs.       
++        guaranteed share, the excess is split between other pools.
+       </p>
+       <p>
+-        The Fair Scheduler lets all jobs run by default, but it is also
+-        possible to limit the number of running jobs per user and per pool
+-        through the config file. This can be useful when a user must submit
+-        hundreds of jobs at once, or in general to improve performance if
+-        running too many jobs at once would cause too much intermediate data
+-        to be created or too much context-switching. Limiting the jobs does
+-        not cause any subsequently submitted jobs to fail, only to wait in the
+-        sheduler's queue until some of the user's earlier jobs finish. Jobs to
+-        run from each user/pool are chosen in order of priority and then
+-        submit time, as in the default FIFO scheduler in Hadoop.
++        In normal operation, when a new job is submitted, the scheduler 
++        waits for tasks from existing jobs to finish in order to free up
++        slots for the new job. However, the scheduler also optionally supports
++        <em>preemption</em> of running jobs after configurable timeouts.
++        If the new job's minimum share is not reached after
++        a certain amount of time, the job is allowed to kill tasks from
++        existing jobs to make room to run.
++        Preemption can thus be used to guarantee
++        that "production" jobs run at specified times while allowing
++        the Hadoop cluster to also be used for experimental and research jobs.
++        In addition, a job can also be allowed to preempt tasks if it is
++        below half of its fair share for a configurable timeout (generally
++        set larger than the minimum share timeout).
++        When choosing tasks to kill, the fair scheduler picks the
++        most-recently-launched tasks from over-allocated jobs, 
++        to minimize wasted computation.
++        Preemption does not cause the preempted jobs to fail, because Hadoop
++        jobs tolerate losing tasks; it only makes them take longer to finish.
+       </p>
+       <p>
+-        Finally, the fair scheduler provides several extension points where
+-        the basic functionality can be extended. For example, the weight
+-        calculation can be modified to give a priority boost to new jobs,
+-        implementing a "shortest job first" policy which reduces response
+-        times for interactive jobs even further.
++        Finally, the Fair Scheduler can limit the number of concurrent
++        running jobs per user and per pool. This can be useful when a 
++        user must submit hundreds of jobs at once, and for ensuring that
++        intermediate data does not fill up disk space on a cluster if too many
++        concurrent jobs are running.
++        Setting job limits causes jobs submitted beyond the limit to wait in the
++        scheduler's queue until some of the user/pool's earlier jobs finish.
++        Jobs to run from each user/pool are chosen in order of priority and then
++        submit time.
+       </p>
+     </section>
+ 
+@@ -94,20 +103,14 @@
+         To run the fair scheduler in your Hadoop installation, you need to put
+         it on the CLASSPATH. The easiest way is to copy the 
+         <em>hadoop-*-fairscheduler.jar</em> from
+-        <em>HADOOP_HOME/contrib/fairscheduler</em> to <em>HADOOP_HOME/lib</em>.
++        <em>HADOOP_HOME/build/contrib/fairscheduler</em> to <em>HADOOP_HOME/lib</em>.
+         Alternatively you can modify <em>HADOOP_CLASSPATH</em> to include this jar, in
+         <em>HADOOP_CONF_DIR/hadoop-env.sh</em>
+       </p>
+       <p>
+-        In order to compile fair scheduler, from sources execute <em> ant 
+-        package</em> in source folder and copy the 
+-        <em>build/contrib/fair-scheduler/hadoop-*-fairscheduler.jar</em> 
+-        to <em>HADOOP_HOME/lib</em>
+-      </p>
+-      <p>
+        You will also need to set the following property in the Hadoop config 
+        file  <em>HADOOP_CONF_DIR/mapred-site.xml</em> to have Hadoop use 
+-       the fair scheduler: <br/>
++       the fair scheduler: <br/><br/>
+        <code>&lt;property&gt;</code><br/> 
+        <code>&nbsp;&nbsp;&lt;name&gt;mapred.jobtracker.taskScheduler&lt;/name&gt;</code><br/>
+        <code>&nbsp;&nbsp;&lt;value&gt;org.apache.hadoop.mapred.FairScheduler&lt;/value&gt;</code><br/>
+@@ -115,162 +118,309 @@
+       </p>
+       <p>
+         Once you restart the cluster, you can check that the fair scheduler 
+-        is running by going to http://&lt;jobtracker URL&gt;/scheduler 
++        is running by going to <em>http://&lt;jobtracker URL&gt;/scheduler</em> 
+         on the JobTracker's web UI. A &quot;job scheduler administration&quot; page should 
+         be visible there. This page is described in the Administration section.
+       </p>
++      <p>
++        If you wish to compile the fair scheduler from source, run <em> ant 
++        package</em> in your HADOOP_HOME directory. This will build
++        <em>build/contrib/fair-scheduler/hadoop-*-fairscheduler.jar</em>.
++      </p>
+     </section>
+     
+     <section>
+-      <title>Configuring the Fair scheduler</title>
++      <title>Configuration</title>
++      <p>
++        The Fair Scheduler contains configuration in two places -- algorithm
++        parameters are set in <em>mapred-site.xml</em>, while a separate XML
++        file called the <em>allocation file</em> can be used to configure
++        pools, minimum shares, running job limits and preemption timeouts.
++        The allocation file is reloaded periodically at runtime, 
++        allowing you to change pool settings without restarting 
++        your Hadoop cluster.
++      </p>
+       <p>
+-      The following properties can be set in mapred-site.xml to configure 
+-      the fair scheduler:
++        For a minimal installation, to just get equal sharing between users,
++        you will not need to set up an allocation file. If you do set up an
++        allocation file, you will need to tell the scheduler where to
++        find it by setting the <em>mapred.fairscheduler.allocation.file</em>
++        parameter in <em>mapred-site.xml</em> as described below.
+       </p>
+-      <table>
+-        <tr>
+-        <th>Name</th><th>Description</th>
+-        </tr>
+-        <tr>
+-        <td>
+-          mapred.fairscheduler.allocation.file
+-        </td>
+-        <td>
+-          Specifies an absolute path to an XML file which contains the 
+-          allocations for each pool, as well as the per-pool and per-user 
+-          limits on number of running jobs. If this property is not 
+-          provided, allocations are not used.<br/>
+-          This file must be in XML format, and can contain three types of 
+-          elements:
++      <section>
++      <title>Scheduler Parameters in mapred-site.xml</title>
++        <p>
++          The following parameters can be set in <em>mapred-site.xml</em>
++          to affect the behavior of the fair scheduler:
++        </p>
++        <p><strong>Basic Parameters:</strong></p>
++        <table>
++          <tr>
++          <th>Name</th><th>Description</th>
++          </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.allocation.file
++          </td>
++          <td>
++            Specifies an absolute path to an XML file which contains minimum
++            shares for each pool, per-pool and per-user limits on number of
++            running jobs, and preemption timeouts. If this property is not 
++            set, these features are not used.
++            The <a href="#Allocation+File+Format">allocation file
++            format</a> is described later.
++          </td>
++          </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.preemption
++          </td>
++          <td>
++            Boolean property for enabling preemption. Default: false.
++          </td>
++          </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.poolnameproperty
++          </td>
++          <td>
++            Specify which jobconf property is used to determine the pool that a
++            job belongs in. String, default: <em>user.name</em>
++            (i.e. one pool for each user). 
++            Another useful value is <em>group.name</em> to create a
++            pool per Unix group.
++            Finally, a common setting is to use a non-standard property
++            such as <em>pool.name</em> as the pool name property, and make it
++            default to <em>user.name</em> through the following setting:<br/>
++            <code>&lt;property&gt;</code><br/> 
++            <code>&nbsp;&nbsp;&lt;name&gt;pool.name&lt;/name&gt;</code><br/>
++            <code>&nbsp;&nbsp;&lt;value&gt;${user.name}&lt;/value&gt;</code><br/>
++            <code>&lt;/property&gt;</code><br/>
++            This allows you to specify the pool name explicitly for some jobs
++            through the jobconf (e.g. passing <em>-Dpool.name=&lt;name&gt;</em>
++            to <em>bin/hadoop jar</em>, while having the default be the user's
++            pool.
++          </td>
++          </tr>
++        </table>
++        <p><strong>Advanced Parameters:</strong></p>
++        <table>
++          <tr>
++          <th>Name</th><th>Description</th>
++          </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.sizebasedweight
++          </td>
++          <td>
++            Take into account job sizes in calculating their weights for fair 
++            sharing. By default, weights are only based on job priorities. 
++            Setting this flag to true will make them based on the size of the 
++            job (number of tasks needed) as well,though not linearly 
++            (the weight will be proportional to the log of the number of tasks 
++            needed). This lets larger jobs get larger fair shares while still 
++            providing enough of a share to small jobs to let them finish fast. 
++            Boolean value, default: false.
++          </td>
++          </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.preemption.only.log
++          </td>
++          <td>
++            This flag will cause the scheduler to run through the preemption
++            calculations but simply log when it wishes to preempt a task,
++            without actually preempting the task. 
++            Boolean property, default: false.
++            This property can be useful for
++            doing a "dry run" of preemption before enabling it to make sure
++            that you have not set timeouts too aggressively.
++            You will see preemption log messages in your JobTracker's output
++            log (<em>HADOOP_LOG_DIR/hadoop-jobtracker-*.log</em>).
++            The messages look as follows:<br/>
++            <code>Should preempt 2 tasks for job_20090101337_0001: tasksDueToMinShare = 2, tasksDueToFairShare = 0</code>
++          </td>
++          </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.update.interval
++          </td>
++          <td>
++            Interval at which to update fair share calculations. The default
++            of 500ms works well for clusters with fewer than 500 nodes, 
++            but larger values reduce load on the JobTracker for larger clusters.
++            Integer value in milliseconds, default: 500.
++          </td>
++          </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.preemption.interval
++          </td>
++          <td>
++            Interval at which to check for tasks to preempt. The default
++            of 15s works well for timeouts on the order of minutes.
++            It is not recommended to set timeouts much smaller than this
++            amount, but you can use this value to make preemption computations
++            run more often if you do set such timeouts. A value of less than
++            5s will probably be too small, however, as it becomes less than
++            the inter-heartbeat interval.
++            Integer value in milliseconds, default: 15000.
++          </td>
++          </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.weightadjuster
++          </td>
++          <td>
++          An extension point that lets you specify a class to adjust the 
++          weights of running jobs. This class should implement the 
++          <em>WeightAdjuster</em> interface. There is currently one example 
++          implementation - <em>NewJobWeightBooster</em>, which increases the 
++          weight of jobs for the first 5 minutes of their lifetime to let 
++          short jobs finish faster. To use it, set the weightadjuster 
++          property to the full class name, 
++          <code>org.apache.hadoop.mapred.NewJobWeightBooster</code>.
++          NewJobWeightBooster itself provides two parameters for setting the 
++          duration and boost factor.
+           <ul>
+-          <li>pool elements, which may contain elements for minMaps, 
+-          minReduces, maxRunningJobs (limit the number of jobs from the 
+-          pool to run at once),and weight (to share the cluster 
+-          non-proportionally with other pools).
+-          </li>
+-          <li>user elements, which may contain a maxRunningJobs to limit 
+-          jobs. Note that by default, there is a separate pool for each 
+-          user, so these may not be necessary; they are useful, however, 
+-          if you create a pool per user group or manually assign jobs 
+-          to pools.</li>
+-          <li>A userMaxJobsDefault element, which sets the default running 
+-          job limit for any users whose limit is not specified.</li>
++          <li><em>mapred.newjobweightbooster.factor</em>
++            Factor by which new jobs weight should be boosted. 
++            Default is 3.</li>
++          <li><em>mapred.newjobweightbooster.duration</em>
++            Boost duration in milliseconds. Default is 300000 for 5 minutes.</li>
+           </ul>
+-          <br/>
+-          Example Allocation file is listed below :<br/>
+-          <code>&lt;?xml version="1.0"?&gt; </code> <br/>
+-          <code>&lt;allocations&gt;</code> <br/> 
+-          <code>&nbsp;&nbsp;&lt;pool name="sample_pool"&gt;</code><br/>
+-          <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;minMaps&gt;5&lt;/minMaps&gt;</code><br/>
+-          <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;minReduces&gt;5&lt;/minReduces&gt;</code><br/>
+-          <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;weight&gt;2.0&lt;/weight&gt;</code><br/>
+-          <code>&nbsp;&nbsp;&lt;/pool&gt;</code><br/>
+-          <code>&nbsp;&nbsp;&lt;user name="sample_user"&gt;</code><br/>
+-          <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;maxRunningJobs&gt;6&lt;/maxRunningJobs&gt;</code><br/>
+-          <code>&nbsp;&nbsp;&lt;/user&gt;</code><br/>
+-          <code>&nbsp;&nbsp;&lt;userMaxJobsDefault&gt;3&lt;/userMaxJobsDefault&gt;</code><br/>
+-          <code>&lt;/allocations&gt;</code>
+-          <br/>
+-          This example creates a pool sample_pool with a guarantee of 5 map 
+-          slots and 5 reduce slots. The pool also has a weight of 2.0, meaning 
+-          it has a 2x higher share of the cluster than other pools (the default 
+-          weight is 1). Finally, the example limits the number of running jobs 
+-          per user to 3, except for sample_user, who can run 6 jobs concurrently. 
+-          Any pool not defined in the allocations file will have no guaranteed 
+-          capacity and a weight of 1.0. Also, any pool or user with no max 
+-          running jobs set in the file will be allowed to run an unlimited 
+-          number of jobs.
+-        </td>
+-        </tr>
+-        <tr>
+-        <td>
+-          mapred.fairscheduler.assignmultiple
+-        </td>
+-        <td>
+-          Allows the scheduler to assign both a map task and a reduce task 
+-          on each heartbeat, which improves cluster throughput when there 
+-          are many small tasks to run. Boolean value, default: false.
+-        </td>
+-        </tr>
+-        <tr>
+-        <td>
+-          mapred.fairscheduler.sizebasedweight
+-        </td>
+-        <td>
+-          Take into account job sizes in calculating their weights for fair 
+-          sharing.By default, weights are only based on job priorities. 
+-          Setting this flag to true will make them based on the size of the 
+-          job (number of tasks needed) as well,though not linearly 
+-          (the weight will be proportional to the log of the number of tasks 
+-          needed). This lets larger jobs get larger fair shares while still 
+-          providing enough of a share to small jobs to let them finish fast. 
+-          Boolean value, default: false.
+-        </td>
+-        </tr>
+-        <tr>
+-        <td>
+-          mapred.fairscheduler.poolnameproperty
+-        </td>
+-        <td>
+-          Specify which jobconf property is used to determine the pool that a
+-          job belongs in. String, default: user.name (i.e. one pool for each 
+-          user). Some other useful values to set this to are: <br/>
+-          <ul> 
+-            <li> group.name (to create a pool per Unix group).</li>
+-            <li>mapred.job.queue.name (the same property as the queue name in 
+-            <a href="capacity_scheduler.html">Capacity Scheduler</a>).</li>
++          </td>
++          </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.loadmanager
++          </td>
++          <td>
++            An extension point that lets you specify a class that determines 
++            how many maps and reduces can run on a given TaskTracker. This class 
++            should implement the LoadManager interface. By default the task caps 
++            in the Hadoop config file are used, but this option could be used to 
++            make the load based on available memory and CPU utilization for example.
++          </td>
++          </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.taskselector
++          </td>
++          <td>
++          An extension point that lets you specify a class that determines 
++          which task from within a job to launch on a given tracker. This can be 
++          used to change either the locality policy (e.g. keep some jobs within 
++          a particular rack) or the speculative execution algorithm (select 
++          when to launch speculative tasks). The default implementation uses 
++          Hadoop's default algorithms from JobInProgress.
++          </td>
++          </tr>
++          <!--
++          <tr>
++          <td>
++            mapred.fairscheduler.eventlog.enabled
++          </td>
++          <td>
++            Enable a detailed log of fair scheduler events, useful for
++            debugging.
++            This log is stored in <em>HADOOP_LOG_DIR/fairscheduler</em>.
++            Boolean value, default: false.
++          </td>
++          </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.dump.interval
++          </td>
++          <td>
++            If using the event log, this is the interval at which to dump
++            complete scheduler state (list of pools and jobs) to the log.
++            Integer value in milliseconds, default: 10000.
++          </td>
++          </tr>
++          -->
++        </table>
++      </section>  
++      <section>
++        <title>Allocation File Format</title>
++        <p>
++        The allocation file configures minimum shares, running job
++        limits, weights and preemption timeouts for each pool.
++        An example is provided in 
++        <em>HADOOP_HOME/conf/fair-scheduler.xml.template</em>.
++        The allocation file can contain the following types of elements:
++        </p>
++        <ul>
++        <li><em>pool</em> elements, which configure each pool.
++        These may contain the following sub-elements:
++          <ul>
++          <li><em>minMaps</em> and <em>minReduces</em>,
++            to set the pool's minimum share of task slots.</li>
++          <li><em>maxRunningJobs</em>, 
++          to limit the number of jobs from the 
++          pool to run at once (defaults to infinite).</li>
++          <li><em>weight</em>, to share the cluster 
++          non-proportionally with other pools (defaults to 1.0).</li>
++          <li><em>minSharePreemptionTimeout</em>, the
++            number of seconds the pool will wait before
++            killing other pools' tasks if it is below its minimum share
++            (defaults to infinite).</li>
+           </ul>
+-        </td>
+-        </tr>
+-        <tr>
+-        <td>
+-          mapred.fairscheduler.weightadjuster
+-        </td>
+-        <td>
+-        An extensibility point that lets you specify a class to adjust the 
+-        weights of running jobs. This class should implement the 
+-        <em>WeightAdjuster</em> interface. There is currently one example 
+-        implementation - <em>NewJobWeightBooster</em>, which increases the 
+-        weight of jobs for the first 5 minutes of their lifetime to let 
+-        short jobs finish faster. To use it, set the weightadjuster 
+-        property to the full class name, 
+-        <code>org.apache.hadoop.mapred.NewJobWeightBooster</code> 
+-        NewJobWeightBooster itself provides two parameters for setting the 
+-        duration and boost factor. <br/>
+-        <ol>
+-        <li> <em>mapred.newjobweightbooster.factor</em>
+-          Factor by which new jobs weight should be boosted. Default is 3</li>
+-        <li><em>mapred.newjobweightbooster.duration</em>
+-          Duration in milliseconds, default 300000 for 5 minutes</li>
+-        </ol>
+-        </td>
+-        </tr>
+-        <tr>
+-        <td>
+-          mapred.fairscheduler.loadmanager
+-        </td>
+-        <td>
+-          An extensibility point that lets you specify a class that determines 
+-          how many maps and reduces can run on a given TaskTracker. This class 
+-          should implement the LoadManager interface. By default the task caps 
+-          in the Hadoop config file are used, but this option could be used to 
+-          make the load based on available memory and CPU utilization for example.
+-        </td>
+-        </tr>
+-        <tr>
+-        <td>
+-          mapred.fairscheduler.taskselector:
+-        </td>
+-        <td>
+-        An extensibility point that lets you specify a class that determines 
+-        which task from within a job to launch on a given tracker. This can be 
+-        used to change either the locality policy (e.g. keep some jobs within 
+-        a particular rack) or the speculative execution algorithm (select 
+-        when to launch speculative tasks). The default implementation uses 
+-        Hadoop's default algorithms from JobInProgress.
+-        </td>
+-        </tr>
+-      </table>      
++        </li>
++        <li><em>user</em> elements, which may contain a 
++        <em>maxRunningJobs</em> element to limit 
++        jobs. Note that by default, there is a pool for each 
++        user, so per-user limits are not necessary.</li>
++        <li><em>poolMaxJobsDefault</em>, which sets the default running 
++        job limit for any pools whose limit is not specified.</li>
++        <li><em>userMaxJobsDefault</em>, which sets the default running 
++        job limit for any users whose limit is not specified.</li>
++        <li><em>defaultMinSharePreemptionTimeout</em>, 
++        which sets the default minimum share preemption timeout 
++        for any pools where it is not specified.</li>
++        <li><em>fairSharePreemptionTimeout</em>, 
++        which sets the preemption timeout used when jobs are below half
++        their fair share.</li>
++        </ul>
++        <p>
++        Pool and user elements only required if you are setting
++        non-default values for the pool/user. That is, you do not need to
++        declare all users and all pools in your config file before running
++        the fair scheduler. If a user or pool is not listed in the config file,
++        the default values for limits, preemption timeouts, etc will be used.
++        </p>
++        <p>
++        An example allocation file is given below : </p>
++        <p>
++        <code>&lt;?xml version="1.0"?&gt; </code> <br/>
++        <code>&lt;allocations&gt;</code> <br/> 
++        <code>&nbsp;&nbsp;&lt;pool name="sample_pool"&gt;</code><br/>
++        <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;minMaps&gt;5&lt;/minMaps&gt;</code><br/>
++        <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;minReduces&gt;5&lt;/minReduces&gt;</code><br/>
++        <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;weight&gt;2.0&lt;/weight&gt;</code><br/>
++        <code>&nbsp;&nbsp;&lt;/pool&gt;</code><br/>
++        <code>&nbsp;&nbsp;&lt;user name="sample_user"&gt;</code><br/>
++        <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;maxRunningJobs&gt;6&lt;/maxRunningJobs&gt;</code><br/>
++        <code>&nbsp;&nbsp;&lt;/user&gt;</code><br/>
++        <code>&nbsp;&nbsp;&lt;userMaxJobsDefault&gt;3&lt;/userMaxJobsDefault&gt;</code><br/>
++        <code>&lt;/allocations&gt;</code>
++        </p>
++        <p>
++        This example creates a pool sample_pool with a guarantee of 5 map 
++        slots and 5 reduce slots. The pool also has a weight of 2.0, meaning 
++        it has a 2x higher share of the cluster than other pools (the default 
++        weight is 1). Finally, the example limits the number of running jobs 
++        per user to 3, except for sample_user, who can run 6 jobs concurrently. 
++        Any pool not defined in the allocation file will have no guaranteed 
++        capacity and a weight of 1.0. Also, any pool or user with no max 
++        running jobs set in the file will be allowed to run an unlimited 
++        number of jobs.
++        </p>
++        <p>
++        A more detailed example file, setting preemption timeouts as well,
++        is available in <em>HADOOP_HOME/conf/fair-scheduler.xml.template</em>.
++        </p>
++      </section>
+     </section>
+     <section>
+     <title> Administration</title>
+@@ -280,14 +430,15 @@
+     </p> 
+     <ol>
+     <li>
+-      It is possible to modify pools' allocations 
+-      and user and pool running job limits at runtime by editing the allocation 
+-      config file. The scheduler will reload this file 10-15 seconds after it 
++      It is possible to modify minimum shares, limits, weights and preemption
++      timeouts at runtime by editing the allocation file.
++      The scheduler will reload this file 10-15 seconds after it 
+       sees that it was modified.
+      </li>
+      <li>
+      Current jobs, pools, and fair shares  can be examined through the 
+-     JobTracker's web interface, at  http://&lt;jobtracker URL&gt;/scheduler. 
++     JobTracker's web interface, at
++     <em>http://&lt;JobTracker URL&gt;/scheduler</em>. 
+      On this interface, it is also possible to modify jobs' priorities or 
+      move jobs from one pool to another and see the effects on the fair 
+      shares (this requires JavaScript).
+@@ -312,9 +463,9 @@
+      the job has had, but on average it will get its fair share amount.</li>
+      </ul>
+      <p>
+-     In addition, it is possible to turn on an "advanced" view for the web UI,
+-     by going to http://&lt;jobtracker URL&gt;/scheduler?advanced. This view shows 
+-     four more columns used for calculations internally:
++     In addition, it is possible to view an "advanced" version of the web 
++     UI by going to <em>http://&lt;JobTracker URL&gt;/scheduler?advanced</em>. 
++     This view shows four more columns:
+      </p>
+      <ul>
+      <li><em>Maps/Reduce Weight</em>: Weight of the job in the fair sharing 
+@@ -359,13 +510,30 @@
+      This capacity is divided among the jobs in that pool according again to 
+      their weights.
+      </p>
+-     <p>Finally, when limits on a user's running jobs or a pool's running jobs 
++     <p>When limits on a user's running jobs or a pool's running jobs 
+      are in place, we choose which jobs get to run by sorting all jobs in order 
+      of priority and then submit time, as in the standard Hadoop scheduler. Any 
+      jobs that fall after the user/pool's limit in this ordering are queued up 
+      and wait idle until they can be run. During this time, they are ignored 
+      from the fair sharing calculations and do not gain or lose deficit (their 
+      fair share is set to zero).</p>
++     <p>
++     Preemption is implemented by periodically checking whether jobs are
++     below their minimum share or below half their fair share. If a job has
++     been below its share for sufficiently long, it is allowed to kill
++     other jobs' tasks. The tasks chosen are the most-recently-launched
++     tasks from over-allocated jobs, to minimize the amount of wasted
++     computation.
++     </p>
++     <p>
++     Finally, the fair scheduler provides several extension points where
++     the basic functionality can be extended. For example, the weight
++     calculation can be modified to give a priority boost to new jobs,
++     implementing a "shortest job first" policy which reduces response
++     times for interactive jobs even further.
++     These extension points are listed in
++     <a href="#Advanced+Parameters">advanced mapred-site.xml properties</a>.
++     </p>
+     </section>
+   </body>  
+ </document>
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTrackerManager.java b/src/mapred/org/apache/hadoop/mapred/TaskTrackerManager.java
+index 0748f0c..76f5a1b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTrackerManager.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTrackerManager.java
+@@ -102,4 +102,14 @@ interface TaskTrackerManager {
+    * @param job JobInProgress object
+    */
+   public void failJob(JobInProgress job);
++
++  /**
++   * Mark the task attempt identified by taskid to be killed
++   * 
++   * @param taskid task to kill
++   * @param shouldFail whether to count the task as failed
++   * @return true if the task was found and successfully marked to kill
++   */
++  public boolean killTask(TaskAttemptID taskid, boolean shouldFail)
++      throws IOException;
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+index 802dcbe..9a62503 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+@@ -191,6 +191,12 @@ public class TestJobQueueTaskScheduler extends TestCase {
+     public void failJob(JobInProgress job) {
+       // do nothing
+     }
++
++    @Override
++    public boolean killTask(TaskAttemptID attemptId, boolean shouldFail) {
++      return true;
++    }
++
+     
+     // Test methods
+     
+diff --git a/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java b/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
+index 86853a4..be15243 100644
+--- a/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
++++ b/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
+@@ -154,6 +154,11 @@ public class TestParallelInitialization extends TestCase {
+         failJob(job);
+       }
+     }
++
++    public boolean killTask(TaskAttemptID attemptId, boolean shouldFail) {
++      return true;
++    }
++
+     // Test methods
+     
+     public synchronized void failJob(JobInProgress job) {
+-- 
+1.7.0.4
+

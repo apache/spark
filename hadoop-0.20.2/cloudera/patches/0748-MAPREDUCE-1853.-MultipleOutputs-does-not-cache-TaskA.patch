@@ -1,0 +1,57 @@
+From ba2c7a5b99915ca1431e3024dd80ac359c8005a1 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Tue, 14 Dec 2010 17:41:09 -0800
+Subject: [PATCH 0748/1179] MAPREDUCE-1853. MultipleOutputs does not cache TaskAttemptContext
+
+Reason: Bug
+Author: Torsten Curdt
+Ref: CDH-2010
+---
+ .../mapreduce/lib/output/MultipleOutputs.java      |   17 ++++++++++++++++-
+ 1 files changed, 16 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/output/MultipleOutputs.java b/src/mapred/org/apache/hadoop/mapreduce/lib/output/MultipleOutputs.java
+index 3161fe8..f3e34f5 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/output/MultipleOutputs.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/output/MultipleOutputs.java
+@@ -124,6 +124,11 @@ public class MultipleOutputs<KEYOUT, VALUEOUT> {
+    * Counters group used by the counters of MultipleOutputs.
+    */
+   private static final String COUNTERS_GROUP = MultipleOutputs.class.getName();
++  
++  /**
++   * Cache for the taskContexts
++   */
++  private Map<String, TaskAttemptContext> taskContexts = new HashMap<String, TaskAttemptContext>();
+ 
+   /**
+    * Checks if a named output name is valid token.
+@@ -416,14 +421,24 @@ public class MultipleOutputs<KEYOUT, VALUEOUT> {
+    // Create a taskAttemptContext for the named output with 
+    // output format and output key/value types put in the context
+   private TaskAttemptContext getContext(String nameOutput) throws IOException {
++
++    TaskAttemptContext taskContext = taskContexts.get(nameOutput);
++
++    if (taskContext != null) {
++      return taskContext;
++    }
++
+     // The following trick leverages the instantiation of a record writer via
+     // the job thus supporting arbitrary output formats.
+     Job job = new Job(context.getConfiguration());
+     job.setOutputFormatClass(getNamedOutputFormatClass(context, nameOutput));
+     job.setOutputKeyClass(getNamedOutputKeyClass(context, nameOutput));
+     job.setOutputValueClass(getNamedOutputValueClass(context, nameOutput));
+-    TaskAttemptContext taskContext = new TaskAttemptContext(
++    taskContext = new TaskAttemptContext(
+       job.getConfiguration(), context.getTaskAttemptID());
++    
++    taskContexts.put(nameOutput, taskContext);
++    
+     return taskContext;
+   }
+   
+-- 
+1.7.0.4
+

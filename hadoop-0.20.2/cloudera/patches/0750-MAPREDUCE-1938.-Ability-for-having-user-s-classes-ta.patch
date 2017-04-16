@@ -1,0 +1,332 @@
+From 4ad53f3de801a1a670d658d4d933d9576b99445c Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 17 Dec 2010 00:00:55 -0800
+Subject: [PATCH 0750/1179] MAPREDUCE-1938. Ability for having user's classes take precedence over
+ the system classes for tasks' classpath.
+
+It would be nice to have the ability in MapReduce to allow users to
+specify for their jobs alternate implementations of classes that are
+already defined in the MapReduce libraries. For example, an alternate
+implementation for CombineFileInputFormat.
+
+Reason: New feature
+Author: Devaraj Das
+Ref: DISTRO-64
+---
+ bin/hadoop                                         |   11 ++-
+ src/mapred/org/apache/hadoop/mapred/JobConf.java   |   20 +++
+ .../org/apache/hadoop/mapred/TaskRunner.java       |   20 +++-
+ src/mapred/org/apache/hadoop/mapreduce/Job.java    |   11 ++
+ .../org/apache/hadoop/mapreduce/JobContext.java    |   12 ++
+ .../hadoop/mapred/TestTaskClasspathPrecedence.java |  130 ++++++++++++++++++++
+ 6 files changed, 199 insertions(+), 5 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestTaskClasspathPrecedence.java
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 108e1a7..04a9da1 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -23,6 +23,12 @@
+ #
+ #   HADOOP_CLASSPATH Extra Java CLASSPATH entries.
+ #
++#   HADOOP_USER_CLASSPATH_FIRST      When defined, the HADOOP_CLASSPATH is 
++#                                    added in the beginning of the global
++#                                    classpath. Can be defined, for example,
++#                                    by doing 
++#                                    export HADOOP_USER_CLASSPATH_FIRST=true
++#
+ #   HADOOP_HEAPSIZE  The maximum amount of heap to use, in MB. 
+ #                    Default is 1000.
+ #
+@@ -117,6 +123,9 @@ fi
+ # CLASSPATH initially contains $HADOOP_CONF_DIR
+ CLASSPATH="${HADOOP_CONF_DIR}"
+ CLASSPATH=${CLASSPATH}:$JAVA_HOME/lib/tools.jar
++if [ "$HADOOP_USER_CLASSPATH_FIRST" != "" ] && [ "$HADOOP_CLASSPATH" != "" ] ; then
++  CLASSPATH=${CLASSPATH}:${HADOOP_CLASSPATH}
++fi
+ 
+ # for developers, add Hadoop classes to CLASSPATH
+ if [ -d "$HADOOP_HOME/build/classes" ]; then
+@@ -166,7 +175,7 @@ for f in $HADOOP_HOME/build/hadoop-tools-*.jar; do
+ done
+ 
+ # add user-specified CLASSPATH last
+-if [ "$HADOOP_CLASSPATH" != "" ]; then
++if [ "$HADOOP_USER_CLASSPATH_FIRST" = "" ] && [ "$HADOOP_CLASSPATH" != "" ]; then
+   CLASSPATH=${CLASSPATH}:${HADOOP_CLASSPATH}
+ fi
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobConf.java b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+index 838be86..35466e1 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobConf.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+@@ -42,6 +42,7 @@ import org.apache.hadoop.mapred.lib.IdentityReducer;
+ import org.apache.hadoop.mapred.lib.HashPartitioner;
+ import org.apache.hadoop.mapred.lib.KeyFieldBasedComparator;
+ import org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner;
++import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.security.Credentials;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.Tool;
+@@ -1450,6 +1451,25 @@ public class JobConf extends Configuration {
+   public void setProfileEnabled(boolean newValue) {
+     setBoolean("mapred.task.profile", newValue);
+   }
++  
++  /**
++   * Set the boolean property for specifying which classpath takes precedence -
++   * the user's one or the system one, when the tasks are launched
++   * @param value pass true if user's classes should take precedence
++   */
++  public void setUserClassesTakesPrecedence(boolean value) {
++    setBoolean(JobContext.MAPREDUCE_TASK_CLASSPATH_PRECEDENCE, value);
++  }
++  
++  /**
++   * Get the boolean value for the property that specifies which classpath
++   * takes precedence when tasks are launched. True - user's classes takes
++   * precedence. False - system's classes takes precedence.
++   * @return true if user's classes should take precedence
++   */
++  public boolean userClassesTakesPrecedence() {
++    return getBoolean(JobContext.MAPREDUCE_TASK_CLASSPATH_PRECEDENCE, false);
++  }
+ 
+   /**
+    * Get the profiler configuration arguments.
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index ba66a39..4b1c25b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -477,22 +477,34 @@ abstract class TaskRunner extends Thread {
+ 
+   /**
+    */
+-  private static List<String> getClassPaths(JobConf conf, File workDir,
++  static List<String> getClassPaths(JobConf conf, File workDir,
+       TaskDistributedCacheManager taskDistributedCacheManager)
+       throws IOException {
+     // Accumulates class paths for child.
+     List<String> classPaths = new ArrayList<String>();
+-    // start with same classpath as parent process
+-    appendSystemClasspaths(classPaths);
++    
++    boolean userClassesTakesPrecedence = conf.userClassesTakesPrecedence();
++    
++    if (!userClassesTakesPrecedence) {
++      // start with same classpath as parent process
++      appendSystemClasspaths(classPaths);
++    }
+ 
+     // include the user specified classpath
+     appendJobJarClasspaths(conf.getJar(), classPaths);
+     
+     // Distributed cache paths
+-    classPaths.addAll(taskDistributedCacheManager.getClassPaths());
++    if (taskDistributedCacheManager != null)
++      classPaths.addAll(taskDistributedCacheManager.getClassPaths());
+     
+     // Include the working dir too
+     classPaths.add(workDir.toString());
++
++    if (userClassesTakesPrecedence) {
++      // parent process's classpath is added last
++      appendSystemClasspaths(classPaths);
++    }
++    
+     return classPaths;
+   }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/Job.java b/src/mapred/org/apache/hadoop/mapreduce/Job.java
+index 526989c..86b2b56 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/Job.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/Job.java
+@@ -262,6 +262,17 @@ public class Job extends JobContext {
+     ensureState(JobState.DEFINE);
+     conf.setJobName(name);
+   }
++  
++  /**
++   * Set the boolean property for specifying which classpath takes precedence -
++   * the user's one or the system one, when the tasks are launched
++   * @param value pass true if user's classes should take precedence
++   */
++  public void setUserClassesTakesPrecedence(boolean value) {
++    ensureState(JobState.DEFINE);
++    conf.setUserClassesTakesPrecedence(value);
++  }
++  
+ 
+   /**
+    * Get the URL where some job progress information will be displayed.
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+index b9eff0c..eb752a7 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+@@ -67,6 +67,8 @@ public class JobContext {
+     "mapreduce.job.complete.cancel.delegation.tokens";
+   public static final String USER_LOG_RETAIN_HOURS = 
+     "mapred.userlog.retain.hours";
++  public static final String MAPREDUCE_TASK_CLASSPATH_PRECEDENCE = 
++    "mapreduce.task.classpath.user.precedence";
+   
+   /**
+    * The UserGroupInformation object that has a reference to the current user
+@@ -176,6 +178,16 @@ public class JobContext {
+   public String getJobName() {
+     return conf.getJobName();
+   }
++  
++  /**
++   * Get the boolean value for the property that specifies which classpath
++   * takes precedence when tasks are launched. True - user's classes takes
++   * precedence. False - system's classes takes precedence.
++   * @return true if user's classes should take precedence
++   */
++  public boolean userClassesTakesPrecedence() {
++    return conf.userClassesTakesPrecedence();
++  }
+ 
+   /**
+    * Get the {@link InputFormat} class for the job.
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskClasspathPrecedence.java b/src/test/org/apache/hadoop/mapred/TestTaskClasspathPrecedence.java
+new file mode 100644
+index 0000000..b81ed2d
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestTaskClasspathPrecedence.java
+@@ -0,0 +1,130 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import java.io.File;
++import java.io.IOException;
++import java.util.List;
++import java.util.Vector;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
++import org.apache.hadoop.util.StringUtils;
++import org.junit.After;
++import static org.junit.Assert.*;
++import org.junit.Before;
++import org.junit.Test;
++import org.apache.log4j.Level;
++
++public class TestTaskClasspathPrecedence {
++  private static File TEST_DIR = new File(System.getProperty("test.build.data",
++      "/tmp"), TestJvmManager.class.getSimpleName());
++  private static int MAP_SLOTS = 1;
++  private static int REDUCE_SLOTS = 1;
++  private TaskTracker tt;
++  private JvmManager jvmManager;
++  private JobConf ttConf;
++
++  private static class MyTaskRunner extends TaskRunner {
++    public MyTaskRunner(TaskInProgress tip, TaskTracker tracker, JobConf conf) {
++      super(tip, tracker, conf);
++    }
++    private static String SYSTEM_PATH_SEPARATOR = System.getProperty("path.separator");
++    private Vector<String> getVMArgs(TaskAttemptID taskid, File workDir,
++        List<String> classPaths, long logSize)
++        throws IOException {
++      Vector<String> vargs = new Vector<String>(8);
++      File jvm =                                  // use same jvm as parent
++        new File(new File(System.getProperty("java.home"), "bin"), "java");
++
++      vargs.add(jvm.toString());
++      vargs.add("-classpath");
++      String classPath = StringUtils.join(SYSTEM_PATH_SEPARATOR, classPaths);
++      vargs.add(classPath);
++      return vargs;
++    }
++    public Level getLogLevel(JobConf jobConf) {
++      return null;
++    }
++  }
++
++  @Before
++  public void setUp() {
++    TEST_DIR.mkdirs();
++  }
++
++  @After
++  public void tearDown() throws IOException {
++    FileUtil.fullyDelete(TEST_DIR);
++  }
++
++  public TestTaskClasspathPrecedence() throws Exception {
++    ttConf = new JobConf();
++    FileSystem fs = FileSystem.get(ttConf);
++    ttConf.setJar("build/test/testjar.jar");
++    Path dfsPath = new Path("build/test/lib/testjob.jar");
++    fs.copyFromLocalFile(new Path("build/test/testjar/testjob.jar"), dfsPath);
++    tt = new TaskTracker();
++    tt.setMaxMapSlots(MAP_SLOTS);
++    tt.setMaxReduceSlots(REDUCE_SLOTS);
++    jvmManager = new JvmManager(tt);
++    tt.setJvmManagerInstance(jvmManager);
++  }
++
++  @Test
++  public void testWithClasspathPrecedence() throws Throwable {
++    ttConf.set(JobContext.MAPREDUCE_TASK_CLASSPATH_PRECEDENCE, "true");
++    JobConf taskConf = new JobConf(ttConf);
++    TaskAttemptID attemptID = new TaskAttemptID("test", 0, true, 0, 0);
++    Task task = new MapTask(null, attemptID, 0, null, MAP_SLOTS);
++    task.setConf(taskConf);
++    TaskInProgress tip = tt.new TaskInProgress(task, taskConf);
++    MyTaskRunner taskRunner = new MyTaskRunner(tip, tt, taskConf);
++    final File workDir = new File(TEST_DIR, "work");
++    workDir.mkdir();
++    
++    List<String> classPaths = TaskRunner.getClassPaths(taskConf, workDir, null);
++    Vector<String> vargs = taskRunner.getVMArgs(task.getTaskID(), workDir, classPaths, 100);
++
++    String classpath = vargs.get(2);
++    String[] cp = classpath.split(":");
++    assertTrue(cp[0], cp[0].contains("testjob"));
++  }
++  
++  @Test
++  public void testWithoutClasspathPrecedence() throws Throwable {
++    ttConf.set(JobContext.MAPREDUCE_TASK_CLASSPATH_PRECEDENCE, "false");
++    JobConf taskConf = new JobConf(ttConf);
++    TaskAttemptID attemptID = new TaskAttemptID("test", 0, true, 0, 0);
++    Task task = new MapTask(null, attemptID, 0, null, MAP_SLOTS);
++    task.setConf(taskConf);
++    TaskInProgress tip = tt.new TaskInProgress(task, taskConf);
++    MyTaskRunner taskRunner = new MyTaskRunner(tip, tt, taskConf);
++    final File workDir = new File(TEST_DIR, "work");
++    workDir.mkdir();
++    
++    List<String> classPaths = TaskRunner.getClassPaths(taskConf, workDir, null);
++    Vector<String> vargs = taskRunner.getVMArgs(task.getTaskID(), workDir, classPaths, 100);
++
++    String classpath = vargs.get(2);
++    String[] cp = classpath.split(":");
++    assertFalse(cp[0], cp[0].contains("testjob"));
++  }
++}
+-- 
+1.7.0.4
+

@@ -1,0 +1,1172 @@
+From ee57d93dde68a072985a44e025594bbb8c9340b0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 27 Feb 2010 16:41:17 +0530
+Subject: [PATCH 0518/1179] MAPREDUCE-1493. Authorization for job-history pages
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437336/MAPREDUCE-1493-20100227.3-ydist.txt
+Author: Vinod K V
+Ref: CDH-648
+---
+ src/mapred/org/apache/hadoop/mapred/JSPUtil.java   |  144 +++++++++++++++--
+ .../org/apache/hadoop/mapred/JobHistory.java       |   40 ++++-
+ .../org/apache/hadoop/mapred/TaskLogServlet.java   |    6 +-
+ .../org/apache/hadoop/mapred/TestJobHistory.java   |   16 ++-
+ .../hadoop/mapred/TestWebUIAuthorization.java      |  172 ++++++++++++++++++--
+ src/webapps/job/analysejobhistory.jsp              |   46 +++---
+ src/webapps/job/jobconf_history.jsp                |   40 ++++-
+ src/webapps/job/jobdetails.jsp                     |   21 +--
+ src/webapps/job/jobdetailshistory.jsp              |   67 +++++----
+ src/webapps/job/jobhistory.jsp                     |    4 +-
+ src/webapps/job/jobtaskshistory.jsp                |   21 ++-
+ src/webapps/job/taskdetailshistory.jsp             |   29 ++--
+ src/webapps/job/taskstatshistory.jsp               |   20 ++-
+ 13 files changed, 491 insertions(+), 135 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+index 5fb404e..72e0f10 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
++++ b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+@@ -35,29 +35,26 @@ import javax.servlet.jsp.JspWriter;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+-import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.http.HtmlQuoting;
+ import org.apache.hadoop.mapred.JobHistory.JobInfo;
++import org.apache.hadoop.mapred.JobHistory.Keys;
+ import org.apache.hadoop.mapred.JobTracker.RetireJobInfo;
+ import org.apache.hadoop.mapreduce.JobACL;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.authorize.AccessControlList;
+ import org.apache.hadoop.util.ServletUtil;
+ import org.apache.hadoop.util.StringUtils;
+ 
+ class JSPUtil {
+   static final String PRIVATE_ACTIONS_KEY = "webinterface.private.actions";
+-  
+-  public static final Configuration conf = new Configuration();
+ 
+   //LRU based cache
+   private static final Map<String, JobInfo> jobHistoryCache = 
+     new LinkedHashMap<String, JobInfo>(); 
+ 
+-  private static final int CACHE_SIZE = 
+-    conf.getInt("mapred.job.tracker.jobhistory.lru.cache.size", 5);
+-
+   private static final Log LOG = LogFactory.getLog(JSPUtil.class);
+ 
+   /**
+@@ -410,8 +407,7 @@ class JSPUtil {
+             "<td id=\"job_" + rowId + "\">" + 
+             
+               (historyFileUrl == null ? "" :
+-              "<a href=\"jobdetailshistory.jsp?jobid=" + 
+-              info.status.getJobId() + "&logFile=" + historyFileUrl + "\">") + 
++              "<a href=\"jobdetailshistory.jsp?logFile=" + historyFileUrl + "\">") + 
+               
+               info.status.getJobId() + "</a></td>" +
+             
+@@ -445,19 +441,42 @@ class JSPUtil {
+     return sb.toString();
+   }
+ 
+-  static JobInfo getJobInfo(HttpServletRequest request, FileSystem fs) 
+-      throws IOException {
+-    String jobid = request.getParameter("jobid");
+-    String logFile = request.getParameter("logFile");
++  static Path getJobConfFilePath(Path logFile) {
++    String[] jobDetails = logFile.getName().split("_");
++    String jobId = getJobID(logFile.getName());
++    String jobUniqueString =
++        jobDetails[0] + "_" + jobDetails[1] + "_" + jobId;
++    Path logDir = logFile.getParent();
++    Path jobFilePath = new Path(logDir, jobUniqueString + "_conf.xml");
++    return jobFilePath;
++  }
++
++  /**
++   * Read a job-history log file and construct the corresponding {@link JobInfo}
++   * . Also cache the {@link JobInfo} for quick serving further requests.
++   * 
++   * @param logFile
++   * @param fs
++   * @param jobTracker
++   * @return JobInfo
++   * @throws IOException
++   */
++  static JobInfo getJobInfo(Path logFile, FileSystem fs,
++      JobTracker jobTracker) throws IOException {
++    String jobid = getJobID(logFile.getName());
++    JobInfo jobInfo = null;
+     synchronized(jobHistoryCache) {
+-      JobInfo jobInfo = jobHistoryCache.remove(jobid);
++      jobInfo = jobHistoryCache.remove(jobid);
+       if (jobInfo == null) {
+         jobInfo = new JobHistory.JobInfo(jobid);
+         LOG.info("Loading Job History file "+jobid + ".   Cache size is " +
+             jobHistoryCache.size());
+-        DefaultJobHistoryParser.parseJobTasks( logFile, jobInfo, fs) ; 
++        DefaultJobHistoryParser.parseJobTasks(logFile.toUri().getPath(),
++            jobInfo, logFile.getFileSystem(jobTracker.conf));
+       }
+       jobHistoryCache.put(jobid, jobInfo);
++      int CACHE_SIZE = 
++        jobTracker.conf.getInt("mapred.job.tracker.jobhistory.lru.cache.size", 5);
+       if (jobHistoryCache.size() > CACHE_SIZE) {
+         Iterator<Map.Entry<String, JobInfo>> it = 
+           jobHistoryCache.entrySet().iterator();
+@@ -465,7 +484,102 @@ class JSPUtil {
+         it.remove();
+         LOG.info("Job History file removed form cache "+removeJobId);
+       }
+-      return jobInfo;
++    }
++
++    jobTracker.getJobACLsManager().checkAccess(JobID.forName(jobid),
++        UserGroupInformation.getCurrentUser(), JobACL.VIEW_JOB,
++        jobInfo.get(Keys.USER), jobInfo.getJobACLs().get(JobACL.VIEW_JOB));
++    return jobInfo;
++  }
++
++  /**
++   * Check the access for users to view job-history pages.
++   * 
++   * @param request
++   * @param response
++   * @param jobTracker
++   * @param fs
++   * @param logFile
++   * @return the job if authorization is disabled or if the authorization checks
++   *         pass. Otherwise return null.
++   * @throws IOException
++   * @throws InterruptedException
++   * @throws ServletException
++   */
++  static JobInfo checkAccessAndGetJobInfo(HttpServletRequest request,
++      HttpServletResponse response, final JobTracker jobTracker,
++      final FileSystem fs, final Path logFile) throws IOException,
++      InterruptedException, ServletException {
++    String jobid = getJobID(logFile.getName());
++    String user = request.getRemoteUser();
++    JobInfo job = null;
++    if (user != null) {
++      try {
++        final UserGroupInformation ugi =
++            UserGroupInformation.createRemoteUser(user);
++        job =
++            ugi.doAs(new PrivilegedExceptionAction<JobHistory.JobInfo>() {
++              public JobInfo run() throws IOException {
++                // checks job view permission
++                JobInfo jobInfo = JSPUtil.getJobInfo(logFile, fs, jobTracker);
++                return jobInfo;
++              }
++            });
++      } catch (AccessControlException e) {
++        String errMsg =
++            String.format(
++                "User %s failed to view %s!<br><br>%s"
++                    + "<hr>"
++                    + "<a href=\"jobhistory.jsp\">Go back to JobHistory</a><br>"
++                    + "<a href=\"jobtracker.jsp\">Go back to JobTracker</a>",
++                user, jobid, e.getMessage());
++        JSPUtil.setErrorAndForward(errMsg, request, response);
++        return null;
++      }
++    } else {
++      // no authorization needed
++      job = JSPUtil.getJobInfo(logFile, fs, jobTracker);
++    }
++    return job;
++  }
++
++  static String getJobID(String historyFileName) {
++    String[] jobDetails = historyFileName.split("_");
++    return jobDetails[2] + "_" + jobDetails[3] + "_" + jobDetails[4];
++  }
++
++  static String getUserName(String historyFileName) {
++    String[] jobDetails = historyFileName.split("_");
++    return jobDetails[5];
++  }
++
++  static String getJobName(String historyFileName) {
++    String[] jobDetails = historyFileName.split("_");
++    return jobDetails[6];
++  }
++
++  /**
++   * Nicely print the Job-ACLs
++   * @param tracker
++   * @param jobAcls
++   * @param out
++   * @throws IOException
++   */
++  static void printJobACLs(JobTracker tracker,
++      Map<JobACL, AccessControlList> jobAcls, JspWriter out)
++      throws IOException {
++    if (tracker.isJobLevelAuthorizationEnabled()) {
++      // Display job-view-acls and job-modify-acls configured for this job
++      out.print("<b>Job-ACLs:</b><br>");
++      for (JobACL aclName : JobACL.values()) {
++        String aclConfigName = aclName.getAclName();
++        AccessControlList aclConfigured = jobAcls.get(aclName);
++        if (aclConfigured != null) {
++          String aclStr = aclConfigured.toString();
++          out.print("&nbsp;&nbsp;&nbsp;&nbsp;" + aclConfigName + ": "
++              + aclStr + "<br>");
++        }
++      }
+     }
+   }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index ef89250..6579b38 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -54,7 +54,9 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.PathFilter;
+ import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.mapreduce.JobACL;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.authorize.AccessControlList;
+ import org.apache.hadoop.util.StringUtils;
+ 
+ /**
+@@ -298,7 +300,8 @@ public class JobHistory {
+     FINISHED_MAPS, FINISHED_REDUCES, JOB_STATUS, TASKID, HOSTNAME, TASK_TYPE, 
+     ERROR, TASK_ATTEMPT_ID, TASK_STATUS, COPY_PHASE, SORT_PHASE, REDUCE_PHASE, 
+     SHUFFLE_FINISHED, SORT_FINISHED, COUNTERS, SPLITS, JOB_PRIORITY, HTTP_PORT, 
+-    TRACKER_NAME, STATE_STRING, VERSION, MAP_COUNTERS, REDUCE_COUNTERS
++    TRACKER_NAME, STATE_STRING, VERSION, MAP_COUNTERS, REDUCE_COUNTERS,
++    VIEW_JOB, MODIFY_JOB
+   }
+ 
+   /**
+@@ -680,6 +683,8 @@ public class JobHistory {
+   public static class JobInfo extends KeyValuePair{
+     
+     private Map<String, Task> allTasks = new TreeMap<String, Task>();
++    private Map<JobACL, AccessControlList> jobACLs =
++        new HashMap<JobACL, AccessControlList>();
+     
+     /** Create new JobInfo */
+     public JobInfo(String jobId){ 
+@@ -690,7 +695,31 @@ public class JobHistory {
+      * Returns all map and reduce tasks <taskid-Task>. 
+      */
+     public Map<String, Task> getAllTasks() { return allTasks; }
+-    
++
++    /**
++     * Get the job acls.
++     * 
++     * @return a {@link Map} from {@link JobACL} to {@link AccessControlList}
++     */
++    public Map<JobACL, AccessControlList> getJobACLs() {
++      return jobACLs;
++    }
++
++    @Override
++    public synchronized void handle(Map<Keys, String> values) {
++      // construct the ACLs
++      String viewJobACL = values.get(Keys.VIEW_JOB);
++      String modifyJobACL = values.get(Keys.MODIFY_JOB);
++      if (viewJobACL != null) {
++        jobACLs.put(JobACL.VIEW_JOB, new AccessControlList(viewJobACL));
++      }
++      if (modifyJobACL != null) {
++        jobACLs.put(JobACL.MODIFY_JOB, new AccessControlList(modifyJobACL));
++
++      }
++      super.handle(values);
++    }
++
+     /**
+      * Get the path of the locally stored job file
+      * @param jobId id of the job
+@@ -1211,9 +1240,12 @@ public class JobHistory {
+ 
+           //add to writer as well 
+           JobHistory.log(writers, RecordTypes.Job, 
+-                         new Keys[]{Keys.JOBID, Keys.JOBNAME, Keys.USER, Keys.SUBMIT_TIME, Keys.JOBCONF }, 
++                         new Keys[]{Keys.JOBID, Keys.JOBNAME, Keys.USER, Keys.SUBMIT_TIME, Keys.JOBCONF, 
++                                      Keys.VIEW_JOB, Keys.MODIFY_JOB }, 
+                          new String[]{jobId.toString(), jobName, user, 
+-                                      String.valueOf(submitTime) , jobConfPath}
++                                      String.valueOf(submitTime) , jobConfPath,
++                                      jobConf.get(JobACL.VIEW_JOB.getAclName(), ""),
++                                      jobConf.get(JobACL.MODIFY_JOB.getAclName(), "")}
+                         ); 
+              
+         }catch(IOException e){
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java b/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
+index 3c6354d..59b9c3d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
+@@ -232,8 +232,10 @@ public class TaskLogServlet extends HttpServlet {
+                      TaskLog.LogName.STDOUT, isCleanup);
+         printTaskLog(response, out, attemptId, start, end, plainText, 
+                      TaskLog.LogName.STDERR, isCleanup);
+-        printTaskLog(response, out, attemptId, start, end, plainText, 
+-                     TaskLog.LogName.SYSLOG, isCleanup);
++        if (haveTaskLog(attemptId, TaskLog.LogName.SYSLOG)) {
++          printTaskLog(response, out, attemptId, start, end, plainText,
++              TaskLog.LogName.SYSLOG, isCleanup);
++        }
+         if (haveTaskLog(attemptId, TaskLog.LogName.DEBUGOUT)) {
+           printTaskLog(response, out, attemptId, start, end, plainText, 
+                        TaskLog.LogName.DEBUGOUT, isCleanup);
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistory.java b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+index ad5a3df..4a5dc2f 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistory.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+@@ -38,6 +38,7 @@ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.mapred.JobHistory.*;
++import org.apache.hadoop.mapreduce.JobACL;
+ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -798,6 +799,14 @@ public class TestJobHistory extends TestCase {
+     validateJobLevelKeyValues(mr, job, jobInfo, conf);
+     validateTaskLevelKeyValues(mr, job, jobInfo);
+     validateTaskAttemptLevelKeyValues(mr, job, jobInfo);
++
++    // Also JobACLs should be correct
++    if (mr.getJobTrackerRunner().getJobTracker().isJobLevelAuthorizationEnabled()) {
++      assertEquals(conf.get(JobACL.VIEW_JOB.getAclName()),
++          jobInfo.getJobACLs().get(JobACL.VIEW_JOB).toString());
++      assertEquals(conf.get(JobACL.MODIFY_JOB.getAclName()),
++          jobInfo.getJobACLs().get(JobACL.MODIFY_JOB).toString());
++    }
+   }
+ 
+   public void testDoneFolderOnHDFS() throws IOException {
+@@ -900,6 +909,9 @@ public class TestJobHistory extends TestCase {
+       //set the done folder location
+       String doneFolder = TEST_ROOT_DIR + "history_done";
+       conf.set("mapred.job.tracker.history.completed.location", doneFolder);
++
++      // Enable ACLs so that they are logged to history
++      conf.setBoolean(JobConf.JOB_LEVEL_AUTHORIZATION_ENABLING_FLAG, true);
+       
+       mr = new MiniMRCluster(2, "file:///", 3, null, null, conf);
+ 
+@@ -915,6 +927,8 @@ public class TestJobHistory extends TestCase {
+ 
+       //Disable speculative execution
+       conf.setSpeculativeExecution(false);
++      conf.set(JobACL.VIEW_JOB.getAclName(), "user1,user2 group1,group2");
++      conf.set(JobACL.MODIFY_JOB.getAclName(), "user3,user4 group3,group4");
+ 
+       // Make sure that the job is not removed from memory until we do finish
+       // the validation of history file content
+@@ -983,7 +997,7 @@ public class TestJobHistory extends TestCase {
+ 
+   //Returns the file in the done folder
+   //Waits for sometime to get the file moved to done
+-  private static String getDoneFile(JobConf conf, JobID id, 
++  static String getDoneFile(JobConf conf, JobID id, 
+       Path doneDir) throws IOException {
+     String name = null;
+     for (int i = 0; name == null && i < 20; i++) {
+diff --git a/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java b/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java
+index 2726c6d..414732a 100644
+--- a/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java
++++ b/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java
+@@ -17,17 +17,22 @@
+  */
+ package org.apache.hadoop.mapred;
+ 
++import java.io.File;
+ import java.io.IOException;
+ import java.io.OutputStream;
+ import java.net.URL;
+ import java.net.HttpURLConnection;
++import java.net.URLEncoder;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ 
+ import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.http.TestHttpServer.DummyFilterInitializer;
++import org.apache.hadoop.mapred.JobHistory.Keys;
++import org.apache.hadoop.mapred.JobHistory.TaskAttempt;
+ import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.examples.SleepJob;
+@@ -42,6 +47,7 @@ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Properties;
++import java.util.Map.Entry;
+ 
+ public class TestWebUIAuthorization extends ClusterMapReduceTestCase {
+ 
+@@ -109,21 +115,28 @@ public class TestWebUIAuthorization extends ClusterMapReduceTestCase {
+    *     cannot view the job
+    * (5) other unauthorized users cannot view the job
+    */
+-  private void validateViewJob(String url, String method) throws IOException {
+-    assertEquals(HttpURLConnection.HTTP_OK,
+-        getHttpStatusCode(url, jobSubmitter, method));
+-    assertEquals(HttpURLConnection.HTTP_OK,
+-        getHttpStatusCode(url, superGroupMember, method));
+-    assertEquals(HttpURLConnection.HTTP_OK,
+-        getHttpStatusCode(url, mrOwner, method));
+-    assertEquals(HttpURLConnection.HTTP_OK,
+-        getHttpStatusCode(url, viewColleague, method));
+-    assertEquals(HttpURLConnection.HTTP_OK,
+-        getHttpStatusCode(url, viewAndModifyColleague, method));
+-    assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED,
+-        getHttpStatusCode(url, modifyColleague, method));
+-    assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED,
+-        getHttpStatusCode(url, unauthorizedUser, method));
++  private void validateViewJob(String url, String method)
++      throws IOException {
++    assertEquals("Incorrect return code for " + jobSubmitter,
++        HttpURLConnection.HTTP_OK, getHttpStatusCode(url, jobSubmitter,
++            method));
++    assertEquals("Incorrect return code for " + superGroupMember,
++        HttpURLConnection.HTTP_OK, getHttpStatusCode(url, superGroupMember,
++            method));
++    assertEquals("Incorrect return code for " + mrOwner,
++        HttpURLConnection.HTTP_OK, getHttpStatusCode(url, mrOwner, method));
++    assertEquals("Incorrect return code for " + viewColleague,
++        HttpURLConnection.HTTP_OK, getHttpStatusCode(url, viewColleague,
++            method));
++    assertEquals("Incorrect return code for " + viewAndModifyColleague,
++        HttpURLConnection.HTTP_OK, getHttpStatusCode(url,
++            viewAndModifyColleague, method));
++    assertEquals("Incorrect return code for " + modifyColleague,
++        HttpURLConnection.HTTP_UNAUTHORIZED, getHttpStatusCode(url,
++            modifyColleague, method));
++    assertEquals("Incorrect return code for " + unauthorizedUser,
++        HttpURLConnection.HTTP_UNAUTHORIZED, getHttpStatusCode(url,
++            unauthorizedUser, method));
+   }
+ 
+   /**
+@@ -237,6 +250,135 @@ public class TestWebUIAuthorization extends ClusterMapReduceTestCase {
+     }
+   }
+ 
++  public void testAuthorizationForJobHistoryPages() throws Exception {
++    JobConf conf = new JobConf();
++    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_GROUP_MAPPING,
++        MyGroupsProvider.class.getName());
++    Groups.getUserToGroupsMappingService(conf);
++    Properties props = new Properties();
++    props.setProperty("hadoop.http.filter.initializers",
++        DummyFilterInitializer.class.getName());
++    props.setProperty(JobConf.JOB_LEVEL_AUTHORIZATION_ENABLING_FLAG,
++        String.valueOf(true));
++    props.setProperty("dfs.permissions", "false");
++
++    props.setProperty(JobConf.MR_SUPERGROUP, "superGroup");
++
++    MyGroupsProvider.mapping.put(jobSubmitter, Arrays.asList("group1"));
++    MyGroupsProvider.mapping.put(viewColleague, Arrays.asList("group2"));
++    MyGroupsProvider.mapping.put(modifyColleague, Arrays.asList("group1"));
++    MyGroupsProvider.mapping.put(unauthorizedUser, Arrays.asList("evilSociety"));
++    MyGroupsProvider.mapping.put(superGroupMember, Arrays.asList("superGroup"));
++    MyGroupsProvider.mapping.put(viewAndModifyColleague, Arrays.asList("group3"));
++    mrOwner = UserGroupInformation.getCurrentUser().getShortUserName();
++    MyGroupsProvider.mapping.put(mrOwner, Arrays.asList(
++        new String[] { "group4", "group5" }));
++
++    startCluster(true, props);
++    MiniMRCluster cluster = getMRCluster();
++    int infoPort = cluster.getJobTrackerRunner().getJobTrackerInfoPort();
++
++    conf = new JobConf(cluster.createJobConf());
++    conf.set(JobContext.JOB_ACL_VIEW_JOB, viewColleague + " group3");
++
++    // Let us add group1 and group3 to modify-job-acl. So modifyColleague and
++    // viewAndModifyColleague will be able to modify the job
++    conf.set(JobContext.JOB_ACL_MODIFY_JOB, " group1,group3");
++
++    final SleepJob sleepJob = new SleepJob();
++    final JobConf jobConf = new JobConf(conf);
++    sleepJob.setConf(jobConf);
++    UserGroupInformation jobSubmitterUGI =
++        UserGroupInformation.createRemoteUser(jobSubmitter);
++    RunningJob job =
++        jobSubmitterUGI.doAs(new PrivilegedExceptionAction<RunningJob>() {
++          public RunningJob run() throws Exception {
++            JobClient jobClient = new JobClient(jobConf);
++            SleepJob sleepJob = new SleepJob();
++            sleepJob.setConf(jobConf);
++            JobConf jobConf =
++                sleepJob.setupJobConf(1, 0, 1000, 1, 1000, 1000);
++            RunningJob runningJob = jobClient.runJob(jobConf);
++            return runningJob;
++          }
++        });
++
++    JobID jobid = job.getID();
++
++    JobTracker jobTracker = getMRCluster().getJobTrackerRunner().getJobTracker();
++    JobInProgress jip = jobTracker.getJob(jobid);
++    JobConf finalJobConf = jip.getJobConf();
++    Path doneDir = JobHistory.getCompletedJobHistoryLocation();
++
++    // Wait for history file to be written
++    while(TestJobHistory.getDoneFile(finalJobConf, jobid, doneDir) == null) {
++      Thread.sleep(2000);
++    }
++
++    Path historyFilePath = new Path(doneDir,
++        JobHistory.JobInfo.getDoneJobHistoryFileName(finalJobConf, jobid));
++
++    String urlEncodedHistoryFileName = URLEncoder.encode(historyFilePath.toString());
++    String jtURL = "http://localhost:" + infoPort;
++
++    // validate access of jobdetails_history.jsp
++    String jobDetailsJSP =
++        jtURL + "/jobdetailshistory.jsp?logFile=" + urlEncodedHistoryFileName;
++    validateViewJob(jobDetailsJSP, "GET");
++
++    // validate accesses of jobtaskshistory.jsp
++    String jobTasksJSP =
++        jtURL + "/jobtaskshistory.jsp?logFile=" + urlEncodedHistoryFileName;
++    String[] taskTypes =
++        new String[] { "JOb_SETUP", "MAP", "REDUCE", "JOB_CLEANUP" };
++    String[] states =
++        new String[] { "all", "SUCCEEDED", "FAILED", "KILLED" };
++    for (String taskType : taskTypes) {
++      for (String state : states) {
++        validateViewJob(jobTasksJSP + "&taskType=" + taskType + "&status="
++            + state, "GET");
++      }
++    }
++
++    JobHistory.JobInfo jobInfo = new JobHistory.JobInfo(jobid.toString());
++
++    DefaultJobHistoryParser.JobTasksParseListener l =
++                   new DefaultJobHistoryParser.JobTasksParseListener(jobInfo);
++    JobHistory.parseHistoryFromFS(historyFilePath.toString().substring(5),
++        l, historyFilePath.getFileSystem(conf));
++
++    Map<String, org.apache.hadoop.mapred.JobHistory.Task> tipsMap = jobInfo.getAllTasks();
++    for (String tip : tipsMap.keySet()) {
++      // validate access of taskdetailshistory.jsp
++      validateViewJob(jtURL + "/taskdetailshistory.jsp?logFile="
++          + urlEncodedHistoryFileName + "&tipid=" + tip.toString(), "GET");
++
++      Map<String, TaskAttempt> attemptsMap =
++          tipsMap.get(tip).getTaskAttempts();
++      for (String attempt : attemptsMap.keySet()) {
++
++        // validate access to taskstatshistory.jsp
++        validateViewJob(jtURL + "/taskstatshistory.jsp?attemptid="
++            + attempt.toString() + "&logFile=" + urlEncodedHistoryFileName, "GET");
++
++        // validate access to tasklogs
++        validateViewJob(TaskLogServlet.getTaskLogUrl("localhost",
++            attemptsMap.get(attempt).get(Keys.HTTP_PORT),
++            attempt.toString()), "GET");
++      }
++    }
++
++    // validate access to analysejobhistory.jsp
++    String analyseJobHistoryJSP =
++        jtURL + "/analysejobhistory.jsp?logFile=" + urlEncodedHistoryFileName;
++    validateViewJob(analyseJobHistoryJSP, "GET");
++
++    // validate access of jobconf_history.jsp
++    String jobConfJSP =
++        jtURL + "/jobconf_history.jsp?logFile=" + urlEncodedHistoryFileName;
++    validateViewJob(jobConfJSP, "GET");
++  }
++
+   /**
+    * Starts a sleep job and tries to kill the job using jobdetails.jsp as
+    * (1) viewColleague (2) unauthorizedUser (3) modifyColleague
+diff --git a/src/webapps/job/analysejobhistory.jsp b/src/webapps/job/analysejobhistory.jsp
+index a885706..ecbf533 100644
+--- a/src/webapps/job/analysejobhistory.jsp
++++ b/src/webapps/job/analysejobhistory.jsp
+@@ -18,17 +18,25 @@
+ %>
+ <html>
+ <%
+-  String jobid = JobID.forName(request.getParameter("jobid")).toString();
+   String logFile = request.getParameter("logFile");
++  if (logFile == null) {
++    out.println("Missing job!!");
++    return;
++  }
+   String encodedLogFileName = JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
++  String jobid = JSPUtil.getJobID(new Path(encodedLogFileName).getName());
+   String numTasks = request.getParameter("numTasks");
+   int showTasks = 10 ; 
+   if (numTasks != null) {
+     showTasks = Integer.parseInt(numTasks);  
+   }
+   FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+-  JobHistory.JobInfo job = JSPUtil.getJobInfo(request, fs);
+-%>
++  JobTracker jobTracker = (JobTracker) application.getAttribute("job.tracker");
++  JobHistory.JobInfo job = JSPUtil.checkAccessAndGetJobInfo(request,
++      response, jobTracker, fs, new Path(logFile));
++  if (job == null) {
++    return;
++  }%>
+ <head>
+   <title>Analyze Job - Hadoop Job <%=jobid %></title>
+   <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
+@@ -36,7 +44,7 @@
+ </head>
+ 
+ <body>
+-<h2>Hadoop Job <a href="jobdetailshistory.jsp?jobid=<%=jobid%>&&logFile=<%=encodedLogFileName%>"><%=jobid %> </a></h2>
++<h2>Hadoop Job <a href="jobdetailshistory.jsp?logFile=<%=encodedLogFileName%>"><%=jobid %> </a></h2>
+ <b>User : </b> <%=HtmlQuoting.quoteHtmlChars(job.get(Keys.USER)) %><br/> 
+ <b>JobName : </b> <%=HtmlQuoting.quoteHtmlChars(job.get(Keys.JOBNAME)) %><br/> 
+ <b>JobConf : </b> <%=job.get(Keys.JOBCONF) %><br/> 
+@@ -110,7 +118,7 @@
+ %>
+ 
+ <h3>Time taken by best performing Map task 
+-<a href="taskdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>&taskid=<%=minMap.get(Keys.TASKID)%>">
++<a href="taskdetailshistory.jsp?logFile=<%=encodedLogFileName%>&tipid=<%=minMap.get(Keys.TASKID)%>">
+ <%=minMap.get(Keys.TASKID) %></a> : <%=StringUtils.formatTimeDiff(minMap.getLong(Keys.FINISH_TIME), minMap.getLong(Keys.START_TIME) ) %></h3>
+ <h3>Average time taken by Map tasks: 
+ <%=StringUtils.formatTimeDiff(avgMapTime, 0) %></h3>
+@@ -124,7 +132,7 @@
+   for (int i=0;i<showTasks && i<mapTasks.length; i++) {
+ %>
+     <tr>
+-    <td><a href="taskdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>&taskid=<%=mapTasks[i].get(Keys.TASKID)%>">
++    <td><a href="taskdetailshistory.jsp?logFile=<%=encodedLogFileName%>&tipid=<%=mapTasks[i].get(Keys.TASKID)%>">
+         <%=mapTasks[i].get(Keys.TASKID) %></a></td>
+     <td><%=StringUtils.formatTimeDiff(mapTasks[i].getLong(Keys.FINISH_TIME), mapTasks[i].getLong(Keys.START_TIME)) %></td>
+     </tr>
+@@ -147,8 +155,8 @@
+ %>
+ 
+ <h3>The last Map task 
+-<a href="taskdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>
+-&taskid=<%=lastMap.get(Keys.TASKID)%>"><%=lastMap.get(Keys.TASKID) %></a> 
++<a href="taskdetailshistory.jsp?logFile=<%=encodedLogFileName%>
++&tipid=<%=lastMap.get(Keys.TASKID)%>"><%=lastMap.get(Keys.TASKID) %></a> 
+ finished at (relative to the Job launch time): 
+ <%=StringUtils.getFormattedTimeWithDiff(dateFormat, 
+                               lastMap.getLong(Keys.FINISH_TIME), 
+@@ -160,9 +168,9 @@ finished at (relative to the Job launch time):
+   Arrays.sort(reduceTasks, cShuffle); 
+   JobHistory.Task minShuffle = reduceTasks[reduceTasks.length-1] ;
+ %>
+-<h3>Time taken by best performing shuffle
+-<a href="taskdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>
+-&taskid=<%=minShuffle.get(Keys.TASKID)%>"><%=minShuffle.get(Keys.TASKID)%></a> : 
++<h3>Time taken by best performing shufflejobId
++<a href="taskdetailshistory.jsp?logFile=<%=encodedLogFileName%>
++&tipid=<%=minShuffle.get(Keys.TASKID)%>"><%=minShuffle.get(Keys.TASKID)%></a> : 
+ <%=StringUtils.formatTimeDiff(minShuffle.getLong(Keys.SHUFFLE_FINISHED), 
+                               minShuffle.getLong(Keys.START_TIME) ) %></h3>
+ <h3>Average time taken by Shuffle: 
+@@ -176,8 +184,8 @@ finished at (relative to the Job launch time):
+   for (int i=0;i<showTasks && i<reduceTasks.length; i++) {
+ %>
+     <tr>
+-    <td><a href="taskdetailshistory.jsp?jobid=<%=jobid%>&logFile=
+-<%=encodedLogFileName%>&taskid=<%=reduceTasks[i].get(Keys.TASKID)%>">
++    <td><a href="taskdetailshistory.jsp?logFile=
++<%=encodedLogFileName%>&tipid=<%=reduceTasks[i].get(Keys.TASKID)%>">
+ <%=reduceTasks[i].get(Keys.TASKID) %></a></td>
+     <td><%=
+            StringUtils.formatTimeDiff(
+@@ -204,8 +212,8 @@ finished at (relative to the Job launch time):
+ %>
+ 
+ <h3>The last Shuffle  
+-<a href="taskdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>
+-&taskid=<%=lastShuffle.get(Keys.TASKID)%>"><%=lastShuffle.get(Keys.TASKID)%>
++<a href="taskdetailshistory.jsp?logFile=<%=encodedLogFileName%>
++&tipid=<%=lastShuffle.get(Keys.TASKID)%>"><%=lastShuffle.get(Keys.TASKID)%>
+ </a> finished at (relative to the Job launch time): 
+ <%=StringUtils.getFormattedTimeWithDiff(dateFormat,
+                               lastShuffle.getLong(Keys.SHUFFLE_FINISHED), 
+@@ -226,7 +234,7 @@ finished at (relative to the Job launch time):
+ %>
+ <hr/>
+ <h3>Time taken by best performing Reduce task : 
+-<a href="taskdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>&taskid=<%=minReduce.get(Keys.TASKID)%>">
++<a href="taskdetailshistory.jsp?logFile=<%=encodedLogFileName%>&tipid=<%=minReduce.get(Keys.TASKID)%>">
+ <%=minReduce.get(Keys.TASKID) %></a> : 
+ <%=StringUtils.formatTimeDiff(minReduce.getLong(Keys.FINISH_TIME),
+     minReduce.getLong(Keys.SHUFFLE_FINISHED) ) %></h3>
+@@ -243,7 +251,7 @@ finished at (relative to the Job launch time):
+   for (int i=0;i<showTasks && i<reduceTasks.length; i++) {
+ %>
+     <tr>
+-    <td><a href="taskdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>&taskid=<%=reduceTasks[i].get(Keys.TASKID)%>">
++    <td><a href="taskdetailshistory.jsp?logFile=<%=encodedLogFileName%>&tipid=<%=reduceTasks[i].get(Keys.TASKID)%>">
+         <%=reduceTasks[i].get(Keys.TASKID) %></a></td>
+     <td><%=StringUtils.formatTimeDiff(
+              reduceTasks[i].getLong(Keys.FINISH_TIME), 
+@@ -260,8 +268,8 @@ finished at (relative to the Job launch time):
+ %>
+ 
+ <h3>The last Reduce task 
+-<a href="taskdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>
+-&taskid=<%=lastReduce.get(Keys.TASKID)%>"><%=lastReduce.get(Keys.TASKID)%>
++<a href="taskdetailshistory.jsp?logFile=<%=encodedLogFileName%>
++&tipid=<%=lastReduce.get(Keys.TASKID)%>"><%=lastReduce.get(Keys.TASKID)%>
+ </a> finished at (relative to the Job launch time): 
+ <%=StringUtils.getFormattedTimeWithDiff(dateFormat,
+                               lastReduce.getLong(Keys.FINISH_TIME), 
+diff --git a/src/webapps/job/jobconf_history.jsp b/src/webapps/job/jobconf_history.jsp
+index a93290f..06d64f5 100644
+--- a/src/webapps/job/jobconf_history.jsp
++++ b/src/webapps/job/jobconf_history.jsp
+@@ -6,6 +6,10 @@
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.fs.*"
+   import="org.apache.hadoop.util.*"
++  import="org.apache.hadoop.mapreduce.JobACL"
++  import="org.apache.hadoop.security.UserGroupInformation"
++  import="org.apache.hadoop.security.authorize.AccessControlList"
++  import="org.apache.hadoop.security.AccessControlException"
+ %>
+ 
+ <%!	private static final long serialVersionUID = 1L;
+@@ -13,11 +17,16 @@
+ 
+ <%
+   JobTracker tracker = (JobTracker) application.getAttribute("job.tracker");
+-  String jobId = JobID.forName(request.getParameter("jobid")).toString();
+-  if (jobId == null) {
+-    out.println("<h2>Missing 'jobid' for fetching job configuration!</h2>");
+- 	return;
++
++  String logFileString = request.getParameter("logFile");
++  if (logFileString == null) {
++    out.println("<h2>Missing 'logFile' for fetching job configuration!</h2>");
++    return;
+   }
++
++  Path logFile = new Path(logFileString);
++  String jobId = JSPUtil.getJobID(logFile.getName()).toString();
++
+ %>
+   
+ <html>
+@@ -30,14 +39,31 @@
+ <h2>Job Configuration: JobId - <%= jobId %></h2><br>
+ 
+ <%
+-  Path logDir = new Path(request.getParameter("jobLogDir"));
+-  Path jobFilePath = new Path(logDir, 
+-                       request.getParameter("jobUniqueString") + "_conf.xml");
++  Path jobFilePath = JSPUtil.getJobConfFilePath(logFile);
+   FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+   FSDataInputStream jobFile = null; 
+   try {
+     jobFile = fs.open(jobFilePath);
+     JobConf jobConf = new JobConf(jobFilePath);
++    JobTracker jobTracker = (JobTracker) application.getAttribute("job.tracker");
++    String user = request.getRemoteUser();
++    if (user != null) {
++      try {
++        jobTracker.getJobACLsManager().checkAccess(JobID.forName(jobId),
++            UserGroupInformation.createRemoteUser(user), JobACL.VIEW_JOB,
++            jobConf.getUser(),
++            new AccessControlList(jobConf.get(JobACL.VIEW_JOB.getAclName())));
++        } catch (AccessControlException e) {
++          String errMsg =
++            user
++                + " is not authorized to view details of job "
++                + jobId
++                + "<hr><a href=\"jobhistory.jsp\">Go back to JobHistory</a><br>";
++        JSPUtil.setErrorAndForward(errMsg, request, response);
++        return;
++        }
++    }
++
+     XMLUtils.transform(
+         jobConf.getConfResourceAsInputStream("webapps/static/jobconf.xsl"),
+         jobFile, out);
+diff --git a/src/webapps/job/jobdetails.jsp b/src/webapps/job/jobdetails.jsp
+index a4488d7..379b708 100644
+--- a/src/webapps/job/jobdetails.jsp
++++ b/src/webapps/job/jobdetails.jsp
+@@ -269,8 +269,8 @@
+         out.println("<h2>Job " + jobId + " not known!</h2>");
+         return;
+       }
+-      String historyUrl = "/jobdetailshistory.jsp?jobid=" + jobId +
+-      "&logFile=" + JobHistory.JobInfo.encodeJobHistoryFilePath(historyFile);
++      String historyUrl = "/jobdetailshistory.jsp?logFile=" + 
++          JobHistory.JobInfo.encodeJobHistoryFilePath(historyFile);
+       response.sendRedirect(response.encodeRedirectURL(historyUrl));
+       return;
+     }
+@@ -285,21 +285,8 @@
+     out.print("<b>Job File:</b> <a href=\"jobconf.jsp?jobid=" + jobId + "\">" +
+         profile.getJobFile() + "</a><br>\n");
+ 
+-    if (tracker.isJobLevelAuthorizationEnabled()) {
+-      // Display job-view-acls and job-modify-acls configured for this job
+-      Map<JobACL, AccessControlList> jobAcls = status.getJobACLs();
+-      out.print("<b>Job-ACLs:</b><br>");
+-      for (JobACL aclName : JobACL.values()) {
+-        String aclConfigName = aclName.getAclName();
+-        AccessControlList aclConfigured = jobAcls.get(aclName);
+-        String aclStr = "";
+-        if (aclConfigured != null) {
+-          aclStr = aclConfigured.toString();
+-        }
+-        out.print("&nbsp;&nbsp;&nbsp;&nbsp;" + aclConfigName + ": "
+-                  + aclStr + "<br>");
+-      }
+-    }
++    Map<JobACL, AccessControlList> jobAcls = status.getJobACLs();
++    JSPUtil.printJobACLs(tracker, jobAcls, out);
+     out.print("<b>Job Setup:</b>");
+     printJobLevelTaskSummary(out, jobId, "setup", 
+                              job.getTasks(TaskType.JOB_SETUP));
+diff --git a/src/webapps/job/jobdetailshistory.jsp b/src/webapps/job/jobdetailshistory.jsp
+index 3b160cc..5df81f8 100644
+--- a/src/webapps/job/jobdetailshistory.jsp
++++ b/src/webapps/job/jobdetailshistory.jsp
+@@ -9,21 +9,28 @@
+   import="org.apache.hadoop.util.*"
+   import="java.text.*"
+   import="org.apache.hadoop.mapred.JobHistory.*"
++  import="java.security.PrivilegedExceptionAction"
++  import="org.apache.hadoop.security.AccessControlException"
++  import="org.apache.hadoop.mapreduce.JobACL"
++  import="org.apache.hadoop.security.authorize.AccessControlList"
+ %>
+ <%!	private static final long serialVersionUID = 1L;
+ %>
+ <%! static SimpleDateFormat dateFormat = new SimpleDateFormat("d-MMM-yyyy HH:mm:ss") ; %>
+ <%
+-    String jobid = JobID.forName(request.getParameter("jobid")).toString();
+     String logFile = request.getParameter("logFile");
+-	String encodedLogFileName = JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
+-	
+-    Path jobFile = new Path(logFile);
+-    String[] jobDetails = jobFile.getName().split("_");
+-    String jobUniqueString = jobDetails[0] + "_" +jobDetails[1] + "_" + jobid ;
++
++    String jobid = JSPUtil.getJobID(new Path(logFile).getName());
+ 	
+     FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+-    JobHistory.JobInfo job = JSPUtil.getJobInfo(request, fs);
++    JobTracker jobTracker = (JobTracker) application.getAttribute("job.tracker");
++    JobHistory.JobInfo job = JSPUtil.checkAccessAndGetJobInfo(request,
++        response, jobTracker, fs, new Path(logFile));
++    if (job == null) {
++      return;
++    }
++
++  	String encodedLogFileName = JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
+ %>
+ <html>
+ <head>
+@@ -38,9 +45,13 @@ Hadoop Job <%=jobid %> on History Viewer
+ <h2>Hadoop Job <%=jobid %> on <a href="jobhistory.jsp">History Viewer</a></h2>
+ 
+ <b>User: </b> <%=HtmlQuoting.quoteHtmlChars(job.get(Keys.USER)) %><br/> 
+-<b>JobName: </b> <%=HtmlQuoting.quoteHtmlChars(job.get(Keys.JOBNAME)) %><br/> 
+-<b>JobConf: </b> <a href="jobconf_history.jsp?jobid=<%=jobid%>&jobLogDir=<%=new Path(logFile).getParent().toString()%>&jobUniqueString=<%=jobUniqueString%>"> 
++<b>JobName: </b> <%=HtmlQuoting.quoteHtmlChars(job.get(Keys.JOBNAME)) %><br/>  
++<b>JobConf: </b> <a href="jobconf_history.jsp?logFile=<%=encodedLogFileName%>"> 
+                  <%=job.get(Keys.JOBCONF) %></a><br/> 
++<%         
++  Map<JobACL, AccessControlList> jobAcls = job.getJobACLs();
++  JSPUtil.printJobACLs(jobTracker, jobAcls, out);
++%> 
+ <b>Submitted At: </b> <%=StringUtils.getFormattedTimeWithDiff(dateFormat, job.getLong(Keys.SUBMIT_TIME), 0 )  %><br/> 
+ <b>Launched At: </b> <%=StringUtils.getFormattedTimeWithDiff(dateFormat, job.getLong(Keys.LAUNCH_TIME), job.getLong(Keys.SUBMIT_TIME)) %><br/>
+ <b>Finished At: </b>  <%=StringUtils.getFormattedTimeWithDiff(dateFormat, job.getLong(Keys.FINISH_TIME), job.getLong(Keys.LAUNCH_TIME)) %><br/>
+@@ -138,7 +149,7 @@ Hadoop Job <%=jobid %> on History Viewer
+       }
+     }
+ %>
+-<b><a href="analysejobhistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>">Analyse This Job</a></b> 
++<b><a href="analysejobhistory.jsp?logFile=<%=encodedLogFileName%>">Analyse This Job</a></b> 
+ <hr/>
+ <center>
+ <table>
+@@ -147,52 +158,52 @@ Hadoop Job <%=jobid %> on History Viewer
+ </tr>
+ <tr>
+ <th>Setup</th>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=all">
++    <th><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=all">
+         <%=totalSetups%></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=<%=Values.SUCCESS %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=<%=Values.SUCCESS %>">
+         <%=numFinishedSetups%></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=<%=Values.FAILED %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=<%=Values.FAILED %>">
+         <%=numFailedSetups%></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=<%=Values.KILLED %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=<%=Values.KILLED %>">
+         <%=numKilledSetups%></a></td>  
+     <td><%=StringUtils.getFormattedTimeWithDiff(dateFormat, setupStarted, 0) %></td>
+     <td><%=StringUtils.getFormattedTimeWithDiff(dateFormat, setupFinished, setupStarted) %></td>
+ </tr>
+ <tr>
+ <th>Map</th>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.MAP.name() %>&status=all">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.MAP.name() %>&status=all">
+         <%=totalMaps %></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.MAP.name() %>&status=<%=Values.SUCCESS %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.MAP.name() %>&status=<%=Values.SUCCESS %>">
+         <%=job.getInt(Keys.FINISHED_MAPS) %></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.MAP.name() %>&status=<%=Values.FAILED %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.MAP.name() %>&status=<%=Values.FAILED %>">
+         <%=numFailedMaps %></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.MAP.name() %>&status=<%=Values.KILLED %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.MAP.name() %>&status=<%=Values.KILLED %>">
+         <%=numKilledMaps %></a></td>
+     <td><%=StringUtils.getFormattedTimeWithDiff(dateFormat, mapStarted, 0) %></td>
+     <td><%=StringUtils.getFormattedTimeWithDiff(dateFormat, mapFinished, mapStarted) %></td>
+ </tr>
+ <tr>
+ <th>Reduce</th>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.REDUCE.name() %>&status=all">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.REDUCE.name() %>&status=all">
+         <%=totalReduces%></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.REDUCE.name() %>&status=<%=Values.SUCCESS %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.REDUCE.name() %>&status=<%=Values.SUCCESS %>">
+         <%=job.getInt(Keys.FINISHED_REDUCES)%></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.REDUCE.name() %>&status=<%=Values.FAILED %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.REDUCE.name() %>&status=<%=Values.FAILED %>">
+         <%=numFailedReduces%></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.REDUCE.name() %>&status=<%=Values.KILLED %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.REDUCE.name() %>&status=<%=Values.KILLED %>">
+         <%=numKilledReduces%></a></td>  
+     <td><%=StringUtils.getFormattedTimeWithDiff(dateFormat, reduceStarted, 0) %></td>
+     <td><%=StringUtils.getFormattedTimeWithDiff(dateFormat, reduceFinished, reduceStarted) %></td>
+ </tr>
+ <tr>
+ <th>Cleanup</th>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.CLEANUP.name() %>&status=all">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.CLEANUP.name() %>&status=all">
+         <%=totalCleanups%></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.CLEANUP.name() %>&status=<%=Values.SUCCESS %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.CLEANUP.name() %>&status=<%=Values.SUCCESS %>">
+         <%=numFinishedCleanups%></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.CLEANUP.name() %>&status=<%=Values.FAILED %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.CLEANUP.name() %>&status=<%=Values.FAILED %>">
+         <%=numFailedCleanups%></a></td>
+-    <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.CLEANUP.name() %>&status=<%=Values.KILLED %>">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.CLEANUP.name() %>&status=<%=Values.KILLED %>">
+         <%=numKilledCleanups%></a></td>  
+     <td><%=StringUtils.getFormattedTimeWithDiff(dateFormat, cleanupStarted, 0) %></td>
+     <td><%=StringUtils.getFormattedTimeWithDiff(dateFormat, cleanupFinished, cleanupStarted) %></td>
+@@ -284,7 +295,7 @@ Hadoop Job <%=jobid %> on History Viewer
+ <%
+         for (String t : failedTasks) {
+ %>
+-          <a href="taskdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>&taskid=<%=t %>"><%=t %></a>,&nbsp;
++          <a href="taskdetailshistory.jsp?logFile=<%=encodedLogFileName%>&tipid=<%=t %>"><%=t %></a>,&nbsp;
+ <%		  
+         }
+ %>	
+@@ -318,7 +329,7 @@ Hadoop Job <%=jobid %> on History Viewer
+ <%
+         for (String t : killedTasks) {
+ %>
+-          <a href="taskdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>&taskid=<%=t %>"><%=t %></a>,&nbsp;
++          <a href="taskdetailshistory.jsp?logFile=<%=encodedLogFileName%>&tipid=<%=t %>"><%=t %></a>,&nbsp;
+ <%		  
+         }
+ %>	
+diff --git a/src/webapps/job/jobhistory.jsp b/src/webapps/job/jobhistory.jsp
+index 6fbbbe6..58eaa18 100644
+--- a/src/webapps/job/jobhistory.jsp
++++ b/src/webapps/job/jobhistory.jsp
+@@ -269,8 +269,8 @@ window.location.href = url;
+       out.print("<tr>"); 
+       out.print("<td>" + trackerHostName + "</td>"); 
+       out.print("<td>" + new Date(Long.parseLong(trackerid)) + "</td>"); 
+-      out.print("<td>" + "<a href=\"jobdetailshistory.jsp?jobid=" + jobId + 
+-                "&logFile=" + URLEncoder.encode(logFile.toString(), "UTF-8") + "\">" + jobId + "</a></td>"); 
++      out.print("<td>" + "<a href=\"jobdetailshistory.jsp?logFile=" 
++          + URLEncoder.encode(logFile.toString()) + "\">" + jobId + "</a></td>");
+       out.print("<td>" + HtmlQuoting.quoteHtmlChars(jobName) + "</td>"); 
+       out.print("<td>" + HtmlQuoting.quoteHtmlChars(user) + "</td>"); 
+       out.print("</tr>");
+diff --git a/src/webapps/job/jobtaskshistory.jsp b/src/webapps/job/jobtaskshistory.jsp
+index aaa5f85..a11a67a 100644
+--- a/src/webapps/job/jobtaskshistory.jsp
++++ b/src/webapps/job/jobtaskshistory.jsp
+@@ -19,14 +19,19 @@
+ %>
+ 
+ <%	
+-  String jobid = JobID.forName(request.getParameter("jobid")).toString();
+   String logFile = request.getParameter("logFile");
+   String encodedLogFileName = JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
+-  String taskStatus = request.getParameter("status");
++  String jobid = JSPUtil.getJobID(new Path(logFile).getName());
++  String taskStatus = request.getParameter("status"); 
+   String taskType = request.getParameter("taskType"); 
+   
+   FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+-  JobHistory.JobInfo job = JSPUtil.getJobInfo(request, fs);
++  JobTracker jobTracker = (JobTracker) application.getAttribute("job.tracker");
++  JobHistory.JobInfo job = JSPUtil.checkAccessAndGetJobInfo(request,
++      response, jobTracker, fs, new Path(logFile));
++  if (job == null) {
++    return;
++  }
+   Map<String, JobHistory.Task> tasks = job.getAllTasks(); 
+ %>
+ <html>
+@@ -36,7 +41,7 @@
+   <link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ </head>
+ <body>
+-<h2><%=taskStatus%> <%=taskType %> task list for <a href="jobdetailshistory.jsp?jobid=<%=jobid%>&&logFile=<%=encodedLogFileName%>"><%=jobid %> </a></h2>
++<h2><%=taskStatus%> <%=taskType %> task list for <a href="jobdetailshistory.jsp?logFile=<%=encodedLogFileName%>"><%=jobid %> </a></h2>
+ <center>
+ <table class="jobtasks datatable">
+ <thead>
+@@ -50,7 +55,7 @@
+       for (JobHistory.TaskAttempt taskAttempt : taskAttempts.values()) {
+         if (taskStatus.equals(taskAttempt.get(Keys.TASK_STATUS)) || 
+           taskStatus.equals("all")){
+-          printTask(jobid, encodedLogFileName, taskAttempt, out); 
++          printTask(encodedLogFileName, taskAttempt, out); 
+         }
+       }
+     }
+@@ -59,11 +64,11 @@
+ </tbody>
+ </table>
+ <%!
+-  private void printTask(String jobid, String logFile,
++  private void printTask(String logFile,
+     JobHistory.TaskAttempt attempt, JspWriter out) throws IOException{
+     out.print("<tr>"); 
+-    out.print("<td>" + "<a href=\"taskdetailshistory.jsp?jobid=" + jobid + 
+-          "&logFile="+ logFile +"&taskid="+attempt.get(Keys.TASKID)+"\">" +
++    out.print("<td>" + "<a href=\"taskdetailshistory.jsp?logFile="+ logFile
++     +"&tipid="+attempt.get(Keys.TASKID)+"\">" +
+           attempt.get(Keys.TASKID) + "</a></td>");
+     out.print("<td>" + StringUtils.getFormattedTimeWithDiff(dateFormat, 
+           attempt.getLong(Keys.START_TIME), 0 ) + "</td>");
+diff --git a/src/webapps/job/taskdetailshistory.jsp b/src/webapps/job/taskdetailshistory.jsp
+index 296dafd..1c87757 100644
+--- a/src/webapps/job/taskdetailshistory.jsp
++++ b/src/webapps/job/taskdetailshistory.jsp
+@@ -16,23 +16,32 @@
+ %>
+ 
+ <%	
+-  String jobid = JobID.forName(request.getParameter("jobid")).toString();
+   String logFile = request.getParameter("logFile");
++  String tipid = request.getParameter("tipid");
++  if (logFile == null || tipid == null) {
++    out.println("Missing job!!");
++    return;
++  }
+   String encodedLogFileName = JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
+-  String taskid = request.getParameter("taskid"); 
++  String jobid = JSPUtil.getJobID(new Path(encodedLogFileName).getName());
+   FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+-  JobHistory.JobInfo job = JSPUtil.getJobInfo(request, fs);
+-  JobHistory.Task task = job.getAllTasks().get(taskid); 
++  JobTracker jobTracker = (JobTracker) application.getAttribute("job.tracker");
++  JobHistory.JobInfo job = JSPUtil.checkAccessAndGetJobInfo(request,
++      response, jobTracker, fs, new Path(logFile));
++  if (job == null) {
++    return;
++  }
++  JobHistory.Task task = job.getAllTasks().get(tipid); 
+   String type = task.get(Keys.TASK_TYPE);
+ %>
+ <html>
+ <head>
+-<title><%=taskid %> attempts for <%=jobid %></title>
++<title><%=tipid %> attempts for <%=jobid %></title>
+ <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
+ <link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ </head>
+ <body>
+-<h2><%=taskid %> attempts for <a href="jobdetailshistory.jsp?jobid=<%=jobid%>&&logFile=<%=encodedLogFileName%>"> <%=jobid %> </a></h2>
++<h2><%=tipid %> attempts for <a href="jobdetailshistory.jsp?logFile=<%=encodedLogFileName%>"> <%=jobid %> </a></h2>
+ <center>
+ <table class="jobtasks datatable">
+ <thead>
+@@ -117,12 +126,10 @@
+     if (counters != null) {
+       TaskAttemptID attemptId = 
+         TaskAttemptID.forName(taskAttempt.get(Keys.TASK_ATTEMPT_ID));
+-      TaskID taskId = attemptId.getTaskID();
+-      org.apache.hadoop.mapreduce.JobID jobId = taskId.getJobID();
++      TaskID tipid = attemptId.getTaskID();
++      org.apache.hadoop.mapreduce.JobID jobId = tipid.getJobID();
+       out.print("<td>" 
+-       + "<a href=\"/taskstatshistory.jsp?jobid=" + jobId
+-           + "&taskid=" + taskId
+-           + "&attemptid=" + attemptId
++       + "<a href=\"/taskstatshistory.jsp?attemptid=" + attemptId
+            + "&logFile=" + logFile + "\">"
+            + counters.size() + "</a></td>");
+     } else {
+diff --git a/src/webapps/job/taskstatshistory.jsp b/src/webapps/job/taskstatshistory.jsp
+index 633c2dd..37e4297 100644
+--- a/src/webapps/job/taskstatshistory.jsp
++++ b/src/webapps/job/taskstatshistory.jsp
+@@ -34,19 +34,27 @@
+ %>
+ 
+ <%
+-  String jobid = request.getParameter("jobid");
+   String attemptid = request.getParameter("attemptid");
+-  String taskid = request.getParameter("taskid");
++  if(attemptid == null) {
++    out.println("No attemptid found! Pass a 'attemptid' parameter in the request.");
++    return;
++  }
++  TaskID tipid = TaskAttemptID.forName(attemptid).getTaskID();
+   String logFile = request.getParameter("logFile");
+   String encodedLogFileName = 
+     JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
+-
++  String jobid = JSPUtil.getJobID(new Path(encodedLogFileName).getName());
+   Format decimal = new DecimalFormat();
+ 
+   FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+-  JobHistory.JobInfo job = JSPUtil.getJobInfo(request, fs);
++  JobTracker jobTracker = (JobTracker) application.getAttribute("job.tracker");
++  JobHistory.JobInfo job = JSPUtil.checkAccessAndGetJobInfo(request,
++      response, jobTracker, fs, new Path(logFile));
++  if (job == null) {
++    return;
++  }
+ 
+-  JobHistory.Task task = job.getAllTasks().get(taskid);
++  JobHistory.Task task = job.getAllTasks().get(tipid.toString());
+   JobHistory.TaskAttempt attempt = task.getTaskAttempts().get(attemptid);
+ 
+   Counters counters = 
+@@ -101,7 +109,7 @@
+ %>
+ 
+ <hr>
+-<a href="jobdetailshistory.jsp?jobid=<%=jobid%>&logFile=<%=encodedLogFileName%>">Go back to the job</a><br>
++<a href="jobdetailshistory.jsp?logFile=<%=encodedLogFileName%>">Go back to the job</a><br>
+ <a href="jobtracker.jsp">Go back to JobTracker</a><br>
+ <%
+ out.println(ServletUtil.htmlFooter());
+-- 
+1.7.0.4
+

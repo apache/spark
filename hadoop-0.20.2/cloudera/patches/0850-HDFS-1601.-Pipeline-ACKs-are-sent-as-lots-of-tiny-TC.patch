@@ -1,0 +1,30 @@
+From dbaa8cd7a1a81de7700dcec4517dbf2012906641 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Wed, 26 Jan 2011 21:24:38 -0800
+Subject: [PATCH 0850/1179] HDFS-1601. Pipeline ACKs are sent as lots of tiny TCP packets
+
+Reason: HBase performance
+Author: Todd Lipcon
+Ref: CDH-2627
+---
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index d90e1d3..2ab1780 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -283,8 +283,8 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+     Token<BlockTokenIdentifier> accessToken = new Token<BlockTokenIdentifier>();
+     accessToken.readFields(in);
+     DataOutputStream replyOut = null;   // stream to prev target
+-    replyOut = new DataOutputStream(
+-                   NetUtils.getOutputStream(s, datanode.socketWriteTimeout));
++    replyOut = new DataOutputStream(new BufferedOutputStream(
++                   NetUtils.getOutputStream(s, datanode.socketWriteTimeout)));
+     if (datanode.isBlockTokenEnabled) {
+       try {
+         datanode.blockTokenSecretManager.checkAccess(accessToken, null, block, 
+-- 
+1.7.0.4
+

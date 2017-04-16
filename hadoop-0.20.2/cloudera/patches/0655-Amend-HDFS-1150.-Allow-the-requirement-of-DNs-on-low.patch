@@ -1,0 +1,29 @@
+From f87ec798d3f48c701cdb24372ad15e7d269e580f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 27 Jul 2010 16:59:02 -0700
+Subject: [PATCH 0655/1179] Amend HDFS-1150. Allow the requirement of DNs on low ports to be relaxed by a config
+
+Reason: simplifies testing, and allows running with other security methods
+Author: Todd Lipcon
+Ref: CDH-648
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index f4465d2..45032f4 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -290,7 +290,8 @@ public class DataNode extends Configured
+   void startDataNode(Configuration conf, 
+                      AbstractList<File> dataDirs, SecureResources resources
+                      ) throws IOException {
+-    if(UserGroupInformation.isSecurityEnabled() && resources == null)
++    if(UserGroupInformation.isSecurityEnabled() && resources == null &&
++       conf.getBoolean("dfs.datanode.require.secure.ports", true))
+       throw new RuntimeException("Cannot start secure cluster without " +
+       		"privileged resources.");
+     
+-- 
+1.7.0.4
+

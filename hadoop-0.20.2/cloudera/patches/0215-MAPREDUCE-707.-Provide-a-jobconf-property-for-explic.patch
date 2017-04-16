@@ -1,0 +1,215 @@
+From 8e47288583fcdbdf649ddf3486bf201788e79202 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:50:51 -0800
+Subject: [PATCH 0215/1179] MAPREDUCE-707. Provide a jobconf property for explicitly assigning a job to a pool
+
+Description: A common use case of the fair scheduler is to have one pool per user, but then to define some special pools for various production jobs, import jobs, etc. Therefore, it would be nice if jobs went by default to the pool of the user who submitted them, but there was a setting to explicitly place a job in another pool. Today, this can be achieved through a sort of trick in the JobConf:
+
+<div class="code panel" style="border-width: 1px;"><div class="codeContent panelContent">
+<pre class="code-java">&lt;property&gt;
+  &lt;name&gt;mapred.fairscheduler.poolnameproperty&lt;/name&gt;
+  &lt;value&gt;pool.name&lt;/value&gt;
+&lt;/property&gt;
+
+&lt;property&gt;
+  &lt;name&gt;pool.name&lt;/name&gt;
+  &lt;value&gt;${user.name}&lt;/value&gt;
+&lt;/property&gt;</pre>
+</div></div>
+
+<p>This JIRA proposes to add a property called mapred.fairscheduler.pool that allows a job to be placed directly into a pool, avoiding the need for this trick.</p>
+Reason: Configuration improvement
+Author: Alan Heirich
+Ref: UNKNOWN
+---
+ .../java/org/apache/hadoop/mapred/PoolManager.java |   15 +++-
+ .../apache/hadoop/mapred/TestFairScheduler.java    |   82 ++++++++++++++++++++
+ .../documentation/content/xdocs/fair_scheduler.xml |   22 +++---
+ 3 files changed, 103 insertions(+), 16 deletions(-)
+
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+index 1598d53..5c323db 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+@@ -58,6 +58,8 @@ public class PoolManager {
+    */
+   public static final long ALLOC_RELOAD_WAIT = 5 * 1000; 
+ 
++  public static final String EXPLICIT_POOL_PROPERTY = "mapred.fairscheduler.pool";
++
+   private final FairScheduler scheduler;
+   
+   // Map and reduce minimum allocations for each pool
+@@ -423,7 +425,7 @@ public class PoolManager {
+    */
+   public synchronized void setPool(JobInProgress job, String pool) {
+     removeJob(job);
+-    job.getJobConf().set(poolNameProperty, pool);
++    job.getJobConf().set(EXPLICIT_POOL_PROPERTY, pool);
+     addJob(job);
+   }
+ 
+@@ -435,13 +437,16 @@ public class PoolManager {
+   }
+   
+   /**
+-   * Get the pool name for a JobInProgress from its configuration. This uses
+-   * the "project" property in the jobconf by default, or the property set with
+-   * "mapred.fairscheduler.poolnameproperty".
++   * Get the pool name for a JobInProgress from its configuration.  This uses
++   * the value of mapred.fairscheduler.pool if specified, otherwise the value 
++   * of the property named in mapred.fairscheduler.poolnameproperty if that is
++   * specified.  Otherwise if neither is specified it uses the "user.name" property 
++   * in the jobconf by default.
+    */
+   public String getPoolName(JobInProgress job) {
+     Configuration conf = job.getJobConf();
+-    return conf.get(poolNameProperty, Pool.DEFAULT_POOL_NAME).trim();
++    return conf.get(EXPLICIT_POOL_PROPERTY,
++      conf.get(poolNameProperty, Pool.DEFAULT_POOL_NAME)).trim();
+   }
+ 
+   /**
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index c1d522d..b396b1b 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -48,6 +48,7 @@ public class TestFairScheduler extends TestCase {
+       "test-pools").getAbsolutePath();
+   
+   private static final String POOL_PROPERTY = "pool";
++  private static final String EXPLICIT_POOL_PROPERTY = "mapred.fairscheduler.pool";
+   
+   private static int jobCounter;
+   
+@@ -2510,6 +2511,87 @@ public class TestFairScheduler extends TestCase {
+     checkAssignment("tt2", "attempt_test_0004_m_000000_0 on tt2");
+     checkAssignment("tt2", "attempt_test_0004_r_000000_0 on tt2");
+   }
++
++  /**
++   * This test uses the mapred.fairscheduler.pool property to assign jobs to pools.
++   */
++  public void testPoolAssignment() throws Exception {
++    // Set up pools file
++    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
++    out.println("<?xml version=\"1.0\"?>");
++    out.println("<allocations>");
++    out.println("<pool name=\"default\">");
++    out.println("<schedulingMode>fair</schedulingMode>");
++    out.println("</pool>");
++    out.println("<pool name=\"poolA\">");
++    out.println("<schedulingMode>fair</schedulingMode>");
++    out.println("</pool>");
++    out.println("</allocations>");
++    out.close();
++    scheduler.getPoolManager().reloadAllocs();
++    Pool defaultPool = scheduler.getPoolManager().getPool("default");
++    Pool poolA = scheduler.getPoolManager().getPool("poolA");
++ 
++    // Submit a job to the default pool.  All specifications take default values.
++    JobInProgress job1 = submitJob(JobStatus.RUNNING, 1, 3);
++
++    assertEquals(1,    defaultPool.getMapSchedulable().getDemand());
++    assertEquals(3,    defaultPool.getReduceSchedulable().getDemand());
++    assertEquals(0,    poolA.getMapSchedulable().getDemand());
++    assertEquals(0,    poolA.getReduceSchedulable().getDemand());
++
++    // Submit a job to the default pool and move it to poolA using setPool.
++    JobInProgress job2 = submitJob(JobStatus.RUNNING, 5, 7);
++
++    assertEquals(6,    defaultPool.getMapSchedulable().getDemand());
++    assertEquals(10,   defaultPool.getReduceSchedulable().getDemand());
++    assertEquals(0,    poolA.getMapSchedulable().getDemand());
++    assertEquals(0,    poolA.getReduceSchedulable().getDemand());
++
++    scheduler.getPoolManager().setPool(job2, "poolA");
++    assertEquals("poolA", scheduler.getPoolManager().getPoolName(job2));
++
++    defaultPool.getMapSchedulable().updateDemand();
++    defaultPool.getReduceSchedulable().updateDemand();
++    poolA.getMapSchedulable().updateDemand();
++    poolA.getReduceSchedulable().updateDemand();
++
++    assertEquals(1,    defaultPool.getMapSchedulable().getDemand());
++    assertEquals(3,    defaultPool.getReduceSchedulable().getDemand());
++    assertEquals(5,    poolA.getMapSchedulable().getDemand());
++    assertEquals(7,    poolA.getReduceSchedulable().getDemand());
++
++    // Submit a job to poolA by specifying mapred.fairscheduler.pool
++    JobConf jobConf = new JobConf(conf);
++    jobConf.setNumMapTasks(11);
++    jobConf.setNumReduceTasks(13);
++    jobConf.set(POOL_PROPERTY, "nonsense"); // test that this is overridden
++    jobConf.set(EXPLICIT_POOL_PROPERTY, "poolA");
++    JobInProgress job3 = new FakeJobInProgress(jobConf, taskTrackerManager,
++        null);
++    job3.getStatus().setRunState(JobStatus.RUNNING);
++    taskTrackerManager.submitJob(job3);
++
++    assertEquals(1,    defaultPool.getMapSchedulable().getDemand());
++    assertEquals(3,    defaultPool.getReduceSchedulable().getDemand());
++    assertEquals(16,   poolA.getMapSchedulable().getDemand());
++    assertEquals(20,   poolA.getReduceSchedulable().getDemand());
++
++    // Submit a job to poolA by specifying pool and not mapred.fairscheduler.pool
++    JobConf jobConf2 = new JobConf(conf);
++    jobConf2.setNumMapTasks(17);
++    jobConf2.setNumReduceTasks(19);
++    jobConf2.set(POOL_PROPERTY, "poolA");
++    JobInProgress job4 = new FakeJobInProgress(jobConf2, taskTrackerManager,
++        null);
++    job4.getStatus().setRunState(JobStatus.RUNNING);
++    taskTrackerManager.submitJob(job4);
++
++    assertEquals(1,    defaultPool.getMapSchedulable().getDemand());
++    assertEquals(3,    defaultPool.getReduceSchedulable().getDemand());
++    assertEquals(33,   poolA.getMapSchedulable().getDemand());
++    assertEquals(39,   poolA.getReduceSchedulable().getDemand());
++  }
+   
+   private void advanceTime(long time) {
+     clock.advance(time);
+diff --git a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+index ae6db31..a5eb0f8 100644
+--- a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
++++ b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+@@ -182,6 +182,15 @@
+           </tr>
+           <tr>
+           <td>
++            mapred.fairscheduler.pool
++          </td>
++          <td>
++            Specify the pool that a job belongs in.  
++            If this is specified then mapred.fairscheduler.poolnameproperty is ignored.
++          </td>
++          </tr>
++          <tr>
++          <td>
+             mapred.fairscheduler.poolnameproperty
+           </td>
+           <td>
+@@ -190,17 +199,8 @@
+             (i.e. one pool for each user). 
+             Another useful value is <em>group.name</em> to create a
+             pool per Unix group.
+-            Finally, a common setting is to use a non-standard property
+-            such as <em>pool.name</em> as the pool name property, and make it
+-            default to <em>user.name</em> through the following setting:<br/>
+-            <code>&lt;property&gt;</code><br/> 
+-            <code>&nbsp;&nbsp;&lt;name&gt;pool.name&lt;/name&gt;</code><br/>
+-            <code>&nbsp;&nbsp;&lt;value&gt;${user.name}&lt;/value&gt;</code><br/>
+-            <code>&lt;/property&gt;</code><br/>
+-            This allows you to specify the pool name explicitly for some jobs
+-            through the jobconf (e.g. passing <em>-Dpool.name=&lt;name&gt;</em>
+-            to <em>bin/hadoop jar</em>, while having the default be the user's
+-            pool.
++            mapred.fairscheduler.poolnameproperty is used only for jobs in which
++            mapred.fairscheduler.pool is not explicitly set.
+           </td>
+           </tr>
+         </table>
+-- 
+1.7.0.4
+

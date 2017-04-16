@@ -1,0 +1,53 @@
+From 1da8cc2964b488a55091e7b8b8f3a494ba4c1772 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Feb 2011 12:11:24 -0800
+Subject: [PATCH 0863/1179] MAPREDUCE-2321. Check for NativeIO at TT startup
+
+Reason: Easier failure diagnosis for secure TT
+Author: Todd Lipcon
+Ref: CDH-2623
+---
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   13 +++++++++++++
+ 1 files changed, 13 insertions(+), 0 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 4319326..3f90fe9 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -73,6 +73,7 @@ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.http.HttpServer;
+ import org.apache.hadoop.io.IntWritable;
++import org.apache.hadoop.io.nativeio.NativeIO;
+ import org.apache.hadoop.io.SecureIOUtils;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
+@@ -662,6 +663,15 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     DiskChecker.checkDir(TaskLog.getUserLogDir());
+   }
+ 
++  private void checkSecurityRequirements() throws IOException {
++    if (!UserGroupInformation.isSecurityEnabled()) {
++      return;
++    }
++    if (!NativeIO.isAvailable()) {
++      throw new IOException("Secure IO is necessary to run a secure task tracker.");
++    }
++  }
++
+   public static final String TT_USER_NAME = "mapreduce.tasktracker.kerberos.principal";
+   public static final String TT_KEYTAB_FILE =
+     "mapreduce.tasktracker.keytab.file";  
+@@ -690,6 +700,9 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     // local directories.
+     initializeDirectories();
+ 
++    // Check security requirements are met
++    checkSecurityRequirements();
++
+     // Clear out state tables
+     this.tasks.clear();
+     this.runningTasks = new LinkedHashMap<TaskAttemptID, TaskInProgress>();
+-- 
+1.7.0.4
+

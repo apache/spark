@@ -1,0 +1,79 @@
+From b7cba5f7ab2cb9f2240b45dd90c34f4974c5757a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Bruno=20Mah=C3=A9?= <bruno@cloudera.com>
+Date: Mon, 12 Jul 2010 20:17:48 -0700
+Subject: [PATCH 0321/1179] CDH-1085. Native libraries should be installed in /usr/lib64/ on 64bit redhat
+
+Description: On 64bit redhat, native libraries should be installed in /usr/lib64/ instead of
+/usr/lib/. This patch makes possible to override the destination of native libraries and will default to
+/usr/lib/.
+Reason: Bug
+Author: Bruno Mahe
+Ref: CDH-1085
+---
+ cloudera/install_hadoop.sh |   19 ++++++++++++-------
+ 1 files changed, 12 insertions(+), 7 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 04426cc..68a45e7 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -27,6 +27,7 @@ OPTS=$(getopt \
+   -l 'native-build-string:' \
+   -l 'installed-lib-dir:' \
+   -l 'lib-dir:' \
++  -l 'system-lib-dir:' \
+   -l 'src-dir:' \
+   -l 'etc-dir:' \
+   -l 'doc-dir:' \
+@@ -51,6 +52,9 @@ while true ; do
+         --lib-dir)
+         LIB_DIR=$2 ; shift 2
+         ;;
++        --system-lib-dir)
++        SYSTEM_LIB_DIR=$2 ; shift 2
++        ;;
+         --build-dir)
+         BUILD_DIR=$2 ; shift 2
+         ;;
+@@ -97,6 +101,7 @@ for var in CLOUDERA_SOURCE_DIR PREFIX BUILD_DIR APACHE_BRANCH; do
+ done
+ 
+ LIB_DIR=${LIB_DIR:-$PREFIX/usr/lib/hadoop-$APACHE_BRANCH}
++SYSTEM_LIB_DIR=${SYSTEM_LIB_DIR:-$PREFIX/usr/lib}
+ BIN_DIR=${BIN_DIR:-$PREFIX/usr/bin}
+ DOC_DIR=${DOC_DIR:-$PREFIX/usr/share/doc/hadoop-$APACHE_BRANCH}
+ MAN_DIR=${MAN_DIR:-$PREFIX/usr/man}
+@@ -243,15 +248,15 @@ EOF
+   cp -r ${BUILD_DIR}/lib/native/${NATIVE_BUILD_STRING} $LIB_DIR/lib/native/
+ 
+   # Pipes
+-  mkdir -p $PREFIX/usr/lib $PREFIX/usr/include
++  mkdir -p $PREFIX/$SYSTEM_LIB_DIR $PREFIX/usr/include
+   cp ${BUILD_DIR}/c++/${NATIVE_BUILD_STRING}/lib/libhadooppipes.a \
+       ${BUILD_DIR}/c++/${NATIVE_BUILD_STRING}/lib/libhadooputils.a \
+-      $PREFIX/usr/lib
++      $PREFIX/$SYSTEM_LIB_DIR
+   cp -r ${BUILD_DIR}/c++/${NATIVE_BUILD_STRING}/include/hadoop $PREFIX/usr/include/
+ 
+   # libhdfs
+-  cp ${BUILD_DIR}/c++/${NATIVE_BUILD_STRING}/lib/libhdfs.so.0.0.0 $PREFIX/usr/lib
+-  ln -sf libhdfs.so.0.0.0 $PREFIX/usr/lib/libhdfs.so.0
++  cp ${BUILD_DIR}/c++/${NATIVE_BUILD_STRING}/lib/libhdfs.so.0.0.0 $PREFIX/$SYSTEM_LIB_DIR
++  ln -sf libhdfs.so.0.0.0 $PREFIX/$SYSTEM_LIB_DIR/libhdfs.so.0
+ 
+   # libhdfs-dev - hadoop doesn't realy install these things in nice places :(
+   mkdir -p $PREFIX/usr/share/doc/libhdfs0-dev/examples
+@@ -260,7 +265,7 @@ EOF
+   cp ${HADOOP_SRC_DIR}/c++/libhdfs/hdfs_*.c $PREFIX/usr/share/doc/libhdfs0-dev/examples
+ 
+   #    This is somewhat unintuitive, but the -dev package has this symlink (see Debian Library Packaging Guide)
+-  ln -sf libhdfs.so.0.0.0 $PREFIX/usr/lib/libhdfs.so
+-  sed -e "s|^libdir='.*'|libdir='/usr/lib'|" \
+-      ${BUILD_DIR}/c++/${NATIVE_BUILD_STRING}/lib/libhdfs.la > $PREFIX/usr/lib/libhdfs.la
++  ln -sf libhdfs.so.0.0.0 $PREFIX/$SYSTEM_LIB_DIR/libhdfs.so
++  sed -e "s|^libdir='.*'|libdir=\"$SYSTEM_LIB_DIR\"|" \
++      ${BUILD_DIR}/c++/${NATIVE_BUILD_STRING}/lib/libhdfs.la > $PREFIX/$SYSTEM_LIB_DIR/libhdfs.la
+ fi
+-- 
+1.7.0.4
+

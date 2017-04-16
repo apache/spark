@@ -1,0 +1,105 @@
+From 565a64129238a55499661deda662d8bedab714b1 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Fri, 24 Feb 2012 16:02:52 -0800
+Subject: [PATCH 1145/1179] MAPREDUCE-2835. Make per-job counter limits configurable.
+
+Reason: Operator improvement
+Author: Tom White
+Ref: CDH-4505
+---
+ src/mapred/mapred-default.xml                      |   27 ++++++++++++++++++-
+ src/mapred/org/apache/hadoop/mapred/Counters.java  |   14 ++++++---
+ .../hadoop/mapred/TestUserDefinedCounters.java     |    2 +-
+ 3 files changed, 35 insertions(+), 8 deletions(-)
+
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index 4db4fe4..0f4d701 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -1221,13 +1221,36 @@
+   </description>
+ </property>
+ 
++<!--  end of node health script variables -->
++
+ <property>
+-  <name>mapreduce.job.counters.limit</name>
++  <name>mapreduce.job.counters.max</name>
+   <value>120</value>
+   <description>Limit on the number of counters allowed per job.
+   </description>
+ </property>
+ 
+-<!--  end of node health script variables -->
++<property>
++  <name>mapreduce.job.counters.groups.max</name>
++  <value>50</value>
++  <description>Limit on the number of counter groups allowed per job.
++  </description>
++</property>
++
++<property>
++  <name>mapreduce.job.counters.counter.name.max</name>
++  <value>64</value>
++  <description>Limit on the length of counter names in jobs. Names
++  exceeding this limit will be truncated.
++  </description>
++</property>
++
++<property>
++  <name>mapreduce.job.counters.group.name.max</name>
++  <value>128</value>
++  <description>Limit on the length of counter group names in jobs. Names
++  exceeding this limit will be truncated.
++  </description>
++</property>
+ 
+ </configuration>
+diff --git a/src/mapred/org/apache/hadoop/mapred/Counters.java b/src/mapred/org/apache/hadoop/mapred/Counters.java
+index c036850..e21b26c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Counters.java
++++ b/src/mapred/org/apache/hadoop/mapred/Counters.java
+@@ -59,18 +59,22 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+   private static char[] charsToEscape =  {GROUP_OPEN, GROUP_CLOSE, 
+                                           COUNTER_OPEN, COUNTER_CLOSE, 
+                                           UNIT_OPEN, UNIT_CLOSE};
++  private static final JobConf conf = new JobConf();
+   /** limit on the size of the name of the group **/
+-  private static final int GROUP_NAME_LIMIT = 128;
++  private static final int GROUP_NAME_LIMIT = 
++    conf.getInt("mapreduce.job.counters.group.name.max", 128);
+   /** limit on the size of the counter name **/
+-  private static final int COUNTER_NAME_LIMIT = 64;
++  private static final int COUNTER_NAME_LIMIT = 
++    conf.getInt("mapreduce.job.counters.counter.name.max", 64);
+   
+-  private static final JobConf conf = new JobConf();
+   /** limit on counters **/
+   public static int MAX_COUNTER_LIMIT = 
+-    conf.getInt("mapreduce.job.counters.limit", 120);
++    conf.getInt("mapreduce.job.counters.limit", // deprecated in 0.23
++        conf.getInt("mapreduce.job.counters.max", 120));
+ 
+   /** the max groups allowed **/
+-  static final int MAX_GROUP_LIMIT = 50;
++  public static final int MAX_GROUP_LIMIT = 
++    conf.getInt("mapreduce.job.counters.groups.max", 50);
+   
+   /** the number of current counters**/
+   private int numCounters = 0;
+diff --git a/src/test/org/apache/hadoop/mapred/TestUserDefinedCounters.java b/src/test/org/apache/hadoop/mapred/TestUserDefinedCounters.java
+index 44d96cc..4b85d3c 100644
+--- a/src/test/org/apache/hadoop/mapred/TestUserDefinedCounters.java
++++ b/src/test/org/apache/hadoop/mapred/TestUserDefinedCounters.java
+@@ -130,7 +130,7 @@ public class TestUserDefinedCounters extends ClusterMapReduceTestCase {
+     assertEquals(4,
+         runningJob.getCounters().getGroup("StringCounter")
+         .getCounter("MapRecords"));
+-    assertTrue(counters.getGroupNames().size() <= 51);
++    assertTrue(counters.getGroupNames().size() <= Counters.MAX_GROUP_LIMIT);
+     int i = 0;
+     while (counters.size() < Counters.MAX_COUNTER_LIMIT) {
+       counters.incrCounter("IncrCounter", "limit " + i, 2);
+-- 
+1.7.0.4
+

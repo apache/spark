@@ -1,0 +1,365 @@
+<?xml version="1.0"?>
+<!--
+  Copyright 2002-2004 The Apache Software Foundation
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!--
+Skin configuration file. This file contains details of your project,
+which will be used to configure the chosen Forrest skin.
+-->
+
+<!DOCTYPE skinconfig PUBLIC "-//APACHE//DTD Skin Configuration V0.6-3//EN" "http://forrest.apache.org/dtd/skinconfig-v06-3.dtd">
+<skinconfig>
+  <!-- To enable lucene search add provider="lucene" (default is google).
+    Add box-location="alt" to move the search box to an alternate location
+    (if the skin supports it) and box-location="all" to show it in all
+    available locations on the page.  Remove the <search> element to show
+    no search box. @domain will enable sitesearch for the specific domain with google.
+    In other words google will search the @domain for the query string.
+
+  -->
+  <search name="Lucene" domain="archive.cloudera.com" provider="google"/>
+
+  <!-- Disable the print link? If enabled, invalid HTML 4.0.1 -->
+  <disable-print-link>true</disable-print-link>  
+  <!-- Disable the PDF link? -->
+  <disable-pdf-link>false</disable-pdf-link>
+  <!-- Disable the POD link? -->
+  <disable-pod-link>true</disable-pod-link>
+  <!-- Disable the Text link? FIXME: NOT YET IMPLEMENETED. -->
+  <disable-txt-link>true</disable-txt-link>
+  <!-- Disable the xml source link? -->
+  <!-- The xml source link makes it possible to access the xml rendition
+    of the source frim the html page, and to have it generated statically.
+    This can be used to enable other sites and services to reuse the
+    xml format for their uses. Keep this disabled if you don't want other
+    sites to easily reuse your pages.-->
+  <disable-xml-link>true</disable-xml-link>
+
+  <!-- Disable navigation icons on all external links? -->
+  <disable-external-link-image>true</disable-external-link-image>
+
+  <!-- Disable w3c compliance links? 
+    Use e.g. align="center" to move the compliance links logos to 
+    an alternate location default is left.
+    (if the skin supports it) -->
+  <disable-compliance-links>true</disable-compliance-links>
+
+  <!-- Render mailto: links unrecognisable by spam harvesters? -->
+  <obfuscate-mail-links>false</obfuscate-mail-links>
+
+  <!-- Disable the javascript facility to change the font size -->
+  <disable-font-script>true</disable-font-script>
+
+  <!-- project logo -->
+  <project-name>Hadoop</project-name>
+  <project-description>Scalable Computing Platform</project-description>
+  <project-url>http://hadoop.apache.org/core/</project-url>
+  <project-logo>images/hadoop-logo-2.gif</project-logo>
+
+  <!-- group logo -->
+  <group-name>Hadoop</group-name>
+  <group-description>Apache Hadoop</group-description>
+  <group-url>http://hadoop.apache.org/</group-url>
+  <group-logo>images/hadoop-logo.jpg</group-logo>
+
+  <!-- optional host logo (e.g. sourceforge logo)
+       default skin: renders it at the bottom-left corner -->
+  <host-url></host-url>
+  <host-logo></host-logo>
+
+  <!-- relative url of a favicon file, normally favicon.ico -->
+  <favicon-url>images/favicon.ico</favicon-url>
+
+  <!-- The following are used to construct a copyright statement -->
+  <year>2008</year>
+  <vendor>The Apache Software Foundation.</vendor>
+  <copyright-link>http://www.apache.org/licenses/</copyright-link>
+
+  <!-- Some skins use this to form a 'breadcrumb trail' of links.
+    Use location="alt" to move the trail to an alternate location
+    (if the skin supports it).
+	  Omit the location attribute to display the trail in the default location.
+	  Use location="none" to not display the trail (if the skin supports it).
+    For some skins just set the attributes to blank.
+  -->
+  <trail>
+    <link1 name="Apache" href="http://www.apache.org/"/>
+    <link2 name="Hadoop" href="http://hadoop.apache.org/"/>
+    <link3 name="Core" href="http://hadoop.apache.org/core/"/>
+  </trail>
+
+  <!-- Configure the TOC, i.e. the Table of Contents.
+  @max-depth
+   how many "section" levels need to be included in the
+   generated Table of Contents (TOC). 
+  @min-sections
+   Minimum required to create a TOC.
+  @location ("page","menu","page,menu", "none")
+   Where to show the TOC.
+  -->
+  <toc max-depth="2" min-sections="1" location="page"/>
+
+  <!-- Heading types can be clean|underlined|boxed  -->
+  <headings type="clean"/>
+  
+  <!-- The optional feedback element will be used to construct a
+    feedback link in the footer with the page pathname appended:
+    <a href="@href">{@to}</a>
+  <feedback to="webmaster@foo.com"
+    href="mailto:webmaster@foo.com?subject=Feedback&#160;" >
+    Send feedback about the website to:
+  </feedback>
+    -->
+  <!--
+    extra-css - here you can define custom css-elements that are 
+    a. overriding the fallback elements or 
+    b. adding the css definition from new elements that you may have 
+       used in your documentation.
+    -->
+  <extra-css>
+    <!--Example of b. 
+        To define the css definition of a new element that you may have used
+        in the class attribute of a <p> node. 
+        e.g. <p class="quote"/>
+    -->
+    p.quote {
+      margin-left: 2em;
+      padding: .5em;
+      background-color: #f0f0f0;
+      font-family: monospace;
+    }
+    
+    <!--Headers -->
+	#content h1 {
+	  margin-bottom: .5em;
+	  font-size: 200%; color: black;
+	  font-family: arial;
+	}  
+    h2, .h3 { font-size: 195%; color: black; font-family: arial; }
+	h3, .h4 { font-size: 140%; color: black; font-family: arial; margin-bottom: 0.5em; }
+	h4, .h5 { font-size: 125%; color: black;  font-style: italic; font-weight: bold; font-family: arial; }
+	h5, h6 { font-size: 110%; color: #363636; font-weight: bold; } 
+   
+   <!--Code Background -->
+    pre.code {
+      margin-left: 0em;
+      padding: 0.5em;
+      background-color: rgb(241,239,231);
+      font-family: monospace;
+    }   
+    
+  </extra-css>
+
+  <colors>
+  <!-- These values are used for the generated CSS files. -->
+
+  <!-- Krysalis -->
+<!--
+    <color name="header"    value="#FFFFFF"/>
+
+    <color name="tab-selected" value="#a5b6c6" link="#000000" vlink="#000000" hlink="#000000"/>
+    <color name="tab-unselected" value="#F7F7F7"  link="#000000" vlink="#000000" hlink="#000000"/>
+    <color name="subtab-selected" value="#a5b6c6"  link="#000000" vlink="#000000" hlink="#000000"/>
+    <color name="subtab-unselected" value="#a5b6c6"  link="#000000" vlink="#000000" hlink="#000000"/>
+
+    <color name="heading" value="#a5b6c6"/>
+    <color name="subheading" value="#CFDCED"/>
+        
+    <color name="navstrip" value="#CFDCED" font="#000000" link="#000000" vlink="#000000" hlink="#000000"/>
+    <color name="toolbox" value="#a5b6c6"/>
+    <color name="border" value="#a5b6c6"/>
+        
+    <color name="menu" value="#F7F7F7" link="#000000" vlink="#000000" hlink="#000000"/>    
+    <color name="dialog" value="#F7F7F7"/>
+            
+    <color name="body"    value="#ffffff" link="#0F3660" vlink="#009999" hlink="#000066"/>
+    
+    <color name="table" value="#a5b6c6"/>    
+    <color name="table-cell" value="#ffffff"/>    
+    <color name="highlight" value="#ffff00"/>
+    <color name="fixme" value="#cc6600"/>
+    <color name="note" value="#006699"/>
+    <color name="warning" value="#990000"/>
+    <color name="code" value="#a5b6c6"/>
+        
+    <color name="footer" value="#a5b6c6"/>
+-->
+  
+  <!-- Forrest -->
+<!--
+    <color name="header"    value="#294563"/>
+
+    <color name="tab-selected" value="#4a6d8c" link="#0F3660" vlink="#0F3660" hlink="#000066"/>
+    <color name="tab-unselected" value="#b5c7e7" link="#0F3660" vlink="#0F3660" hlink="#000066"/>
+    <color name="subtab-selected" value="#4a6d8c" link="#0F3660" vlink="#0F3660" hlink="#000066"/>
+    <color name="subtab-unselected" value="#4a6d8c" link="#0F3660" vlink="#0F3660" hlink="#000066"/>
+
+    <color name="heading" value="#294563"/>
+    <color name="subheading" value="#4a6d8c"/>
+        
+    <color name="navstrip" value="#cedfef" font="#0F3660" link="#0F3660" vlink="#0F3660" hlink="#000066"/>
+    <color name="toolbox" value="#4a6d8c"/>
+    <color name="border" value="#294563"/>
+    
+    <color name="menu" value="#4a6d8c" font="#cedfef" link="#ffffff" vlink="#ffffff" hlink="#ffcf00"/>    
+    <color name="dialog" value="#4a6d8c"/>
+            
+    <color name="body" value="#ffffff"  link="#0F3660" vlink="#009999" hlink="#000066"/>
+    
+    <color name="table" value="#7099C5"/>    
+    <color name="table-cell" value="#f0f0ff"/>    
+    <color name="highlight" value="#ffff00"/>
+    <color name="fixme" value="#cc6600"/>
+    <color name="note" value="#006699"/>
+    <color name="warning" value="#990000"/>
+    <color name="code" value="#CFDCED"/>
+        
+    <color name="footer" value="#cedfef"/>
+-->
+
+  <!-- Collabnet --> 
+<!--
+    <color name="header"    value="#003366"/>
+
+    <color name="tab-selected" value="#dddddd" link="#555555" vlink="#555555" hlink="#555555"/>
+    <color name="tab-unselected" value="#999999" link="#ffffff" vlink="#ffffff" hlink="#ffffff"/>
+    <color name="subtab-selected" value="#cccccc" link="#000000" vlink="#000000" hlink="#000000"/>
+    <color name="subtab-unselected" value="#cccccc" link="#555555" vlink="#555555" hlink="#555555"/>
+
+    <color name="heading" value="#003366"/>
+    <color name="subheading" value="#888888"/>
+    
+    <color name="navstrip" value="#dddddd" font="#555555"/>
+    <color name="toolbox" value="#dddddd" font="#555555"/>
+    <color name="border" value="#999999"/>
+    
+    <color name="menu" value="#ffffff"/>    
+    <color name="dialog" value="#eeeeee"/>
+            
+    <color name="body"      value="#ffffff"/>
+    
+    <color name="table" value="#ccc"/>    
+    <color name="table-cell" value="#ffffff"/>   
+    <color name="highlight" value="#ffff00"/>
+    <color name="fixme" value="#cc6600"/>
+    <color name="note" value="#006699"/>
+    <color name="warning" value="#990000"/>
+    <color name="code" value="#003366"/>
+        
+    <color name="footer" value="#ffffff"/>
+-->
+ <!-- Lenya using pelt-->
+<!--
+    <color name="header" value="#ffffff"/>
+
+    <color name="tab-selected" value="#4C6C8F" link="#ffffff" vlink="#ffffff" hlink="#ffffff"/>
+    <color name="tab-unselected" value="#E5E4D9" link="#000000" vlink="#000000" hlink="#000000"/>
+    <color name="subtab-selected" value="#000000" link="#000000" vlink="#000000" hlink="#000000"/>
+    <color name="subtab-unselected" value="#E5E4D9" link="#000000" vlink="#000000" hlink="#000000"/>
+
+    <color name="heading" value="#E5E4D9"/>
+    <color name="subheading" value="#000000"/>
+    <color name="published" value="#4C6C8F" font="#FFFFFF"/>
+    <color name="feedback" value="#4C6C8F" font="#FFFFFF" align="center"/>
+    <color name="navstrip" value="#E5E4D9" font="#000000"/>
+
+    <color name="toolbox" value="#CFDCED" font="#000000"/>
+
+    <color name="border" value="#999999"/>
+    <color name="menu" value="#4C6C8F" font="#ffffff" link="#ffffff" vlink="#ffffff" hlink="#ffffff" current="#FFCC33" />    
+    <color name="menuheading" value="#cfdced" font="#000000" />
+    <color name="searchbox" value="#E5E4D9" font="#000000"/>
+    
+    <color name="dialog" value="#CFDCED"/>
+    <color name="body" value="#ffffff" />            
+    
+    <color name="table" value="#ccc"/>    
+    <color name="table-cell" value="#ffffff"/>   
+    <color name="highlight" value="#ffff00"/>
+    <color name="fixme" value="#cc6600"/>
+    <color name="note" value="#006699"/>
+    <color name="warning" value="#990000"/>
+    <color name="code" value="#003366"/>
+        
+    <color name="footer" value="#E5E4D9"/>
+-->
+  </colors>
+ 
+  <!-- Settings specific to PDF output. -->
+  <pdf>
+    <!-- 
+       Supported page sizes are a0, a1, a2, a3, a4, a5, executive,
+       folio, legal, ledger, letter, quarto, tabloid (default letter).
+       Supported page orientations are portrait, landscape (default
+       portrait).
+       Supported text alignments are left, right, justify (default left).
+    -->
+    <page size="letter" orientation="portrait" text-align="left"/>
+
+    <!--
+       Margins can be specified for top, bottom, inner, and outer
+       edges. If double-sided="false", the inner edge is always left
+       and the outer is always right. If double-sided="true", the
+       inner edge will be left on odd pages, right on even pages,
+       the outer edge vice versa.
+       Specified below are the default settings.
+    -->
+    <margins double-sided="false">
+      <top>1in</top>
+      <bottom>1in</bottom>
+      <inner>1.25in</inner>
+      <outer>1in</outer>
+    </margins>
+
+    <!--
+      Print the URL text next to all links going outside the file
+    -->
+    <show-external-urls>false</show-external-urls>
+
+    <!--
+      Disable the copyright footer on each page of the PDF.
+      A footer is composed for each page. By default, a "credit" with role=pdf
+      will be used, as explained below. Otherwise a copyright statement
+      will be generated. This latter can be disabled.
+    -->
+    <disable-copyright-footer>false</disable-copyright-footer>
+  </pdf>
+
+  <!-- Credits are typically rendered as a set of small clickable
+    images in the page footer.
+    Use box-location="alt" to move the credit to an alternate location
+    (if the skin supports it). 
+  -->
+  <credits>
+    <credit box-location="alt">
+      <name>Built with Apache Forrest</name>
+      <url>http://forrest.apache.org/</url>
+      <image>images/built-with-forrest-button.png</image>
+      <width>88</width>
+      <height>31</height>
+    </credit>
+    <!-- A credit with @role="pdf" will be used to compose a footer
+     for each page in the PDF, using either "name" or "url" or both.
+    -->
+    <!--
+    <credit role="pdf">
+      <name>Built with Apache Forrest</name>
+      <url>http://forrest.apache.org/</url>
+    </credit>
+    -->
+  </credits>
+
+</skinconfig>

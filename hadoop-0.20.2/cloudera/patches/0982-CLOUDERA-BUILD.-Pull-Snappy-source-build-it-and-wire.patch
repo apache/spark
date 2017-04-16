@@ -1,0 +1,169 @@
+From ec7e2867282ab51ad353ff6ed4f268425036a6e3 Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu00@gmail.com>
+Date: Fri, 24 Jun 2011 14:30:59 -0700
+Subject: [PATCH 0982/1179] CLOUDERA BUILD. Pull Snappy source, build it and wire it to Hadoop build
+
+---
+ cloudera/do-release-build   |   64 ++++++++++++++++++++++++++++++++++++++++++-
+ cloudera/getsnappysource.sh |   53 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 116 insertions(+), 1 deletions(-)
+ create mode 100755 cloudera/getsnappysource.sh
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 8fe6d1e..8b4960e 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -3,6 +3,9 @@
+ #
+ # Performs a release build
+ 
++#
++# Setup
++#
+ set -e
+ 
+ if [ $(uname -s) = "SunOS" ]; then
+@@ -26,6 +29,63 @@ JAVA64_HOME=${JAVA64_HOME:-$JAVA_HOME}
+ BIN_DIR=$(readlink -f $(dirname $0))
+ RELEASE_DIR=$BIN_DIR/..
+ 
++failIfNotOK() {
++  if [ $? != 0 ]; then
++    echo "Failed!"
++    exit $?
++  fi
++}
++
++# Clean build directory
++#
++BUILDDIR=${RELEASE_DIR}/build
++rm -rf ${BUILDDIR}
++failIfNotOK
++mkdir ${BUILDDIR}
++failIfNotOK
++
++#
++# Building Snappy
++#
++
++echo "Downloading Snappy"
++
++SNAPPY_VERSION=1.0.3
++
++# Get Snappy source
++#
++${RELEASE_DIR}/cloudera/getsnappysource.sh ${SNAPPY_VERSION} ${RELEASE_DIR}/cloudera ${BUILDDIR}
++failIfNotOK
++
++echo "Building Snappy"
++
++SNAPPY_DIR=${BUILDDIR}/snappy-${SNAPPY_VERSION}
++cd ${SNAPPY_DIR}
++failIfNotOK
++
++./configure
++failIfNotOK
++
++# Disable rpath
++# TODO: find the correct way of disabling RPATH when running configure
++#
++sed -i 's|^hardcode_libdir_flag_spec=.*|hardcode_libdir_flag_spec=""|g' libtool
++sed -i 's|^runpath_var=LD_RUN_PATH|runpath_var=DIE_RPATH_DIE|g' libtool
++
++SNAPPY_BUILDDIR=${SNAPPY_DIR}/build
++mkdir ${SNAPPY_BUILDDIR}
++
++LIBTOOL_VAR="LIBTOOL=libtool"
++if [ -f "/etc/SuSE-release" ]; then
++  LIBTOOL_VAR=""
++fi
++
++make install CXXFLAGS="-O2 -DNDEBUG" DESTDIR=${SNAPPY_BUILDDIR} ${LIBTOOL_VAR}
++failIfNotOK
++
++#
++# Building Hadoop
++#
+ cd $RELEASE_DIR
+ 
+ if [ -z "$SKIP_EXTRA_NATIVE" ]; then
+@@ -41,7 +101,7 @@ JAVA_HOME=$JAVA32_HOME \
+   -Dforrest.home=$FORREST_HOME \
+   -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+   -propertyfile cloudera/build.properties \
+-  clean task-controller package-native
++  task-controller package-native
+ 
+ JAVA_HOME=$JAVA64_HOME
+ fi
+@@ -67,6 +127,8 @@ ant \
+   -Dforrest.home=$FORREST_HOME \
+   -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+   -propertyfile cloudera/build.properties \
++  -Dsnappy.prefix=${SNAPPY_BUILDDIR}/usr/local \
++  -Dbundle.snappy=true \
+   compile-core-native compile-c++ compile-c++-examples task-controller tar
+ 
+ if [ -z "$SKIP_MVN_EXPLICIT" ]; then
+diff --git a/cloudera/getsnappysource.sh b/cloudera/getsnappysource.sh
+new file mode 100755
+index 0000000..221a161
+--- /dev/null
++++ b/cloudera/getsnappysource.sh
+@@ -0,0 +1,53 @@
++#!/bin/sh
++#
++#  Licensed to Cloudera, Inc. under one or more contributor license
++#  agreements.  See the NOTICE file distributed with this work for
++#  additional information regarding copyright ownership.  Cloudera,
++#  Inc. licenses this file to you under the Apache License, Version
++#  2.0 (the "License"); you may not use this file except in compliance
++#  with the License.  You may obtain a copy of the License at
++#
++#  http://www.apache.org/licenses/LICENSE-2.0
++#
++#  Unless required by applicable law or agreed to in writing, software
++#  distributed under the License is distributed on an "AS IS" BASIS,
++#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++#  See the License for the specific language governing permissions and
++#  limitations under the License.
++
++#
++# Copyright (c) 2011 Cloudera, inc.
++#
++
++failIfNotOK() {
++  if [ $? != 0 ]; then
++    echo "Failed!"
++    exit $?
++  fi
++}
++
++SNAPPY_VERSION=$1
++CACHEDIR=$2
++BUILDDIR=$3
++
++SNAPPY_SRC_TAR=snappy-${SNAPPY_VERSION}.tar.gz
++SNAPPY_SRC_TAR_URL="http://snappy.googlecode.com/files/${SNAPPY_SRC_TAR}"
++
++SNAPPY_SRC_TAR_PATH=${CACHEDIR}/${SNAPPY_SRC_TAR}
++
++if [ ! -f ${SNAPPY_SRC_TAR_PATH} ]
++then
++  cd ${BUILDDIR}
++  failIfNotOK
++  wget ${SNAPPY_SRC_TAR_URL}
++  failIfNotOK
++  SNAPPY_SRC_TAR_PATH=${BUILDDIR}/${SNAPPY_SRC_TAR}
++fi
++
++cd ${BUILDDIR}
++failIfNotOK
++
++tar xzf ${SNAPPY_SRC_TAR_PATH}
++failIfNotOK
++
++exit 0
+-- 
+1.7.0.4
+

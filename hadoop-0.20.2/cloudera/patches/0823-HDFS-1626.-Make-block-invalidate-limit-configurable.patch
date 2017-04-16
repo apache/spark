@@ -1,0 +1,111 @@
+From 4098a214be838238a9879f7f978e34e89b736986 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 18:01:15 -0800
+Subject: [PATCH 0823/1179] HDFS-1626. Make block invalidate limit configurable
+
+Author: Tsz Wo (Nicholas) Sze
+Ref: CDH-2622
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    2 ++
+ .../apache/hadoop/hdfs/protocol/FSConstants.java   |    3 ---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   11 +++++++++--
+ .../server/namenode/TestHeartbeatHandling.java     |    7 ++++---
+ 4 files changed, 15 insertions(+), 8 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index b40580e..dba2a80 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -185,6 +185,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final long    DFS_BLOCKREPORT_INTERVAL_MSEC_DEFAULT = 21600000;
+   public static final String  DFS_BLOCKREPORT_INITIAL_DELAY_KEY = "dfs.blockreport.initialDelay";
+   public static final int     DFS_BLOCKREPORT_INITIAL_DELAY_DEFAULT = 0;
++  public static final String  DFS_BLOCK_INVALIDATE_LIMIT_KEY = "dfs.block.invalidate.limit";
++  public static final int     DFS_BLOCK_INVALIDATE_LIMIT_DEFAULT = 1000;
+ 
+   //Keys with no defaults
+   public static final String  DFS_DATANODE_PLUGINS_KEY = "dfs.datanode.plugins";
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
+index 76237c6..5617c1e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
+@@ -26,9 +26,6 @@ import org.apache.hadoop.conf.Configuration;
+ public interface FSConstants {
+   public static int MIN_BLOCKS_FOR_WRITE = 5;
+ 
+-  // Chunk the block Invalidate message
+-  public static final int BLOCK_INVALIDATE_CHUNK = 1000;
+-
+   // Long that indicates "leave current quota unchanged"
+   public static final long QUOTA_DONT_SET = Long.MAX_VALUE;
+   public static final long QUOTA_RESET = -1L;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index c903588..a78ac91 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -304,11 +304,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   private final GenerationStamp generationStamp = new GenerationStamp();
+ 
+   // Ask Datanode only up to this many blocks to delete.
+-  private int blockInvalidateLimit = FSConstants.BLOCK_INVALIDATE_CHUNK;
++  private int blockInvalidateLimit = DFSConfigKeys.DFS_BLOCK_INVALIDATE_LIMIT_DEFAULT;
+ 
+   // precision of access times.
+   private long accessTimePrecision = 0;
+-
++  
+   /**
+    * FSNamesystem constructor.
+    */
+@@ -466,8 +466,15 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       conf.getInt("dfs.replication.interval", 3) * 1000L;
+     this.defaultBlockSize = conf.getLong("dfs.block.size", DEFAULT_BLOCK_SIZE);
+     this.maxFsObjects = conf.getLong("dfs.max.objects", 0);
++
++    //default limit
+     this.blockInvalidateLimit = Math.max(this.blockInvalidateLimit, 
+                                          20*(int)(heartbeatInterval/1000));
++    //use conf value if it is set.
++    this.blockInvalidateLimit = conf.getInt(
++        DFSConfigKeys.DFS_BLOCK_INVALIDATE_LIMIT_KEY, this.blockInvalidateLimit);
++    LOG.info(DFSConfigKeys.DFS_BLOCK_INVALIDATE_LIMIT_KEY + "=" + this.blockInvalidateLimit);
++
+     this.accessTimePrecision = conf.getLong("dfs.access.time.precision", 0);
+     this.supportAppends = conf.getBoolean("dfs.support.append", false);
+     this.isAccessTokenEnabled = conf.getBoolean(
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestHeartbeatHandling.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestHeartbeatHandling.java
+index 0e91172..17fb9bf 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestHeartbeatHandling.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestHeartbeatHandling.java
+@@ -2,7 +2,10 @@ package org.apache.hadoop.hdfs.server.namenode;
+ 
+ import java.util.ArrayList;
+ 
++import junit.framework.TestCase;
++
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.server.common.GenerationStamp;
+@@ -11,8 +14,6 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeCommand;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
+ 
+-import junit.framework.TestCase;
+-
+ /**
+  * Test if FSNamesystem handles heartbeat right
+  */
+@@ -33,7 +34,7 @@ public class TestHeartbeatHandling extends TestCase {
+       
+       final int REMAINING_BLOCKS = 1;
+       final int MAX_REPLICATE_LIMIT = conf.getInt("dfs.max-repl-streams", 2);
+-      final int MAX_INVALIDATE_LIMIT = FSNamesystem.BLOCK_INVALIDATE_CHUNK;
++      final int MAX_INVALIDATE_LIMIT = DFSConfigKeys.DFS_BLOCK_INVALIDATE_LIMIT_DEFAULT;
+       final int MAX_INVALIDATE_BLOCKS = 2*MAX_INVALIDATE_LIMIT+REMAINING_BLOCKS;
+       final int MAX_REPLICATE_BLOCKS = 2*MAX_REPLICATE_LIMIT+REMAINING_BLOCKS;
+       final DatanodeDescriptor[] ONE_TARGET = new DatanodeDescriptor[1];
+-- 
+1.7.0.4
+

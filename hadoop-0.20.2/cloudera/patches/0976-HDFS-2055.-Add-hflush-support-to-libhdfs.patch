@@ -1,0 +1,100 @@
+From 1f3e7f44a9c6f56b4a2921faa82f0d81321dbd64 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 22 Jun 2011 10:54:00 -0700
+Subject: [PATCH 0976/1179] HDFS-2055. Add hflush support to libhdfs.
+
+Reason: New Feature
+Author: Travis Crawford
+Ref: DISTRO-257
+---
+ src/c++/libhdfs/hdfs.c      |   34 ++++++++++++++++++++++++++++++++++
+ src/c++/libhdfs/hdfs.h      |   10 ++++++++++
+ src/c++/libhdfs/hdfs_test.c |    6 ++++++
+ 3 files changed, 50 insertions(+), 0 deletions(-)
+
+diff --git a/src/c++/libhdfs/hdfs.c b/src/c++/libhdfs/hdfs.c
+index 36a7c87..77d8d78 100644
+--- a/src/c++/libhdfs/hdfs.c
++++ b/src/c++/libhdfs/hdfs.c
+@@ -1006,6 +1006,40 @@ int hdfsFlush(hdfsFS fs, hdfsFile f)
+ 
+ 
+ 
++int hdfsHFlush(hdfsFS fs, hdfsFile f)
++{
++    //Get the JNIEnv* corresponding to current thread
++    JNIEnv* env = getJNIEnv();
++    if (env == NULL) {
++      errno = EINTERNAL;
++      return -1;
++    }
++
++    //Parameters
++    jobject jOutputStream = (jobject)(f ? f->file : 0);
++
++    //Caught exception
++    jthrowable jExc = NULL;
++
++    //Sanity check
++    if (!f || f->type != OUTPUT) {
++        errno = EBADF;
++        return -1;
++    }
++
++    // NB: Use sync, which has been deprecated in favor of hflush,
++    // however hflush is not available in 0.20.
++    if (invokeMethod(env, NULL, &jExc, INSTANCE, jOutputStream,
++                     HADOOP_OSTRM, "sync", "()V") != 0) {
++        errno = errnoFromException(jExc, env, HADOOP_OSTRM "::sync");
++        return -1;
++    }
++
++    return 0;
++}
++
++
++
+ int hdfsAvailable(hdfsFS fs, hdfsFile f)
+ {
+     // JAVA EQUIVALENT
+diff --git a/src/c++/libhdfs/hdfs.h b/src/c++/libhdfs/hdfs.h
+index 6a01084..54c30b2 100644
+--- a/src/c++/libhdfs/hdfs.h
++++ b/src/c++/libhdfs/hdfs.h
+@@ -240,6 +240,16 @@ extern  "C" {
+ 
+ 
+     /**
++     * hdfsHFlush - Flush out the data in client's user buffer. After the
++     * return of this call, new readers will see the data.
++     * @param fs configured filesystem handle
++     * @param file file handle
++     * @return 0 on success, -1 on error and sets errno
++     */
++    int hdfsHFlush(hdfsFS fs, hdfsFile file);
++
++
++    /**
+      * hdfsAvailable - Number of bytes that can be read from this
+      * input stream without blocking.
+      * @param fs The configured filesystem handle.
+diff --git a/src/c++/libhdfs/hdfs_test.c b/src/c++/libhdfs/hdfs_test.c
+index 855d703..ee6d7bd 100644
+--- a/src/c++/libhdfs/hdfs_test.c
++++ b/src/c++/libhdfs/hdfs_test.c
+@@ -95,6 +95,12 @@ int main(int argc, char **argv) {
+         }
+         fprintf(stderr, "Flushed %s successfully!\n", writePath); 
+ 
++        if (hdfsHFlush(fs, writeFile)) {
++            fprintf(stderr, "Failed to 'hflush' %s\n", writePath);
++            exit(-1);
++        }
++        fprintf(stderr, "HFlushed %s successfully!\n", writePath);
++
+         hdfsCloseFile(fs, writeFile);
+     }
+ 
+-- 
+1.7.0.4
+

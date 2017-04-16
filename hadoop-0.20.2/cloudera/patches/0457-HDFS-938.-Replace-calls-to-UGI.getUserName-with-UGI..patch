@@ -1,0 +1,382 @@
+From d012efa36429328941a04742bd6febd35d3875ef Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 5 Feb 2010 23:06:29 +0000
+Subject: [PATCH 0457/1179] HDFS-938. Replace calls to UGI.getUserName() with UGI.getShortUserName()
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435015/HDFS-938-BP20-2.patch
+Author: Jakob Homan
+Ref: CDH-648
+---
+ .../hadoop/hdfsproxy/ProxyFileDataServlet.java     |    2 +-
+ .../apache/hadoop/hdfs/DistributedFileSystem.java  |    2 +-
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |    4 ++--
+ .../hadoop/hdfs/security/AccessTokenHandler.java   |    2 +-
+ .../hadoop/hdfs/server/namenode/DfsServlet.java    |    4 ++--
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   12 ++++++------
+ .../hdfs/server/namenode/FSPermissionChecker.java  |    4 ++--
+ .../hdfs/server/namenode/FileDataServlet.java      |    2 +-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    6 +++---
+ .../hdfs/server/namenode/PermissionChecker.java    |    4 ++--
+ src/hdfs/org/apache/hadoop/hdfs/tools/DFSck.java   |    2 +-
+ .../org/apache/hadoop/hdfs/AppendTestUtil.java     |    2 +-
+ .../org/apache/hadoop/hdfs/TestDFSPermission.java  |    8 ++++----
+ src/test/org/apache/hadoop/hdfs/TestDFSShell.java  |    2 +-
+ .../org/apache/hadoop/hdfs/TestFileAppend2.java    |    2 +-
+ .../hadoop/hdfs/TestHDFSFileSystemContract.java    |    2 +-
+ src/test/org/apache/hadoop/hdfs/TestLocalDFS.java  |    2 +-
+ src/test/org/apache/hadoop/hdfs/TestQuota.java     |    2 +-
+ 18 files changed, 32 insertions(+), 32 deletions(-)
+
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+index f6f4e37..7f77857 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+@@ -40,7 +40,7 @@ public class ProxyFileDataServlet extends FileDataServlet {
+       URISyntaxException {
+     return new URI(request.getScheme(), null, request.getServerName(), request
+         .getServerPort(), "/streamFile", "filename=" + i.getPath() + "&ugi="
+-        + ugi.getUserName(), null);
++        + ugi.getShortUserName(), null);
+   }
+ 
+   /** {@inheritDoc} */
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+index 04a3a0f..993e310 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+@@ -153,7 +153,7 @@ public class DistributedFileSystem extends FileSystem {
+ 
+   /** {@inheritDoc} */
+   public Path getHomeDirectory() {
+-    return new Path("/user/" + dfs.ugi.getUserName()).makeQualified(this);
++    return new Path("/user/" + dfs.ugi.getShortUserName()).makeQualified(this);
+   }
+ 
+   private String getPathName(Path file) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index ea1c258..6d75e3e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -131,7 +131,7 @@ public class HftpFileSystem extends FileSystem {
+   @Override
+   public FSDataInputStream open(Path f, int buffersize) throws IOException {
+     HttpURLConnection connection = null;
+-    connection = openConnection("/data" + f.toUri().getPath(), "ugi=" + ugi.getUserName());
++    connection = openConnection("/data" + f.toUri().getPath(), "ugi=" + ugi.getShortUserName());
+     connection.setRequestMethod("GET");
+     connection.connect();
+     final InputStream in = connection.getInputStream();
+@@ -271,7 +271,7 @@ public class HftpFileSystem extends FileSystem {
+ 
+     private FileChecksum getFileChecksum(String f) throws IOException {
+       final HttpURLConnection connection = openConnection(
+-          "/fileChecksum" + f, "ugi=" + ugi.getUserName());
++          "/fileChecksum" + f, "ugi=" + ugi.getShortUserName());
+       try {
+         final XMLReader xr = XMLReaderFactory.createXMLReader();
+         xr.setContentHandler(this);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/AccessTokenHandler.java b/src/hdfs/org/apache/hadoop/hdfs/security/AccessTokenHandler.java
+index 7dd8b38..5cc4602 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/security/AccessTokenHandler.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/security/AccessTokenHandler.java
+@@ -226,7 +226,7 @@ public class AccessTokenHandler {
+   public BlockAccessToken generateToken(long blockID, EnumSet<AccessMode> modes)
+       throws IOException {
+     UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+-    String userID = (ugi == null ? null : ugi.getUserName());
++    String userID = (ugi == null ? null : ugi.getShortUserName());
+     return generateToken(userID, blockID, modes);
+   }
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+index f4401ec..d73061f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+@@ -70,7 +70,7 @@ abstract class DfsServlet extends HttpServlet {
+     }
+ 
+     if(LOG.isDebugEnabled())
+-      LOG.debug("getUGI is returning: " + u.getUserName());
++      LOG.debug("getUGI is returning: " + u.getShortUserName());
+     return u;
+   }
+ 
+@@ -96,7 +96,7 @@ abstract class DfsServlet extends HttpServlet {
+         : host.getInfoPort();
+     final String filename = request.getPathInfo();
+     return new URI(scheme, null, hostname, port, servletpath,
+-        "filename=" + filename + "&ugi=" + ugi.getUserName(), null);
++        "filename=" + filename + "&ugi=" + ugi.getShortUserName(), null);
+   }
+ 
+   /** Get filename from the request */
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 894088b..abd3a67 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -419,7 +419,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     LOG.info("isPermissionEnabled=" + isPermissionEnabled);
+     short filePermission = (short)conf.getInt("dfs.upgrade.permission", 0777);
+     this.defaultPermission = PermissionStatus.createImmutable(
+-        fsOwner.getUserName(), supergroup, new FsPermission(filePermission));
++        fsOwner.getShortUserName(), supergroup, new FsPermission(filePermission));
+ 
+ 
+     this.replicator = new ReplicationTargetChooser(
+@@ -4818,7 +4818,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   }
+ 
+   PermissionStatus createFsOwnerPermissions(FsPermission permission) {
+-    return new PermissionStatus(fsOwner.getUserName(), supergroup, permission);
++    return new PermissionStatus(fsOwner.getShortUserName(), supergroup, permission);
+   }
+ 
+   private FSPermissionChecker checkOwner(String path) throws AccessControlException {
+@@ -4860,7 +4860,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       FsAction ancestorAccess, FsAction parentAccess, FsAction access,
+       FsAction subAccess) throws AccessControlException {
+     FSPermissionChecker pc = new FSPermissionChecker(
+-        fsOwner.getUserName(), supergroup);
++        fsOwner.getShortUserName(), supergroup);
+     if (!pc.isSuper) {
+       dir.waitForReady();
+       pc.checkPermission(path, dir.rootDir, doCheckOwner,
+@@ -5134,7 +5134,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+ 
+   public Token<DelegationTokenIdentifier> getDelegationToken(Text renewer)
+       throws IOException {
+-    String user = UserGroupInformation.getCurrentUser().getUserName();
++    String user = UserGroupInformation.getCurrentUser().getShortUserName();
+     Text owner = new Text(user);
+     DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(owner, renewer);
+     return new Token<DelegationTokenIdentifier>(dtId, dtSecretManager);
+@@ -5142,13 +5142,13 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+ 
+   public Boolean renewDelegationToken(Token<DelegationTokenIdentifier> token)
+       throws InvalidToken, IOException {
+-    String renewer = UserGroupInformation.getCurrentUser().getUserName();
++    String renewer = UserGroupInformation.getCurrentUser().getShortUserName();
+     return dtSecretManager.renewToken(token, renewer);
+   }
+ 
+   public Boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token)
+       throws IOException {
+-    String canceller = UserGroupInformation.getCurrentUser().getUserName();
++    String canceller = UserGroupInformation.getCurrentUser().getShortUserName();
+     return dtSecretManager.cancelToken(token, canceller);
+   }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSPermissionChecker.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSPermissionChecker.java
+index fc26ebc..c651caf 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSPermissionChecker.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSPermissionChecker.java
+@@ -48,7 +48,7 @@ private final UserGroupInformation ugi;
+     } 
+ 
+     groups.addAll(Arrays.asList(ugi.getGroupNames()));
+-    user = ugi.getUserName();
++    user = ugi.getShortUserName();
+ 
+     isSuper = user.equals(fsOwner) || groups.contains(supergroup);
+   }
+@@ -69,7 +69,7 @@ private final UserGroupInformation ugi;
+                                              String supergroup) 
+                      throws AccessControlException {
+     FSPermissionChecker checker = 
+-      new FSPermissionChecker(owner.getUserName(), supergroup);
++      new FSPermissionChecker(owner.getShortUserName(), supergroup);
+     if (!checker.isSuper) {
+       throw new AccessControlException("Access denied for user " 
+           + checker.user + ". Superuser privilege is required");
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+index 881e83f..93a1d75 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+@@ -53,7 +53,7 @@ public class FileDataServlet extends DfsServlet {
+           ? (Integer)getServletContext().getAttribute("datanode.https.port")
+           : host.getInfoPort(),
+         "/streamFile", "filename=" + i.getPath() + 
+-        "&ugi=" + ugi.getUserName(), null);
++        "&ugi=" + ugi.getShortUserName(), null);
+   }
+ 
+   private static JspHelper jspHelper = null;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 4a10aa6..1080c58 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -433,7 +433,7 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+                             + MAX_PATH_LENGTH + " characters, " + MAX_PATH_DEPTH + " levels.");
+     }
+     namesystem.startFile(src,
+-        new PermissionStatus(UserGroupInformation.getCurrentUser().getUserName(),
++        new PermissionStatus(UserGroupInformation.getCurrentUser().getShortUserName(),
+             null, masked),
+         clientName, clientMachine, overwrite, replication, blockSize);
+     myMetrics.numFilesCreated.inc();
+@@ -616,7 +616,7 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+                             + MAX_PATH_LENGTH + " characters, " + MAX_PATH_DEPTH + " levels.");
+     }
+     return namesystem.mkdirs(src,
+-        new PermissionStatus(UserGroupInformation.getCurrentUser().getUserName(),
++        new PermissionStatus(UserGroupInformation.getCurrentUser().getShortUserName(),
+             null, masked));
+   }
+ 
+@@ -977,7 +977,7 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   @Override
+   public void refreshUserToGroupsMappings(Configuration conf) throws IOException {
+     LOG.info("Refreshing all user-to-groups mappings. Requested by user: " + 
+-             UserGroupInformation.getCurrentUser().getUserName());
++             UserGroupInformation.getCurrentUser().getShortUserName());
+     Groups.getUserToGroupsMappingService(conf).refresh();
+   }
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/PermissionChecker.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/PermissionChecker.java
+index adf62f4..cb7ca8e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/PermissionChecker.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/PermissionChecker.java
+@@ -47,7 +47,7 @@ class PermissionChecker {
+       LOG.debug("ugi=" + ugi);
+     }
+ 
+-    user = ugi.getUserName();
++    user = ugi.getShortUserName();
+     groups.addAll(Arrays.asList(ugi.getGroupNames()));
+     isSuper = user.equals(fsOwner) || groups.contains(supergroup);
+   }
+@@ -64,7 +64,7 @@ class PermissionChecker {
+                                              String supergroup)
+   throws AccessControlException {
+     PermissionChecker checker = 
+-      new PermissionChecker(owner.getUserName(), supergroup);
++      new PermissionChecker(owner.getShortUserName(), supergroup);
+     if (!checker.isSuper) {
+       throw new AccessControlException("Access denied for user " 
+           + checker.user + ". Superuser privilege is required");
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSck.java b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSck.java
+index e297f84..b663244 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSck.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSck.java
+@@ -108,7 +108,7 @@ public class DFSck extends Configured implements Tool {
+     }
+ 
+     final StringBuffer url = new StringBuffer("http://");
+-    url.append(getInfoServer()).append("/fsck?ugi=").append(ugi.getUserName()).append("&path=");
++    url.append(getInfoServer()).append("/fsck?ugi=").append(ugi.getShortUserName()).append("&path=");
+ 
+     String dir = "/";
+     // find top-level dir first
+diff --git a/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java b/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java
+index a1a5c05..b00c581 100644
+--- a/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java
++++ b/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java
+@@ -88,7 +88,7 @@ public class AppendTestUtil {
+ 
+   public static FileSystem createHdfsWithDifferentUsername(final Configuration conf
+       ) throws IOException, InterruptedException {
+-    String username = UserGroupInformation.getCurrentUser().getUserName()+"_XXX";
++    String username = UserGroupInformation.getCurrentUser().getShortUserName()+"_XXX";
+     UserGroupInformation ugi = 
+       UserGroupInformation.createUserForTesting(username, new String[]{"supergroup"});
+     
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java b/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
+index dec8ff4..540dbad 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
+@@ -261,15 +261,15 @@ public class TestDFSPermission extends TestCase {
+     fs = FileSystem.get(conf);
+     create(op, FILE_DIR_PATH, DEFAULT_UMASK,
+         new FsPermission(DEFAULT_PERMISSION));
+-    checkOwnership(FILE_DIR_PATH, SUPERUSER.getUserName(),
++    checkOwnership(FILE_DIR_PATH, SUPERUSER.getShortUserName(),
+         getGroup(FILE_DIR_PATH.getParent()));
+ 
+     // case 2: superuser changes FILE_DIR_PATH's owner to be <user1, group3>
+-    setOwner(FILE_DIR_PATH, USER1.getUserName(), GROUP3_NAME, false);
++    setOwner(FILE_DIR_PATH, USER1.getShortUserName(), GROUP3_NAME, false);
+ 
+     // case 3: user1 changes FILE_DIR_PATH's owner to be user2
+     login(USER1);
+-    setOwner(FILE_DIR_PATH, USER2.getUserName(), null, true);
++    setOwner(FILE_DIR_PATH, USER2.getShortUserName(), null, true);
+ 
+     // case 4: user1 changes FILE_DIR_PATH's group to be group1 which it belongs
+     // to
+@@ -284,7 +284,7 @@ public class TestDFSPermission extends TestCase {
+     setOwner(FILE_DIR_PATH, null, GROUP3_NAME, true);
+ 
+     // case 7: user2 (non-owner) changes FILE_DIR_PATH's user to be user2
+-    setOwner(FILE_DIR_PATH, USER2.getUserName(), null, true);
++    setOwner(FILE_DIR_PATH, USER2.getShortUserName(), null, true);
+ 
+     // delete the file/directory
+     login(SUPERUSER);
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSShell.java b/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
+index 8e9dd0d..d5f2d09 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
+@@ -1256,7 +1256,7 @@ public class TestDFSShell extends TestCase {
+       dfs.setPermission(sub, new FsPermission((short)0));
+ 
+       final UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+-      final String tmpusername = ugi.getUserName() + "1";
++      final String tmpusername = ugi.getShortUserName() + "1";
+       UserGroupInformation tmpUGI = UserGroupInformation.createUserForTesting(
+           tmpusername, new String[] {tmpusername});
+       String results = tmpUGI.doAs(new PrivilegedExceptionAction<String>() {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
+index b099335..44d0ae0 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
+@@ -209,7 +209,7 @@ public class TestFileAppend2 {
+         final UserGroupInformation superuser = UserGroupInformation.getCurrentUser();
+         String username = "testappenduser";
+         String group = "testappendgroup";
+-        assertFalse(superuser.getUserName().equals(username));
++        assertFalse(superuser.getShortUserName().equals(username));
+         assertFalse(Arrays.asList(superuser.getGroupNames()).contains(group));
+         UserGroupInformation appenduser = 
+           UserGroupInformation.createUserForTesting(username, new String[]{group});
+diff --git a/src/test/org/apache/hadoop/hdfs/TestHDFSFileSystemContract.java b/src/test/org/apache/hadoop/hdfs/TestHDFSFileSystemContract.java
+index e409eba..75897ed 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestHDFSFileSystemContract.java
++++ b/src/test/org/apache/hadoop/hdfs/TestHDFSFileSystemContract.java
+@@ -33,7 +33,7 @@ public class TestHDFSFileSystemContract extends FileSystemContractBaseTest {
+     cluster = new MiniDFSCluster(conf, 2, true, null);
+     fs = cluster.getFileSystem();
+     defaultWorkingDirectory = "/user/" + 
+-           UserGroupInformation.getCurrentUser().getUserName();
++           UserGroupInformation.getCurrentUser().getShortUserName();
+   }
+   
+   @Override
+diff --git a/src/test/org/apache/hadoop/hdfs/TestLocalDFS.java b/src/test/org/apache/hadoop/hdfs/TestLocalDFS.java
+index ec20c25..5057848 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestLocalDFS.java
++++ b/src/test/org/apache/hadoop/hdfs/TestLocalDFS.java
+@@ -51,7 +51,7 @@ public class TestLocalDFS extends TestCase {
+ 
+   static String getUserName(FileSystem fs) {
+     if (fs instanceof DistributedFileSystem) {
+-      return ((DistributedFileSystem)fs).dfs.ugi.getUserName();
++      return ((DistributedFileSystem)fs).dfs.ugi.getShortUserName();
+     }
+     return System.getProperty("user.name");
+   }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestQuota.java b/src/test/org/apache/hadoop/hdfs/TestQuota.java
+index 20a6ec9..3d88759 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestQuota.java
++++ b/src/test/org/apache/hadoop/hdfs/TestQuota.java
+@@ -252,7 +252,7 @@ public class TestQuota extends TestCase {
+         @Override
+         public Object run() throws Exception {
+           assertEquals("Not running as new user", username, 
+-              UserGroupInformation.getCurrentUser().getUserName());
++              UserGroupInformation.getCurrentUser().getShortUserName());
+           DFSAdmin userAdmin = new DFSAdmin(conf);
+           
+           args2[1] = "100";
+-- 
+1.7.0.4
+

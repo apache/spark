@@ -1,0 +1,96 @@
+From 10db8fc860cd1c5de28d204b0efecb37476f0483 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 16 Sep 2010 15:04:18 -0700
+Subject: [PATCH 0694/1179] HDFS-1404. Incorrect logic in TestNodeCount causes test failures
+
+Reason: Fix occasional red build
+Author: Todd Lipcon
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    7 +++++++
+ .../hadoop/hdfs/server/namenode/TestNodeCount.java |   18 +++++++++++-------
+ 2 files changed, 18 insertions(+), 7 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 4b7f429..15da43b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -4035,6 +4035,13 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     int excessReplicas() {
+       return excessReplicas;
+     }
++
++    public String toString() {
++      return "live=" + liveReplicas +
++        " decomissioned=" + decommissionedReplicas +
++        " corrupt=" + corruptReplicas +
++        " excess=" + excessReplicas;
++    }
+   } 
+ 
+   /**
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java
+index 77339a3..8aafae1 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java
+@@ -137,7 +137,7 @@ public class TestNodeCount extends TestCase {
+       LOG.info("Waiting for excess replicas to be detected");
+ 
+       // check if excessive replica is detected
+-      waitForExcessReplicasToChange(namesystem, block, 0);
++      waitForExcessReplicasToChangeTo(namesystem, block, 1);
+ 
+       LOG.info("Finding a non-excess node");
+       // find out a non-excess node
+@@ -168,24 +168,26 @@ public class TestNodeCount extends TestCase {
+       do {
+         num = namesystem.countNodes(block);
+       } while (num.liveReplicas() != REPLICATION_FACTOR);
+-      
++
+       LOG.info("Restarting first DN");
+       // restart the first datanode
+       cluster.restartDataNode(dnprop);
+       cluster.waitActive(false);
+ 
++      Thread.sleep(3000);
++
+       LOG.info("Waiting for excess replicas to be detected");
+       // check if excessive replica is detected
+-      waitForExcessReplicasToChange(namesystem, block, 2);
++      waitForExcessReplicasToChangeTo(namesystem, block, 2);
+     } finally {
+       cluster.shutdown();
+     }
+   }
+ 
+-  private void waitForExcessReplicasToChange(
++  private void waitForExcessReplicasToChangeTo(
+     FSNamesystem namesystem,
+     Block block,
+-    int oldReplicas) throws Exception
++    int waitForReplicas) throws Exception
+   {
+     NumberReplicas num;
+     long startChecking = System.currentTimeMillis();
+@@ -193,14 +195,16 @@ public class TestNodeCount extends TestCase {
+       synchronized (namesystem) {
+         num = namesystem.countNodes(block);
+       }
+-      Thread.sleep(100);
++      LOG.info("Waiting for excess replicas == " + waitForReplicas +
++       " - current: " + num);
++      Thread.sleep(200);
+       if (System.currentTimeMillis() - startChecking > 30000) {
+         namesystem.metaSave("TestNodeCount.meta");
+         LOG.warn("Dumping meta into log directory");
+         fail("Timed out waiting for excess replicas to change");
+       }
+ 
+-    } while (num.excessReplicas() == oldReplicas);
++    } while (num.excessReplicas() != waitForReplicas);
+   }
+     
+ }
+-- 
+1.7.0.4
+

@@ -1,0 +1,57 @@
+From 864b534240e5837629c1419893aa75346e66bf64 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 27 Sep 2011 20:40:18 -0700
+Subject: [PATCH 1060/1179] HADOOP-7629. Allow immutable FsPermission objects to be used as IPC parameters.
+
+Author: Todd Lipcon
+Reason: necessary for Mahout tests to pass
+Ref: CDH-3568
+---
+ .../apache/hadoop/fs/permission/FsPermission.java  |   22 ++++++++++++-------
+ 1 files changed, 14 insertions(+), 8 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/permission/FsPermission.java b/src/core/org/apache/hadoop/fs/permission/FsPermission.java
+index 23ad301..767062d 100644
+--- a/src/core/org/apache/hadoop/fs/permission/FsPermission.java
++++ b/src/core/org/apache/hadoop/fs/permission/FsPermission.java
+@@ -39,18 +39,12 @@ public class FsPermission implements Writable {
+   };
+   static {                                      // register a ctor
+     WritableFactories.setFactory(FsPermission.class, FACTORY);
++    WritableFactories.setFactory(ImmutableFsPermission.class, FACTORY);
+   }
+ 
+   /** Create an immutable {@link FsPermission} object. */
+   public static FsPermission createImmutable(short permission) {
+-    return new FsPermission(permission) {
+-      public FsPermission applyUMask(FsPermission umask) {
+-        throw new UnsupportedOperationException();
+-      }
+-      public void readFields(DataInput in) throws IOException {
+-        throw new UnsupportedOperationException();
+-      }
+-    };
++    return new ImmutableFsPermission(permission);
+   }
+ 
+   //POSIX permission style
+@@ -273,4 +267,16 @@ public class FsPermission implements Writable {
+ 
+     return new FsPermission((short)n);
+   }
++  
++  private static class ImmutableFsPermission extends FsPermission {
++    public ImmutableFsPermission(short permission) {
++      super(permission);
++    }
++    public FsPermission applyUMask(FsPermission umask) {
++      throw new UnsupportedOperationException();
++    }
++    public void readFields(DataInput in) throws IOException {
++      throw new UnsupportedOperationException();
++    }    
++  }
+ }
+-- 
+1.7.0.4
+

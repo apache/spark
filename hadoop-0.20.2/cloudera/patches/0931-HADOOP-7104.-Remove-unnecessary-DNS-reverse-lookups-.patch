@@ -1,0 +1,347 @@
+From 6ca2af6321cbabf8029092ce6550ec8e78673fba Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Mar 2011 14:28:51 -0700
+Subject: [PATCH 0931/1179] HADOOP-7104. Remove unnecessary DNS reverse lookups from RPC layer
+
+Reason: Fixes potential performance issues when DNS blips occur
+Author: Kan Zhang
+Ref: DISTRO-108
+---
+ src/core/org/apache/hadoop/ipc/Client.java         |    2 +-
+ src/core/org/apache/hadoop/ipc/Server.java         |   17 +++---
+ .../org/apache/hadoop/security/SecurityUtil.java   |   67 +++++++++++++++-----
+ .../authorize/ServiceAuthorizationManager.java     |   35 +++-------
+ .../apache/hadoop/security/TestSecurityUtil.java   |   41 +++++++++---
+ 5 files changed, 100 insertions(+), 62 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index 6e217ac..efe2439 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -1349,7 +1349,7 @@ public class Client {
+                    + protocol.getCanonicalName());
+          }
+          return SecurityUtil.getServerPrincipal(conf.get(serverKey), address
+-             .getAddress().getCanonicalHostName());
++             .getAddress());
+        }
+        return null;
+      }
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index c0d5582..b83c65a 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -870,8 +870,8 @@ public abstract class Server {
+     // Cache the remote host & port info so that even if the socket is 
+     // disconnected, we can say where it used to connect to.
+     private String hostAddress;
+-    private String hostName;
+     private int remotePort;
++    private InetAddress addr;
+     
+     ConnectionHeader header = new ConnectionHeader();
+     Class<?> protocol;
+@@ -908,12 +908,11 @@ public abstract class Server {
+       this.unwrappedData = null;
+       this.unwrappedDataLengthBuffer = ByteBuffer.allocate(4);
+       this.socket = channel.socket();
+-      InetAddress addr = socket.getInetAddress();
++      this.addr = socket.getInetAddress();
+       if (addr == null) {
+         this.hostAddress = "*Unknown*";
+       } else {
+         this.hostAddress = addr.getHostAddress();
+-        this.hostName = addr.getCanonicalHostName();
+       }
+       this.remotePort = socket.getPort();
+       this.responseQueue = new LinkedList<Call>();
+@@ -936,8 +935,8 @@ public abstract class Server {
+       return hostAddress;
+     }
+ 
+-    public String getHostName() {
+-      return hostName;
++    public InetAddress getHostInetAddress() {
++      return addr;
+     }
+     
+     public void setLastContact(long lastContact) {
+@@ -1345,7 +1344,7 @@ public abstract class Server {
+             && (authMethod != AuthMethod.DIGEST)) {
+           ProxyUsers.authorize(user, this.getHostAddress(), conf);
+         }
+-        authorize(user, header, getHostName());
++        authorize(user, header, getHostInetAddress());
+         if (LOG.isDebugEnabled()) {
+           LOG.debug("Successfully authorized " + header);
+         }
+@@ -1675,12 +1674,12 @@ public abstract class Server {
+    * 
+    * @param user client user
+    * @param connection incoming connection
+-   * @param hostname fully-qualified domain name of incoming connection
++   * @param addr InetAddress of incoming connection
+    * @throws AuthorizationException when the client isn't authorized to talk the protocol
+    */
+   public void authorize(UserGroupInformation user, 
+                         ConnectionHeader connection,
+-                        String hostname
++                        InetAddress addr
+                         ) throws AuthorizationException {
+     if (authorize) {
+       Class<?> protocol = null;
+@@ -1690,7 +1689,7 @@ public abstract class Server {
+         throw new AuthorizationException("Unknown protocol: " + 
+                                          connection.getProtocol());
+       }
+-      serviceAuthorizationManager.authorize(user, protocol, getConf(), hostname);
++      serviceAuthorizationManager.authorize(user, protocol, getConf(), addr);
+     }
+   }
+   
+diff --git a/src/core/org/apache/hadoop/security/SecurityUtil.java b/src/core/org/apache/hadoop/security/SecurityUtil.java
+index 6c49ce4..37d5149 100644
+--- a/src/core/org/apache/hadoop/security/SecurityUtil.java
++++ b/src/core/org/apache/hadoop/security/SecurityUtil.java
+@@ -113,8 +113,8 @@ public class SecurityUtil {
+   }
+   
+   /**
+-   * Convert Kerberos principal name conf values to valid Kerberos principal
+-   * names. It replaces $host in the conf values with hostname, which should be
++   * Convert Kerberos principal name pattern to valid Kerberos principal
++   * names. It replaces hostname pattern with hostname, which should be
+    * fully-qualified domain name. If hostname is null or "0.0.0.0", it uses
+    * dynamically looked-up fqdn of the current host instead.
+    * 
+@@ -127,24 +127,57 @@ public class SecurityUtil {
+    */
+   public static String getServerPrincipal(String principalConfig,
+       String hostname) throws IOException {
+-    if (principalConfig == null)
+-      return null;
+-    String[] components = principalConfig.split("[/@]");
+-    if (components.length != 3) {
+-      throw new IOException(
+-          "Kerberos service principal name isn't configured properly "
+-              + "(should have 3 parts): " + principalConfig);
+-    }
+-
+-    if (components[1].equals(HOSTNAME_PATTERN)) {
+-      String fqdn = hostname;
+-      if (fqdn == null || fqdn.equals("") || fqdn.equals("0.0.0.0")) {
+-        fqdn = getLocalHostName();
+-      }
+-      return components[0] + "/" + fqdn + "@" + components[2];
++    String[] components = getComponents(principalConfig);
++    if (components == null || components.length != 3
++        || !components[1].equals(HOSTNAME_PATTERN)) {
++      return principalConfig;
+     } else {
++      return replacePattern(components, hostname);
++    }
++  }
++  
++  /**
++   * Convert Kerberos principal name pattern to valid Kerberos principal names.
++   * This method is similar to {@link #getServerPrincipal(String, String)},
++   * except 1) the reverse DNS lookup from addr to hostname is done only when
++   * necessary, 2) param addr can't be null (no default behavior of using local
++   * hostname when addr is null).
++   * 
++   * @param principalConfig
++   *          Kerberos principal name pattern to convert
++   * @param addr
++   *          InetAddress of the host used for substitution
++   * @return converted Kerberos principal name
++   * @throws IOException
++   */
++  public static String getServerPrincipal(String principalConfig,
++      InetAddress addr) throws IOException {
++    String[] components = getComponents(principalConfig);
++    if (components == null || components.length != 3
++        || !components[1].equals(HOSTNAME_PATTERN)) {
+       return principalConfig;
++    } else {
++      if (addr == null) {
++        throw new IOException("Can't replace " + HOSTNAME_PATTERN
++            + " pattern since client address is null");
++      }
++      return replacePattern(components, addr.getCanonicalHostName());
++    }
++  }
++  
++  private static String[] getComponents(String principalConfig) {
++    if (principalConfig == null)
++      return null;
++    return principalConfig.split("[/@]");
++  }
++  
++  private static String replacePattern(String[] components, String hostname)
++      throws IOException {
++    String fqdn = hostname;
++    if (fqdn == null || fqdn.equals("") || fqdn.equals("0.0.0.0")) {
++      fqdn = getLocalHostName();
+     }
++    return components[0] + "/" + fqdn + "@" + components[2];
+   }
+   
+   static String getLocalHostName() throws UnknownHostException {
+diff --git a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+index 4b65c53..ab07e2b 100644
+--- a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
++++ b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+@@ -18,6 +18,7 @@
+ package org.apache.hadoop.security.authorize;
+ 
+ import java.io.IOException;
++import java.net.InetAddress;
+ import java.util.IdentityHashMap;
+ import java.util.Map;
+ import java.util.Set;
+@@ -27,7 +28,6 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.security.KerberosInfo;
+-import org.apache.hadoop.security.KerberosName;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+@@ -66,13 +66,13 @@ public class ServiceAuthorizationManager {
+    * @param user user accessing the service 
+    * @param protocol service being accessed
+    * @param conf configuration to use
+-   * @param hostname fully qualified domain name of the client
++   * @param addr InetAddress of the client
+    * @throws AuthorizationException on authorization failure
+    */
+   public void authorize(UserGroupInformation user, 
+                                Class<?> protocol,
+                                Configuration conf,
+-                               String hostname
++                               InetAddress addr
+                                ) throws AuthorizationException {
+     AccessControlList acl = protocolToAcl.get(protocol);
+     if (acl == null) {
+@@ -86,39 +86,24 @@ public class ServiceAuthorizationManager {
+     if (krbInfo != null) {
+       String clientKey = krbInfo.clientPrincipal();
+       if (clientKey != null && !clientKey.equals("")) {
+-        if (hostname == null) {
+-          throw new AuthorizationException(
+-              "Can't authorize client when client hostname is null");
+-        }
+         try {
+           clientPrincipal = SecurityUtil.getServerPrincipal(
+-              conf.get(clientKey), hostname);
++              conf.get(clientKey), addr);
+         } catch (IOException e) {
+           throw (AuthorizationException) new AuthorizationException(
+               "Can't figure out Kerberos principal name for connection from "
+-                  + hostname + " for user=" + user + " protocol=" + protocol)
++                  + addr + " for user=" + user + " protocol=" + protocol)
+               .initCause(e);
+         }
+       }
+     }
+-    // when authorizing use the short name only
+-    String shortName = clientPrincipal;
+-    if(clientPrincipal != null ) {
+-      try {
+-        shortName = new KerberosName(clientPrincipal).getShortName();
+-      } catch (IOException e) {
+-        LOG.warn("couldn't get short name from " + clientPrincipal, e);
+-        // just keep going
+-      }
+-    }
+-    LOG.debug("for protocol authorization compare (" + clientPrincipal + "): " 
+-        + shortName + " with " + user.getShortUserName());
+-    if((shortName != null &&  !shortName.equals(user.getShortUserName())) || 
++    if((clientPrincipal != null && !clientPrincipal.equals(user.getUserName())) || 
+         !acl.isUserAllowed(user)) {
+-      AUDITLOG.warn(AUTHZ_FAILED_FOR + user + " for protocol="+protocol);
++      AUDITLOG.warn(AUTHZ_FAILED_FOR + user + " for protocol=" + protocol
++          + ", expected client Kerberos principal is " + clientPrincipal);
+       throw new AuthorizationException("User " + user + 
+-          " is not authorized for protocol " + 
+-          protocol);
++          " is not authorized for protocol " + protocol + 
++          ", expected client Kerberos principal is " + clientPrincipal);
+     }
+     AUDITLOG.info(AUTHZ_SUCCESSFULL_FOR + user + " for protocol="+protocol);
+   }
+diff --git a/src/test/org/apache/hadoop/security/TestSecurityUtil.java b/src/test/org/apache/hadoop/security/TestSecurityUtil.java
+index 9547ad5..ee0533c 100644
+--- a/src/test/org/apache/hadoop/security/TestSecurityUtil.java
++++ b/src/test/org/apache/hadoop/security/TestSecurityUtil.java
+@@ -19,8 +19,10 @@ package org.apache.hadoop.security;
+ import static org.junit.Assert.*;
+ 
+ import java.io.IOException;
++import java.net.InetAddress;
+ 
+ import org.junit.Test;
++import org.mockito.Mockito;
+ 
+ public class TestSecurityUtil {
+   @Test
+@@ -38,27 +40,46 @@ public class TestSecurityUtil {
+   
+   private void verify(String original, String hostname, String expected)
+       throws IOException {
+-    assertTrue(SecurityUtil.getServerPrincipal(original, hostname).equals(
+-        expected));
+-    assertTrue(SecurityUtil.getServerPrincipal(original, null).equals(
+-        expected));
+-    assertTrue(SecurityUtil.getServerPrincipal(original, "").equals(
+-        expected));
+-    assertTrue(SecurityUtil.getServerPrincipal(original, "0.0.0.0").equals(
+-        expected));
++    assertEquals(expected, 
++                 SecurityUtil.getServerPrincipal(original, hostname));
++
++    InetAddress addr = mockAddr(hostname);
++    assertEquals(expected, 
++                 SecurityUtil.getServerPrincipal(original, addr));
+   }
+ 
++  private InetAddress mockAddr(String reverseTo) {
++    InetAddress mock = Mockito.mock(InetAddress.class);
++    Mockito.doReturn(reverseTo).when(mock).getCanonicalHostName();
++    return mock;
++  }
++  
+   @Test
+   public void testGetServerPrincipal() throws IOException {
+     String service = "hdfs/";
+     String realm = "@REALM";
+-    String hostname = SecurityUtil.getLocalHostName();
++    String hostname = "foohost";
++    String userPrincipal = "foo@FOOREALM";
+     String shouldReplace = service + SecurityUtil.HOSTNAME_PATTERN + realm;
+     String replaced = service + hostname + realm;
+     verify(shouldReplace, hostname, replaced);
+     String shouldNotReplace = service + SecurityUtil.HOSTNAME_PATTERN + "NAME"
+         + realm;
+     verify(shouldNotReplace, hostname, shouldNotReplace);
+-    verify(shouldNotReplace, shouldNotReplace, shouldNotReplace);
++    verify(userPrincipal, hostname, userPrincipal);
++    // testing reverse DNS lookup doesn't happen
++    InetAddress notUsed = Mockito.mock(InetAddress.class);
++    assertEquals(shouldNotReplace, SecurityUtil.getServerPrincipal(
++        shouldNotReplace, notUsed));
++    Mockito.verify(notUsed, Mockito.never()).getCanonicalHostName();
++  }
++  
++  @Test
++  public void testLocalHostNameForNullOrWild() throws Exception {
++    String local = SecurityUtil.getLocalHostName();
++    assertEquals("hdfs/" + local + "@REALM", SecurityUtil.getServerPrincipal(
++        "hdfs/_HOST@REALM", (String) null));
++    assertEquals("hdfs/" + local + "@REALM", SecurityUtil.getServerPrincipal(
++        "hdfs/_HOST@REALM", "0.0.0.0"));
+   }
+ }
+-- 
+1.7.0.4
+

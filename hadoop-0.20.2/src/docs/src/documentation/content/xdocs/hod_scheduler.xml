@@ -1,0 +1,1445 @@
+<?xml version="1.0"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN"
+          "http://forrest.apache.org/dtd/document-v20.dtd">
+<document>
+  <header>
+    <title>
+      HOD Scheduler
+    </title>
+  </header>
+
+<!-- HOD USERS -->
+
+<body>
+
+<section>
+<title>Introduction</title>
+<p>Hadoop On Demand (HOD) is a system for provisioning and managing independent Hadoop MapReduce and 
+Hadoop Distributed File System (HDFS) instances on a shared cluster of nodes. HOD is a tool that makes it easy 
+for administrators and users to quickly setup and use Hadoop. HOD is also a very useful tool for Hadoop developers 
+and testers who need to share a physical cluster for testing their own Hadoop versions. </p>
+
+<p>HOD uses the Torque resource manager to do node allocation. On the allocated nodes, it can start Hadoop 
+MapReduce and HDFS daemons. It automatically generates the appropriate configuration files (hadoop-site.xml) 
+for the Hadoop daemons and client. HOD also has the capability to distribute Hadoop to the nodes in the virtual 
+cluster that it allocates. HOD supports Hadoop from version 0.15 onwards.</p>
+</section>
+
+  <section>
+    <title>HOD Users</title>
+      <p>This section shows users how to get started using HOD, reviews various HOD features and command line options, 
+  and provides detailed troubleshooting help.</p>
+
+  <section>
+		<title> Getting Started</title><anchor id="Getting_Started_Using_HOD_0_4"></anchor>
+  <p>In this section, we shall see a step-by-step introduction on how to use HOD for the most basic operations. Before 
+  following these steps, it is assumed that HOD and its dependent hardware and software components are setup and 
+  configured correctly. This is a step that is generally performed by system administrators of the cluster.</p>
+  
+  <p>The HOD user interface is a command line utility called <code>hod</code>. It is driven by a configuration file, 
+  that is typically setup for users by system administrators. Users can override this configuration when using 
+  the <code>hod</code>, which is described later in this documentation. The configuration file can be specified in 
+  two ways when using <code>hod</code>, as described below: </p>
+  <ul>
+    <li> Specify it on command line, using the -c option. Such as 
+    <code>hod &lt;operation&gt; &lt;required-args&gt; -c path-to-the-configuration-file [other-options]</code></li>
+    <li> Set up an environment variable <em>HOD_CONF_DIR</em> where <code>hod</code> will be run. 
+    This should be pointed to a directory on the local file system, containing a file called <em>hodrc</em>. 
+    Note that this is analogous to the <em>HADOOP_CONF_DIR</em> and <em>hadoop-site.xml</em> file for Hadoop. 
+    If no configuration file is specified on the command line, <code>hod</code> shall look for the <em>HOD_CONF_DIR</em> 
+    environment variable and a <em>hodrc</em> file under that.</li>
+    </ul>
+  <p>In examples listed below, we shall not explicitly point to the configuration option, assuming it is correctly specified.</p>
+  
+  <section><title>A Typical HOD Session</title><anchor id="HOD_Session"></anchor>
+  <p>A typical session of HOD will involve at least three steps: allocate, run hadoop jobs, deallocate. In order to do this, 
+  perform the following steps.</p>
+  
+  <p><strong> Create a Cluster Directory </strong></p><anchor id="Create_a_Cluster_Directory"></anchor>
+  
+  <p>The <em>cluster directory</em> is a directory on the local file system where <code>hod</code> will generate the 
+  Hadoop configuration, <em>hadoop-site.xml</em>, corresponding to the cluster it allocates. Pass this directory to the 
+  <code>hod</code> operations as stated below. If the cluster directory passed doesn't already exist, HOD will automatically 
+  try to create it and use it. Once a cluster is allocated, a user can utilize it to run Hadoop jobs by specifying the cluster 
+  directory as the Hadoop --config option. </p>
+  
+  <p><strong>Operation allocate</strong></p><anchor id="Operation_allocate"></anchor>
+  
+  <p>The <em>allocate</em> operation is used to allocate a set of nodes and install and provision Hadoop on them. 
+  It has the following syntax. Note that it requires a cluster_dir ( -d, --hod.clusterdir) and the number of nodes 
+  (-n, --hod.nodecount) needed to be allocated:</p>
+    
+      <source>$ hod allocate -d cluster_dir -n number_of_nodes [OPTIONS]</source>    
+    
+  <p>If the command completes successfully, then <code>cluster_dir/hadoop-site.xml</code> will be generated and 
+  will contain information about the allocated cluster. It will also print out the information about the Hadoop web UIs.</p>
+  
+  <p>An example run of this command produces the following output. Note in this example that <code>~/hod-clusters/test</code> 
+  is the cluster directory, and we are allocating 5 nodes:</p>
+   
+<source>
+$ hod allocate -d ~/hod-clusters/test -n 5 
+INFO - HDFS UI on http://foo1.bar.com:53422 
+INFO - Mapred UI on http://foo2.bar.com:55380</source>   
+   
+  <p><strong> Running Hadoop jobs using the allocated cluster </strong></p><anchor id="Running_Hadoop_jobs_using_the_al"></anchor>
+  
+  <p>Now, one can run Hadoop jobs using the allocated cluster in the usual manner. This assumes variables like <em>JAVA_HOME</em> 
+  and path to the Hadoop installation are set up correctly.:</p>
+
+  <source>$ hadoop --config cluster_dir hadoop_command hadoop_command_args</source>
+  <p>or</p>
+
+     <source>
+$ export HADOOP_CONF_DIR=cluster_dir
+$ hadoop hadoop_command hadoop_command_args</source>
+
+  <p>Continuing our example, the following command will run a wordcount example on the allocated cluster:</p>
+ <source>$ hadoop --config ~/hod-clusters/test jar /path/to/hadoop/hadoop-examples.jar wordcount /path/to/input /path/to/output</source>
+ 
+  <p>or</p>
+  
+   <source>
+$ export HADOOP_CONF_DIR=~/hod-clusters/test
+$ hadoop jar /path/to/hadoop/hadoop-examples.jar wordcount /path/to/input /path/to/output</source>
+   
+  <p><strong> Operation deallocate</strong></p><anchor id="Operation_deallocate"></anchor>
+  <p>The <em>deallocate</em> operation is used to release an allocated cluster. When finished with a cluster, deallocate must be 
+  run so that the nodes become free for others to use. The <em>deallocate</em> operation has the following syntax. Note that it 
+  requires the cluster_dir (-d, --hod.clusterdir) argument:</p>
+     <source>$ hod deallocate -d cluster_dir</source>
+     
+  <p>Continuing our example, the following command will deallocate the cluster:</p>
+   <source>$ hod deallocate -d ~/hod-clusters/test</source>
+   
+  <p>As can be seen, HOD allows the users to allocate a cluster, and use it flexibly for running Hadoop jobs. For example, users 
+  can run multiple jobs in parallel on the same cluster, by running hadoop from multiple shells pointing to the same configuration.</p>
+	</section>
+	
+  <section><title>Running Hadoop Scripts Using HOD</title><anchor id="HOD_Script_Mode"></anchor>
+  <p>The HOD <em>script operation</em> combines the operations of allocating, using and deallocating a cluster into a single operation. 
+  This is very useful for users who want to run a script of hadoop jobs and let HOD handle the cleanup automatically once the script completes. 
+  In order to run hadoop scripts using <code>hod</code>, do the following:</p>
+  
+  <p><strong> Create a script file </strong></p><anchor id="Create_a_script_file"></anchor>
+  
+  <p>This will be a regular shell script that will typically contain hadoop commands, such as:</p>
+
+  <source>$ hadoop jar jar_file options</source>
+  
+  <p>However, the user can add any valid commands as part of the script. HOD will execute this script setting <em>HADOOP_CONF_DIR</em> 
+  automatically to point to the allocated cluster. So users do not need to worry about this. The users however need to specify a cluster directory 
+  just like when using the allocate operation.</p>
+  <p><strong> Running the script </strong></p><anchor id="Running_the_script"></anchor>
+  <p>The syntax for the <em>script operation</em> as is as follows. Note that it requires a cluster directory ( -d, --hod.clusterdir), number of 
+  nodes (-n, --hod.nodecount) and a script file (-s, --hod.script):</p>
+
+     <source>$ hod script -d cluster_directory -n number_of_nodes -s script_file</source>
+  <p>Note that HOD will deallocate the cluster as soon as the script completes, and this means that the script must not complete until the 
+  hadoop jobs themselves are completed. Users must take care of this while writing the script. </p>
+   </section>
+  </section>
+  <section>
+		<title> HOD Features </title><anchor id="HOD_0_4_Features"></anchor>
+  <section><title> Provisioning and Managing Hadoop Clusters </title><anchor id="Provisioning_and_Managing_Hadoop"></anchor>
+  <p>The primary feature of HOD is to provision Hadoop MapReduce and HDFS clusters. This is described above in the Getting Started section. 
+  Also, as long as nodes are available, and organizational policies allow, a user can use HOD to allocate multiple MapReduce clusters simultaneously. 
+  The user would need to specify different paths for the <code>cluster_dir</code> parameter mentioned above for each cluster he/she allocates. 
+  HOD provides the <em>list</em> and the <em>info</em> operations to enable managing multiple clusters.</p>
+  
+  <p><strong> Operation list</strong></p><anchor id="Operation_list"></anchor>
+  
+  <p>The list operation lists all the clusters allocated so far by a user. The cluster directory where the hadoop-site.xml is stored for the cluster, 
+  and its status vis-a-vis connectivity with the JobTracker and/or HDFS is shown. The list operation has the following syntax:</p>
+
+     <source>$ hod list</source>
+     
+  <p><strong> Operation info</strong></p><anchor id="Operation_info"></anchor>
+  <p>The info operation shows information about a given cluster. The information shown includes the Torque job id, and locations of the important 
+  daemons like the HOD Ringmaster process, and the Hadoop JobTracker and NameNode daemons. The info operation has the following syntax. 
+  Note that it requires a cluster directory (-d, --hod.clusterdir):</p>
+
+     <source>$ hod info -d cluster_dir</source>
+     
+  <p>The <code>cluster_dir</code> should be a valid cluster directory specified in an earlier <em>allocate</em> operation.</p>
+  </section>
+  
+  <section><title> Using a Tarball to Distribute Hadoop </title><anchor id="Using_a_tarball_to_distribute_Ha"></anchor>
+  <p>When provisioning Hadoop, HOD can use either a pre-installed Hadoop on the cluster nodes or distribute and install a Hadoop tarball as part 
+  of the provisioning operation. If the tarball option is being used, there is no need to have a pre-installed Hadoop on the cluster nodes, nor a need 
+  to use a pre-installed one. This is especially useful in a development / QE environment where individual developers may have different versions of 
+  Hadoop to test on a shared cluster. </p>
+  
+  <p>In order to use a pre-installed Hadoop, you must specify, in the hodrc, the <code>pkgs</code> option in the <code>gridservice-hdfs</code> 
+  and <code>gridservice-mapred</code> sections. This must point to the path where Hadoop is installed on all nodes of the cluster.</p>
+  
+  <p>The syntax for specifying tarball is as follows:</p>
+  
+ <source>$ hod allocate -d cluster_dir -n number_of_nodes -t hadoop_tarball_location</source>    
+    
+  <p>For example, the following command allocates Hadoop provided by the tarball <code>~/share/hadoop.tar.gz</code>:</p>
+  <source>$ hod allocate -d ~/hadoop-cluster -n 10 -t ~/share/hadoop.tar.gz</source>
+  
+  <p>Similarly, when using hod script, the syntax is as follows:</p>
+    <source>$ hod script -d cluster_directory -s script_file -n number_of_nodes -t hadoop_tarball_location</source> 
+   
+  <p>The hadoop_tarball specified in the syntax above should point to a path on a shared file system that is accessible from all the compute nodes. 
+  Currently, HOD only supports NFS mounted file systems.</p>
+  <p><em>Note:</em></p>
+  <ul>
+    <li> For better distribution performance it is recommended that the Hadoop tarball contain only the libraries and binaries, and not the source or documentation.</li>
+    
+    <li> When you want to run jobs against a cluster allocated using the tarball, you must use a compatible version of hadoop to submit your jobs. 
+    The best would be to untar and use the version that is present in the tarball itself.</li>
+    <li> You need to make sure that there are no Hadoop configuration files, hadoop-env.sh and hadoop-site.xml, present in the conf directory of the
+     tarred distribution. The presence of these files with incorrect values could make the cluster allocation to fail.</li>
+  </ul>
+  </section>
+  
+  <section><title> Using an External HDFS </title><anchor id="Using_an_external_HDFS"></anchor>
+  <p>In typical Hadoop clusters provisioned by HOD, HDFS is already set up statically (without using HOD). This allows data to persist in HDFS after 
+  the HOD provisioned clusters is deallocated. To use a statically configured HDFS, your hodrc must point to an external HDFS. Specifically, set the 
+  following options to the correct values in the section <code>gridservice-hdfs</code> of the hodrc:</p>
+  
+  <source>
+external = true
+host = Hostname of the HDFS NameNode
+fs_port = Port number of the HDFS NameNode
+info_port = Port number of the HDFS NameNode web UI
+</source>
+  
+  <p><em>Note:</em> You can also enable this option from command line. That is, to use a static HDFS, you will need to say: <br />
+    </p>
+     <source>$ hod allocate -d cluster_dir -n number_of_nodes --gridservice-hdfs.external</source>
+     
+  <p>HOD can be used to provision an HDFS cluster as well as a MapReduce cluster, if required. To do so, set the following option in the section 
+  <code>gridservice-hdfs</code> of the hodrc:</p>
+  <source>external = false</source>
+  </section>
+  
+  <section><title> Options for Configuring Hadoop </title><anchor id="Options_for_Configuring_Hadoop"></anchor>
+  <p>HOD provides a very convenient mechanism to configure both the Hadoop daemons that it provisions and also the hadoop-site.xml that 
+  it generates on the client side. This is done by specifying Hadoop configuration parameters in either the HOD configuration file, or from the 
+  command line when allocating clusters.</p>
+  
+  <p><strong> Configuring Hadoop Daemons </strong></p><anchor id="Configuring_Hadoop_Daemons"></anchor>
+  
+  <p>For configuring the Hadoop daemons, you can do the following:</p>
+  
+  <p>For MapReduce, specify the options as a comma separated list of key-value pairs to the <code>server-params</code> option in the 
+  <code>gridservice-mapred</code> section. Likewise for a dynamically provisioned HDFS cluster, specify the options in the 
+  <code>server-params</code> option in the <code>gridservice-hdfs</code> section. If these parameters should be marked as 
+  <em>final</em>, then include these in the <code>final-server-params</code> option of the appropriate section.</p>
+  <p>For example:</p>
+<source>
+server-params = mapred.reduce.parallel.copies=20,io.sort.factor=100,io.sort.mb=128,io.file.buffer.size=131072
+final-server-params = mapred.child.java.opts=-Xmx512m,dfs.block.size=134217728,fs.inmemory.size.mb=128   
+</source>
+  <p>In order to provide the options from command line, you can use the following syntax:</p>
+  <p>For configuring the MapReduce daemons use:</p>
+
+    <source>$ hod allocate -d cluster_dir -n number_of_nodes -Mmapred.reduce.parallel.copies=20 -Mio.sort.factor=100</source>
+    
+  <p>In the example above, the <em>mapred.reduce.parallel.copies</em> parameter and the <em>io.sort.factor</em> 
+  parameter will be appended to the other <code>server-params</code> or if they already exist in <code>server-params</code>, 
+  will override them. In order to specify these are <em>final</em> parameters, you can use:</p>
+
+    <source>$ hod allocate -d cluster_dir -n number_of_nodes -Fmapred.reduce.parallel.copies=20 -Fio.sort.factor=100</source>
+    
+  <p>However, note that final parameters cannot be overwritten from command line. They can only be appended if not already specified.</p>
+  
+  <p>Similar options exist for configuring dynamically provisioned HDFS daemons. For doing so, replace -M with -H and -F with -S.</p>
+  
+  <p><strong> Configuring Hadoop Job Submission (Client) Programs </strong></p><anchor id="Configuring_Hadoop_Job_Submissio"></anchor>
+  
+  <p>As mentioned above, if the allocation operation completes successfully then <code>cluster_dir/hadoop-site.xml</code> will be generated 
+  and will contain information about the allocated cluster's JobTracker and NameNode. This configuration is used when submitting jobs to the cluster. 
+  HOD provides an option to include additional Hadoop configuration parameters into this file. The syntax for doing so is as follows:</p>
+  
+    <source>$ hod allocate -d cluster_dir -n number_of_nodes -Cmapred.userlog.limit.kb=200 -Cmapred.child.java.opts=-Xmx512m</source>
+    
+  <p>In this example, the <em>mapred.userlog.limit.kb</em> and <em>mapred.child.java.opts</em> options will be included into 
+  the hadoop-site.xml that is generated by HOD.</p>
+  </section>
+  
+  <section><title> Viewing Hadoop Web-UIs </title><anchor id="Viewing_Hadoop_Web_UIs"></anchor>
+  <p>The HOD allocation operation prints the JobTracker and NameNode web UI URLs. For example:</p>
+
+<source>
+$ hod allocate -d ~/hadoop-cluster -n 10 -c ~/hod-conf-dir/hodrc
+INFO - HDFS UI on http://host242.foo.com:55391
+INFO - Mapred UI on http://host521.foo.com:54874
+</source>    
+    
+  <p>The same information is also available via the <em>info</em> operation described above.</p>
+  </section>
+  
+  <section><title> Collecting and Viewing Hadoop Logs </title><anchor id="Collecting_and_Viewing_Hadoop_Lo"></anchor>
+  <p>To get the Hadoop logs of the daemons running on one of the allocated nodes: </p>
+  <ul>
+    <li> Log into the node of interest. If you want to look at the logs of the JobTracker or NameNode, then you can find the node running these by 
+    using the <em>list</em> and <em>info</em> operations mentioned above.</li>
+    <li> Get the process information of the daemon of interest (for example, <code>ps ux | grep TaskTracker</code>)</li>
+    <li> In the process information, search for the value of the variable <code>-Dhadoop.log.dir</code>. Typically this will be a decendent directory 
+    of the <code>hodring.temp-dir</code> value from the hod configuration file.</li>
+    <li> Change to the <code>hadoop.log.dir</code> directory to view daemon and user logs.</li>
+  </ul>
+  <p>HOD also provides a mechanism to collect logs when a cluster is being deallocated and persist them into a file system, or an externally 
+  configured HDFS. By doing so, these logs can be viewed after the jobs are completed and the nodes are released. In order to do so, configure 
+  the log-destination-uri to a URI as follows:</p>
+    <source>
+log-destination-uri = hdfs://host123:45678/user/hod/logs
+log-destination-uri = file://path/to/store/log/files</source>
+
+  <p>Under the root directory specified above in the path, HOD will create a path user_name/torque_jobid and store gzipped log files for each 
+  node that was part of the job.</p>
+  <p>Note that to store the files to HDFS, you may need to configure the <code>hodring.pkgs</code> option with the Hadoop version that 
+  matches the HDFS mentioned. If not, HOD will try to use the Hadoop version that it is using to provision the Hadoop cluster itself.</p>
+  </section>
+  
+  <section><title> Auto-deallocation of Idle Clusters </title><anchor id="Auto_deallocation_of_Idle_Cluste"></anchor>
+  <p>HOD automatically deallocates clusters that are not running Hadoop jobs for a given period of time. Each HOD allocation includes a 
+  monitoring facility that constantly checks for running Hadoop jobs. If it detects no running Hadoop jobs for a given period, it will automatically 
+  deallocate its own cluster and thus free up nodes which are not being used effectively.</p>
+  
+  <p><em>Note:</em> While the cluster is deallocated, the <em>cluster directory</em> is not cleaned up automatically. The user must 
+  deallocate this cluster through the regular <em>deallocate</em> operation to clean this up.</p>
+	</section>
+  <section><title> Specifying Additional Job Attributes </title><anchor id="Specifying_Additional_Job_Attrib"></anchor>
+  <p>HOD allows the user to specify a wallclock time and a name (or title) for a Torque job. </p>
+  <p>The wallclock time is the estimated amount of time for which the Torque job will be valid. After this time has expired, Torque will 
+  automatically delete the job and free up the nodes. Specifying the wallclock time can also help the job scheduler to better schedule 
+  jobs, and help improve utilization of cluster resources.</p>
+  <p>To specify the wallclock time, use the following syntax:</p>
+
+<source>$ hod allocate -d cluster_dir -n number_of_nodes -l time_in_seconds</source>    
+  <p>The name or title of a Torque job helps in user friendly identification of the job. The string specified here will show up in all information 
+  where Torque job attributes are displayed, including the <code>qstat</code> command.</p>
+  <p>To specify the name or title, use the following syntax:</p>
+<source>$ hod allocate -d cluster_dir -n number_of_nodes -N name_of_job</source>   
+ 
+  <p><em>Note:</em> Due to restriction in the underlying Torque resource manager, names which do not start with an alphabet character 
+  or contain a 'space' will cause the job to fail. The failure message points to the problem being in the specified job name.</p>
+  </section>
+  
+  <section><title> Capturing HOD Exit Codes in Torque </title><anchor id="Capturing_HOD_exit_codes_in_Torq"></anchor>
+  <p>HOD exit codes are captured in the Torque exit_status field. This will help users and system administrators to distinguish successful 
+  runs from unsuccessful runs of HOD. The exit codes are 0 if allocation succeeded and all hadoop jobs ran on the allocated cluster correctly. 
+  They are non-zero if allocation failed or some of the hadoop jobs failed on the allocated cluster. The exit codes that are possible are 
+  mentioned in the table below. <em>Note: Hadoop job status is captured only if the version of Hadoop used is 16 or above.</em></p>
+  <table>
+    
+      <tr>
+        <th> Exit Code </th>
+        <th> Meaning </th>
+      </tr>
+      <tr>
+        <td> 6 </td>
+        <td> Ringmaster failure </td>
+      </tr>
+      <tr>
+        <td> 7 </td>
+        <td> HDFS failure </td>
+      </tr>
+      <tr>
+        <td> 8 </td>
+        <td> Job tracker failure </td>
+      </tr>
+      <tr>
+        <td> 10 </td>
+        <td> Cluster dead </td>
+      </tr>
+      <tr>
+        <td> 12 </td>
+        <td> Cluster already allocated </td>
+      </tr>
+      <tr>
+        <td> 13 </td>
+        <td> HDFS dead </td>
+      </tr>
+      <tr>
+        <td> 14 </td>
+        <td> Mapred dead </td>
+      </tr>
+      <tr>
+        <td> 16 </td>
+        <td> All MapReduce jobs that ran on the cluster failed. Refer to hadoop logs for more details. </td>
+      </tr>
+      <tr>
+        <td> 17 </td>
+        <td> Some of the MapReduce jobs that ran on the cluster failed. Refer to hadoop logs for more details. </td>
+      </tr>
+    
+  </table>
+  </section>
+  <section>
+    <title> Command Line</title><anchor id="Command_Line"></anchor>
+    <p>HOD command line has the following general syntax:</p>
+    <source>hod &lt;operation&gt; [ARGS] [OPTIONS]</source>
+      
+    <p> Allowed operations are 'allocate', 'deallocate', 'info', 'list', 'script' and 'help'. For help with a particular operation do: </p> 
+    <source>hod help &lt;operation&gt;</source>
+      
+      <p>To have a look at possible options do:</p>
+      <source>hod help options</source>
+      
+      <ul>
+
+      <li><em>allocate</em><br />
+      <em>Usage : hod allocate -d cluster_dir -n number_of_nodes [OPTIONS]</em><br />
+        Allocates a cluster on the given number of cluster nodes, and store the allocation information in cluster_dir for use with subsequent 
+        <code>hadoop</code> commands. Note that the <code>cluster_dir</code> must exist before running the command.</li>
+        
+      <li><em>list</em><br/>
+      <em>Usage : hod list [OPTIONS]</em><br />
+       Lists the clusters allocated by this user. Information provided includes the Torque job id corresponding to the cluster, the cluster 
+       directory where the allocation information is stored, and whether the MapReduce daemon is still active or not.</li>
+       
+      <li><em>info</em><br/>
+      <em>Usage : hod info -d cluster_dir [OPTIONS]</em><br />
+        Lists information about the cluster whose allocation information is stored in the specified cluster directory.</li>
+        
+      <li><em>deallocate</em><br/>
+      <em>Usage : hod deallocate -d cluster_dir [OPTIONS]</em><br />
+        Deallocates the cluster whose allocation information is stored in the specified cluster directory.</li>
+        
+      <li><em>script</em><br/>
+      <em>Usage : hod script -s script_file -d cluster_directory -n number_of_nodes [OPTIONS]</em><br />
+        Runs a hadoop script using HOD<em>script</em> operation. Provisions Hadoop on a given number of nodes, executes the given 
+        script from the submitting node, and deallocates the cluster when the script completes.</li>
+        
+      <li><em>help</em><br/>
+      <em>Usage : hod help [operation | 'options']</em><br/>
+       When no argument is specified, <code>hod help</code> gives the usage and basic options, and is equivalent to 
+       <code>hod --help</code> (See below). When 'options' is given as argument, hod displays only the basic options 
+       that hod takes. When an operation is specified, it displays the usage and description corresponding to that particular 
+       operation. For e.g, to know about allocate operation, one can do a <code>hod help allocate</code></li>
+    </ul>
+    
+    
+      <p>Besides the operations, HOD can take the following command line options.</p>
+      
+      <ul>
+
+      <li><em>--help</em><br />
+        Prints out the help message to see the usage and basic options.</li>
+        
+      <li><em>--verbose-help</em><br />
+        All configuration options provided in the hodrc file can be passed on the command line, using the syntax 
+        <code>--section_name.option_name[=value]</code>. When provided this way, the value provided on command line 
+        overrides the option provided in hodrc. The verbose-help command lists all the available options in the hodrc file. 
+        This is also a nice way to see the meaning of the configuration options. <br />"</li>
+        </ul>
+         
+       <p>See <a href="#Options_Configuring_HOD">Options Configuring HOD</a> for a description of most important hod configuration options. 
+       For basic options do <code>hod help options</code> and for all options possible in hod configuration do <code>hod --verbose-help</code>. 
+       See <a href="#HOD+Configuration">HOD Configuration</a> for a description of all options.</p>
+       
+      
+  </section>
+
+  <section><title> Options Configuring HOD </title><anchor id="Options_Configuring_HOD"></anchor>
+  <p>As described above, HOD is configured using a configuration file that is usually set up by system administrators. 
+  This is a INI style configuration file that is divided into sections, and options inside each section. Each section relates 
+  to one of the HOD processes: client, ringmaster, hodring, mapreduce or hdfs. The options inside a section comprise 
+  of an option name and value. </p>
+  
+  <p>Users can override the configuration defined in the default configuration in two ways: </p>
+  <ul>
+    <li> Users can supply their own configuration file to HOD in each of the commands, using the <code>-c</code> option</li>
+    <li> Users can supply specific configuration options to HOD/ Options provided on command line <em>override</em> 
+    the values provided in the configuration file being used.</li>
+  </ul>
+  <p>This section describes some of the most commonly used configuration options. These commonly used options are 
+  provided with a <em>short</em> option for convenience of specification. All other options can be specified using 
+  a <em>long</em> option that is also described below.</p>
+  
+  <ul>
+
+  <li><em>-c config_file</em><br />
+    Provides the configuration file to use. Can be used with all other options of HOD. Alternatively, the 
+    <code>HOD_CONF_DIR</code> environment variable can be defined to specify a directory that contains a file 
+    named <code>hodrc</code>, alleviating the need to specify the configuration file in each HOD command.</li>
+    
+  <li><em>-d cluster_dir</em><br />
+        This is required for most of the hod operations. As described under <a href="#Create_a_Cluster_Directory">Create a Cluster Directory</a>, 
+        the <em>cluster directory</em> is a directory on the local file system where <code>hod</code> will generate the Hadoop configuration, 
+        <em>hadoop-site.xml</em>, corresponding to the cluster it allocates. Pass it to the <code>hod</code> operations as an argument 
+        to -d or --hod.clusterdir. If it doesn't already exist, HOD will automatically try to create it and use it. Once a cluster is allocated, a 
+        user can utilize it to run Hadoop jobs by specifying the clusterdirectory as the Hadoop --config option.</li>
+        
+  <li><em>-n number_of_nodes</em><br />
+  This is required for the hod 'allocation' operation and for script operation. This denotes the number of nodes to be allocated.</li>
+  
+  <li><em>-s script-file</em><br/>
+   Required when using script operation, specifies the script file to execute.</li>
+   
+ <li><em>-b 1|2|3|4</em><br />
+    Enables the given debug level. Can be used with all other options of HOD. 4 is most verbose.</li>
+    
+  <li><em>-t hadoop_tarball</em><br />
+    Provisions Hadoop from the given tar.gz file. This option is only applicable to the <em>allocate</em> operation. For better 
+    distribution performance it is strongly recommended that the Hadoop tarball is created <em>after</em> removing the source 
+    or documentation.</li>
+    
+  <li><em>-N job-name</em><br />
+    The Name to give to the resource manager job that HOD uses underneath. For e.g. in the case of Torque, this translates to 
+    the <code>qsub -N</code> option, and can be seen as the job name using the <code>qstat</code> command.</li>
+    
+  <li><em>-l wall-clock-time</em><br />
+    The amount of time for which the user expects to have work on the allocated cluster. This is passed to the resource manager 
+    underneath HOD, and can be used in more efficient scheduling and utilization of the cluster. Note that in the case of Torque, 
+    the cluster is automatically deallocated after this time expires.</li>
+    
+  <li><em>-j java-home</em><br />
+    Path to be set to the JAVA_HOME environment variable. This is used in the <em>script</em> operation. HOD sets the 
+    JAVA_HOME environment variable tot his value and launches the user script in that.</li>
+    
+  <li><em>-A account-string</em><br />
+    Accounting information to pass to underlying resource manager.</li>
+    
+  <li><em>-Q queue-name</em><br />
+    Name of the queue in the underlying resource manager to which the job must be submitted.</li>
+    
+  <li><em>-Mkey1=value1 -Mkey2=value2</em><br />
+    Provides configuration parameters for the provisioned MapReduce daemons (JobTracker and TaskTrackers). A 
+    hadoop-site.xml is generated with these values on the cluster nodes. <br />
+    <em>Note:</em> Values which have the following characters: space, comma, equal-to, semi-colon need to be 
+    escaped with a '\' character, and need to be enclosed within quotes. You can escape a '\' with a '\' too. </li>
+    
+  <li><em>-Hkey1=value1 -Hkey2=value2</em><br />
+    Provides configuration parameters for the provisioned HDFS daemons (NameNode and DataNodes). A hadoop-site.xml 
+    is generated with these values on the cluster nodes <br />
+    <em>Note:</em> Values which have the following characters: space, comma, equal-to, semi-colon need to be 
+    escaped with a '\' character, and need to be enclosed within quotes. You can escape a '\' with a '\' too. </li>
+    
+  <li><em>-Ckey1=value1 -Ckey2=value2</em><br />
+    Provides configuration parameters for the client from where jobs can be submitted. A hadoop-site.xml is generated 
+    with these values on the submit node. <br />
+    <em>Note:</em> Values which have the following characters: space, comma, equal-to, semi-colon need to be 
+    escaped with a '\' character, and need to be enclosed within quotes. You can escape a '\' with a '\' too. </li>
+    
+  <li><em>--section-name.option-name=value</em><br />
+    This is the method to provide options using the <em>long</em> format. For e.g. you could say <em>--hod.script-wait-time=20</em></li>
+   </ul>
+    
+    </section>
+	</section>
+	
+	
+	<section>
+	  <title> Troubleshooting </title><anchor id="Troubleshooting"></anchor>
+  <p>The following section identifies some of the most likely error conditions users can run into when using HOD and ways to trouble-shoot them</p>
+  
+  <section><title>HOD Hangs During Allocation </title><anchor id="_hod_Hangs_During_Allocation"></anchor>
+  <anchor id="hod_Hangs_During_Allocation"></anchor>
+  <p><em>Possible Cause:</em> One of the HOD or Hadoop components have failed to come up. In such a case, the 
+  <code>hod</code> command will return after a few minutes (typically 2-3 minutes) with an error code of either 7 or 8 
+  as defined in the Error Codes section. Refer to that section for further details. </p>
+  <p><em>Possible Cause:</em> A large allocation is fired with a tarball. Sometimes due to load in the network, or on 
+  the allocated nodes, the tarball distribution might be significantly slow and take a couple of minutes to come back. 
+  Wait for completion. Also check that the tarball does not have the Hadoop sources or documentation.</p>
+  <p><em>Possible Cause:</em> A Torque related problem. If the cause is Torque related, the <code>hod</code> 
+  command will not return for more than 5 minutes. Running <code>hod</code> in debug mode may show the 
+  <code>qstat</code> command being executed repeatedly. Executing the <code>qstat</code> command from 
+  a separate shell may show that the job is in the <code>Q</code> (Queued) state. This usually indicates a 
+  problem with Torque. Possible causes could include some nodes being down, or new nodes added that Torque 
+  is not aware of. Generally, system administator help is needed to resolve this problem.</p>
+    </section>
+    
+  <section><title>HOD Hangs During Deallocation </title>
+  <anchor id="_hod_Hangs_During_Deallocation"></anchor><anchor id="hod_Hangs_During_Deallocation"></anchor>
+  <p><em>Possible Cause:</em> A Torque related problem, usually load on the Torque server, or the allocation is very large. 
+  Generally, waiting for the command to complete is the only option.</p>
+  </section>
+  
+  <section><title>HOD Fails With an Error Code and Error Message </title>
+  <anchor id="hod_Fails_With_an_error_code_and"></anchor><anchor id="_hod_Fails_With_an_error_code_an"></anchor>
+  <p>If the exit code of the <code>hod</code> command is not <code>0</code>, then refer to the following table 
+  of error exit codes to determine why the code may have occurred and how to debug the situation.</p>
+  <p><strong> Error Codes </strong></p><anchor id="Error_Codes"></anchor>
+  <table>
+    
+      <tr>
+        <th>Error Code</th>
+        <th>Meaning</th>
+        <th>Possible Causes and Remedial Actions</th>
+      </tr>
+      <tr>
+        <td> 1 </td>
+        <td> Configuration error </td>
+        <td> Incorrect configuration values specified in hodrc, or other errors related to HOD configuration. 
+        The error messages in this case must be sufficient to debug and fix the problem. </td>
+      </tr>
+      <tr>
+        <td> 2 </td>
+        <td> Invalid operation </td>
+        <td> Do <code>hod help</code> for the list of valid operations. </td>
+      </tr>
+      <tr>
+        <td> 3 </td>
+        <td> Invalid operation arguments </td>
+        <td> Do <code>hod help operation</code> for listing the usage of a particular operation.</td>
+      </tr>
+      <tr>
+        <td> 4 </td>
+        <td> Scheduler failure </td>
+        <td> 1. Requested more resources than available. Run <code>checknodes cluster_name</code> to see if enough nodes are available. <br />
+          2. Requested resources exceed resource manager limits. <br />
+          3. Torque is misconfigured, the path to Torque binaries is misconfigured, or other Torque problems. Contact system administrator. </td>
+      </tr>
+      <tr>
+        <td> 5 </td>
+        <td> Job execution failure </td>
+        <td> 1. Torque Job was deleted from outside. Execute the Torque <code>qstat</code> command to see if you have any jobs in the 
+        <code>R</code> (Running) state. If none exist, try re-executing HOD. <br />
+          2. Torque problems such as the server momentarily going down, or becoming unresponsive. Contact system administrator. <br/>
+          3. The system administrator might have configured account verification, and an invalid account is specified. Contact system administrator.</td>
+      </tr>
+      <tr>
+        <td> 6 </td>
+        <td> Ringmaster failure </td>
+        <td> HOD prints the message "Cluster could not be allocated because of the following errors on the ringmaster host &lt;hostname&gt;". 
+        The actual error message may indicate one of the following:<br/>
+          1. Invalid configuration on the node running the ringmaster, specified by the hostname in the error message.<br/>
+          2. Invalid configuration in the <code>ringmaster</code> section,<br />
+          3. Invalid <code>pkgs</code> option in <code>gridservice-mapred or gridservice-hdfs</code> section,<br />
+          4. An invalid hadoop tarball, or a tarball which has bundled an invalid configuration file in the conf directory,<br />
+          5. Mismatched version in Hadoop between the MapReduce and an external HDFS.<br />
+          The Torque <code>qstat</code> command will most likely show a job in the <code>C</code> (Completed) state. <br/>
+          One can login to the ringmaster host as given by HOD failure message and debug the problem with the help of the error message. 
+          If the error message doesn't give complete information, ringmaster logs should help finding out the root cause of the problem. 
+          Refer to the section <em>Locating Ringmaster Logs</em> below for more information. </td>
+      </tr>
+      <tr>
+        <td> 7 </td>
+        <td> HDFS failure </td>
+        <td> When HOD fails to allocate due to HDFS failures (or Job tracker failures, error code 8, see below), it prints a failure message 
+        "Hodring at &lt;hostname&gt; failed with following errors:" and then gives the actual error message, which may indicate one of the following:<br/>
+          1. Problem in starting Hadoop clusters. Usually the actual cause in the error message will indicate the problem on the hostname mentioned. 
+          Also, review the Hadoop related configuration in the HOD configuration files. Look at the Hadoop logs using information specified in 
+          <em>Collecting and Viewing Hadoop Logs</em> section above. <br />
+          2. Invalid configuration on the node running the hodring, specified by the hostname in the error message <br/>
+          3. Invalid configuration in the <code>hodring</code> section of hodrc. <code>ssh</code> to the hostname specified in the 
+          error message and grep for <code>ERROR</code> or <code>CRITICAL</code> in hodring logs. Refer to the section 
+          <em>Locating Hodring Logs</em> below for more information. <br />
+          4. Invalid tarball specified which is not packaged correctly. <br />
+          5. Cannot communicate with an externally configured HDFS.<br/>
+          When such HDFS or Job tracker failure occurs, one can login into the host with hostname mentioned in HOD failure message and debug the problem. 
+          While fixing the problem, one should also review other log messages in the ringmaster log to see which other machines also might have had problems 
+          bringing up the jobtracker/namenode, apart from the hostname that is reported in the failure message. This possibility of other machines also having problems 
+          occurs because HOD continues to try and launch hadoop daemons on multiple machines one after another depending upon the value of the configuration 
+          variable <a href="hod_scheduler.html#ringmaster+options">ringmaster.max-master-failures</a>. 
+          See <a href="hod_scheduler.html#Locating+Ringmaster+Logs">Locating Ringmaster Logs</a> for more information.</td>
+      </tr>
+      <tr>
+        <td> 8 </td>
+        <td> Job tracker failure </td>
+        <td> Similar to the causes in <em>DFS failure</em> case. </td>
+      </tr>
+      <tr>
+        <td> 10 </td>
+        <td> Cluster dead </td>
+        <td> 1. Cluster was auto-deallocated because it was idle for a long time. <br />
+          2. Cluster was auto-deallocated because the wallclock time specified by the system administrator or user was exceeded. <br />
+          3. Cannot communicate with the JobTracker and HDFS NameNode which were successfully allocated. Deallocate the cluster, and allocate again. </td>
+      </tr>
+      <tr>
+        <td> 12 </td>
+        <td> Cluster already allocated </td>
+        <td> The cluster directory specified has been used in a previous allocate operation and is not yet deallocated. 
+        Specify a different directory, or deallocate the previous allocation first. </td>
+      </tr>
+      <tr>
+        <td> 13 </td>
+        <td> HDFS dead </td>
+        <td> Cannot communicate with the HDFS NameNode. HDFS NameNode went down. </td>
+      </tr>
+      <tr>
+        <td> 14 </td>
+        <td> Mapred dead </td>
+        <td> 1. Cluster was auto-deallocated because it was idle for a long time. <br />
+          2. Cluster was auto-deallocated because the wallclock time specified by the system administrator or user was exceeded. <br />
+          3. Cannot communicate with the MapReduce JobTracker. JobTracker node went down. <br />
+          </td>
+      </tr>
+      <tr>
+        <td> 15 </td>
+        <td> Cluster not allocated </td>
+        <td> An operation which requires an allocated cluster is given a cluster directory with no state information. </td>
+      </tr>
+   
+      <tr>
+        <td> Any non-zero exit code </td>
+        <td> HOD script error </td>
+        <td> If the hod script option was used, it is likely that the exit code is from the script. Unfortunately, this could clash with the 
+        exit codes of the hod command itself. In order to help users differentiate these two, hod writes the script's exit code to a file 
+        called script.exitcode in the cluster directory, if the script returned an exit code. You can cat this file to determine the script's 
+        exit code. If it does not exist, then it is a hod command exit code.</td> 
+      </tr>
+  </table>
+    </section>
+  <section><title>Hadoop DFSClient Warns with a
+  NotReplicatedYetException</title>
+  <p>Sometimes, when you try to upload a file to the HDFS immediately after
+  allocating a HOD cluster, DFSClient warns with a NotReplicatedYetException. It
+  usually shows a message something like - </p>
+  
+  <source>
+WARN hdfs.DFSClient: NotReplicatedYetException sleeping  &lt;filename&gt; retries left 3
+08/01/25 16:31:40 INFO hdfs.DFSClient: org.apache.hadoop.ipc.RemoteException: java.io.IOException: 
+File &lt;filename&gt; could only be replicated to 0 nodes, instead of 1</source>
+  
+  <p> This scenario arises when you try to upload a file
+  to the HDFS while the DataNodes are still in the process of contacting the
+  NameNode. This can be resolved by waiting for some time before uploading a new
+  file to the HDFS, so that enough DataNodes start and contact the NameNode.</p>
+  </section>
+  
+  <section><title> Hadoop Jobs Not Running on a Successfully Allocated Cluster </title><anchor id="Hadoop_Jobs_Not_Running_on_a_Suc"></anchor>
+  
+  <p>This scenario generally occurs when a cluster is allocated, and is left inactive for sometime, and then hadoop jobs 
+  are attempted to be run on them. Then Hadoop jobs fail with the following exception:</p>
+  
+  <source>08/01/25 16:31:40 INFO ipc.Client: Retrying connect to server: foo.bar.com/1.1.1.1:53567. Already tried 1 time(s).</source>
+  
+  <p><em>Possible Cause:</em> No Hadoop jobs were run for a significant portion of time. Thus the cluster would have got 
+  deallocated as described in the section <em>Auto-deallocation of Idle Clusters</em>. Deallocate the cluster and allocate it again.</p>
+  <p><em>Possible Cause:</em> The wallclock limit specified by the Torque administrator or the <code>-l</code> option 
+  defined in the section <em>Specifying Additional Job Attributes</em> was exceeded since allocation time. Thus the cluster 
+  would have got released. Deallocate the cluster and allocate it again.</p>
+  <p><em>Possible Cause:</em> There is a version mismatch between the version of the hadoop being used in provisioning 
+  (typically via the tarball option) and the external HDFS. Ensure compatible versions are being used.</p>
+  <p><em>Possible Cause:</em> There is a version mismatch between the version of the hadoop client being used to submit
+   jobs and the hadoop used in provisioning (typically via the tarball option). Ensure compatible versions are being used.</p>
+  <p><em>Possible Cause:</em> You used one of the options for specifying Hadoop configuration <code>-M or -H</code>, 
+  which had special characters like space or comma that were not escaped correctly. Refer to the section 
+  <em>Options Configuring HOD</em> for checking how to specify such options correctly.</p>
+    </section>
+  <section><title> My Hadoop Job Got Killed </title><anchor id="My_Hadoop_Job_Got_Killed"></anchor>
+  <p><em>Possible Cause:</em> The wallclock limit specified by the Torque administrator or the <code>-l</code> 
+  option defined in the section <em>Specifying Additional Job Attributes</em> was exceeded since allocation time. 
+  Thus the cluster would have got released. Deallocate the cluster and allocate it again, this time with a larger wallclock time.</p>
+  <p><em>Possible Cause:</em> Problems with the JobTracker node. Refer to the section in <em>Collecting and Viewing Hadoop Logs</em> to get more information.</p>
+    </section>
+  <section><title> Hadoop Job Fails with Message: 'Job tracker still initializing' </title><anchor id="Hadoop_Job_Fails_with_Message_Jo"></anchor>
+  <p><em>Possible Cause:</em> The hadoop job was being run as part of the HOD script command, and it started before the JobTracker could come up fully. 
+  Allocate the cluster using a large value for the configuration option <code>--hod.script-wait-time</code>.
+   Typically a value of 120 should work, though it is typically unnecessary to be that large.</p>
+    </section>
+  <section><title> The Exit Codes For HOD Are Not Getting Into Torque </title><anchor id="The_Exit_Codes_For_HOD_Are_Not_G"></anchor>
+  <p><em>Possible Cause:</em> Version 0.16 of hadoop is required for this functionality to work. 
+  The version of Hadoop used does not match. Use the required version of Hadoop.</p>
+  <p><em>Possible Cause:</em> The deallocation was done without using the <code>hod</code> 
+  command; for e.g. directly using <code>qdel</code>. When the cluster is deallocated in this manner, 
+  the HOD processes are terminated using signals. This results in the exit code to be based on the 
+  signal number, rather than the exit code of the program.</p>
+    </section>
+  <section><title> The Hadoop Logs are Not Uploaded to HDFS </title><anchor id="The_Hadoop_Logs_are_Not_Uploaded"></anchor>
+  <p><em>Possible Cause:</em> There is a version mismatch between the version of the hadoop being used for uploading the logs 
+  and the external HDFS. Ensure that the correct version is specified in the <code>hodring.pkgs</code> option.</p>
+    </section>
+  <section><title> Locating Ringmaster Logs </title><anchor id="Locating_Ringmaster_Logs"></anchor>
+  <p>To locate the ringmaster logs, follow these steps: </p>
+  <ul>
+    <li> Execute hod in the debug mode using the -b option. This will print the Torque job id for the current run.</li>
+    <li> Execute <code>qstat -f torque_job_id</code> and look up the value of the <code>exec_host</code> parameter in the output. 
+    The first host in this list is the ringmaster node.</li>
+    <li> Login to this node.</li>
+    <li> The ringmaster log location is specified by the <code>ringmaster.log-dir</code> option in the hodrc. The name of the log file will be 
+    <code>username.torque_job_id/ringmaster-main.log</code>.</li>
+    <li> If you don't get enough information, you may want to set the ringmaster debug level to 4. This can be done by passing 
+    <code>--ringmaster.debug 4</code> to the hod command line.</li>
+  </ul>
+  </section>
+  <section><title> Locating Hodring Logs </title><anchor id="Locating_Hodring_Logs"></anchor>
+  <p>To locate hodring logs, follow the steps below: </p>
+  <ul>
+    <li> Execute hod in the debug mode using the -b option. This will print the Torque job id for the current run.</li>
+    <li> Execute <code>qstat -f torque_job_id</code> and look up the value of the <code>exec_host</code> parameter in the output. 
+    All nodes in this list should have a hodring on them.</li>
+    <li> Login to any of these nodes.</li>
+    <li> The hodring log location is specified by the <code>hodring.log-dir</code> option in the hodrc. The name of the log file will be 
+    <code>username.torque_job_id/hodring-main.log</code>.</li>
+    <li> If you don't get enough information, you may want to set the hodring debug level to 4. This can be done by passing 
+    <code>--hodring.debug 4</code> to the hod command line.</li>
+  </ul>
+  </section>
+	</section>
+	  </section>
+	  
+	  
+	  
+<!-- HOD ADMINISTRATORS -->
+
+  <section>
+    <title>HOD Administrators</title>	  
+   <p>This section show administrators how to install, configure and run HOD.</p> 
+	  <section>
+<title>Getting Started</title>
+
+<p>The basic system architecture of HOD includes these components:</p>
+<ul>
+  <li>A Resource manager, possibly together with a scheduler (see <a href="hod_scheduler.html#Prerequisites"> Prerequisites</a>) </li>
+  <li>Various HOD components</li>
+  <li>Hadoop MapReduce and HDFS daemons</li>
+</ul>
+
+<p>
+HOD provisions and maintains Hadoop MapReduce and, optionally, HDFS instances 
+through interaction with the above components on a given cluster of nodes. A cluster of
+nodes can be thought of as comprising two sets of nodes:</p>
+<ul>
+  <li>Submit nodes: Users use the HOD client on these nodes to allocate clusters, and then
+use the Hadoop client to submit Hadoop jobs. </li>
+  <li>Compute nodes: Using the resource manager, HOD components are run on these nodes to 
+provision the Hadoop daemons. After that Hadoop jobs run on them.</li>
+</ul>
+
+<p>
+Here is a brief description of the sequence of operations in allocating a cluster and
+running jobs on them.
+</p>
+
+<ul>
+  <li>The user uses the HOD client on the Submit node to allocate a desired number of
+cluster nodes and to provision Hadoop on them.</li>
+  <li>The HOD client uses a resource manager interface (qsub, in Torque) to submit a HOD
+process, called the RingMaster, as a Resource Manager job, to request the user's desired number 
+of nodes. This job is submitted to the central server of the resource manager (pbs_server, in Torque).</li>
+  <li>On the compute nodes, the resource manager slave daemons (pbs_moms in Torque) accept
+and run jobs that they are assigned by the central server (pbs_server in Torque). The RingMaster 
+process is started on one of the compute nodes (mother superior, in Torque).</li>
+  <li>The RingMaster then uses another resource manager interface (pbsdsh, in Torque) to run
+the second HOD component, HodRing, as distributed tasks on each of the compute
+nodes allocated.</li>
+  <li>The HodRings, after initializing, communicate with the RingMaster to get Hadoop commands, 
+and run them accordingly. Once the Hadoop commands are started, they register with the RingMaster,
+giving information about the daemons.</li>
+  <li>All the configuration files needed for Hadoop instances are generated by HOD itself, 
+some obtained from options given by user in its own configuration file.</li>
+  <li>The HOD client keeps communicating with the RingMaster to find out the location of the 
+JobTracker and HDFS daemons.</li>
+</ul>
+
+</section>
+
+<section>
+<title>Prerequisites</title>
+<p>To use HOD, your system should include the following components.</p>
+
+<ul>
+
+<li>Operating System: HOD is currently tested on RHEL4.</li>
+
+<li>Nodes: HOD requires a minimum of three nodes configured through a resource manager.</li>
+
+<li>Software: The following components must be installed on ALL nodes before using HOD:
+<ul>
+ <li><a href="ext:hod/torque">Torque: Resource manager</a></li>
+ <li><a href="ext:hod/python">Python</a> : HOD requires version 2.5.1 of Python.</li>
+</ul></li>
+
+<li>Software (optional): The following components are optional and can be installed to obtain better
+functionality from HOD:
+<ul>
+ <li><a href="ext:hod/twisted-python">Twisted Python</a>: This can be
+  used for improving the scalability of HOD. If this module is detected to be
+  installed, HOD uses it, else it falls back to default modules.</li>
+ <li><a href="http://hadoop.apache.org">Hadoop</a>: HOD can automatically
+ distribute Hadoop to all nodes in the cluster. However, it can also use a
+ pre-installed version of Hadoop, if it is available on all nodes in the cluster.
+  HOD currently supports Hadoop 0.15 and above.</li>
+</ul></li>
+
+</ul>
+
+<p>Note: HOD configuration requires the location of installs of these
+components to be the same on all nodes in the cluster. It will also
+make the configuration simpler to have the same location on the submit
+nodes.
+</p>
+</section>
+
+<section>
+<title>Resource Manager</title>
+<p>  Currently HOD works with the Torque resource manager, which it uses for its node
+  allocation and job submission. Torque is an open source resource manager from
+  <a href="ext:hod/cluster-resources">Cluster Resources</a>, a community effort
+  based on the PBS project. It provides control over batch jobs and distributed compute nodes. Torque is
+  freely available for download from <a href="ext:hod/torque-download">here</a>.
+  </p>
+
+<p>  All documentation related to torque can be seen under
+  the section TORQUE Resource Manager <a
+  href="ext:hod/torque-docs">here</a>. You can
+  get wiki documentation from <a
+  href="ext:hod/torque-wiki">here</a>.
+  Users may wish to subscribe to TORQUE’s mailing list or view the archive for questions,
+  comments <a
+  href="ext:hod/torque-mailing-list">here</a>.
+</p>
+
+<p>To use HOD with Torque:</p>
+<ul>
+ <li>Install Torque components: pbs_server on one node (head node), pbs_mom on all
+  compute nodes, and PBS client tools on all compute nodes and submit
+  nodes. Perform at least a basic configuration so that the Torque system is up and
+  running, that is, pbs_server knows which machines to talk to. Look <a
+  href="ext:hod/torque-basic-config">here</a>
+  for basic configuration.
+
+  For advanced configuration, see <a
+  href="ext:hod/torque-advanced-config">here</a></li>
+ <li>Create a queue for submitting jobs on the pbs_server. The name of the queue is the
+  same as the HOD configuration parameter, resource-manager.queue. The HOD client uses this queue to
+  submit the RingMaster process as a Torque job.</li>
+ <li>Specify a cluster name as a property for all nodes in the cluster.
+  This can be done by using the qmgr command. For example:
+  <code>qmgr -c "set node node properties=cluster-name"</code>. The name of the cluster is the same as
+  the HOD configuration parameter, hod.cluster. </li>
+ <li>Make sure that jobs can be submitted to the nodes. This can be done by
+  using the qsub command. For example:
+  <code>echo "sleep 30" | qsub -l nodes=3</code></li>
+</ul>
+
+</section>
+
+<section>
+<title>Installing HOD</title>
+
+<p>Once the resource manager is set up, you can obtain and
+install HOD.</p>
+<ul>
+ <li>If you are getting HOD from the Hadoop tarball, it is available under the 
+  'contrib' section of Hadoop, under the root  directory 'hod'.</li>
+ <li>If you are building from source, you can run ant tar from the Hadoop root
+  directory to generate the Hadoop tarball, and then get HOD from there,
+  as described above.</li>
+ <li>Distribute the files under this directory to all the nodes in the
+  cluster. Note that the location where the files are copied should be
+  the same on all the nodes.</li>
+  <li>Note that compiling hadoop would build HOD with appropriate permissions 
+  set on all the required script files in HOD.</li>
+</ul>
+</section>
+
+<section>
+<title>Configuring HOD</title>
+
+<p>You can configure HOD once it is installed. The minimal configuration needed
+to run HOD is described below. More advanced configuration options are discussed
+in the HOD Configuration.</p>
+<section>
+  <title>Minimal Configuration</title>
+  <p>To get started using HOD, the following minimal configuration is
+  required:</p>
+<ul>
+ <li>On the node from where you want to run HOD, edit the file hodrc
+  located in the &lt;install dir&gt;/conf directory. This file
+  contains the minimal set of values required to run hod.</li>
+ <li>
+<p>Specify values suitable to your environment for the following
+  variables defined in the configuration file. Note that some of these
+  variables are defined at more than one place in the file.</p>
+
+  <ul>
+   <li>${JAVA_HOME}: Location of Java for Hadoop. Hadoop supports Sun JDK
+    1.6.x and above.</li>
+   <li>${CLUSTER_NAME}: Name of the cluster which is specified in the
+    'node property' as mentioned in resource manager configuration.</li>
+   <li>${HADOOP_HOME}: Location of Hadoop installation on the compute and
+    submit nodes.</li>
+   <li>${RM_QUEUE}: Queue configured for submitting jobs in the resource
+    manager configuration.</li>
+   <li>${RM_HOME}: Location of the resource manager installation on the
+    compute and submit nodes.</li>
+    </ul>
+</li>
+
+<li>
+<p>The following environment variables may need to be set depending on
+  your environment. These variables must be defined where you run the
+  HOD client and must also be specified in the HOD configuration file as the
+  value of the key resource_manager.env-vars. Multiple variables can be
+  specified as a comma separated list of key=value pairs.</p>
+
+  <ul>
+   <li>HOD_PYTHON_HOME: If you install python to a non-default location
+    of the compute nodes, or submit nodes, then this variable must be
+    defined to point to the python executable in the non-standard
+    location.</li>
+    </ul>
+</li>
+</ul>
+</section>
+
+  <section>
+    <title>Advanced Configuration</title>
+    <p> You can review and modify other configuration options to suit
+ your specific needs. See <a href="#HOD+Configuration">HOD Configuration</a> for more information.</p>
+  </section>
+</section>
+
+  <section>
+    <title>Running HOD</title>
+    <p>You can run HOD once it is configured. Refer to <a
+    href="#HOD+Users"> HOD Users</a> for more information.</p>
+  </section>
+
+  <section>
+    <title>Supporting Tools and Utilities</title>
+    <p>This section describes supporting tools and utilities that can be used to
+    manage HOD deployments.</p>
+    
+    <section>
+      <title>logcondense.py - Manage Log Files</title>
+      <p>As mentioned under 
+         <a href="hod_scheduler.html#Collecting+and+Viewing+Hadoop+Logs">Collecting and Viewing Hadoop Logs</a>,
+         HOD can be configured to upload
+         Hadoop logs to a statically configured HDFS. Over time, the number of logs uploaded
+         to HDFS could increase. logcondense.py is a tool that helps
+         administrators to remove log files uploaded to HDFS. </p>
+      <section>
+        <title>Running logcondense.py</title>
+        <p>logcondense.py is available under hod_install_location/support folder. You can either
+        run it using python, for example, <em>python logcondense.py</em>, or give execute permissions 
+        to the file, and directly run it as <em>logcondense.py</em>. logcondense.py needs to be 
+        run by a user who has sufficient permissions to remove files from locations where log 
+        files are uploaded in the HDFS, if permissions are enabled. For example as mentioned under
+        <a href="hod_scheduler.html#hodring+options">hodring options</a>, the logs could
+        be configured to come under the user's home directory in HDFS. In that case, the user
+        running logcondense.py should have super user privileges to remove the files from under
+        all user home directories.</p>
+      </section>
+      <section>
+        <title>Command Line Options for logcondense.py</title>
+        <p>The following command line options are supported for logcondense.py.</p>
+          <table>
+            <tr>
+              <th>Short Option</th>
+              <th>Long option</th>
+              <th>Meaning</th>
+              <th>Example</th>
+            </tr>
+            <tr>
+              <td>-p</td>
+              <td>--package</td>
+              <td>Complete path to the hadoop script. The version of hadoop must be the same as the 
+                  one running HDFS.</td>
+              <td>/usr/bin/hadoop</td>
+            </tr>
+            <tr>
+              <td>-d</td>
+              <td>--days</td>
+              <td>Delete log files older than the specified number of days</td>
+              <td>7</td>
+            </tr>
+            <tr>
+              <td>-c</td>
+              <td>--config</td>
+              <td>Path to the Hadoop configuration directory, under which hadoop-site.xml resides.
+              The hadoop-site.xml must point to the HDFS NameNode from where logs are to be removed.</td>
+              <td>/home/foo/hadoop/conf</td>
+            </tr>
+            <tr>
+              <td>-l</td>
+              <td>--logs</td>
+              <td>A HDFS path, this must be the same HDFS path as specified for the log-destination-uri,
+              as mentioned under <a href="hod_scheduler.html#hodring+options">hodring options</a>,
+              without the hdfs:// URI string</td>
+              <td>/user</td>
+            </tr>
+            <tr>
+              <td>-n</td>
+              <td>--dynamicdfs</td>
+              <td>If true, this will indicate that the logcondense.py script should delete HDFS logs
+              in addition to MapReduce logs. Otherwise, it only deletes MapReduce logs, which is also the
+              default if this option is not specified. This option is useful if
+              dynamic HDFS installations 
+              are being provisioned by HOD, and the static HDFS installation is being used only to collect 
+              logs - a scenario that may be common in test clusters.</td>
+              <td>false</td>
+            </tr>
+            <tr>
+              <td>-r</td>
+              <td>--retain-master-logs</td>
+              <td>If true, this will keep the JobTracker logs of job in hod-logs inside HDFS and it 
+              will delete only the TaskTracker logs. Also, this will keep the Namenode logs along with 
+              JobTracker logs and will only delete the Datanode logs if 'dynamicdfs' options is set 
+              to true. Otherwise, it will delete the complete job directory from hod-logs inside 
+              HDFS. By default it is set to false.</td>
+              <td>false</td>
+            </tr>
+          </table>
+        <p>So, for example, to delete all log files older than 7 days using a hadoop-site.xml stored in
+        ~/hadoop-conf, using the hadoop installation under ~/hadoop-0.17.0, you could say:</p>
+        <p><em>python logcondense.py -p ~/hadoop-0.17.0/bin/hadoop -d 7 -c ~/hadoop-conf -l /user</em></p>
+      </section>
+    </section>
+    <section>
+      <title>checklimits.sh - Monitor Resource Limits</title>
+      <p>checklimits.sh is a HOD tool specific to the Torque/Maui environment
+      (<a href="ext:hod/maui">Maui Cluster Scheduler</a> is an open source job
+      scheduler for clusters and supercomputers, from clusterresources). The
+      checklimits.sh script
+      updates the torque comment field when newly submitted job(s) violate or
+      exceed
+      over user limits set up in Maui scheduler. It uses qstat, does one pass
+      over the torque job-list to determine queued or unfinished jobs, runs Maui
+      tool checkjob on each job to see if user limits are violated and then
+      runs torque's qalter utility to update job attribute 'comment'. Currently
+      it updates the comment as <em>User-limits exceeded. Requested:([0-9]*)
+      Used:([0-9]*) MaxLimit:([0-9]*)</em> for those jobs that violate limits.
+      This comment field is then used by HOD to behave accordingly depending on
+      the type of violation.</p>
+      <section>
+        <title>Running checklimits.sh</title>
+        <p>checklimits.sh is available under the hod_install_location/support
+        folder. This shell script can be run directly as <em>sh
+        checklimits.sh </em>or as <em>./checklimits.sh</em> after enabling
+        execute permissions. Torque and Maui binaries should be available
+        on the machine where the tool is run and should be in the path
+        of the shell script process. To update the
+        comment field of jobs from different users, this tool must be run with
+        torque administrative privileges. This tool must be run repeatedly
+        after specific intervals of time to frequently update jobs violating
+        constraints, for example via cron. Please note that the resource manager
+        and scheduler commands used in this script can be expensive and so
+        it is better not to run this inside a tight loop without sleeping.</p>
+      </section>
+    </section>
+
+    <section>
+      <title>verify-account Script</title>
+      <p>Production systems use accounting packages to charge users for using
+      shared compute resources. HOD supports a parameter 
+      <em>resource_manager.pbs-account</em> to allow users to identify the
+      account under which they would like to submit jobs. It may be necessary
+      to verify that this account is a valid one configured in an accounting
+      system. The <em>hod-install-dir/bin/verify-account</em> script 
+      provides a mechanism to plug-in a custom script that can do this
+      verification.</p>
+      
+      <section>
+        <title>Integrating the verify-account script with HOD</title>
+        <p>HOD runs the <em>verify-account</em> script passing in the
+        <em>resource_manager.pbs-account</em> value as argument to the script,
+        before allocating a cluster. Sites can write a script that verify this 
+        account against their accounting systems. Returning a non-zero exit 
+        code from this script will cause HOD to fail allocation. Also, in
+        case of an error, HOD will print the output of script to the user.
+        Any descriptive error message can be passed to the user from the
+        script in this manner.</p>
+        <p>The default script that comes with the HOD installation does not
+        do any validation, and returns a zero exit code.</p>
+        <p>If the verify-account script is not found, then HOD will treat
+        that verification is disabled, and continue allocation as is.</p>
+      </section>
+    </section>
+  </section>
+  </section>
+
+
+<!-- HOD CONFIGURATION -->
+
+   <section>
+    <title>HOD Configuration</title>
+      <p>This section discusses how to work with the HOD configuration options.</p>
+	 
+	  <section>
+      <title>Getting Started</title>
+ 
+      <p>Configuration options can be specified in two ways: as a configuration file 
+      in the INI format and as command line options to the HOD shell, 
+      specified in the format --section.option[=value]. If the same option is 
+      specified in both places, the value specified on the command line 
+      overrides the value in the configuration file.</p>
+      
+      <p>To get a simple description of all configuration options use:</p>
+      <source>$ hod --verbose-help</source>
+      
+       </section>
+       
+        <section>
+     <title>Configuation Options</title>
+      <p>HOD organizes configuration options into these sections:</p>
+      
+      <ul>
+        <li>  common: Options that appear in more than one section. Options defined in a section are used by the
+        process for which that section applies. Common options have the same meaning, but can have different values in each section.</li>
+        <li>  hod: Options for the HOD client</li>
+        <li>  resource_manager: Options for specifying which resource manager to use, and other parameters for using that resource manager</li>
+        <li>  ringmaster: Options for the RingMaster process, </li>
+        <li>  hodring: Options for the HodRing processes</li>
+        <li>  gridservice-mapred: Options for the MapReduce daemons</li>
+        <li>  gridservice-hdfs: Options for the HDFS daemons.</li>
+      </ul>
+      
+      <section> 
+        <title>common options</title>    
+        <ul>
+          <li>temp-dir: Temporary directory for usage by the HOD processes. Make 
+                      sure that the users who will run hod have rights to create 
+                      directories under the directory specified here. If you
+                      wish to make this directory vary across allocations,
+                      you can make use of the environmental variables which will
+                      be made available by the resource manager to the HOD
+                      processes. For example, in a Torque setup, having
+                      --ringmaster.temp-dir=/tmp/hod-temp-dir.$PBS_JOBID would
+                      let ringmaster use different temp-dir for each
+                      allocation; Torque expands this variable before starting
+                      the ringmaster.</li>
+          
+          <li>debug: Numeric value from 1-4. 4 produces the most log information,
+                   and 1 the least.</li>
+          
+          <li>log-dir: Directory where log files are stored. By default, this is
+                     &lt;install-location&gt;/logs/. The restrictions and notes for the
+                     temp-dir variable apply here too.
+          </li>
+          
+          <li>xrs-port-range: Range of ports, among which an available port shall
+                            be picked for use to run an XML-RPC server.</li>
+          
+          <li>http-port-range: Range of ports, among which an available port shall
+                             be picked for use to run an HTTP server.</li>
+          
+          <li>java-home: Location of Java to be used by Hadoop.</li>
+          <li>syslog-address: Address to which a syslog daemon is bound to. The format 
+                              of the value is host:port. If configured, HOD log messages
+                              will be logged to syslog using this value.</li>
+                              
+        </ul>
+      </section>
+      
+      <section>
+        <title>hod options</title>
+        
+        <ul>
+          <li>cluster: Descriptive name given to the cluster. For Torque, this is specified as a 'Node property' for every node in the cluster. 
+          HOD uses this value to compute the number of available nodes.</li>
+          
+          <li>client-params: Comma-separated list of hadoop config parameters specified as key-value pairs. 
+          These will be used to generate a hadoop-site.xml on the submit node that should be used for running MapReduce jobs.</li>
+
+          <li>job-feasibility-attr: Regular expression string that specifies whether and how to check job feasibility - resource 
+          manager or scheduler limits. The current implementation corresponds to the torque job attribute 'comment' and by default is disabled. 
+          When set, HOD uses it to decide what type of limit violation is triggered and either deallocates the cluster or stays in queued state
+          according as the request is beyond maximum limits or the cumulative usage has crossed maximum limits. The torque comment attribute may be updated 
+          periodically by an external mechanism. For example, comment attribute can be updated by running 
+          <a href="hod_scheduler.html#checklimits.sh+-+Monitor+Resource+Limits">checklimits.sh</a> script in hod/support directory, 
+          and then setting job-feasibility-attr equal to the value TORQUE_USER_LIMITS_COMMENT_FIELD, "User-limits exceeded. Requested:([0-9]*) 
+          Used:([0-9]*) MaxLimit:([0-9]*)", will make HOD behave accordingly.</li>
+         </ul>
+      </section>
+      
+      <section>
+        <title>resource_manager options</title>
+      
+        <ul>
+          <li>queue: Name of the queue configured in the resource manager to which
+                   jobs are to be submitted.</li>
+          
+          <li>batch-home: Install directory to which 'bin' is appended and under 
+                        which the executables of the resource manager can be 
+                        found.</li> 
+          
+          <li>env-vars: Comma-separated list of key-value pairs, 
+                      expressed as key=value, which would be passed to the jobs 
+                      launched on the compute nodes. 
+                      For example, if the python installation is 
+                      in a non-standard location, one can set the environment
+                      variable 'HOD_PYTHON_HOME' to the path to the python 
+                      executable. The HOD processes launched on the compute nodes
+                      can then use this variable.</li>
+          <li>options: Comma-separated list of key-value pairs,
+                      expressed as
+                      &lt;option&gt;:&lt;sub-option&gt;=&lt;value&gt;. When
+                      passing to the job submission program, these are expanded
+                      as -&lt;option&gt; &lt;sub-option&gt;=&lt;value&gt;. These
+                      are generally used for specifying additional resource
+                      contraints for scheduling. For instance, with a Torque
+                      setup, one can specify
+                      --resource_manager.options='l:arch=x86_64' for
+                      constraining the nodes being allocated to a particular
+                      architecture; this option will be passed to Torque's qsub
+                      command as "-l arch=x86_64".</li>
+        </ul>
+      </section>
+      
+      <section>
+        <title>ringmaster options</title>
+        
+        <ul>
+          <li>work-dirs: Comma-separated list of paths that will serve
+                       as the root for directories that HOD generates and passes
+                       to Hadoop for use to store DFS and MapReduce data. For
+                       example,
+                       this is where DFS data blocks will be stored. Typically,
+                       as many paths are specified as there are disks available
+                       to ensure all disks are being utilized. The restrictions
+                       and notes for the temp-dir variable apply here too.</li>
+          <li>max-master-failures: Number of times a hadoop master
+                       daemon can fail to launch, beyond which HOD will fail
+                       the cluster allocation altogether. In HOD clusters,
+                       sometimes there might be a single or few "bad" nodes due
+                       to issues like missing java, missing or incorrect version
+                       of Hadoop etc. When this configuration variable is set
+                       to a positive integer, the RingMaster returns an error
+                       to the client only when the number of times a hadoop
+                       master (JobTracker or NameNode) fails to start on these
+                       bad nodes because of above issues, exceeds the specified
+                       value. If the number is not exceeded, the next HodRing
+                       which requests for a command to launch is given the same
+                       hadoop master again. This way, HOD tries its best for a
+                       successful allocation even in the presence of a few bad
+                       nodes in the cluster.
+                       </li>
+          <li>workers_per_ring: Number of workers per service per HodRing.
+                       By default this is set to 1. If this configuration
+                       variable is set to a value 'n', the HodRing will run
+                       'n' instances of the workers (TaskTrackers or DataNodes)
+                       on each node acting as a slave. This can be used to run
+                       multiple workers per HodRing, so that the total number of
+                       workers  in a HOD cluster is not limited by the total
+                       number of nodes requested during allocation. However, note
+                       that this will mean each worker should be configured to use
+                       only a proportional fraction of the capacity of the 
+                       resources on the node. In general, this feature is only
+                       useful for testing and simulation purposes, and not for
+                       production use.</li>
+        </ul>
+      </section>
+      
+      <section>
+        <title>gridservice-hdfs options</title>
+        
+        <ul>
+          <li>external: If false, indicates that a HDFS cluster must be 
+                      bought up by the HOD system, on the nodes which it 
+                      allocates via the allocate command. Note that in that case,
+                      when the cluster is de-allocated, it will bring down the 
+                      HDFS cluster, and all the data will be lost.
+                      If true, it will try and connect to an externally configured
+                      HDFS system.
+                      Typically, because input for jobs are placed into HDFS
+                      before jobs are run, and also the output from jobs in HDFS 
+                      is required to be persistent, an internal HDFS cluster is 
+                      of little value in a production system. However, it allows 
+                      for quick testing.</li>
+          
+          <li>host: Hostname of the externally configured NameNode, if any</li>
+          
+          <li>fs_port: Port to which NameNode RPC server is bound.</li>
+          
+          <li>info_port: Port to which the NameNode web UI server is bound.</li>
+          
+          <li>pkgs: Installation directory, under which bin/hadoop executable is 
+                  located. This can be used to use a pre-installed version of
+                  Hadoop on the cluster.</li>
+          
+          <li>server-params: Comma-separated list of hadoop config parameters
+                           specified key-value pairs. These will be used to
+                           generate a hadoop-site.xml that will be used by the
+                           NameNode and DataNodes.</li>
+          
+          <li>final-server-params: Same as above, except they will be marked final.</li>
+        </ul>
+      </section>
+      
+      <section>
+        <title>gridservice-mapred options</title>
+        
+        <ul>
+          <li>external: If false, indicates that a MapReduce cluster must be
+                      bought up by the HOD system on the nodes which it allocates
+                      via the allocate command.
+                      If true, if will try and connect to an externally 
+                      configured MapReduce system.</li>
+          
+          <li>host: Hostname of the externally configured JobTracker, if any</li>
+          
+          <li>tracker_port: Port to which the JobTracker RPC server is bound</li>
+          
+          <li>info_port: Port to which the JobTracker web UI server is bound.</li>
+          
+          <li>pkgs: Installation directory, under which bin/hadoop executable is 
+                  located</li>
+          
+          <li>server-params: Comma-separated list of hadoop config parameters
+                           specified key-value pairs. These will be used to
+                           generate a hadoop-site.xml that will be used by the
+                           JobTracker and TaskTrackers</li>
+          
+          <li>final-server-params: Same as above, except they will be marked final.</li>
+        </ul>
+      </section>
+
+      <section>
+        <title>hodring options</title>
+
+        <ul>
+          <li>mapred-system-dir-root: Directory in the DFS under which HOD will
+                                      generate sub-directory names and pass the full path
+                                      as the value of the 'mapred.system.dir' configuration 
+                                      parameter to Hadoop daemons. The format of the full 
+                                      path will be value-of-this-option/userid/mapredsystem/cluster-id.
+                                      Note that the directory specified here should be such
+                                      that all users can create directories under this, if
+                                      permissions are enabled in HDFS. Setting the value of
+                                      this option to /user will make HOD use the user's
+                                      home directory to generate the mapred.system.dir value.</li>
+
+          <li>log-destination-uri: URL describing a path in an external, static DFS or the 
+                                   cluster node's local file system where HOD will upload 
+                                   Hadoop logs when a cluster is deallocated. To specify a 
+                                   DFS path, use the format 'hdfs://path'. To specify a 
+                                   cluster node's local file path, use the format 'file://path'.
+
+                                   When clusters are deallocated by HOD, the hadoop logs will
+                                   be deleted as part of HOD's cleanup process. To ensure these
+                                   logs persist, you can use this configuration option.
+
+                                   The format of the path is 
+                                   value-of-this-option/userid/hod-logs/cluster-id
+
+                                   Note that the directory you specify here must be such that all
+                                   users can create sub-directories under this. Setting this value
+                                   to hdfs://user will make the logs come in the user's home directory
+                                   in DFS.</li>
+
+          <li>pkgs: Installation directory, under which bin/hadoop executable is located. This will
+                    be used by HOD to upload logs if a HDFS URL is specified in log-destination-uri
+                    option. Note that this is useful if the users are using a tarball whose version
+                    may differ from the external, static HDFS version.</li>
+
+          <li>hadoop-port-range: Range of ports, among which an available port shall
+                             be picked for use to run a Hadoop Service, like JobTracker or TaskTracker. </li>
+          
+                                      
+        </ul>
+      </section>
+    </section>
+   </section>
+   
+   
+</body>
+</document>

@@ -1,0 +1,46 @@
+[hod]
+stream                          = True
+java-home                       = ${JAVA_HOME}
+cluster                         = ${CLUSTER_NAME}
+cluster-factor                  = 1.8
+xrs-port-range                  = 32768-65536
+debug                           = 3
+allocate-wait-time              = 3600
+temp-dir                        = /tmp/hod
+
+[ringmaster]
+register                        = True
+stream                          = False
+temp-dir                        = /tmp/hod
+http-port-range                 = 8000-9000
+work-dirs                       = /tmp/hod/1,/tmp/hod/2
+xrs-port-range                  = 32768-65536
+debug                           = 3
+
+[hodring]
+stream                          = False
+temp-dir                        = /tmp/hod
+register                        = True
+java-home                       = ${JAVA_HOME}
+http-port-range                 = 8000-9000
+xrs-port-range                  = 32768-65536
+debug                           = 3
+
+[resource_manager]
+queue                           = ${RM_QUEUE}
+batch-home                      = ${RM_HOME}
+id                              = torque
+#env-vars                       = HOD_PYTHON_HOME=/foo/bar/python-2.5.1/bin/python
+
+[gridservice-mapred]
+external                        = False
+pkgs                            = ${HADOOP_HOME}
+tracker_port                    = 8030
+info_port                       = 50080
+
+[gridservice-hdfs]
+external                        = False
+pkgs                            = ${HADOOP_HOME}
+fs_port                         = 8020
+info_port                       = 50070
+

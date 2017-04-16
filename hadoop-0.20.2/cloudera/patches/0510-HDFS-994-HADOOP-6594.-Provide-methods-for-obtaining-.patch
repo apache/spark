@@ -1,0 +1,459 @@
+From 5ba4559365dec19e119d041ddf7f6f65b7fc0c56 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 26 Feb 2010 19:26:55 -0800
+Subject: [PATCH 0510/1179] HDFS-994, HADOOP-6594. Provide methods for obtaining delegation token from Namenode for hftp and other uses
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436748/HADOOP-6594.patch
+Author: Jakob Homan
+Ref: CDH-648
+---
+ bin/hadoop                                         |    3 +
+ .../server/namenode/DelegationTokenServlet.java    |   91 +++++++++++
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    2 +
+ .../hadoop/hdfs/tools/DelegationTokenFetcher.java  |  169 ++++++++++++++++++++
+ .../hadoop/tools/TestDelegationTokenFetcher.java   |  125 +++++++++++++++
+ 5 files changed, 390 insertions(+), 0 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/server/namenode/DelegationTokenServlet.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
+ create mode 100644 src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 380c587..67c7f82 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -64,6 +64,7 @@ if [ $# = 0 ]; then
+   echo "  fsck                 run a DFS filesystem checking utility"
+   echo "  fs                   run a generic filesystem user client"
+   echo "  balancer             run a cluster balancing utility"
++  echo "  fetchdt              fetch a delegation token from the NameNode"
+   echo "  jobtracker           run the MapReduce job Tracker node" 
+   echo "  pipes                run a Pipes job"
+   echo "  tasktracker          run a MapReduce task Tracker node" 
+@@ -213,6 +214,8 @@ elif [ "$COMMAND" = "fsck" ] ; then
+ elif [ "$COMMAND" = "balancer" ] ; then
+   CLASS=org.apache.hadoop.hdfs.server.balancer.Balancer
+   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_BALANCER_OPTS"
++elif [ "$COMMAND" = "fetchdt" ] ; then
++  CLASS=org.apache.hadoop.hdfs.tools.DelegationTokenFetcher
+ elif [ "$COMMAND" = "jobtracker" ] ; then
+   CLASS=org.apache.hadoop.mapred.JobTracker
+   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_JOBTRACKER_OPTS"
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DelegationTokenServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DelegationTokenServlet.java
+new file mode 100644
+index 0000000..f69271c
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DelegationTokenServlet.java
+@@ -0,0 +1,91 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements. See the NOTICE file distributed with this
++ * work for additional information regarding copyright ownership. The ASF
++ * licenses this file to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ * 
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * 
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
++ * License for the specific language governing permissions and limitations under
++ * the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.security.PrivilegedExceptionAction;
++
++import javax.servlet.ServletContext;
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.TokenStorage;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
++
++/**
++ * Serve delegation tokens over http for use in hftp.
++ */
++@SuppressWarnings("serial")
++public class DelegationTokenServlet extends DfsServlet {
++  private static final Log LOG = LogFactory.getLog(DelegationTokenServlet.class);
++  public static final String PATH_SPEC = "/getDelegationToken";
++  
++  @Override
++  protected void doGet(final HttpServletRequest req, final HttpServletResponse resp)
++      throws ServletException, IOException {
++    final UserGroupInformation ugi;
++    final Configuration conf = new Configuration();
++    try {
++      ugi = getUGI(req, conf);
++    } catch(IOException ioe) {
++      LOG.info("Request for token received with no authentication from "
++          + req.getRemoteAddr(), ioe);
++      resp.sendError(HttpServletResponse.SC_FORBIDDEN, 
++          "Unable to identify or authenticate user");
++      return;
++    }
++    LOG.info("Sending token: {" + ugi.getUserName() + "," + req.getRemoteAddr() +"}");
++    final ServletContext context = getServletContext();
++    final NameNode nn = (NameNode) context.getAttribute("name.node");
++    
++    DataOutputStream dos = null;
++    try {
++      dos = new DataOutputStream(resp.getOutputStream());
++      final DataOutputStream dosFinal = dos; // for doAs block
++      ugi.doAs(new PrivilegedExceptionAction<Void>() {
++        @Override
++        public Void run() throws Exception {
++          
++          Token<DelegationTokenIdentifier> token = 
++            nn.getDelegationToken(new Text(req.getUserPrincipal().getName()));
++          String s = NameNode.getAddress(conf).getAddress().getHostAddress()
++                     + ":" + NameNode.getAddress(conf).getPort();
++          token.setService(new Text(s));
++          TokenStorage ts = new TokenStorage();
++          ts.addToken(new Text(ugi.getShortUserName()), token);
++          ts.write(dosFinal);
++          dosFinal.close();
++          return null;
++        }
++      });
++
++    } catch(Exception e) {
++      LOG.info("Exception while sending token. Re-throwing. ", e);
++      resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
++    } finally {
++      if(dos != null) dos.close();
++    }
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index d0d286a..8e8a573 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -272,6 +272,8 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     this.httpServer.setAttribute("name.node.address", getNameNodeAddress());
+     this.httpServer.setAttribute("name.system.image", getFSImage());
+     this.httpServer.setAttribute("name.conf", conf);
++    this.httpServer.addInternalServlet("getDelegationToken", 
++        DelegationTokenServlet.PATH_SPEC, DelegationTokenServlet.class);
+     this.httpServer.addInternalServlet("fsck", "/fsck", FsckServlet.class);
+     this.httpServer.addInternalServlet("getimage", "/getimage", GetImageServlet.class);
+     this.httpServer.addInternalServlet("listPaths", "/listPaths/*", ListPathsServlet.class);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java b/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
+new file mode 100644
+index 0000000..781cc87
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
+@@ -0,0 +1,169 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.net.InetAddress;
++import java.net.URL;
++import java.net.URLConnection;
++import java.security.PrivilegedExceptionAction;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.hdfs.DistributedFileSystem;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.server.namenode.DelegationTokenServlet;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.TokenStorage;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.util.StringUtils;
++
++/**
++ * Fetch a DelegationToken from the current Namenode and store it in the
++ * specified file.
++ */
++public class DelegationTokenFetcher {
++  private static final String USAGE =
++    "fetchdt retrieves delegation tokens (optionally over http)\n" +
++    "and writes them to specified file.\n" +
++    "Usage: fetchdt [--webservice <namenode http addr>] <output filename>";
++  
++  private final DistributedFileSystem dfs;
++  private final UserGroupInformation ugi;
++  private final DataOutputStream out;
++
++  /**
++   * Command-line interface
++   */
++  public static void main(final String [] args) throws Exception {
++    // Login the current user
++    UserGroupInformation.getCurrentUser().doAs(new PrivilegedExceptionAction<Object>() {
++      @Override
++      public Object run() throws Exception {
++        
++        if(args.length == 3 && "--webservice".equals(args[0])) {
++          getDTfromRemote(args[1], args[2]);
++          return null;
++        }
++        // avoid annoying mistake
++        if(args.length == 1 && "--webservice".equals(args[0])) {
++          System.out.println(USAGE);
++          return null;
++        }
++        if(args.length != 1 || args[0].isEmpty()) {
++          System.out.println(USAGE);
++          return null;
++        }
++        
++        DataOutputStream out = null;
++        
++        try {
++          Configuration conf = new Configuration();
++          DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(conf);
++          out = new DataOutputStream(new FileOutputStream(args[0]));
++          UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++
++          new DelegationTokenFetcher(dfs, out, ugi).go();
++          
++          out.flush();
++          System.out.println("Succesfully wrote token of size " + 
++              out.size() + " bytes to "+ args[0]);
++        } catch (IOException ioe) {
++          System.out.println("Exception encountered:\n" +
++              StringUtils.stringifyException(ioe));
++        } finally {
++          if(out != null) out.close();
++        }
++        return null;
++      }
++    });
++
++  }
++  
++  public DelegationTokenFetcher(DistributedFileSystem dfs, 
++      DataOutputStream out, UserGroupInformation ugi) {
++    checkNotNull("dfs", dfs); this.dfs = dfs;
++    checkNotNull("out", out); this.out = out;
++    checkNotNull("ugi", ugi); this.ugi = ugi;
++  }
++  
++  private void checkNotNull(String s, Object o) {
++    if(o == null) throw new IllegalArgumentException(s + " cannot be null.");
++  }
++
++  public void go() throws IOException {
++    String fullName = ugi.getUserName();
++    String shortName = ugi.getShortUserName();
++    Token<DelegationTokenIdentifier> token = 
++      dfs.getDelegationToken(new Text(fullName));
++    
++    // Reconstruct the ip:port of the Namenode
++    String nnAddress = 
++      InetAddress.getByName(dfs.getUri().getHost()).getHostAddress() 
++      + ":" + dfs.getUri().getPort();
++    token.setService(new Text(nnAddress));
++    
++    TokenStorage ts = new TokenStorage();
++    ts.addToken(new Text(shortName), token);
++    ts.write(out);
++  }
++  
++  /**
++   * Utility method to obtain a delegation token over http
++   * @param nnHttpAddr Namenode http addr, such as http://namenode:50070
++   * @param filename Name of file to store token in
++   */
++   static private void getDTfromRemote(String nnAddr, String filename) 
++   throws IOException {
++     // Enable Kerberos sockets
++    System.setProperty("https.cipherSuites", "TLS_KRB5_WITH_3DES_EDE_CBC_SHA");
++    String ugiPostfix = "";
++    DataOutputStream file = null;
++    DataInputStream dis = null;
++    
++    if(nnAddr.startsWith("http:"))
++      ugiPostfix = "?ugi=" + UserGroupInformation.getCurrentUser().getShortUserName();
++    
++    try {
++      System.out.println("Retrieving token from: " + 
++          nnAddr + DelegationTokenServlet.PATH_SPEC + ugiPostfix);
++      URL remoteURL = new URL(nnAddr + DelegationTokenServlet.PATH_SPEC + ugiPostfix);
++      URLConnection connection = remoteURL.openConnection();
++      
++      InputStream in = connection.getInputStream();
++      TokenStorage ts = new TokenStorage();
++      dis = new DataInputStream(in);
++      ts.readFields(dis);
++      file = new DataOutputStream(new FileOutputStream(filename));
++      ts.write(file);
++      file.flush();
++      System.out.println("Successfully wrote token of " + file.size() 
++          + " bytes  to " + filename);
++    } catch (Exception e) {
++      throw new IOException("Unable to obtain remote token", e);
++    } finally {
++      if(dis != null) dis.close();
++      if(file != null) file.close();
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java b/src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java
+new file mode 100644
+index 0000000..24822a9
+--- /dev/null
++++ b/src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java
+@@ -0,0 +1,125 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.tools;
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.fail;
++import static org.mockito.Matchers.eq;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++
++import java.io.ByteArrayInputStream;
++import java.io.ByteArrayOutputStream;
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.net.URI;
++
++import org.apache.hadoop.hdfs.DistributedFileSystem;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.tools.DelegationTokenFetcher;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.TokenStorage;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestDelegationTokenFetcher {
++  private DistributedFileSystem dfs;
++  private DataOutputStream out;
++  private UserGroupInformation ugi;
++
++  @Before 
++  public void init() {
++    dfs = mock(DistributedFileSystem.class);
++    out = mock(DataOutputStream.class);
++    ugi = mock(UserGroupInformation.class);
++  }
++  
++  /**
++   * Verify that when the DelegationTokenFetcher runs, it talks to the Namenode,
++   * pulls out the correct user's token and successfully serializes it to disk.
++   */
++  @Test
++  public void expectedTokenIsRetrievedFromDFS() throws Exception {
++    final String LONG_NAME = "TheDoctor@TARDIS";
++    final String SHORT_NAME = "TheDoctor";
++    final String SERVICE_VALUE = "localhost:2005";
++    
++    // Mock out the user's long and short names.
++    when(ugi.getUserName()).thenReturn(LONG_NAME);
++    when(ugi.getShortUserName()).thenReturn(SHORT_NAME);
++    
++    // Create a token for the fetcher to fetch, wire NN to return it when asked
++    // for this particular user.
++    Token<DelegationTokenIdentifier> t = new Token<DelegationTokenIdentifier>();
++    when(dfs.getDelegationToken(eq(new Text(LONG_NAME)))).thenReturn(t);
++
++    // Mock the NN's URI, which is stored as the service value
++    URI uri = new URI("hdfs://" + SERVICE_VALUE);
++    when(dfs.getUri()).thenReturn(uri);
++    
++    // Now, actually let the TokenFetcher go fetch the token.
++    final ByteArrayOutputStream baos = new ByteArrayOutputStream();
++    out = new DataOutputStream(baos);
++    new DelegationTokenFetcher(dfs, out, ugi).go();
++    
++    // now read the data back in and verify correct values
++    TokenStorage ts = new TokenStorage();
++    DataInputStream dis = 
++      new DataInputStream(new ByteArrayInputStream(baos.toByteArray()));
++    ts.readFields(dis);
++    Token<? extends TokenIdentifier> newToken = ts.getToken(new Text(SHORT_NAME));
++    
++    assertEquals("Should only be one token in storage", ts.numberOfTokens(), 1);
++    assertEquals("Service value should have survived", 
++        "127.0.0.1:2005", newToken.getService().toString());
++  }
++
++  private void checkWithNullParam(String s) {
++    try {
++      new DelegationTokenFetcher(dfs, out, ugi);
++    } catch (IllegalArgumentException iae) {
++      assertEquals("Expected exception message not received", 
++          s + " cannot be null.", iae.getMessage());
++      return; // received expected exception. We're good.
++    }
++    fail("null parameter should have failed.");
++  }
++  
++  @Test
++  public void dfsCannotBeNull() {
++    dfs = null;
++    String s = "dfs";
++    checkWithNullParam(s);
++  }
++
++  @Test
++  public void dosCannotBeNull() {
++    out = null;
++    String s = "out";
++    checkWithNullParam(s);
++  }
++  
++  @Test
++  public void ugiCannotBeNull() {
++    ugi = null;
++    String s = "ugi";
++    checkWithNullParam(s);
++  }
++}
+-- 
+1.7.0.4
+

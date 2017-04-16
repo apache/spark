@@ -1,0 +1,145 @@
+From b57d9d0a60f8d871511750465ad94dd18a103656 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 18 Dec 2010 15:44:25 -0800
+Subject: [PATCH 0759/1179] MAPREDUCE-2219. Fix JT startup to not require mapred.system.dir inside a dir that it owns
+
+Reason: Easier permissions
+Author: Todd Lipcon
+Ref: CDH-2499
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |   44 +++++++++++++++----
+ .../apache/hadoop/mapred/TestMapredSystemDir.java  |   28 ++++++++----
+ 2 files changed, 52 insertions(+), 20 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 4b71d36..80c2402 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -2244,22 +2244,34 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+             break; // if there is something to recover else clean the sys dir
+           }
+         }
+-        LOG.info("Cleaning up the system directory");
+-        fs.delete(systemDir, true);
+-        if (FileSystem.mkdirs(fs, systemDir, 
+-            new FsPermission(SYSTEM_DIR_PERMISSION))) {
++
++        if (!fs.exists(systemDir)) {
++          LOG.info("Creating the system directory");
++          if (FileSystem.mkdirs(fs, systemDir, 
++                                new FsPermission(SYSTEM_DIR_PERMISSION))) {
++            // success
++            break;
++          } else {
++            LOG.error("Mkdirs failed to create " + systemDir);
++          }
++        } else {
++          LOG.info("Cleaning up the system directory");
++          fs.setPermission(systemDir, new FsPermission(SYSTEM_DIR_PERMISSION));
++          // It exists, just set permissions and clean the contents up
++          deleteContents(fs, systemDir);
+           break;
+         }
+-        LOG.error("Mkdirs failed to create " + systemDir);
+       } catch (AccessControlException ace) {
+-        LOG.warn("Failed to operate on mapred.system.dir (" + systemDir 
+-                 + ") because of permissions.");
+-        LOG.warn("Manually delete the mapred.system.dir (" + systemDir 
+-                 + ") and then start the JobTracker.");
++        LOG.warn("Failed to operate on mapred.system.dir (" +
++                 systemDir.makeQualified(fs) +
++                 ") because of permissions.");
++        LOG.warn("This directory should be owned by the user '" +
++                 UserGroupInformation.getCurrentUser() + "'");
+         LOG.warn("Bailing out ... ", ace);
+         throw ace;
+       } catch (IOException ie) {
+-        LOG.info("problem cleaning system directory: " + systemDir, ie);
++        LOG.info("problem cleaning system directory: " +
++                 systemDir.makeQualified(fs), ie);
+       }
+       Thread.sleep(FS_ACCESS_RETRY_PERIOD);
+     }
+@@ -2302,6 +2314,18 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     pluginDispatcher.dispatchStart(this);
+   }
+ 
++  /**
++   * Recursively delete the contents of a directory without deleting the
++   * directory itself.
++   */
++  private void deleteContents(FileSystem fs, Path dir) throws IOException {
++    for (FileStatus stat : fs.listStatus(dir)) {
++      if (!fs.delete(stat.getPath(), true)) {
++        throw new IOException("Unable to delete " + stat.getPath());
++      }
++    }
++  }
++
+   private static SimpleDateFormat getDateFormat() {
+     return new SimpleDateFormat("yyyyMMddHHmm");
+   }
+diff --git a/src/test/org/apache/hadoop/mapred/TestMapredSystemDir.java b/src/test/org/apache/hadoop/mapred/TestMapredSystemDir.java
+index 8f9c583..acff4c6 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMapredSystemDir.java
++++ b/src/test/org/apache/hadoop/mapred/TestMapredSystemDir.java
+@@ -40,9 +40,11 @@ public class TestMapredSystemDir extends TestCase {
+   // mapred ugi
+   private static final UserGroupInformation MR_UGI = 
+     TestMiniMRWithDFSWithDistinctUsers.createUGI("mr", false);
++  private static final FsPermission SYSTEM_DIR_PARENT_PERMISSION =
++    FsPermission.createImmutable((short) 0755); // rwxr-xr-x
+   private static final FsPermission SYSTEM_DIR_PERMISSION =
+-    FsPermission.createImmutable((short) 0733); // rwx-wx-wx
+-  
++    FsPermission.createImmutable((short) 0700); // rwx------
++
+   public void testGarbledMapredSystemDir() throws Exception {
+     final Configuration conf = new Configuration();
+     MiniDFSCluster dfs = null;
+@@ -53,22 +55,28 @@ public class TestMapredSystemDir extends TestCase {
+       conf.set("mapred.system.dir", "/mapred");
+       dfs = new MiniDFSCluster(conf, 1, true, null);
+       FileSystem fs = dfs.getFileSystem();
+-      // create Configs.SYSTEM_DIR's parent (the parent has to be given
+-      // permissions since the JT internally tries to delete the leaf of
+-      // the directory structure
+-      Path mapredSysDir =  new Path(conf.get("mapred.system.dir")).getParent();
++
++      // create Configs.SYSTEM_DIR's parent with restrictive permissions.
++      // So long as the JT has access to the system dir itself it should
++      // be able to start.
++      Path mapredSysDir = new Path(conf.get("mapred.system.dir"));
++      Path parentDir =  mapredSysDir.getParent();
++      fs.mkdirs(parentDir);
++      fs.setPermission(parentDir,
++                       new FsPermission(SYSTEM_DIR_PARENT_PERMISSION));
+       fs.mkdirs(mapredSysDir);
+-      fs.setPermission(mapredSysDir, new FsPermission(SYSTEM_DIR_PERMISSION));
++      fs.setPermission(mapredSysDir,
++                       new FsPermission(SYSTEM_DIR_PERMISSION));
+       fs.setOwner(mapredSysDir, "mr", "mrgroup");
+ 
+       final MiniDFSCluster finalDFS = dfs;
+-      
++
+       // Become MR_UGI to do start the job tracker...
+       mr = MR_UGI.doAs(new PrivilegedExceptionAction<MiniMRCluster>() {
+         @Override
+         public MiniMRCluster run() throws Exception {
+           // start mr (i.e jobtracker)
+-          Configuration mrConf = new Configuration();
++          Configuration mrConf = new Configuration(conf);
+           
+           FileSystem fs = finalDFS.getFileSystem();
+           MiniMRCluster mr2 = new MiniMRCluster(0, 0, 0, fs.getUri().toString(),
+@@ -120,4 +128,4 @@ public class TestMapredSystemDir extends TestCase {
+       if (mr != null) { mr.shutdown();}
+     }
+   }
+-}
+\ No newline at end of file
++}
+-- 
+1.7.0.4
+

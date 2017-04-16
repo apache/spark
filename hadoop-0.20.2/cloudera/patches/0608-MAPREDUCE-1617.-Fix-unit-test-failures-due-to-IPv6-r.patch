@@ -1,0 +1,29 @@
+From 12bcbba89226fdce99733f366e8eaacd09d95ab7 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 16 Apr 2010 15:36:16 +0530
+Subject: [PATCH 0608/1179] MAPREDUCE-1617. Fix unit test failures due to IPv6-related issues
+
+Patch: https://issues.apache.org/jira/secure/attachment/12441951/mr-1617-v1.3.patch.
+Author: Luke Lu
+Reason: fix unit test
+Ref: YDH
+---
+ src/test/mapred-site.xml |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/src/test/mapred-site.xml b/src/test/mapred-site.xml
+index 437d7c4..8af5e26 100644
+--- a/src/test/mapred-site.xml
++++ b/src/test/mapred-site.xml
+@@ -18,4 +18,8 @@
+   <name>mapreduce.fileoutputcommitter.marksuccessfuljobs</name>
+   <value>false</value>
+ </property>
++<property>
++  <name>mapred.child.java.opts</name>
++  <value>-Xmx200m -Djava.net.preferIPv4Stack=true</value>
++</property>
+ </configuration>
+-- 
+1.7.0.4
+

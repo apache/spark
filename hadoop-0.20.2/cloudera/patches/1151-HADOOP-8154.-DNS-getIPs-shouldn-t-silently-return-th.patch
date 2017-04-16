@@ -1,0 +1,84 @@
+From f61144c1d90cdad986a466b9955a593461776306 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sat, 10 Mar 2012 12:58:16 -0800
+Subject: [PATCH 1151/1179] HADOOP-8154. DNS#getIPs shouldn't silently return the local host IP
+ for bogus interface names.
+
+DNS#getIPs silently returns the local host IP for bogus interface
+names. In this case let's throw an UnknownHostException. Specifying
+"default" for the interface is still supported.
+
+Author: Eli Collins
+Reason: Bug
+Ref: CDH-4292
+---
+ src/core/org/apache/hadoop/net/DNS.java |   28 ++++++++++++++++++++--------
+ 1 files changed, 20 insertions(+), 8 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/net/DNS.java b/src/core/org/apache/hadoop/net/DNS.java
+index 6832cb9..c537692 100644
+--- a/src/core/org/apache/hadoop/net/DNS.java
++++ b/src/core/org/apache/hadoop/net/DNS.java
+@@ -30,6 +30,9 @@ import javax.naming.directory.Attributes;
+ import javax.naming.directory.DirContext;
+ import javax.naming.directory.InitialDirContext;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
+ /**
+  * 
+  * A class that provides direct and reverse lookup functionalities, allowing
+@@ -39,6 +42,8 @@ import javax.naming.directory.InitialDirContext;
+  */
+ public class DNS {
+ 
++  public static final Log LOG = LogFactory.getLog(DNS.class);
++
+   /**
+    * Returns the hostname associated with the specified IP address by the
+    * provided nameserver.
+@@ -82,25 +87,32 @@ public class DNS {
+    *         interface
+    * @throws UnknownHostException
+    *             If an UnknownHostException is encountered in querying the
+-   *             default interface
++   *             default interface or the given interface can not be found
+    * 
+    */
+   public static String[] getIPs(String strInterface)
+     throws UnknownHostException {
++    if ("default".equals(strInterface)) {
++      return new String[] {
++          InetAddress.getLocalHost().getHostAddress()
++      };
++    }
+     try {
+       NetworkInterface netIF = NetworkInterface.getByName(strInterface);
+-      if (netIF == null)
+-        return new String[] { InetAddress.getLocalHost()
+-                              .getHostAddress() };
+-      else {
++      if (netIF == null) {
++        throw new UnknownHostException("Unknown interface " + strInterface);
++      } else {
+         Vector<String> ips = new Vector<String>();
+-        Enumeration e = netIF.getInetAddresses();
++        Enumeration<InetAddress> e = netIF.getInetAddresses();
+         while (e.hasMoreElements())
+-          ips.add(((InetAddress) e.nextElement()).getHostAddress());
++          ips.add(e.nextElement().getHostAddress());
+         return ips.toArray(new String[] {});
+       }
+     } catch (SocketException e) {
+-      return new String[] { InetAddress.getLocalHost().getHostAddress() };
++      LOG.warn("Unable to get IP for interface " + strInterface, e);
++      return new String[] {
++          InetAddress.getLocalHost().getHostAddress()
++      };
+     }
+   }
+ 
+-- 
+1.7.0.4
+

@@ -1,0 +1,30 @@
+From 0ca54f2722206685d9e36fcbb2656d0ac1957311 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:53:47 -0800
+Subject: [PATCH 0070/1179] MAPREDUCE-792. javac warnings in DBInputFormat
+
+Description: <a href="http://issues.apache.org/jira/browse/MAPREDUCE-716" title="org.apache.hadoop.mapred.lib.db.DBInputformat not working with oracle"><del>MAPREDUCE-716</del></a> introduces javac warnings
+Reason: Technical debt
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../hadoop/mapreduce/lib/db/DBInputFormat.java     |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java
+index 6aba70d..ef8bd98 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java
+@@ -176,7 +176,8 @@ public class DBInputFormat<T extends DBWritable>
+   protected RecordReader<LongWritable, T> createDBRecordReader(DBInputSplit split,
+       Configuration conf) throws IOException {
+ 
+-    Class inputClass = dbConf.getInputClass();
++    @SuppressWarnings("unchecked")
++    Class<T> inputClass = (Class<T>) (dbConf.getInputClass());
+     try {
+       // use database product name to determine appropriate record reader.
+       if (dbProductName.startsWith("ORACLE")) {
+-- 
+1.7.0.4
+

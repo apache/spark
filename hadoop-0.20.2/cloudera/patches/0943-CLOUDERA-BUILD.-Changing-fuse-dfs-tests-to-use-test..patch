@@ -1,0 +1,25 @@
+From 03ab6d72146cfd99028fec22f6d28994d515df12 Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Mon, 21 Mar 2011 11:26:14 -0700
+Subject: [PATCH 0943/1179] CLOUDERA-BUILD. Changing fuse-dfs tests to use test.junit.output.format for Junit formatter, rather than hardcoding as plain.
+
+---
+ src/contrib/fuse-dfs/build.xml |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/fuse-dfs/build.xml b/src/contrib/fuse-dfs/build.xml
+index 7f0853b..4e9b1c8 100644
+--- a/src/contrib/fuse-dfs/build.xml
++++ b/src/contrib/fuse-dfs/build.xml
+@@ -120,7 +120,7 @@
+       <sysproperty key="user.dir" value="${build.test}/data"/>
+       <sysproperty key="hadoop.log.dir" value="${hadoop.log.dir}"/>
+       <sysproperty key="test.src.dir" value="${test.src.dir}"/>
+-      <formatter type="plain" />
++      <formatter type="${test.junit.output.format}" />
+       <batchtest todir="${build.test}" unless="testcase">
+         <fileset dir="${src.test}">
+           <include name="**/Test*.java"/>
+-- 
+1.7.0.4
+

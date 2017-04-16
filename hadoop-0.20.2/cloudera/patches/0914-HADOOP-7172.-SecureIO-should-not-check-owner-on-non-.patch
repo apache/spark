@@ -1,0 +1,96 @@
+From 462e80e19c2ab2e40aa6ca4b590580de9b9a4a1b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 8 Mar 2011 11:02:49 -0800
+Subject: [PATCH 0914/1179] HADOOP-7172. SecureIO should not check owner on non-secure clusters that have no native support
+
+Reason: Fix shuffle performance regression when native libraries are not installed
+Author: Todd Lipcon
+Ref: CDH-2779
+---
+ src/core/org/apache/hadoop/io/SecureIOUtils.java   |   31 +++++++++++++-------
+ .../org/apache/hadoop/io/TestSecureIOUtils.java    |   17 ++++++++--
+ 2 files changed, 33 insertions(+), 15 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/SecureIOUtils.java b/src/core/org/apache/hadoop/io/SecureIOUtils.java
+index 3c5d0e5..908f86c 100644
+--- a/src/core/org/apache/hadoop/io/SecureIOUtils.java
++++ b/src/core/org/apache/hadoop/io/SecureIOUtils.java
+@@ -91,26 +91,35 @@ public class SecureIOUtils {
+ 
+   /**
+    * Open the given File for read access, verifying the expected user
+-   * constraints.
++   * constraints if security is enabled.
++   *
++   * Note that this function provides no additional checks if Hadoop
++   * security is disabled, since doing the checks would be too expensive
++   * when native libraries are not available.
++   *
+    * @param f the file that we are trying to open
+    * @param expectedOwner the expected user owner for the file
+-   * @throws IOException if an IO Error occurred, or the user does not 
+-   * match
++   * @throws IOException if an IO Error occurred, or security is enabled and
++   * the user/group does not match
+    */
+   public static FileInputStream openForRead(File f, String expectedOwner) 
+   throws IOException {
++    if (!UserGroupInformation.isSecurityEnabled()) {
++      return new FileInputStream(f);
++    }
++    return forceSecureOpenForRead(f, expectedOwner);
++  }
++
++  /**
++   * Same as openForRead() except that it will run even if security is off.
++   * This is used by unit tests.
++   */
++  static FileInputStream forceSecureOpenForRead(File f, String expectedOwner)
++      throws IOException {
+     FileInputStream fis = new FileInputStream(f);
+     if (expectedOwner == null) { //no security checks
+       return fis;
+     }
+-    if (skipSecurity) {
+-      // Subject to race conditions but this is the best we can do
+-      FileStatus status =
+-        rawFilesystem.getFileStatus(new Path(f.getAbsolutePath()));
+-      checkStat(f, status.getOwner(), expectedOwner);
+-      return fis;
+-    }
+-
+     boolean success = false;
+     try {
+       String owner = NativeIO.getOwner(fis.getFD());
+diff --git a/src/test/org/apache/hadoop/io/TestSecureIOUtils.java b/src/test/org/apache/hadoop/io/TestSecureIOUtils.java
+index f4e981b..5ff49c1 100644
+--- a/src/test/org/apache/hadoop/io/TestSecureIOUtils.java
++++ b/src/test/org/apache/hadoop/io/TestSecureIOUtils.java
+@@ -63,11 +63,20 @@ public class TestSecureIOUtils {
+       .openForRead(testFilePath, realOwner).close();
+   }
+ 
+-  @Test(expected=IOException.class)
++  @Test
+   public void testReadIncorrectlyRestrictedWithSecurity() throws IOException {
+-    SecureIOUtils
+-      .openForRead(testFilePath, "invalidUser").close();
+-    fail("Didn't throw expection for wrong ownership!");
++    // this will only run if libs are available
++    assumeTrue(NativeIO.isAvailable());
++
++    System.out.println("Running test with native libs...");
++
++    try {
++      SecureIOUtils
++        .forceSecureOpenForRead(testFilePath, "invalidUser").close();
++      fail("Didn't throw expection for wrong ownership!");
++    } catch (IOException ioe) {
++      // expected
++    }
+   }
+ 
+   @Test
+-- 
+1.7.0.4
+

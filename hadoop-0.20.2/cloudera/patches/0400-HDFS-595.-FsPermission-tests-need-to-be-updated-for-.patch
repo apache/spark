@@ -1,0 +1,53 @@
+From 4ba755db0d9eae199355905193c424d1a8a78dae Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 14 Dec 2009 19:45:50 -0800
+Subject: [PATCH 0400/1179] HDFS-595. FsPermission tests need to be updated for new octal configuration parameter from HADOOP-6234
+
+Patch: https://issues.apache.org/jira/secure/attachment/12427977/HDFS-595-Y20.patch
+Author: Jakob Homan
+Ref: YDH
+---
+ .../org/apache/hadoop/hdfs/TestDFSPermission.java  |    4 ++--
+ .../org/apache/hadoop/security/TestPermission.java |    4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java b/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
+index c456b90..fd3a1ce 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
+@@ -153,8 +153,8 @@ public class TestDFSPermission extends TestCase {
+   /* create a file/directory with the given umask and permission */
+   private void create(OpType op, Path name, short umask, 
+       FsPermission permission) throws IOException {
+-    // set umask in configuration
+-    conf.setInt(FsPermission.UMASK_LABEL, umask);
++    // set umask in configuration, converting to padded octal
++    conf.set(FsPermission.UMASK_LABEL, String.format("%1$03o", umask));
+ 
+     // create the file/directory
+     switch (op) {
+diff --git a/src/test/org/apache/hadoop/security/TestPermission.java b/src/test/org/apache/hadoop/security/TestPermission.java
+index c77b777..b6138a0 100644
+--- a/src/test/org/apache/hadoop/security/TestPermission.java
++++ b/src/test/org/apache/hadoop/security/TestPermission.java
+@@ -66,7 +66,7 @@ public class TestPermission extends TestCase {
+   public void testCreate() throws Exception {
+     Configuration conf = new Configuration();
+     conf.setBoolean("dfs.permissions", true);
+-    conf.setInt(FsPermission.UMASK_LABEL, 0);
++    conf.set(FsPermission.UMASK_LABEL, "000");
+     MiniDFSCluster cluster = null;
+     FileSystem fs = null;
+ 
+@@ -94,7 +94,7 @@ public class TestPermission extends TestCase {
+       checkPermission(fs, "/b1/b2", inheritPerm);
+       checkPermission(fs, "/b1/b2/b3.txt", filePerm);
+       
+-      conf.setInt(FsPermission.UMASK_LABEL, 0022);
++      conf.set(FsPermission.UMASK_LABEL, "022");
+       FsPermission permission = 
+         FsPermission.createImmutable((short)0666);
+       FileSystem.mkdirs(fs, new Path("/c1"), new FsPermission(permission));
+-- 
+1.7.0.4
+

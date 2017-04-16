@@ -1,0 +1,29 @@
+From 9cf8f0cb6ed744439d8e90e3ba376edb5d9521f3 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:36:22 -0800
+Subject: [PATCH 0028/1179] MAPREDUCE-415. JobControl Job does always has an unassigned name
+
+Description: When creating and adding org.apache.hadoop.mapred.jobcontrol.Job(s) they don't use the names specified in their respective JobConf files.  Instead it's just hardcoded to "unassigned".
+Reason: bugfix
+Author: Xavier Stevens
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/mapred/jobcontrol/Job.java   |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/jobcontrol/Job.java b/src/mapred/org/apache/hadoop/mapred/jobcontrol/Job.java
+index 9801d2c..4a1ee30 100644
+--- a/src/mapred/org/apache/hadoop/mapred/jobcontrol/Job.java
++++ b/src/mapred/org/apache/hadoop/mapred/jobcontrol/Job.java
+@@ -75,7 +75,7 @@ public class Job {
+     this.state = Job.WAITING;
+     this.jobID = "unassigned";
+     this.mapredJobID = null; //not yet assigned 
+-    this.jobName = "unassigned";
++    this.jobName = jobConf.getJobName();
+     this.message = "just initialized";
+     this.jc = new JobClient(jobConf);
+   }
+-- 
+1.7.0.4
+

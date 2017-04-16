@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<project name="hadoopjsvc" default="compile">
+
+  <property name="jsvc.version" value="1.0.2" />
+  <property name="jsvc.tar.ball" value="commons-daemon-${jsvc.version}-src.tar.gz" />
+  <property name="jsvc.src.code.dir" value="commons-daemon-${jsvc.version}-src/src/native/unix" />
+
+  <target name="jsvc">
+    <mkdir dir="${build.c++.jsvc}" />
+
+    <untar src="${c++.jsvc.src}/${jsvc.tar.ball}" compression="gzip" dest="${build.c++.jsvc}" />
+
+    <exec executable="sh" dir="${build.c++.jsvc}/${jsvc.src.code.dir}"
+        failonerror="yes">
+        <arg value="support/buildconf.sh" />
+    </exec>
+
+    <exec executable="sh" dir="${build.c++.jsvc}/${jsvc.src.code.dir}"
+        failonerror="yes">
+        <env key="JSVC_ARCH" value="${jsvc.arch}"/>
+        <arg value="${c++.jsvc.src}/xconf.sh" />
+    </exec>
+
+    <exec executable="make" dir="${build.c++.jsvc}/${jsvc.src.code.dir}"
+        failonerror="yes">
+        <arg value="clean" />
+    </exec>
+
+    <exec executable="make" dir="${build.c++.jsvc}/${jsvc.src.code.dir}"
+        failonerror="yes">
+    </exec>
+
+    <copy file="${build.c++.jsvc}/${jsvc.src.code.dir}/jsvc" todir="${jsvc.install.dir}"
+        verbose="true" />
+    <chmod perm="ugo+x" type="file">
+      <fileset file="${jsvc.install.dir}/jsvc"/>
+    </chmod>
+  </target>
+
+</project>

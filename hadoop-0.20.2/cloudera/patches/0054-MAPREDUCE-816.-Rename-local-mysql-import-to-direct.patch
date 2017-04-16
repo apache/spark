@@ -1,0 +1,203 @@
+From 84b622a5f6f5bd145f19f4c08b6263759ac51756 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:47:15 -0800
+Subject: [PATCH 0054/1179] MAPREDUCE-816. Rename "local" mysql import to "direct"
+
+Description: A mysqldump-based fast path known as "local mode" is used in sqoop when users pass the argument <tt>-<del>local.</tt> The restriction that this only import from localhost was based on an implementation technique that was later abandoned in favor of a more general one, which can support remote hosts as well. Thus, <tt></del><del>local</tt> is a poor name for the flag. <tt></del>-direct</tt> is more general and more descriptive. This should be used instead.
+Reason: Interface clarification
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../java/org/apache/hadoop/sqoop/ConnFactory.java  |    2 +-
+ .../org/apache/hadoop/sqoop/ImportOptions.java     |   22 +++++++++++--------
+ .../apache/hadoop/sqoop/manager/ConnManager.java   |    2 +-
+ .../hadoop/sqoop/manager/LocalMySQLManager.java    |    8 +++---
+ .../apache/hadoop/sqoop/manager/MySQLManager.java  |    8 ++++--
+ .../hadoop/sqoop/manager/LocalMySQLTest.java       |    2 +-
+ .../apache/hadoop/sqoop/manager/MySQLAuthTest.java |    2 +-
+ 7 files changed, 26 insertions(+), 20 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ConnFactory.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ConnFactory.java
+index 579b87f..05307e4 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ConnFactory.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ConnFactory.java
+@@ -71,7 +71,7 @@ public final class ConnFactory {
+     }
+ 
+     if (scheme.equals("jdbc:mysql:")) {
+-      if (opts.isLocal()) {
++      if (opts.isDirect()) {
+         return new LocalMySQLManager(opts);
+       } else {
+         return new MySQLManager(opts);
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java
+index 092539a..c509d55 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java
+@@ -93,7 +93,7 @@ public class ImportOptions {
+   private String driverClassName;
+   private String warehouseDir;
+   private FileLayout layout;
+-  private boolean local; // if true and conn is mysql, use mysqldump.
++  private boolean direct; // if true and conn is mysql, use mysqldump.
+   private String tmpDir; // where temp data goes; usually /tmp
+   private String hiveHome;
+   private boolean hiveImport;
+@@ -161,10 +161,10 @@ public class ImportOptions {
+       this.className = props.getProperty("java.classname", this.className);
+       this.packageName = props.getProperty("java.packagename", this.packageName);
+ 
+-      String localImport = props.getProperty("local.import",
+-          Boolean.toString(this.local)).toLowerCase();
+-      this.local = "true".equals(localImport) || "yes".equals(localImport)
+-          || "1".equals(localImport);
++      String directImport = props.getProperty("direct.import",
++          Boolean.toString(this.direct)).toLowerCase();
++      this.direct = "true".equals(directImport) || "yes".equals(directImport)
++          || "1".equals(directImport);
+ 
+       String hiveImportStr = props.getProperty("hive.import",
+           Boolean.toString(this.hiveImport)).toLowerCase();
+@@ -250,7 +250,7 @@ public class ImportOptions {
+     System.out.println("--username (username)        Set authentication username");
+     System.out.println("--password (password)        Set authentication password");
+     System.out.println("-P                           Read password from console");
+-    System.out.println("--local                      Use local import fast path (mysql only)");
++    System.out.println("--direct                     Use direct import fast path (mysql only)");
+     System.out.println("");
+     System.out.println("Import control options:");
+     System.out.println("--table (tablename)          Table to read");
+@@ -418,7 +418,11 @@ public class ImportOptions {
+         } else if (args[i].equals("--all-tables")) {
+           this.allTables = true;
+         } else if (args[i].equals("--local")) {
+-          this.local = true;
++          // TODO(aaron): Remove this after suitable deprecation time period.
++          LOG.warn("--local is deprecated; use --direct instead.");
++          this.direct = true;
++        } else if (args[i].equals("--direct")) {
++          this.direct = true;
+         } else if (args[i].equals("--username")) {
+           this.username = args[++i];
+           if (null == this.password) {
+@@ -614,8 +618,8 @@ public class ImportOptions {
+     return password;
+   }
+ 
+-  public boolean isLocal() {
+-    return local;
++  public boolean isDirect() {
++    return direct;
+   }
+ 
+   /**
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java
+index 951a389..6a0aa25 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ConnManager.java
+@@ -65,7 +65,7 @@ public interface ConnManager {
+ 
+   /**
+    * Execute a SQL statement to read the named set of columns from a table.
+-   * If columns is null, all columns from the table are read. This is a local
++   * If columns is null, all columns from the table are read. This is a direct
+    * (non-parallelized) read of the table back to the current client.
+    * The client is responsible for calling ResultSet.close() when done with the
+    * returned ResultSet object.
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java
+index 349d492..eec0bd6 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java
+@@ -49,9 +49,8 @@ import org.apache.hadoop.sqoop.util.StreamHandlerFactory;
+ import org.apache.hadoop.util.Shell;
+ 
+ /**
+- * Manages local connections to MySQL databases
+- * that are local to this machine -- so we can use mysqldump to get
+- * really fast dumps.
++ * Manages direct connections to MySQL databases
++ * so we can use mysqldump to get really fast dumps.
+  */
+ public class LocalMySQLManager extends MySQLManager {
+ 
+@@ -391,7 +390,7 @@ public class LocalMySQLManager extends MySQLManager {
+       // TODO(aaron): Support SequenceFile-based load-in
+       LOG.warn("File import layout " + options.getFileLayout()
+           + " is not supported by");
+-      LOG.warn("MySQL local import; import will proceed as text files.");
++      LOG.warn("MySQL direct import; import will proceed as text files.");
+     }
+ 
+     ArrayList<String> args = new ArrayList<String>();
+@@ -461,6 +460,7 @@ public class LocalMySQLManager extends MySQLManager {
+       args.add("--quick"); // no buffering
+       // TODO(aaron): Add a flag to allow --lock-tables instead for MyISAM data
+       args.add("--single-transaction"); 
++      // TODO(aaron): Add --host and --port arguments to support remote direct connects.
+ 
+       String username = options.getUsername();
+       if (null != username) {
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
+index fee4dde..083a130 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
+@@ -41,7 +41,7 @@ public class MySQLManager extends GenericJdbcManager {
+   // driver class to ensure is loaded when making db connection.
+   private static final String DRIVER_CLASS = "com.mysql.jdbc.Driver";
+ 
+-  // set to true after we warn the user that we can use local fastpath.
++  // set to true after we warn the user that we can use direct fastpath.
+   private static boolean warningPrinted = false;
+ 
+   public MySQLManager(final ImportOptions opts) {
+@@ -49,7 +49,7 @@ public class MySQLManager extends GenericJdbcManager {
+   }
+ 
+   protected MySQLManager(final ImportOptions opts, boolean ignored) {
+-    // constructor used by subclasses to avoid the --local warning.
++    // constructor used by subclasses to avoid the --direct warning.
+     super(DRIVER_CLASS, opts);
+   }
+ 
+@@ -102,9 +102,11 @@ public class MySQLManager extends GenericJdbcManager {
+ 
+       if (null != connectString && connectString.indexOf("//localhost") != -1) {
+         // if we're not doing a remote connection, they should have a LocalMySQLManager.
++        // TODO(aaron): After LocalMySQLManager supports --host/--port, this should
++        // always be issued.
+         LOG.warn("It looks like you are importing from mysql on");
+         LOG.warn("localhost. This transfer can be faster! Use the");
+-        LOG.warn("--local option to exercise a MySQL-specific fast");
++        LOG.warn("--direct option to exercise a MySQL-specific fast");
+         LOG.warn("path.");
+ 
+         MySQLManager.warningPrinted = true; // don't display this twice.
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
+index af61035..6eb29d1 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
+@@ -193,7 +193,7 @@ public class LocalMySQLTest extends ImportJobTestCase {
+     args.add(getWarehouseDir());
+     args.add("--connect");
+     args.add(CONNECT_STRING);
+-    args.add("--local");
++    args.add("--direct");
+     args.add("--username");
+     args.add(getCurrentUser());
+     args.add("--where");
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
+index edd64d4..49166b5 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
+@@ -144,7 +144,7 @@ public class MySQLAuthTest extends ImportJobTestCase {
+     args.add(getWarehouseDir());
+     args.add("--connect");
+     args.add(AUTH_CONNECT_STRING);
+-    args.add("--local");
++    args.add("--direct");
+     args.add("--username");
+     args.add(AUTH_TEST_USER);
+     args.add("--password");
+-- 
+1.7.0.4
+

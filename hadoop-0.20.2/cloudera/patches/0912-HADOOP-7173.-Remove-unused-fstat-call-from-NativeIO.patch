@@ -1,0 +1,243 @@
+From b6f34f37281d49de97e7d41e55ffbed596036067 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 7 Mar 2011 23:06:10 -0800
+Subject: [PATCH 0912/1179] HADOOP-7173. Remove unused fstat() call from NativeIO
+
+Reason: Remove unused code after HADOOP-7115
+Author: Todd Lipcon
+Ref: CDH-2779
+---
+ .../org/apache/hadoop/io/nativeio/NativeIO.java    |   47 -----------
+ .../src/org/apache/hadoop/io/nativeio/NativeIO.c   |   81 --------------------
+ .../apache/hadoop/io/nativeio/TestNativeIO.java    |   22 +----
+ 3 files changed, 5 insertions(+), 145 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+index f216c32..ba2301b 100644
+--- a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
++++ b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+@@ -76,10 +76,6 @@ public class NativeIO {
+   /** Wrapper around open(2) */
+   public static native FileDescriptor open(String path, int flags, int mode) throws IOException;
+ 
+-  /** Wrapper around fstat(2) */
+-  //TODO: fstat is an old implementation. Doesn't use the cache. This should be 
+-  //changed to use the cache.
+-  public static native Stat fstat(FileDescriptor fd) throws IOException;
+   /** Wrapper around chmod(2) */
+   public static native void chmod(String path, int mode) throws IOException;
+ 
+@@ -128,47 +124,4 @@ public class NativeIO {
+       initialized = true;
+     }
+   }
+-
+-
+-  /**
+-   * Result type of the fstat call
+-   */
+-  public static class Stat {
+-    private String owner;
+-    private int mode;
+-
+-    // Mode constants
+-    public static final int S_IFMT = 0170000;      /* type of file */
+-    public static final int   S_IFIFO  = 0010000;  /* named pipe (fifo) */
+-    public static final int   S_IFCHR  = 0020000;  /* character special */
+-    public static final int   S_IFDIR  = 0040000;  /* directory */
+-    public static final int   S_IFBLK  = 0060000;  /* block special */
+-    public static final int   S_IFREG  = 0100000;  /* regular */
+-    public static final int   S_IFLNK  = 0120000;  /* symbolic link */
+-    public static final int   S_IFSOCK = 0140000;  /* socket */
+-    public static final int   S_IFWHT  = 0160000;  /* whiteout */
+-    public static final int S_ISUID = 0004000;  /* set user id on execution */
+-    public static final int S_ISGID = 0002000;  /* set group id on execution */
+-    public static final int S_ISVTX = 0001000;  /* save swapped text even after use */
+-    public static final int S_IRUSR = 0000400;  /* read permission, owner */
+-    public static final int S_IWUSR = 0000200;  /* write permission, owner */
+-    public static final int S_IXUSR = 0000100;  /* execute/search permission, owner */
+-
+-    Stat(String owner, int mode) {
+-      this.owner = owner;
+-      this.mode = mode;
+-    }
+-
+-    public String toString() {
+-      return "Stat(owner='" + owner + "'" +
+-        ", mode=" + mode + ")";
+-    }
+-
+-    public String getOwner() {
+-      return owner;
+-    }
+-    public int getMode() {
+-      return mode;
+-    }
+-  }
+ }
+diff --git a/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c b/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
+index 71608e4..18d4162 100644
+--- a/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
++++ b/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
+@@ -34,10 +34,6 @@
+ #include "file_descriptor.h"
+ #include "errno_enum.h"
+ 
+-// the NativeIO$Stat inner class and its constructor
+-static jclass stat_clazz;
+-static jmethodID stat_ctor;
+-
+ // the NativeIOException class and its constructor
+ static jclass nioe_clazz;
+ static jmethodID nioe_ctor;
+@@ -46,23 +42,6 @@ static jmethodID nioe_ctor;
+ static void throw_ioe(JNIEnv* env, int errnum);
+ static ssize_t get_pw_buflen();
+ 
+-
+-static void stat_init(JNIEnv *env) {
+-  // Init Stat
+-  jclass clazz = (*env)->FindClass(env, "org/apache/hadoop/io/nativeio/NativeIO$Stat");
+-  PASS_EXCEPTIONS(env);
+-  stat_clazz = (*env)->NewGlobalRef(env, clazz);
+-  stat_ctor = (*env)->GetMethodID(env, stat_clazz, "<init>",
+-    "(Ljava/lang/String;I)V");
+-}
+-
+-static void stat_deinit(JNIEnv *env) {
+-  if (stat_clazz != NULL) {  
+-    (*env)->DeleteGlobalRef(env, stat_clazz);
+-    stat_clazz = NULL;
+-  }
+-}
+-
+ static void nioe_init(JNIEnv *env) {
+   // Init NativeIOException
+   nioe_clazz = (*env)->FindClass(
+@@ -93,8 +72,6 @@ JNIEXPORT void JNICALL
+ Java_org_apache_hadoop_io_nativeio_NativeIO_initNative(
+ 	JNIEnv *env, jclass clazz) {
+ 
+-  stat_init(env);
+-  PASS_EXCEPTIONS_GOTO(env, error);
+   nioe_init(env);
+   PASS_EXCEPTIONS_GOTO(env, error);
+   fd_init(env);
+@@ -105,69 +82,11 @@ Java_org_apache_hadoop_io_nativeio_NativeIO_initNative(
+ error:
+   // these are all idempodent and safe to call even if the
+   // class wasn't initted yet
+-  stat_deinit(env);
+   nioe_deinit(env);
+   fd_deinit(env);
+   errno_enum_deinit(env);
+ }
+ 
+-/*
+- * public static native Stat fstat(FileDescriptor fd);
+- */
+-JNIEXPORT jobject JNICALL
+-Java_org_apache_hadoop_io_nativeio_NativeIO_fstat(
+-  JNIEnv *env, jclass clazz, jobject fd_object)
+-{
+-  jobject ret = NULL;
+-  char *pw_buf = NULL;
+-
+-  int fd = fd_get(env, fd_object);
+-  PASS_EXCEPTIONS_GOTO(env, cleanup);
+-
+-  struct stat s;
+-  int rc = fstat(fd, &s);
+-  if (rc != 0) {
+-    throw_ioe(env, errno);
+-    goto cleanup;
+-  }
+-
+-  size_t pw_buflen = get_pw_buflen();
+-  if ((pw_buf = malloc(pw_buflen)) == NULL) {
+-    THROW(env, "java/lang/OutOfMemoryError", "Couldn't allocate memory for pw buffer");
+-    goto cleanup;
+-  }
+-
+-  // Grab username
+-  struct passwd pwd, *pwdp;
+-  while ((rc = getpwuid_r(s.st_uid, &pwd, pw_buf, pw_buflen, &pwdp)) != 0) {
+-    if (rc != ERANGE) {
+-      throw_ioe(env, rc);
+-      goto cleanup;
+-    }
+-    free(pw_buf);
+-    pw_buflen *= 2;
+-    if ((pw_buf = malloc(pw_buflen)) == NULL) {
+-      THROW(env, "java/lang/OutOfMemoryError", "Couldn't allocate memory for pw buffer");
+-      goto cleanup;
+-    }
+-  }
+-  if (rc == 0 && pwdp == NULL) {
+-    throw_ioe(env, ENOENT);
+-    goto cleanup;
+-  }
+-
+-  jstring jstr_username = (*env)->NewStringUTF(env, pwd.pw_name);
+-  if (jstr_username == NULL) goto cleanup;
+-
+-  // Construct result
+-  ret = (*env)->NewObject(env, stat_clazz, stat_ctor,
+-    jstr_username, s.st_mode);
+-
+-cleanup:
+-  if (pw_buf != NULL) free(pw_buf);
+-  return ret;
+-}
+-
+ 
+ /*
+  * public static native FileDescriptor open(String path, int flags, int mode);
+diff --git a/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java b/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
+index 78531ed..e6f2ca1 100644
+--- a/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
++++ b/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
+@@ -53,22 +53,9 @@ public class TestNativeIO {
+   }
+ 
+   @Test
+-  public void testFstat() throws Exception {
+-    FileOutputStream fos = new FileOutputStream(
+-      new File(TEST_DIR, "testfstat"));
+-    NativeIO.Stat stat = NativeIO.fstat(fos.getFD());
+-    fos.close();
+-    LOG.info("Stat: " + String.valueOf(stat));
+-
+-    assertEquals(System.getProperty("user.name"), stat.getOwner());
+-    assertEquals("Stat mode field should indicate a regular file",
+-      NativeIO.Stat.S_IFREG, stat.getMode() & NativeIO.Stat.S_IFMT);
+-  }
+-
+-  @Test
+   public void testGetOwner() throws Exception {
+     FileOutputStream fos = new FileOutputStream(
+-      new File(TEST_DIR, "testfstat"));
++      new File(TEST_DIR, "testgetowner"));
+     String owner = NativeIO.getOwner(fos.getFD());
+     fos.close();
+     LOG.info("Owner: " + owner);
+@@ -77,12 +64,13 @@ public class TestNativeIO {
+   }
+ 
+   @Test
+-  public void testFstatClosedFd() throws Exception {
++  public void testGetOwnerClosedFd() throws Exception {
+     FileOutputStream fos = new FileOutputStream(
+-      new File(TEST_DIR, "testfstat2"));
++      new File(TEST_DIR, "testgetowner2"));
+     fos.close();
+     try {
+-      NativeIO.Stat stat = NativeIO.fstat(fos.getFD());
++      String owner = NativeIO.getOwner(fos.getFD());
++      fail("Didn't throw IOE on closed fd");
+     } catch (NativeIOException nioe) {
+       LOG.info("Got expected exception", nioe);
+       assertEquals(Errno.EBADF, nioe.getErrno());
+-- 
+1.7.0.4
+

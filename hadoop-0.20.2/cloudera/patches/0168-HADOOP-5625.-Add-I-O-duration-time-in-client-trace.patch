@@ -1,0 +1,166 @@
+From e9f3ec90e57b383faf49e6a6eb8cc91e5182d31e Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:31:08 -0800
+Subject: [PATCH 0168/1179] HADOOP-5625. Add I/O duration time in client trace
+
+Description: Add I/O duration information into client trace log for analyzing performance.
+
+Reason: Logging improvement
+Author: Lei Xu
+Ref: UNKNOWN
+---
+ .../hadoop/hdfs/server/datanode/BlockReceiver.java |    8 ++++++--
+ .../hadoop/hdfs/server/datanode/BlockSender.java   |    4 +++-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    4 +++-
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |    2 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    9 +++++++--
+ 5 files changed, 20 insertions(+), 7 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+index 1698331..e3c052b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+@@ -748,6 +748,7 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+     private synchronized void lastDataNodeRun() {
+       long lastHeartbeat = System.currentTimeMillis();
+       boolean lastPacket = false;
++      final long startTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
+ 
+       while (running && datanode.shouldRun && !lastPacket) {
+         long now = System.currentTimeMillis();
+@@ -800,6 +801,7 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+             if (pkt.lastPacketInBlock) {
+               if (!receiver.finalized) {
+                 receiver.close();
++                final long endTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
+                 block.setNumBytes(receiver.offsetInBlock);
+                 datanode.data.finalizeBlock(block);
+                 datanode.myMetrics.blocksWritten.inc();
+@@ -811,7 +813,7 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+                   ClientTraceLog.info(String.format(DN_CLIENTTRACE_FORMAT,
+                         receiver.inAddr, receiver.myAddr, block.getNumBytes(), 
+                         "HDFS_WRITE", receiver.clientName, offset,
+-                        datanode.dnRegistration.getStorageID(), block));
++                        datanode.dnRegistration.getStorageID(), block, endTime-startTime));
+                 } else {
+                   LOG.info("Received block " + block + 
+                            " of size " + block.getNumBytes() + 
+@@ -849,6 +851,7 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+       }
+ 
+       boolean lastPacketInBlock = false;
++      final long startTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
+       while (running && datanode.shouldRun && !lastPacketInBlock) {
+ 
+         try {
+@@ -937,6 +940,7 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+             // file and finalize the block before responding success
+             if (lastPacketInBlock && !receiver.finalized) {
+               receiver.close();
++              final long endTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
+               block.setNumBytes(receiver.offsetInBlock);
+               datanode.data.finalizeBlock(block);
+               datanode.myMetrics.blocksWritten.inc();
+@@ -948,7 +952,7 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+                 ClientTraceLog.info(String.format(DN_CLIENTTRACE_FORMAT,
+                       receiver.inAddr, receiver.myAddr, block.getNumBytes(), 
+                       "HDFS_WRITE", receiver.clientName, offset, 
+-                      datanode.dnRegistration.getStorageID(), block));
++                      datanode.dnRegistration.getStorageID(), block, endTime-startTime));
+               } else {
+                 LOG.info("Received block " + block + 
+                          " of size " + block.getNumBytes() + 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
+index 87dc71c..6c08115 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
+@@ -357,6 +357,7 @@ class BlockSender implements java.io.Closeable, FSConstants {
+     long totalRead = 0;
+     OutputStream streamForSendChunks = out;
+     
++    final long startTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0; 
+     try {
+       try {
+         checksum.writeHeader(out);
+@@ -412,7 +413,8 @@ class BlockSender implements java.io.Closeable, FSConstants {
+       }
+     } finally {
+       if (clientTraceFmt != null) {
+-        ClientTraceLog.info(String.format(clientTraceFmt, totalRead, initialOffset));
++        final long endTime = System.nanoTime();
++        ClientTraceLog.info(String.format(clientTraceFmt, totalRead, initialOffset, endTime - startTime));
+       }
+       close();
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index ca1be5b..b3bff8d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -144,7 +144,9 @@ public class DataNode extends Configured
+         ", cliID: %s" +  // DFSClient id
+         ", offset: %s" + // offset
+         ", srvID: %s" +  // DatanodeRegistration
+-        ", blockid: %s"; // block id
++        ", blockid: %s" + // block id
++        ", duration: %s"; // duration time
++
+   static final Log ClientTraceLog =
+     LogFactory.getLog(DataNode.class.getName() + ".clienttrace");
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index 391bd5b..3763721 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -164,7 +164,7 @@ class DataXceiver implements Runnable, FSConstants {
+       clientName.length() > 0 && ClientTraceLog.isInfoEnabled()
+         ? String.format(DN_CLIENTTRACE_FORMAT, localAddress, remoteAddress,
+             "%d", "HDFS_READ", clientName, "%d", 
+-            datanode.dnRegistration.getStorageID(), block)
++            datanode.dnRegistration.getStorageID(), block, "%d")
+         : datanode.dnRegistration + " Served block " + block + " to " +
+             s.getInetAddress();
+     try {
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 69d8645..5c5666b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -127,7 +127,8 @@ public class TaskTracker
+         ", dest: %s" +  // dst IP
+         ", bytes: %s" + // byte count
+         ", op: %s" +    // operation
+-        ", cliID: %s";  // task id
++        ", cliID: %s" +  // task id
++        ", duration: %s"; // duration
+   public static final Log ClientTraceLog =
+     LogFactory.getLog(TaskTracker.class.getName() + ".clienttrace");
+ 
+@@ -2874,8 +2875,11 @@ public class TaskTracker
+       TaskTracker tracker = 
+         (TaskTracker) context.getAttribute("task.tracker");
+ 
++      long startTime = 0;
+       try {
+         shuffleMetrics.serverHandlerBusy();
++        if(ClientTraceLog.isInfoEnabled())
++          startTime = System.nanoTime();
+         outStream = response.getOutputStream();
+         JobConf conf = (JobConf) context.getAttribute("conf");
+         LocalDirAllocator lDirAlloc = 
+@@ -2967,12 +2971,13 @@ public class TaskTracker
+         if (null != mapOutputIn) {
+           mapOutputIn.close();
+         }
++        final long endTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
+         shuffleMetrics.serverHandlerFree();
+         if (ClientTraceLog.isInfoEnabled()) {
+           ClientTraceLog.info(String.format(MR_CLIENTTRACE_FORMAT,
+                 request.getLocalAddr() + ":" + request.getLocalPort(),
+                 request.getRemoteAddr() + ":" + request.getRemotePort(),
+-                totalRead, "MAPRED_SHUFFLE", mapId));
++                totalRead, "MAPRED_SHUFFLE", mapId, endTime-startTime));
+         }
+       }
+       outStream.close();
+-- 
+1.7.0.4
+

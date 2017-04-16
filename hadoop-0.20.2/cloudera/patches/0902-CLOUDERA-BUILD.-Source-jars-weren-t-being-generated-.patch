@@ -1,0 +1,535 @@
+From c3174e9c80710d30fa832394709174fc8d7f6e6b Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Mon, 7 Mar 2011 12:44:36 -0800
+Subject: [PATCH 0902/1179] CLOUDERA-BUILD. Source jars weren't being generated due to change to use existing jars for artifacts.
+
+---
+ cloudera/maven-packaging/hadoop-core/pom.xml      |   56 +++++++++----------
+ cloudera/maven-packaging/hadoop-examples/pom.xml  |   53 +++++++++----------
+ cloudera/maven-packaging/hadoop-mrunit/pom.xml    |   59 ++++++++++-----------
+ cloudera/maven-packaging/hadoop-streaming/pom.xml |   57 +++++++++-----------
+ cloudera/maven-packaging/hadoop-test/pom.xml      |   54 +++++++++----------
+ cloudera/maven-packaging/hadoop-tools/pom.xml     |   55 +++++++++----------
+ 6 files changed, 159 insertions(+), 175 deletions(-)
+
+diff --git a/cloudera/maven-packaging/hadoop-core/pom.xml b/cloudera/maven-packaging/hadoop-core/pom.xml
+index 4e83adf..beeee64 100644
+--- a/cloudera/maven-packaging/hadoop-core/pom.xml
++++ b/cloudera/maven-packaging/hadoop-core/pom.xml
+@@ -155,18 +155,6 @@
+         <artifactId>build-helper-maven-plugin</artifactId>
+         <executions>
+           <execution>
+-            <id>add-source</id>
+-            <phase>generate-sources</phase>
+-            <goals>
+-              <goal>add-source</goal>
+-            </goals>
+-            <configuration>
+-              <sources>
+-                <source>${basedir}/../../../src</source>
+-              </sources>
+-            </configuration>
+-          </execution>
+-          <execution>
+             <id>add-jar</id>
+             <phase>package</phase>
+             <goals>
+@@ -178,6 +166,11 @@
+                   <file>${basedir}/../../../build/hadoop-core-${project.version}.jar</file>
+                   <type>jar</type>
+                 </artifact>
++                <artifact>
++                  <file>${basedir}/target/hadoop-core-${project.version}-sources.jar</file>
++                  <type>jar</type>
++                  <classifier>sources</classifier>
++                </artifact>
+               </artifacts>
+             </configuration>
+           </execution>
+@@ -185,23 +178,28 @@
+       </plugin>
+       <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-source-plugin</artifactId>
+-        <configuration>
+-          <includes>
+-            <include>core/**/*</include>
+-            <include>mapred/**/*</include>
+-            <include>hdfs/**/*</include>
+-          </includes>
+-        </configuration>
+-      </plugin>
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-compiler-plugin</artifactId>
+-        <configuration>
+-          <excludes>
+-            <exclude>**/*.java</exclude>
+-          </excludes>
+-        </configuration>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source-jar</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <configuration>
++              <target>
++                <mkdir dir="${basedir}/target" />
++                <jar destfile="${basedir}/target/hadoop-core-${project.version}-sources.jar">
++                  <fileset dir="${basedir}/../../../src">
++                    <include name="core/**/*" />
++                    <include name="mapred/**/*" />
++                    <include name="hdfs/**/*" />
++                  </fileset>
++                </jar>
++              </target>
++            </configuration>
++          </execution>
++        </executions>
+       </plugin>
+     </plugins>
+   </build>
+diff --git a/cloudera/maven-packaging/hadoop-examples/pom.xml b/cloudera/maven-packaging/hadoop-examples/pom.xml
+index 6706667..60acf9a 100644
+--- a/cloudera/maven-packaging/hadoop-examples/pom.xml
++++ b/cloudera/maven-packaging/hadoop-examples/pom.xml
+@@ -55,18 +55,6 @@
+         <artifactId>build-helper-maven-plugin</artifactId>
+         <executions>
+           <execution>
+-            <id>add-source</id>
+-            <phase>generate-sources</phase>
+-            <goals>
+-              <goal>add-source</goal>
+-            </goals>
+-            <configuration>
+-              <sources>
+-                <source>${basedir}/../../../src</source>
+-              </sources>
+-            </configuration>
+-          </execution>
+-          <execution>
+             <id>add-jar</id>
+             <phase>package</phase>
+             <goals>
+@@ -78,6 +66,11 @@
+                   <file>${basedir}/../../../build/hadoop-examples-${project.version}.jar</file>
+                   <type>jar</type>
+                 </artifact>
++                <artifact>
++                  <file>${basedir}/target/hadoop-examples-${project.version}-sources.jar</file>
++                  <type>jar</type>
++                  <classifier>sources</classifier>
++                </artifact>
+               </artifacts>
+             </configuration>
+           </execution>
+@@ -85,23 +78,27 @@
+       </plugin>
+       <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-source-plugin</artifactId>
+-        <configuration>
+-          <includes>
+-            <include>examples/**/*</include>
+-          </includes>
+-        </configuration>
+-      </plugin>
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-compiler-plugin</artifactId>
+-        <configuration>
+-          <excludes>
+-            <exclude>**/*.java</exclude>
+-          </excludes>
+-        </configuration>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source-jar</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <configuration>
++              <target>
++                <mkdir dir="${basedir}/target" />
++                <jar destfile="${basedir}/target/hadoop-examples-${project.version}-sources.jar">
++                  <fileset dir="${basedir}/../../../src">
++                    <include name="examples/**/*" />
++                  </fileset>
++                </jar>
++              </target>
++            </configuration>
++          </execution>
++        </executions>
+       </plugin>
+-
+     </plugins>
+   </build>
+   
+diff --git a/cloudera/maven-packaging/hadoop-mrunit/pom.xml b/cloudera/maven-packaging/hadoop-mrunit/pom.xml
+index aa46f65..f967a6c 100644
+--- a/cloudera/maven-packaging/hadoop-mrunit/pom.xml
++++ b/cloudera/maven-packaging/hadoop-mrunit/pom.xml
+@@ -47,26 +47,14 @@
+       <artifactId>hadoop-core</artifactId>
+     </dependency>
+   </dependencies>
+-  
++
+   <build>
+     <plugins>
+-       <plugin>
++      <plugin>
+         <groupId>org.codehaus.mojo</groupId>
+         <artifactId>build-helper-maven-plugin</artifactId>
+         <executions>
+           <execution>
+-            <id>add-source</id>
+-            <phase>generate-sources</phase>
+-            <goals>
+-              <goal>add-source</goal>
+-            </goals>
+-            <configuration>
+-              <sources>
+-                <source>${basedir}/../../../src/contrib</source>
+-              </sources>
+-            </configuration>
+-          </execution>
+-          <execution>
+             <id>add-jar</id>
+             <phase>package</phase>
+             <goals>
+@@ -75,8 +63,13 @@
+             <configuration>
+               <artifacts>
+                 <artifact>
+-                  <file>${basedir}/../../../build/contrib/mrunit/hadoop-mrunit-${project.version}.jar</file>
++                  <file>${basedir}/../../../build/contrib/hadoop-mrunit-${project.version}.jar</file>
++                  <type>jar</type>
++                </artifact>
++                <artifact>
++                  <file>${basedir}/target/hadoop-mrunit-${project.version}-sources.jar</file>
+                   <type>jar</type>
++                  <classifier>sources</classifier>
+                 </artifact>
+               </artifacts>
+             </configuration>
+@@ -85,23 +78,27 @@
+       </plugin>
+       <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-source-plugin</artifactId>
+-        <configuration>
+-          <includes>
+-            <include>mrunit/**/*</include>
+-          </includes>
+-        </configuration>
+-      </plugin>
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-compiler-plugin</artifactId>
+-        <configuration>
+-          <excludes>
+-            <exclude>**/*.java</exclude>
+-          </excludes>
+-        </configuration>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source-jar</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <configuration>
++              <target>
++                <mkdir dir="${basedir}/target" />
++                <jar destfile="${basedir}/target/hadoop-mrunit-${project.version}-sources.jar">
++                  <fileset dir="${basedir}/../../../src/contrib">
++                    <include name="mrunit/**/*" />
++                  </fileset>
++                </jar>
++              </target>
++            </configuration>
++          </execution>
++        </executions>
+       </plugin>
+-
+     </plugins>
+   </build>
+   
+diff --git a/cloudera/maven-packaging/hadoop-streaming/pom.xml b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+index 4d1c5dc..ce01540 100644
+--- a/cloudera/maven-packaging/hadoop-streaming/pom.xml
++++ b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+@@ -47,7 +47,7 @@
+       <artifactId>hadoop-core</artifactId>
+     </dependency>
+   </dependencies>
+-  
++
+   <build>
+     <plugins>
+       <plugin>
+@@ -55,18 +55,6 @@
+         <artifactId>build-helper-maven-plugin</artifactId>
+         <executions>
+           <execution>
+-            <id>add-source</id>
+-            <phase>generate-sources</phase>
+-            <goals>
+-              <goal>add-source</goal>
+-            </goals>
+-            <configuration>
+-              <sources>
+-                <source>${basedir}/../../../src/contrib</source>
+-              </sources>
+-            </configuration>
+-          </execution>
+-          <execution>
+             <id>add-jar</id>
+             <phase>package</phase>
+             <goals>
+@@ -75,8 +63,13 @@
+             <configuration>
+               <artifacts>
+                 <artifact>
+-                  <file>${basedir}/../../../build/contrib/streaming/hadoop-streaming-${project.version}.jar</file>
++                  <file>${basedir}/../../../build/contrib/hadoop-streaming-${project.version}.jar</file>
++                  <type>jar</type>
++                </artifact>
++                <artifact>
++                  <file>${basedir}/target/hadoop-streaming-${project.version}-sources.jar</file>
+                   <type>jar</type>
++                  <classifier>sources</classifier>
+                 </artifact>
+               </artifacts>
+             </configuration>
+@@ -85,23 +78,27 @@
+       </plugin>
+       <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-source-plugin</artifactId>
+-        <configuration>
+-          <includes>
+-            <include>streaming/**/*</include>
+-          </includes>
+-        </configuration>
+-      </plugin>
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-compiler-plugin</artifactId>
+-        <configuration>
+-          <excludes>
+-            <exclude>**/*.java</exclude>
+-          </excludes>
+-        </configuration>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source-jar</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <configuration>
++              <target>
++                <mkdir dir="${basedir}/target" />
++                <jar destfile="${basedir}/target/hadoop-streaming-${project.version}-sources.jar">
++                  <fileset dir="${basedir}/../../../src/contrib">
++                    <include name="streaming/**/*" />
++                  </fileset>
++                </jar>
++              </target>
++            </configuration>
++          </execution>
++        </executions>
+       </plugin>
+-
+     </plugins>
+   </build>
+   
+diff --git a/cloudera/maven-packaging/hadoop-test/pom.xml b/cloudera/maven-packaging/hadoop-test/pom.xml
+index 51cc767..275cd8b 100644
+--- a/cloudera/maven-packaging/hadoop-test/pom.xml
++++ b/cloudera/maven-packaging/hadoop-test/pom.xml
+@@ -65,6 +65,7 @@
+     </dependency>
+   </dependencies>
+   
++
+   <build>
+     <plugins>
+       <plugin>
+@@ -72,18 +73,6 @@
+         <artifactId>build-helper-maven-plugin</artifactId>
+         <executions>
+           <execution>
+-            <id>add-source</id>
+-            <phase>generate-sources</phase>
+-            <goals>
+-              <goal>add-source</goal>
+-            </goals>
+-            <configuration>
+-              <sources>
+-                <source>${basedir}/../../../src</source>
+-              </sources>
+-            </configuration>
+-          </execution>
+-          <execution>
+             <id>add-jar</id>
+             <phase>package</phase>
+             <goals>
+@@ -95,6 +84,11 @@
+                   <file>${basedir}/../../../build/hadoop-test-${project.version}.jar</file>
+                   <type>jar</type>
+                 </artifact>
++                <artifact>
++                  <file>${basedir}/target/hadoop-test-${project.version}-sources.jar</file>
++                  <type>jar</type>
++                  <classifier>sources</classifier>
++                </artifact>
+               </artifacts>
+             </configuration>
+           </execution>
+@@ -102,23 +96,27 @@
+       </plugin>
+       <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-source-plugin</artifactId>
+-        <configuration>
+-          <includes>
+-            <include>test/**/*</include>
+-          </includes>
+-        </configuration>
+-      </plugin>
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-compiler-plugin</artifactId>
+-        <configuration>
+-          <excludes>
+-            <exclude>**/*.java</exclude>
+-          </excludes>
+-        </configuration>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source-jar</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <configuration>
++              <target>
++                <mkdir dir="${basedir}/target" />
++                <jar destfile="${basedir}/target/hadoop-test-${project.version}-sources.jar">
++                  <fileset dir="${basedir}/../../../src">
++                    <include name="test/**/*" />
++                  </fileset>
++                </jar>
++              </target>
++            </configuration>
++          </execution>
++        </executions>
+       </plugin>
+-
+     </plugins>
+   </build>
+   
+diff --git a/cloudera/maven-packaging/hadoop-tools/pom.xml b/cloudera/maven-packaging/hadoop-tools/pom.xml
+index 69550da..b1788d6 100644
+--- a/cloudera/maven-packaging/hadoop-tools/pom.xml
++++ b/cloudera/maven-packaging/hadoop-tools/pom.xml
+@@ -48,7 +48,7 @@
+       <version>0.20.2-cdh3u0-SNAPSHOT</version>
+     </dependency>
+   </dependencies>
+-  
++
+   <build>
+     <plugins>
+       <plugin>
+@@ -56,18 +56,6 @@
+         <artifactId>build-helper-maven-plugin</artifactId>
+         <executions>
+           <execution>
+-            <id>add-source</id>
+-            <phase>generate-sources</phase>
+-            <goals>
+-              <goal>add-source</goal>
+-            </goals>
+-            <configuration>
+-              <sources>
+-                <source>${basedir}/../../../src</source>
+-              </sources>
+-            </configuration>
+-          </execution>
+-          <execution>
+             <id>add-jar</id>
+             <phase>package</phase>
+             <goals>
+@@ -79,6 +67,11 @@
+                   <file>${basedir}/../../../build/hadoop-tools-${project.version}.jar</file>
+                   <type>jar</type>
+                 </artifact>
++                <artifact>
++                  <file>${basedir}/target/hadoop-tools-${project.version}-sources.jar</file>
++                  <type>jar</type>
++                  <classifier>sources</classifier>
++                </artifact>
+               </artifacts>
+             </configuration>
+           </execution>
+@@ -86,23 +79,27 @@
+       </plugin>
+       <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-source-plugin</artifactId>
+-        <configuration>
+-          <includes>
+-            <include>tools/**/*</include>
+-          </includes>
+-        </configuration>
+-      </plugin>
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-compiler-plugin</artifactId>
+-        <configuration>
+-          <excludes>
+-            <exclude>**/*.java</exclude>
+-          </excludes>
+-        </configuration>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source-jar</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <configuration>
++              <target>
++                <mkdir dir="${basedir}/target" />
++                <jar destfile="${basedir}/target/hadoop-tools-${project.version}-sources.jar">
++                  <fileset dir="${basedir}/../../../src">
++                    <include name="tools/**/*" />
++                  </fileset>
++                </jar>
++              </target>
++            </configuration>
++          </execution>
++        </executions>
+       </plugin>
+-
+     </plugins>
+   </build>
+   
+-- 
+1.7.0.4
+

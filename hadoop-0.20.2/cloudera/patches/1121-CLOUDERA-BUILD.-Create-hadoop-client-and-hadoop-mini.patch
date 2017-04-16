@@ -1,0 +1,218 @@
+From 3040fcd9cc551d92be0082f2448fed2f03590531 Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu@cloudera.com>
+Date: Tue, 14 Feb 2012 15:45:41 -0800
+Subject: [PATCH 1121/1179] CLOUDERA BUILD. Create hadoop-client and hadoop-minicluster artifacts for downstream projects
+
+  Reason: backport HADOOP-8009 for easier build/test for downstream projects
+  Author: Alejandro Abdelnur
+  Ref: CDH-4502
+---
+ cloudera/maven-packaging/hadoop-client/pom.xml     |  103 ++++++++++++++++++++
+ .../maven-packaging/hadoop-minicluster/pom.xml     |   53 ++++++++++
+ cloudera/maven-packaging/pom.xml                   |    4 +
+ 3 files changed, 160 insertions(+), 0 deletions(-)
+ create mode 100644 cloudera/maven-packaging/hadoop-client/pom.xml
+ create mode 100644 cloudera/maven-packaging/hadoop-client/src/main/resources/META-INF/MANIFEST.MF
+ create mode 100644 cloudera/maven-packaging/hadoop-minicluster/pom.xml
+ create mode 100644 cloudera/maven-packaging/hadoop-minicluster/src/main/resources/META-INF/MANIFEST.MF
+
+diff --git a/cloudera/maven-packaging/hadoop-client/pom.xml b/cloudera/maven-packaging/hadoop-client/pom.xml
+new file mode 100644
+index 0000000..e3d311c
+--- /dev/null
++++ b/cloudera/maven-packaging/hadoop-client/pom.xml
+@@ -0,0 +1,103 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++ Licensed under the Apache License, Version 2.0 (the "License");
++ you may not use this file except in compliance with the License.
++ You may obtain a copy of the License at
++
++   http://www.apache.org/licenses/LICENSE-2.0
++
++ Unless required by applicable law or agreed to in writing, software
++ distributed under the License is distributed on an "AS IS" BASIS,
++ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ See the License for the specific language governing permissions and
++ limitations under the License. See accompanying LICENSE file.
++-->
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++  <modelVersion>4.0.0</modelVersion>
++  <parent>
++    <groupId>com.cloudera.cdh</groupId>
++    <artifactId>hadoop-root</artifactId>
++    <version>0.20.2-cdh3u4-SNAPSHOT</version>
++    <relativePath>../pom.xml</relativePath>
++  </parent>
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-client</artifactId>
++  <version>0.20.2-cdh3u4-SNAPSHOT</version>
++  <packaging>jar</packaging>
++
++  <description>Apache Hadoop Client</description>
++  <name>Apache Hadoop Client</name>
++
++  <dependencies>
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-core</artifactId>
++      <version>${project.version}</version>
++      <scope>compile</scope>
++      <exclusions>
++        <exclusion>
++          <groupId>commons-cli</groupId>
++          <artifactId>commons-cli</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>commons-httpclient</groupId>
++          <artifactId>commons-httpclient</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>tomcat</groupId>
++          <artifactId>jasper-compiler</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>tomcat</groupId>
++          <artifactId>jasper-runtime</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>javax.servlet</groupId>
++          <artifactId>servlet-api</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>javax.servlet.jsp</groupId>
++          <artifactId>jsp-api</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>jetty</groupId>
++          <artifactId>org.mortbay.jetty</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>org.mortbay.jetty</groupId>
++          <artifactId>jetty</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>org.mortbay.jetty</groupId>
++          <artifactId>jetty-util</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>org.mortbay.jetty</groupId>
++          <artifactId>jsp-2.1</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>org.mortbay.jetty</groupId>
++          <artifactId>jsp-api-2.1</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>org.mortbay.jetty</groupId>
++          <artifactId>servlet-api-2.5</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>net.sf.kosmosfs</groupId>
++          <artifactId>kfs</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>net.java.dev.jets3t</groupId>
++          <artifactId>jets3t</artifactId>
++        </exclusion>
++        <exclusion>
++          <groupId>org.eclipse.jdt</groupId>
++          <artifactId>core</artifactId>
++        </exclusion>
++      </exclusions>
++    </dependency>
++  </dependencies>
++
++</project>
+diff --git a/cloudera/maven-packaging/hadoop-client/src/main/resources/META-INF/MANIFEST.MF b/cloudera/maven-packaging/hadoop-client/src/main/resources/META-INF/MANIFEST.MF
+new file mode 100644
+index 0000000..e69de29
+diff --git a/cloudera/maven-packaging/hadoop-minicluster/pom.xml b/cloudera/maven-packaging/hadoop-minicluster/pom.xml
+new file mode 100644
+index 0000000..a70540c
+--- /dev/null
++++ b/cloudera/maven-packaging/hadoop-minicluster/pom.xml
+@@ -0,0 +1,53 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++ Licensed under the Apache License, Version 2.0 (the "License");
++ you may not use this file except in compliance with the License.
++ You may obtain a copy of the License at
++
++   http://www.apache.org/licenses/LICENSE-2.0
++
++ Unless required by applicable law or agreed to in writing, software
++ distributed under the License is distributed on an "AS IS" BASIS,
++ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ See the License for the specific language governing permissions and
++ limitations under the License. See accompanying LICENSE file.
++-->
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++  <modelVersion>4.0.0</modelVersion>
++  <parent>
++    <groupId>com.cloudera.cdh</groupId>
++    <artifactId>hadoop-root</artifactId>
++    <version>0.20.2-cdh3u4-SNAPSHOT</version>
++    <relativePath>../pom.xml</relativePath>
++  </parent>
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-minicluster</artifactId>
++  <version>0.20.2-cdh3u4-SNAPSHOT</version>
++  <packaging>jar</packaging>
++
++  <description>Apache Hadoop Mini-Cluster</description>
++  <name>Apache Hadoop Mini-Cluster</name>
++  
++  <dependencies>
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-core</artifactId>
++      <version>${project.version}</version>
++      <scope>compile</scope>
++    </dependency>
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-test</artifactId>
++      <version>${project.version}</version>
++      <scope>compile</scope>
++    </dependency>
++    <dependency>
++      <groupId>com.sun.jersey</groupId>
++      <artifactId>jersey-server</artifactId>
++      <version>1.0</version>
++      <scope>compile</scope>
++    </dependency>
++  </dependencies>
++
++</project>
+\ No newline at end of file
+diff --git a/cloudera/maven-packaging/hadoop-minicluster/src/main/resources/META-INF/MANIFEST.MF b/cloudera/maven-packaging/hadoop-minicluster/src/main/resources/META-INF/MANIFEST.MF
+new file mode 100644
+index 0000000..e69de29
+diff --git a/cloudera/maven-packaging/pom.xml b/cloudera/maven-packaging/pom.xml
+index 17ee37c..726bf5f 100644
+--- a/cloudera/maven-packaging/pom.xml
++++ b/cloudera/maven-packaging/pom.xml
+@@ -88,6 +88,8 @@
+         <module>hadoop-examples</module>
+         <module>hadoop-test</module>
+         <module>hadoop-tools</module>
++        <module>hadoop-client</module>
++        <module>hadoop-minicluster</module>
+       </modules>
+     </profile>
+     <profile>
+@@ -108,6 +110,8 @@
+         <module>hadoop-test</module>
+         <module>hadoop-tools</module>
+         <module>hadoop-tarball</module>
++        <module>hadoop-client</module>
++        <module>hadoop-minicluster</module>
+       </modules>
+     </profile>
+   </profiles>
+-- 
+1.7.0.4
+

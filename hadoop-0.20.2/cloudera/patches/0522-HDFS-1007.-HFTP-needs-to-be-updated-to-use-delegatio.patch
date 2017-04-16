@@ -1,0 +1,546 @@
+From 5a1ea2b0a3050a0a8fdae64902067504d6f8c8eb Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 1 Mar 2010 00:09:00 -0800
+Subject: [PATCH 0522/1179] HDFS-1007. HFTP needs to be updated to use delegation tokens
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437458/distcp-hftp.2.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12437464/distcp-hftp.2.1.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12438384/distcp-hftp-2.1.1.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |  105 ++++++++++++++++++--
+ .../org/apache/hadoop/hdfs/HsftpFileSystem.java    |    1 +
+ .../server/namenode/DelegationTokenServlet.java    |    6 +-
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |    9 ++-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    8 +-
+ .../hadoop/hdfs/tools/DelegationTokenFetcher.java  |   78 ++++++++-------
+ .../hadoop/mapreduce/security/TokenCache.java      |   19 +++-
+ .../security/token/DelegationTokenRenewal.java     |    9 +-
+ src/tools/org/apache/hadoop/tools/DistCp.java      |    5 +
+ 9 files changed, 184 insertions(+), 56 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index c861c75..8a23029 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -23,17 +23,17 @@ import java.io.InputStream;
+ import java.io.IOException;
+ 
+ import java.net.HttpURLConnection;
+-import java.net.InetAddress;
+ import java.net.InetSocketAddress;
+ import java.net.URI;
+ import java.net.URISyntaxException;
+ import java.net.URL;
+ 
++import java.security.PrivilegedExceptionAction;
+ import java.text.ParseException;
+ import java.text.SimpleDateFormat;
+ 
+ import java.util.ArrayList;
+-import java.util.Random;
++import java.util.Collection;
+ import java.util.TimeZone;
+ 
+ import org.xml.sax.Attributes;
+@@ -55,9 +55,14 @@ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.MD5MD5CRC32FileChecksum;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.hdfs.server.namenode.JspHelper;
+ import org.apache.hadoop.hdfs.server.namenode.ListPathsServlet;
++import org.apache.hadoop.hdfs.tools.DelegationTokenFetcher;
++import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.security.*;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.util.Progressable;
+ 
+ /** An implementation of a protocol for accessing filesystems over HTTP.
+@@ -76,6 +81,8 @@ public class HftpFileSystem extends FileSystem {
+ 
+   public static final String HFTP_TIMEZONE = "UTC";
+   public static final String HFTP_DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ssZ";
++  private Token<? extends TokenIdentifier> delegationToken;
++  public static final String HFTP_RENEWER = "fs.hftp.renewer";
+ 
+   public static final SimpleDateFormat getDateFormat() {
+     final SimpleDateFormat df = new SimpleDateFormat(HFTP_DATE_FORMAT);
+@@ -91,14 +98,69 @@ public class HftpFileSystem extends FileSystem {
+     };
+ 
+   @Override
+-  public void initialize(URI name, Configuration conf) throws IOException {
++  public void initialize(final URI name, final Configuration conf) 
++  throws IOException {
+     super.initialize(name, conf);
+     setConf(conf);
+     this.ugi = UserGroupInformation.getCurrentUser();
+ 
+     nnAddr = NetUtils.createSocketAddr(name.toString());
++    
++    if (UserGroupInformation.isSecurityEnabled()) {
++      StringBuffer sb = new StringBuffer();
++      final String nnServiceName = 
++        (sb.append(NetUtils.normalizeHostName(name.getHost()))
++                .append(":").append(name.getPort())).toString();
++      Text nnServiceNameText = new Text(nnServiceName);
++      Collection<Token<? extends TokenIdentifier>> tokens =
++        ugi.getTokens();
++      //try finding a token for this namenode (esp applicable for tasks
++      //using hftp). If there exists one, just set the delegationField
++      for (Token<? extends TokenIdentifier> t : tokens) {
++        if ((t.getService()).equals(nnServiceNameText)) {
++          delegationToken = t;
++          return;
++        }
++      }
++      //since we don't already have a token, go get one over https
++      try {
++        ugi.doAs(new PrivilegedExceptionAction<Object>() {
++          public Object run() throws IOException {
++            StringBuffer sb = new StringBuffer();
++            //try https (on http we NEVER get a delegation token)
++            String nnHttpUrl = "https://" + 
++            (sb.append(NetUtils.normalizeHostName(name.getHost()))
++                .append(":").append(conf.getInt("dfs.https.port", 50470))).
++                toString();
++            Credentials c;
++            try {
++              c = DelegationTokenFetcher.getDTfromRemote(nnHttpUrl, 
++                  conf.get(HFTP_RENEWER));
++            } catch (Exception e) {
++              LOG.info("Couldn't get a delegation token from " + nnHttpUrl + 
++              " using https.");
++              //Maybe the server is in unsecure mode (that's bad but okay)
++              return null;
++            }
++            for (Token<? extends TokenIdentifier> t : c.getAllTokens()) {
++              //the service field is already set and so setService 
++              //is not required
++              delegationToken = t;
++              LOG.debug("Got dt for " + getUri() + ";t.service="
++                  +t.getService());
++            }
++            return null;
++          }
++        });
++      } catch (InterruptedException e) {
++        throw new RuntimeException(e);
++      }
++    }
+   }
+   
++  public Token<? extends TokenIdentifier> getDelegationToken() {
++    return delegationToken;
++  }
+ 
+   @Override
+   public URI getUri() {
+@@ -109,6 +171,20 @@ public class HftpFileSystem extends FileSystem {
+       return null;
+     } 
+   }
++  
++  /**
++   * ugi parameter for http connection
++   * 
++   * @return user_shortname,group1,group2...
++   */
++  private String getUgiParameter() {
++    StringBuilder ugiParamenter = new StringBuilder(ugi.getShortUserName());
++    for(String g: ugi.getGroupNames()) {
++      ugiParamenter.append(",");
++      ugiParamenter.append(g);
++    }
++    return ugiParamenter.toString();
++  }
+ 
+   /**
+    * Open an HTTP connection to the namenode to read file data and metadata.
+@@ -118,6 +194,7 @@ public class HftpFileSystem extends FileSystem {
+   protected HttpURLConnection openConnection(String path, String query)
+       throws IOException {
+     try {
++      query = updateQuery(query);
+       final URL url = new URI("http", null, nnAddr.getHostName(),
+           nnAddr.getPort(), path, query, null).toURL();
+       if (LOG.isTraceEnabled()) {
+@@ -128,11 +205,23 @@ public class HftpFileSystem extends FileSystem {
+       throw (IOException)new IOException().initCause(e);
+     }
+   }
++  
++  protected String updateQuery(String query) throws IOException {
++    String tokenString = null;
++    if (UserGroupInformation.isSecurityEnabled()) {
++      if (delegationToken != null) {
++        tokenString = delegationToken.encodeToUrlString();
++        return (query + JspHelper.SET_DELEGATION + tokenString);
++      } // else we are talking to an unsecure cluster
++    }
++    return query;
++  }
+ 
+   @Override
+   public FSDataInputStream open(Path f, int buffersize) throws IOException {
+     HttpURLConnection connection = null;
+-    connection = openConnection("/data" + f.toUri().getPath(), "ugi=" + ugi.getShortUserName());
++    connection = openConnection("/data" + f.toUri().getPath(),
++        "ugi=" + getUgiParameter());
+     connection.setRequestMethod("GET");
+     connection.connect();
+     final InputStream in = connection.getInputStream();
+@@ -200,13 +289,13 @@ public class HftpFileSystem extends FileSystem {
+                 .makeQualified(HftpFileSystem.this));
+       fslist.add(fs);
+     }
+-
++    
+     private void fetchList(String path, boolean recur) throws IOException {
+       try {
+         XMLReader xr = XMLReaderFactory.createXMLReader();
+         xr.setContentHandler(this);
+         HttpURLConnection connection = openConnection("/listPaths" + path,
+-            "ugi=" + ugi.getCurrentUser() + (recur? "&recursive=yes" : ""));
++            "ugi=" + getUgiParameter() + (recur? "&recursive=yes" : ""));
+         connection.setRequestMethod("GET");
+         connection.connect();
+ 
+@@ -272,7 +361,7 @@ public class HftpFileSystem extends FileSystem {
+ 
+     private FileChecksum getFileChecksum(String f) throws IOException {
+       final HttpURLConnection connection = openConnection(
+-          "/fileChecksum" + f, "ugi=" + ugi.getShortUserName());
++          "/fileChecksum" + f, "ugi=" + getUgiParameter());
+       try {
+         final XMLReader xr = XMLReaderFactory.createXMLReader();
+         xr.setContentHandler(this);
+@@ -373,7 +462,7 @@ public class HftpFileSystem extends FileSystem {
+      */
+     private ContentSummary getContentSummary(String path) throws IOException {
+       final HttpURLConnection connection = openConnection(
+-          "/contentSummary" + path, "ugi=" + ugi);
++          "/contentSummary" + path, "ugi=" + getUgiParameter());
+       InputStream in = null;
+       try {
+         in = connection.getInputStream();        
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java
+index f70dae0..9280a09 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java
+@@ -68,6 +68,7 @@ public class HsftpFileSystem extends HftpFileSystem {
+   protected HttpURLConnection openConnection(String path, String query)
+       throws IOException {
+     try {
++      query = updateQuery(query);
+       final URL url = new URI("https", null, nnAddr.getHostName(),
+           nnAddr.getPort(), path, query, null).toURL();
+       HttpsURLConnection conn = (HttpsURLConnection)url.openConnection();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DelegationTokenServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DelegationTokenServlet.java
+index 297bb6f..88a826c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DelegationTokenServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DelegationTokenServlet.java
+@@ -41,6 +41,7 @@ import org.apache.hadoop.security.token.Token;
+ public class DelegationTokenServlet extends DfsServlet {
+   private static final Log LOG = LogFactory.getLog(DelegationTokenServlet.class);
+   public static final String PATH_SPEC = "/getDelegationToken";
++  public static final String RENEWER = "renewer";
+   
+   @Override
+   protected void doGet(final HttpServletRequest req, final HttpServletResponse resp)
+@@ -59,6 +60,9 @@ public class DelegationTokenServlet extends DfsServlet {
+     LOG.info("Sending token: {" + ugi.getUserName() + "," + req.getRemoteAddr() +"}");
+     final ServletContext context = getServletContext();
+     final NameNode nn = (NameNode) context.getAttribute("name.node");
++    String renewer = req.getParameter(RENEWER);
++    final String renewerFinal = (renewer == null) ? 
++        req.getUserPrincipal().getName() : renewer;
+     
+     DataOutputStream dos = null;
+     try {
+@@ -69,7 +73,7 @@ public class DelegationTokenServlet extends DfsServlet {
+         public Void run() throws Exception {
+           
+           Token<DelegationTokenIdentifier> token = 
+-            nn.getDelegationToken(new Text(req.getUserPrincipal().getName()));
++            nn.getDelegationToken(new Text(renewerFinal));
+           String s = NameNode.getAddress(conf).getAddress().getHostAddress()
+                      + ":" + NameNode.getAddress(conf).getPort();
+           token.setService(new Text(s));
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index 5ccf70c..ce81239 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -420,6 +420,7 @@ public class JspHelper {
+                                             Configuration conf
+                                            ) throws IOException {
+     UserGroupInformation ugi = null;
++    final String RANDOM_USER = "webuser1234";
+     if(UserGroupInformation.isSecurityEnabled()) {
+       String user = request.getRemoteUser();
+       String tokenString = request.getParameter(DELEGATION_PARAMETER_NAME);
+@@ -427,6 +428,12 @@ public class JspHelper {
+         Token<DelegationTokenIdentifier> token = 
+           new Token<DelegationTokenIdentifier>();
+         token.decodeFromUrlString(tokenString);
++        if (user == null) {
++          //this really doesn't break any security since we use the 
++          //delegation token for authentication in
++          //the back end.
++          user = RANDOM_USER;
++        }
+         ugi = UserGroupInformation.createRemoteUser(user);
+         ugi.addToken(token);        
+         ugi.setAuthenticationMethod(AuthenticationMethod.TOKEN);
+@@ -444,7 +451,7 @@ public class JspHelper {
+       if(user == null) { // not specified in request
+         ugi = getDefaultWebUser(conf);
+       } else {
+-        ugi = UserGroupInformation.createRemoteUser(user);
++        ugi = UserGroupInformation.createRemoteUser(user.split(",")[0]);
+       }
+       ugi.setAuthenticationMethod(AuthenticationMethod.SIMPLE);
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 31dfda2..af540b0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -296,13 +296,13 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+           httpServer.addInternalServlet("getimage", "/getimage", 
+               GetImageServlet.class, true);
+           httpServer.addInternalServlet("listPaths", "/listPaths/*", 
+-              ListPathsServlet.class, true);
++              ListPathsServlet.class, false);
+           httpServer.addInternalServlet("data", "/data/*", 
+-              FileDataServlet.class, true);
++              FileDataServlet.class, false);
+           httpServer.addInternalServlet("checksum", "/fileChecksum/*",
+-              FileChecksumServlets.RedirectServlet.class, true);
++              FileChecksumServlets.RedirectServlet.class, false);
+           httpServer.addInternalServlet("contentSummary", "/contentSummary/*",
+-              ContentSummaryServlet.class, true);
++              ContentSummaryServlet.class, false);
+           httpServer.start();
+       
+           // The web-server port can be ephemeral... ensure we have the correct info
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java b/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
+index 26b5fad..1f77e05 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
+@@ -62,7 +62,7 @@ public class DelegationTokenFetcher {
+       public Object run() throws Exception {
+         
+         if(args.length == 3 && "--webservice".equals(args[0])) {
+-          getDTfromRemote(args[1], args[2]);
++          getDTfromRemoteIntoFile(args[1], args[2]);
+           return null;
+         }
+         // avoid annoying mistake
+@@ -127,43 +127,53 @@ public class DelegationTokenFetcher {
+     ts.addToken(new Text(shortName), token);
+     ts.write(out);
+   }
+-  
++  /**
++   * Utility method to obtain a delegation token over http
++   * @param nnHttpAddr Namenode http addr, such as http://namenode:50070
++   */
++  static public Credentials getDTfromRemote(String nnAddr, String renewer) 
++  throws IOException {
++    // Enable Kerberos sockets
++   System.setProperty("https.cipherSuites", "TLS_KRB5_WITH_3DES_EDE_CBC_SHA");
++   DataOutputStream file = null;
++   DataInputStream dis = null;
++   
++   try {
++     StringBuffer url = new StringBuffer();
++     if (renewer != null) {
++       url.append(nnAddr).append(DelegationTokenServlet.PATH_SPEC).append("?").
++       append(DelegationTokenServlet.RENEWER).append("=").append(renewer);
++     } else {
++       url.append(nnAddr).append(DelegationTokenServlet.PATH_SPEC);
++     }
++     System.out.println("Retrieving token from: " + url);
++     URL remoteURL = new URL(url.toString());
++     URLConnection connection = remoteURL.openConnection();
++     
++     InputStream in = connection.getInputStream();
++     Credentials ts = new Credentials();
++     dis = new DataInputStream(in);
++     ts.readFields(dis);
++     return ts;
++   } catch (Exception e) {
++     throw new IOException("Unable to obtain remote token", e);
++   } finally {
++     if(dis != null) dis.close();
++     if(file != null) file.close();
++   }
++ }
+   /**
+    * Utility method to obtain a delegation token over http
+    * @param nnHttpAddr Namenode http addr, such as http://namenode:50070
+    * @param filename Name of file to store token in
+    */
+-   static private void getDTfromRemote(String nnAddr, String filename) 
+-   throws IOException {
+-     // Enable Kerberos sockets
+-    System.setProperty("https.cipherSuites", "TLS_KRB5_WITH_3DES_EDE_CBC_SHA");
+-    String ugiPostfix = "";
+-    DataOutputStream file = null;
+-    DataInputStream dis = null;
+-    
+-    if(nnAddr.startsWith("http:"))
+-      ugiPostfix = "?ugi=" + UserGroupInformation.getCurrentUser().getShortUserName();
+-    
+-    try {
+-      System.out.println("Retrieving token from: " + 
+-          nnAddr + DelegationTokenServlet.PATH_SPEC + ugiPostfix);
+-      URL remoteURL = new URL(nnAddr + DelegationTokenServlet.PATH_SPEC + ugiPostfix);
+-      URLConnection connection = remoteURL.openConnection();
+-      
+-      InputStream in = connection.getInputStream();
+-      Credentials ts = new Credentials();
+-      dis = new DataInputStream(in);
+-      ts.readFields(dis);
+-      file = new DataOutputStream(new FileOutputStream(filename));
+-      ts.write(file);
+-      file.flush();
+-      System.out.println("Successfully wrote token of " + file.size() 
+-          + " bytes  to " + filename);
+-    } catch (Exception e) {
+-      throw new IOException("Unable to obtain remote token", e);
+-    } finally {
+-      if(dis != null) dis.close();
+-      if(file != null) file.close();
+-    }
++  static private void getDTfromRemoteIntoFile(String nnAddr, String filename) 
++  throws IOException {
++    Credentials ts = getDTfromRemote(nnAddr, null); 
++    DataOutputStream file = new DataOutputStream(new FileOutputStream(filename));
++    ts.write(file);
++    file.flush();
++    System.out.println("Successfully wrote token of " + file.size() 
++        + " bytes  to " + filename);
+   }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+index 5af48a9..e2816c3 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+@@ -29,8 +29,10 @@ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.DistributedFileSystem;
++import org.apache.hadoop.hdfs.HftpFileSystem;
+ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
++import org.apache.hadoop.hdfs.tools.DelegationTokenFetcher;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.JobTracker;
+@@ -85,7 +87,6 @@ public class TokenCache {
+   throws IOException {
+     // get jobtracker principal id (for the renewer)
+     Text jtCreds = new Text(conf.get(JobTracker.JT_USER_NAME, ""));
+-
+     for(Path p: ps) {
+       FileSystem fs = FileSystem.get(p.toUri(), conf);
+       if(fs instanceof DistributedFileSystem) {
+@@ -107,8 +108,20 @@ public class TokenCache {
+ 
+         token.setService(new Text(fs_addr));
+         credentials.addToken(new Text(fs_addr), token);
+-        LOG.info("getting dt for " + p.toString() + ";uri="+ fs_addr + 
++        LOG.info("Got dt for " + p.toString() + ";uri="+ fs_addr + 
+             ";t.service="+token.getService());
++      } else if (fs instanceof HftpFileSystem) {
++        String fs_addr = buildDTServiceName(fs.getUri());
++        Token<DelegationTokenIdentifier> token = 
++          TokenCache.getDelegationToken(credentials, fs_addr); 
++        if(token != null) {
++          LOG.debug("DT for " + token.getService()  + " is already present");
++          continue;
++        }
++        //the initialize method of hftp, called via FileSystem.get() done
++        //earlier gets a delegation token
++        credentials.addToken(new Text(fs_addr), 
++            ((HftpFileSystem) fs).getDelegationToken());
+       }
+     }
+   }
+@@ -186,7 +199,7 @@ public class TokenCache {
+    * @param uri
+    * @return "ip:port"
+    */
+-  static String buildDTServiceName(URI uri) {
++  public static String buildDTServiceName(URI uri) {
+     int port = uri.getPort();
+     if(port == -1) 
+       port = NameNode.DEFAULT_PORT;
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+index 41a19f4..ba7cbd6 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+@@ -25,8 +25,10 @@ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Collections;
+ import java.util.Date;
++import java.util.HashSet;
+ import java.util.Iterator;
+ import java.util.List;
++import java.util.Set;
+ import java.util.Timer;
+ import java.util.TimerTask;
+ 
+@@ -94,13 +96,10 @@ public class DelegationTokenRenewal {
+   
+   //managing the list of tokens using Map
+   // jobId=>List<tokens>
+-  private static List<DelegationTokenToRenew> delegationTokens = 
+-    Collections.synchronizedList(new ArrayList<DelegationTokenToRenew>());
++  private static Set<DelegationTokenToRenew> delegationTokens = 
++    Collections.synchronizedSet(new HashSet<DelegationTokenToRenew>());
+   //adding token
+   private static void addTokenToList(DelegationTokenToRenew t) {
+-    //check to see if the token already exists in the list
+-    if (delegationTokens.contains(t))
+-      return;
+     delegationTokens.add(t);
+   }
+   
+diff --git a/src/tools/org/apache/hadoop/tools/DistCp.java b/src/tools/org/apache/hadoop/tools/DistCp.java
+index 6857b2f..fc18a5e 100644
+--- a/src/tools/org/apache/hadoop/tools/DistCp.java
++++ b/src/tools/org/apache/hadoop/tools/DistCp.java
+@@ -43,6 +43,7 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FsShell;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.hdfs.HftpFileSystem;
+ import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
+ import org.apache.hadoop.io.LongWritable;
+ import org.apache.hadoop.io.SequenceFile;
+@@ -57,6 +58,7 @@ import org.apache.hadoop.mapred.InputSplit;
+ import org.apache.hadoop.mapred.InvalidInputException;
+ import org.apache.hadoop.mapred.JobClient;
+ import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.JobTracker;
+ import org.apache.hadoop.mapred.Mapper;
+ import org.apache.hadoop.mapred.OutputCollector;
+ import org.apache.hadoop.mapred.RecordReader;
+@@ -627,6 +629,9 @@ public class DistCp implements Tool {
+     List<IOException> rslt = new ArrayList<IOException>();
+     
+     // get tokens for all the required FileSystems..
++    // also set the renewer as the JobTracker for the hftp case
++    conf.set(HftpFileSystem.HFTP_RENEWER, 
++        conf.get(JobTracker.JT_USER_NAME, ""));
+     Path[] ps = new Path[srcPaths.size()];
+     ps = srcPaths.toArray(ps);
+     TokenCache.obtainTokensForNamenodes(jobConf.getCredentials(), ps, conf);
+-- 
+1.7.0.4
+

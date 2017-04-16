@@ -1,0 +1,79 @@
+From 16ba98db9791a1a24aff066ae884c64abb4b589a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 8 Oct 2010 14:10:50 -0700
+Subject: [PATCH 0736/1179] CLOUDERA-BUILD. Use su instead of sudo for dropping root privileges.
+
+This fixes an issue on EC2, where some AMIs don't properly support
+sudo.
+---
+ bin/hadoop |   26 +++++++++++++-------------
+ 1 files changed, 13 insertions(+), 13 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 52f99b2..cb2d227 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -333,8 +333,8 @@ HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.policy.file=$HADOOP_POLICYFILE"
+ #  "jsvc" - only supported for the datanode - we use the jsvc wrapper in
+ #           the sbin/<platform> directory in order to setuid to the target
+ #           user. Requires that this script is running as root.
+-#  "sudo" - supported only when running as root and /usr/bin/sudo exists.
+-#           Uses sudo in order to assume the identity of the daemon user.
++#  "su" -   supported only when running as root and /bin/su exists.
++#           Uses su in order to assume the identity of the daemon user.
+ #  "normal" - supported only when already running as the target user.
+ ###########################################################################
+ if [[ "$COMMAND" == *node ]] || [[ "$COMMAND" == *tracker ]]; then
+@@ -354,15 +354,15 @@ if [[ "$COMMAND" == *node ]] || [[ "$COMMAND" == *tracker ]]; then
+   if [ "$EUID" = "0" ] ; then
+     if [ "$COMMAND" == "datanode" ] && [ -x "$_JSVC_PATH" ]; then
+       _HADOOP_RUN_MODE="jsvc"
+-    elif [ -x /usr/bin/sudo ]; then
+-      _HADOOP_RUN_MODE="sudo"
++    elif [ -x /bin/su ]; then
++      _HADOOP_RUN_MODE="su"
+     else
+       echo "Daemon wants to run as $_HADOOP_DAEMON_USER but script is running as root"
+-      echo "and sudo is not available."
++      echo "and su is not available."
+       exit 1
+     fi
+   else
+-    # We must be running as the user we want to run as, if we can't use jsvc or sudo
++    # We must be running as the user we want to run as, if we can't use jsvc or su
+     # to drop privileges
+     if [ "$_HADOOP_DAEMON_USER" != "$(whoami)" ]; then
+       echo Daemon wants to run as $_HADOOP_DAEMON_USER but not running as that user or root.
+@@ -415,22 +415,22 @@ case "$_HADOOP_RUN_MODE" in
+                        $_JSVC_STARTER_CLASS "$@"
+   ;;
+ 
+-  normal | sudo)
+-    # If we need to sudo, tack the command into a local variable
+-    if [ $_HADOOP_RUN_MODE = "sudo" ]; then
+-      _MAYBE_SUDO="sudo -u $_HADOOP_DAEMON_USER"
++  normal | su)
++    # If we need to su, tack the command into a local variable
++    if [ $_HADOOP_RUN_MODE = "su" ]; then
++      _JAVA_EXEC="su $_HADOOP_DAEMON_USER -s $JAVA --"
+     else
+-      _MAYBE_SUDO=""
++      _JAVA_EXEC="$JAVA"
+     fi
+ 
+     if [ "$_HADOOP_DAEMON_DETACHED" = "true" ]; then
+-      nohup $_MAYBE_SUDO "$JAVA" -Dproc_$COMMAND $JAVA_HEAP_MAX $HADOOP_OPTS -classpath "$CLASSPATH" $CLASS "$@" > "$_HADOOP_DAEMON_OUT" 2>&1 < /dev/null &
++      nohup $_JAVA_EXEC -Dproc_$COMMAND $JAVA_HEAP_MAX $HADOOP_OPTS -classpath "$CLASSPATH" $CLASS "$@" > "$_HADOOP_DAEMON_OUT" 2>&1 < /dev/null &
+       echo $! > "$_HADOOP_DAEMON_PIDFILE"
+       sleep 1
+       head "$_HADOOP_DAEMON_OUT"
+     else
+       # For normal operation, just run the command
+-      exec $_MAYBE_SUDO "$JAVA" -Dproc_$COMMAND $JAVA_HEAP_MAX $HADOOP_OPTS -classpath "$CLASSPATH" $CLASS "$@"
++      exec $_JAVA_EXEC -Dproc_$COMMAND $JAVA_HEAP_MAX $HADOOP_OPTS -classpath "$CLASSPATH" $CLASS "$@"
+     fi
+   ;;
+ 
+-- 
+1.7.0.4
+

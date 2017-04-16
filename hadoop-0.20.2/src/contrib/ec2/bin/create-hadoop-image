@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Create a Hadoop AMI.
+# Inspired by Jonathan Siegel's EC2 script (http://blogsiegel.blogspot.com/2006/08/sandboxing-amazon-ec2.html)
+
+# Import variables
+bin=`dirname "$0"`
+bin=`cd "$bin"; pwd`
+. "$bin"/hadoop-ec2-env.sh
+
+AMI_IMAGE=`ec2-describe-images -a | grep $S3_BUCKET | grep $HADOOP_VERSION | grep $ARCH | grep available | awk '{print $2}'`
+
+[ ! -z $AMI_IMAGE ] && echo "AMI already registered, use: ec2-deregister $AMI_IMAGE" && exit -1
+
+echo "Starting a AMI with ID $BASE_AMI_IMAGE."
+OUTPUT=`ec2-run-instances $BASE_AMI_IMAGE -k $KEY_NAME -t $INSTANCE_TYPE`
+BOOTING_INSTANCE=`echo $OUTPUT | awk '{print $6}'`
+
+echo "Instance is $BOOTING_INSTANCE."
+
+echo "Polling server status (ec2-describe-instances $BOOTING_INSTANCE)"
+while true; do
+  printf "."
+  HOSTNAME=`ec2-describe-instances $BOOTING_INSTANCE | grep running | awk '{print $4}'`
+  if [ ! -z $HOSTNAME ]; then
+    break;
+  fi
+  sleep 1
+done
+
+echo "The server is available at $HOSTNAME."
+while true; do
+  REPLY=`ssh $SSH_OPTS "root@$HOSTNAME" 'echo "hello"'`
+  if [ ! -z $REPLY ]; then
+   break;
+  fi
+  sleep 5
+done
+
+#read -p "Login first? [yes or no]: " answer
+
+if [ "$answer" == "yes" ]; then
+  ssh $SSH_OPTS "root@$HOSTNAME"
+fi
+
+echo "Copying scripts."
+
+# Copy setup scripts
+scp $SSH_OPTS "$bin"/hadoop-ec2-env.sh "root@$HOSTNAME:/mnt"
+scp $SSH_OPTS "$bin"/image/create-hadoop-image-remote "root@$HOSTNAME:/mnt"
+scp $SSH_OPTS "$bin"/image/ec2-run-user-data "root@$HOSTNAME:/etc/init.d"
+
+# Copy private key and certificate (for bundling image)
+scp $SSH_OPTS $EC2_KEYDIR/pk*.pem "root@$HOSTNAME:/mnt"
+scp $SSH_OPTS $EC2_KEYDIR/cert*.pem "root@$HOSTNAME:/mnt"
+
+# Connect to it
+ssh $SSH_OPTS "root@$HOSTNAME" '/mnt/create-hadoop-image-remote'
+
+# Register image
+ec2-register $S3_BUCKET/hadoop-$HADOOP_VERSION-$ARCH.manifest.xml
+
+echo "Terminate with: ec2-terminate-instances $BOOTING_INSTANCE"

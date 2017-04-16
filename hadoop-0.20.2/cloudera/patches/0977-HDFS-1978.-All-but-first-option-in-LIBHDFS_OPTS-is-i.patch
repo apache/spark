@@ -1,0 +1,89 @@
+From b4d1557ba2d16f1fa3af7e4b7bb1265bc7cb6a30 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 22 May 2011 19:51:10 -0700
+Subject: [PATCH 0977/1179] HDFS-1978. All but first option in LIBHDFS_OPTS is ignored.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-3210
+---
+ src/c++/libhdfs/hdfsJniHelper.c |   41 ++++++++++++++++++++++++--------------
+ 1 files changed, 26 insertions(+), 15 deletions(-)
+
+diff --git a/src/c++/libhdfs/hdfsJniHelper.c b/src/c++/libhdfs/hdfsJniHelper.c
+index f5ab81b..f7bf5e4 100644
+--- a/src/c++/libhdfs/hdfsJniHelper.c
++++ b/src/c++/libhdfs/hdfsJniHelper.c
+@@ -421,28 +421,35 @@ JNIEnv* getJNIEnv(void)
+         snprintf(optHadoopClassPath, optHadoopClassPathLen,
+                 "%s%s", hadoopClassPathVMArg, hadoopClassPath);
+ 
++        // Determine the # of LIBHDFS_OPTS args
+         int noArgs = 1;
+-        //determine how many arguments were passed as LIBHDFS_OPTS env var
+         char *hadoopJvmArgs = getenv("LIBHDFS_OPTS");
+         char jvmArgDelims[] = " ";
++        char *str, *token, *savePtr;
+         if (hadoopJvmArgs != NULL)  {
+-                char *result = NULL;
+-                result = strtok( hadoopJvmArgs, jvmArgDelims );
+-                while ( result != NULL ) {
+-                        noArgs++;
+-        		result = strtok( NULL, jvmArgDelims);
+-           	}
++          hadoopJvmArgs = strdup(hadoopJvmArgs);
++          for (noArgs = 1, str = hadoopJvmArgs; ; noArgs++, str = NULL) {
++            token = strtok_r(str, jvmArgDelims, &savePtr);
++            if (NULL == token) {
++              break;
++            }
++          }
++          free(hadoopJvmArgs);
+         }
++
++        // Now that we know the # args, populate the options array
+         JavaVMOption options[noArgs];
+         options[0].optionString = optHadoopClassPath;
+-		//fill in any specified arguments
++        hadoopJvmArgs = getenv("LIBHDFS_OPTS");
+ 	if (hadoopJvmArgs != NULL)  {
+-            char *result = NULL;
+-            result = strtok( hadoopJvmArgs, jvmArgDelims );	
+-            int argNum = 1;
+-            for (;argNum < noArgs ; argNum++) {
+-                options[argNum].optionString = result; //optHadoopArg;
++          hadoopJvmArgs = strdup(hadoopJvmArgs);
++          for (noArgs = 1, str = hadoopJvmArgs; ; noArgs++, str = NULL) {
++            token = strtok_r(str, jvmArgDelims, &savePtr);
++            if (NULL == token) {
++              break;
+             }
++            options[noArgs].optionString = token;
++          }
+         }
+ 
+         //Create the VM
+@@ -454,14 +461,18 @@ JNIEnv* getJNIEnv(void)
+         vm_args.ignoreUnrecognized = 1;
+ 
+         rv = JNI_CreateJavaVM(&vm, (void*)&env, &vm_args);
++
++        if (hadoopJvmArgs != NULL)  {
++          free(hadoopJvmArgs);
++        }
++        free(optHadoopClassPath);
++
+         if (rv != 0) {
+             fprintf(stderr, "Call to JNI_CreateJavaVM failed "
+                     "with error: %d\n", rv);
+             UNLOCK_JVM_MUTEX();
+             return NULL;
+         }
+-
+-        free(optHadoopClassPath);
+     }
+     else {
+         //Attach this thread to the VM
+-- 
+1.7.0.4
+

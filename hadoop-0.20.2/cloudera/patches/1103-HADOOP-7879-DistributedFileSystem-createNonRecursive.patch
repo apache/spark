@@ -1,0 +1,28 @@
+From fa023cef12584d6f38f17b05ea95445eb187cb9e Mon Sep 17 00:00:00 2001
+From: Jonathan Hsieh <jon@cloudera.com>
+Date: Fri, 2 Dec 2011 17:15:06 -0800
+Subject: [PATCH 1103/1179] HADOOP-7879 DistributedFileSystem#createNonRecursive should also incrementWriteOps statistics.
+
+Reason: Bug (hbase data loss)
+Author: Jonathan Hsieh
+Ref: CDH-3798
+---
+ .../apache/hadoop/hdfs/DistributedFileSystem.java  |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+index 942fc48..1243cdd 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+@@ -231,7 +231,7 @@ public class DistributedFileSystem extends FileSystem {
+       boolean overwrite,
+       int bufferSize, short replication, long blockSize, 
+       Progressable progress) throws IOException {
+-
++    statistics.incrementWriteOps(1);
+     return new FSDataOutputStream
+         (dfs.create(getPathName(f), permission, 
+                     overwrite, false, replication, blockSize, progress, bufferSize), 
+-- 
+1.7.0.4
+

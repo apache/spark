@@ -1,0 +1,44 @@
+From c7c90372c078febe77344c656b512c3d927c6a71 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 8 Mar 2011 10:16:20 -0800
+Subject: [PATCH 0908/1179] HDFS-1625. TestDataNodeMXBean fails if disk space usage changes during test run
+
+Reason: flaky test
+Author: Tsz Wo (Nicholas), SZE
+Ref: CDH-2783
+---
+ .../hdfs/server/datanode/TestDataNodeMXBean.java   |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeMXBean.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeMXBean.java
+index e18dddc..f460336 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeMXBean.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeMXBean.java
+@@ -26,7 +26,7 @@ import javax.management.ObjectName;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.conf.Configuration;
+ import org.junit.Test;
+-import junit.framework.Assert;
++import org.junit.Assert;
+ 
+ /**
+  * Class for testing {@link DataNodeMXBean} implementation
+@@ -63,9 +63,14 @@ public class TestDataNodeMXBean {
+       Assert.assertEquals(datanode.getNamenodeAddress(),namenodeAddress);
+       // get attribute "getVolumeInfo"
+       String volumeInfo = (String)mbs.getAttribute(mxbeanName, "VolumeInfo");
+-      Assert.assertEquals(datanode.getVolumeInfo(),volumeInfo);
++      Assert.assertEquals(replaceDigits(datanode.getVolumeInfo()),
++          replaceDigits(volumeInfo));
+     } finally {
+       if (cluster != null) {cluster.shutdown();}
+     }
+   }
++  
++  private static String replaceDigits(final String s) {
++    return s.replaceAll("[0-9]+", "_DIGITS_");
++  }
+ }
+-- 
+1.7.0.4
+

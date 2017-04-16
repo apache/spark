@@ -1,0 +1,76 @@
+From 205a6b6697f7a8934f684e08c187682d0f1d3b2d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 18 Feb 2010 22:12:29 +0000
+Subject: [PATCH 0476/1179] HADOOP-6560. HarFileSystem throws NPE for har://hdfs-/foo
+
+Patch: http://issues.apache.org/jira/secure/attachment/12436045/c6560_20100212_y0.20.patch
+Author: Tsz Wo (Nicholas), SZE
+Ref: YDH
+---
+ src/core/org/apache/hadoop/fs/HarFileSystem.java   |   18 +++++++++++++-----
+ .../org/apache/hadoop/fs/TestHarFileSystem.java    |   20 ++++++++++++++++++++
+ 2 files changed, 33 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/HarFileSystem.java b/src/core/org/apache/hadoop/fs/HarFileSystem.java
+index c2393c6..a445ab9 100644
+--- a/src/core/org/apache/hadoop/fs/HarFileSystem.java
++++ b/src/core/org/apache/hadoop/fs/HarFileSystem.java
+@@ -181,12 +181,20 @@ public class HarFileSystem extends FilterFileSystem {
+       return FileSystem.getDefaultUri(conf);
+     }
+     String host = rawURI.getHost();
+-    String[] str = host.split("-", 2);
+-    if (str[0] == null) {
+-      throw new IOException("URI: " + rawURI + " is an invalid Har URI.");
+-    }
+-    String underLyingScheme = str[0];
+-    String underLyingHost = (str.length > 1)? str[1]:null;
++    if (host == null) {
++      throw new IOException("URI: " + rawURI
++          + " is an invalid Har URI since host==null."
++          + "  Expecting har://<scheme>-<host>/<path>.");
++    }
++    int i = host.indexOf('-');
++    if (i < 0) {
++      throw new IOException("URI: " + rawURI
++          + " is an invalid Har URI since '-' not found."
++          + "  Expecting har://<scheme>-<host>/<path>.");
++    }
++    final String underLyingScheme = host.substring(0, i);
++    i++;
++    final String underLyingHost = i == host.length()? null: host.substring(i);
+     int underLyingPort = rawURI.getPort();
+     String auth = (underLyingHost == null && underLyingPort == -1)?
+                   null:(underLyingHost+":"+underLyingPort);
+diff --git a/src/test/org/apache/hadoop/fs/TestHarFileSystem.java b/src/test/org/apache/hadoop/fs/TestHarFileSystem.java
+index 42838d0..11697a0 100644
+--- a/src/test/org/apache/hadoop/fs/TestHarFileSystem.java
++++ b/src/test/org/apache/hadoop/fs/TestHarFileSystem.java
+@@ -283,4 +283,24 @@ public class TestHarFileSystem extends TestCase {
+     assertTrue("number of bytes left should be -1", reduceIn.read(b) == -1);
+     reduceIn.close();
+   }
++
++  public void testHarUri() {
++    final Configuration conf = new Configuration();
++    checkInvalidPath("har://hdfs-/foo.har", conf);
++    checkInvalidPath("har://hdfs/foo.har", conf);
++    checkInvalidPath("har://-hdfs/foo.har", conf);
++    checkInvalidPath("har://-/foo.har", conf);
++  }
++
++  static void checkInvalidPath(String s, Configuration conf) {
++    System.out.println("\ncheckInvalidPath: " + s);
++    final Path p = new Path(s);
++    try {
++      p.getFileSystem(conf);
++      fail(p + " is an invalid path.");
++    } catch (IOException e) {
++      System.out.println("GOOD: Got an exception.");
++      e.printStackTrace(System.out);
++    }
++  }
+ }
+-- 
+1.7.0.4
+

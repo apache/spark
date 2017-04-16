@@ -1,0 +1,15 @@
+From 2818706e4a48344eefb3f840fc70d8f3f34a381e Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 17 Nov 2011 08:44:19 -0800
+Subject: [PATCH 1080/1179] Ammend MAPREDUCE-2777. Remove TestTTMemoryReporting.
+
+---
+ 0 files changed, 0 insertions(+), 0 deletions(-)
+ delete mode 100644 src/test/org/apache/hadoop/mapred/TestTTMemoryReporting.java
+
+diff --git a/src/test/org/apache/hadoop/mapred/TestTTMemoryReporting.java b/src/test/org/apache/hadoop/mapred/TestTTMemoryReporting.java
+deleted file mode 100644
+index e69de29..0000000
+-- 
+1.7.0.4
+

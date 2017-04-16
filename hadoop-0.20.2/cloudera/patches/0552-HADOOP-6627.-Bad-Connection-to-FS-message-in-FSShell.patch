@@ -1,0 +1,29 @@
+From 596d28594c9bd32116c6510e6607308bc1a762e8 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 11 Mar 2010 16:58:55 -0800
+Subject: [PATCH 0552/1179] HADOOP-6627. "Bad Connection to FS" message in FSShell should print message from the exception
+
+Patch: https://issues.apache.org/jira/secure/attachment/12438455/HADOOP-6627-BP20.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/fs/FsShell.java |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FsShell.java b/src/core/org/apache/hadoop/fs/FsShell.java
+index 3c14b06..96e463e 100644
+--- a/src/core/org/apache/hadoop/fs/FsShell.java
++++ b/src/core/org/apache/hadoop/fs/FsShell.java
+@@ -1784,7 +1784,8 @@ public class FsShell extends Configured implements Tool {
+                          "... command aborted.");
+       return exitCode;
+     } catch (IOException e) {
+-      System.err.println("Bad connection to FS. command aborted.");
++      System.err.println("Bad connection to FS. command aborted. exception: " +
++          e.getLocalizedMessage());
+       return exitCode;
+     }
+ 
+-- 
+1.7.0.4
+

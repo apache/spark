@@ -1,0 +1,137 @@
+From 5fe725b1a48326bf606dadfc636586904aa861c4 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 6 Sep 2010 11:41:10 -0700
+Subject: [PATCH 0699/1179] HDFS-1378. Track and report file offsets in cases of edit log replay failure.
+
+Author: Todd Lipcon
+---
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |   77 +++++++++++++++++++-
+ 1 files changed, 76 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index 227afb0..b708425 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -25,9 +25,12 @@ import java.io.EOFException;
+ import java.io.File;
+ import java.io.FileInputStream;
+ import java.io.FileOutputStream;
++import java.io.FilterInputStream;
++import java.io.InputStream;
+ import java.io.IOException;
+ import java.io.RandomAccessFile;
+ import java.util.ArrayList;
++import java.util.Arrays;
+ import java.util.Iterator;
+ import java.lang.Math;
+ import java.nio.channels.FileChannel;
+@@ -43,6 +46,7 @@ import org.apache.hadoop.hdfs.server.common.Storage.StorageDirectory;
+ import org.apache.hadoop.hdfs.server.namenode.FSImage.NameNodeDirType;
+ import org.apache.hadoop.hdfs.server.namenode.metrics.NameNodeMetrics;
+ import org.apache.hadoop.io.*;
++import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.permission.*;
+ import org.apache.hadoop.security.token.delegation.DelegationKey;
+ 
+@@ -501,7 +505,13 @@ public class FSEditLog {
+ 
+     long startTime = FSNamesystem.now();
+ 
+-    DataInputStream in = new DataInputStream(new BufferedInputStream(edits));
++    // Keep track of the file offsets of the last several opcodes.
++    // This is handy when manually recovering corrupted edits files.
++    PositionTrackingInputStream tracker = 
++      new PositionTrackingInputStream(new BufferedInputStream(edits));
++    long recentOpcodeOffsets[] = new long[4];
++
++    DataInputStream in = new DataInputStream(tracker);
+     try {
+       // Read log file version. Could be missing. 
+       in.mark(4);
+@@ -541,6 +551,8 @@ public class FSEditLog {
+         } catch (EOFException e) {
+           break; // no more transactions
+         }
++        recentOpcodeOffsets[numEdits % recentOpcodeOffsets.length] =
++          tracker.getPos();
+         numEdits++;
+         switch (opcode) {
+         case OP_ADD:
+@@ -844,6 +856,21 @@ public class FSEditLog {
+         }
+         }
+       }
++    } catch (IOException ioe) {
++      FSImage.LOG.error("Error replaying edit log at offset " +
++        tracker.getPos());
++      Arrays.sort(recentOpcodeOffsets);
++      StringBuilder sb = new StringBuilder();
++      for (long offset : recentOpcodeOffsets) {
++        if (offset != 0) {
++          sb.append(' ').append(offset);
++        }
++      }
++      if (!sb.toString().isEmpty()) {
++        FSImage.LOG.error("Last 4 opcodes at offsets:" +
++          sb);
++      }
++      throw ioe;
+     } finally {
+       in.close();
+     }
+@@ -1443,4 +1470,52 @@ public class FSEditLog {
+     }
+     return blocks;
+   }
++
++  /**
++   * Stream wrapper that keeps track of the current file position.
++   */
++  private static class PositionTrackingInputStream extends FilterInputStream {
++    private long curPos = 0;
++    private long markPos = -1;
++
++    public PositionTrackingInputStream(InputStream is) {
++      super(is);
++    }
++
++    public int read() throws IOException {
++      int ret = super.read();
++      if (ret != -1) curPos++;
++      return ret;
++    }
++
++    public int read(byte[] data) throws IOException {
++      int ret = super.read(data);
++      if (ret > 0) curPos += ret;
++      return ret;
++    }
++
++    public int read(byte[] data, int offset, int length) throws IOException {
++      int ret = super.read(data, offset, length);
++      if (ret > 0) curPos += ret;
++      return ret;
++    }
++
++    public void mark(int limit) {
++      super.mark(limit);
++      markPos = curPos;
++    }
++
++    public void reset() throws IOException {
++      if (markPos == -1) {
++        throw new IOException("Not marked!");
++      }
++      super.reset();
++      curPos = markPos;
++      markPos = -1;
++    }
++
++    public long getPos() {
++      return curPos;
++    }
++  }
+ }
+-- 
+1.7.0.4
+

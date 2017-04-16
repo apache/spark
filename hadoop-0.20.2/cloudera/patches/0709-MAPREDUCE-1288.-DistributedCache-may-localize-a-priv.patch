@@ -1,0 +1,218 @@
+From 3f2759c884c496ef71a75db9d436ebfe61e04111 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Mon, 27 Sep 2010 22:35:31 -0700
+Subject: [PATCH 0709/1179] MAPREDUCE-1288. DistributedCache may localize a private file for multiple users
+
+Reason: bug fix when multiple users add the same "private" file to their distributed caches
+Author: Devaraj Das
+Ref: CDH-648
+---
+ .../apache/hadoop/filecache/DistributedCache.java  |    4 +-
+ .../filecache/TaskDistributedCacheManager.java     |   12 ++++-
+ .../filecache/TrackerDistributedCacheManager.java  |   41 +++++++++++++++----
+ .../TestTrackerDistributedCacheManager.java        |   12 ++++--
+ 4 files changed, 52 insertions(+), 17 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/filecache/DistributedCache.java b/src/mapred/org/apache/hadoop/filecache/DistributedCache.java
+index c1faf02..a774cc9 100644
+--- a/src/mapred/org/apache/hadoop/filecache/DistributedCache.java
++++ b/src/mapred/org/apache/hadoop/filecache/DistributedCache.java
+@@ -21,6 +21,7 @@ package org.apache.hadoop.filecache;
+ import java.io.*;
+ import java.util.*;
+ import org.apache.hadoop.conf.*;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.*;
+ import org.apache.hadoop.fs.*;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -325,7 +326,8 @@ public class DistributedCache {
+       throw new IOException("TimeStamp of the uri couldnot be found");
+     }
+     new TrackerDistributedCacheManager(conf, new DefaultTaskController())
+-        .releaseCache(cache, conf, Long.parseLong(timestamp));
++        .releaseCache(cache, conf, Long.parseLong(timestamp), 
++            TrackerDistributedCacheManager.getLocalizedCacheOwner(false));
+   }
+   
+   /**
+diff --git a/src/mapred/org/apache/hadoop/filecache/TaskDistributedCacheManager.java b/src/mapred/org/apache/hadoop/filecache/TaskDistributedCacheManager.java
+index 2c16134..c809464 100644
+--- a/src/mapred/org/apache/hadoop/filecache/TaskDistributedCacheManager.java
++++ b/src/mapred/org/apache/hadoop/filecache/TaskDistributedCacheManager.java
+@@ -74,14 +74,18 @@ public class TaskDistributedCacheManager {
+     /** Whether this is to be added to the classpath */
+     final boolean shouldBeAddedToClassPath;
+     boolean localized = false;
++    /** The owner of the localized file. Relevant only on the tasktrackers */
++    final String owner;
+ 
+     private CacheFile(URI uri, FileType type, boolean isPublic, long timestamp, 
+-        boolean classPath) {
++        boolean classPath) throws IOException {
+       this.uri = uri;
+       this.type = type;
+       this.isPublic = isPublic;
+       this.timestamp = timestamp;
+       this.shouldBeAddedToClassPath = classPath;
++      this.owner = 
++          TrackerDistributedCacheManager.getLocalizedCacheOwner(isPublic);
+     }
+ 
+     /**
+@@ -90,7 +94,8 @@ public class TaskDistributedCacheManager {
+      * files.
+      */
+     private static List<CacheFile> makeCacheFiles(URI[] uris, 
+-        String[] timestamps, String cacheVisibilities[], Path[] paths, FileType type) {
++        String[] timestamps, String cacheVisibilities[], Path[] paths, 
++        FileType type) throws IOException {
+       List<CacheFile> ret = new ArrayList<CacheFile>();
+       if (uris != null) {
+         if (uris.length != timestamps.length) {
+@@ -235,7 +240,8 @@ public class TaskDistributedCacheManager {
+   public void release() throws IOException {
+     for (CacheFile c : cacheFiles) {
+       if (c.getLocalized()) {
+-        distributedCacheManager.releaseCache(c.uri, taskConf, c.timestamp);
++        distributedCacheManager.releaseCache(c.uri, taskConf, c.timestamp, 
++            c.owner);
+       }
+     }
+   }
+diff --git a/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java b/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
+index e4cbc62..0cd8bd0 100644
+--- a/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
++++ b/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
+@@ -47,6 +47,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.mapred.InvalidJobConfException;
+ import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.security.Credentials;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.RunJar;
+ import org.apache.hadoop.mapreduce.security.TokenCache;
+ 
+@@ -158,7 +159,8 @@ public class TrackerDistributedCacheManager {
+       boolean isArchive, long confFileStamp,
+       Path currentWorkDir, boolean honorSymLinkConf, boolean isPublic)
+       throws IOException {
+-    String key = getKey(cache, conf, confFileStamp);
++    String key;
++    key = getKey(cache, conf, confFileStamp, getLocalizedCacheOwner(isPublic));
+     CacheStatus lcacheStatus;
+     Path localizedPath = null;
+     synchronized (cachedArchives) {
+@@ -235,11 +237,13 @@ public class TrackerDistributedCacheManager {
+    * @param cache The cache URI to be released
+    * @param conf configuration which contains the filesystem the cache
+    * is contained in.
++   * @param timeStamp the timestamp on the file represented by the cache URI
++   * @param owner the owner of the localized file
+    * @throws IOException
+    */
+-  void releaseCache(URI cache, Configuration conf, long timeStamp)
+-    throws IOException {
+-    String key = getKey(cache, conf, timeStamp);
++  void releaseCache(URI cache, Configuration conf, long timeStamp,
++      String owner) throws IOException {
++    String key = getKey(cache, conf, timeStamp, owner);
+     synchronized (cachedArchives) {
+       CacheStatus lcacheStatus = cachedArchives.get(key);
+       if (lcacheStatus == null) {
+@@ -256,9 +260,9 @@ public class TrackerDistributedCacheManager {
+   /*
+    * This method is called from unit tests. 
+    */
+-  int getReferenceCount(URI cache, Configuration conf, long timeStamp) 
+-    throws IOException {
+-    String key = getKey(cache, conf, timeStamp);
++  int getReferenceCount(URI cache, Configuration conf, long timeStamp,
++      String owner) throws IOException {
++    String key = getKey(cache, conf, timeStamp, owner);
+     synchronized (cachedArchives) {
+       CacheStatus lcacheStatus = cachedArchives.get(key);
+       if (lcacheStatus == null) {
+@@ -268,6 +272,25 @@ public class TrackerDistributedCacheManager {
+     }
+   }
+ 
++  /**
++   * Get the user who should "own" the localized distributed cache file.
++   * If the cache is public, the tasktracker user is the owner. If private,
++   * the user that the task is running as, is the owner.
++   * @param isPublic
++   * @return the owner as a shortname string
++   * @throws IOException
++   */
++  static String getLocalizedCacheOwner(boolean isPublic) throws IOException {  
++    String user;
++    if (isPublic) {
++      user = UserGroupInformation.getLoginUser().getShortUserName();
++    } else {
++      user = UserGroupInformation.getCurrentUser().getShortUserName();
++    }
++    return user;
++  }
++
++
+   // To delete the caches which have a refcount of zero
+ 
+   private void compactCache(Configuration conf) throws IOException {
+@@ -571,9 +594,9 @@ public class TrackerDistributedCacheManager {
+     return true;
+   }
+ 
+-  String getKey(URI cache, Configuration conf, long timeStamp) 
++  String getKey(URI cache, Configuration conf, long timeStamp, String user) 
+       throws IOException {
+-    return makeRelative(cache, conf) + String.valueOf(timeStamp);
++    return makeRelative(cache, conf) + String.valueOf(timeStamp) + user;
+   }
+   
+   /**
+diff --git a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+index 9d055de..9e147e3 100644
+--- a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
++++ b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+@@ -249,7 +249,8 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+           TaskTracker.getPublicDistributedCacheDir());
+     handle.release();
+     for (TaskDistributedCacheManager.CacheFile c : handle.getCacheFiles()) {
+-      assertEquals(0, manager.getReferenceCount(c.uri, conf1, c.timestamp));
++      assertEquals(0, manager.getReferenceCount(c.uri, conf1, c.timestamp, 
++          c.owner));
+     }
+     
+     Path thirdCacheFile = new Path(TEST_ROOT_DIR, "thirdcachefile");
+@@ -287,7 +288,8 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+     th = null;
+     for (TaskDistributedCacheManager.CacheFile c : handle.getCacheFiles()) {
+       try {
+-        assertEquals(0, manager.getReferenceCount(c.uri, conf2, c.timestamp));
++        assertEquals(0, manager.getReferenceCount(c.uri, conf2, c.timestamp, 
++            c.owner));
+       } catch (IOException ie) {
+         th = ie;
+         LOG.info("Exception getting reference count for " + c.uri, ie);
+@@ -505,7 +507,8 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+         TaskTracker.getPrivateDistributedCacheDir(userName),
+         fs.getFileStatus(firstCacheFile), false,
+         now, new Path(TEST_ROOT_DIR), false, false);
+-    manager.releaseCache(firstCacheFile.toUri(), conf2, now);
++    manager.releaseCache(firstCacheFile.toUri(), conf2, now, 
++        TrackerDistributedCacheManager.getLocalizedCacheOwner(false));
+     //in above code,localized a file of size 4K and then release the cache 
+     // which will cause the cache be deleted when the limit goes out. 
+     // The below code localize another cache which's designed to
+@@ -559,7 +562,8 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+         fs.getFileStatus(thirdCacheFile), false,
+         now, new Path(TEST_ROOT_DIR), false, false);
+     // Release the third cache so that it can be deleted while sweeping
+-    manager.releaseCache(thirdCacheFile.toUri(), conf2, now);
++    manager.releaseCache(thirdCacheFile.toUri(), conf2, now, 
++        TrackerDistributedCacheManager.getLocalizedCacheOwner(false));
+     // Getting the fourth cache will make the number of sub directories becomes
+     // 3 which is greater than 2. So the released cache will be deleted.
+     Path fourthLocalCache = manager.getLocalCache(fourthCacheFile.toUri(), conf2, 
+-- 
+1.7.0.4
+

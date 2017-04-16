@@ -1,0 +1,43 @@
+<html>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<body>
+Implementation of the metrics package that writes the metrics to a file.
+Programmers should not normally need to use this package directly. Instead
+they should use org.hadoop.metrics.
+
+<p/>
+These are the implementation specific factory attributes 
+(See ContextFactory.getFactory()):
+
+<dl>
+    <dt><i>contextName</i>.fileName</dt>
+    <dd>The path of the file to which metrics in context <i>contextName</i>
+    are to be appended.  If this attribute is not specified, the metrics
+    are written to standard output by default.</dd>
+    
+    <dt><i>contextName</i>.period</dt>
+    <dd>The period in seconds on which the metric data is written to the
+    file.</dd>
+    
+</dl>
+
+
+</body>
+</html>

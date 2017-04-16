@@ -1,0 +1,739 @@
+From d8fe4d58aa93d151e55cd3e427a4b90ce470e7c9 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 22 Apr 2010 10:23:26 +0530
+Subject: [PATCH 0622/1179] MAPREDUCE-1533. JobTracker performance improvements.
+
+Author: Dick King
+Reason: Simple CPU usage optimizations in JT and Capacity Scheduler
+Ref: YDH
+---
+ .../hadoop/mapred/CapacityTaskScheduler.java       |   66 +++++++++----
+ .../org/apache/hadoop/mapred/MemoryMatcher.java    |    8 +-
+ .../hadoop/mapred/TestCapacityScheduler.java       |   66 ++++++-------
+ src/core/org/apache/hadoop/util/StringUtils.java   |    8 +-
+ src/mapred/org/apache/hadoop/mapred/Counters.java  |  103 ++++++++++++++------
+ .../org/apache/hadoop/mapred/JobHistory.java       |   40 +++++---
+ .../org/apache/hadoop/mapred/JobTracker.java       |   28 ++++--
+ src/mapred/org/apache/hadoop/mapred/Task.java      |   14 ++-
+ .../org/apache/hadoop/mapred/TaskInProgress.java   |   12 ++-
+ 9 files changed, 226 insertions(+), 119 deletions(-)
+
+diff --git a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
+index b7c533a..bee9123 100644
+--- a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
++++ b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
+@@ -549,8 +549,10 @@ class CapacityTaskScheduler extends TaskScheduler {
+             return TaskLookupResult.getTaskFoundResult(t);
+           } else {
+             //skip to the next job in the queue.
+-            LOG.debug("Job " + j.getJobID().toString()
+-                + " returned no tasks of type " + type);
++            if (LOG.isDebugEnabled()) {
++              LOG.debug("Job " + j.getJobID().toString()
++                  + " returned no tasks of type " + type);
++            }
+             continue;
+           }
+         } else {
+@@ -627,8 +629,10 @@ class CapacityTaskScheduler extends TaskScheduler {
+       }//end of for loop
+ 
+       // found nothing for this queue, look at the next one.
+-      String msg = "Found no task from the queue " + qsi.queueName;
+-      LOG.debug(msg);
++      if (LOG.isDebugEnabled()) {
++        String msg = "Found no task from the queue " + qsi.queueName;
++        LOG.debug(msg);
++      }
+       return TaskLookupResult.getNoTaskFoundResult();
+     }
+ 
+@@ -935,10 +939,6 @@ class CapacityTaskScheduler extends TaskScheduler {
+   /** whether scheduler has started or not */
+   private boolean started = false;
+ 
+-  final static String JOB_SCHEDULING_INFO_FORMAT_STRING =
+-    "%s running map tasks using %d map slots. %d additional slots reserved." +
+-    " %s running reduce tasks using %d reduce slots." +
+-    " %d additional slots reserved.";
+   /**
+    * A clock class - can be mocked out for testing.
+    */
+@@ -1256,14 +1256,12 @@ class CapacityTaskScheduler extends TaskScheduler {
+         int numReservedReduceSlotsForThisJob = 
+           (reduceScheduler.getNumReservedTaskTrackers(j) * 
+            reduceScheduler.getSlotsPerTask(j)); 
+-        j.setSchedulingInfo(
+-            String.format(JOB_SCHEDULING_INFO_FORMAT_STRING,
+-                          Integer.valueOf(numMapsRunningForThisJob), 
+-                          Integer.valueOf(numRunningMapSlots),
+-                          Integer.valueOf(numReservedMapSlotsForThisJob),
+-                          Integer.valueOf(numReducesRunningForThisJob), 
+-                          Integer.valueOf(numRunningReduceSlots),
+-                          Integer.valueOf(numReservedReduceSlotsForThisJob)));
++        j.setSchedulingInfo(getJobQueueSchedInfo(numMapsRunningForThisJob, 
++                              numRunningMapSlots,
++                              numReservedMapSlotsForThisJob,
++                              numReducesRunningForThisJob, 
++                              numRunningReduceSlots,
++                              numReservedReduceSlotsForThisJob));
+         qsi.mapTSI.numRunningTasks += numMapsRunningForThisJob;
+         qsi.reduceTSI.numRunningTasks += numReducesRunningForThisJob;
+         qsi.mapTSI.numSlotsOccupied += numMapSlotsForThisJob;
+@@ -1307,6 +1305,22 @@ class CapacityTaskScheduler extends TaskScheduler {
+     prevReduceClusterCapacity = reduceClusterCapacity;
+   }
+ 
++  private static final int JOBQUEUE_SCHEDULINGINFO_INITIAL_LENGTH = 175;
++
++  static String getJobQueueSchedInfo(int numMapsRunningForThisJob, 
++    int numRunningMapSlots, int numReservedMapSlotsForThisJob, 
++    int numReducesRunningForThisJob, int numRunningReduceSlots, 
++    int numReservedReduceSlotsForThisJob) {
++    StringBuilder sb = new StringBuilder(JOBQUEUE_SCHEDULINGINFO_INITIAL_LENGTH);
++    sb.append(numMapsRunningForThisJob).append(" running map tasks using ")
++      .append(numRunningMapSlots).append(" map slots. ")
++      .append(numReservedMapSlotsForThisJob).append(" additional slots reserved. ")
++      .append(numReducesRunningForThisJob).append(" running reduce tasks using ")
++      .append(numRunningReduceSlots).append(" reduce slots. ")
++      .append(numReservedReduceSlotsForThisJob).append(" additional slots reserved.");
++    return sb.toString();
++  }
++
+   /**
+    * Sets whether the scheduler can assign multiple tasks in a heartbeat
+    * or not.
+@@ -1346,12 +1360,14 @@ class CapacityTaskScheduler extends TaskScheduler {
+     int currentMapSlots = taskTrackerStatus.countOccupiedMapSlots();
+     int maxReduceSlots = taskTrackerStatus.getMaxReduceSlots();
+     int currentReduceSlots = taskTrackerStatus.countOccupiedReduceSlots();
+-    LOG.debug("TT asking for task, max maps=" + taskTrackerStatus.getMaxMapSlots() + 
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("TT asking for task, max maps=" + taskTrackerStatus.getMaxMapSlots() + 
+         ", run maps=" + taskTrackerStatus.countMapTasks() + ", max reds=" + 
+         taskTrackerStatus.getMaxReduceSlots() + ", run reds=" + 
+         taskTrackerStatus.countReduceTasks() + ", map cap=" + 
+         mapClusterCapacity + ", red cap = " + 
+         reduceClusterCapacity);
++    }
+ 
+     /* 
+      * update all our QSI objects.
+@@ -1441,8 +1457,10 @@ class CapacityTaskScheduler extends TaskScheduler {
+     // setup scheduler specific job information
+     preInitializeJob(job);
+     
+-    LOG.debug("Job " + job.getJobID().toString() + " is added under user " 
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Job " + job.getJobID().toString() + " is added under user " 
+               + job.getProfile().getUser() + ", user now has " + i + " jobs");
++    }
+   }
+ 
+   /**
+@@ -1470,7 +1488,9 @@ class CapacityTaskScheduler extends TaskScheduler {
+       queueInfoMap.get(job.getProfile().getQueueName());
+     // qsi shouldn't be null
+     // update numJobsByUser
+-    LOG.debug("JOb to be removed for user " + job.getProfile().getUser());
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Job to be removed for user " + job.getProfile().getUser());
++    }
+     Integer i = qsi.numJobsByUser.get(job.getProfile().getUser());
+     i--;
+     if (0 == i.intValue()) {
+@@ -1478,12 +1498,16 @@ class CapacityTaskScheduler extends TaskScheduler {
+       // remove job footprint from our TSIs
+       qsi.mapTSI.numSlotsOccupiedByUser.remove(job.getProfile().getUser());
+       qsi.reduceTSI.numSlotsOccupiedByUser.remove(job.getProfile().getUser());
+-      LOG.debug("No more jobs for user, number of users = " + qsi.numJobsByUser.size());
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("No more jobs for user, number of users = " + qsi.numJobsByUser.size());
++      }
+     }
+     else {
+       qsi.numJobsByUser.put(job.getProfile().getUser(), i);
+-      LOG.debug("User still has " + i + " jobs, number of users = "
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("User still has " + i + " jobs, number of users = "
+                 + qsi.numJobsByUser.size());
++      }
+     }
+   }
+   
+diff --git a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/MemoryMatcher.java b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/MemoryMatcher.java
+index e48d679..072ed78 100644
+--- a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/MemoryMatcher.java
++++ b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/MemoryMatcher.java
+@@ -93,12 +93,16 @@ class MemoryMatcher {
+   boolean matchesMemoryRequirements(JobInProgress job,TaskType taskType, 
+                                     TaskTrackerStatus taskTracker) {
+ 
+-    LOG.debug("Matching memory requirements of " + job.getJobID().toString()
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Matching memory requirements of " + job.getJobID().toString()
+         + " for scheduling on " + taskTracker.trackerName);
++    }
+ 
+     if (!isSchedulingBasedOnMemEnabled()) {
+-      LOG.debug("Scheduling based on job's memory requirements is disabled."
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("Scheduling based on job's memory requirements is disabled."
+           + " Ignoring any value set by job.");
++      }
+       return true;
+     }
+ 
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+index 655b203..da12363 100644
+--- a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+@@ -2164,18 +2164,16 @@ public class TestCapacityScheduler extends TestCase {
+     checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
+     // Total 1 map slot should be accounted for.
+     checkOccupiedSlots("default", TaskType.MAP, 1, 1, 16.7f);
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 
+-        1, 1, 0, 0, 0, 0),
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(1, 1, 0, 0, 0, 0),
+         (String) job1.getSchedulingInfo());
+     checkMemReservedForTasksOnTT("tt1", 1 * 1024L, 0L);
+ 
+     // same for reduces.
+     checkAssignment("tt1", "attempt_test_0001_r_000001_0 on tt1");
+     checkOccupiedSlots("default", TaskType.REDUCE, 1, 1, 16.7f);
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 
+-        1, 1, 0, 1, 1, 0),
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(1, 1, 0, 1, 1, 0),
+         (String) job1.getSchedulingInfo());
+     checkMemReservedForTasksOnTT("tt1", 1 * 1024L, 1 * 1024L);
+ 
+@@ -2198,17 +2196,15 @@ public class TestCapacityScheduler extends TestCase {
+     // job. This will fill up the TT. 
+     checkAssignment("tt3", "attempt_test_0002_m_000001_0 on tt3");
+     checkOccupiedSlots("default", TaskType.MAP, 1, 4, 66.7f);
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 
+-        1, 2, 0, 0, 0, 0),
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(1, 2, 0, 0, 0, 0),
+         (String) job2.getSchedulingInfo());
+     checkMemReservedForTasksOnTT("tt3", 2 * 1024L, 0L);
+ 
+     checkAssignment("tt3", "attempt_test_0002_r_000001_0 on tt3");
+     checkOccupiedSlots("default", TaskType.REDUCE, 1, 4, 66.7f);
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 
+-        1, 2, 0, 1, 2, 0),
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(1, 2, 0, 1, 2, 0),
+         (String) job2.getSchedulingInfo());
+     checkMemReservedForTasksOnTT("tt3", 2 * 1024L, 2 * 1024L);
+ 
+@@ -2232,13 +2228,11 @@ public class TestCapacityScheduler extends TestCase {
+     checkOccupiedSlots("default", TaskType.REDUCE, 1, 6, 100.0f);
+     checkMemReservedForTasksOnTT("tt1", 1 * 1024L, 1 * 1024L);
+     LOG.info(job2.getSchedulingInfo());
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 
+-        1, 2, 2, 1, 2, 2),
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(1, 2, 2, 1, 2, 2),
+         (String) job2.getSchedulingInfo());
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 
+-        0, 0, 0, 0, 0, 0),
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(0, 0, 0, 0, 0, 0),
+         (String) job3.getSchedulingInfo());
+     
+     // Reservations are already done for job2. So job3 should go ahead.
+@@ -2793,9 +2787,9 @@ public class TestCapacityScheduler extends TestCase {
+     scheduler.updateQSIInfoForTests();
+ 
+     LOG.info(job1.getSchedulingInfo());
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 3, 3, 0, 0,
+-        0, 0), (String) job1.getSchedulingInfo());
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(3, 3, 0, 0, 0, 0), 
++        (String) job1.getSchedulingInfo());
+ 
+     LOG.debug("Submit one high memory(2GB maps, 0MB reduces) job of "
+         + "2 map tasks");
+@@ -2823,16 +2817,16 @@ public class TestCapacityScheduler extends TestCase {
+     assertNull(scheduler.assignTasks(tracker("tt1")));
+     scheduler.updateQSIInfoForTests();
+     LOG.info(job2.getSchedulingInfo());
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 0, 0, 2, 0,
+-        0, 0), (String) job2.getSchedulingInfo());
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(0, 0, 2, 0, 0, 0), 
++        (String) job2.getSchedulingInfo());
+ 
+     assertNull(scheduler.assignTasks(tracker("tt2")));
+     scheduler.updateQSIInfoForTests();
+     LOG.info(job2.getSchedulingInfo());
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 0, 0, 4, 0,
+-        0, 0), (String) job2.getSchedulingInfo());
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(0, 0, 4, 0, 0, 0), 
++        (String) job2.getSchedulingInfo());
+ 
+     // Job2 has only 2 pending tasks. So no more reservations. Job3 should get
+     // slots on tt3. tt1 and tt2 should not be assigned any slots with the
+@@ -2840,23 +2834,23 @@ public class TestCapacityScheduler extends TestCase {
+     assertNull(scheduler.assignTasks(tracker("tt1")));
+     scheduler.updateQSIInfoForTests();
+     LOG.info(job2.getSchedulingInfo());
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 0, 0, 4, 0,
+-        0, 0), (String) job2.getSchedulingInfo());
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(0, 0, 4, 0, 0, 0), 
++        (String) job2.getSchedulingInfo());
+ 
+     assertNull(scheduler.assignTasks(tracker("tt2")));
+     scheduler.updateQSIInfoForTests();
+     LOG.info(job2.getSchedulingInfo());
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 0, 0, 4, 0,
+-        0, 0), (String) job2.getSchedulingInfo());
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(0, 0, 4, 0, 0, 0), 
++        (String) job2.getSchedulingInfo());
+ 
+     checkAssignment("tt3", "attempt_test_0003_m_000001_0 on tt3");
+     scheduler.updateQSIInfoForTests();
+     LOG.info(job2.getSchedulingInfo());
+-    assertEquals(String.format(
+-        CapacityTaskScheduler.JOB_SCHEDULING_INFO_FORMAT_STRING, 0, 0, 4, 0,
+-        0, 0), (String) job2.getSchedulingInfo());
++    assertEquals(
++        CapacityTaskScheduler.getJobQueueSchedInfo(0, 0, 4, 0, 0, 0), 
++        (String) job2.getSchedulingInfo());
+ 
+     // No more tasks there in job3 also
+     assertNull(scheduler.assignTasks(tracker("tt3")));
+diff --git a/src/core/org/apache/hadoop/util/StringUtils.java b/src/core/org/apache/hadoop/util/StringUtils.java
+index 9b8d5cf..b9e93e4 100644
+--- a/src/core/org/apache/hadoop/util/StringUtils.java
++++ b/src/core/org/apache/hadoop/util/StringUtils.java
+@@ -452,8 +452,12 @@ public class StringUtils {
+     if (str == null) {
+       return null;
+     }
+-    StringBuilder result = new StringBuilder();
+-    for (int i=0; i<str.length(); i++) {
++    int len = str.length();
++    // Let us specify good enough capacity to constructor of StringBuilder sothat
++    // resizing would not be needed(to improve perf).
++    StringBuilder result = new StringBuilder((int)(len * 1.5));
++
++    for (int i=0; i<len; i++) {
+       char curChar = str.charAt(i);
+       if (curChar == escapeChar || hasChar(charsToEscape, curChar)) {
+         // special char
+diff --git a/src/mapred/org/apache/hadoop/mapred/Counters.java b/src/mapred/org/apache/hadoop/mapred/Counters.java
+index 00c1201..114a290 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Counters.java
++++ b/src/mapred/org/apache/hadoop/mapred/Counters.java
+@@ -86,27 +86,36 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+      * [(actual-name)(display-name)(value)]
+      */
+     public synchronized String makeEscapedCompactString() {
+-      StringBuffer buf = new StringBuffer();
+-      buf.append(COUNTER_OPEN);
++
++      // First up, obtain the strings that need escaping. This will help us
++      // determine the buffer length apriori.
++      String escapedName = escape(getName());
++      String escapedDispName = escape(getDisplayName());
++      long currentValue = this.getValue();
++      int length = escapedName.length() + escapedDispName.length() + 4;
++
++      length += 8; // For the following delimiting characters
++      StringBuilder builder = new StringBuilder(length);
++      builder.append(COUNTER_OPEN);
+       
+       // Add the counter name
+-      buf.append(UNIT_OPEN);
+-      buf.append(escape(getName()));
+-      buf.append(UNIT_CLOSE);
++      builder.append(UNIT_OPEN);
++      builder.append(escapedName);
++      builder.append(UNIT_CLOSE);
+       
+       // Add the display name
+-      buf.append(UNIT_OPEN);
+-      buf.append(escape(getDisplayName()));
+-      buf.append(UNIT_CLOSE);
++      builder.append(UNIT_OPEN);
++      builder.append(escapedDispName);
++      builder.append(UNIT_CLOSE);
+       
+       // Add the value
+-      buf.append(UNIT_OPEN);
+-      buf.append(this.getValue());
+-      buf.append(UNIT_CLOSE);
++      builder.append(UNIT_OPEN);
++      builder.append(currentValue);
++      builder.append(UNIT_CLOSE);
+       
+-      buf.append(COUNTER_CLOSE);
++      builder.append(COUNTER_CLOSE);
+       
+-      return buf.toString();
++      return builder.toString();
+     }
+     
+     // Checks for (content) equality of two (basic) counters
+@@ -148,8 +157,10 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+       }
+       this.groupName = groupName;
+       this.displayName = localize("CounterGroupName", groupName);
+-      LOG.debug("Creating group " + groupName + " with " +
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("Creating group " + groupName + " with " +
+                (bundle == null ? "nothing" : "bundle"));
++      }
+     }
+     
+     /**
+@@ -190,26 +201,41 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+      * counters within.
+      */
+     public String makeEscapedCompactString() {
+-      StringBuffer buf = new StringBuffer();
+-      buf.append(GROUP_OPEN); // group start
++      String[] subcountersArray = new String[subcounters.size()];
++
++      // First up, obtain the strings that need escaping. This will help us
++      // determine the buffer length apriori.
++      String escapedName = escape(getName());
++      String escapedDispName = escape(getDisplayName());
++      int i = 0;
++      int length = escapedName.length() + escapedDispName.length();
++      for (Counter counter : subcounters.values()) {
++        String escapedStr = counter.makeEscapedCompactString();
++        subcountersArray[i++] = escapedStr;
++        length += escapedStr.length();
++      }
++
++      length += 6; // for all the delimiting characters below
++      StringBuilder builder = new StringBuilder(length);
++      builder.append(GROUP_OPEN); // group start
+       
+       // Add the group name
+-      buf.append(UNIT_OPEN);
+-      buf.append(escape(getName()));
+-      buf.append(UNIT_CLOSE);
++      builder.append(UNIT_OPEN);
++      builder.append(escapedName);
++      builder.append(UNIT_CLOSE);
+       
+       // Add the display name
+-      buf.append(UNIT_OPEN);
+-      buf.append(escape(getDisplayName()));
+-      buf.append(UNIT_CLOSE);
++      builder.append(UNIT_OPEN);
++      builder.append(escapedDispName);
++      builder.append(UNIT_CLOSE);
+       
+       // write the value
+-      for(Counter counter: subcounters.values()) {
+-        buf.append(counter.makeEscapedCompactString());
++      for(String str : subcountersArray) {
++        builder.append(str);
+       }
+       
+-      buf.append(GROUP_CLOSE); // group end
+-      return buf.toString();
++      builder.append(GROUP_CLOSE); // group end
++      return builder.toString();
+     }
+ 
+     @Override
+@@ -274,7 +300,9 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+     public synchronized Counter getCounterForName(String name) {
+       Counter result = subcounters.get(name);
+       if (result == null) {
+-        LOG.debug("Adding " + name);
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("Adding " + name);
++        }
+         result = new Counter(name, localize(name + ".name", name), 0L);
+         subcounters.put(name, result);
+       }
+@@ -567,11 +595,24 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+    * {(groupname)(group-displayname)[(countername)(displayname)(value)][][]}{}{}
+    */
+   public synchronized String makeEscapedCompactString() {
+-    StringBuffer buffer = new StringBuffer();
+-    for(Group group: this){
+-      buffer.append(group.makeEscapedCompactString());
++    String[] groupsArray = new String[counters.size()];
++    int i = 0;
++    int length = 0;
++
++    // First up, obtain the escaped string for each group so that we can
++    // determine the buffer length apriori.
++    for (Group group : this) {
++      String escapedString = group.makeEscapedCompactString();
++      groupsArray[i++] = escapedString;
++      length += escapedString.length();
+     }
+-    return buffer.toString();
++
++    // Now construct the buffer
++    StringBuilder builder = new StringBuilder(length);
++    for (String group : groupsArray) {
++      builder.append(group);
++    }
++    return builder.toString();
+   }
+ 
+   // Extracts a block (data enclosed within delimeters) ignoring escape 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index 6579b38..c53c457 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -89,7 +89,7 @@ public class JobHistory {
+   
+   static final long VERSION = 1L;
+   public static final Log LOG = LogFactory.getLog(JobHistory.class);
+-  private static final String DELIMITER = " ";
++  private static final char DELIMITER = ' ';
+   static final char LINE_DELIMITER_CHAR = '.';
+   static final char[] charsToEscape = new char[] {'"', '=', 
+                                                 LINE_DELIMITER_CHAR};
+@@ -557,20 +557,30 @@ public class JobHistory {
+ 
+   static void log(ArrayList<PrintWriter> writers, RecordTypes recordType, 
+                   Keys[] keys, String[] values) {
+-    StringBuffer buf = new StringBuffer(recordType.name()); 
+-    buf.append(DELIMITER); 
+-    for(int i =0; i< keys.length; i++){
+-      buf.append(keys[i]);
+-      buf.append("=\"");
++
++    // First up calculate the length of buffer, so that we are performant
++    // enough.
++    int length = recordType.name().length() + keys.length * 4 + 2;
++    for (int i = 0; i < keys.length; i++) { 
+       values[i] = escapeString(values[i]);
+-      buf.append(values[i]);
+-      buf.append("\"");
+-      buf.append(DELIMITER); 
++      length += values[i].length() + keys[i].toString().length();
+     }
+-    buf.append(LINE_DELIMITER_CHAR);
++
++    // We have the length of the buffer, now construct it.
++    StringBuilder builder = new StringBuilder(length);
++    builder.append(recordType.name());
++    builder.append(DELIMITER); 
++    for(int i =0; i< keys.length; i++){
++      builder.append(keys[i]);
++      builder.append("=\"");
++      builder.append(values[i]);
++      builder.append("\"");
++      builder.append(DELIMITER); 
++    }
++    builder.append(LINE_DELIMITER_CHAR);
+     
+     for (PrintWriter out : writers) {
+-      out.println(buf.toString());
++      out.println(builder.toString());
+     }
+   }
+   
+@@ -1064,7 +1074,9 @@ public class JobHistory {
+     throws IOException {
+        Path tmpLogPath = fileManager.getHistoryFile(id);
+        if (tmpLogPath == null) {
+-         LOG.debug("No file for job with " + id + " found in cache!");
++         if (LOG.isDebugEnabled()) {
++           LOG.debug("No file for job with " + id + " found in cache!");
++         }
+          return;
+        }
+        String tmpLogFileName = tmpLogPath.getName();
+@@ -1107,7 +1119,9 @@ public class JobHistory {
+       File f = new File (localJobFilePath);
+       LOG.info("Deleting localized job conf at " + f);
+       if (!f.delete()) {
+-        LOG.debug("Failed to delete file " + f);
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("Failed to delete file " + f);
++        }
+       }
+     }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index f802293..9070a1f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -349,7 +349,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           // Every 3 minutes check for any tasks that are overdue
+           Thread.sleep(TASKTRACKER_EXPIRY_INTERVAL/3);
+           long now = clock.getTime();
+-          LOG.debug("Starting launching task sweep");
++          if(LOG.isDebugEnabled()) {
++            LOG.debug("Starting launching task sweep");
++          }
+           synchronized (JobTracker.this) {
+             synchronized (launchingTasks) {
+               Iterator<Map.Entry<TaskAttemptID, Long>> itr =
+@@ -2564,7 +2566,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+     taskset.add(taskid);
+       
+-    LOG.debug("Marked '" + taskid + "' from '" + taskTracker + "'");
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Marked '" + taskid + "' from '" + taskTracker + "'");
++    }
+   }
+ 
+   /**
+@@ -3180,7 +3184,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         if (tasks != null) {
+           for (Task task : tasks) {
+             expireLaunchingTasks.addNewTask(task.getTaskID());
+-            LOG.debug(trackerName + " -> LaunchTask: " + task.getTaskID());
++            if(LOG.isDebugEnabled()) {
++              LOG.debug(trackerName + " -> LaunchTask: " + task.getTaskID());
++            }
+             actions.add(new LaunchTaskAction(task));
+           }
+         }
+@@ -3483,7 +3489,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           //
+           if (!tip.getJob().isComplete()) {
+             killList.add(new KillTaskAction(killTaskId));
+-            LOG.debug(taskTracker + " -> KillTaskAction: " + killTaskId);
++            if (LOG.isDebugEnabled()) {
++              LOG.debug(taskTracker + " -> KillTaskAction: " + killTaskId);
++            }
+           }
+         }
+       }
+@@ -3506,7 +3514,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    */
+   private void addJobForCleanup(JobID id) {
+     for (String taskTracker : taskTrackers.keySet()) {
+-      LOG.debug("Marking job " + id + " for cleanup by tracker " + taskTracker);
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("Marking job " + id + " for cleanup by tracker " + taskTracker);
++      }
+       synchronized (trackerToJobsToCleanup) {
+         Set<JobID> jobsToKill = trackerToJobsToCleanup.get(taskTracker);
+         if (jobsToKill == null) {
+@@ -3531,7 +3541,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       List<TaskTrackerAction> killList = new ArrayList<TaskTrackerAction>();
+       for (JobID killJobId : jobs) {
+         killList.add(new KillJobAction(killJobId));
+-        LOG.debug(taskTracker + " -> KillJobAction: " + killJobId);
++        if(LOG.isDebugEnabled()) {
++          LOG.debug(taskTracker + " -> KillJobAction: " + killJobId);
++        }
+       }
+ 
+       return killList;
+@@ -3556,8 +3568,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           }
+           if (tip.shouldCommit(taskId)) {
+             saveList.add(new CommitTaskAction(taskId));
+-            LOG.debug(tts.getTrackerName() + 
++            if (LOG.isDebugEnabled()) {
++              LOG.debug(tts.getTrackerName() + 
+                       " -> CommitTaskAction: " + taskId);
++            }
+           }
+         }
+       }
+diff --git a/src/mapred/org/apache/hadoop/mapred/Task.java b/src/mapred/org/apache/hadoop/mapred/Task.java
+index de4c5d5..8778a3b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Task.java
++++ b/src/mapred/org/apache/hadoop/mapred/Task.java
+@@ -478,7 +478,9 @@ abstract public class Task implements Writable, Configurable {
+       setState(TaskStatus.State.RUNNING);
+     }
+     if (useNewApi) {
+-      LOG.debug("using new api for output committer");
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("using new api for output committer");
++      }
+       outputFormat =
+         ReflectionUtils.newInstance(taskContext.getOutputFormatClass(), job);
+       committer = outputFormat.getOutputCommitter(taskContext);
+@@ -598,8 +600,10 @@ abstract public class Task implements Writable, Configurable {
+             Thread.sleep(PROGRESS_INTERVAL);
+           } 
+           catch (InterruptedException e) {
+-            LOG.debug(getTaskID() + " Progress/ping thread exiting " +
+-            "since it got interrupted");
++            if (LOG.isDebugEnabled()) {
++              LOG.debug(getTaskID() + " Progress/ping thread exiting " +
++                "since it got interrupted");
++            }
+             break;
+           }
+ 
+@@ -668,7 +672,9 @@ abstract public class Task implements Writable, Configurable {
+     SortedRanges.Range range = 
+       new SortedRanges.Range(currentRecStartIndex, len);
+     taskStatus.setNextRecordRange(range);
+-    LOG.debug("sending reportNextRecordRange " + range);
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("sending reportNextRecordRange " + range);
++    }
+     umbilical.reportNextRecordRange(taskId, range);
+   }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+index 5b122fa..3610aab 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+@@ -689,7 +689,9 @@ public class TaskInProgress {
+         machinesWhereFailed.add(trackerHostName);
+         if(maxSkipRecords>0) {
+           //skipping feature enabled
+-          LOG.debug("TaskInProgress adding" + status.getNextRecordRange());
++          if(LOG.isDebugEnabled()) {
++            LOG.debug("TaskInProgress adding" + status.getNextRecordRange());
++          }
+           failedRanges.add(status.getNextRecordRange());
+           skipping = startSkipping();
+         }
+@@ -979,8 +981,10 @@ public class TaskInProgress {
+     // create the task
+     Task t = null;
+     if (isMapTask()) {
+-      LOG.debug("attempt " + numTaskFailures + " sending skippedRecords "
++      if(LOG.isDebugEnabled()) {
++        LOG.debug("attempt " + numTaskFailures + " sending skippedRecords "
+           + failedRanges.getIndicesCount());
++      }
+       t = new MapTask(jobFile, taskid, partition, splitInfo.getSplitIndex(),
+                       numSlotsNeeded);
+     } else {
+@@ -1000,7 +1004,9 @@ public class TaskInProgress {
+     }
+     t.setConf(conf);
+     t.setUser(getUser());
+-    LOG.debug("Launching task with skipRanges:"+failedRanges.getSkipRanges());
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Launching task with skipRanges:"+failedRanges.getSkipRanges());
++    }
+     t.setSkipRanges(failedRanges.getSkipRanges());
+     t.setSkipping(skipping);
+     if(failedRanges.isTestAttempt()) {
+-- 
+1.7.0.4
+

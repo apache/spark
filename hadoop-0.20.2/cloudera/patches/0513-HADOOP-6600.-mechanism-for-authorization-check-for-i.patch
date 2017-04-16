@@ -1,0 +1,306 @@
+From ea1922be01c027410bdfdb3776b79cbb2328162d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 26 Feb 2010 22:45:11 -0800
+Subject: [PATCH 0513/1179] HADOOP-6600. mechanism for authorization check for inter-server protocols
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437320/HADOOP-6600-4-BP20.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12437534/HADOOP-6600-BP20-fix.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Client.java         |    2 +-
+ src/core/org/apache/hadoop/ipc/Server.java         |    2 +-
+ .../org/apache/hadoop/security/KerberosInfo.java   |    3 +-
+ .../authorize/ServiceAuthorizationManager.java     |   21 ++++++++++++++++---
+ .../hadoop/hdfs/protocol/ClientProtocol.java       |    3 +-
+ .../hdfs/server/protocol/DatanodeProtocol.java     |    4 ++-
+ .../server/protocol/InterDatanodeProtocol.java     |    4 ++-
+ .../hdfs/server/protocol/NamenodeProtocol.java     |    4 ++-
+ .../hadoop/mapred/AdminOperationsProtocol.java     |    4 +-
+ .../apache/hadoop/mapred/InterTrackerProtocol.java |    4 ++-
+ .../hadoop/mapred/JobSubmissionProtocol.java       |    8 +++---
+ .../org/apache/hadoop/mapreduce/JobContext.java    |    1 -
+ .../hadoop/mapreduce/security/TokenCache.java      |    3 +-
+ src/test/org/apache/hadoop/ipc/TestSaslRPC.java    |    3 +-
+ .../hadoop/mapreduce/security/TestTokenCache.java  |    3 +-
+ 15 files changed, 47 insertions(+), 22 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index c0c9911..d4cf74d 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -260,7 +260,7 @@ public class Client {
+         }
+         KerberosInfo krbInfo = protocol.getAnnotation(KerberosInfo.class);
+         if (krbInfo != null) {
+-          String serverKey = krbInfo.value();
++          String serverKey = krbInfo.serverPrincipal();
+           if (serverKey != null) {
+             serverPrincipal = conf.get(serverKey);
+           }
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 657c198..e2fc283 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -1498,7 +1498,7 @@ public abstract class Server {
+         throw new AuthorizationException("Unknown protocol: " + 
+                                          connection.getProtocol());
+       }
+-      ServiceAuthorizationManager.authorize(user, protocol);
++      ServiceAuthorizationManager.authorize(user, protocol, getConf());
+     }
+   }
+   
+diff --git a/src/core/org/apache/hadoop/security/KerberosInfo.java b/src/core/org/apache/hadoop/security/KerberosInfo.java
+index e8b5747..15236e7 100644
+--- a/src/core/org/apache/hadoop/security/KerberosInfo.java
++++ b/src/core/org/apache/hadoop/security/KerberosInfo.java
+@@ -27,5 +27,6 @@ import java.lang.annotation.*;
+ @Target(ElementType.TYPE)
+ public @interface KerberosInfo {
+   /** Key for getting server's Kerberos principal name from Configuration */
+-  String value();
++  String serverPrincipal();
++  String clientPrincipal() default "";
+ }
+diff --git a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+index 69b7488..6bed847 100644
+--- a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
++++ b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+@@ -23,6 +23,7 @@ import java.util.Map;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.security.KerberosInfo;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+@@ -55,18 +56,30 @@ public class ServiceAuthorizationManager {
+    * @throws AuthorizationException on authorization failure
+    */
+   public static void authorize(UserGroupInformation user, 
+-                               Class<?> protocol
++                               Class<?> protocol,
++                               Configuration conf
+                                ) throws AuthorizationException {
+     AccessControlList acl = protocolToAcl.get(protocol);
+     if (acl == null) {
+       throw new AuthorizationException("Protocol " + protocol + 
+                                        " is not known.");
+     }
+-    if (!acl.isUserAllowed(user)) {
++        
++    // get client principal key to verify (if available)
++    KerberosInfo krbInfo = protocol.getAnnotation(KerberosInfo.class);
++    String clientPrincipal = null; 
++    if (krbInfo != null) {
++      String clientKey = krbInfo.clientPrincipal();
++      if (clientKey != null && !clientKey.equals("")) {
++        clientPrincipal = conf.get(clientKey);
++      }
++    }
++    if((clientPrincipal != null && !clientPrincipal.equals(user.getUserName())) || 
++        !acl.isUserAllowed(user)) {
+       auditLOG.warn(AUTHZ_FAILED_FOR + user + " for protocol="+protocol);
+       throw new AuthorizationException("User " + user + 
+-                                       " is not authorized for protocol " + 
+-                                       protocol);
++          " is not authorized for protocol " + 
++          protocol);
+     }
+     auditLOG.info(AUTHZ_SUCCESSFULL_FOR + user + " for protocol="+protocol);
+   }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+index 8134309..d2a1cad 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+@@ -41,7 +41,8 @@ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenSelector;
+  * as well as open/close file streams, etc.
+  *
+  **********************************************************************/
+-@KerberosInfo(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
++@KerberosInfo(
++    serverPrincipal = DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
+ @TokenInfo(DelegationTokenSelector.class)
+ public interface ClientProtocol extends VersionedProtocol {
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+index a23aa50..4cbd415 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+@@ -36,7 +36,9 @@ import org.apache.hadoop.security.KerberosInfo;
+  * returning values from these functions.
+  *
+  **********************************************************************/
+-@KerberosInfo(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
++@KerberosInfo(
++    serverPrincipal = DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY, 
++    clientPrincipal = DFSConfigKeys.DFS_DATANODE_USER_NAME_KEY)
+ public interface DatanodeProtocol extends VersionedProtocol {
+   /**
+    * 20: SendHeartbeat may return KeyUpdateCommand
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
+index d18c7f6..a1c3040 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
+@@ -29,7 +29,9 @@ import org.apache.hadoop.security.KerberosInfo;
+ 
+ /** An inter-datanode protocol for updating generation stamp
+  */
+-@KerberosInfo(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
++@KerberosInfo(
++    serverPrincipal = DFSConfigKeys.DFS_DATANODE_USER_NAME_KEY,
++    clientPrincipal = DFSConfigKeys.DFS_DATANODE_USER_NAME_KEY)
+ public interface InterDatanodeProtocol extends VersionedProtocol {
+   public static final Log LOG = LogFactory.getLog(InterDatanodeProtocol.class);
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java
+index 89e7bdd..f51bd48 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java
+@@ -31,7 +31,9 @@ import org.apache.hadoop.security.KerberosInfo;
+  * Protocol that a secondary NameNode uses to communicate with the NameNode.
+  * It's used to get part of the name node state
+  *****************************************************************************/
+-@KerberosInfo(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
++@KerberosInfo(
++    serverPrincipal = DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY,
++    clientPrincipal = DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
+ public interface NamenodeProtocol extends VersionedProtocol {
+   /**
+    * 3: new method added: getAccessKeys()
+diff --git a/src/mapred/org/apache/hadoop/mapred/AdminOperationsProtocol.java b/src/mapred/org/apache/hadoop/mapred/AdminOperationsProtocol.java
+index b10b7e2..1ca033f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/AdminOperationsProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/AdminOperationsProtocol.java
+@@ -21,14 +21,14 @@ package org.apache.hadoop.mapred;
+ import java.io.IOException;
+ 
+ import org.apache.hadoop.ipc.VersionedProtocol;
+-import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.security.KerberosInfo;
+ 
+ /**
+  * Protocol for admin operations. This is a framework-public interface and is
+  * NOT_TO_BE_USED_BY_USERS_DIRECTLY.
+  */
+-@KerberosInfo(JobContext.JOB_JOBTRACKER_ID)
++@KerberosInfo(
++    serverPrincipal = JobTracker.JT_USER_NAME)
+ public interface AdminOperationsProtocol extends VersionedProtocol {
+   
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java b/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
+index 587a83d..3dc767b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
+@@ -28,7 +28,9 @@ import org.apache.hadoop.security.KerberosInfo;
+  * Protocol that a TaskTracker and the central JobTracker use to communicate.
+  * The JobTracker is the Server, which implements this protocol.
+  */ 
+-@KerberosInfo(JobContext.JOB_JOBTRACKER_ID)
++@KerberosInfo(
++    serverPrincipal = JobTracker.JT_USER_NAME,
++    clientPrincipal = TaskTracker.TT_USER_NAME)
+ interface InterTrackerProtocol extends VersionedProtocol {
+   /**
+    * version 3 introduced to replace 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+index 876b10e..f962a25 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+@@ -20,11 +20,10 @@ package org.apache.hadoop.mapred;
+ 
+ import java.io.IOException;
+ 
+-import org.apache.hadoop.mapreduce.security.token.delegation.DelegationTokenIdentifier;
+-import org.apache.hadoop.mapreduce.security.token.delegation.DelegationTokenSelector;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.VersionedProtocol;
+-import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.mapreduce.security.token.delegation.DelegationTokenSelector;
+ import org.apache.hadoop.security.KerberosInfo;
+ import org.apache.hadoop.security.TokenStorage;
+ import org.apache.hadoop.security.token.Token;
+@@ -35,7 +34,8 @@ import org.apache.hadoop.security.token.TokenInfo;
+  * JobClient can use these methods to submit a Job for execution, and learn about
+  * the current system status.
+  */ 
+-@KerberosInfo(JobContext.JOB_JOBTRACKER_ID)
++@KerberosInfo(
++    serverPrincipal = JobTracker.JT_USER_NAME)
+ @TokenInfo(DelegationTokenSelector.class)
+ interface JobSubmissionProtocol extends VersionedProtocol {
+   /* 
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+index d0bbde6..c2b4b3d 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+@@ -51,7 +51,6 @@ public class JobContext {
+   private JobID jobId;
+ 
+   public static final String JOB_NAMENODES = "mapreduce.job.hdfs-servers";
+-  public static final String JOB_JOBTRACKER_ID = "mapreduce.job.kerberos.jtprinicipal";
+ 
+   public static final String CACHE_FILE_VISIBILITIES = 
+     "mapreduce.job.cache.files.visibilities";
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+index de0138a..d17d039 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+@@ -33,6 +33,7 @@ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifie
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.JobTracker;
+ import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
+ import org.apache.hadoop.net.NetUtils;
+@@ -108,7 +109,7 @@ public class TokenCache {
+   static void obtainTokensForNamenodesInternal(Path [] ps, Configuration conf)
+   throws IOException {
+     // get jobtracker principal id (for the renewer)
+-    Text jtCreds = new Text(conf.get(JobContext.JOB_JOBTRACKER_ID, ""));
++    Text jtCreds = new Text(conf.get(JobTracker.JT_USER_NAME, ""));
+ 
+     for(Path p: ps) {
+       FileSystem fs = FileSystem.get(p.toUri(), conf);
+diff --git a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+index 82ba6ad..e7df87e 100644
+--- a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+@@ -151,7 +151,8 @@ public class TestSaslRPC {
+     }
+   }
+   
+-  @KerberosInfo(SERVER_PRINCIPAL_KEY)
++  @KerberosInfo(
++      serverPrincipal = SERVER_PRINCIPAL_KEY)
+   @TokenInfo(TestTokenSelector.class)
+   public interface TestSaslProtocol extends TestRPC.TestProtocol {
+     public AuthenticationMethod getAuthMethod() throws IOException;
+diff --git a/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java b/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
+index b27f0ac..228c907 100644
+--- a/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
++++ b/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
+@@ -43,6 +43,7 @@ import org.apache.hadoop.io.IntWritable;
+ import org.apache.hadoop.io.NullWritable;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.JobTracker;
+ import org.apache.hadoop.mapred.MiniMRCluster;
+ import org.apache.hadoop.mapred.OutputCollector;
+ import org.apache.hadoop.mapred.Reporter;
+@@ -214,7 +215,7 @@ public class TestTokenCache {
+     URI nnUri = NameNode.getUri(nn.getNameNodeAddress());
+     jConf.set(JobContext.JOB_NAMENODES, nnUri + "," + nnUri.toString());
+     // job tracker principle id..
+-    jConf.set(JobContext.JOB_JOBTRACKER_ID, "jt_id");
++    jConf.set(JobTracker.JT_USER_NAME, "jt_id");
+ 
+     // using argument to pass the file name
+     String[] args = {
+-- 
+1.7.0.4
+

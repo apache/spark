@@ -1,0 +1,366 @@
+From c5df4748c04337af74ca80a84a03e15ba2de2f0e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 27 Jan 2011 13:01:24 -0800
+Subject: [PATCH 0795/1179] HDFS-1353. Remove getBlockLocations optimization that blew out LocatedBlocks response size
+
+Reason: Address OOME found by QA
+Author: Jakob Homan
+Ref: CDH-2573
+---
+ .../hadoop/hdfs/protocol/ClientProtocol.java       |    4 +-
+ .../security/token/block/BlockTokenIdentifier.java |   49 +++++--------------
+ .../token/block/BlockTokenSecretManager.java       |   25 ++-------
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   24 ++-------
+ .../hdfs/server/protocol/DatanodeProtocol.java     |    7 +--
+ .../hdfs/security/token/block/TestBlockToken.java  |   52 +++++---------------
+ 6 files changed, 40 insertions(+), 121 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+index 0eb30c8..59e13a9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+@@ -50,9 +50,9 @@ public interface ClientProtocol extends VersionedProtocol {
+    * Compared to the previous version the following changes have been introduced:
+    * (Only the latest change is reflected.
+    * The log of historical changes can be retrieved from the svn).
+-   * 62: Sticky bit
++   * 63: Remove getBlockLocations optimization
+    */
+-  public static final long versionID = 62L;
++  public static final long versionID = 63L;
+   
+   ///////////////////////////////////////
+   // File contents
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/block/BlockTokenIdentifier.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/block/BlockTokenIdentifier.java
+index a3c103c..4d6befb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/security/token/block/BlockTokenIdentifier.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/security/token/block/BlockTokenIdentifier.java
+@@ -21,7 +21,6 @@ package org.apache.hadoop.hdfs.security.token.block;
+ import java.io.DataInput;
+ import java.io.DataOutput;
+ import java.io.IOException;
+-import java.util.Arrays;
+ import java.util.EnumSet;
+ 
+ import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager.AccessMode;
+@@ -36,23 +35,20 @@ public class BlockTokenIdentifier extends TokenIdentifier {
+   private long expiryDate;
+   private int keyId;
+   private String userId;
+-  private long [] blockIds;
++  private long blockId;
+   private EnumSet<AccessMode> modes;
+ 
+   private byte [] cache;
+   
+   public BlockTokenIdentifier() {
+-    this(null, new long [] {}, EnumSet.noneOf(AccessMode.class));
++    this(null, 0l, EnumSet.noneOf(AccessMode.class));
+   }
+ 
+-  public BlockTokenIdentifier(String userId, long [] blockIds,
++  public BlockTokenIdentifier(String userId, long blockId,
+       EnumSet<AccessMode> modes) {
+-    if(blockIds == null) 
+-      throw new IllegalArgumentException("blockIds can't be null");
+     this.cache = null;
+     this.userId = userId;
+-    this.blockIds = Arrays.copyOf(blockIds, blockIds.length);
+-    Arrays.sort(this.blockIds);
++    this.blockId  = blockId;
+     this.modes = modes == null ? EnumSet.noneOf(AccessMode.class) : modes;
+   }
+ 
+@@ -64,7 +60,7 @@ public class BlockTokenIdentifier extends TokenIdentifier {
+   @Override
+   public UserGroupInformation getUser() {
+     if (userId == null || "".equals(userId)) {
+-      return UserGroupInformation.createRemoteUser(Arrays.toString(blockIds));
++      return UserGroupInformation.createRemoteUser(Long.toString(blockId));
+     }
+     return UserGroupInformation.createRemoteUser(userId);
+   }
+@@ -91,25 +87,8 @@ public class BlockTokenIdentifier extends TokenIdentifier {
+     return userId;
+   }
+ 
+-  /**
+-   * Return sorted array of blockIds this {@link BlockTokenIdentifier} includes
+-   */
+-  public long [] getBlockIds() {
+-    return blockIds;
+-  }
+-  
+-  /**
+-   * Is specified blockId included in this BlockTokenIdentifier?
+-   */
+-  public boolean isBlockIncluded(long blockId) {
+-    switch(blockIds.length) {
+-    case 1:
+-      return blockIds[0] == blockId;
+-    case 2:
+-      return (blockIds[0] == blockId) || (blockIds[1] == blockId);
+-    default:
+-      return Arrays.binarySearch(blockIds, blockId) >= 0;  
+-    }
++  public long getBlockId() {
++    return blockId;
+   }
+ 
+   public EnumSet<AccessMode> getAccessModes() {
+@@ -120,7 +99,7 @@ public class BlockTokenIdentifier extends TokenIdentifier {
+   public String toString() {
+     return "block_token_identifier (expiryDate=" + this.getExpiryDate()
+         + ", keyId=" + this.getKeyId() + ", userId=" + this.getUserId()
+-        + ", blockIds=" + Arrays.toString(blockIds) + ", access modes="
++        + ", blockIds=" + blockId + ", access modes="
+         + this.getAccessModes() + ")";
+   }
+ 
+@@ -137,7 +116,7 @@ public class BlockTokenIdentifier extends TokenIdentifier {
+       BlockTokenIdentifier that = (BlockTokenIdentifier) obj;
+       return this.expiryDate == that.expiryDate && this.keyId == that.keyId
+           && isEqual(this.userId, that.userId) 
+-          && Arrays.equals(this.blockIds, that.blockIds)
++          && this.blockId == that.blockId
+           && isEqual(this.modes, that.modes);
+     }
+     return false;
+@@ -145,7 +124,7 @@ public class BlockTokenIdentifier extends TokenIdentifier {
+ 
+   /** {@inheritDoc} */
+   public int hashCode() {
+-    return (int) expiryDate ^ keyId ^ Arrays.hashCode(blockIds) ^ modes.hashCode()
++    return (int) expiryDate ^ keyId ^ (int)blockId ^ modes.hashCode()
+         ^ (userId == null ? 0 : userId.hashCode());
+   }
+ 
+@@ -154,9 +133,7 @@ public class BlockTokenIdentifier extends TokenIdentifier {
+     expiryDate = WritableUtils.readVLong(in);
+     keyId = WritableUtils.readVInt(in);
+     userId = WritableUtils.readString(in);
+-    blockIds = new long[WritableUtils.readVInt(in)];
+-    for(int i = 0; i < blockIds.length; i++)
+-      blockIds[i] = WritableUtils.readVLong(in);
++    blockId = WritableUtils.readVLong(in);
+     int length = WritableUtils.readVInt(in);
+     for (int i = 0; i < length; i++) {
+       modes.add(WritableUtils.readEnum(in, AccessMode.class));
+@@ -167,9 +144,7 @@ public class BlockTokenIdentifier extends TokenIdentifier {
+     WritableUtils.writeVLong(out, expiryDate);
+     WritableUtils.writeVInt(out, keyId);
+     WritableUtils.writeString(out, userId);
+-    WritableUtils.writeVInt(out, blockIds.length);
+-    for(int i = 0; i < blockIds.length; i++)
+-      WritableUtils.writeVLong(out, blockIds[i]);
++    WritableUtils.writeVLong(out, blockId);
+     WritableUtils.writeVInt(out, modes.size());
+     for (AccessMode aMode : modes) {
+       WritableUtils.writeEnum(out, aMode);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/block/BlockTokenSecretManager.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/block/BlockTokenSecretManager.java
+index e626774..f9b5a6b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/security/token/block/BlockTokenSecretManager.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/security/token/block/BlockTokenSecretManager.java
+@@ -174,29 +174,16 @@ public class BlockTokenSecretManager extends
+   /** Generate an block token for current user */
+   public Token<BlockTokenIdentifier> generateToken(Block block,
+       EnumSet<AccessMode> modes) throws IOException {
+-    return generateToken(new long [] { block.getBlockId() }, modes);
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    String userID = (ugi == null ? null : ugi.getShortUserName());
++    return generateToken(userID, block, modes);
+   }
+ 
+   /** Generate a block token for a specified user */
+   public Token<BlockTokenIdentifier> generateToken(String userId, Block block,
+       EnumSet<AccessMode> modes) throws IOException {
+-    return generateToken(userId, new long [] { block.getBlockId() }, modes);
+-  }
+-
+-  /** Generate a block token for the current user based on a collection
+-   * of blockIds
+-   */
+-  public Token<BlockTokenIdentifier> generateToken(long[] blockIds,
+-      EnumSet<AccessMode> modes) throws IOException {
+-    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+-    String userID = (ugi == null ? null : ugi.getShortUserName());
+-    return generateToken(userID, blockIds, modes);
+-  }
+-  
+-  /** Generate a block token based on a collection of blockIds */
+-  public Token<BlockTokenIdentifier> generateToken(String userID,
+-      long[] blockIds, EnumSet<AccessMode> modes) {
+-    BlockTokenIdentifier id = new BlockTokenIdentifier(userID, blockIds, modes);
++    BlockTokenIdentifier id = new BlockTokenIdentifier(userId, 
++        block.getBlockId(), modes);
+     return new Token<BlockTokenIdentifier>(id, this);
+   }
+ 
+@@ -215,7 +202,7 @@ public class BlockTokenSecretManager extends
+       throw new InvalidToken("Block token with " + id.toString()
+           + " doesn't belong to user " + userId);
+     }
+-    if (!id.isBlockIncluded(block.getBlockId())) {
++    if (id.getBlockId() != block.getBlockId()) {
+       throw new InvalidToken("Block token with " + id.toString()
+           + " doesn't apply to block " + block);
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 9c670e2..c903588 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -938,7 +938,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       }
+       LocatedBlock b = new LocatedBlock(blocks[curBlk], machineSet, curPos,
+           blockCorrupt);
+-
++      if(isAccessTokenEnabled) {
++        b.setBlockToken(accessTokenHandler.generateToken(b.getBlock(), 
++            EnumSet.of(BlockTokenSecretManager.AccessMode.READ)));
++      }
++      
+       results.add(b); 
+       curPos += blocks[curBlk].getNumBytes();
+       curBlk++;
+@@ -946,24 +950,6 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+           && curBlk < blocks.length 
+           && results.size() < nrBlocksToReturn);
+     
+-    if(isAccessTokenEnabled) {
+-      // Generate a list of the blockIds to be returned for this request
+-      long [] blockIds = new long[results.size()];
+-      for(int i = 0; i < results.size(); i++) {
+-        blockIds[i] = results.get(i).getBlock().getBlockId();
+-      }
+-      
+-      // Generate a single BlockTokenIdentifier for all ids
+-      Token<BlockTokenIdentifier> bti 
+-        = accessTokenHandler.generateToken(blockIds, 
+-            EnumSet.of(BlockTokenSecretManager.AccessMode.READ));
+-      
+-      // Assign a reference to this BlockTokenIdentifier to all blocks
+-      for(LocatedBlock lb : results) {
+-        lb.setBlockToken(bti);
+-      }
+-    }
+-    
+     return inode.createLocatedBlocks(results);
+   }
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+index bd1669e..1f12634 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+@@ -41,12 +41,9 @@ import org.apache.hadoop.security.KerberosInfo;
+     clientPrincipal = DFSConfigKeys.DFS_DATANODE_USER_NAME_KEY)
+ public interface DatanodeProtocol extends VersionedProtocol {
+   /**
+-   * 25: Serialized format of BlockTokenIdentifier changed to contain
+-   *     multiple blocks within a single BlockTokenIdentifier
+-   *     
+-   *     (bumped to 25 to bring in line with trunk)
++   * 26: Remove getBlockLocations optimization
+    */
+-  public static final long versionID = 25L;
++  public static final long versionID = 26L;
+   
+   // error code
+   final static int NOTIFY = 0;
+diff --git a/src/test/org/apache/hadoop/hdfs/security/token/block/TestBlockToken.java b/src/test/org/apache/hadoop/hdfs/security/token/block/TestBlockToken.java
+index 5ecef26..3dcf4fa 100644
+--- a/src/test/org/apache/hadoop/hdfs/security/token/block/TestBlockToken.java
++++ b/src/test/org/apache/hadoop/hdfs/security/token/block/TestBlockToken.java
+@@ -18,11 +18,21 @@
+ 
+ package org.apache.hadoop.hdfs.security.token.block;
+ 
++import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION;
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++import static org.mockito.Matchers.any;
++import static org.mockito.Matchers.anyBoolean;
++import static org.mockito.Matchers.anyLong;
++import static org.mockito.Matchers.anyString;
++import static org.mockito.Mockito.doAnswer;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++
+ import java.io.ByteArrayInputStream;
+ import java.io.DataInputStream;
+ import java.io.IOException;
+ import java.net.InetSocketAddress;
+-import java.util.Arrays;
+ import java.util.EnumSet;
+ import java.util.Set;
+ 
+@@ -30,8 +40,8 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
+ import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+ import org.apache.hadoop.io.TestWritable;
+@@ -46,18 +56,7 @@ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.log4j.Level;
+-
+ import org.junit.Test;
+-
+-import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION;
+-import static org.junit.Assert.*;
+-import static org.mockito.Matchers.any;
+-import static org.mockito.Matchers.anyBoolean;
+-import static org.mockito.Matchers.anyLong;
+-import static org.mockito.Matchers.anyString;
+-import static org.mockito.Mockito.doAnswer;
+-import static org.mockito.Mockito.mock;
+-import static org.mockito.Mockito.when;
+ import org.mockito.invocation.InvocationOnMock;
+ import org.mockito.stubbing.Answer;
+ 
+@@ -112,7 +111,7 @@ public class TestBlockToken {
+         LOG.info("Got: " + id.toString());
+         assertTrue("Received BlockTokenIdentifier is wrong", ident.equals(id));
+         sm.checkAccess(id, null, block, BlockTokenSecretManager.AccessMode.WRITE);
+-        result = new LocatedBlock(new Block(id.getBlockIds()[0]), null);
++        result = new LocatedBlock(new Block(id.getBlockId()), null);
+       }
+       return result;
+     }
+@@ -225,29 +224,4 @@ public class TestBlockToken {
+       }
+     }
+   }
+-
+-  @Test
+-  public void collectionOfBlocksActsSanely() {
+-    final long[][] testBlockIds = new long [][] {{99l, 7l, -32l, 0l},
+-                                                 {},
+-                                                 {42l},
+-                                                 {-5235l, 2352}};
+-    final long [] notBlockIds = new long [] { 32l, 1l, -23423423l};
+-    
+-    for(long [] bids : testBlockIds) {
+-      BlockTokenIdentifier bti = new BlockTokenIdentifier("Madame Butterfly", 
+-          bids, EnumSet.noneOf(BlockTokenSecretManager.AccessMode.class));
+-      
+-      for(long bid : bids) assertTrue(bti.isBlockIncluded(bid));
+-      
+-      for(long nbid : notBlockIds) assertFalse(bti.isBlockIncluded(nbid));
+-      
+-      // BlockTokenIdentifiers maintain a sorted array of the block Ids.
+-      long[] sorted = Arrays.copyOf(bids, bids.length);
+-      Arrays.sort(sorted);
+-      
+-      assertTrue(Arrays.toString(bids)+" doesn't equal "+Arrays.toString(sorted), 
+-          Arrays.equals(bti.getBlockIds(), sorted));
+-    }
+-  }
+ }
+-- 
+1.7.0.4
+

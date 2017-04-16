@@ -1,0 +1,111 @@
+From d6d4c8bbd31486ad7661331044d0d568f6b5eabb Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 16 Sep 2011 16:37:32 -0700
+Subject: [PATCH 1048/1179] HDFS-2186. DN volume failures on startup are not counted.
+
+Volume failures detected on startup are not currently counted/reported
+as such. Eg if you have configured 4 volumes, 2 tolerated failures,
+and you start a DN with two failed volumes it will come up and report
+(to the NN) no failed volumes. The DN will still be able to tolerate 2
+additional volume failures (ie it's OK with no valid volumes
+remaining). The intent of the volume failure toleration config value
+is that if more than this # of volumes of the total set of configured
+volumes have failed the DN should shutdown, therefore volume failures
+detected on startup should count against this quota.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-3371
+---
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |   16 ++++++++---
+ .../TestDataNodeVolumeFailureToleration.java       |   28 +++++++++++++++++++-
+ 2 files changed, 38 insertions(+), 6 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index 8464e9f..62ac610 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -599,10 +599,11 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+   static class FSVolumeSet {
+     FSVolume[] volumes = null;
+     int curVolume = 0;
+-    int numFailedVolumes = 0;
++    int numFailedVolumes;
+ 
+-    FSVolumeSet(FSVolume[] volumes) {
++    FSVolumeSet(FSVolume[] volumes, int failedVols) {
+       this.volumes = volumes;
++      this.numFailedVolumes = failedVols;
+     }
+     
+     private int numberOfVolumes() {
+@@ -902,13 +903,18 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       conf.getInt("dfs.datanode.failed.volumes.tolerated", 0);
+     String[] dataDirs = conf.getTrimmedStrings(DataNode.DATA_DIR_KEY);
+     int volsConfigured = (dataDirs == null) ? 0 : dataDirs.length;
++    int volsFailed = volsConfigured - storage.getNumStorageDirs();
+     validVolsRequired = volsConfigured - volFailuresTolerated;
+ 
+-    if (validVolsRequired < 1
+-        || validVolsRequired > storage.getNumStorageDirs()) {
++    if (volFailuresTolerated < 0 || volFailuresTolerated >= volsConfigured) {
++      throw new DiskErrorException("Invalid volume failure "
++          + " config value: " + volFailuresTolerated);
++    }
++    if (volsFailed > volFailuresTolerated) {
+       throw new DiskErrorException("Too many failed volumes - "
+         + "current valid volumes: " + storage.getNumStorageDirs()
+         + ", volumes configured: " + volsConfigured
++        + ", volumes failed: " + volsFailed
+         + ", volume failures tolerated: " + volFailuresTolerated);
+     }
+ 
+@@ -916,7 +922,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     for (int idx = 0; idx < storage.getNumStorageDirs(); idx++) {
+       volArray[idx] = new FSVolume(storage.getStorageDir(idx).getCurrentDir(), conf);
+     }
+-    volumes = new FSVolumeSet(volArray);
++    volumes = new FSVolumeSet(volArray, volsFailed);
+     volumes.getVolumeMap(volumeMap);
+     File[] roots = new File[storage.getNumStorageDirs()];
+     for (int idx = 0; idx < storage.getNumStorageDirs(); idx++) {
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailureToleration.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailureToleration.java
+index 91d5f76..1948144 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailureToleration.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailureToleration.java
+@@ -213,4 +213,30 @@ public class TestDataNodeVolumeFailureToleration {
+     assertEquals("Couldn't chmod local vol", 0,
+         FileUtil.chmod(dir.toString(), "000"));
+   }
+-}
+\ No newline at end of file
++
++  /**
++   * Test that a volume that is considered failed on startup is seen as
++   *  a failed volume by the NN.
++   */
++  @Test
++  public void testFailedVolumeOnStartupIsCounted() throws Exception {
++    assumeTrue(!System.getProperty("os.name").startsWith("Windows"));
++
++    FSNamesystem ns = cluster.getNameNode().getNamesystem();
++    long origCapacity = DFSTestUtil.getLiveDatanodeCapacity(ns);
++    File dir = new File(dataDir, "data1/current");
++
++    try {
++      prepareDirToFail(dir);
++      restartDatanodes(1, false);
++      // The cluster is up..
++      assertTrue(cluster.getDataNodes().get(0).isDatanodeUp());
++      // but there has been a single volume failure
++      DFSTestUtil.waitForDatanodeStatus(ns, 1, 0, 1,
++          origCapacity / 2, WAIT_FOR_HEARTBEATS);
++    } finally {
++      FileUtil.chmod(dir.toString(), "755");
++    }
++  }
++
++}
+-- 
+1.7.0.4
+

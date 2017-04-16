@@ -1,0 +1,41 @@
+From a5fb4a8c8bf9d6a3a96c3a06eb3a46febaf21a0f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 7 May 2010 15:36:14 -0700
+Subject: [PATCH 0241/1179] MAPREDUCE-1375. TestFileArgs fails intermittently
+
+Description: Fixes an error in a test case without modifying code. This is an amendment to the prior fix which did not address the issue properly.
+Reason: Should fix flaky tests.
+Author: Todd Lipcon
+Ref: CDH-657
+---
+ .../org/apache/hadoop/streaming/TestFileArgs.java  |    7 +++----
+ 1 files changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java
+index e875391..fd4468c 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestFileArgs.java
+@@ -63,6 +63,9 @@ public class TestFileArgs extends TestStreaming
+ 
+   @Override
+   protected void createInput() throws IOException {
++    // Since ls doesn't read stdin, we don't want to write anything
++    // to it, or else we risk Broken Pipe exceptions.
++    input = "";
+     super.createInput();
+ 
+     SIDE_FILE = new File(TEST_DIR, "sidefile");
+@@ -70,10 +73,6 @@ public class TestFileArgs extends TestStreaming
+       new FileOutputStream(SIDE_FILE.getAbsoluteFile()));
+     dos.write("hello world\n".getBytes("UTF-8"));
+     dos.close();
+-
+-    // Since ls doesn't read stdin, we don't want to write anything
+-    // to it, or else we risk Broken Pipe exceptions.
+-    input = "";
+   }
+ 
+   @Override
+-- 
+1.7.0.4
+

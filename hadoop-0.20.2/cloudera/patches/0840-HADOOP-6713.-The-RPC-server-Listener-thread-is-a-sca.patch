@@ -1,0 +1,318 @@
+From 66beb0bfe053b9c0fa02f7ac82310081fa6da2cd Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:52 -0800
+Subject: [PATCH 0840/1179] HADOOP-6713. The RPC server Listener thread is a scalability bottleneck.
+
+Author: Dmytro Molkov
+Ref: CDH-2622
+---
+ .../apache/hadoop/fs/CommonConfigurationKeys.java  |    4 +
+ src/core/org/apache/hadoop/ipc/Server.java         |  134 ++++++++++++++++----
+ src/test/org/apache/hadoop/ipc/TestRPC.java        |   42 ++++++-
+ 3 files changed, 153 insertions(+), 27 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+index a64e3ff..dbe0985 100644
+--- a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
++++ b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+@@ -42,5 +42,9 @@ public class CommonConfigurationKeys {
+   /** See src/core/core-default.xml */
+   public static final String  HADOOP_SECURITY_SERVICE_USER_NAME_KEY = 
+     "hadoop.security.service.user.name.key";
++  public static final String IPC_SERVER_RPC_READ_THREADS_KEY =
++                                        "ipc.server.read.threadpool.size";
++  public static final int IPC_SERVER_RPC_READ_THREADS_DEFAULT = 1;
++
+ }
+ 
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index b10e8d1..438e9df 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -51,6 +51,8 @@ import java.util.Random;
+ import java.util.concurrent.BlockingQueue;
+ import java.util.concurrent.ConcurrentHashMap;
+ import java.util.concurrent.LinkedBlockingQueue;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
+ 
+ import javax.security.sasl.Sasl;
+ import javax.security.sasl.SaslException;
+@@ -174,6 +176,7 @@ public abstract class Server {
+   private String bindAddress; 
+   private int port;                               // port we listen on
+   private int handlerCount;                       // number of handler threads
++  private int readThreads;                        // number of read threads
+   private Class<? extends Writable> paramClass;   // class of call parameters
+   private int maxIdleTime;                        // the maximum idle time after 
+                                                   // which a client may be disconnected
+@@ -296,6 +299,8 @@ public abstract class Server {
+     
+     private ServerSocketChannel acceptChannel = null; //the accept channel
+     private Selector selector = null; //the selector that we use for the server
++    private Reader[] readers = null;
++    private int currentReader = 0;
+     private InetSocketAddress address; //the address we bind at
+     private Random rand = new Random();
+     private long lastCleanupRunTime = 0; //the last time when a cleanup connec-
+@@ -303,7 +308,8 @@ public abstract class Server {
+     private long cleanupInterval = 10000; //the minimum interval between 
+                                           //two cleanup runs
+     private int backlogLength = conf.getInt("ipc.server.listen.queue.size", 128);
+-    
++    private ExecutorService readPool; 
++   
+     public Listener() throws IOException {
+       address = new InetSocketAddress(bindAddress, port);
+       // Create a new server socket and set to non blocking mode
+@@ -315,12 +321,85 @@ public abstract class Server {
+       port = acceptChannel.socket().getLocalPort(); //Could be an ephemeral port
+       // create a selector;
+       selector= Selector.open();
++      readers = new Reader[readThreads];
++      readPool = Executors.newFixedThreadPool(readThreads);
++      for (int i = 0; i < readThreads; i++) {
++        Selector readSelector = Selector.open();
++        Reader reader = new Reader(readSelector);
++        readers[i] = reader;
++        readPool.execute(reader);
++      }
+ 
+       // Register accepts on the server socket with the selector.
+       acceptChannel.register(selector, SelectionKey.OP_ACCEPT);
+       this.setName("IPC Server listener on " + port);
+       this.setDaemon(true);
+     }
++    
++    private class Reader implements Runnable {
++      private volatile boolean adding = false;
++      private Selector readSelector = null;
++
++      Reader(Selector readSelector) {
++        this.readSelector = readSelector;
++      }
++      public void run() {
++        LOG.info("Starting SocketReader");
++        synchronized (this) {
++          while (running) {
++            SelectionKey key = null;
++            try {
++              readSelector.select();
++              while (adding) {
++                this.wait(1000);
++              }              
++
++              Iterator<SelectionKey> iter = readSelector.selectedKeys().iterator();
++              while (iter.hasNext()) {
++                key = iter.next();
++                iter.remove();
++                if (key.isValid()) {
++                  if (key.isReadable()) {
++                    doRead(key);
++                  }
++                }
++                key = null;
++              }
++            } catch (InterruptedException e) {
++              if (running) {                      // unexpected -- log it
++                LOG.info(getName() + " caught: " +
++                         StringUtils.stringifyException(e));
++              }
++            } catch (IOException ex) {
++              LOG.error("Error in Reader", ex);
++            }
++          }
++        }
++      }
++
++      /**
++       * This gets reader into the state that waits for the new channel
++       * to be registered with readSelector. If it was waiting in select()
++       * the thread will be woken up, otherwise whenever select() is called
++       * it will return even if there is nothing to read and wait
++       * in while(adding) for finishAdd call
++       */
++      public void startAdd() {
++        adding = true;
++        readSelector.wakeup();
++      }
++      
++      public synchronized SelectionKey registerChannel(SocketChannel channel)
++                                                          throws IOException {
++          return channel.register(readSelector, SelectionKey.OP_READ);
++      }
++
++      public synchronized void finishAdd() {
++        adding = false;
++        this.notify();        
++      }
++    }
++
+     /** cleanup connections from connectionList. Choose a random range
+      * to scan and also have a limit on the number of the connections
+      * that will be cleanedup per run. The criteria for cleanup is the time
+@@ -385,8 +464,6 @@ public abstract class Server {
+               if (key.isValid()) {
+                 if (key.isAcceptable())
+                   doAccept(key);
+-                else if (key.isReadable())
+-                  doRead(key);
+               }
+             } catch (IOException e) {
+             }
+@@ -400,11 +477,6 @@ public abstract class Server {
+           closeCurrentConnection(key, e);
+           cleanupConnections(true);
+           try { Thread.sleep(60000); } catch (Exception ie) {}
+-        } catch (InterruptedException e) {
+-          if (running) {                          // unexpected -- log it
+-            LOG.info(getName() + " caught: " +
+-                     StringUtils.stringifyException(e));
+-          }
+         } catch (Exception e) {
+           closeCurrentConnection(key, e);
+         }
+@@ -447,24 +519,28 @@ public abstract class Server {
+     void doAccept(SelectionKey key) throws IOException,  OutOfMemoryError {
+       Connection c = null;
+       ServerSocketChannel server = (ServerSocketChannel) key.channel();
+-      // accept up to 10 connections
+-      for (int i=0; i<10; i++) {
+-        SocketChannel channel = server.accept();
+-        if (channel==null) return;
+-
++      SocketChannel channel;
++      while ((channel = server.accept()) != null) {
+         channel.configureBlocking(false);
+         channel.socket().setTcpNoDelay(tcpNoDelay);
+-        SelectionKey readKey = channel.register(selector, SelectionKey.OP_READ);
+-        c = new Connection(readKey, channel, System.currentTimeMillis());
+-        readKey.attach(c);
+-        synchronized (connectionList) {
+-          connectionList.add(numConnections, c);
+-          numConnections++;
++        Reader reader = getReader();
++        try {
++          reader.startAdd();
++          SelectionKey readKey = reader.registerChannel(channel);
++          c = new Connection(readKey, channel, System.currentTimeMillis());
++          readKey.attach(c);
++          synchronized (connectionList) {
++            connectionList.add(numConnections, c);
++            numConnections++;
++          }
++          if (LOG.isDebugEnabled())
++            LOG.debug("Server connection from " + c.toString() +
++                "; # active connections: " + numConnections +
++                "; # queued calls: " + callQueue.size());          
++        } finally {
++          reader.finishAdd(); 
+         }
+-        if (LOG.isDebugEnabled())
+-          LOG.debug("Server connection from " + c.toString() +
+-              "; # active connections: " + numConnections +
+-              "; # queued calls: " + callQueue.size());
++
+       }
+     }
+ 
+@@ -510,7 +586,16 @@ public abstract class Server {
+           LOG.info(getName() + ":Exception in closing listener socket. " + e);
+         }
+       }
++      readPool.shutdown();
++    }
++
++    // The method that will return the next reader to work with
++    // Simplistic implementation of round robin for now
++    Reader getReader() {
++      currentReader = (currentReader + 1) % readers.length;
++      return readers[currentReader];
+     }
++
+   }
+ 
+   // Sends responses of RPC back to clients.
+@@ -1398,6 +1483,9 @@ public abstract class Server {
+                                 IPC_SERVER_HANDLER_QUEUE_SIZE_DEFAULT);
+     this.maxRespSize = conf.getInt(IPC_SERVER_RPC_MAX_RESPONSE_SIZE_KEY,
+                                    IPC_SERVER_RPC_MAX_RESPONSE_SIZE_DEFAULT);
++    this.readThreads = conf.getInt(
++        IPC_SERVER_RPC_READ_THREADS_KEY,
++        IPC_SERVER_RPC_READ_THREADS_DEFAULT);
+     this.callQueue  = new LinkedBlockingQueue<Call>(maxQueueSize); 
+     this.maxIdleTime = 2*conf.getInt("ipc.client.connection.maxidletime", 1000);
+     this.maxConnectionsToNuke = conf.getInt("ipc.client.kill.max", 10);
+diff --git a/src/test/org/apache/hadoop/ipc/TestRPC.java b/src/test/org/apache/hadoop/ipc/TestRPC.java
+index 87a54e6..a3035c3 100644
+--- a/src/test/org/apache/hadoop/ipc/TestRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestRPC.java
+@@ -237,8 +237,7 @@ public class TestRPC extends TestCase {
+     }
+   }
+ 
+-
+-  public void testCalls() throws Exception {
++  public void testCalls(Configuration conf) throws Exception {
+     Server server = RPC.getServer(new TestImpl(), ADDRESS, 0, conf);
+     TestProtocol proxy = null;
+     try {
+@@ -487,6 +486,16 @@ public class TestRPC extends TestCase {
+     // should not cause any other thread to get an error
+     assertNull("rpc got ClosedChannelException", error.get());
+   }
++
++  public void testNoPings() throws Exception {
++    Configuration conf = new Configuration();
++   
++    conf.setBoolean("ipc.client.ping", false);
++    new TestRPC("testnoPings").testCalls(conf);
++   
++    conf.setInt(CommonConfigurationKeys.IPC_SERVER_RPC_READ_THREADS_KEY, 2);
++    new TestRPC("testnoPings").testCalls(conf);
++  }
+   
+   public void testErrorMsgForInsecureClient() throws Exception {
+     final Server server = RPC.getServer(
+@@ -510,11 +519,36 @@ public class TestRPC extends TestCase {
+       }
+     }
+     assertTrue(succeeded);
++
++    conf.setInt(CommonConfigurationKeys.IPC_SERVER_RPC_READ_THREADS_KEY, 2);
++
++    final Server multiServer = RPC.getServer(new TestImpl(), 
++						ADDRESS, 0, 5, true, conf, null);
++    multiServer.enableSecurity();
++    multiServer.start();
++    succeeded = false;
++    final InetSocketAddress mulitServerAddr =
++                      NetUtils.getConnectAddress(multiServer);
++    proxy = null;
++    try {
++      proxy = (TestProtocol) RPC.getProxy(TestProtocol.class,
++          TestProtocol.versionID, mulitServerAddr, conf);
++    } catch (RemoteException e) {
++      LOG.info("LOGGING MESSAGE: " + e.getLocalizedMessage());
++      assertTrue(e.unwrapRemoteException() instanceof AccessControlException);
++      succeeded = true;
++    } finally {
++      multiServer.stop();
++      if (proxy != null) {
++        RPC.stopProxy(proxy);
++      }
++    }
++    assertTrue(succeeded);
+   }
+-  
++ 
+   public static void main(String[] args) throws Exception {
+ 
+-    new TestRPC("test").testCalls();
++    new TestRPC("test").testCalls(conf);
+ 
+   }
+ }
+-- 
+1.7.0.4
+

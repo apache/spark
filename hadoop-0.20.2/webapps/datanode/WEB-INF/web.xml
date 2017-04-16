@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<web-app xmlns="http://java.sun.com/xml/ns/javaee"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd"
+   version="2.5">
+
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.hdfs.server.datanode.tail_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.hdfs.server.datanode.tail_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.hdfs.server.datanode.browseDirectory_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.hdfs.server.datanode.browseDirectory_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.hdfs.server.datanode.browseBlock_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.hdfs.server.datanode.browseBlock_jsp</servlet-class>
+    </servlet>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.hdfs.server.datanode.tail_jsp</servlet-name>
+        <url-pattern>/tail.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.hdfs.server.datanode.browseDirectory_jsp</servlet-name>
+        <url-pattern>/browseDirectory.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.hdfs.server.datanode.browseBlock_jsp</servlet-name>
+        <url-pattern>/browseBlock.jsp</url-pattern>
+    </servlet-mapping>
+
+</web-app>
+

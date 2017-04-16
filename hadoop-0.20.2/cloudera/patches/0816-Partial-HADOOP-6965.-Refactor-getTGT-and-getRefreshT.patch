@@ -1,0 +1,121 @@
+From bfa0b28baad26de8315ec1f9282728913863c3e7 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 10 Feb 2011 14:27:45 -0800
+Subject: [PATCH 0816/1179] Partial HADOOP-6965. Refactor getTGT and getRefreshTime out of anonymous class, add synchronized block around relogin
+
+Author: Jitendra Pandey
+Ref: CDH-2622
+---
+ .../hadoop/security/UserGroupInformation.java      |   82 ++++++++++----------
+ 1 files changed, 42 insertions(+), 40 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 441952d..294559b 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -508,6 +508,32 @@ public class UserGroupInformation {
+   public boolean isFromKeytab() {
+     return isKeytab;
+   }
++  
++  /**
++   * Get the Kerberos TGT
++   * @return the user's TGT or null if none was found
++   */
++  private synchronized KerberosTicket getTGT() {
++    Set<KerberosTicket> tickets = 
++      subject.getPrivateCredentials(KerberosTicket.class);
++    for(KerberosTicket ticket: tickets) {
++      KerberosPrincipal server = ticket.getServer();
++      if (server.getName().equals("krbtgt/" + server.getRealm() + 
++                                  "@" + server.getRealm())) {
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("Found tgt " + ticket);
++        }
++        return ticket;
++      }
++    }
++    return null;
++  }
++  
++  private long getRefreshTime(KerberosTicket tgt) {
++    long start = tgt.getStartTime().getTime();
++    long end = tgt.getEndTime().getTime();
++    return start + (long) ((end - start) * TICKET_RENEW_WINDOW);
++  }
+ 
+   /**Spawn a thread to do periodic renewals of kerberos credentials*/
+   private void spawnAutoRenewalThreadForUserCreds() {
+@@ -516,32 +542,6 @@ public class UserGroupInformation {
+       if (user.getAuthenticationMethod() == AuthenticationMethod.KERBEROS &&
+           !isKeytab) {
+         Thread t = new Thread(new Runnable() {
+-          
+-          /**
+-           * Get the Kerberos TGT
+-           * @return the user's TGT or null if none was found
+-           */
+-          private KerberosTicket getTGT() {
+-            Set<KerberosTicket> tickets = 
+-              subject.getPrivateCredentials(KerberosTicket.class);
+-            for(KerberosTicket ticket: tickets) {
+-              KerberosPrincipal server = ticket.getServer();
+-              if (server.getName().equals("krbtgt/" + server.getRealm() + 
+-                                          "@" + server.getRealm())) {
+-                if (LOG.isDebugEnabled()) {
+-                  LOG.debug("Found tgt " + ticket);
+-                }
+-                return ticket;
+-              }
+-            }
+-            return null;
+-          }
+-
+-          private long getRefreshTime(KerberosTicket tgt) {
+-            long start = tgt.getStartTime().getTime();
+-            long end = tgt.getEndTime().getTime();
+-            return start + (long) ((end - start) * TICKET_RENEW_WINDOW);
+-          }
+ 
+           public void run() {
+             String cmd = conf.get("hadoop.kerberos.kinit.command",
+@@ -738,20 +738,22 @@ public class UserGroupInformation {
+     long start = 0;
+     try {
+       LOG.info("Initiating logout for " + getUserName());
+-      //clear up the kerberos state. But the tokens are not cleared! As per 
+-      //the Java kerberos login module code, only the kerberos credentials
+-      //are cleared
+-      login.logout();
+-      //login and also update the subject field of this instance to 
+-      //have the new credentials (pass it to the LoginContext constructor)
+-      login = 
+-        new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, 
+-            getSubject());
+-      LOG.info("Initiating re-login for " + keytabPrincipal);
+-      start = System.currentTimeMillis();
+-      login.login();
+-      metrics.loginSuccess.inc(System.currentTimeMillis() - start);
+-      setLogin(login);
++      synchronized (UserGroupInformation.class) {
++        //clear up the kerberos state. But the tokens are not cleared! As per 
++        //the Java kerberos login module code, only the kerberos credentials
++        //are cleared
++        login.logout();
++        //login and also update the subject field of this instance to 
++        //have the new credentials (pass it to the LoginContext constructor)
++        login = 
++          new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, 
++                           getSubject());
++        LOG.info("Initiating re-login for " + keytabPrincipal);
++        start = System.currentTimeMillis();
++        login.login();
++        metrics.loginSuccess.inc(System.currentTimeMillis() - start);
++        setLogin(login);
++      }
+     } catch (LoginException le) {
+       if (start > 0) {
+         metrics.loginFailure.inc(System.currentTimeMillis() - start);
+-- 
+1.7.0.4
+

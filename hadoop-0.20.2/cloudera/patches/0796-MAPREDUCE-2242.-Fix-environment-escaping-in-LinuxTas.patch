@@ -1,0 +1,104 @@
+From 545bcc1060833f76eab19fa0425f890cb3f9d2cb Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 28 Jan 2011 13:39:43 -0800
+Subject: [PATCH 0796/1179] MAPREDUCE-2242. Fix environment escaping in LinuxTaskController
+
+Reason: Support env variables with "s
+Author: Todd Lipcon
+Ref: CDH-2572
+---
+ .../apache/hadoop/mapred/LinuxTaskController.java  |   30 ++++++++++++++------
+ .../hadoop/mapred/TestLinuxTaskController.java     |   21 ++++++++++++++
+ 2 files changed, 42 insertions(+), 9 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+index ca66191..0956dbd 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+@@ -138,18 +138,11 @@ class LinuxTaskController extends TaskController {
+       TaskLog.buildCommandLine(env.setup, env.vargs, env.stdout, env.stderr,
+           env.logSize, true);
+ 
+-    StringBuffer sb = new StringBuffer();
++    StringBuilder sb = new StringBuilder();
+     //export out all the environment variable before child command as
+     //the setuid/setgid binaries would not be getting, any environmental
+     //variables which begin with LD_*.
+-    for(Entry<String, String> entry : env.env.entrySet()) {
+-      sb.append("export ");
+-      sb.append(entry.getKey());
+-      sb.append("=");
+-      sb.append(entry.getValue());
+-      sb.append("\n");
+-    }
+-    sb.append(cmdLine);
++    appendEnvExports(sb, env.env);
+     // write the command to a file in the
+     // task specific cache directory
+     writeCommand(sb.toString(), getTaskCacheDirectory(context));
+@@ -219,6 +212,25 @@ class LinuxTaskController extends TaskController {
+   }
+ 
+   /**
++   * Append lines of the form 'export FOO="bar"' to sb to export the given
++   * environment map.
++   * 
++   * This should not be relied upon for security as the variable names are not
++   * sanitized in any way.
++   * @param sb StringBuilder to append to
++   * @param env Environment to export
++   */
++  static void appendEnvExports(StringBuilder sb, Map<String, String> env) {
++    for(Entry<String, String> entry : env.entrySet()) {
++      sb.append("export ");
++      sb.append(entry.getKey());
++      sb.append("=\"");
++      sb.append(StringUtils.escapeString(entry.getValue(), '\\', '"'));
++      sb.append("\"\n");
++    }
++  }
++  
++  /**
+    * Returns list of arguments to be passed while initializing a new task. See
+    * {@code buildTaskControllerExecutor(TaskControllerCommands, String, 
+    * List<String>, JvmEnv)} documentation.
+diff --git a/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+index 81cd3cf..eb71b9f 100644
+--- a/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+@@ -19,6 +19,8 @@ package org.apache.hadoop.mapred;
+ 
+ import java.io.File;
+ import java.io.IOException;
++import java.util.Map;
++import java.util.TreeMap;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileUtil;
+@@ -101,4 +103,23 @@ public class TestLinuxTaskController extends TestCase {
+         conf);
+     validateTaskControllerSetup(controller, false);
+   }
++
++  /**
++   * Test that environment variables are properly escaped when exported from
++   * taskjvm.sh
++   */
++  public void testEnvironmentEscaping() {
++    Map<String,String> env = new TreeMap<String, String>();
++    env.put("BAZ", "blah blah multiple words");
++    env.put("FOO", "bar");
++    env.put("QUOTED", "bad chars like \\ and \"");
++    
++    StringBuilder sb = new StringBuilder();
++    LinuxTaskController.appendEnvExports(sb, env);
++    assertEquals(
++        "export BAZ=\"blah blah multiple words\"\n" +
++        "export FOO=\"bar\"\n" +
++        "export QUOTED=\"bad chars like \\\\ and \\\"\"\n",
++        sb.toString());
++  }
+ }
+-- 
+1.7.0.4
+

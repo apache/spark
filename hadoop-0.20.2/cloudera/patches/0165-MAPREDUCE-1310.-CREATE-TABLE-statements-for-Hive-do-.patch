@@ -1,0 +1,193 @@
+From 35f87aef6d7cd4030644a1d454da2e0a6e2969c0 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:30:18 -0800
+Subject: [PATCH 0165/1179] MAPREDUCE-1310. CREATE TABLE statements for Hive do not correctly specify delimiters
+
+Description: Imports to HDFS via Sqoop that also inject metadata into Hive do not correctly specify delimiters; using Hive to access the data results in rows being parsed as NULL characters. See <span class="nobr"><a href="http://getsatisfaction.com/cloudera/topics/sqoop_hive_import_giving_null_query_values">http://getsatisfaction.com/cloudera/topics/sqoop_hive_import_giving_null_query_values<sup><img class="rendericon" src="https://issues.apache.org/jira/images/icons/linkext7.gif" height="7" width="7" align="absmiddle" alt="" border="0"/></sup></a></span> for an example bug report
+Reason: Bugfix
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../apache/hadoop/sqoop/hive/TableDefWriter.java   |   31 ++++++++++--
+ .../test/org/apache/hadoop/sqoop/SmokeTests.java   |    2 +
+ .../hadoop/sqoop/hive/TestTableDefWriter.java      |   55 ++++++++++++++++++++
+ .../testdata/hive/scripts/customDelimImport.q      |    2 +-
+ .../sqoop/testdata/hive/scripts/dateImport.q       |    2 +-
+ .../sqoop/testdata/hive/scripts/failingImport.q    |    2 +-
+ .../sqoop/testdata/hive/scripts/normalImport.q     |    2 +-
+ .../sqoop/testdata/hive/scripts/numericImport.q    |    2 +-
+ 8 files changed, 89 insertions(+), 9 deletions(-)
+ create mode 100644 src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestTableDefWriter.java
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/TableDefWriter.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/TableDefWriter.java
+index 28f83d4..81550af 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/TableDefWriter.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/TableDefWriter.java
+@@ -115,10 +115,10 @@ public class TableDefWriter {
+       sb.append("COMMENT 'Imported by sqoop on " + curDateStr + "' ");
+     }
+ 
+-    sb.append("ROW FORMAT DELIMITED FIELDS TERMINATED BY '\\0");
+-    sb.append(Integer.toOctalString((int) options.getOutputFieldDelim()));
+-    sb.append("' LINES TERMINATED BY '\\0");
+-    sb.append(Integer.toOctalString((int) options.getOutputRecordDelim()));
++    sb.append("ROW FORMAT DELIMITED FIELDS TERMINATED BY '");
++    sb.append(getHiveOctalCharCode((int) options.getOutputFieldDelim()));
++    sb.append("' LINES TERMINATED BY '");
++    sb.append(getHiveOctalCharCode((int) options.getOutputRecordDelim()));
+     sb.append("' STORED AS TEXTFILE");
+ 
+     LOG.debug("Create statement: " + sb.toString());
+@@ -170,5 +170,28 @@ public class TableDefWriter {
+     LOG.debug("Load statement: " + sb.toString());
+     return sb.toString();
+   }
++
++  /**
++   * Return a string identifying the character to use as a delimiter
++   * in Hive, in octal representation.
++   * Hive can specify delimiter characters in the form '\ooo' where
++   * ooo is a three-digit octal number between 000 and 177. Values
++   * may not be truncated ('\12' is wrong; '\012' is ok) nor may they
++   * be zero-prefixed (e.g., '\0177' is wrong).
++   *
++   * @param charNum the character to use as a delimiter
++   * @return a string of the form "\ooo" where ooo is an octal number
++   * in [000, 177].
++   * @throws IllegalArgumentException if charNum &gt;> 0177.
++   */
++  static String getHiveOctalCharCode(int charNum)
++      throws IllegalArgumentException {
++    if (charNum > 0177) {
++      throw new IllegalArgumentException(
++          "Character " + charNum + " is an out-of-range delimiter");
++    }
++
++    return String.format("\\%03o", charNum);
++  }
+ }
+ 
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/SmokeTests.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/SmokeTests.java
+index 366e9a2..5f1059a 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/SmokeTests.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/SmokeTests.java
+@@ -19,6 +19,7 @@
+ package org.apache.hadoop.sqoop;
+ 
+ import org.apache.hadoop.sqoop.hive.TestHiveImport;
++import org.apache.hadoop.sqoop.hive.TestTableDefWriter;
+ import org.apache.hadoop.sqoop.io.TestSplittableBufferedWriter;
+ import org.apache.hadoop.sqoop.lib.TestFieldFormatter;
+ import org.apache.hadoop.sqoop.lib.TestRecordParser;
+@@ -59,6 +60,7 @@ public final class SmokeTests {
+     suite.addTestSuite(TestParseMethods.class);
+     suite.addTestSuite(TestConnFactory.class);
+     suite.addTestSuite(TestSplittableBufferedWriter.class);
++    suite.addTestSuite(TestTableDefWriter.class);
+     suite.addTest(MapreduceTests.suite());
+ 
+     return suite;
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestTableDefWriter.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestTableDefWriter.java
+new file mode 100644
+index 0000000..e8aed69
+--- /dev/null
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestTableDefWriter.java
+@@ -0,0 +1,55 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.sqoop.hive;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.junit.Test;
++
++import junit.framework.TestCase;
++
++/**
++ * Test Hive DDL statement generation.
++ */
++public class TestTableDefWriter extends TestCase {
++
++  public static final Log LOG = LogFactory.getLog(TestHiveImport.class.getName());
++
++
++  // Test getHiveOctalCharCode and expect an IllegalArgumentException.
++  private void expectExceptionInCharCode(int charCode) {
++    try {
++      TableDefWriter.getHiveOctalCharCode(charCode);
++      fail("Expected IllegalArgumentException");
++    } catch (IllegalArgumentException iae) {
++      // Expected; ok.
++    }
++  }
++
++  public void testHiveOctalCharCode() {
++    assertEquals("\\000", TableDefWriter.getHiveOctalCharCode(0));
++    assertEquals("\\001", TableDefWriter.getHiveOctalCharCode(1));
++    assertEquals("\\012", TableDefWriter.getHiveOctalCharCode((int) '\n'));
++    assertEquals("\\177", TableDefWriter.getHiveOctalCharCode(0177));
++
++    expectExceptionInCharCode(4096);
++    expectExceptionInCharCode(0200);
++    expectExceptionInCharCode(254);
++  }
++}
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/customDelimImport.q b/src/contrib/sqoop/testdata/hive/scripts/customDelimImport.q
+index a64166e..1e7defb 100644
+--- a/src/contrib/sqoop/testdata/hive/scripts/customDelimImport.q
++++ b/src/contrib/sqoop/testdata/hive/scripts/customDelimImport.q
+@@ -1,2 +1,2 @@
+-CREATE TABLE CUSTOM_DELIM_IMPORT ( DATA_COL0 STRING, DATA_COL1 INT, DATA_COL2 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\054' LINES TERMINATED BY '\0174' STORED AS TEXTFILE;
++CREATE TABLE CUSTOM_DELIM_IMPORT ( DATA_COL0 STRING, DATA_COL1 INT, DATA_COL2 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\054' LINES TERMINATED BY '\174' STORED AS TEXTFILE;
+ LOAD DATA INPATH 'file:BASEPATH/sqoop/warehouse/CUSTOM_DELIM_IMPORT' INTO TABLE CUSTOM_DELIM_IMPORT;
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/dateImport.q b/src/contrib/sqoop/testdata/hive/scripts/dateImport.q
+index fc74ff3..223f67a 100644
+--- a/src/contrib/sqoop/testdata/hive/scripts/dateImport.q
++++ b/src/contrib/sqoop/testdata/hive/scripts/dateImport.q
+@@ -1,2 +1,2 @@
+-CREATE TABLE DATE_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\01' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
++CREATE TABLE DATE_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
+ LOAD DATA INPATH 'file:BASEPATH/sqoop/warehouse/DATE_HIVE_IMPORT' INTO TABLE DATE_HIVE_IMPORT;
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/failingImport.q b/src/contrib/sqoop/testdata/hive/scripts/failingImport.q
+index fc74ff3..223f67a 100644
+--- a/src/contrib/sqoop/testdata/hive/scripts/failingImport.q
++++ b/src/contrib/sqoop/testdata/hive/scripts/failingImport.q
+@@ -1,2 +1,2 @@
+-CREATE TABLE DATE_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\01' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
++CREATE TABLE DATE_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
+ LOAD DATA INPATH 'file:BASEPATH/sqoop/warehouse/DATE_HIVE_IMPORT' INTO TABLE DATE_HIVE_IMPORT;
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/normalImport.q b/src/contrib/sqoop/testdata/hive/scripts/normalImport.q
+index 328e37c..76e690c 100644
+--- a/src/contrib/sqoop/testdata/hive/scripts/normalImport.q
++++ b/src/contrib/sqoop/testdata/hive/scripts/normalImport.q
+@@ -1,2 +1,2 @@
+-CREATE TABLE NORMAL_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 INT, DATA_COL2 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\01' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
++CREATE TABLE NORMAL_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 INT, DATA_COL2 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
+ LOAD DATA INPATH 'file:BASEPATH/sqoop/warehouse/NORMAL_HIVE_IMPORT' INTO TABLE NORMAL_HIVE_IMPORT;
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/numericImport.q b/src/contrib/sqoop/testdata/hive/scripts/numericImport.q
+index bb6c154..263b295 100644
+--- a/src/contrib/sqoop/testdata/hive/scripts/numericImport.q
++++ b/src/contrib/sqoop/testdata/hive/scripts/numericImport.q
+@@ -1,2 +1,2 @@
+-CREATE TABLE NUMERIC_HIVE_IMPORT ( DATA_COL0 DOUBLE, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\01' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
++CREATE TABLE NUMERIC_HIVE_IMPORT ( DATA_COL0 DOUBLE, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
+ LOAD DATA INPATH 'file:BASEPATH/sqoop/warehouse/NUMERIC_HIVE_IMPORT' INTO TABLE NUMERIC_HIVE_IMPORT;
+-- 
+1.7.0.4
+

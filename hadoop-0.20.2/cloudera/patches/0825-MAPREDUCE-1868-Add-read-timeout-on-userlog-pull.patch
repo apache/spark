@@ -1,0 +1,47 @@
+From e0104169bfac10c2760fcf133b01fd2b710208cb Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:51 -0800
+Subject: [PATCH 0825/1179] MAPREDUCE-1868 Add read timeout on userlog pull
+
+Author: Krishna Ramachandran
+Ref: CDH-2622
+---
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index 2a9c65b..ff9130f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -445,6 +445,10 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+   
+   private FileSystem fs = null;
+   private UserGroupInformation ugi;
++  private static final String TASKLOG_PULL_TIMEOUT_KEY = 
++    "mapreduce.client.tasklog.timeout";
++  private static final int DEFAULT_TASKLOG_TIMEOUT = 60000;
++  static int tasklogtimeout;
+ 
+   /**
+    * Create a job client.
+@@ -472,6 +476,8 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+    */
+   public void init(JobConf conf) throws IOException {
+     String tracker = conf.get("mapred.job.tracker", "local");
++    tasklogtimeout = conf.getInt(
++      TASKLOG_PULL_TIMEOUT_KEY, DEFAULT_TASKLOG_TIMEOUT);
+     this.ugi = UserGroupInformation.getCurrentUser();
+     if ("local".equals(tracker)) {
+       conf.setNumMapTasks(1);
+@@ -1399,6 +1405,8 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+                                   OutputStream out) {
+     try {
+       URLConnection connection = taskLogUrl.openConnection();
++      connection.setReadTimeout(tasklogtimeout);
++      connection.setConnectTimeout(tasklogtimeout);
+       BufferedReader input = 
+         new BufferedReader(new InputStreamReader(connection.getInputStream()));
+       BufferedWriter output = 
+-- 
+1.7.0.4
+

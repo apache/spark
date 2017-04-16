@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  
+  <parent>
+    <groupId>com.cloudera.cdh</groupId>
+    <artifactId>cdh-root</artifactId>
+    <version>3.0-u4</version>
+    <relativePath>../../../../../pom.xml</relativePath>
+  </parent>
+  
+  <groupId>com.cloudera.cdh</groupId>
+  <artifactId>hadoop-root</artifactId>
+  <version>0.20.2-cdh3u4</version>
+  <packaging>pom</packaging>
+  
+  <description>Hadoop root</description>
+  <name>CDH Hadoop root</name>
+  
+  <licenses>
+    <license>
+      <name>The Apache Software License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    </license>
+  </licenses>
+  
+  <organization>
+    <name>Cloudera</name>
+    <url>http://www.cloudera.com</url>
+  </organization>
+
+  <scm>
+    <connection>scm:git:git://github.sf.cloudera.com/CDH/hadoop.git</connection>
+    <developerConnection>scm:git:ssh://git@github.sf.cloudera.com/CDH/hadoop.git</developerConnection>
+    <url>http://github.sf.cloudera.com/CDH/hadoop</url>
+  </scm>
+
+  <repositories>
+    <repository>
+      <id>cdh.releases.repo</id>
+      <url>https://repository.cloudera.com/content/groups/cdh-releases-rcs</url>
+      <name>CDH Releases Repository</name>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>cdh.snapshots.repo</id>
+      <url>https://repository.cloudera.com/content/repositories/snapshots</url>
+      <name>CDH Snapshots Repository</name>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
+  
+  <profiles>
+    <profile>
+      <id>non.release.build</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+        <property>
+          <name>not.cdh.release.build</name>
+          <value>!false</value>
+        </property>
+      </activation>
+      <modules>
+        <module>../../cloudera-pom.xml</module>
+        <module>hadoop-core</module>
+        <module>hadoop-streaming</module>
+        <module>hadoop-mrunit</module>
+        <module>hadoop-examples</module>
+        <module>hadoop-test</module>
+        <module>hadoop-tools</module>
+        <module>hadoop-client</module>
+        <module>hadoop-minicluster</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>cdh.release.build</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+        <property>
+          <name>not.cdh.release.build</name>
+          <value>false</value>
+        </property>
+      </activation>
+      <modules>
+        <module>../../cloudera-pom.xml</module>
+        <module>hadoop-core</module>
+        <module>hadoop-streaming</module>
+        <module>hadoop-mrunit</module>
+        <module>hadoop-examples</module>
+        <module>hadoop-test</module>
+        <module>hadoop-tools</module>
+        <module>hadoop-tarball</module>
+        <module>hadoop-client</module>
+        <module>hadoop-minicluster</module>
+      </modules>
+    </profile>
+  </profiles>
+      
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <archive>
+            <manifestFile>target/classes/META-INF/MANIFEST.MF</manifestFile>
+          </archive>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+  
+</project>
+

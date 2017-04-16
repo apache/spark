@@ -1,0 +1,269 @@
+From 60784d712cdd5781ceff262bb67e2d484fde428b Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:29:56 -0800
+Subject: [PATCH 0164/1179] MAPREDUCE-1235. java.io.IOException: Cannot convert value '0000-00-00 00:00:00' from column 6 to TIMESTAMP.
+
+Description: <b>Description</b>: java.io.IOException is thrown when trying to import a table to HDFS using Sqoop. Table has "0" value in a field of type datetime. <br/>
+<b>Full Exception</b>: java.io.IOException: Cannot convert value '0000-00-00 00:00:00' from column 6 to TIMESTAMP. <br/>
+<b>Original question</b>: <span class="nobr"><a href="http://getsatisfaction.com/cloudera/topics/cant_import_table?utm_content=reply_link&amp;utm_medium=email&amp;utm_source=reply_notification">http://getsatisfaction.com/cloudera/topics/cant_import_table?utm_content=reply_link&amp;utm_medium=email&amp;utm_source=reply_notification<sup><img class="rendericon" src="https://issues.apache.org/jira/images/icons/linkext7.gif" height="7" width="7" align="absmiddle" alt="" border="0"/></sup></a></span>
+Reason: Bugfix (compatibility)
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../java/org/apache/hadoop/sqoop/SqoopOptions.java |    4 +
+ .../apache/hadoop/sqoop/manager/MySQLManager.java  |   54 +++++++++
+ .../apache/hadoop/sqoop/manager/MySQLAuthTest.java |  124 +++++++++++++++++++-
+ 3 files changed, 177 insertions(+), 5 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
+index fe9952a..0db319e 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
+@@ -675,6 +675,10 @@ public class SqoopOptions {
+     return connectString;
+   }
+ 
++  public void setConnectString(String connectStr) {
++    this.connectString = connectStr;
++  }
++
+   public String getTableName() {
+     return tableName;
+   }
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
+index cadd729..c9290be 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
+@@ -19,6 +19,8 @@
+ package org.apache.hadoop.sqoop.manager;
+ 
+ import java.io.IOException;
++import java.net.URI;
++import java.net.URISyntaxException;
+ import java.sql.PreparedStatement;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+@@ -113,11 +115,63 @@ public class MySQLManager extends GenericJdbcManager {
+       }
+     }
+ 
++    checkDateTimeBehavior(context);
++
+     // Then run the normal importTable() method.
+     super.importTable(context);
+   }
+ 
+   /**
++   * MySQL allows TIMESTAMP fields to have the value '0000-00-00 00:00:00',
++   * which causes errors in import. If the user has not set the
++   * zeroDateTimeBehavior property already, we set it for them to coerce
++   * the type to null.
++   */
++  private void checkDateTimeBehavior(ImportJobContext context) {
++    final String zeroBehaviorStr = "zeroDateTimeBehavior";
++    final String convertToNull = "=convertToNull";
++
++    String connectStr = context.getOptions().getConnectString();
++    if (connectStr.indexOf("jdbc:") != 0) {
++      // This connect string doesn't have the prefix we expect.
++      // We can't parse the rest of it here.
++      return;
++    }
++
++    // This starts with 'jdbc:mysql://' ... let's remove the 'jdbc:'
++    // prefix so that java.net.URI can parse the rest of the line.
++    String uriComponent = connectStr.substring(5);
++    try {
++      URI uri = new URI(uriComponent);
++      String query = uri.getQuery(); // get the part after a '?'
++
++      // If they haven't set the zeroBehavior option, set it to
++      // squash-null for them.
++      if (null == query) {
++        connectStr = connectStr + "?" + zeroBehaviorStr + convertToNull;
++        LOG.info("Setting zero DATETIME behavior to convertToNull (mysql)");
++      } else if (query.length() == 0) {
++        connectStr = connectStr + zeroBehaviorStr + convertToNull;
++        LOG.info("Setting zero DATETIME behavior to convertToNull (mysql)");
++      } else if (query.indexOf(zeroBehaviorStr) == -1) {
++        if (!connectStr.endsWith("&")) {
++          connectStr = connectStr + "&";
++        }
++        connectStr = connectStr + zeroBehaviorStr + convertToNull;
++        LOG.info("Setting zero DATETIME behavior to convertToNull (mysql)");
++      }
++
++      LOG.debug("Rewriting connect string to " + connectStr);
++      context.getOptions().setConnectString(connectStr);
++    } catch (URISyntaxException use) {
++      // Just ignore this. If we can't parse the URI, don't attempt
++      // to add any extra flags to it.
++      LOG.debug("mysql: Couldn't parse connect str in checkDateTimeBehavior: "
++          + use);
++    }
++  }
++
++  /**
+    * Executes an arbitrary SQL statement. Sets mysql-specific parameter
+    * to ensure the entire table is not buffered in RAM before reading
+    * any rows. A consequence of this is that every ResultSet returned
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
+index 7506964..7b73d22 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
+@@ -131,7 +131,8 @@ public class MySQLAuthTest extends ImportJobTestCase {
+     }
+   }
+ 
+-  private String [] getArgv(boolean includeHadoopFlags) {
++  private String [] getArgv(boolean includeHadoopFlags,
++      boolean useDirect, String connectString, String tableName) {
+     ArrayList<String> args = new ArrayList<String>();
+ 
+     if (includeHadoopFlags) {
+@@ -139,12 +140,14 @@ public class MySQLAuthTest extends ImportJobTestCase {
+     }
+ 
+     args.add("--table");
+-    args.add(AUTH_TABLE_NAME);
++    args.add(tableName);
+     args.add("--warehouse-dir");
+     args.add(getWarehouseDir());
+     args.add("--connect");
+-    args.add(AUTH_CONNECT_STRING);
+-    args.add("--direct");
++    args.add(connectString);
++    if (useDirect) {
++      args.add("--direct");
++    }
+     args.add("--username");
+     args.add(AUTH_TEST_USER);
+     args.add("--password");
+@@ -162,7 +165,7 @@ public class MySQLAuthTest extends ImportJobTestCase {
+    */
+   @Test
+   public void testAuthAccess() {
+-    String [] argv = getArgv(true);
++    String [] argv = getArgv(true, true, AUTH_CONNECT_STRING, AUTH_TABLE_NAME);
+     try {
+       runImport(argv);
+     } catch (IOException ioe) {
+@@ -190,4 +193,115 @@ public class MySQLAuthTest extends ImportJobTestCase {
+       IOUtils.closeStream(r);
+     }
+   }
++
++  @Test
++  public void testZeroTimestamp() throws IOException, SQLException {
++    // MySQL timestamps can hold values whose range causes problems
++    // for java.sql.Timestamp. The MySQLManager adds settings to the
++    // connect string which configure the driver's handling of
++    // zero-valued timestamps. Check that all of these modifications
++    // to the connect string are successful.
++
++    try {
++      // A connect string with a null 'query' component.
++      doZeroTimestampTest(0, true, AUTH_CONNECT_STRING);
++
++      // A connect string with a zero-length query component.
++      doZeroTimestampTest(1, true, AUTH_CONNECT_STRING + "?");
++
++      // A connect string with another argument
++      doZeroTimestampTest(2, true, AUTH_CONNECT_STRING + "?connectTimeout=0");
++      doZeroTimestampTest(3, true, AUTH_CONNECT_STRING + "?connectTimeout=0&");
++
++      // A connect string with the zero-timestamp behavior already
++      // configured.
++      doZeroTimestampTest(4, true, AUTH_CONNECT_STRING
++          + "?zeroDateTimeBehavior=convertToNull");
++
++      // And finally, behavior already configured in such a way as to
++      // cause the timestamp import to fail.
++      doZeroTimestampTest(5, false, AUTH_CONNECT_STRING
++          + "?zeroDateTimeBehavior=exception");
++    } finally {
++      // Clean up our mess on the way out.
++      dropTimestampTables();
++    }
++  }
++
++  private void dropTimestampTables() throws SQLException {
++    SqoopOptions options = new SqoopOptions(AUTH_CONNECT_STRING, null);
++    options.setUsername(AUTH_TEST_USER);
++    options.setPassword(AUTH_TEST_PASS);
++
++    manager = new LocalMySQLManager(options);
++
++    Connection connection = null;
++    Statement st = null;
++
++    connection = manager.getConnection();
++    connection.setAutoCommit(false);
++    st = connection.createStatement();
++
++    st.executeUpdate("DROP TABLE IF EXISTS mysqlTimestampTable0");
++    st.executeUpdate("DROP TABLE IF EXISTS mysqlTimestampTable1");
++    st.executeUpdate("DROP TABLE IF EXISTS mysqlTimestampTable2");
++    st.executeUpdate("DROP TABLE IF EXISTS mysqlTimestampTable3");
++    st.executeUpdate("DROP TABLE IF EXISTS mysqlTimestampTable4");
++    st.executeUpdate("DROP TABLE IF EXISTS mysqlTimestampTable5");
++    connection.commit();
++    st.close();
++    connection.close();
++  }
++
++  public void doZeroTimestampTest(int testNum, boolean expectSuccess,
++      String connectString) throws IOException, SQLException {
++
++    final String tableName = "mysqlTimestampTable" + Integer.toString(testNum);
++
++    // Create a table containing a full-zeros timestamp.
++    SqoopOptions options = new SqoopOptions(connectString, tableName);
++    options.setUsername(AUTH_TEST_USER);
++    options.setPassword(AUTH_TEST_PASS);
++
++    manager = new LocalMySQLManager(options);
++
++    Connection connection = null;
++    Statement st = null;
++
++    connection = manager.getConnection();
++    connection.setAutoCommit(false);
++    st = connection.createStatement();
++
++    // create the database table and populate it with data. 
++    st.executeUpdate("DROP TABLE IF EXISTS " + tableName);
++    st.executeUpdate("CREATE TABLE " + tableName + " ("
++        + "id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, "
++        + "ts TIMESTAMP NOT NULL)");
++
++    st.executeUpdate("INSERT INTO " + tableName + " VALUES("
++        + "NULL,'0000-00-00 00:00:00.0')");
++    connection.commit();
++    st.close();
++    connection.close();
++
++    // Run the import.
++    String [] argv = getArgv(true, false, connectString, tableName);
++    runImport(argv);
++
++    // Make sure the result file is there.
++    Path warehousePath = new Path(this.getWarehouseDir());
++    Path tablePath = new Path(warehousePath, tableName);
++    Path filePath = new Path(tablePath, "part-m-00000");
++
++    File f = new File(filePath.toString());
++    if (expectSuccess) {
++      assertTrue("Could not find imported data file", f.exists());
++      BufferedReader r = new BufferedReader(new InputStreamReader(
++          new FileInputStream(f)));
++      assertEquals("1,null", r.readLine());
++      IOUtils.closeStream(r);
++    } else {
++      assertFalse("Imported data when expected failure", f.exists());
++    }
++  }
+ }
+-- 
+1.7.0.4
+

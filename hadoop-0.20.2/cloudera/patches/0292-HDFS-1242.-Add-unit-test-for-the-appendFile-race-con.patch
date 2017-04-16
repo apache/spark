@@ -1,0 +1,134 @@
+From 10e5944da20d851a847cb2ef422383507d070085 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 13 May 2010 16:33:15 -0700
+Subject: [PATCH 0292/1179] HDFS-1242. Add unit test for the appendFile race condition / synchronization bug fixed in HDFS-142
+
+Reason: Test coverage for previously applied patch.
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ ivy/libraries.properties                           |    2 +-
+ .../hadoop/hdfs/server/namenode/FSImage.java       |    2 +-
+ .../org/apache/hadoop/hdfs/TestFileAppend4.java    |   66 ++++++++++++++++++++
+ 3 files changed, 68 insertions(+), 2 deletions(-)
+
+diff --git a/ivy/libraries.properties b/ivy/libraries.properties
+index fec577a..84d3f84 100644
+--- a/ivy/libraries.properties
++++ b/ivy/libraries.properties
+@@ -59,7 +59,7 @@ kfs.version=0.1
+ log4j.version=1.2.15
+ lucene-core.version=2.3.1
+ 
+-mockito-all.version=1.8.0
++mockito-all.version=1.8.2
+ 
+ oro.version=2.0.8
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index fa2c12d..158ca72 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -111,7 +111,7 @@ public class FSImage extends Storage {
+   }
+   
+   protected long checkpointTime = -1L;
+-  private FSEditLog editLog = null;
++  FSEditLog editLog = null;
+   private boolean isUpgradeFinalized = false;
+ 
+   /**
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+index 89fb4bc..4f1f50d 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+@@ -30,6 +30,8 @@ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+ import org.apache.hadoop.hdfs.server.namenode.LeaseExpiredException;
+ import org.apache.hadoop.hdfs.server.namenode.LeaseManager;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
++import org.apache.hadoop.hdfs.server.namenode.FSEditLog;
++import org.apache.hadoop.hdfs.server.namenode.FSImageAdapter;
+ import org.apache.hadoop.fs.BlockLocation;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -44,6 +46,7 @@ import static org.mockito.Matchers.anyInt;
+ import static org.mockito.Matchers.anyObject;
+ import static org.mockito.Matchers.anyString;
+ import static org.mockito.Mockito.doAnswer;
++import static org.mockito.Mockito.reset;
+ import static org.mockito.Mockito.spy;
+ 
+ /* File Append tests for HDFS-200 & HDFS-142, specifically focused on:
+@@ -956,6 +959,69 @@ public class TestFileAppend4 extends TestCase {
+   }
+ 
+   /**
++   * Test for a race in appendFile where the file might get removed in between
++   * the two synchronized sections.
++   */
++  public void testAppendFileRace() throws Throwable {
++    LOG.info("START");
++    cluster = new MiniDFSCluster(conf, 1, true, null);
++    final FileSystem fs1 = cluster.getFileSystem();;
++
++    try {
++      createFile(fs1, "/testAppendFileRace", 1, BBW_SIZE);
++      stm.close();
++
++      NameNode nn = cluster.getNameNode();
++      FSEditLog editLogSpy = FSImageAdapter.injectEditLogSpy(nn.getNamesystem());
++      DelayAnswer  delayer = new DelayAnswer();
++      doAnswer(delayer).when(editLogSpy).logSync();
++
++      final AtomicReference<Throwable> err = new AtomicReference<Throwable>();
++      Thread appender = new Thread() {
++          public void run() {
++            try {
++              stm = fs1.append(file1);
++            } catch (Throwable t) {
++              err.set(t);
++            }
++          }
++        };
++      LOG.info("Triggering append in other thread");
++      appender.start();
++
++      LOG.info("Waiting for logsync");
++      delayer.waitForCall();
++
++      LOG.info("Resetting spy");
++      reset(editLogSpy);
++
++      LOG.info("Deleting file");
++      fs1.delete(file1, true);
++
++      LOG.info("Allowing append to proceed");
++      delayer.proceed();
++
++      LOG.info("Waiting for append to finish");
++
++      appender.join();
++
++      if (err.get() != null) {
++        if (err.get().getMessage().contains(
++              "File does not exist.")) {
++          LOG.info("Got expected exception", err.get());
++        } else {
++          throw err.get();
++        }
++      }
++      LOG.info("Closing stream");
++      stm.close();
++    } finally {
++      fs1.close();
++      cluster.shutdown();
++    }
++  }
++
++  /**
+    * Mockito answer helper that triggers one latch as soon as the
+    * method is called, then waits on another before continuing.
+    */
+-- 
+1.7.0.4
+

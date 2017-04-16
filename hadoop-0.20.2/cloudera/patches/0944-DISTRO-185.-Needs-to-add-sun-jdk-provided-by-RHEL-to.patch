@@ -1,0 +1,31 @@
+From 81256ad0f2e4ab2bd34b04f53d25a6c23686dd14 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Bruno=20Mah=C3=A9?= <bruno@cloudera.com>
+Date: Thu, 24 Mar 2011 11:47:04 -0700
+Subject: [PATCH 0944/1179] DISTRO-185. Needs to add sun jdk provided by RHEL to the list of jvm candidates
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Description: Services wouldn't start since they could not find the sun jdk on RHEL6
+Reason: Bug
+Author: Bruno Mahé
+Ref: CDH-2858
+---
+ bin/hadoop-config.sh |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/bin/hadoop-config.sh b/bin/hadoop-config.sh
+index 22d1717..57f942c 100644
+--- a/bin/hadoop-config.sh
++++ b/bin/hadoop-config.sh
+@@ -68,6 +68,7 @@ fi
+ if [ -z "$JAVA_HOME" ]; then
+   for candidate in \
+     /usr/lib/jvm/java-6-sun \
++    /usr/lib/jvm/java-1.6.0-sun-1.6.0.* \
+     /usr/lib/j2sdk1.6-sun \
+     /usr/java/jdk1.6* \
+     /usr/java/jre1.6* \
+-- 
+1.7.0.4
+

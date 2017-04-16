@@ -1,0 +1,95 @@
+From 8a3b6472ae00542dadf7f7d60991ec0f21b38177 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:39:40 -0800
+Subject: [PATCH 0034/1179] HADOOP-5968. Sqoop should only print a warning about mysql import speed once
+
+Description: After <a href="http://issues.apache.org/jira/browse/HADOOP-5844" title="Use mysqldump when connecting to local mysql instance in Sqoop"><del>HADOOP-5844</del></a>, Sqoop can use mysqldump as an alternative to JDBC for importing from MySQL. If you use the JDBC mechanism, it prints a warning if you could have enabled the mysqldump path instead. But the warning is printed multiple times (every time the LocalMySQLManager is instantiated), and also when the MySQL manager is used for informational queries (e.g., listing tables) rather than true imports.
+
+<p>It should only emit the warning once per session, and only then if it's actually doing an import.</p>
+Reason: User experience improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../apache/hadoop/sqoop/manager/MySQLManager.java  |   41 +++++++++++++++-----
+ 1 files changed, 31 insertions(+), 10 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
+index 94411df..106496d 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/MySQLManager.java
+@@ -18,6 +18,7 @@
+ 
+ package org.apache.hadoop.sqoop.manager;
+ 
++import java.io.IOException;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.util.ArrayList;
+@@ -25,12 +26,12 @@ import java.util.ArrayList;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.sqoop.ImportOptions;
++import org.apache.hadoop.sqoop.util.ImportError;
+ 
+ /**
+  * Manages connections to MySQL databases
+- * 
+- *
+  */
+ public class MySQLManager extends GenericJdbcManager {
+ 
+@@ -39,16 +40,11 @@ public class MySQLManager extends GenericJdbcManager {
+   // driver class to ensure is loaded when making db connection.
+   private static final String DRIVER_CLASS = "com.mysql.jdbc.Driver";
+ 
++  // set to true after we warn the user that we can use local fastpath.
++  private static boolean warningPrinted = false;
++
+   public MySQLManager(final ImportOptions opts) {
+     super(DRIVER_CLASS, opts);
+-
+-    String connectString = opts.getConnectString();
+-    if (null != connectString && connectString.indexOf("//localhost") != -1) {
+-      // if we're not doing a remote connection, they should have a LocalMySQLManager.
+-      LOG.warn("It looks like you are importing from mysql on localhost.");
+-      LOG.warn("This transfer can be faster! Use the --local option to exercise a");
+-      LOG.warn("MySQL-specific fast path.");
+-    }
+   }
+ 
+   protected MySQLManager(final ImportOptions opts, boolean ignored) {
+@@ -78,4 +74,29 @@ public class MySQLManager extends GenericJdbcManager {
+       return null;
+     }
+   }
++
++  @Override
++  public void importTable(String tableName, String jarFile, Configuration conf)
++        throws IOException, ImportError {
++
++    // Check that we're not doing a MapReduce from localhost. If we are, point
++    // out that we could use mysqldump.
++    if (!MySQLManager.warningPrinted) {
++      String connectString = options.getConnectString();
++
++      if (null != connectString && connectString.indexOf("//localhost") != -1) {
++        // if we're not doing a remote connection, they should have a LocalMySQLManager.
++        LOG.warn("It looks like you are importing from mysql on");
++        LOG.warn("localhost. This transfer can be faster! Use the");
++        LOG.warn("--local option to exercise a MySQL-specific fast");
++        LOG.warn("path.");
++
++        MySQLManager.warningPrinted = true; // don't display this twice.
++      }
++    }
++
++    // Then run the normal importTable() method.
++    super.importTable(tableName, jarFile, conf);
++  }
+ }
++
+-- 
+1.7.0.4
+

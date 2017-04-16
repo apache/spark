@@ -1,0 +1,30 @@
+From dec4c616921b547e5a332a254254d77efc3a7d5e Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:28:25 -0800
+Subject: [PATCH 0156/1179] MAPREDUCE-1224. Calling "SELECT t.* from <table> AS t" to get meta information is too expensive for big tables
+
+Description: The SqlManager uses the query, "SELECT t.* from &lt;table&gt; AS t" to get table spec is too expensive for big tables, and it was called twice to generate column names and types.  For tables that are big enough to be map-reduced, this is too expensive to make sqoop useful.
+Reason: Performance improvement
+Author: Spencer Ho
+Ref: UNKNOWN
+---
+ .../apache/hadoop/sqoop/manager/SqlManager.java    |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
+index 16ceb95..b8a7339 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
+@@ -65,7 +65,8 @@ public abstract class SqlManager implements ConnManager {
+    * be tuned per-database, but the main extraction loop is still inheritable.
+    */
+   protected String getColNamesQuery(String tableName) {
+-    return "SELECT t.* FROM " + tableName + " AS t";
++    // adding where clause to prevent loading a big table
++    return "SELECT t.* FROM " + tableName + " AS t WHERE 1=0";
+   }
+ 
+   @Override
+-- 
+1.7.0.4
+

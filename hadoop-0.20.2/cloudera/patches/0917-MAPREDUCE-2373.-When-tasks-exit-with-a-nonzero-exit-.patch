@@ -1,0 +1,64 @@
+From c48cec8fa73f8aaa3a565a4f57985b93157e6caf Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 9 Mar 2011 14:20:51 -0800
+Subject: [PATCH 0917/1179] MAPREDUCE-2373. When tasks exit with a nonzero exit status, task runner should log the stderr as well as stdout
+
+Reason: assists debugging of task failures
+Author: Todd Lipcon
+Ref: CDH-2794
+---
+ .../hadoop/mapred/DefaultTaskController.java       |   26 ++++++++++++++-----
+ 1 files changed, 19 insertions(+), 7 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+index d7882a6..e4c444d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+@@ -35,6 +35,7 @@ import org.apache.hadoop.mapreduce.server.tasktracker.Localizer;
+ import org.apache.hadoop.util.ProcessTree.Signal;
+ import org.apache.hadoop.util.ProcessTree;
+ import org.apache.hadoop.util.StringUtils;
++import org.apache.hadoop.util.Shell.ExitCodeException;
+ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+ 
+ import org.apache.commons.logging.Log;
+@@ -124,18 +125,29 @@ public class DefaultTaskController extends TaskController {
+           "bash", "-c", commandFile},
+           currentWorkDirectory);
+       shExec.execute();
++    } catch (ExitCodeException ece) {
++      logShExecStatus(shExec);
++      if (ece.getMessage() != null && !ece.getMessage().isEmpty()) {
++        LOG.warn("Task wrapper stderr: " + ece.getMessage());
++      }
++      return shExec.getExitCode();
+     } catch (Exception e) {
+-      if (shExec == null) {
+-        LOG.error("Unable to launch task JVM", e);
+-        return -1;
++      LOG.warn("Unexpected error launching task JVM", e);
++      if (shExec != null) {
++        logShExecStatus(shExec);
+       }
+-      int exitCode = shExec.getExitCode();
+-      LOG.warn("Exit code from task is : " + exitCode);
++      return -1;
++    }
++    return 0;
++  }
++
++  private void logShExecStatus(ShellCommandExecutor shExec) {
++    LOG.warn("Exit code from task is : " + shExec.getExitCode());
++    String stdout = shExec.getOutput().trim();
++    if (!stdout.isEmpty()) {
+       LOG.info("Output from DefaultTaskController's launchTask follows:");
+       logOutput(shExec.getOutput());
+-      return exitCode;
+     }
+-    return 0;
+   }
+     
+   /**
+-- 
+1.7.0.4
+

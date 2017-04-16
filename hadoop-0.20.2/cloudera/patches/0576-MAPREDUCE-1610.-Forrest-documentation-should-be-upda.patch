@@ -1,0 +1,119 @@
+From 9d3a600899712a637109816b5f50b99257ceb79c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 19 Mar 2010 14:27:30 +0530
+Subject: [PATCH 0576/1179] MAPREDUCE-1610. Forrest documentation should be updated to reflect the changes in MAPREDUCE-856
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439252/MAPREDUCE-1610-20.patch
+Author: Ravi Gummadi
+Ref: CDH-648
+---
+ .../content/xdocs/mapred_tutorial.xml              |   55 +++++++++++++------
+ 1 files changed, 37 insertions(+), 18 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+index 9ce33b0..584ff9d 100644
+--- a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
++++ b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+@@ -1290,26 +1290,35 @@
+         semi-random local directory. When the job starts, task tracker 
+         creates a localized job directory relative to the local directory
+         specified in the configuration. Thus the task tracker directory 
+-        structure looks the following: </p>         
++        structure looks as following: </p>         
+         <ul>
+-        <li><code>${mapred.local.dir}/taskTracker/archive/</code> :
+-        The distributed cache. This directory holds the localized distributed
+-        cache. Thus localized distributed cache is shared among all
+-        the tasks and jobs </li>
+-        <li><code>${mapred.local.dir}/taskTracker/jobcache/$jobid/</code> :
+-        The localized job directory 
++        <li><code>${mapred.local.dir}/taskTracker/distcache/</code> :
++        The public distributed cache for the jobs of all users. This directory
++        holds the localized public distributed cache. Thus localized public
++        distributed cache is shared among all the tasks and jobs of all users.
++        </li>
++        <li><code>${mapred.local.dir}/taskTracker/$user/distcache/</code> :
++        The private distributed cache for the jobs of the specific user. This
++        directory holds the localized private distributed cache. Thus localized
++        private distributed cache is shared among all the tasks and jobs of the
++        specific user only. It is not accessible to jobs of other users.
++        </li>
++        <li><code>${mapred.local.dir}/taskTracker/$user/jobcache/$jobid/
++        </code> : The localized job directory 
+         <ul>
+-        <li><code>${mapred.local.dir}/taskTracker/jobcache/$jobid/work/</code> 
++        <li><code>${mapred.local.dir}/taskTracker/$user/jobcache/$jobid/work/
++        </code>
+         : The job-specific shared directory. The tasks can use this space as 
+         scratch space and share files among them. This directory is exposed
+         to the users through the configuration property  
+         <code>job.local.dir</code>. The directory can accessed through 
+-        api <a href="ext:api/org/apache/hadoop/mapred/jobconf/getjoblocaldir">
++        the API <a href="ext:api/org/apache/hadoop/mapred/jobconf/getjoblocaldir">
+         JobConf.getJobLocalDir()</a>. It is available as System property also.
+         So, users (streaming etc.) can call 
+         <code>System.getProperty("job.local.dir")</code> to access the 
+         directory.</li>
+-        <li><code>${mapred.local.dir}/taskTracker/jobcache/$jobid/jars/</code>
++        <li><code>${mapred.local.dir}/taskTracker/$user/jobcache/$jobid/jars/
++        </code>
+         : The jars directory, which has the job jar file and expanded jar.
+         The <code>job.jar</code> is the application's jar file that is
+         automatically distributed to each machine. Any library jars that are dependencies
+@@ -1320,27 +1329,37 @@
+         <a href="ext:api/org/apache/hadoop/mapred/jobconf/getjar"> 
+         JobConf.getJar() </a>. To access the unjarred directory,
+         JobConf.getJar().getParent() can be called.</li>
+-        <li><code>${mapred.local.dir}/taskTracker/jobcache/$jobid/job.xml</code>
++        <li><code>${mapred.local.dir}/taskTracker/$user/jobcache/$jobid/job.xml
++        </code>
+         : The job.xml file, the generic job configuration, localized for 
+         the job. </li>
+-        <li><code>${mapred.local.dir}/taskTracker/jobcache/$jobid/$taskid</code>
++        <li><code>${mapred.local.dir}/taskTracker/$user/jobcache/$jobid/$taskid
++        </code>
+         : The task directory for each task attempt. Each task directory
+         again has the following structure :
+         <ul>
+-        <li><code>${mapred.local.dir}/taskTracker/jobcache/$jobid/$taskid/job.xml</code>
++        <li><code>
++        ${mapred.local.dir}/taskTracker/$user/jobcache/$jobid/$taskid/job.xml
++        </code>
+         : A job.xml file, task localized job configuration, Task localization
+         means that properties have been set that are specific to
+         this particular task within the job. The properties localized for 
+         each task are described below.</li>
+-        <li><code>${mapred.local.dir}/taskTracker/jobcache/$jobid/$taskid/output</code>
++        <li><code>
++        ${mapred.local.dir}/taskTracker/$user/jobcache/$jobid/$taskid/output
++        </code>
+         : A directory for intermediate output files. This contains the
+         temporary map reduce data generated by the framework
+         such as map output files etc. </li>
+-        <li><code>${mapred.local.dir}/taskTracker/jobcache/$jobid/$taskid/work</code>
+-        : The curernt working directory of the task. 
++        <li><code>
++        ${mapred.local.dir}/taskTracker/$user/jobcache/$jobid/$taskid/work
++        </code>
++        : The current working directory of the task. 
+         With <a href="#Task+JVM+Reuse">jvm reuse</a> enabled for tasks, this 
+         directory will be the directory on which the jvm has started</li>
+-        <li><code>${mapred.local.dir}/taskTracker/jobcache/$jobid/$taskid/work/tmp</code>
++        <li><code>
++        ${mapred.local.dir}/taskTracker/$user/jobcache/$jobid/$taskid/work/tmp
++        </code>
+         : The temporary directory for the task. 
+         (User can specify the property <code>mapred.child.tmp</code> to set
+         the value of temporary directory for map and reduce tasks. This 
+@@ -1349,7 +1368,7 @@
+         directly assigned. The directory will be created if it doesn't exist.
+         Then, the child java tasks are executed with option
+         <code>-Djava.io.tmpdir='the absolute path of the tmp dir'</code>.
+-        Anp pipes and streaming are set with environment variable,
++        Pipes and streaming are set with environment variable,
+         <code>TMPDIR='the absolute path of the tmp dir'</code>). This 
+         directory is created, if <code>mapred.child.tmp</code> has the value
+         <code>./tmp</code> </li>
+-- 
+1.7.0.4
+

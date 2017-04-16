@@ -1,0 +1,129 @@
+<body>
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<p>
+MRUnit is a library designed to allow easy testing of Mapper and Reducer
+classes using existing tools such as JUnit. MRUnit provides mock
+implementations of OutputCollector and Reporter for use in calling <tt>Mapper.map()</tt>
+and <tt>Reducer.reduce()</tt>, as well as a set of "driver" classes that manage
+delivery of key/value pair inputs to tasks, and comparison of actual task
+outputs with expected outputs.
+</p>
+
+<p>
+The primary advantage of MRUnit is that it allows you to test the outputs
+of individual maps and reduces, as well as the composition of the two, without
+needing to use the MiniMR cluster, or start a real MapReduce job in Hadoop,
+which are time-consuming processes.
+</p>
+
+<h3>Using MRUnit</h3>
+
+  MRUnit is designed to allow you to write ordinary JUnit test suites.
+
+<ul>
+<li> Include lib/mrunit-0.1.jar and lib/junit-4.4.jar on the classpath when
+    building and testing.</li>
+<li> The test methods for your Mapper implementation should use instances
+    of the <tt>MapDriver</tt>.</li>
+<li> The test methods for your Reducer implementation should use instances
+    of the <tt>ReduceDriver</tt>.</li>
+<li> MapReduce "jobs" consisting of a small number of inputs can be tested
+    with the <tt>MapReduceDriver</tt>. This supports a simple "shuffle" of outputs
+    to maintain the expected input delivery semantics to the reducer.</li>
+</ul>
+
+<p>
+A <tt>MapDriver</tt> or <tt>ReduceDriver</tt> instance is created for each test,
+as well as a fresh instance of your Mapper or Reducer. The driver is configured
+with the input keys and values, and expected output keys and values.
+</p>
+
+<p>
+  The <tt>run()</tt> method will execute the map or reduce, and returns the outputs
+retrieved from the OutputCollector.
+  The <tt>runTest()</tt> method will execute the map or reduce, and compares the
+actual outputs with the expected outputs, and returns true to indicate
+success and false on failure.
+  When expecting multiple outputs, the test drivers enforce that the order of
+the actual outputs is the same as the order in which outputs are configured
+(i.e., the order of calls to <tt>withOutput()</tt> or <tt>addOutput()</tt>).
+</p>
+
+<h3>Example</h3>
+
+<p>
+A brief test of Hadoop's <tt>IdentityMapper</tt> is presented here:
+</p>
+
+<div><tt><pre>
+import junit.framework.TestCase;
+
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.Mapper;
+import org.apache.hadoop.mapred.lib.IdentityMapper;
+import org.junit.Before;
+import org.junit.Test;
+
+public class TestExample extends TestCase {
+
+  private Mapper<Text, Text, Text, Text> mapper;
+  private MapDriver<Text, Text, Text, Text> driver;
+
+  &#64;Before
+  public void setUp() {
+    mapper = new IdentityMapper<Text, Text>();
+    driver = new MapDriver<Text, Text, Text, Text>(mapper);
+  }
+
+  &#64;Test
+  public void testIdentityMapper() {
+    driver.withInput(new Text("foo"), new Text("bar"))
+            .withOutput(new Text("foo"), new Text("bar"))
+            .runTest();
+  }
+}
+</pre></tt></div>
+
+<p>
+  This test first instantiates the Mapper and MapDriver. It configures
+an input (key, value) pair consisting of the strings "foo" and "bar",
+and expects these same values as output. It then calls <tt>runTest()</tt> to
+actually invoke the mapper, and compare the actual and expected outputs.
+The <tt>runTest()</tt> method will throw a RuntimeException if the output
+is not what it expects, which causes JUnit to mark the test case as failed.
+</p>
+
+<p>All <tt>with*()</tt> methods in MRUnit return a reference to <tt>this</tt>
+to allow them to be easily chained (e.g.,
+<tt>driver.withInput(a, b).withOutput(c, d).withOutput(d, e)...</tt>). These
+methods are analogous to the more conventional <tt>setInput()</tt>, <tt>addOutput()</tt>,
+etc. methods, which are also included.</p>
+
+<p>
+  Further examples of MRUnit usage can be seen in its own <tt>test/</tt> directory.
+The above example is in <tt>org.apache.hadoop.mrunit.TestExample</tt>. Further
+&quot;tests&quot; of the IdentityMapper are used to test the correctness of MRUnit
+itself; <tt>org.apache.hadoop.mrunit.TestMapDriver</tt> includes several tests of
+correctness for the MapDriver class; the <tt>testRunTest*()</tt> methods show
+how to apply the MapDriver to the IdentityMapper to confirm behavior surrounding
+both correct and incorrect input/output data sets. The <tt>testRunTest*()</tt> methods
+in <tt>org.apache.hadoop.mrunit.TestReduceDriver</tt> show how to apply the ReduceDriver
+test component to the LongSumReducer class.
+</p>
+
+</body>

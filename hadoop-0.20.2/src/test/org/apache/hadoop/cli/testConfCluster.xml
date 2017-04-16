@@ -1,0 +1,3154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="testConf.xsl"?>
+
+<configuration>
+  <!-- Normal mode is test. To run just the commands and dump the output
+       to the log, set it to nocompare -->
+  <mode>test</mode>
+  
+  <!--  Comparator types:
+           ExactComparator
+           SubstringComparator
+           RegexpComparator
+           TokenComparator
+           -->
+  <tests>
+    <!-- Tests for ls -->
+    <test> <!-- TESTED -->
+      <description>ls: file using absolute path</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -ls TEST_DIR_ABSOLUTE/file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file1</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>ls: file using relative path</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file1</command>
+        <command>-fs NAMENODE -ls file1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm file1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file1</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>ls: files using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file1</command>
+        <command>-fs NAMENODE -touchz file2</command>
+        <command>-fs NAMENODE -touchz file3</command>
+        <command>-fs NAMENODE -touchz file4</command>
+        <command>-fs NAMENODE -ls file*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr file*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file3</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file4</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>ls: directory using absolute path</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir1/dir2</command>
+        <command>-fs NAMENODE -ls TEST_DIR_ABSOLUTE/dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir1/dir2</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir1/dir2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>ls: directory using relative path</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0/dir1</command>
+        <command>-fs NAMENODE -ls dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>ls: directory using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir1</command>
+        <command>-fs NAMENODE -mkdir dir2</command>
+        <command>-fs NAMENODE -mkdir dir3</command>
+        <command>-fs NAMENODE -mkdir dir4</command>
+        <command>-fs NAMENODE -ls </command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir3</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir4</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>ls: file/directory that does not exist in /</description>
+      <test-commands>
+        <command>-fs NAMENODE -ls /file1</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^ls: Cannot access /file1: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>ls: file/directory that does not exist in home directory (/user/username)</description>
+      <test-commands>
+        <command>-fs NAMENODE -ls /user/username</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^ls: Cannot access /user/username: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for lsr -->
+    <test> <!-- TESTED -->
+      <description>lsr: files/directories using absolute path</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir1/dir1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir1/dir2</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir2</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir2/dir1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir2/dir2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file0</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/dir1/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/dir1/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/dir2/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/dir2/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/dir1/dir1/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/dir1/dir1/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/dir2/dir2/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/dir2/dir2/file2</command>
+        <command>-fs NAMENODE -lsr TEST_DIR_ABSOLUTE/dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir1/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir1/dir2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir2/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir2/dir2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir1/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir1/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir2/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir2/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir1/dir1/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir1/dir1/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir2/dir2/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/dir2/dir2/file2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>lsr: files/directories using relative path</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0</command>
+        <command>-fs NAMENODE -mkdir dir0/dir1</command>
+        <command>-fs NAMENODE -mkdir dir0/dir1/dir1</command>
+        <command>-fs NAMENODE -mkdir dir0/dir1/dir2</command>
+        <command>-fs NAMENODE -mkdir dir0/dir2</command>
+        <command>-fs NAMENODE -mkdir dir0/dir2/dir1</command>
+        <command>-fs NAMENODE -mkdir dir0/dir2/dir2</command>
+        <command>-fs NAMENODE -touchz dir0/file0</command>
+        <command>-fs NAMENODE -touchz dir0/dir1/file1</command>
+        <command>-fs NAMENODE -touchz dir0/dir1/file2</command>
+        <command>-fs NAMENODE -touchz dir0/dir2/file1</command>
+        <command>-fs NAMENODE -touchz dir0/dir2/file2</command>
+        <command>-fs NAMENODE -touchz dir0/dir1/dir1/file1</command>
+        <command>-fs NAMENODE -touchz dir0/dir1/dir1/file2</command>
+        <command>-fs NAMENODE -touchz dir0/dir2/dir2/file1</command>
+        <command>-fs NAMENODE -touchz dir0/dir2/dir2/file2</command>
+        <command>-fs NAMENODE -lsr dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/dir2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/dir2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/file0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/dir1/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/dir1/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/dir2/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/dir2/file2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>lsr: files/directories using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0</command>
+        <command>-fs NAMENODE -mkdir dir0/dir1</command>
+        <command>-fs NAMENODE -mkdir dir0/dir1/dir1</command>
+        <command>-fs NAMENODE -mkdir dir0/dir1/dir2</command>
+        <command>-fs NAMENODE -mkdir dir0/dir2</command>
+        <command>-fs NAMENODE -mkdir dir0/dir2/dir1</command>
+        <command>-fs NAMENODE -mkdir dir0/dir2/dir2</command>
+        <command>-fs NAMENODE -touchz dir0/file0</command>
+        <command>-fs NAMENODE -touchz dir0/dir1/file1</command>
+        <command>-fs NAMENODE -touchz dir0/dir1/file2</command>
+        <command>-fs NAMENODE -touchz dir0/dir2/file1</command>
+        <command>-fs NAMENODE -touchz dir0/dir2/file2</command>
+        <command>-fs NAMENODE -touchz dir0/dir1/dir1/file1</command>
+        <command>-fs NAMENODE -touchz dir0/dir1/dir1/file2</command>
+        <command>-fs NAMENODE -touchz dir0/dir2/dir2/file1</command>
+        <command>-fs NAMENODE -touchz dir0/dir2/dir2/file2</command>
+        <command>-fs NAMENODE -lsr dir0/*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <!-- JIRA?
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^/user/[a-z]*/dir0/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^/user/[a-z]*/dir0/dir2</expected-output>
+        </comparator>
+       -->
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/dir2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^drwxr-xr-x( )*-( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/dir2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/file0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/dir1/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir1/dir1/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/dir2/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/dir0/dir2/dir2/file2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>lsr: file/directory that does not exist in /tmp/testcli/</description>
+      <test-commands>
+        <command>-fs NAMENODE -lsr TEST_DIR_ABSOLUTE/file1</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^lsr: Cannot access /tmp/testcli/file1: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>lsr: file/directory that does not exist in home directory (/user/username)</description>
+      <test-commands>
+        <command>-fs NAMENODE -lsr /user/username</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^lsr: Cannot access /user/username: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for du -->
+    <test> <!-- TESTED -->
+      <description>du: file using absolute path</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/data15bytes</command>
+        <command>-fs NAMENODE -du TEST_DIR_ABSOLUTE/data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/data15bytes</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/data15bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>du: file using relative path</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes data15bytes</command>
+        <command>-fs NAMENODE -du data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr data15bytes</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data15bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>du: files using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes data120bytes</command>
+        <command>-fs NAMENODE -du data*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 4 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data15bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data30bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^60( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data60bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^120( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data120bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>du: directory using absolute path</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/dir0/data15bytes</command>
+        <command>-fs NAMENODE -du TEST_DIR_ABSOLUTE/dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/data15bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>du: directory using relative path</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes dir0/data15bytes</command>
+        <command>-fs NAMENODE -du dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/data15bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>du: directory using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/dir0/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/dir0/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes TEST_DIR_ABSOLUTE/dir0/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes TEST_DIR_ABSOLUTE/dir0/data120bytes</command>
+        <command>-fs NAMENODE -du TEST_DIR_ABSOLUTE/dir0/*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 4 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/data15bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/data30bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^60( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/data60bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^120( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/data120bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for dus -->
+    <test> <!-- TESTED -->
+      <description>dus: directories/files using absolute path</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir1/dir1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir1/dir2</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir2</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir2/dir1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir2/dir2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/dir0/dir1/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/dir0/dir1/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/dir0/dir2/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/dir0/dir2/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes TEST_DIR_ABSOLUTE/dir0/dir1/dir1/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes TEST_DIR_ABSOLUTE/dir0/dir1/dir2/data120bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes TEST_DIR_ABSOLUTE/dir0/dir2/dir1/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes TEST_DIR_ABSOLUTE/dir0/dir2/dir2/data120bytes</command>
+        <command>-fs NAMENODE -dus TEST_DIR_ABSOLUTE/dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0( |\t)*450</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>dus: directories/files using relative path</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0</command>
+        <command>-fs NAMENODE -mkdir dir0/dir1</command>
+        <command>-fs NAMENODE -mkdir dir0/dir1/dir1</command>
+        <command>-fs NAMENODE -mkdir dir0/dir1/dir2</command>
+        <command>-fs NAMENODE -mkdir dir0/dir2</command>
+        <command>-fs NAMENODE -mkdir dir0/dir2/dir1</command>
+        <command>-fs NAMENODE -mkdir dir0/dir2/dir2</command>
+        <command>-fs NAMENODE -touchz dir0/file0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes dir0/dir1/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes dir0/dir1/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes dir0/dir2/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes dir0/dir2/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes dir0/dir1/dir1/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes dir0/dir1/dir2/data120bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes dir0/dir2/dir1/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes dir0/dir2/dir2/data120bytes</command>
+        <command>-fs NAMENODE -dus dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0( |\t)*450</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>dus: directories/files using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir1/dir1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir1/dir2</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir2</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir2/dir1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/dir2/dir2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/dir0/dir1/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/dir0/dir1/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/dir0/dir2/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/dir0/dir2/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes TEST_DIR_ABSOLUTE/dir0/dir1/dir1/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes TEST_DIR_ABSOLUTE/dir0/dir1/dir2/data120bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes TEST_DIR_ABSOLUTE/dir0/dir2/dir1/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes TEST_DIR_ABSOLUTE/dir0/dir2/dir2/data120bytes</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/donotcountdir0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/donotcountdir0/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/donotcountdir0/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/donotcountdir0/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/donotcountdir0/data15bytes</command>
+        <command>-fs NAMENODE -dus TEST_DIR_ABSOLUTE/dir*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/donotcountdir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0( |\t)*450</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for mv -->
+    <test> <!-- TESTED -->
+      <description>mv: file (absolute path) to file (absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -mv TEST_DIR_ABSOLUTE/file1 TEST_DIR_ABSOLUTE/file2</command>
+        <command>-fs NAMENODE -ls TEST_DIR_ABSOLUTE/file*</command>        
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/file2</command>
+      </cleanup-commands>:
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file[^1]</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mv: file (absolute path) to file (relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -mv TEST_DIR_ABSOLUTE/file1 file2</command>
+        <command>-fs NAMENODE -ls file2</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr file2</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mv: file (absolute path) to directory (absolute path); keep the same name at the destination</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -mv TEST_DIR_ABSOLUTE/file1 TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -lsr TEST_DIR_ABSOLUTE/dir0</command>        
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file1</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mv: file (absolute path) to directory (absolute path); keep the same name at the destination [ TIED to previous test ]</description>
+      <test-commands>
+        <command>-fs NAMENODE -ls TEST_DIR_ABSOLUTE/file1</command>        
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>ls: Cannot access /tmp/testcli/file1: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mv: file (absolute path) to directory (absolute path); change the name at the destination</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -mv TEST_DIR_ABSOLUTE/file1 TEST_DIR_ABSOLUTE/dir0/file2</command>
+        <command>-fs NAMENODE -ls TEST_DIR_ABSOLUTE/dir0</command>        
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mv: file (absolute path) to directory (absolute path); change the name at the destination [ TIED to previous test ]</description>
+      <test-commands>
+        <command>-fs NAMENODE -ls TEST_DIR_ABSOLUTE/file1</command>        
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>ls: Cannot access /tmp/testcli/file1: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mv: files (absolute path) to directory (absolute path) using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file3</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file4</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -mv TEST_DIR_ABSOLUTE/file* TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -lsr TEST_DIR_ABSOLUTE/*</command>        
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0 TEST_DIR_ABSOLUTE/file*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file3</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file4</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mv: files (absolute path) to directory (absolute path) using globbing [ TIED to previous test ]</description>
+      <test-commands>
+        <command>-fs NAMENODE -ls TEST_DIR_ABSOLUTE/file*</command>        
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>ls: Cannot access /tmp/testcli/file*: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mv: file (relative) to file (relative)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file1</command>
+        <command>-fs NAMENODE -mv file1 file2</command>
+        <command>-fs NAMENODE -ls file*</command>        
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm file*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file[^1]</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for cp-->
+    <test> <!-- TESTED -->
+      <description>cp: file (absolute path) to file (absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -cp TEST_DIR_ABSOLUTE/file1 TEST_DIR_ABSOLUTE/file2</command>
+        <command>-fs NAMENODE -ls TEST_DIR_ABSOLUTE/file*</command>        
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/file*</command>
+      </cleanup-commands>:
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: file (absolute path) to file (relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -cp TEST_DIR_ABSOLUTE/file1 file2</command>
+        <command>-fs NAMENODE -ls TEST_DIR_ABSOLUTE/file1 file2</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/file1 file2</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: file (relative path) to file (absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file1</command>
+        <command>-fs NAMENODE -cp file1 TEST_DIR_ABSOLUTE/file2</command>
+        <command>-fs NAMENODE -ls file1 TEST_DIR_ABSOLUTE/file2</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr file1 TEST_DIR_ABSOLUTE/file2</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: file (relative path) to file (relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file1</command>
+        <command>-fs NAMENODE -cp file1 file2</command>
+        <command>-fs NAMENODE -ls file1 file2</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr file1 file2</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/user/[a-z]*/file2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: file (absolute path) to directory (absolute path); keep the same name at the destination</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -cp TEST_DIR_ABSOLUTE/file1 TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -ls TEST_DIR_ABSOLUTE/file1 TEST_DIR_ABSOLUTE/dir0</command>        
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file1</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: file (absolute path) to directory (absolute path); change the name at the destination</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -cp TEST_DIR_ABSOLUTE/file1 TEST_DIR_ABSOLUTE/dir0/file2</command>
+        <command>-fs NAMENODE -ls TEST_DIR_ABSOLUTE/file1 TEST_DIR_ABSOLUTE/dir0</command>        
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: files to directory (absolute path) using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file3</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file4</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -cp TEST_DIR_ABSOLUTE/file* TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -lsr TEST_DIR_ABSOLUTE/*</command>        
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file3</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file4</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file3</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file4</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: files to directory (absolute path) without globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file3</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file4</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -cp TEST_DIR_ABSOLUTE/file1 TEST_DIR_ABSOLUTE/file2 TEST_DIR_ABSOLUTE/file3 TEST_DIR_ABSOLUTE/file4 TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -lsr TEST_DIR_ABSOLUTE/*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file3</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/file4</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file3</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^-rw-r--r--( )*1( )*[a-z]*( )*supergroup( )*0( )*[0-9]{4,}-[0-9]{2,}-[0-9]{2,} [0-9]{2,}:[0-9]{2,}( )*/tmp/testcli/dir0/file4</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: copying non existent file (absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -cp TEST_DIR_ABSOLUTE/file TEST_DIR_ABSOLUTE/file1</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^cp: File does not exist: /tmp/testcli/file</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: copying non existent file (relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -cp file1 file2</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^cp: File does not exist: file1</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: files to an existent file using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file3</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file4</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file5</command>
+        <command>-fs NAMENODE -cp TEST_DIR_ABSOLUTE/file* TEST_DIR_ABSOLUTE/file5</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/file*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^cp: When copying multiple files, destination should be a directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: files to an existent file without globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file3</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file4</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file5</command>
+        <command>-fs NAMENODE -cp TEST_DIR_ABSOLUTE/file1 TEST_DIR_ABSOLUTE/file2 TEST_DIR_ABSOLUTE/file3 TEST_DIR_ABSOLUTE/file4 TEST_DIR_ABSOLUTE/file5</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/file*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^cp: When copying multiple files, destination /tmp/testcli/file5 should be a directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: files to a non existent directory using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file3</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file4</command>
+        <command>-fs NAMENODE -cp TEST_DIR_ABSOLUTE/file* dir</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/file*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^cp: When copying multiple files, destination should be a directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cp: files to a non existent directory without globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file3</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file4</command>
+        <command>-fs NAMENODE -cp TEST_DIR_ABSOLUTE/file1 TEST_DIR_ABSOLUTE/file2 TEST_DIR_ABSOLUTE/file3 TEST_DIR_ABSOLUTE/file4 dir</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/file*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^cp: When copying multiple files, destination dir should be a directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for rm -->
+    <test> <!-- TESTED -->
+      <description>rm: removing a file (absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file0</command>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/dir0/file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/file0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rm: removing a file (relative path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file0</command>
+        <command>-fs NAMENODE -rm file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm file0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rm: removing files by globbing (absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file0</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file3</command>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/dir0/file*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/file0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/file3</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rm: removing files by globbing (relative path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file0</command>
+        <command>-fs NAMENODE -touchz file1</command>
+        <command>-fs NAMENODE -touchz file2</command>
+        <command>-fs NAMENODE -touchz file3</command>
+        <command>-fs NAMENODE -rm file*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm file0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file3</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rm: removing a directory (absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^rm: Cannot remove directory "hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0", use -rmr instead</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rm: removing a directory (relative path) </description>
+      <test-commands>
+        <command>-fs NAMENODE mkdir dir0</command>
+        <command>-fs NAMENODE -rm dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^rm: cannot remove dir0: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rm: removing a nonexistent file (absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/dir0/file0</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^rm: cannot remove /tmp/testcli/dir0/file0: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rm: removing a nonexistent file (relative path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -rm file0</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^rm: cannot remove file0: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!--Tests for rmr-->
+    <test> <!-- TESTED -->
+      <description>rmr: removing a file (absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file0</command>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0/file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/user</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/file0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rmr: removing a file (relative path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file0</command>
+        <command>-fs NAMENODE -rmr file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr file0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rmr: removing a directory (absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rmr: removing a directory (relative path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0</command>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rmr: removing directories by globbing (absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir1</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir2</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir3</command>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/dir*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir3</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rmr: removing directories by globbing (relative path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0</command>
+        <command>-fs NAMENODE -mkdir dir1</command>
+        <command>-fs NAMENODE -mkdir dir2</command>
+        <command>-fs NAMENODE -mkdir dir3</command>
+        <command>-fs NAMENODE -rmr dir*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir1</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir2</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir3</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!--TESTED-->
+      <description>rmr: removing a nonexistent file (absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0/file0</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^rmr: cannot remove /tmp/testcli/dir0/file0: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>rmr: removing a nonexistent file (relative path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -rmr file0</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^rmr: cannot remove file0: No such file or directory.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for expunge -->
+    <!-- Not yet implemented -->
+
+    <!-- Tests for put -->
+    <test> <!-- TESTED -->
+      <description>put: putting file into a file (absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/data15bytes</command>
+        <command>-fs NAMENODE -du TEST_DIR_ABSOLUTE/data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/data15bytes</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/data15bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>put: putting file into a file (relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes data15bytes</command>
+        <command>-fs NAMENODE -du data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data15bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>put: putting file into a directory(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA TEST_DIR_ABSOLUTE/dir0/dir1/data</command>
+        <command>-fs NAMENODE -du TEST_DIR_ABSOLUTE/dir0/dir1/data</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/dir1/data/data15bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/dir1/data/data30bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^60( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/dir1/data/data60bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^120( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/dir1/data/data120bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>put: putting file into a directory(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA dir0/dir1/data</command>
+        <command>-fs NAMENODE -du dir0/dir1/data</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/dir1/data/data15bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/dir1/data/data30bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^60( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/dir1/data/data60bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^120( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/dir1/data/data120bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>put: putting many files into an existing directory(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -du TEST_DIR_ABSOLUTE/dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 2 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/data15bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/data30bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>put: putting many files into an existing directory(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes CLITEST_DATA/data30bytes dir0</command>
+        <command>-fs NAMENODE -du dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 2 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/data15bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/data30bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>put: putting non existent file(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put /user/wrongdata file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>put: File /user/wrongdata does not exist</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>put: putting non existent file(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put wrongdata file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>put: File wrongdata does not exist</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>put: putting file into an already existing destination(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/user/file0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/user/file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/user</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>put: Target /tmp/testcli/user/file0 already exists</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>put: putting file into an already existing destination(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr file0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>put: Target file0 already exists</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>put: putting many files into an existing file</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/data30bytes</command>
+        <command>-fs NAMENODE -touchz file0</command>
+        <command>-fs NAMENODE -put TEST_DIR_ABSOLUTE/data15bytes TEST_DIR_ABSOLUTE/data30bytes file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^put: copying multiple files, but last argument `file0' is not a directory</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>put: putting many files into a non existent directory</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/data30bytes</command>
+        <command>-fs NAMENODE -put TEST_DIR_ABSOLUTE/data15bytes TEST_DIR_ABSOLUTE/data30bytes wrongdir</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^put: `wrongdir': specified destination directory doest not exist</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for copyFromLocal -->
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying file into a file (absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/data15bytes</command>
+        <command>-fs NAMENODE -du TEST_DIR_ABSOLUTE/data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/data15bytes</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/data15bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying file into a file (relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA/data15bytes data15bytes</command>
+        <command>-fs NAMENODE -du data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data15bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying file into a directory(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA TEST_DIR_ABSOLUTE/dir0/dir1/data</command>
+        <command>-fs NAMENODE -du TEST_DIR_ABSOLUTE/dir0/dir1/data</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/dir1/data/data15bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/dir1/data/data30bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^60( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/dir1/data/data60bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^120( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/dir1/data/data120bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying file into a directory(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA dir0/dir1/data</command>
+        <command>-fs NAMENODE -du dir0/dir1/data</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/dir1/data/data15bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/dir1/data/data30bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^60( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/dir1/data/data60bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^120( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/dir1/data/data120bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying many files into an existing directory(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA/data15bytes CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -du TEST_DIR_ABSOLUTE/dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 2 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/data15bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/data30bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying many files into an existing directory(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0</command>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA/data15bytes CLITEST_DATA/data30bytes dir0</command>
+        <command>-fs NAMENODE -du dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 2 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/data15bytes</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/data30bytes</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying non existent file(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -copyFromLocal TEST_DIR_ABSOLUTE/user/wrongdata file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>copyFromLocal: File /tmp/testcli/user/wrongdata does not exist</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying non existent file(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -copyFromLocal wrongdata file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>copyFromLocal: File wrongdata does not exist</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying file into an already existing destination(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/user/file0</command>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/user/file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/user</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>copyFromLocal: Target /tmp/testcli/user/file0 already exists</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying file into an already existing destination(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file0</command>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA/data15bytes file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr file0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>copyFromLocal: Target file0 already exists</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying many files into an existing file</description>
+      <test-commands>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/data15bytes</command>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/data30bytes</command>
+        <command>-fs NAMENODE -touchz file0</command>
+        <command>-fs NAMENODE -copyFromLocal TEST_DIR_ABSOLUTE/data15bytes TEST_DIR_ABSOLUTE/data30bytes file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^copyFromLocal: copying multiple files, but last argument `file0' is not a directory</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyFromLocal: copying many files into a non existent directory</description>
+      <test-commands>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/data15bytes</command>
+        <command>-fs NAMENODE -copyFromLocal CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/data30bytes</command>
+        <command>-fs NAMENODE -copyFromLocal TEST_DIR_ABSOLUTE/data15bytes TEST_DIR_ABSOLUTE/data30bytes wrongdir</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^copyFromLocal: `wrongdir': specified destination directory doest not exist</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for get -->
+    <test> <!-- TESTED -->
+      <description>get: getting non existent(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -get TEST_DIR_ABSOLUTE/user/file CLITEST_DATA/file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>get: null</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>get: getting non existent file(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -get file CLITEST_DATA/file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>get: null</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for getmerge -->
+    <!-- Manual Testing -->
+
+    <!-- Tests for cat -->
+    <test> <!-- TESTED -->
+      <description>cat: contents of file(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/data15bytes</command>
+        <command>-fs NAMENODE -cat TEST_DIR_ABSOLUTE/data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/data15bytes</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>12345678901234</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test>
+      <description>cat: contents of file(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes data15bytes</command>
+        <command>-fs NAMENODE -cat data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>12345678901234</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test>  <!-- TESTED -->
+      <description>cat: contents of files(absolute path) using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/dir0/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/dir0/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes TEST_DIR_ABSOLUTE/dir0/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes TEST_DIR_ABSOLUTE/dir0/data120bytes</command>
+        <command>-fs NAMENODE -cat TEST_DIR_ABSOLUTE/dir0/data*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>12345678901234.*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED-->
+      <description>cat: contents of files(relative path) using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes dir0/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes dir0/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes dir0/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes dir0/data120bytes</command>
+        <command>-fs NAMENODE -cat dir0/data*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>12345678901234.*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test>  <!-- TESTED -->
+      <description>cat: contents of files(absolute path) without globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/dir0/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/dir0/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes TEST_DIR_ABSOLUTE/dir0/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes TEST_DIR_ABSOLUTE/dir0/data120bytes</command>
+        <command>-fs NAMENODE -cat TEST_DIR_ABSOLUTE/dir0/data15bytes TEST_DIR_ABSOLUTE/dir0/data30bytes TEST_DIR_ABSOLUTE/dir0/data60bytes TEST_DIR_ABSOLUTE/dir0/data120bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>12345678901234.*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED-->
+      <description>cat: contents of files(relative path) without globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes dir0/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes dir0/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes dir0/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes dir0/data120bytes</command>
+        <command>-fs NAMENODE -cat dir0/data15bytes dir0/data30bytes dir0/data60bytes dir0/data120bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>12345678901234.*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    
+    <test> <!-- TESTED -->
+      <description>cat: contents of file(absolute path) that does not exist</description>
+      <test-commands>
+        <command>-fs NAMENODE -cat TEST_DIR_ABSOLUTE/file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^cat: File does not exist: /tmp/testcli/file</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cat: contents of file(relative path) that does not exist</description>
+      <test-commands>
+        <command>-fs NAMENODE -cat file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^cat: File does not exist: /user/[a-z]*/file</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cat: contents of directory(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir1</command>
+        <command>-fs NAMENODE -cat TEST_DIR_ABSOLUTE/dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^cat: File does not exist: /tmp/testcli/dir1</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>cat: contents of directory(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir1</command>
+        <command>-fs NAMENODE -cat dir</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^cat: File does not exist: /user/[a-z]*/dir</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for copyToLocal -->
+    <test> <!-- TESTED -->
+      <description>copyToLocal: non existent relative path</description>
+      <test-commands>
+        <command>-fs NAMENODE -copyToLocal file CLITEST_DATA/file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>copyToLocal: null</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>copyToLocal: non existent absolute path</description>
+      <test-commands>
+        <command>-fs NAMENODE -copyToLocal TEST_DIR_ABSOLUTE/user/file CLITEST_DATA/file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>copyToLocal: null</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for moveToLocal -->
+    <!-- Not yet implemented -->
+
+    <!-- Tests for mkdir -->
+    <test> <!-- TESTED -->
+      <description>mkdir: creating directory (absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -dus TEST_DIR_ABSOLUTE/dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0(|\t)*0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mkdir: creating directory (relative path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0 </command>
+        <command>-fs NAMENODE -dus dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0(|\t)*0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mkdir: creating many directories (absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0 </command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir1 </command>        
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir2 </command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir3 </command>
+        <command>-fs NAMENODE -dus TEST_DIR_ABSOLUTE/dir*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/dir*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0(|\t)*0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir1(|\t)*0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir2(|\t)*0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir3(|\t)*0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mkdir: creating many directories (relative path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir0 </command>
+        <command>-fs NAMENODE -mkdir dir1 </command>
+        <command>-fs NAMENODE -mkdir dir2 </command>
+        <command>-fs NAMENODE -mkdir dir3 </command>
+        <command>-fs NAMENODE -dus dir*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0(|\t)*0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir1(|\t)*0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir2(|\t)*0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir3(|\t)*0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mkdir: creating a directory with the name of an already existing directory</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>mkdir: cannot create directory /tmp/testcli/dir0: File exists</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>mkdir: creating a directory with the name of an already existing file</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes data15bytes</command>
+        <command>-fs NAMENODE -mkdir data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr data15bytes</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>mkdir: data15bytes exists but is not a directory</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!--Tests for setrep-->
+    <test> <!-- TESTED -->
+      <description>setrep: existent file (absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file0</command>
+        <command>-fs NAMENODE -setrep 2 TEST_DIR_ABSOLUTE/dir0/file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/file0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>setrep: existent file (relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file0</command>
+        <command>-fs NAMENODE -setrep 2 file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr file0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>setrep: existent directory (absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file0</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/dir0/file1</command>
+        <command>-fs NAMENODE -setrep -R 2 TEST_DIR_ABSOLUTE/dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/file0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/dir0/file1</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>setrep: existent directory (relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz dir0/file0</command>
+        <command>-fs NAMENODE -touchz dir0/file1</command>
+        <command>-fs NAMENODE -setrep -R 2 dir0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/file0</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/file1</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>setrep: non existent file (absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -setrep 2 TEST_DIR_ABSOLUTE/dir0/file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^setrep: File does not exist: /tmp/testcli/dir0/file</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>setrep: non existent file (relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -setrep 2 file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr file0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^setrep: File does not exist: file0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    
+    <!-- Tests for touchz-->
+    <test> <!-- TESTED -->
+      <description>touchz: touching file (absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/user/file0</command>
+        <command>-fs NAMENODE -du TEST_DIR_ABSOLUTE/user/file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/user</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^0( |\t)*hdfs://\w+[.a-z]*:[0-9]*/tmp/testcli/user/file0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>touchz: touching file(relative path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file0 </command>
+        <command>-fs NAMENODE -du file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm file0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 1 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^0( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>touchz: touching many files </description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file0 file1 file2</command>
+        <command>-fs NAMENODE -du file*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm file*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>Found 3 items</expected-output>
+        </comparator>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^0( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+          <expected-output>^0( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file1</expected-output>
+          <expected-output>^0( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file2</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>touchz: touching already existing file </description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes data15bytes</command>
+        <command>-fs NAMENODE -touchz data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm data15bytes</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>touchz: data15bytes must be a zero-length file</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!--Tests for test-->
+    <test> <!-- TESTED -->
+      <description>test: non existent file (absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -test -z TEST_DIR_ABSOLUTE/dir0/file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^test: File does not exist: /tmp/testcli/dir0/file</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>test: non existent file (relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -test -z file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^test: File does not exist: file</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>test: non existent directory (absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -test -d TEST_DIR_ABSOLUTE/dir</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^test: File does not exist: /tmp/testcli/dir</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>test: non existent directory (relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -test -d dir0</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^test: File does not exist: dir0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!--Tests for stat -->
+    <test> <!-- TESTED -->
+      <description>stat: statistics about file(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes TEST_DIR_ABSOLUTE/data60bytes</command>
+        <command>-fs NAMENODE -stat "%n-%b" TEST_DIR_ABSOLUTE/data60bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/data60bytes</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>data60bytes-60</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>stat: statistics about file(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes data60bytes</command>
+        <command>-fs NAMENODE -stat "%n-%b" data60bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>data60bytes-60</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>stat: statistics about directory(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dirtest</command>
+        <command>-fs NAMENODE -stat "%n-%b-%o" TEST_DIR_ABSOLUTE/dirtest</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dirtest</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>dirtest-0-0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>stat: statistics about directory(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dirtest</command>
+        <command>-fs NAMENODE -stat "%n-%b-%o" dirtest</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dirtest</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>dirtest-0-0</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>stat: statistics about files (absolute path) using globbing</description>
+      <test-commands>
+        <command>-fs -mkdir TEST_DIR_ABSOLUTE/dir0</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/dir0/data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/dir0/data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes TEST_DIR_ABSOLUTE/dir0/data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes TEST_DIR_ABSOLUTE/dir0/data120bytes</command>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir0/datadir</command>
+        <command>-fs NAMENODE -stat "%n-%b" TEST_DIR_ABSOLUTE/dir0/data*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir0</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>"data15bytes-15"</expected-output>
+        </comparator>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>"data30bytes-30"</expected-output>
+        </comparator>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>"data60bytes-60"</expected-output>
+        </comparator>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>"data120bytes-120"</expected-output>
+        </comparator>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>"datadir-0"</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>stat: statistics about files (relative path) using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes data15bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data30bytes data30bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data60bytes data60bytes</command>
+        <command>-fs NAMENODE -put CLITEST_DATA/data120bytes data120bytes</command>
+        <command>-fs NAMENODE -mkdir datadir</command>
+        <command>-fs NAMENODE -stat "%n-%b" data*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>"data15bytes-15"</expected-output>
+        </comparator>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>"data30bytes-30"</expected-output>
+        </comparator>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>"data60bytes-60"</expected-output>
+        </comparator>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>"data120bytes-120"</expected-output>
+        </comparator>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>"datadir-0"</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>stat: statistics about file or directory(absolute path) that does not exist</description>
+      <test-commands>
+        <command>-fs NAMENODE -stat TEST_DIR_ABSOLUTE/file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^stat: cannot stat `/tmp/testcli/file': No such file or directory</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>stat: statistics about file or directory(relative path) that does not exist </description>
+      <test-commands>
+        <command>-fs NAMENODE -stat file1</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^stat: cannot stat `file1': No such file or directory</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    
+    <!-- Tests for tail -->
+    <test> <!-- TESTED -->
+      <description>tail: contents of file(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/data15bytes</command>
+        <command>-fs NAMENODE -tail TEST_DIR_ABSOLUTE/data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rm TEST_DIR_ABSOLUTE/data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>12345678901234</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!--TESTED-->
+      <description>tail: contents of file(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -put CLITEST_DATA/data15bytes data15bytes</command>
+        <command>-fs NAMENODE -tail data15bytes</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>12345678901234</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>tail: contents of files(absolute path) using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file1</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file2</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file3</command>
+        <command>-fs NAMENODE -touchz TEST_DIR_ABSOLUTE/file4</command>
+        <command>-fs NAMENODE -tail TEST_DIR_ABSOLUTE/file*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/file*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^tail: File does not exist: /tmp/testcli/file\*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>tail: contents of files(relative path) using globbing</description>
+      <test-commands>
+        <command>-fs NAMENODE -touchz file1</command>
+        <command>-fs NAMENODE -touchz file2</command>
+        <command>-fs NAMENODE -touchz file3</command>
+        <command>-fs NAMENODE -touchz file4</command>
+        <command>-fs NAMENODE -tail file*</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr file*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^tail: File does not exist: file\*</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>tail: contents of file(absolute path) that does not exist</description>
+      <test-commands>
+        <command>-fs NAMENODE -tail TEST_DIR_ABSOLUTE/file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^tail: File does not exist: /tmp/testcli/file</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>tail: contents of file(relative path) that does not exist</description>
+      <test-commands>
+        <command>-fs NAMENODE -tail file1</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^tail: File does not exist: file1</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>tail: contents of directory(absolute path) </description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir TEST_DIR_ABSOLUTE/dir1</command>
+        <command>-fs NAMENODE -tail TEST_DIR_ABSOLUTE/dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^tail: Source must be a file.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>tail: contents of directory(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -mkdir dir1</command>
+        <command>-fs NAMENODE -tail dir1</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr dir1</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^tail: Source must be a file.</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <!-- Tests for moveFromLocal -->
+    <test> <!-- TESTED -->
+      <description>moveFromLocal: moving non existent file(absolute path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -moveFromLocal TEST_DIR_ABSOLUTE/user/wrongdata file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>moveFromLocal: File /tmp/testcli/user/wrongdata does not exist</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>moveFromLocal: moving non existent file(relative path)</description>
+      <test-commands>
+        <command>-fs NAMENODE -moveFromLocal wrongdata file</command>
+      </test-commands>
+      <cleanup-commands>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>TokenComparator</type>
+          <expected-output>moveFromLocal: File wrongdata does not exist</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>moveFromLocal: moving many files into an existing file</description>
+      <test-commands>
+        <command>-fs NAMENODE -moveFromLocal CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/data15bytes</command>
+        <command>-fs NAMENODE -moveFromLocal CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/data30bytes</command>
+        <command>-fs NAMENODE -touchz file0</command>
+        <command>-fs NAMENODE -moveFromLocal TEST_DIR_ABSOLUTE/data15bytes TEST_DIR_ABSOLUTE/data30bytes file0</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^moveFromLocal: copying multiple files, but last argument `file0' is not a directory</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+    <test> <!-- TESTED -->
+      <description>moveFromLocal: moving many files into a non existent directory</description>
+      <test-commands>
+        <command>-fs NAMENODE -moveFromLocal CLITEST_DATA/data15bytes TEST_DIR_ABSOLUTE/data15bytes</command>
+        <command>-fs NAMENODE -moveFromLocal CLITEST_DATA/data30bytes TEST_DIR_ABSOLUTE/data30bytes</command>
+        <command>-fs NAMENODE -moveFromLocal TEST_DIR_ABSOLUTE/data15bytes TEST_DIR_ABSOLUTE/data30bytes wrongdir</command>
+      </test-commands>
+      <cleanup-commands>
+        <command>-fs NAMENODE -rmr TEST_DIR_ABSOLUTE/data*</command>
+      </cleanup-commands>
+      <comparators>
+        <comparator>
+          <type>RegexpComparator</type>
+          <expected-output>^moveFromLocal: `wrongdir': specified destination directory doest not exist</expected-output>
+        </comparator>
+      </comparators>
+    </test>
+    
+  </tests>
+</configuration>

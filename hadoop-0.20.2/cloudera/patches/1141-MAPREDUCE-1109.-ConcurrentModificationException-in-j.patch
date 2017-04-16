@@ -1,0 +1,32 @@
+From 06abe3168b8ee4b0cc4ed9a009ab218f47d32582 Mon Sep 17 00:00:00 2001
+From: Harsh J <harsh@cloudera.com>
+Date: Sun, 11 Mar 2012 22:44:46 +0530
+Subject: [PATCH 1141/1179] MAPREDUCE-1109. ConcurrentModificationException in jobtracker.jsp
+
+Reason: Customer request
+Author: Harsh J
+Ref: CDH-4527
+---
+ src/webapps/job/jobtracker.jsp |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/webapps/job/jobtracker.jsp b/src/webapps/job/jobtracker.jsp
+index 22d1220..dd5ce64 100644
+--- a/src/webapps/job/jobtracker.jsp
++++ b/src/webapps/job/jobtracker.jsp
+@@ -38,9 +38,9 @@
+   String trackerName = 
+            StringUtils.simpleHostname(tracker.getJobTrackerMachine());
+   JobQueueInfo[] queues = tracker.getQueues();
+-  List<JobInProgress> runningJobs = tracker.runningJobs();
+-  List<JobInProgress> completedJobs = tracker.completedJobs();
+-  List<JobInProgress> failedJobs = tracker.failedJobs();
++  List<JobInProgress> runningJobs = tracker.getRunningJobs();
++  List<JobInProgress> completedJobs = tracker.getCompletedJobs();
++  List<JobInProgress> failedJobs = tracker.getFailedJobs();
+ %>
+ <%!
+   private static DecimalFormat percentFormat = new DecimalFormat("##0.00");
+-- 
+1.7.0.4
+

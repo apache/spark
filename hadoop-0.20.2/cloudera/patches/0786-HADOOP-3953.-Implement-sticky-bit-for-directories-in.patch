@@ -1,0 +1,873 @@
+From 8b4374bfa12b1a1ed8cc8e0ab209ad763becf791 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 19 Jan 2011 14:22:55 -0800
+Subject: [PATCH 0786/1179] HADOOP-3953. Implement sticky bit for directories in HDFS.
+
+Reason: security on /tmp
+Author: Jakob Homan
+Ref: CDH-2091
+---
+ src/core/org/apache/hadoop/fs/FsShell.java         |    9 +-
+ .../org/apache/hadoop/fs/FsShellPermissions.java   |    2 +-
+ .../org/apache/hadoop/fs/RawLocalFileSystem.java   |    2 +-
+ .../apache/hadoop/fs/permission/ChmodParser.java   |    4 +-
+ .../apache/hadoop/fs/permission/FsPermission.java  |   47 +++-
+ .../hadoop/fs/permission/PermissionParser.java     |   27 ++-
+ .../apache/hadoop/fs/permission/UmaskParser.java   |    8 +-
+ .../content/xdocs/hdfs_permissions_guide.xml       |    8 +-
+ .../hadoop/hdfs/protocol/ClientProtocol.java       |    7 +-
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    2 +-
+ .../hdfs/server/namenode/FSPermissionChecker.java  |   25 ++-
+ .../hadoop/fs/permission/TestFsPermission.java     |   45 +++-
+ .../apache/hadoop/fs/permission/TestStickyBit.java |  297 ++++++++++++++++++++
+ src/test/org/apache/hadoop/hdfs/TestDFSShell.java  |   46 +++-
+ 14 files changed, 485 insertions(+), 44 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/fs/permission/TestStickyBit.java
+
+diff --git a/src/core/org/apache/hadoop/fs/FsShell.java b/src/core/org/apache/hadoop/fs/FsShell.java
+index 225e6a1..b57c788 100644
+--- a/src/core/org/apache/hadoop/fs/FsShell.java
++++ b/src/core/org/apache/hadoop/fs/FsShell.java
+@@ -22,8 +22,6 @@ import java.io.FileNotFoundException;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.net.URI;
+-import java.text.DecimalFormat;
+-import java.text.NumberFormat;
+ import java.text.SimpleDateFormat;
+ import java.util.*;
+ import java.util.zip.GZIPInputStream;
+@@ -1437,9 +1435,10 @@ public class FsShell extends Configured implements Tool {
+       "\t-R\tmodifies the files recursively. This is the only option\n" +
+       "\t\tcurrently supported.\n\n" +
+       "\tMODE\tMode is same as mode used for chmod shell command.\n" +
+-      "\t\tOnly letters recognized are 'rwxX'. E.g. a+r,g-w,+rwx,o=r\n\n" +
+-      "\tOCTALMODE Mode specifed in 3 digits. Unlike shell command,\n" +
+-      "\t\tthis requires all three digits.\n" +
++      "\t\tOnly letters recognized are 'rwxXt'. E.g. +t,a+r,g-w,+rwx,o=r\n\n" +
++      "\tOCTALMODE Mode specifed in 3 or 4 digits. If 4 digits, the first may\n" +
++      "\tbe 1 or 0 to turn the sticky bit on or off, respectively.  Unlike " +
++      "\tshell command, it is not possible to specify only part of the mode\n" +
+       "\t\tE.g. 754 is same as u=rwx,g=rx,o=r\n\n" +
+       "\t\tIf none of 'augo' is specified, 'a' is assumed and unlike\n" +
+       "\t\tshell command, no umask is applied.\n";
+diff --git a/src/core/org/apache/hadoop/fs/FsShellPermissions.java b/src/core/org/apache/hadoop/fs/FsShellPermissions.java
+index 0874952..61f22ef 100644
+--- a/src/core/org/apache/hadoop/fs/FsShellPermissions.java
++++ b/src/core/org/apache/hadoop/fs/FsShellPermissions.java
+@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.permission.ChmodParser;
+ 
+ /**
+  * This class is the home for file permissions related commands.
+- * Moved to this seperate class since FsShell is getting too large.
++ * Moved to this separate class since FsShell is getting too large.
+  */
+ class FsShellPermissions {
+   
+diff --git a/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java b/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
+index f9fc838..197af2b 100644
+--- a/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
++++ b/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
+@@ -487,7 +487,7 @@ public class RawLocalFileSystem extends FileSystem {
+                      permission.toShort());
+     } else {
+       execCommand(pathToFile(p), Shell.SET_PERMISSION_COMMAND,
+-          String.format("%04o", permission.toShort()));
++          String.format("%05o", permission.toShort()));
+     }
+   }
+ 
+diff --git a/src/core/org/apache/hadoop/fs/permission/ChmodParser.java b/src/core/org/apache/hadoop/fs/permission/ChmodParser.java
+index b8ca668..f088ef2 100644
+--- a/src/core/org/apache/hadoop/fs/permission/ChmodParser.java
++++ b/src/core/org/apache/hadoop/fs/permission/ChmodParser.java
+@@ -27,9 +27,9 @@ import org.apache.hadoop.fs.FileStatus;
+  */
+ public class ChmodParser extends PermissionParser {
+   private static Pattern chmodOctalPattern =
+-    Pattern.compile("^\\s*[+]?([0-7]{3})\\s*$");
++    Pattern.compile("^\\s*[+]?([01]?)([0-7]{3})\\s*$");
+   private static Pattern chmodNormalPattern =
+-    Pattern.compile("\\G\\s*([ugoa]*)([+=-]+)([rwxX]+)([,\\s]*)\\s*");
++    Pattern.compile("\\G\\s*([ugoa]*)([+=-]+)([rwxXt]+)([,\\s]*)\\s*");
+   
+   public ChmodParser(String modeStr) throws IllegalArgumentException {
+     super(modeStr, chmodNormalPattern, chmodOctalPattern);
+diff --git a/src/core/org/apache/hadoop/fs/permission/FsPermission.java b/src/core/org/apache/hadoop/fs/permission/FsPermission.java
+index e81546f..23ad301 100644
+--- a/src/core/org/apache/hadoop/fs/permission/FsPermission.java
++++ b/src/core/org/apache/hadoop/fs/permission/FsPermission.java
+@@ -57,6 +57,7 @@ public class FsPermission implements Writable {
+   private FsAction useraction = null;
+   private FsAction groupaction = null;
+   private FsAction otheraction = null;
++  private boolean stickyBit = false;
+ 
+   private FsPermission() {}
+ 
+@@ -66,7 +67,13 @@ public class FsPermission implements Writable {
+    * @param g group action
+    * @param o other action
+    */
+-  public FsPermission(FsAction u, FsAction g, FsAction o) {set(u, g, o);}
++  public FsPermission(FsAction u, FsAction g, FsAction o) {
++    this(u, g, o, false);
++  }
++
++  public FsPermission(FsAction u, FsAction g, FsAction o, boolean sb) {
++    set(u, g, o, sb);
++  }
+ 
+   /**
+    * Construct by the given mode.
+@@ -104,14 +111,17 @@ public class FsPermission implements Writable {
+   /** Return other {@link FsAction}. */
+   public FsAction getOtherAction() {return otheraction;}
+ 
+-  private void set(FsAction u, FsAction g, FsAction o) {
++  private void set(FsAction u, FsAction g, FsAction o, boolean sb) {
+     useraction = u;
+     groupaction = g;
+     otheraction = o;
++    stickyBit = sb;
+   }
++
+   public void fromShort(short n) {
+     FsAction[] v = FsAction.values();
+-    set(v[(n >>> 6) & 7], v[(n >>> 3) & 7], v[n & 7]);
++
++    set(v[(n >>> 6) & 7], v[(n >>> 3) & 7], v[n & 7], (((n >>> 9) & 1) == 1) );
+   }
+ 
+   /** {@inheritDoc} */
+@@ -137,8 +147,11 @@ public class FsPermission implements Writable {
+    * Encode the object to a short.
+    */
+   public short toShort() {
+-    int s = (useraction.ordinal() << 6) | (groupaction.ordinal() << 3) |
++    int s =  (stickyBit ? 1 << 9 : 0)     |
++             (useraction.ordinal() << 6)  |
++             (groupaction.ordinal() << 3) |
+              otheraction.ordinal();
++
+     return (short)s;
+   }
+ 
+@@ -148,7 +161,8 @@ public class FsPermission implements Writable {
+       FsPermission that = (FsPermission)obj;
+       return this.useraction == that.useraction
+           && this.groupaction == that.groupaction
+-          && this.otheraction == that.otheraction;
++          && this.otheraction == that.otheraction
++          && this.stickyBit == that.stickyBit;
+     }
+     return false;
+   }
+@@ -158,7 +172,15 @@ public class FsPermission implements Writable {
+ 
+   /** {@inheritDoc} */
+   public String toString() {
+-    return useraction.SYMBOL + groupaction.SYMBOL + otheraction.SYMBOL;
++    String str = useraction.SYMBOL + groupaction.SYMBOL + otheraction.SYMBOL;
++    if(stickyBit) {
++      StringBuilder str2 = new StringBuilder(str);
++      str2.replace(str2.length() - 1, str2.length(),
++           otheraction.implies(FsAction.EXECUTE) ? "t" : "T");
++      str = str2.toString();
++    }
++
++    return str;
+   }
+ 
+   /** Apply a umask to this permission and return a new one */
+@@ -209,6 +231,10 @@ public class FsPermission implements Writable {
+     
+     return new FsPermission((short)umask);
+   }
++
++  public boolean getStickyBit() {
++    return stickyBit;
++  }
+   
+   /** Set the user file creation mask (umask) */
+   public static void setUMask(Configuration conf, FsPermission umask) {
+@@ -217,7 +243,7 @@ public class FsPermission implements Writable {
+ 
+   /** Get the default permission. */
+   public static FsPermission getDefault() {
+-    return new FsPermission((short)0777);
++    return new FsPermission((short)00777);
+   }
+ 
+   /**
+@@ -232,12 +258,19 @@ public class FsPermission implements Writable {
+       throw new IllegalArgumentException("length != 10(unixSymbolicPermission="
+           + unixSymbolicPermission + ")");
+     }
++
+     int n = 0;
+     for(int i = 1; i < unixSymbolicPermission.length(); i++) {
+       n = n << 1;
+       char c = unixSymbolicPermission.charAt(i);
+       n += (c == '-' || c == 'T' || c == 'S') ? 0: 1;
+     }
++
++    // Add sticky bit value if set
++    if(unixSymbolicPermission.charAt(9) == 't' ||
++        unixSymbolicPermission.charAt(9) == 'T')
++      n += 01000;
++
+     return new FsPermission((short)n);
+   }
+ }
+diff --git a/src/core/org/apache/hadoop/fs/permission/PermissionParser.java b/src/core/org/apache/hadoop/fs/permission/PermissionParser.java
+index d2a5f03..2a40bfe 100644
+--- a/src/core/org/apache/hadoop/fs/permission/PermissionParser.java
++++ b/src/core/org/apache/hadoop/fs/permission/PermissionParser.java
+@@ -30,9 +30,11 @@ class PermissionParser {
+   protected short userMode;
+   protected short groupMode;
+   protected short othersMode;
++  protected short stickyMode;
+   protected char userType = '+';
+   protected char groupType = '+';
+   protected char othersType = '+';
++  protected char stickyBitType = '+';
+   
+   /**
+    * Begin parsing permission stored in modeStr
+@@ -64,14 +66,14 @@ class PermissionParser {
+       }
+ 
+       /*
+-       * groups : 1 : [ugoa]* 2 : [+-=] 3 : [rwxX]+ 4 : [,\s]*
++       * groups : 1 : [ugoa]* 2 : [+-=] 3 : [rwxXt]+ 4 : [,\s]*
+        */
+ 
+       String str = matcher.group(2);
+       char type = str.charAt(str.length() - 1);
+ 
+-      boolean user, group, others;
+-      user = group = others = false;
++      boolean user, group, others, stickyBit;
++      user = group = others = stickyBit = false;
+ 
+       for (char c : matcher.group(1).toCharArray()) {
+         switch (c) {
+@@ -111,6 +113,9 @@ class PermissionParser {
+         case 'X':
+           mode |= 8;
+           break;
++        case 't':
++          stickyBit = true;
++          break;
+         default:
+           throw new RuntimeException("Unexpected");
+         }
+@@ -129,6 +134,9 @@ class PermissionParser {
+       if (others) {
+         othersMode = mode;
+         othersType = type;
++
++        stickyMode = (short) (stickyBit ? 1 : 0);
++        stickyBitType = type;
+       }
+ 
+       commaSeperated = matcher.group(4).contains(",");
+@@ -139,14 +147,23 @@ class PermissionParser {
+   private void applyOctalPattern(String modeStr, Matcher matcher) {
+     userType = groupType = othersType = '=';
+ 
+-    String str = matcher.group(1);
++    // Check if sticky bit is specified
++    String sb = matcher.group(1);
++    if (!sb.isEmpty()) {
++      stickyMode = Short.valueOf(sb.substring(0, 1));
++      stickyBitType = '=';
++    }
++
++    String str = matcher.group(2);
+     userMode = Short.valueOf(str.substring(0, 1));
+     groupMode = Short.valueOf(str.substring(1, 2));
+     othersMode = Short.valueOf(str.substring(2, 3));
+   }
+ 
+   protected int combineModes(int existing, boolean exeOk) {
+-    return   combineModeSegments(userType, userMode,
++    return   combineModeSegments(stickyBitType, stickyMode, 
++                (existing>>>9), false) << 9 |
++             combineModeSegments(userType, userMode,
+                 (existing>>>6)&7, exeOk) << 6 |
+              combineModeSegments(groupType, groupMode,
+                 (existing>>>3)&7, exeOk) << 3 |
+diff --git a/src/core/org/apache/hadoop/fs/permission/UmaskParser.java b/src/core/org/apache/hadoop/fs/permission/UmaskParser.java
+index 5ce516e..3d7e7d3 100644
+--- a/src/core/org/apache/hadoop/fs/permission/UmaskParser.java
++++ b/src/core/org/apache/hadoop/fs/permission/UmaskParser.java
+@@ -22,12 +22,14 @@ import java.util.regex.Pattern;
+ /**
+  * Parse umask value provided as a string, either in octal or symbolic
+  * format and return it as a short value. Umask values are slightly
+- * different from standard modes as they cannot specify X.
++ * different from standard modes as they cannot specify sticky bit
++ * or X.
++ *
+  */
+ class UmaskParser extends PermissionParser {
+   private static Pattern chmodOctalPattern =
+-    Pattern.compile("^\\s*[+]?([0-7]{3})\\s*$");
+-  private static Pattern umaskSymbolicPattern =    /* not allow X */
++    Pattern.compile("^\\s*[+]?()([0-7]{3})\\s*$"); // no leading 1 for sticky bit
++  private static Pattern umaskSymbolicPattern =    /* not allow X or t */
+     Pattern.compile("\\G\\s*([ugoa]*)([+=-]+)([rwx]*)([,\\s]*)\\s*");
+   final short umaskMode;
+   
+diff --git a/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml b/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
+index ef52265..7df4037 100644
+--- a/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
++++ b/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
+@@ -41,8 +41,14 @@
+ 		or delete files or directories, and the <em>x</em> permission is required to access a child of the directory. 
+ 		</p>
+ 	 <p>	
+-		In contrast to the POSIX model, there are no <em>sticky</em>, <em>setuid</em> or <em>setgid</em> bits for files as there is no notion of executable files. 
++		In contrast to the POSIX model, there are no <em>setuid</em> or <em>setgid</em> bits for files as there is no notion of executable files. 
+ 		For directories, there are no <em>setuid</em> or <em>setgid</em> bits directory as a simplification. 
++         </p>
++         <p>
++                The <em>sticky bit</em> can be set on directories, preventing anyone except the superuser, directory owner, or file owner from deleting
++                or moving the files within the directory. Setting the sticky bit for a file has no effect.
++         </p>
++         <p>
+                 Collectively, the permissions of a file or directory are its <em>mode</em>. In general, Unix 
+ 		customs for representing and displaying modes will be used, including the use of octal numbers in this description. When a file or directory 
+ 		is created, its owner is the user identity of the client process, and its group is the group of the parent directory (the BSD rule).
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+index ae83852..0eb30c8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+@@ -50,12 +50,9 @@ public interface ClientProtocol extends VersionedProtocol {
+    * Compared to the previous version the following changes have been introduced:
+    * (Only the latest change is reflected.
+    * The log of historical changes can be retrieved from the svn).
+-   * 61: Serialized format of BlockTokenIdentifier changed to contain
+-   *     multiple blocks within a single BlockTokenIdentifier 
+-   *     
+-   *     (bumped to 61 to bring in line with trunk)
++   * 62: Sticky bit
+    */
+-  public static final long versionID = 61L;
++  public static final long versionID = 62L;
+   
+   ///////////////////////////////////////
+   // File contents
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 2716fef..9c670e2 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -429,7 +429,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     this.isPermissionEnabled = conf.getBoolean("dfs.permissions", true);
+     LOG.info("supergroup=" + supergroup);
+     LOG.info("isPermissionEnabled=" + isPermissionEnabled);
+-    short filePermission = (short)conf.getInt("dfs.upgrade.permission", 0777);
++    short filePermission = (short)conf.getInt("dfs.upgrade.permission", 00777);
+     this.defaultPermission = PermissionStatus.createImmutable(
+         fsOwner.getShortUserName(), supergroup, new FsPermission(filePermission));
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSPermissionChecker.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSPermissionChecker.java
+index c651caf..bb3eb2a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSPermissionChecker.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSPermissionChecker.java
+@@ -116,7 +116,7 @@ private final UserGroupInformation ugi;
+           + ", access=" + access
+           + ", subAccess=" + subAccess);
+     }
+-
++    // check if (parentAccess != null) && file exists, then check sb
+     synchronized(root) {
+       INode[] inodes = root.getExistingPathINodes(path);
+       int ancestorIndex = inodes.length - 2;
+@@ -124,6 +124,10 @@ private final UserGroupInformation ugi;
+           ancestorIndex--);
+       checkTraverse(inodes, ancestorIndex);
+ 
++      if(parentAccess != null && parentAccess.implies(FsAction.WRITE)
++          && inodes[inodes.length - 1] != null)
++        checkStickyBit(inodes[inodes.length - 2], inodes[inodes.length - 1]);
++
+       if (ancestorAccess != null && inodes.length > 1) {
+         check(inodes, ancestorIndex, ancestorAccess);
+       }
+@@ -199,4 +203,23 @@ private final UserGroupInformation ugi;
+     throw new AccessControlException("Permission denied: user=" + user
+         + ", access=" + access + ", inode=" + inode);
+   }
++
++  private void checkStickyBit(INode parent, INode inode) throws AccessControlException {
++    if(!parent.getFsPermission().getStickyBit()) {
++      return;
++    }
++
++    // If this user is the directory owner, return
++    if(parent.getUserName().equals(user)) {
++      return;
++    }
++
++    // if this user is the file owner, return
++    if(inode.getUserName().equals(user)) {
++      return;
++    }
++
++    throw new AccessControlException("Permission denied by sticky bit setting:" +
++      " user=" + user + ", inode=" + inode);
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/fs/permission/TestFsPermission.java b/src/test/org/apache/hadoop/fs/permission/TestFsPermission.java
+index 17174ab..0dcc91a 100644
+--- a/src/test/org/apache/hadoop/fs/permission/TestFsPermission.java
++++ b/src/test/org/apache/hadoop/fs/permission/TestFsPermission.java
+@@ -49,11 +49,52 @@ public class TestFsPermission extends TestCase {
+     assertEquals(WRITE_EXECUTE, ALL.and(WRITE_EXECUTE));
+   }
+ 
+-  public void testFsPermission() {
+-    for(short s = 0; s < (1<<9); s++) {
++  /**
++   * Ensure that when manually specifying permission modes we get
++   * the expected values back out for all combinations
++   */
++  public void testConvertingPermissions() {
++    for(short s = 0; s < 01777; s++) {
+       assertEquals(s, new FsPermission(s).toShort());
+     }
+ 
++    short s = 0;
++
++    for(boolean sb : new boolean [] { false, true }) {
++      for(FsAction u : FsAction.values()) {
++        for(FsAction g : FsAction.values()) {
++          for(FsAction o : FsAction.values()) {
++            FsPermission f = new FsPermission(u, g, o, sb);
++            assertEquals(s, f.toShort());
++            s++;
++          }
++        }
++      }
++    }
++  }
++
++  public void testStickyBitToString() {
++    // Check that every permission has its sticky bit represented correctly
++    for(boolean sb : new boolean [] { false, true }) {
++      for(FsAction u : FsAction.values()) {
++        for(FsAction g : FsAction.values()) {
++          for(FsAction o : FsAction.values()) {
++            FsPermission f = new FsPermission(u, g, o, sb);
++            if(f.getStickyBit() && f.getOtherAction().implies(EXECUTE))
++              assertEquals('t', f.toString().charAt(8));
++            else if(f.getStickyBit() && !f.getOtherAction().implies(EXECUTE))
++              assertEquals('T', f.toString().charAt(8));
++            else if(!f.getStickyBit()  && f.getOtherAction().implies(EXECUTE))
++              assertEquals('x', f.toString().charAt(8));
++            else
++              assertEquals('-', f.toString().charAt(8));
++          }
++        }
++      }
++    }
++  }
++
++  public void testFsPermission() {
+     String symbolic = "-rwxrwxrwx";
+     StringBuilder b = new StringBuilder("-123456789");
+     for(int i = 0; i < (1<<9); i++) {
+diff --git a/src/test/org/apache/hadoop/fs/permission/TestStickyBit.java b/src/test/org/apache/hadoop/fs/permission/TestStickyBit.java
+new file mode 100644
+index 0000000..c7da251
+--- /dev/null
++++ b/src/test/org/apache/hadoop/fs/permission/TestStickyBit.java
+@@ -0,0 +1,297 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.fs.permission;
++
++import java.io.IOException;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.DFSTestUtil;
++import org.apache.hadoop.hdfs.DistributedFileSystem;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.security.AccessControlException;
++import org.apache.hadoop.security.UserGroupInformation;
++
++public class TestStickyBit extends TestCase {
++
++  static UserGroupInformation user1 = 
++    UserGroupInformation.createUserForTesting("theDoctor", new String[] {"tardis"});
++  static UserGroupInformation user2 = 
++    UserGroupInformation.createUserForTesting("rose", new String[] {"powellestates"});
++
++  /**
++   * Ensure that even if a file is in a directory with the sticky bit on,
++   * another user can write to that file (assuming correct permissions).
++   */
++  private void confirmCanAppend(Configuration conf, FileSystem hdfs,
++      Path baseDir) throws IOException, InterruptedException {
++    // Create a tmp directory with wide-open permissions and sticky bit
++    Path p = new Path(baseDir, "tmp");
++
++    hdfs.mkdirs(p);
++    hdfs.setPermission(p, new FsPermission((short) 01777));
++
++    // Write a file to the new tmp directory as a regular user
++    hdfs = DFSTestUtil.getFileSystemAs(user1, conf);
++    Path file = new Path(p, "foo");
++    writeFile(hdfs, file);
++    hdfs.setPermission(file, new FsPermission((short) 0777));
++
++    // Log onto cluster as another user and attempt to append to file
++    hdfs = DFSTestUtil.getFileSystemAs(user2, conf);
++    Path file2 = new Path(p, "foo");
++    FSDataOutputStream h = hdfs.append(file2);
++    h.write("Some more data".getBytes());
++    h.close();
++  }
++
++  /**
++   * Test that one user can't delete another user's file when the sticky bit is
++   * set.
++   */
++  private void confirmDeletingFiles(Configuration conf, FileSystem hdfs,
++      Path baseDir) throws IOException, InterruptedException {
++    Path p = new Path(baseDir, "contemporary");
++    hdfs.mkdirs(p);
++    hdfs.setPermission(p, new FsPermission((short) 01777));
++    assertTrue(hdfs.getFileStatus(p).getPermission().getStickyBit());
++
++    // Write a file to the new temp directory as a regular user
++    hdfs = DFSTestUtil.getFileSystemAs(user1, conf);
++    Path file = new Path(p, "foo");
++    writeFile(hdfs, file);
++
++    // Make sure the correct user is the owner
++    assertEquals(user1.getShortUserName(), hdfs.getFileStatus(file).getOwner());
++
++    // Log onto cluster as another user and attempt to delete the file
++    FileSystem hdfs2 = DFSTestUtil.getFileSystemAs(user2, conf);
++
++    try {
++      hdfs2.delete(file, false);
++      fail("Shouldn't be able to delete someone else's file with SB on");
++    } catch (IOException ioe) {
++      assertTrue(ioe instanceof AccessControlException);
++      assertTrue(ioe.getMessage().contains("sticky bit"));
++    }
++  }
++
++  /**
++   * Test that if a directory is created in a directory that has the sticky bit
++   * on, the new directory does not automatically get a sticky bit, as is
++   * standard Unix behavior
++   */
++  private void confirmStickyBitDoesntPropagate(FileSystem hdfs, Path baseDir)
++      throws IOException {
++    Path p = new Path(baseDir, "scissorsisters");
++
++    // Turn on its sticky bit
++    hdfs.mkdirs(p, new FsPermission((short) 01666));
++
++    // Create a subdirectory within it
++    Path p2 = new Path(p, "bar");
++    hdfs.mkdirs(p2);
++
++    // Ensure new directory doesn't have its sticky bit on
++    assertFalse(hdfs.getFileStatus(p2).getPermission().getStickyBit());
++  }
++
++  /**
++   * Test basic ability to get and set sticky bits on files and directories.
++   */
++  private void confirmSettingAndGetting(FileSystem hdfs, Path baseDir)
++      throws IOException {
++    Path p1 = new Path(baseDir, "roguetraders");
++
++    hdfs.mkdirs(p1);
++
++    // Initially sticky bit should not be set
++    assertFalse(hdfs.getFileStatus(p1).getPermission().getStickyBit());
++
++    // Same permission, but with sticky bit on
++    short withSB;
++    withSB = (short) (hdfs.getFileStatus(p1).getPermission().toShort() | 01000);
++
++    assertTrue((new FsPermission(withSB)).getStickyBit());
++
++    hdfs.setPermission(p1, new FsPermission(withSB));
++    assertTrue(hdfs.getFileStatus(p1).getPermission().getStickyBit());
++
++    // However, while you can set the sticky bit on files, it has no effect,
++    // following the linux/unix model:
++    //
++    // [user@host test]$ ls -alh
++    // -rw-r--r-- 1 user users 0 Dec 31 01:46 aFile
++    // [user@host test]$ chmod +t aFile
++    // [user@host test]$ ls -alh
++    // -rw-r--r-- 1 user users 0 Dec 31 01:46 aFile
++
++    // Write a file to the fs, try to set its sticky bit, expect to be ignored
++    Path f = new Path(baseDir, "somefile");
++    writeFile(hdfs, f);
++    assertFalse(hdfs.getFileStatus(f).getPermission().getStickyBit());
++
++    withSB = (short) (hdfs.getFileStatus(f).getPermission().toShort() | 01000);
++
++    hdfs.setPermission(f, new FsPermission(withSB));
++
++    assertFalse(hdfs.getFileStatus(f).getPermission().getStickyBit());
++  }
++
++  public void testGeneralSBBehavior() throws IOException, InterruptedException {
++    MiniDFSCluster cluster = null;
++    try {
++      Configuration conf = new Configuration();
++      conf.setBoolean("dfs.permissions", true);
++      cluster = new MiniDFSCluster(conf, 4, true, null);
++
++      FileSystem hdfs = cluster.getFileSystem();
++
++      assertTrue(hdfs instanceof DistributedFileSystem);
++
++      Path baseDir = new Path("/mcgann");
++      hdfs.mkdirs(baseDir);
++      confirmCanAppend(conf, hdfs, baseDir);
++
++      baseDir = new Path("/eccleston");
++      hdfs.mkdirs(baseDir);
++      confirmSettingAndGetting(hdfs, baseDir);
++
++      baseDir = new Path("/tennant");
++      hdfs.mkdirs(baseDir);
++      confirmDeletingFiles(conf, hdfs, baseDir);
++
++      baseDir = new Path("/smith");
++      hdfs.mkdirs(baseDir);
++      confirmStickyBitDoesntPropagate(hdfs, baseDir);
++
++    } finally {
++      if (cluster != null)
++        cluster.shutdown();
++    }
++  }
++
++  /**
++   * Test that one user can't rename/move another user's file when the sticky
++   * bit is set.
++   */
++  public void testMovingFiles() throws IOException, InterruptedException {
++    MiniDFSCluster cluster = null;
++
++    try {
++      // Set up cluster for testing
++      Configuration conf = new Configuration();
++      conf.setBoolean("dfs.permissions", true);
++      cluster = new MiniDFSCluster(conf, 4, true, null);
++      FileSystem hdfs = cluster.getFileSystem();
++
++      assertTrue(hdfs instanceof DistributedFileSystem);
++
++      // Create a tmp directory with wide-open permissions and sticky bit
++      Path tmpPath = new Path("/tmp");
++      Path tmpPath2 = new Path("/tmp2");
++      hdfs.mkdirs(tmpPath);
++      hdfs.mkdirs(tmpPath2);
++      hdfs.setPermission(tmpPath, new FsPermission((short) 01777));
++      hdfs.setPermission(tmpPath2, new FsPermission((short) 01777));
++
++      // Write a file to the new tmp directory as a regular user
++      Path file = new Path(tmpPath, "foo");
++
++      FileSystem hdfs2 = DFSTestUtil.getFileSystemAs(user1, conf);
++
++      writeFile(hdfs2, file);
++
++      // Log onto cluster as another user and attempt to move the file
++      FileSystem hdfs3 = DFSTestUtil.getFileSystemAs(user2, conf);
++
++      try {
++        hdfs3.rename(file, new Path(tmpPath2, "renamed"));
++        fail("Shouldn't be able to rename someone else's file with SB on");
++      } catch (IOException ioe) {
++        assertTrue(ioe instanceof AccessControlException);
++        assertTrue(ioe.getMessage().contains("sticky bit"));
++      }
++    } finally {
++      if (cluster != null)
++        cluster.shutdown();
++    }
++  }
++
++  /**
++   * Ensure that when we set a sticky bit and shut down the file system, we get
++   * the sticky bit back on re-start, and that no extra sticky bits appear after
++   * re-start.
++   */
++  public void testStickyBitPersistence() throws IOException {
++    MiniDFSCluster cluster = null;
++    try {
++      Configuration conf = new Configuration();
++      conf.setBoolean("dfs.permissions", true);
++      cluster = new MiniDFSCluster(conf, 4, true, null);
++      FileSystem hdfs = cluster.getFileSystem();
++
++      assertTrue(hdfs instanceof DistributedFileSystem);
++
++      // A tale of three directories...
++      Path sbSet = new Path("/Housemartins");
++      Path sbNotSpecified = new Path("/INXS");
++      Path sbSetOff = new Path("/Easyworld");
++
++      for (Path p : new Path[] { sbSet, sbNotSpecified, sbSetOff })
++        hdfs.mkdirs(p);
++
++      // Two directories had there sticky bits set explicitly...
++      hdfs.setPermission(sbSet, new FsPermission((short) 01777));
++      hdfs.setPermission(sbSetOff, new FsPermission((short) 00777));
++
++      cluster.shutdown();
++
++      // Start file system up again
++      cluster = new MiniDFSCluster(conf, 4, false, null);
++      hdfs = cluster.getFileSystem();
++
++      assertTrue(hdfs.exists(sbSet));
++      assertTrue(hdfs.getFileStatus(sbSet).getPermission().getStickyBit());
++
++      assertTrue(hdfs.exists(sbNotSpecified));
++      assertFalse(hdfs.getFileStatus(sbNotSpecified).getPermission()
++          .getStickyBit());
++
++      assertTrue(hdfs.exists(sbSetOff));
++      assertFalse(hdfs.getFileStatus(sbSetOff).getPermission().getStickyBit());
++
++    } finally {
++      if (cluster != null)
++        cluster.shutdown();
++    }
++  }
++
++  /***
++   * Write a quick file to the specified file system at specified path
++   */
++  static private void writeFile(FileSystem hdfs, Path p) throws IOException {
++    FSDataOutputStream o = hdfs.create(p);
++    o.write("some file contents".getBytes());
++    o.close();
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSShell.java b/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
+index d5f2d09..cc682da 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
+@@ -762,18 +762,15 @@ public class TestDFSShell extends TestCase {
+      fs.delete(dir, true);
+      fs.mkdirs(dir);
+ 
+-     runCmd(shell, "-chmod", "u+rwx,g=rw,o-rwx", chmodDir);
+-     assertEquals("rwxrw----",
+-                  fs.getFileStatus(dir).getPermission().toString());
+-
++     confirmPermissionChange(/* Setting */ "u+rwx,g=rw,o-rwx",
++                             /* Should give */ "rwxrw----", fs, shell, dir);
++     
+      //create an empty file
+      Path file = new Path(chmodDir, "file");
+      TestDFSShell.writeFile(fs, file);
+ 
+      //test octal mode
+-     runCmd(shell, "-chmod", "644", file.toString());
+-     assertEquals("rw-r--r--",
+-                  fs.getFileStatus(file).getPermission().toString());
++     confirmPermissionChange( "644", "rw-r--r--", fs, shell, file);
+ 
+      //test recursive
+      runCmd(shell, "-chmod", "-R", "a+rwX", chmodDir);
+@@ -781,8 +778,28 @@ public class TestDFSShell extends TestCase {
+                   fs.getFileStatus(dir).getPermission().toString()); 
+      assertEquals("rw-rw-rw-",
+                   fs.getFileStatus(file).getPermission().toString());
++
++     // test sticky bit on directories
++     Path dir2 = new Path(dir, "stickybit" );
++     fs.mkdirs(dir2 );
+      
+-     fs.delete(dir, true);     
++     assertEquals("rwxr-xr-x", fs.getFileStatus(dir2).getPermission()
++         .toString());
++     
++     confirmPermissionChange("+t", "rwxr-xr-t", fs, shell, dir2);
++
++     confirmPermissionChange("-t", "rwxr-xr-x", fs, shell, dir2);
++
++     confirmPermissionChange("=t", "--------T", fs, shell, dir2);
++
++     confirmPermissionChange("0000", "---------", fs, shell, dir2);
++
++     confirmPermissionChange("1666", "rw-rw-rwT", fs, shell, dir2);
++
++     confirmPermissionChange("777", "rwxrwxrwt", fs, shell, dir2);
++
++     fs.delete(dir, true);
++     fs.delete(dir2, true);
+     } finally {
+       try {
+         fs.close();
+@@ -790,7 +807,16 @@ public class TestDFSShell extends TestCase {
+       } catch (IOException ignored) {}
+     }
+   }
+-  
++
++  // Apply a new permission to a path and confirm that the new permission
++  // is the one you were expecting
++  private void confirmPermissionChange(String toApply, String expected,
++      FileSystem fs, FsShell shell, Path dir2) throws IOException {
++    runCmd(shell, "-chmod", toApply, dir2.toString());
++    
++    assertEquals(expected, fs.getFileStatus(dir2).getPermission().toString());
++  }
++   
+   private void confirmOwner(String owner, String group, 
+                             FileSystem fs, Path... paths) throws IOException {
+     for(Path path : paths) {
+@@ -824,7 +850,7 @@ public class TestDFSShell extends TestCase {
+     shell.setConf(conf);
+     fs = cluster.getFileSystem();
+     
+-    /* For dfs, I am the super user and I can change ower of any file to
++    /* For dfs, I am the super user and I can change owner of any file to
+      * anything. "-R" option is already tested by chmod test above.
+      */
+     
+-- 
+1.7.0.4
+

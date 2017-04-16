@@ -1,0 +1,161 @@
+From 21fdb7a7fd501fd63e1a540c2b55cf410d057301 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:54:27 -0800
+Subject: [PATCH 0073/1179] MAPREDUCE-825. JobClient completion poll interval of 5s causes slow tests in local mode
+
+Description: The JobClient.NetworkedJob.waitForCompletion() method polls for job completion every 5 seconds. When running a set of short tests in pseudo-distributed mode, this is unnecessarily slow and causes lots of wasted time. When bandwidth is not scarce, setting the poll interval to 100 ms results in a 4x speedup in some tests.  This interval should be parametrized to allow users to control the interval for testing purposes.
+Reason: Test performance improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/mapred/mapred-default.xml                      |   20 +++++++++
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |   45 +++++++++++++++++++-
+ .../org/apache/hadoop/mapred/TestTaskFail.java     |    3 +
+ 3 files changed, 66 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index 3f0fd2a..259ee03 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -605,6 +605,26 @@
+ </property>
+ 
+   <property>
++    <name>jobclient.completion.poll.interval</name>
++    <value>5000</value>
++    <description>The interval (in milliseconds) between which the JobClient
++    polls the JobTracker for updates about job status. You may want to set this
++    to a lower value to make tests run faster on a single node system. Adjusting
++    this value in production may lead to unwanted client-server traffic.
++    </description>
++  </property>
++
++  <property>
++    <name>jobclient.progress.monitor.poll.interval</name>
++    <value>1000</value>
++    <description>The interval (in milliseconds) between which the JobClient
++    reports status to the console and checks for job completion. You may want to set this
++    to a lower value to make tests run faster on a single node system. Adjusting
++    this value in production may lead to unwanted client-server traffic.
++    </description>
++  </property>
++
++  <property>
+     <name>mapred.job.tracker.persist.jobstatus.active</name>
+     <value>false</value>
+     <description>Indicates if persistency of job status information is
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index c0e25ab..bf223f2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -166,6 +166,17 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     Configuration.addDefaultResource("mapred-site.xml");
+   }
+ 
++  /** The interval at which monitorAndPrintJob() prints status */
++  private int progMonitorPollIntervalMillis;
++
++  /** Default progMonitorPollIntervalMillis is 1000 ms. */
++  private static final int DEFAULT_MONITOR_POLL_INTERVAL = 1000;
++
++  /** Key in mapred-*.xml that sets progMonitorPollIntervalMillis */
++  static final String PROGRESS_MONITOR_POLL_INTERVAL_KEY =
++      "jobclient.progress.monitor.poll.interval";
++
++
+   /**
+    * A NetworkedJob is an implementation of RunningJob.  It holds
+    * a JobProfile object to provide some info, and interacts with the
+@@ -176,6 +187,15 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     JobStatus status;
+     long statustime;
+ 
++    /** The interval at which NetworkedJob.waitForCompletion() should check. */
++    private int completionPollIntervalMillis;
++
++    /** Default completionPollIntervalMillis is 5000 ms. */
++    private static final int DEFAULT_COMPLETION_POLL_INTERVAL = 5000;
++
++    /** Key in mapred-*.xml that sets completionPollInvervalMillis */
++    static final String COMPLETION_POLL_INTERVAL_KEY = "jobclient.completion.poll.interval";
++
+     /**
+      * We store a JobProfile and a timestamp for when we last
+      * acquired the job profile.  If the job is null, then we cannot
+@@ -187,6 +207,17 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+       this.status = job;
+       this.profile = jobSubmitClient.getJobProfile(job.getJobID());
+       this.statustime = System.currentTimeMillis();
++
++      // Set the completion poll interval from the configuration.
++      // Default is 5 seconds.
++      Configuration conf = JobClient.this.getConf();
++      this.completionPollIntervalMillis = conf.getInt(COMPLETION_POLL_INTERVAL_KEY,
++          DEFAULT_COMPLETION_POLL_INTERVAL);
++      if (this.completionPollIntervalMillis < 1) {
++        LOG.warn(COMPLETION_POLL_INTERVAL_KEY + " has been set to an invalid value; "
++            + "replacing with " + DEFAULT_COMPLETION_POLL_INTERVAL);
++        this.completionPollIntervalMillis = DEFAULT_COMPLETION_POLL_INTERVAL;
++      }
+     }
+ 
+     /**
+@@ -303,7 +334,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     public void waitForCompletion() throws IOException {
+       while (!isComplete()) {
+         try {
+-          Thread.sleep(5000);
++          Thread.sleep(this.completionPollIntervalMillis);
+         } catch (InterruptedException ie) {
+         }
+       }
+@@ -396,6 +427,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+    * Create a job client.
+    */
+   public JobClient() {
++    this.progMonitorPollIntervalMillis = DEFAULT_MONITOR_POLL_INTERVAL;
+   }
+     
+   /**
+@@ -422,6 +454,15 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     } else {
+       this.jobSubmitClient = createRPCProxy(JobTracker.getAddress(conf), conf);
+     }        
++
++    // Read progress monitor poll interval from config. Default is 1 second.
++    this.progMonitorPollIntervalMillis = conf.getInt(PROGRESS_MONITOR_POLL_INTERVAL_KEY,
++        DEFAULT_MONITOR_POLL_INTERVAL);
++    if (this.progMonitorPollIntervalMillis < 1) {
++      LOG.warn(PROGRESS_MONITOR_POLL_INTERVAL_KEY + " has been set to an invalid value; "
++          + " replacing with " + DEFAULT_MONITOR_POLL_INTERVAL);
++      this.progMonitorPollIntervalMillis = DEFAULT_MONITOR_POLL_INTERVAL;
++    }
+   }
+ 
+   private JobSubmissionProtocol createRPCProxy(InetSocketAddress addr,
+@@ -1279,7 +1320,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     Configuration.IntegerRanges reduceRanges = conf.getProfileTaskRange(false);
+ 
+     while (!job.isComplete()) {
+-      Thread.sleep(1000);
++      Thread.sleep(this.progMonitorPollIntervalMillis);
+       String report = 
+         (" map " + StringUtils.formatPercent(job.mapProgress(), 0)+
+             " reduce " + 
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskFail.java b/src/test/org/apache/hadoop/mapred/TestTaskFail.java
+index 16deb8b..e46cd68 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskFail.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskFail.java
+@@ -176,6 +176,9 @@ public class TestTaskFail extends TestCase {
+       String input = "The quick brown fox\nhas many silly\nred fox sox\n";
+       // launch job with fail tasks
+       JobConf jobConf = mr.createJobConf();
++      // turn down the completion poll interval from the 5 second default
++      // for better test performance.
++      jobConf.set(JobClient.NetworkedJob.COMPLETION_POLL_INTERVAL_KEY, "50");
+       jobConf.setOutputCommitter(CommitterWithLogs.class);
+       RunningJob rJob = launchJob(jobConf, inDir, outDir, input);
+       rJob.waitForCompletion();
+-- 
+1.7.0.4
+

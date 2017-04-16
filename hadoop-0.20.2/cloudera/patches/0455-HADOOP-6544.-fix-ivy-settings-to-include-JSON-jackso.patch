@@ -1,0 +1,135 @@
+From ee18c74b284b015975b0df13c750e135ff938fbe Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 5 Feb 2010 20:23:24 +0000
+Subject: [PATCH 0455/1179] HADOOP-6544. fix ivy settings to include JSON jackson.codehause.org libs for .20
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435002/contrib.ivy.jackson.patch-3
+Author: Boris Shkolnik
+Reason: contrib build breaks because ivy is not configured to include jackson libs.
+Ref: YDH
+---
+ .eclipse.templates/.classpath                      |   14 ++++++++------
+ src/contrib/capacity-scheduler/ivy.xml             |    8 ++++++++
+ .../capacity-scheduler/ivy/libraries.properties    |    2 ++
+ src/contrib/hdfsproxy/ivy.xml                      |    8 ++++++++
+ src/contrib/hdfsproxy/ivy/libraries.properties     |    2 ++
+ src/contrib/streaming/ivy.xml                      |    8 ++++++++
+ src/contrib/streaming/ivy/libraries.properties     |    3 +++
+ 7 files changed, 39 insertions(+), 6 deletions(-)
+
+diff --git a/.eclipse.templates/.classpath b/.eclipse.templates/.classpath
+index fadd4f9..7613447 100644
+--- a/.eclipse.templates/.classpath
++++ b/.eclipse.templates/.classpath
+@@ -40,15 +40,17 @@
+   	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/servlet-api-2.5-6.1.14.jar"/>
+   	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/core-3.1.1.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/slf4j-api-1.4.3.jar"/>
+-	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/slf4j-log4j12-1.4.3.jar"/>
+-	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/xmlenc-0.52.jar"/>
+-        <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/aspectjrt-1.6.5.jar"/>
+-        <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/aspectjtools-1.6.5.jar"/>
++    <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/slf4j-log4j12-1.4.3.jar"/>
++    <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/xmlenc-0.52.jar"/>
++    <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jackson-mapper-asl-1.0.1.jar"/>
++    <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jackson-core-asl-1.0.1.jar"/>
++    <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/aspectjrt-1.6.5.jar"/>
++    <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/aspectjtools-1.6.5.jar"/>
+ 	<classpathentry kind="lib" path="src/test/lib/ftplet-api-1.0.0-SNAPSHOT.jar"/>
+ 	<classpathentry kind="lib" path="src/test/lib/ftpserver-core-1.0.0-SNAPSHOT.jar"/>
+ 	<classpathentry kind="lib" path="src/test/lib/ftpserver-server-1.0.0-SNAPSHOT.jar"/>
+-  <classpathentry kind="lib" path="src/test/lib/mina-core-2.0.0-M2-20080407.124109-12.jar"/>
+-  <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/mockito-all-1.8.0.jar"/>i
++    <classpathentry kind="lib" path="src/test/lib/mina-core-2.0.0-M2-20080407.124109-12.jar"/>
++    <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/mockito-all-1.8.0.jar"/>
+ 	<classpathentry kind="lib" path="build/test/classes"/>
+ 	<classpathentry kind="output" path="build/eclipse-classes"/>
+ </classpath>
+diff --git a/src/contrib/capacity-scheduler/ivy.xml b/src/contrib/capacity-scheduler/ivy.xml
+index 49be617..9a60e9d 100644
+--- a/src/contrib/capacity-scheduler/ivy.xml
++++ b/src/contrib/capacity-scheduler/ivy.xml
+@@ -56,5 +56,13 @@
+       name="commons-codec"
+       rev="${commons-codec.version}"
+       conf="common->default"/>
++    <dependency org="org.codehaus.jackson"
++      name="jackson-mapper-asl"
++      rev="${jackson.version}"
++      conf="common->default"/>
++    <dependency org="org.codehaus.jackson"
++      name="jackson-core-asl"
++      rev="${jackson.version}"
++      conf="common->default"/>
+   </dependencies>
+ </ivy-module>
+diff --git a/src/contrib/capacity-scheduler/ivy/libraries.properties b/src/contrib/capacity-scheduler/ivy/libraries.properties
+index a470b37..688b76a 100644
+--- a/src/contrib/capacity-scheduler/ivy/libraries.properties
++++ b/src/contrib/capacity-scheduler/ivy/libraries.properties
+@@ -3,3 +3,5 @@
+ 
+ #Please list the dependencies name with version if they are different from the ones 
+ #listed in the global libraries.properties file (in alphabetical order)
++
++jackson.version=1.0.1
+diff --git a/src/contrib/hdfsproxy/ivy.xml b/src/contrib/hdfsproxy/ivy.xml
+index da1e9c6..371eb1b 100644
+--- a/src/contrib/hdfsproxy/ivy.xml
++++ b/src/contrib/hdfsproxy/ivy.xml
+@@ -79,5 +79,13 @@
+       name="core"
+       rev="${core.version}"
+       conf="common->default"/>
++    <dependency org="org.codehaus.jackson"
++      name="jackson-mapper-asl"
++      rev="${jackson.version}"
++      conf="common->default"/>
++    <dependency org="org.codehaus.jackson"
++      name="jackson-core-asl"
++      rev="${jackson.version}"
++      conf="common->default"/>
+   </dependencies>
+ </ivy-module>
+diff --git a/src/contrib/hdfsproxy/ivy/libraries.properties b/src/contrib/hdfsproxy/ivy/libraries.properties
+index 73d7403..1d12ff7 100644
+--- a/src/contrib/hdfsproxy/ivy/libraries.properties
++++ b/src/contrib/hdfsproxy/ivy/libraries.properties
+@@ -3,3 +3,5 @@
+ #These are the versions of our dependencies (in alphabetical order)
+ log4j.version=1.2.15
+ slf4j-api.version=1.4.3
++jackson.version=1.0.1
++
+diff --git a/src/contrib/streaming/ivy.xml b/src/contrib/streaming/ivy.xml
+index d7e72c4..7357205 100644
+--- a/src/contrib/streaming/ivy.xml
++++ b/src/contrib/streaming/ivy.xml
+@@ -80,5 +80,13 @@
+       name="commons-codec"
+       rev="${commons-codec.version}"
+       conf="common->default"/>
++	<dependency org="org.codehaus.jackson"
++      name="jackson-mapper-asl"
++      rev="${jackson.version}"
++      conf="common->default"/>
++    <dependency org="org.codehaus.jackson"
++      name="jackson-core-asl"
++      rev="${jackson.version}"
++      conf="common->default"/>
+     </dependencies>
+ </ivy-module>
+diff --git a/src/contrib/streaming/ivy/libraries.properties b/src/contrib/streaming/ivy/libraries.properties
+index a470b37..fdc1465 100644
+--- a/src/contrib/streaming/ivy/libraries.properties
++++ b/src/contrib/streaming/ivy/libraries.properties
+@@ -3,3 +3,6 @@
+ 
+ #Please list the dependencies name with version if they are different from the ones 
+ #listed in the global libraries.properties file (in alphabetical order)
++
++jackson.version=1.0.1
++
+-- 
+1.7.0.4
+

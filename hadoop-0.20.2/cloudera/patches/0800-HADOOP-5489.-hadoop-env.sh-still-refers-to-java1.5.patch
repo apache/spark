@@ -1,0 +1,42 @@
+From f40f6bef0808d34b0632bd759b7916946b6a500c Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 6 Feb 2011 14:01:28 -0800
+Subject: [PATCH 0800/1179] HADOOP-5489. hadoop-env.sh still refers to java1.5.
+
+Reason: Bug
+Author: Steve Loughran
+Ref: CDH-2588
+---
+ conf/hadoop-env.sh.template                        |    2 +-
+ .../hdfsproxy/conf/hdfsproxy-env.sh.template       |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/conf/hadoop-env.sh.template b/conf/hadoop-env.sh.template
+index 5dfaa20..ce7ccc8 100644
+--- a/conf/hadoop-env.sh.template
++++ b/conf/hadoop-env.sh.template
+@@ -6,7 +6,7 @@
+ # remote nodes.
+ 
+ # The java implementation to use.  Required.
+-# export JAVA_HOME=/usr/lib/j2sdk1.5-sun
++# export JAVA_HOME=/usr/lib/j2sdk1.6-sun
+ 
+ # Extra Java CLASSPATH elements.  Optional.
+ # export HADOOP_CLASSPATH="<extra_entries>:$HADOOP_CLASSPATH"
+diff --git a/src/contrib/hdfsproxy/conf/hdfsproxy-env.sh.template b/src/contrib/hdfsproxy/conf/hdfsproxy-env.sh.template
+index a0ff7a5..b0e6018 100644
+--- a/src/contrib/hdfsproxy/conf/hdfsproxy-env.sh.template
++++ b/src/contrib/hdfsproxy/conf/hdfsproxy-env.sh.template
+@@ -6,7 +6,7 @@
+ # remote nodes.
+ 
+ # The java implementation to use.  Required.
+-# export JAVA_HOME=/usr/lib/j2sdk1.5-sun
++# export JAVA_HOME=/usr/lib/j2sdk1.6-sun
+ 
+ # Extra Java CLASSPATH elements.  Optional.
+ # export HDFSPROXY_CLASSPATH=
+-- 
+1.7.0.4
+

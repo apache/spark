@@ -1,0 +1,231 @@
+From f4ad3c7d410bfb5d86053fcbc91b4275fe0fd74c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 11 Mar 2010 17:28:05 -0800
+Subject: [PATCH 0554/1179] HDFS-1036. in DelegationTokenFetch dfs.getURI returns no port
+
+Patch: https://issues.apache.org/jira/secure/attachment/12438549/HDFS-1036-BP20.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12438585/HDFS-1036-BP20-1.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12438856/fetchdt_doc.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ .../content/xdocs/commands_manual.xml              |   24 ++++++++++++++++++-
+ .../content/xdocs/hdfs_user_guide.xml              |   20 ++++++++++++++++
+ .../hadoop/hdfs/tools/DelegationTokenFetcher.java  |   13 ++++++----
+ .../hadoop/tools/TestDelegationTokenFetcher.java   |   16 +++++++-----
+ 4 files changed, 59 insertions(+), 14 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/commands_manual.xml b/src/docs/src/documentation/content/xdocs/commands_manual.xml
+index d17730f..be88462 100644
+--- a/src/docs/src/documentation/content/xdocs/commands_manual.xml
++++ b/src/docs/src/documentation/content/xdocs/commands_manual.xml
+@@ -56,8 +56,8 @@
+ 				<title>Generic Options</title>
+ 				<p>
+ 				  The following options are supported by <a href="commands_manual.html#dfsadmin">dfsadmin</a>, 
+-				  <a href="commands_manual.html#fs">fs</a>, <a href="commands_manual.html#fsck">fsck</a> and 
+-				  <a href="commands_manual.html#job">job</a>. 
++				  <a href="commands_manual.html#fs">fs</a>, <a href="commands_manual.html#fsck">fsck</a>, 
++				  <a href="commands_manual.html#job">job</a> and <a href="commands_manual.html#fetchdt">fetchdt</a>. 
+ 				  Applications should implement 
+ 				  <a href="ext:api/org/apache/hadoop/util/tool">Tool</a> to support
+ 				  <a href="ext:api/org/apache/hadoop/util/genericoptionsparser">
+@@ -211,6 +211,26 @@
+ 			</section>
+ 			
+ 			<section>
++                <title> fetchdt </title>
++                <p>
++                    Gets Delegation Token from a NameNode. See <a href="hdfs_user_guide.html#fetchdt">fetchdt</a> for more info.
++                </p> 
++                <p><code>Usage: hadoop fetchdt [</code><a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a><code>] 
++                [--webservice &lt;namenode_http_addr&gt;] &lt;path&gt; </code></p>
++                <table>
++                      <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
++                      <tr>
++                        <td><code>&lt;fileName&gt;</code></td>
++                        <td>File name to store the token into.</td>
++                       </tr>
++                       <tr>
++                        <td><code>--webservice &lt;https_address&gt;</code></td>
++                        <td>use http protocol instead of RPC</td>
++                       </tr>
++                    </table>
++            </section>
++            
++			<section>
+ 				<title> jar </title>
+ 				<p>
+ 					Runs a jar file. Users can bundle their Map Reduce code in a jar file and execute it using this command.
+diff --git a/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml b/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
+index 33f3867..2d0969d 100644
+--- a/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
++++ b/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
+@@ -99,6 +99,10 @@
+     		find missing files or blocks.
+     	</li>
+     	<li>
++            <code>fetchdt</code>: a utility to fetch DelegationToken and store it 
++            in a file on the local system. 
++        </li>
++    	<li>
+     		Rebalancer: tool to balance the cluster when the data is
+     		unevenly distributed among DataNodes.
+     	</li>
+@@ -371,6 +375,22 @@
+       For command usage, see <a href="commands_manual.html#fsck"><code>fsck</code> command</a>. 
+       <code>fsck</code> can be run on the whole file system or on a subset of files.
+      </p>
++   
++   </section> <section> <title> fetchdt </title>
++     <p>    
++      HDFS supports the <code>fetchdt</code> command to fetch Delegation Token 
++      and store it in a file on the local system. This token can be later used to 
++      access secure server (NameNode for example) from a non secure client.
++      Utility uses either RPC or HTTPS (over Kerberos) to get the token, and thus
++      requires kerberos tickets to be present before the run (run kinit to get 
++      the tickets). 
++      The HDFS <code>fetchdt</code> command is not a
++      Hadoop shell command. It can be run as '<code>bin/hadoop fetchdt DTfile </code>'.
++      After you got the token you can run an HDFS command without having Kerberos
++      tickets, by pointing HADOOP_TOKEN_FILE_LOCATION environmental variable to 
++      the delegation token file. 
++      For command usage, see <a href="commands_manual.html#fetchdt"><code>fetchdt</code> command</a>. 
++     </p>
+      
+    </section> <section> <title> Upgrade and Rollback </title>
+      <p>
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java b/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
+index 05de6f3..82af9e4 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
+@@ -23,6 +23,7 @@ import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.net.InetAddress;
++import java.net.URI;
+ import java.net.URL;
+ import java.net.URLConnection;
+ import java.security.PrivilegedExceptionAction;
+@@ -30,11 +31,11 @@ import java.security.PrivilegedExceptionAction;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.hdfs.DistributedFileSystem;
+-import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.namenode.DelegationTokenServlet;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.security.Credentials;
++import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.util.StringUtils;
+@@ -52,6 +53,7 @@ public class DelegationTokenFetcher {
+   private final DistributedFileSystem dfs;
+   private final UserGroupInformation ugi;
+   private final DataOutputStream out;
++  private final Configuration conf;
+ 
+   /**
+    * Command-line interface
+@@ -84,7 +86,7 @@ public class DelegationTokenFetcher {
+           out = new DataOutputStream(new FileOutputStream(args[0]));
+           UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+ 
+-          new DelegationTokenFetcher(dfs, out, ugi).go();
++          new DelegationTokenFetcher(dfs, out, ugi, conf).go();
+           
+           out.flush();
+           System.out.println("Succesfully wrote token of size " + 
+@@ -102,10 +104,11 @@ public class DelegationTokenFetcher {
+   }
+   
+   public DelegationTokenFetcher(DistributedFileSystem dfs, 
+-      DataOutputStream out, UserGroupInformation ugi) {
++      DataOutputStream out, UserGroupInformation ugi, Configuration conf) {
+     checkNotNull("dfs", dfs); this.dfs = dfs;
+     checkNotNull("out", out); this.out = out;
+     checkNotNull("ugi", ugi); this.ugi = ugi;
++    checkNotNull("conf",conf); this.conf = conf;
+   }
+   
+   private void checkNotNull(String s, Object o) {
+@@ -119,9 +122,9 @@ public class DelegationTokenFetcher {
+       dfs.getDelegationToken(new Text(fullName));
+     
+     // Reconstruct the ip:port of the Namenode
++    URI uri = FileSystem.getDefaultUri(conf);
+     String nnAddress = 
+-      InetAddress.getByName(dfs.getUri().getHost()).getHostAddress() 
+-      + ":" + dfs.getUri().getPort();
++      InetAddress.getByName(uri.getHost()).getHostAddress() + ":" + uri.getPort();
+     token.setService(new Text(nnAddress));
+     
+     Credentials ts = new Credentials();
+diff --git a/src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java b/src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java
+index e9a5d2b..cef4a4a 100644
+--- a/src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java
++++ b/src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java
+@@ -28,6 +28,8 @@ import java.io.DataInputStream;
+ import java.io.DataOutputStream;
+ import java.net.URI;
+ 
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.hdfs.DistributedFileSystem;
+ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.tools.DelegationTokenFetcher;
+@@ -43,12 +45,14 @@ public class TestDelegationTokenFetcher {
+   private DistributedFileSystem dfs;
+   private DataOutputStream out;
+   private UserGroupInformation ugi;
++  private Configuration conf;
+ 
+   @Before 
+   public void init() {
+     dfs = mock(DistributedFileSystem.class);
+     out = mock(DataOutputStream.class);
+     ugi = mock(UserGroupInformation.class);
++    conf = new Configuration();
+   }
+   
+   /**
+@@ -60,6 +64,8 @@ public class TestDelegationTokenFetcher {
+     final String LONG_NAME = "TheDoctor@TARDIS";
+     final String SHORT_NAME = "TheDoctor";
+     final String SERVICE_VALUE = "localhost:2005";
++    URI uri = new URI("hdfs://" + SERVICE_VALUE);
++    FileSystem.setDefaultUri(conf, uri);
+     
+     // Mock out the user's long and short names.
+     when(ugi.getUserName()).thenReturn(LONG_NAME);
+@@ -69,15 +75,11 @@ public class TestDelegationTokenFetcher {
+     // for this particular user.
+     Token<DelegationTokenIdentifier> t = new Token<DelegationTokenIdentifier>();
+     when(dfs.getDelegationToken(eq(new Text(LONG_NAME)))).thenReturn(t);
+-
+-    // Mock the NN's URI, which is stored as the service value
+-    URI uri = new URI("hdfs://" + SERVICE_VALUE);
+-    when(dfs.getUri()).thenReturn(uri);
+-    
++ 
+     // Now, actually let the TokenFetcher go fetch the token.
+     final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+     out = new DataOutputStream(baos);
+-    new DelegationTokenFetcher(dfs, out, ugi).go();
++    new DelegationTokenFetcher(dfs, out, ugi, conf).go();
+     
+     // now read the data back in and verify correct values
+     Credentials ts = new Credentials();
+@@ -94,7 +96,7 @@ public class TestDelegationTokenFetcher {
+ 
+   private void checkWithNullParam(String s) {
+     try {
+-      new DelegationTokenFetcher(dfs, out, ugi);
++      new DelegationTokenFetcher(dfs, out, ugi, conf);
+     } catch (IllegalArgumentException iae) {
+       assertEquals("Expected exception message not received", 
+           s + " cannot be null.", iae.getMessage());
+-- 
+1.7.0.4
+

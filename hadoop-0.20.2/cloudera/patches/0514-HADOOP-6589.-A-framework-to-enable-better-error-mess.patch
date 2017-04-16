@@ -1,0 +1,498 @@
+From cf43306ef9d6a7b1a3d3287a898c05cbd51361b6 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 27 Feb 2010 00:04:02 -0800
+Subject: [PATCH 0514/1179] HADOOP-6589. A framework to enable better error messages when rpc connections
+ fail to authenticate. (Kan Zhang via omalley)
+
+Author: Kan Zhang
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Server.java         |  158 ++++++++++++--------
+ .../org/apache/hadoop/security/SaslRpcClient.java  |   13 ++
+ .../org/apache/hadoop/security/SaslRpcServer.java  |   28 +++-
+ src/test/org/apache/hadoop/ipc/TestRPC.java        |   25 +++
+ src/test/org/apache/hadoop/ipc/TestSaslRPC.java    |   29 ++++
+ 5 files changed, 183 insertions(+), 70 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index e2fc283..5805f22 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -59,12 +59,15 @@ import javax.security.sasl.SaslServer;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.BytesWritable;
++import org.apache.hadoop.io.IntWritable;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableUtils;
+ import org.apache.hadoop.ipc.metrics.RpcDetailedMetrics;
+ import org.apache.hadoop.ipc.metrics.RpcMetrics;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.SaslRpcServer;
++import org.apache.hadoop.security.SaslRpcServer.SaslStatus;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
+ import org.apache.hadoop.security.SaslRpcServer.SaslDigestCallbackHandler;
+@@ -74,6 +77,7 @@ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.ProxyUsers;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.security.token.SecretManager;
++import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+@@ -766,11 +770,11 @@ public abstract class Server {
+     // Fake 'call' for failed authorization response
+     private final int AUTHROIZATION_FAILED_CALLID = -1;
+     private final Call authFailedCall = 
+-      new Call(AUTHROIZATION_FAILED_CALLID, null, null);
++      new Call(AUTHROIZATION_FAILED_CALLID, null, this);
+     private ByteArrayOutputStream authFailedResponse = new ByteArrayOutputStream();
+     // Fake 'call' for SASL context setup
+     private static final int SASL_CALLID = -33;
+-    private final Call saslCall = new Call(SASL_CALLID, null, null);
++    private final Call saslCall = new Call(SASL_CALLID, null, this);
+     private final ByteArrayOutputStream saslResponse = new ByteArrayOutputStream();
+     
+     public Connection(SelectionKey key, SocketChannel channel, 
+@@ -852,68 +856,78 @@ public abstract class Server {
+     private void saslReadAndProcess(byte[] saslToken) throws IOException,
+         InterruptedException {
+       if (!saslContextEstablished) {
+-        if (saslServer == null) {
+-          switch (authMethod) {
+-          case DIGEST:
+-            saslServer = Sasl.createSaslServer(AuthMethod.DIGEST
+-                .getMechanismName(), null, SaslRpcServer.SASL_DEFAULT_REALM,
+-                SaslRpcServer.SASL_PROPS, new SaslDigestCallbackHandler(
+-                    secretManager, this));
+-            break;
+-          default:
+-            UserGroupInformation current = UserGroupInformation
+-                .getCurrentUser();
+-            String fullName = current.getUserName();
+-            if (LOG.isDebugEnabled())
+-              LOG.debug("Kerberos principal name is " + fullName);
+-            final String names[] = SaslRpcServer.splitKerberosName(fullName);
+-            if (names.length != 3) {
+-              throw new IOException(
+-                  "Kerberos principal name does NOT have the expected "
+-                      + "hostname part: " + fullName);
+-            }
+-            current.doAs(new PrivilegedExceptionAction<Object>() {
+-              @Override
+-              public Object run() throws IOException {
+-                saslServer = Sasl.createSaslServer(AuthMethod.KERBEROS
+-                    .getMechanismName(), names[0], names[1],
+-                    SaslRpcServer.SASL_PROPS, new SaslGssCallbackHandler());
+-                return null;
++        byte[] replyToken = null;
++        try {
++          if (saslServer == null) {
++            switch (authMethod) {
++            case DIGEST:
++              if (secretManager == null) {
++                throw new AccessControlException(
++                    "Server is not configured to do DIGEST authentication.");
+               }
+-            });
++              saslServer = Sasl.createSaslServer(AuthMethod.DIGEST
++                  .getMechanismName(), null, SaslRpcServer.SASL_DEFAULT_REALM,
++                  SaslRpcServer.SASL_PROPS, new SaslDigestCallbackHandler(
++                      secretManager, this));
++              break;
++            default:
++              UserGroupInformation current = UserGroupInformation
++                  .getCurrentUser();
++              String fullName = current.getUserName();
++              if (LOG.isDebugEnabled())
++                LOG.debug("Kerberos principal name is " + fullName);
++              final String names[] = SaslRpcServer.splitKerberosName(fullName);
++              if (names.length != 3) {
++                throw new AccessControlException(
++                    "Kerberos principal name does NOT have the expected "
++                        + "hostname part: " + fullName);
++              }
++              current.doAs(new PrivilegedExceptionAction<Object>() {
++                @Override
++                public Object run() throws SaslException {
++                  saslServer = Sasl.createSaslServer(AuthMethod.KERBEROS
++                      .getMechanismName(), names[0], names[1],
++                      SaslRpcServer.SASL_PROPS, new SaslGssCallbackHandler());
++                  return null;
++                }
++              });
++            }
++            if (saslServer == null)
++              throw new AccessControlException(
++                  "Unable to find SASL server implementation for "
++                      + authMethod.getMechanismName());
++            if (LOG.isDebugEnabled())
++              LOG.debug("Created SASL server with mechanism = "
++                  + authMethod.getMechanismName());
+           }
+-          if (saslServer == null)
+-            throw new IOException(
+-                "Unable to find SASL server implementation for "
+-                    + authMethod.getMechanismName());
+           if (LOG.isDebugEnabled())
+-            LOG.debug("Created SASL server with mechanism = "
+-                + authMethod.getMechanismName());
+-        }
+-        if (LOG.isDebugEnabled())
+-          LOG.debug("Have read input token of size " + saslToken.length
+-              + " for processing by saslServer.evaluateResponse()");
+-        byte[] replyToken;
+-        try {
++            LOG.debug("Have read input token of size " + saslToken.length
++                + " for processing by saslServer.evaluateResponse()");
+           replyToken = saslServer.evaluateResponse(saslToken);
+-        } catch (SaslException se) {
++        } catch (IOException e) {
++          IOException sendToClient = e;
++          Throwable cause = e;
++          while (cause != null) {
++            if (cause instanceof InvalidToken) {
++              sendToClient = (InvalidToken) cause;
++              break;
++            }
++            cause = cause.getCause();
++          }
++          doSaslReply(SaslStatus.ERROR, null, sendToClient.getClass().getName(), 
++              sendToClient.getLocalizedMessage());
+           rpcMetrics.authenticationFailures.inc();
+           String clientIP = this.toString();
+           // attempting user could be null
+-          auditLOG.warn(AUTH_FAILED_FOR + clientIP + ":" + attemptingUser, se);
+-          throw se;
++          auditLOG.warn(AUTH_FAILED_FOR + clientIP + ":" + attemptingUser, e);
++          throw e;
+         }
+         if (replyToken != null) {
+           if (LOG.isDebugEnabled())
+             LOG.debug("Will send token of size " + replyToken.length
+                 + " from saslServer.");
+-          saslCall.connection = this;
+-          saslResponse.reset();
+-          DataOutputStream out = new DataOutputStream(saslResponse);
+-          out.writeInt(replyToken.length);
+-          out.write(replyToken, 0, replyToken.length);
+-          saslCall.setResponse(ByteBuffer.wrap(saslResponse.toByteArray()));
+-          responder.doRespond(saslCall);
++          doSaslReply(SaslStatus.SUCCESS, new BytesWritable(replyToken), null,
++              null);
+         }
+         if (saslServer.isComplete()) {
+           if (LOG.isDebugEnabled()) {
+@@ -936,6 +950,21 @@ public abstract class Server {
+       }
+     }
+     
++    private void doSaslReply(SaslStatus status, Writable rv,
++        String errorClass, String error) throws IOException {
++      saslResponse.reset();
++      DataOutputStream out = new DataOutputStream(saslResponse);
++      out.writeInt(status.state); // write status
++      if (status == SaslStatus.SUCCESS) {
++        rv.write(out);
++      } else {
++        WritableUtils.writeString(out, errorClass);
++        WritableUtils.writeString(out, error);
++      }
++      saslCall.setResponse(ByteBuffer.wrap(saslResponse.toByteArray()));
++      responder.doRespond(saslCall);
++    }
++    
+     private void disposeSasl() {
+       if (saslServer != null) {
+         try {
+@@ -945,15 +974,6 @@ public abstract class Server {
+       }
+     }
+     
+-    private void askClientToUseSimpleAuth() throws IOException {
+-      saslCall.connection = this;
+-      saslResponse.reset();
+-      DataOutputStream out = new DataOutputStream(saslResponse);
+-      out.writeInt(SaslRpcServer.SWITCH_TO_SIMPLE_AUTH);
+-      saslCall.setResponse(ByteBuffer.wrap(saslResponse.toByteArray()));
+-      responder.doRespond(saslCall);
+-    }
+-    
+     public int readAndProcess() throws IOException, InterruptedException {
+       while (true) {
+         /* Read at most one RPC. If the header is not read completely yet
+@@ -983,10 +1003,16 @@ public abstract class Server {
+             throw new IOException("Unable to read authentication method");
+           }
+           if (isSecurityEnabled && authMethod == AuthMethod.SIMPLE) {
+-            throw new IOException("Authentication is required");
++            AccessControlException ae = new AccessControlException(
++                "Authentication is required");
++            setupResponse(authFailedResponse, authFailedCall, Status.FATAL,
++                null, ae.getClass().getName(), ae.getMessage());
++            responder.doRespond(authFailedCall);
++            throw ae;
+           }
+           if (!isSecurityEnabled && authMethod != AuthMethod.SIMPLE) {
+-            askClientToUseSimpleAuth();
++            doSaslReply(SaslStatus.SUCCESS, new IntWritable(
++                SaslRpcServer.SWITCH_TO_SIMPLE_AUTH), null, null);
+             authMethod = AuthMethod.SIMPLE;
+             // client has already sent the initial Sasl message and we
+             // should ignore it. Both client and server should fall back
+@@ -1182,7 +1208,6 @@ public abstract class Server {
+         rpcMetrics.authorizationSuccesses.inc();
+       } catch (AuthorizationException ae) {
+         rpcMetrics.authorizationFailures.inc();
+-        authFailedCall.connection = this;
+         setupResponse(authFailedResponse, authFailedCall, Status.FATAL, null,
+             ae.getClass().getName(), ae.getMessage());
+         responder.doRespond(authFailedCall);
+@@ -1410,6 +1435,11 @@ public abstract class Server {
+     this.isSecurityEnabled = false;
+   }
+   
++  /** for unit testing only, should be called before server is started */ 
++  void enableSecurity() {
++    this.isSecurityEnabled = true;
++  }
++  
+   /** Sets the socket buffer size used for responding to RPCs */
+   public void setSocketSendBufSize(int size) { this.socketSendBufferSize = size; }
+ 
+diff --git a/src/core/org/apache/hadoop/security/SaslRpcClient.java b/src/core/org/apache/hadoop/security/SaslRpcClient.java
+index 7b171c5..6e28203 100644
+--- a/src/core/org/apache/hadoop/security/SaslRpcClient.java
++++ b/src/core/org/apache/hadoop/security/SaslRpcClient.java
+@@ -39,7 +39,10 @@ import javax.security.sasl.SaslClient;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
++import org.apache.hadoop.security.SaslRpcServer.SaslStatus;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ 
+@@ -99,6 +102,14 @@ public class SaslRpcClient {
+       throw new IOException("Unable to find SASL client implementation");
+   }
+ 
++  private static void readStatus(DataInputStream inStream) throws IOException {
++    int status = inStream.readInt(); // read status
++    if (status != SaslStatus.SUCCESS.state) {
++      throw new RemoteException(WritableUtils.readString(inStream),
++          WritableUtils.readString(inStream));
++    }
++  }
++  
+   /**
+    * Do client side SASL authentication with server via the given InputStream
+    * and OutputStream
+@@ -130,6 +141,7 @@ public class SaslRpcClient {
+               + " from initSASLContext.");
+       }
+       if (!saslClient.isComplete()) {
++        readStatus(inStream);
+         int len = inStream.readInt();
+         if (len == SaslRpcServer.SWITCH_TO_SIMPLE_AUTH) {
+           if (LOG.isDebugEnabled())
+@@ -155,6 +167,7 @@ public class SaslRpcClient {
+           outStream.flush();
+         }
+         if (!saslClient.isComplete()) {
++          readStatus(inStream);
+           saslToken = new byte[inStream.readInt()];
+           if (LOG.isDebugEnabled())
+             LOG.debug("Will read input token of size " + saslToken.length
+diff --git a/src/core/org/apache/hadoop/security/SaslRpcServer.java b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+index 8a7dde9..0c1994a 100644
+--- a/src/core/org/apache/hadoop/security/SaslRpcServer.java
++++ b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+@@ -42,6 +42,7 @@ import org.apache.hadoop.ipc.Server;
+ import org.apache.hadoop.security.token.SecretManager;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
++import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+ 
+ /**
+  * A utility class for dealing with SASL on RPC server
+@@ -68,11 +69,16 @@ public class SaslRpcServer {
+   }
+ 
+   public static TokenIdentifier getIdentifier(String id,
+-      SecretManager<TokenIdentifier> secretManager) throws IOException {
++      SecretManager<TokenIdentifier> secretManager) throws InvalidToken {
+     byte[] tokenId = decodeIdentifier(id);
+     TokenIdentifier tokenIdentifier = secretManager.createIdentifier();
+-    tokenIdentifier.readFields(new DataInputStream(new ByteArrayInputStream(
+-        tokenId)));
++    try {
++      tokenIdentifier.readFields(new DataInputStream(new ByteArrayInputStream(
++          tokenId)));
++    } catch (IOException e) {
++      throw (InvalidToken) new InvalidToken(
++          "Can't de-serialize tokenIdentifier").initCause(e);
++    }
+     return tokenIdentifier;
+   }
+ 
+@@ -85,6 +91,16 @@ public class SaslRpcServer {
+     return fullName.split("[/@]");
+   }
+ 
++  public enum SaslStatus {
++    SUCCESS (0),
++    ERROR (1);
++    
++    public final int state;
++    private SaslStatus(int state) {
++      this.state = state;
++    }
++  }
++  
+   /** Authentication method */
+   public static enum AuthMethod {
+     SIMPLE((byte) 80, "", AuthenticationMethod.SIMPLE),
+@@ -139,13 +155,13 @@ public class SaslRpcServer {
+       this.connection = connection;
+     }
+ 
+-    private char[] getPassword(TokenIdentifier tokenid) throws IOException {
++    private char[] getPassword(TokenIdentifier tokenid) throws InvalidToken {
+       return encodePassword(secretManager.retrievePassword(tokenid));
+     }
+ 
+     /** {@inheritDoc} */
+     @Override
+-    public void handle(Callback[] callbacks) throws IOException,
++    public void handle(Callback[] callbacks) throws InvalidToken,
+         UnsupportedCallbackException {
+       NameCallback nc = null;
+       PasswordCallback pc = null;
+@@ -201,7 +217,7 @@ public class SaslRpcServer {
+ 
+     /** {@inheritDoc} */
+     @Override
+-    public void handle(Callback[] callbacks) throws IOException,
++    public void handle(Callback[] callbacks) throws
+         UnsupportedCallbackException {
+       AuthorizeCallback ac = null;
+       for (Callback callback : callbacks) {
+diff --git a/src/test/org/apache/hadoop/ipc/TestRPC.java b/src/test/org/apache/hadoop/ipc/TestRPC.java
+index 47bd655..d808a7e 100644
+--- a/src/test/org/apache/hadoop/ipc/TestRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestRPC.java
+@@ -45,6 +45,7 @@ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.PolicyProvider;
+ import org.apache.hadoop.security.authorize.Service;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
++import org.apache.hadoop.security.AccessControlException;
+ 
+ /** Unit tests for RPC. */
+ public class TestRPC extends TestCase {
+@@ -487,6 +488,30 @@ public class TestRPC extends TestCase {
+     assertNull("rpc got ClosedChannelException", error.get());
+   }
+   
++  public void testErrorMsgForInsecureClient() throws Exception {
++    final Server server = RPC.getServer(
++        new TestImpl(), ADDRESS, 0, 5, true, conf, null);
++    server.enableSecurity();
++    server.start();
++    boolean succeeded = false;
++    final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++    TestProtocol proxy = null;
++    try {
++      proxy = (TestProtocol) RPC.getProxy(TestProtocol.class,
++          TestProtocol.versionID, addr, conf);
++    } catch (RemoteException e) {
++      LOG.info("LOGGING MESSAGE: " + e.getLocalizedMessage());
++      assertTrue(e.unwrapRemoteException() instanceof AccessControlException);
++      succeeded = true;
++    } finally {
++      server.stop();
++      if (proxy != null) {
++        RPC.stopProxy(proxy);
++      }
++    }
++    assertTrue(succeeded);
++  }
++  
+   public static void main(String[] args) throws Exception {
+ 
+     new TestRPC("test").testCalls();
+diff --git a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+index e7df87e..72489e8 100644
+--- a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+@@ -19,6 +19,7 @@
+ package org.apache.hadoop.ipc;
+ 
+ import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION;
++import static org.junit.Assert.*;
+ 
+ import java.io.DataInput;
+ import java.io.DataOutput;
+@@ -41,6 +42,7 @@ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.security.token.TokenInfo;
+ import org.apache.hadoop.security.token.TokenSelector;
++import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+ import org.apache.hadoop.security.SaslInputStream;
+ import org.apache.hadoop.security.SaslRpcClient;
+ import org.apache.hadoop.security.SaslRpcServer;
+@@ -57,6 +59,7 @@ public class TestSaslRPC {
+   public static final Log LOG =
+     LogFactory.getLog(TestSaslRPC.class);
+   
++  static final String ERROR_MESSAGE = "Token is invalid";
+   static final String SERVER_PRINCIPAL_KEY = "test.ipc.server.principal";
+   private static Configuration conf;
+   static {
+@@ -131,6 +134,14 @@ public class TestSaslRPC {
+       return new TestTokenIdentifier();
+     }
+   }
++  
++  public static class BadTokenSecretManager extends TestTokenSecretManager {
++
++    public byte[] retrievePassword(TestTokenIdentifier id) 
++        throws InvalidToken {
++      throw new InvalidToken(ERROR_MESSAGE);
++    }
++  }
+ 
+   public static class TestTokenSelector implements
+       TokenSelector<TestTokenIdentifier> {
+@@ -183,6 +194,24 @@ public class TestSaslRPC {
+     doDigestRpc(server, sm);
+   }
+   
++  @Test
++  public void testErrorMessage() throws Exception {
++    BadTokenSecretManager sm = new BadTokenSecretManager();
++    final Server server = RPC.getServer(
++        new TestSaslImpl(), ADDRESS, 0, 5, true, conf, sm);
++
++    boolean succeeded = false;
++    try {
++      doDigestRpc(server, sm);
++    } catch (RemoteException e) {
++      LOG.info("LOGGING MESSAGE: " + e.getLocalizedMessage());
++      assertTrue(ERROR_MESSAGE.equals(e.getLocalizedMessage()));
++      assertTrue(e.unwrapRemoteException() instanceof InvalidToken);
++      succeeded = true;
++    }
++    assertTrue(succeeded);
++  }
++  
+   private void doDigestRpc(Server server, TestTokenSecretManager sm)
+       throws Exception {
+     server.start();
+-- 
+1.7.0.4
+

@@ -1,0 +1,431 @@
+From 89e10647b3c733c16124b648a6bfe187670390da Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 18 Mar 2010 17:02:47 -0700
+Subject: [PATCH 0572/1179] HADOOP-6642. Fix javac, javadoc, findbugs warnings
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439225/C6642-1y20.patch
+Author: Chris Douglas
+Ref: CDH-648
+---
+ .../security/Krb5AndCertsSslSocketConnector.java   |   16 ++++++----
+ .../org/apache/hadoop/security/SaslRpcServer.java  |    4 +-
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    4 ++-
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    2 +-
+ src/hdfs/org/apache/hadoop/hdfs/tools/DFSck.java   |    2 +-
+ src/mapred/org/apache/hadoop/mapred/JSPUtil.java   |    2 +-
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   17 +----------
+ .../org/apache/hadoop/mapred/JobTracker.java       |   31 +++++++++++++-------
+ src/mapred/org/apache/hadoop/mapred/MapTask.java   |    1 -
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    3 +-
+ .../apache/hadoop/mapred/TaskTrackerStatus.java    |   12 ++-----
+ .../security/token/DelegationTokenRenewal.java     |    6 ++-
+ .../mapreduce/server/tasktracker/Localizer.java    |    2 +-
+ src/test/findbugsExcludeFile.xml                   |    7 ++++
+ src/webapps/datanode/browseDirectory.jsp           |    2 +-
+ src/webapps/datanode/tail.jsp                      |    2 +-
+ src/webapps/job/jobconf_history.jsp                |    2 +-
+ src/webapps/job/jobdetailshistory.jsp              |    1 +
+ 18 files changed, 60 insertions(+), 56 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/Krb5AndCertsSslSocketConnector.java b/src/core/org/apache/hadoop/security/Krb5AndCertsSslSocketConnector.java
+index ad9ea81..2043c3f 100644
+--- a/src/core/org/apache/hadoop/security/Krb5AndCertsSslSocketConnector.java
++++ b/src/core/org/apache/hadoop/security/Krb5AndCertsSslSocketConnector.java
+@@ -20,6 +20,8 @@ import java.io.IOException;
+ import java.net.InetAddress;
+ import java.net.ServerSocket;
+ import java.security.Principal;
++import java.util.List;
++import java.util.Collections;
+ import java.util.Random;
+ 
+ import javax.net.ssl.SSLContext;
+@@ -52,10 +54,11 @@ import org.mortbay.jetty.security.SslSocketConnector;
+  * running with Kerberos support.
+  */
+ public class Krb5AndCertsSslSocketConnector extends SslSocketConnector {
+-  public static final String[] KRB5_CIPHER_SUITES = 
+-    new String [] {"TLS_KRB5_WITH_3DES_EDE_CBC_SHA"};
++  public static final List<String> KRB5_CIPHER_SUITES = 
++    Collections.unmodifiableList(Collections.singletonList(
++          "TLS_KRB5_WITH_3DES_EDE_CBC_SHA"));
+   static {
+-    System.setProperty("https.cipherSuites", KRB5_CIPHER_SUITES[0]);
++    System.setProperty("https.cipherSuites", KRB5_CIPHER_SUITES.get(0));
+   }
+   
+   private static final Log LOG = LogFactory
+@@ -136,11 +139,12 @@ public class Krb5AndCertsSslSocketConnector extends SslSocketConnector {
+       String [] combined;
+       if(useCerts) { // combine the cipher suites
+         String[] certs = ss.getEnabledCipherSuites();
+-        combined = new String[certs.length + KRB5_CIPHER_SUITES.length];
++        combined = new String[certs.length + KRB5_CIPHER_SUITES.size()];
+         System.arraycopy(certs, 0, combined, 0, certs.length);
+-        System.arraycopy(KRB5_CIPHER_SUITES, 0, combined, certs.length, KRB5_CIPHER_SUITES.length);
++        System.arraycopy(KRB5_CIPHER_SUITES.toArray(new String[0]), 0, combined,
++              certs.length, KRB5_CIPHER_SUITES.size());
+       } else { // Just enable Kerberos auth
+-        combined = KRB5_CIPHER_SUITES;
++        combined = KRB5_CIPHER_SUITES.toArray(new String[0]);
+       }
+       
+       ss.setEnabledCipherSuites(combined);
+diff --git a/src/core/org/apache/hadoop/security/SaslRpcServer.java b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+index ff7f8ef..b349519 100644
+--- a/src/core/org/apache/hadoop/security/SaslRpcServer.java
++++ b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+@@ -202,8 +202,8 @@ public class SaslRpcServer {
+         }
+         if (ac.isAuthorized()) {
+           if (LOG.isDebugEnabled()) {
+-            String username = getIdentifier(authzid, secretManager).getUser()
+-            .getUserName().toString();
++            String username =
++              getIdentifier(authzid, secretManager).getUser().getUserName();
+             LOG.debug("SASL server DIGEST-MD5 callback: setting "
+                 + "canonicalized client ID: " + username);
+           }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 92ceb13..47f9ba2 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -77,6 +77,7 @@ import java.io.DataOutputStream;
+ import java.net.InetAddress;
+ import java.net.InetSocketAddress;
+ import java.util.*;
++import java.util.concurrent.TimeUnit;
+ import java.util.Map.Entry;
+ 
+ import javax.management.NotCompliantMBeanException;
+@@ -147,7 +148,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   private long accessTokenLifetime;
+   
+   // Scan interval is not configurable.
+-  private final long DELEGATION_TOKEN_REMOVER_SCAN_INTERVAL = 3600000; // 1 hour
++  private static final long DELEGATION_TOKEN_REMOVER_SCAN_INTERVAL =
++    TimeUnit.MILLISECONDS.convert(1, TimeUnit.HOURS);
+   private DelegationTokenSecretManager dtSecretManager;
+ 
+   volatile long pendingReplicationBlocksCount = 0L;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index d9b0130..dfb3700 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -202,7 +202,7 @@ public class SecondaryNameNode implements Runnable {
+           
+           if(UserGroupInformation.isSecurityEnabled()) {
+             System.setProperty("https.cipherSuites", 
+-                Krb5AndCertsSslSocketConnector.KRB5_CIPHER_SUITES[0]);
++                Krb5AndCertsSslSocketConnector.KRB5_CIPHER_SUITES.get(0));
+             InetSocketAddress secInfoSocAddr = 
+               NetUtils.createSocketAddr(infoBindAddress + ":"+ conf.get(
+                 "dfs.secondary.https.port", infoBindAddress + ":" + 0));
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSck.java b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSck.java
+index 12a38d6..850b3f6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSck.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSck.java
+@@ -113,7 +113,7 @@ public class DFSck extends Configured implements Tool {
+ 
+           String proto = "http://";
+           if(UserGroupInformation.isSecurityEnabled()) { 
+-             System.setProperty("https.cipherSuites", Krb5AndCertsSslSocketConnector.KRB5_CIPHER_SUITES[0]);
++             System.setProperty("https.cipherSuites", Krb5AndCertsSslSocketConnector.KRB5_CIPHER_SUITES.get(0));
+              proto = "https://";
+           }
+           
+diff --git a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+index e0f7081..37482f2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
++++ b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+@@ -535,7 +535,7 @@ class JSPUtil {
+       }
+     } else {
+       // no authorization needed
+-      job = JSPUtil.getJobInfo(logFile, fs, jobTracker, user);
++      job = JSPUtil.getJobInfo(logFile, fs, jobTracker, null);
+     }
+     return job;
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 9e89b05..5c90cc9 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -292,6 +292,7 @@ public class JobInProgress {
+    * Create an almost empty JobInProgress, which can be used only for tests
+    */
+   protected JobInProgress(JobID jobid, JobConf conf, JobTracker tracker) {
++    System.out.println("DEBUG3");
+     this.conf = conf;
+     this.jobId = jobid;
+     this.numMapTasks = conf.getNumMapTasks();
+@@ -328,22 +329,6 @@ public class JobInProgress {
+     }
+   }
+   
+-  /**
+-   * Create a JobInProgress with the given job file, plus a handle
+-   * to the tracker.
+-   */
+-  public JobInProgress(JobID jobid, JobTracker jobtracker, 
+-                       JobConf default_conf) 
+-  throws IOException, InterruptedException {
+-    this(jobid, jobtracker, default_conf, 0);
+-  }
+-  
+-  public JobInProgress(JobID jobid, JobTracker jobtracker, 
+-                       JobConf default_conf, int rCount) 
+-  throws IOException, InterruptedException {
+-    this(jobtracker, default_conf, null, rCount, null);
+-  }
+-
+   JobInProgress(JobTracker jobtracker, final JobConf default_conf, 
+       JobInfo jobInfo, int rCount, Credentials ts) 
+   throws IOException, InterruptedException {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index d09549d..9899e89 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -169,8 +169,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   // in a second
+   static final String JT_HEARTBEATS_IN_SECOND = "mapred.heartbeats.in.second";
+   private int NUM_HEARTBEATS_IN_SECOND;
+-  private final int DEFAULT_NUM_HEARTBEATS_IN_SECOND = 100;
+-  private final int MIN_NUM_HEARTBEATS_IN_SECOND = 1;
++  private static final int DEFAULT_NUM_HEARTBEATS_IN_SECOND = 100;
++  private static final int MIN_NUM_HEARTBEATS_IN_SECOND = 1;
+   
+   // Scaling factor for heartbeats, used for testing only
+   static final String JT_HEARTBEATS_SCALING_FACTOR = 
+@@ -1629,6 +1629,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       fs.rename(tmpRestartFile, restartFile);
+     }
+ 
++                                   // mapred.JobID::forName returns
++    @SuppressWarnings("unchecked") // mapreduce.JobID
+     public void recover() {
+       if (!shouldRecover()) {
+         // clean up jobs structure
+@@ -1691,8 +1693,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           /* THIS PART OF THE CODE IS USELESS. JOB RECOVERY SHOULD BE
+            * BACKPORTED (MAPREDUCE-873)
+            */
+-          job = new JobInProgress(JobTracker.this, conf, null, 
+-                                  restartCount, new Credentials() /*HACK*/);
++          job = new JobInProgress(JobTracker.this, conf,
++              new JobInfo((org.apache.hadoop.mapreduce.JobID) id,
++                new Text(user), new Path(getStagingAreaDirInternal(user))),
++              restartCount, new Credentials() /*HACK*/);
+ 
+           // 2. Check if the user has appropriate access
+           // Get the user group info for the job's owner
+@@ -3740,16 +3744,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    */
+   public String getStagingAreaDir() throws IOException {
+     try{
+-      final String user = UserGroupInformation.getCurrentUser().getShortUserName();
++      final String user =
++        UserGroupInformation.getCurrentUser().getShortUserName();
+       return mrOwner.doAs(new PrivilegedExceptionAction<String>() {
+         @Override
+         public String run() throws Exception {
+-          Path stagingRootDir =
+-            new Path(conf.get("mapreduce.jobtracker.staging.root.dir",
+-                "/tmp/hadoop/mapred/staging"));
+-          FileSystem fs = stagingRootDir.getFileSystem(conf);
+-          return fs.makeQualified(new Path(stagingRootDir,
+-                                    user+"/.staging")).toString();
++          return getStagingAreaDirInternal(user);
+         }
+       });
+     } catch(InterruptedException ie) {
+@@ -3757,6 +3757,15 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+   }
+ 
++  private String getStagingAreaDirInternal(String user) throws IOException {
++    final Path stagingRootDir =
++      new Path(conf.get("mapreduce.jobtracker.staging.root.dir",
++            "/tmp/hadoop/mapred/staging"));
++    final FileSystem fs = stagingRootDir.getFileSystem(conf);
++    return fs.makeQualified(new Path(stagingRootDir,
++                              user+"/.staging")).toString();
++  }
++
+   /**
+    * Adds a job to the jobtracker. Make sure that the checks are inplace before
+    * adding a job. This is the core job submission logic
+diff --git a/src/mapred/org/apache/hadoop/mapred/MapTask.java b/src/mapred/org/apache/hadoop/mapred/MapTask.java
+index e8cef47..be961db 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MapTask.java
++++ b/src/mapred/org/apache/hadoop/mapred/MapTask.java
+@@ -80,7 +80,6 @@ class MapTask extends Task {
+   public static final int MAP_OUTPUT_INDEX_RECORD_LENGTH = 24;
+ 
+   private TaskSplitIndex splitMetaInfo = new TaskSplitIndex();
+-  private String splitClass;
+   private final static int APPROX_HEADER_LENGTH = 150;
+ 
+   private static final Log LOG = LogFactory.getLog(MapTask.class.getName());
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 5476be7..22d2f8f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -1043,8 +1043,7 @@ public class TaskTracker
+     
+     // set the location of the token file into jobConf to transfer 
+     // the name to TaskRunner
+-    localJobConf.set(TokenCache.JOB_TOKENS_FILENAME,
+-        localJobTokenFile.toString());
++    localJobConf.set(TokenCache.JOB_TOKENS_FILENAME, localJobTokenFile);
+     // create the 'job-work' directory: job-specific shared directory for use as
+     // scratch space by all tasks of the same job running on this TaskTracker.
+     Path workDir =
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java b/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
+index 973f188..26442c7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
+@@ -279,8 +279,7 @@ public class TaskTrackerStatus implements Writable {
+    */
+   public int countMapTasks() {
+     int mapCount = 0;
+-    for (Iterator<TaskStatus> it = taskReports.iterator(); it.hasNext();) {
+-      TaskStatus ts = (TaskStatus) it.next();
++    for (TaskStatus ts : taskReports) {
+       if (ts.getIsMap() && isTaskRunning(ts)) {
+         mapCount++;
+       }
+@@ -294,8 +293,7 @@ public class TaskTrackerStatus implements Writable {
+    */
+   public int countOccupiedMapSlots() {
+     int mapSlotsCount = 0;
+-    for (Iterator<TaskStatus> it = taskReports.iterator(); it.hasNext();) {
+-      TaskStatus ts = (TaskStatus) it.next();
++    for (TaskStatus ts : taskReports) {
+       if (ts.getIsMap() && isTaskRunning(ts)) {
+         mapSlotsCount += ts.getNumSlots();
+       }
+@@ -317,8 +315,7 @@ public class TaskTrackerStatus implements Writable {
+    */
+   public int countReduceTasks() {
+     int reduceCount = 0;
+-    for (Iterator<TaskStatus> it = taskReports.iterator(); it.hasNext();) {
+-      TaskStatus ts = (TaskStatus) it.next();
++    for (TaskStatus ts : taskReports) {
+       if ((!ts.getIsMap()) && isTaskRunning(ts)) {
+         reduceCount++;
+       }
+@@ -332,8 +329,7 @@ public class TaskTrackerStatus implements Writable {
+    */
+   public int countOccupiedReduceSlots() {
+     int reduceSlotsCount = 0;
+-    for (Iterator<TaskStatus> it = taskReports.iterator(); it.hasNext();) {
+-      TaskStatus ts = (TaskStatus) it.next();
++    for (TaskStatus ts : taskReports) {
+       if ((!ts.getIsMap()) && isTaskRunning(ts)) {
+         reduceSlotsCount += ts.getNumSlots();
+       }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+index 85ef8d7..d7eaf04 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+@@ -82,12 +82,14 @@ public class DelegationTokenRenewal {
+     public void setTimerTask(TimerTask tTask) {
+       timerTask = tTask;
+     }
++    @Override
+     public String toString() {
+       return token + ";exp="+expirationDate;
+     }
+     @Override
+-    public boolean equals (Object obj) {
+-      return token.equals(((DelegationTokenToRenew)obj).token);
++    public boolean equals(Object obj) {
++      return obj instanceof DelegationTokenToRenew &&
++        token.equals(((DelegationTokenToRenew)obj).token);
+     }
+     @Override
+     public int hashCode() {
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java b/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java
+index 20bddeb..8d97fdd 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java
+@@ -356,7 +356,7 @@ public class Localizer {
+     if (!initStatus) {
+       throw new IOException("Not able to initialize attempt directories "
+           + "in any of the configured local directories for the attempt "
+-          + attemptId.toString());
++          + attemptId);
+     }
+   }
+ 
+diff --git a/src/test/findbugsExcludeFile.xml b/src/test/findbugsExcludeFile.xml
+index d01c8b4..f2dbf60 100644
+--- a/src/test/findbugsExcludeFile.xml
++++ b/src/test/findbugsExcludeFile.xml
+@@ -119,4 +119,11 @@
+        </Or>
+        <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD" />
+      </Match>
++     <!--
++        Call to System.exit is intentional, HADOOP-249
++     <-->
++     <Match>
++       <Class name="org.apache.hadoop.mapred.Child" />
++       <Bug pattern="DM_EXIT" />
++     </Match>
+ </FindBugsFilter>
+diff --git a/src/webapps/datanode/browseDirectory.jsp b/src/webapps/datanode/browseDirectory.jsp
+index 0c090f8..e790cfa 100644
+--- a/src/webapps/datanode/browseDirectory.jsp
++++ b/src/webapps/datanode/browseDirectory.jsp
+@@ -132,7 +132,7 @@
+               cols[4] = "";
+             }
+             String datanodeUrl = req.getRequestURL()+"?dir="+
+-              URLEncoder.encode(files[i].getFullName(target).toString(), "UTF-8") + 
++              URLEncoder.encode(files[i].getFullName(target), "UTF-8") + 
+               "&namenodeInfoPort=" + namenodeInfoPort + JspHelper.SET_DELEGATION + 
+               tokenString;
+             cols[0] = "<a href=\""+datanodeUrl+"\">"+localname+"</a>";
+diff --git a/src/webapps/datanode/tail.jsp b/src/webapps/datanode/tail.jsp
+index fc1d7ba..831fed5 100644
+--- a/src/webapps/datanode/tail.jsp
++++ b/src/webapps/datanode/tail.jsp
+@@ -22,7 +22,7 @@
+ %>
+ 
+ <%!
+-  JspHelper jspHelper = new JspHelper();
++  static JspHelper jspHelper = new JspHelper();
+ 
+   public void generateFileChunks(JspWriter out, HttpServletRequest req,
+                                  Configuration conf
+diff --git a/src/webapps/job/jobconf_history.jsp b/src/webapps/job/jobconf_history.jsp
+index 06d64f5..624d03a 100644
+--- a/src/webapps/job/jobconf_history.jsp
++++ b/src/webapps/job/jobconf_history.jsp
+@@ -25,7 +25,7 @@
+   }
+ 
+   Path logFile = new Path(logFileString);
+-  String jobId = JSPUtil.getJobID(logFile.getName()).toString();
++  String jobId = JSPUtil.getJobID(logFile.getName());
+ 
+ %>
+   
+diff --git a/src/webapps/job/jobdetailshistory.jsp b/src/webapps/job/jobdetailshistory.jsp
+index 5df81f8..bd42df2 100644
+--- a/src/webapps/job/jobdetailshistory.jsp
++++ b/src/webapps/job/jobdetailshistory.jsp
+@@ -16,6 +16,7 @@
+ %>
+ <%!	private static final long serialVersionUID = 1L;
+ %>
++
+ <%! static SimpleDateFormat dateFormat = new SimpleDateFormat("d-MMM-yyyy HH:mm:ss") ; %>
+ <%
+     String logFile = request.getParameter("logFile");
+-- 
+1.7.0.4
+

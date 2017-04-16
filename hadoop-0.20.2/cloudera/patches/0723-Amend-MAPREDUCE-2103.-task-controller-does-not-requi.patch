@@ -1,0 +1,63 @@
+From d56be41bb9648f721ba6714827ccfbf503af7d84 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 4 Oct 2010 12:32:09 -0700
+Subject: [PATCH 0723/1179] Amend MAPREDUCE-2103. task-controller does not require setgid permissions
+
+---
+ src/c++/task-controller/main.c                     |    9 ++++-----
+ .../documentation/content/xdocs/cluster_setup.xml  |    4 ++--
+ 2 files changed, 6 insertions(+), 7 deletions(-)
+
+diff --git a/src/c++/task-controller/main.c b/src/c++/task-controller/main.c
+index 5322399..6f368ba 100644
+--- a/src/c++/task-controller/main.c
++++ b/src/c++/task-controller/main.c
+@@ -50,7 +50,7 @@ void display_usage(FILE *stream) {
+  *    * be user-owned by root
+  *    * be group-owned by a configured special group.
+  *    * others do not have any permissions
+- *    * be setuid/setgid
++ *    * be setuid
+  */
+ int check_taskcontroller_permissions(char *executable_file) {
+ 
+@@ -107,11 +107,10 @@ int check_taskcontroller_permissions(char *executable_file) {
+     return -1;
+   }
+ 
+-  // Binary should be setuid/setgid executable
+-  if ((filestat.st_mode & S_ISUID) != S_ISUID || (filestat.st_mode & S_ISGID)
+-      != S_ISGID) {
++  // Binary should be setuid executable
++  if ((filestat.st_mode & S_ISUID) != S_ISUID) {
+     fprintf(LOGFILE,
+-        "The task-controller binary should be set setuid and setgid bits.\n");
++        "The task-controller binary should be set setuid.\n");
+     return -1;
+   }
+ 
+diff --git a/src/docs/src/documentation/content/xdocs/cluster_setup.xml b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+index 0c04cad..012158c 100644
+--- a/src/docs/src/documentation/content/xdocs/cluster_setup.xml
++++ b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+@@ -581,7 +581,7 @@
+             
+             <p>
+             The executable must have specific permissions as follows. The
+-            executable should have <em>6050 or --Sr-s---</em> permissions
++            executable should have <em>4754 or -rwsr-xr--</em> permissions
+             user-owned by root(super-user) and group-owned by a special group
+             of which the TaskTracker's user is the group member and no job
+             submitter is. If any job submitter belongs to this special group,
+@@ -596,7 +596,7 @@
+             another user (job submitter) <em>X</em> as its members, and X does
+             not belong to <em>specialGroup</em>. Going by the above
+             description, the setuid/setgid executable should be set
+-            <em>6050 or --Sr-s---</em> with user-owner as <em>mapred</em> and
++            <em>4754 or -rwsr-xr--</em> with user-owner as <em>mapred</em> and
+             group-owner as <em>specialGroup</em> which has
+             <em>mapred</em> as its member(and not <em>users</em> which has
+             <em>X</em> also as its member besides <em>mapred</em>).
+-- 
+1.7.0.4
+

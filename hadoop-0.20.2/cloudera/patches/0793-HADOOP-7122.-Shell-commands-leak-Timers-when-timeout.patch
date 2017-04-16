@@ -1,0 +1,100 @@
+From 0d4eb1a867620813affdfd3291cb618d6fce63ca Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 28 Jan 2011 10:33:02 -0800
+Subject: [PATCH 0793/1179] HADOOP-7122. Shell commands leak Timers when timeout expires
+
+Reason: Thread leak seen on JT
+Author: Todd Lipcon
+Ref: CDH-2568
+---
+ src/core/org/apache/hadoop/util/Shell.java     |    4 +-
+ src/test/org/apache/hadoop/util/TestShell.java |   44 ++++++++++++++++++++++++
+ 2 files changed, 46 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/util/Shell.java b/src/core/org/apache/hadoop/util/Shell.java
+index 7a97a7b..e593132 100644
+--- a/src/core/org/apache/hadoop/util/Shell.java
++++ b/src/core/org/apache/hadoop/util/Shell.java
+@@ -194,7 +194,7 @@ abstract public class Shell {
+     
+     process = builder.start();
+     if (timeOutInterval > 0) {
+-      timeOutTimer = new Timer();
++      timeOutTimer = new Timer("Shell command timeout");
+       timeoutTimerTask = new ShellTimeoutTimerTask(
+           this);
+       //One time scheduling.
+@@ -252,7 +252,7 @@ abstract public class Shell {
+     } catch (InterruptedException ie) {
+       throw new IOException(ie.toString());
+     } finally {
+-      if ((timeOutTimer!=null) && !timedOut.get()) {
++      if (timeOutTimer != null) {
+         timeOutTimer.cancel();
+       }
+       // close the input stream
+diff --git a/src/test/org/apache/hadoop/util/TestShell.java b/src/test/org/apache/hadoop/util/TestShell.java
+index 1550db0..07ca917 100644
+--- a/src/test/org/apache/hadoop/util/TestShell.java
++++ b/src/test/org/apache/hadoop/util/TestShell.java
+@@ -24,6 +24,10 @@ import java.io.File;
+ import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.PrintWriter;
++import java.lang.management.ManagementFactory;
++import java.lang.management.ThreadInfo;
++import java.lang.management.ThreadMXBean;
++import java.util.Timer;
+ 
+ public class TestShell extends TestCase {
+ 
+@@ -95,6 +99,46 @@ public class TestShell extends TestCase {
+     shellFile.delete();
+     assertTrue("Script didnt not timeout" , shexc.isTimedOut());
+   }
++  
++  private static int countTimerThreads() {
++    ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
++    
++    int count = 0;
++    ThreadInfo[] infos = threadBean.getThreadInfo(threadBean.getAllThreadIds(), 20);
++    for (ThreadInfo info : infos) {
++      if (info == null) continue;
++      for (StackTraceElement elem : info.getStackTrace()) {
++        if (elem.getClassName().contains("Timer")) {
++          count++;
++          break;
++        }
++      }
++    }
++    return count;
++  }
++  
++  public void testShellCommandTimerLeak() throws Exception {
++    String quickCommand[] = new String[] {"/bin/sleep", "100"};
++    
++    int timersBefore = countTimerThreads();
++    System.err.println("before: " + timersBefore);
++    
++    for (int i = 0; i < 10; i++) {
++      Shell.ShellCommandExecutor shexec = new Shell.ShellCommandExecutor(
++            quickCommand, null, null, 1);
++      try {
++        shexec.execute();
++        fail("Bad command should throw exception");
++      } catch (Exception e) {
++        // expected
++      }
++    }
++    Thread.sleep(1000);
++    int timersAfter = countTimerThreads();
++    System.err.println("after: " + timersAfter);
++    assertEquals(timersBefore, timersAfter);
++  }
++  
+ 
+   private void testInterval(long interval) throws IOException {
+     Command command = new Command(interval);
+-- 
+1.7.0.4
+

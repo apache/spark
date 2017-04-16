@@ -1,0 +1,42 @@
+From 8c9b473e1af036a3e2cc9036a945a4567277db8a Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:21:14 -0800
+Subject: [PATCH 0138/1179] HADOOP-6312. Configuration sends too much data to log4j
+
+Description: Configuration objects send a DEBUG-level log message every time they're instantiated, which include a full stack trace. This is more appropriate for TRACE-level logging, as it renders other debug logs very hard to read.
+Reason: Logging improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/core/org/apache/hadoop/conf/Configuration.java |    8 --------
+ 1 files changed, 0 insertions(+), 8 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index da8f7e8..cdfcc2c 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -228,9 +228,6 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    */
+   public Configuration(boolean loadDefaults) {
+     this.loadDefaults = loadDefaults;
+-    if (LOG.isDebugEnabled()) {
+-      LOG.debug(StringUtils.stringifyException(new IOException("config()")));
+-    }
+     synchronized(Configuration.class) {
+       REGISTRY.put(this, null);
+     }
+@@ -261,11 +258,6 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    */
+   @SuppressWarnings("unchecked")
+   public Configuration(Configuration other) {
+-    if (LOG.isDebugEnabled()) {
+-      LOG.debug(StringUtils.stringifyException
+-                (new IOException("config(config)")));
+-    }
+-   
+    this.resources = (ArrayList)other.resources.clone();
+    synchronized(other) {
+      if (other.properties != null) {
+-- 
+1.7.0.4
+

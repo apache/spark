@@ -1,0 +1,194 @@
+From 76ac08dad430d600c6cc69424c21d16a4ba42d42 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 5 Jul 2011 12:10:54 -0700
+Subject: [PATCH 1004/1179] HADOOP-7247. Fix documentation to reflect new jar names.
+
+In several places, we have the old jar naming style of hadoop - * -
+examples.jar. With Ivy and Maven, we had to rename the jars to hadoop
+- examples - *.jar. Therefore, we need to update the documentation.
+
+Reason: Improvement
+Author: Owen O'Malley
+Ref: CDH-3099
+---
+ src/core/overview.html                             |    4 ++--
+ .../content/xdocs/capacity_scheduler.xml           |    4 ++--
+ .../documentation/content/xdocs/fair_scheduler.xml |    4 ++--
+ .../content/xdocs/single_node_setup.xml            |    4 ++--
+ .../apache/hadoop/examples/AggregateWordCount.java |    2 +-
+ .../hadoop/examples/AggregateWordHistogram.java    |    2 +-
+ .../apache/hadoop/examples/dancing/package.html    |    4 ++--
+ .../apache/hadoop/examples/terasort/TeraGen.java   |    2 +-
+ .../apache/hadoop/examples/terasort/TeraSort.java  |    2 +-
+ .../hadoop/examples/terasort/TeraValidate.java     |    2 +-
+ 10 files changed, 15 insertions(+), 15 deletions(-)
+
+diff --git a/src/core/overview.html b/src/core/overview.html
+index 7b1f348..be75058 100644
+--- a/src/core/overview.html
++++ b/src/core/overview.html
+@@ -114,7 +114,7 @@ be demonstrated as follows:</p>
+ <tt>
+ mkdir input<br>
+ cp conf/*.xml input<br>
+-bin/hadoop jar hadoop-*-examples.jar grep input output 'dfs[a-z.]+'<br>
++bin/hadoop jar hadoop-examples-*.jar grep input output 'dfs[a-z.]+'<br>
+ cat output/*
+ </tt>
+ <p>This will display counts for each match of the <a
+@@ -217,7 +217,7 @@ command, run on the master node:</p>
+ examine it:</p>
+ 
+ <tt>
+-bin/hadoop jar hadoop-*-examples.jar grep input output 'dfs[a-z.]+'<br>
++bin/hadoop jar hadoop-examples-*.jar grep input output 'dfs[a-z.]+'<br>
+ bin/hadoop fs -get output output
+ cat output/*
+ </tt>
+diff --git a/src/docs/src/documentation/content/xdocs/capacity_scheduler.xml b/src/docs/src/documentation/content/xdocs/capacity_scheduler.xml
+index 99034f9..4334143 100644
+--- a/src/docs/src/documentation/content/xdocs/capacity_scheduler.xml
++++ b/src/docs/src/documentation/content/xdocs/capacity_scheduler.xml
+@@ -108,13 +108,13 @@
+       
+         <p>The Capacity Scheduler is available as a JAR file in the Hadoop
+         tarball under the <em>contrib/capacity-scheduler</em> directory. The name of 
+-        the JAR file would be on the lines of hadoop-*-capacity-scheduler.jar.</p>
++        the JAR file would be on the lines of hadoop-capacity-scheduler-*.jar.</p>
+         <p>You can also build the Scheduler from source by executing
+         <em>ant package</em>, in which case it would be available under
+         <em>build/contrib/capacity-scheduler</em>.</p>
+         <p>To run the Capacity Scheduler in your Hadoop installation, you need 
+         to put it on the <em>CLASSPATH</em>. The easiest way is to copy the 
+-        <code>hadoop-*-capacity-scheduler.jar</code> from 
++        <code>hadoop-capacity-scheduler-*.jar</code> from
+         to <code>HADOOP_HOME/lib</code>. Alternatively, you can modify 
+         <em>HADOOP_CLASSPATH</em> to include this jar, in 
+         <code>conf/hadoop-env.sh</code>.</p>
+diff --git a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+index e42bdc7..02421af 100644
+--- a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
++++ b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+@@ -103,7 +103,7 @@
+       <p>
+         To run the fair scheduler in your Hadoop installation, you need to put
+         it on the CLASSPATH. The easiest way is to copy the 
+-        <em>hadoop-*-fairscheduler.jar</em> from
++        <em>hadoop-fairscheduler-*.jar</em> from
+         <em>HADOOP_HOME/build/contrib/fairscheduler</em> to <em>HADOOP_HOME/lib</em>.
+         Alternatively you can modify <em>HADOOP_CLASSPATH</em> to include this jar, in
+         <em>HADOOP_CONF_DIR/hadoop-env.sh</em>
+@@ -126,7 +126,7 @@
+       <p>
+         If you wish to compile the fair scheduler from source, run <em> ant 
+         package</em> in your HADOOP_HOME directory. This will build
+-        <em>build/contrib/fair-scheduler/hadoop-*-fairscheduler.jar</em>.
++        <em>build/contrib/fair-scheduler/hadoop-fairscheduler-*.jar</em>.
+       </p>
+     </section>
+     
+diff --git a/src/docs/src/documentation/content/xdocs/single_node_setup.xml b/src/docs/src/documentation/content/xdocs/single_node_setup.xml
+index edfa6d1..5cc5810 100644
+--- a/src/docs/src/documentation/content/xdocs/single_node_setup.xml
++++ b/src/docs/src/documentation/content/xdocs/single_node_setup.xml
+@@ -146,7 +146,7 @@
+         <code>$ mkdir input</code><br/>
+         <code>$ cp conf/*.xml input</code><br/>
+         <code>
+-          $ bin/hadoop jar hadoop-*-examples.jar grep input output 'dfs[a-z.]+'
++          $ bin/hadoop jar hadoop-examples-*.jar grep input output 'dfs[a-z.]+'
+         </code><br/>
+         <code>$ cat output/*</code>
+       </p>
+@@ -252,7 +252,7 @@
+         <p>
+           Run some of the examples provided:<br/>
+           <code>
+-            $ bin/hadoop jar hadoop-*-examples.jar grep input output 'dfs[a-z.]+'
++            $ bin/hadoop jar hadoop-examples-*.jar grep input output 'dfs[a-z.]+'
+           </code>
+         </p>
+         
+diff --git a/src/examples/org/apache/hadoop/examples/AggregateWordCount.java b/src/examples/org/apache/hadoop/examples/AggregateWordCount.java
+index 9e5794f..671be83 100644
+--- a/src/examples/org/apache/hadoop/examples/AggregateWordCount.java
++++ b/src/examples/org/apache/hadoop/examples/AggregateWordCount.java
+@@ -34,7 +34,7 @@ import org.apache.hadoop.mapred.lib.aggregate.ValueAggregatorJob;
+  * text input files, breaks each line into words and counts them. The output is
+  * a locally sorted list of words and the count of how often they occurred.
+  * 
+- * To run: bin/hadoop jar hadoop-*-examples.jar aggregatewordcount <i>in-dir</i>
++ * To run: bin/hadoop jar hadoop-examples-*.jar aggregatewordcount <i>in-dir</i>
+  * <i>out-dir</i> <i>numOfReducers</i> textinputformat
+  * 
+  */
+diff --git a/src/examples/org/apache/hadoop/examples/AggregateWordHistogram.java b/src/examples/org/apache/hadoop/examples/AggregateWordHistogram.java
+index 46edc20..f8dc8ad 100644
+--- a/src/examples/org/apache/hadoop/examples/AggregateWordHistogram.java
++++ b/src/examples/org/apache/hadoop/examples/AggregateWordHistogram.java
+@@ -32,7 +32,7 @@ import org.apache.hadoop.mapred.lib.aggregate.ValueAggregatorJob;
+  * This is an example Aggregated Hadoop Map/Reduce application. Computes the
+  * histogram of the words in the input texts.
+  * 
+- * To run: bin/hadoop jar hadoop-*-examples.jar aggregatewordhist <i>in-dir</i>
++ * To run: bin/hadoop jar hadoop-examples-*.jar aggregatewordhist <i>in-dir</i>
+  * <i>out-dir</i> <i>numOfReducers</i> textinputformat
+  * 
+  */
+diff --git a/src/examples/org/apache/hadoop/examples/dancing/package.html b/src/examples/org/apache/hadoop/examples/dancing/package.html
+index b7cb472..965efd4 100644
+--- a/src/examples/org/apache/hadoop/examples/dancing/package.html
++++ b/src/examples/org/apache/hadoop/examples/dancing/package.html
+@@ -59,8 +59,8 @@ Both applications have been added to the examples jar, so they can be
+ run as:
+ 
+ <pre>
+-bin/hadoop jar hadoop-*-examples.jar pentomino pent-outdir
+-bin/hadoop jar hadoop-*-examples.jar sudoku puzzle.txt
++bin/hadoop jar hadoop-examples-*.jar pentomino pent-outdir
++bin/hadoop jar hadoop-examples-*.jar sudoku puzzle.txt
+ </pre>
+ 
+ <p>
+diff --git a/src/examples/org/apache/hadoop/examples/terasort/TeraGen.java b/src/examples/org/apache/hadoop/examples/terasort/TeraGen.java
+index 8893170..4f7ba91 100644
+--- a/src/examples/org/apache/hadoop/examples/terasort/TeraGen.java
++++ b/src/examples/org/apache/hadoop/examples/terasort/TeraGen.java
+@@ -55,7 +55,7 @@ import org.apache.hadoop.util.ToolRunner;
+  *
+  * <p>
+  * To run the program: 
+- * <b>bin/hadoop jar hadoop-*-examples.jar teragen 10000000000 in-dir</b>
++ * <b>bin/hadoop jar hadoop-examples-*.jar teragen 10000000000 in-dir</b>
+  */
+ public class TeraGen extends Configured implements Tool {
+ 
+diff --git a/src/examples/org/apache/hadoop/examples/terasort/TeraSort.java b/src/examples/org/apache/hadoop/examples/terasort/TeraSort.java
+index c185cc4..d119c01 100644
+--- a/src/examples/org/apache/hadoop/examples/terasort/TeraSort.java
++++ b/src/examples/org/apache/hadoop/examples/terasort/TeraSort.java
+@@ -45,7 +45,7 @@ import org.apache.hadoop.util.ToolRunner;
+  * finish. 
+  * <p>
+  * To run the program: 
+- * <b>bin/hadoop jar hadoop-*-examples.jar terasort in-dir out-dir</b>
++ * <b>bin/hadoop jar hadoop-examples-*.jar terasort in-dir out-dir</b>
+  */
+ public class TeraSort extends Configured implements Tool {
+   private static final Log LOG = LogFactory.getLog(TeraSort.class);
+diff --git a/src/examples/org/apache/hadoop/examples/terasort/TeraValidate.java b/src/examples/org/apache/hadoop/examples/terasort/TeraValidate.java
+index dac3fc1..52b3c5c 100644
+--- a/src/examples/org/apache/hadoop/examples/terasort/TeraValidate.java
++++ b/src/examples/org/apache/hadoop/examples/terasort/TeraValidate.java
+@@ -44,7 +44,7 @@ import org.apache.hadoop.util.ToolRunner;
+  * Any output from the reduce is problem report.
+  * <p>
+  * To run the program: 
+- * <b>bin/hadoop jar hadoop-*-examples.jar teravalidate out-dir report-dir</b>
++ * <b>bin/hadoop jar hadoop-examples-*.jar teravalidate out-dir report-dir</b>
+  * <p>
+  * If there is any output, something is wrong and the output of the reduce
+  * will have the problem report.
+-- 
+1.7.0.4
+

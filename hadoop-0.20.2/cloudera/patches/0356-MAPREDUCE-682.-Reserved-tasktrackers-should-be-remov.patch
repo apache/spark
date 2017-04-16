@@ -1,0 +1,64 @@
+From c602e3c58dab89470526d912f32ca05260a18e8c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 18 Aug 2009 09:16:07 -0700
+Subject: [PATCH 0356/1179] MAPREDUCE-682. Reserved tasktrackers should be removed when a node is globally blacklisted
+
+Patch: http://issues.apache.org/jira/secure/attachment/12414313/mapreduce-682-ydist.patch
+Author: Sreekanth Ramakrishnan
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |    9 ++++++++-
+ .../mapreduce/server/jobtracker/TaskTracker.java   |    9 ++++++---
+ 2 files changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index d0c4bf2..2c9c4e4 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -730,6 +730,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       } else {
+         LOG.info("Blacklisting tracker : " + hostName 
+             + " Reason for blacklisting is : " + rfb);
++        Set<TaskTracker> trackers = 
++          hostnameToTaskTracker.get(hostName);
++        synchronized (trackers) {
++          for (TaskTracker tracker : trackers) {
++            tracker.cancelAllReservations();
++          }
++        }
+         removeHostCapacity(hostName);
+         fi.setBlacklist(rfb, reason);
+       }
+@@ -4203,7 +4210,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       }
+ 
+       // Cleanup
+-      taskTracker.lost();
++      taskTracker.cancelAllReservations();
+ 
+       // Purge 'marked' tasks, needs to be done  
+       // here to prevent hanging references!
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/server/jobtracker/TaskTracker.java b/src/mapred/org/apache/hadoop/mapreduce/server/jobtracker/TaskTracker.java
+index d2ee58e..a259af6 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/server/jobtracker/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/server/jobtracker/TaskTracker.java
+@@ -183,10 +183,13 @@ public class TaskTracker {
+   }
+   
+   /**
+-   * Cleanup when the {@link TaskTracker} is declared as 'lost' by the 
+-   * JobTracker.
++   * Cleanup when the {@link TaskTracker} is declared as 'lost/blacklisted'
++   * by the JobTracker.
++   * 
++   * The method assumes that the lock on the {@link JobTracker} is obtained
++   * by the caller.
+    */
+-  public void lost() {
++  public void cancelAllReservations() {
+     // Inform jobs which have reserved slots on this tasktracker
+     if (jobForFallowMapSlot != null) {
+       unreserveSlots(TaskType.MAP, jobForFallowMapSlot);
+-- 
+1.7.0.4
+

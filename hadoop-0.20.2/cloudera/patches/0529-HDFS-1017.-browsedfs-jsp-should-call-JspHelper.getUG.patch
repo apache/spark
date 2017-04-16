@@ -1,0 +1,79 @@
+From a4c9f34046770120a47ba864eaaaab0ecc952d86 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 3 Mar 2010 10:50:34 -0800
+Subject: [PATCH 0529/1179] HDFS-1017. browsedfs jsp should call JspHelper.getUGI rather than using createRemoteUser()
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437683/HDFS-1017-Y20-2.patch
+Author: Jakob Homan
+Ref: CDH-648
+---
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |    2 ++
+ src/webapps/hdfs/nn_browsedfscontent.jsp           |   19 +++++++++----------
+ 2 files changed, 11 insertions(+), 10 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index ce81239..5c4b4b6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -443,6 +443,8 @@ public class JspHelper {
+                                 "authenticated by filter");
+         }
+         ugi = UserGroupInformation.createRemoteUser(user);
++        // This is not necessarily true, could have been auth'ed by user-facing
++        // filter
+         ugi.setAuthenticationMethod(AuthenticationMethod.KERBEROS_SSL);
+       }
+     } else { // Security's not on, pull from url
+diff --git a/src/webapps/hdfs/nn_browsedfscontent.jsp b/src/webapps/hdfs/nn_browsedfscontent.jsp
+index 50cd410..3f6f530 100644
+--- a/src/webapps/hdfs/nn_browsedfscontent.jsp
++++ b/src/webapps/hdfs/nn_browsedfscontent.jsp
+@@ -20,18 +20,16 @@
+   import="java.net.URLEncoder"
+ %>
+ <%!
+-  static String getDelegationToken(final NameNode nn, final String user
+-                                   ) throws IOException, InterruptedException {
+-    if (user == null) {
+-      return null;
+-    }
+-    UserGroupInformation ugi = UserGroupInformation.createRemoteUser(user);
++  static String getDelegationToken(final NameNode nn,
++                                   HttpServletRequest request, Configuration conf) 
++                                   throws IOException, InterruptedException {
++    final UserGroupInformation ugi = JspHelper.getUGI(request, conf);
+     Token<DelegationTokenIdentifier> token =
+       ugi.doAs(
+               new PrivilegedExceptionAction<Token<DelegationTokenIdentifier>>()
+           {
+             public Token<DelegationTokenIdentifier> run() throws IOException {
+-              return nn.getDelegationToken(new Text(user));
++              return nn.getDelegationToken(new Text(ugi.getUserName()));
+             }
+           });
+     return token.encodeToUrlString();
+@@ -40,9 +38,10 @@
+   public void redirectToRandomDataNode(
+                             NameNode nn, 
+                             HttpServletRequest request,
+-                            HttpServletResponse resp
++                            HttpServletResponse resp,
++                            Configuration conf
+                            ) throws IOException, InterruptedException {
+-    String tokenString = getDelegationToken(nn, request.getRemoteUser());
++    String tokenString = getDelegationToken(nn, request, conf);
+     FSNamesystem fsn = nn.getNamesystem();
+     String datanode = fsn.randomDataNode();
+     String redirectLocation;
+@@ -76,7 +75,7 @@
+ <% 
+   NameNode nn = (NameNode)application.getAttribute("name.node");
+   Configuration conf = (Configuration) application.getAttribute("name.conf");
+-  redirectToRandomDataNode(nn, request, response); 
++  redirectToRandomDataNode(nn, request, response, conf); 
+ %>
+ <hr>
+ 
+-- 
+1.7.0.4
+

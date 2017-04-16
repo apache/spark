@@ -1,0 +1,57 @@
+From 635b88303ce6ef229308b9787469cc5b04b4fe3c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 19 Mar 2010 14:05:16 -0700
+Subject: [PATCH 0581/1179] HADOOP-6647. Service authorization should compare short names, not full names.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439325/HADOOP-6647-BP20.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ .../authorize/ServiceAuthorizationManager.java     |   17 ++++++++++++++++-
+ 1 files changed, 16 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+index 35c204c..6eca6dc 100644
+--- a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
++++ b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+@@ -26,6 +26,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.security.KerberosInfo;
++import org.apache.hadoop.security.KerberosName;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+@@ -35,6 +36,8 @@ import org.apache.hadoop.security.UserGroupInformation;
+  */
+ public class ServiceAuthorizationManager {
+   private static final String HADOOP_POLICY_FILE = "hadoop-policy.xml";
++  private static final Log LOG = LogFactory
++      .getLog(ServiceAuthorizationManager.class);
+ 
+   private static Map<Class<?>, AccessControlList> protocolToAcl =
+     new IdentityHashMap<Class<?>, AccessControlList>();
+@@ -97,7 +100,19 @@ public class ServiceAuthorizationManager {
+         }
+       }
+     }
+-    if((clientPrincipal != null && !clientPrincipal.equals(user.getUserName())) || 
++    // when authorizing use the short name only
++    String shortName = clientPrincipal;
++    if(clientPrincipal != null ) {
++      try {
++        shortName = new KerberosName(clientPrincipal).getShortName();
++      } catch (IOException e) {
++        LOG.warn("couldn't get short name from " + clientPrincipal, e);
++        // just keep going
++      }
++    }
++    LOG.debug("for protocol authorization compare (" + clientPrincipal + "): " 
++        + shortName + " with " + user.getShortUserName());
++    if((shortName != null &&  !shortName.equals(user.getShortUserName())) || 
+         !acl.isUserAllowed(user)) {
+       AUDITLOG.warn(AUTHZ_FAILED_FOR + user + " for protocol="+protocol);
+       throw new AuthorizationException("User " + user + 
+-- 
+1.7.0.4
+

@@ -1,0 +1,278 @@
+From 97d8bb472f57c1abc73a5240675a37b8e4b5b31a Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Tue, 7 Jun 2011 16:59:31 -0700
+Subject: [PATCH 0968/1179] HADOOP-7323. Add capability to resolve compression codec based on codec name
+
+Reason: Improvement
+Author: Alejandro Abdelnur
+Ref: CDH-3226
+---
+ src/core/core-default.xml                          |    2 +-
+ .../io/compress/CompressionCodecFactory.java       |   67 +++++++++++++++++++-
+ .../apache/hadoop/io/compress/DeflateCodec.java    |   24 +++++++
+ .../org/apache/hadoop/io/compress/TestCodec.java   |   13 ++++
+ .../hadoop/io/compress/TestCodecFactory.java       |   51 +++++++++++++--
+ 5 files changed, 150 insertions(+), 7 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/io/compress/DeflateCodec.java
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index d6fd0b2..b7d1bdd 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -127,7 +127,7 @@
+ 
+ <property>
+   <name>io.compression.codecs</name>
+-  <value>org.apache.hadoop.io.compress.DefaultCodec,org.apache.hadoop.io.compress.GzipCodec,org.apache.hadoop.io.compress.BZip2Codec</value>
++  <value>org.apache.hadoop.io.compress.DefaultCodec,org.apache.hadoop.io.compress.GzipCodec,org.apache.hadoop.io.compress.BZip2Codec,org.apache.hadoop.io.compress.DeflateCodec</value>
+   <description>A list of the compression codec classes that can be used 
+                for compression/decompression.</description>
+ </property>
+diff --git a/src/core/org/apache/hadoop/io/compress/CompressionCodecFactory.java b/src/core/org/apache/hadoop/io/compress/CompressionCodecFactory.java
+index 1cba520..3d967a1 100644
+--- a/src/core/org/apache/hadoop/io/compress/CompressionCodecFactory.java
++++ b/src/core/org/apache/hadoop/io/compress/CompressionCodecFactory.java
+@@ -41,6 +41,13 @@ public class CompressionCodecFactory {
+   private SortedMap<String, CompressionCodec> codecs = null;
+ 
+   /**
++   * A map from the reversed filename suffixes to the codecs.
++   * This is probably overkill, because the maps should be small, but it
++   * automatically supports finding the longest matching suffix.
++   */
++  private Map<String, CompressionCodec> codecsByName = null;
++  
++  /**
+    * A map from class names to the codecs
+    */
+   private HashMap<String, CompressionCodec> codecsByClassName = null;
+@@ -49,8 +56,15 @@ public class CompressionCodecFactory {
+     String suffix = codec.getDefaultExtension();
+     codecs.put(new StringBuffer(suffix).reverse().toString(), codec);
+     codecsByClassName.put(codec.getClass().getCanonicalName(), codec);
++
++    String codecName = codec.getClass().getSimpleName();
++    codecsByName.put(codecName.toLowerCase(), codec);
++    if (codecName.endsWith("Codec")) {
++      codecName = codecName.substring(0, codecName.length() - "Codec".length());
++      codecsByName.put(codecName.toLowerCase(), codec);
++    }
+   }
+-  
++
+   /**
+    * Print the extension map out as a string.
+    */
+@@ -138,6 +152,7 @@ public class CompressionCodecFactory {
+   public CompressionCodecFactory(Configuration conf) {
+     codecs = new TreeMap<String, CompressionCodec>();
+     codecsByClassName = new HashMap<String, CompressionCodec>();
++    codecsByName = new HashMap<String, CompressionCodec>();
+     List<Class<? extends CompressionCodec>> codecClasses = getCodecClasses(conf);
+     if (codecClasses == null) {
+       addCodec(new GzipCodec());
+@@ -186,6 +201,56 @@ public class CompressionCodecFactory {
+     return codecsByClassName.get(classname);
+   }
+ 
++    /**
++     * Find the relevant compression codec for the codec's canonical class name
++     * or by codec alias.
++     * <p/>
++     * Codec aliases are case insensitive.
++     * <p/>
++     * The code alias is the short class name (without the package name).
++     * If the short class name ends with 'Codec', then there are two aliases for
++     * the codec, the complete short class name and the short class name without
++     * the 'Codec' ending. For example for the 'GzipCodec' codec class name the
++     * alias are 'gzip' and 'gzipcodec'.
++     *
++     * @param codecName the canonical class name of the codec
++     * @return the codec object
++     */
++    public CompressionCodec getCodecByName(String codecName) {
++      if (codecsByClassName == null) {
++        return null;
++      }
++      CompressionCodec codec = getCodecByClassName(codecName);
++      if (codec == null) {
++        // trying to get the codec by name in case the name was specified instead a class
++        codec = codecsByName.get(codecName.toLowerCase());
++      }
++      return codec;
++    }
++
++    /**
++     * Find the relevant compression codec for the codec's canonical class name
++     * or by codec alias and returns its implemetation class.
++     * <p/>
++     * Codec aliases are case insensitive.
++     * <p/>
++     * The code alias is the short class name (without the package name).
++     * If the short class name ends with 'Codec', then there are two aliases for
++     * the codec, the complete short class name and the short class name without
++     * the 'Codec' ending. For example for the 'GzipCodec' codec class name the
++     * alias are 'gzip' and 'gzipcodec'.
++     *
++     * @param codecName the canonical class name of the codec
++     * @return the codec class
++     */
++    public Class<? extends CompressionCodec> getCodecClassByName(String codecName) {
++      CompressionCodec codec = getCodecByName(codecName);
++      if (codec == null) {
++        return null;
++      }
++      return codec.getClass();
++    }
++
+   /**
+    * Removes a suffix from a filename, if it has it.
+    * @param filename the filename to strip
+diff --git a/src/core/org/apache/hadoop/io/compress/DeflateCodec.java b/src/core/org/apache/hadoop/io/compress/DeflateCodec.java
+new file mode 100644
+index 0000000..330e328
+--- /dev/null
++++ b/src/core/org/apache/hadoop/io/compress/DeflateCodec.java
+@@ -0,0 +1,24 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.io.compress;
++
++/**
++ * Alias class for DefaultCodec to enable codec discovery by 'deflate' name.
++ */
++public class DeflateCodec extends DefaultCodec {
++}
+diff --git a/src/test/org/apache/hadoop/io/compress/TestCodec.java b/src/test/org/apache/hadoop/io/compress/TestCodec.java
+index a6016f3..ce4f830 100644
+--- a/src/test/org/apache/hadoop/io/compress/TestCodec.java
++++ b/src/test/org/apache/hadoop/io/compress/TestCodec.java
+@@ -95,6 +95,12 @@ public class TestCodec {
+   }
+ 
+   @Test
++  public void testDeflateCodec() throws IOException {
++    codecTest(conf, seed, 0, "org.apache.hadoop.io.compress.DeflateCodec");
++    codecTest(conf, seed, count, "org.apache.hadoop.io.compress.DeflateCodec");
++  }
++
++  @Test
+   public void testGzipCodecWithParam() throws IOException {
+     Configuration conf = new Configuration(this.conf);
+     ZlibFactory.setCompressionLevel(conf, CompressionLevel.BEST_COMPRESSION);
+@@ -425,6 +431,13 @@ public class TestCodec {
+     sequenceFileCodecTest(conf, 200000, "org.apache.hadoop.io.compress.BZip2Codec", 1000000);
+   }
+ 
++  @Test
++  public void testSequenceFileDeflateCodec() throws IOException, ClassNotFoundException,
++      InstantiationException, IllegalAccessException {
++    sequenceFileCodecTest(conf, 100, "org.apache.hadoop.io.compress.DeflateCodec", 100);
++    sequenceFileCodecTest(conf, 200000, "org.apache.hadoop.io.compress.DeflateCodec", 1000000);
++  }
++
+   private static void sequenceFileCodecTest(Configuration conf, int lines, 
+                                 String codecClass, int blockSize) 
+     throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException {
+diff --git a/src/test/org/apache/hadoop/io/compress/TestCodecFactory.java b/src/test/org/apache/hadoop/io/compress/TestCodecFactory.java
+index baaddc5..c7bcc0f 100644
+--- a/src/test/org/apache/hadoop/io/compress/TestCodecFactory.java
++++ b/src/test/org/apache/hadoop/io/compress/TestCodecFactory.java
+@@ -131,12 +131,41 @@ public class TestCodecFactory extends TestCase {
+     checkCodec("default factory for .gz", GzipCodec.class, codec);
+     codec = factory.getCodecByClassName(GzipCodec.class.getCanonicalName());
+     checkCodec("default factory for gzip codec", GzipCodec.class, codec);
+-    
++    codec = factory.getCodecByName("gzip");
++    checkCodec("default factory for gzip codec", GzipCodec.class, codec);
++    codec = factory.getCodecByName("GZIP");
++    checkCodec("default factory for gzip codec", GzipCodec.class, codec);
++    codec = factory.getCodecByName("GZIPCodec");
++    checkCodec("default factory for gzip codec", GzipCodec.class, codec);
++    codec = factory.getCodecByName("gzipcodec");
++    checkCodec("default factory for gzip codec", GzipCodec.class, codec);
++    Class klass = factory.getCodecClassByName("gzipcodec");
++    assertEquals(GzipCodec.class, klass);
++
+     codec = factory.getCodec(new Path("/tmp/foo.bz2"));
+     checkCodec("default factory for .bz2", BZip2Codec.class, codec);
+     codec = factory.getCodecByClassName(BZip2Codec.class.getCanonicalName());
+     checkCodec("default factory for bzip2 codec", BZip2Codec.class, codec);
+-    
++    codec = factory.getCodecByName("bzip2");
++    checkCodec("default factory for bzip2 codec", BZip2Codec.class, codec);
++    codec = factory.getCodecByName("bzip2codec");
++    checkCodec("default factory for bzip2 codec", BZip2Codec.class, codec);
++    codec = factory.getCodecByName("BZIP2");
++    checkCodec("default factory for bzip2 codec", BZip2Codec.class, codec);
++    codec = factory.getCodecByName("BZIP2CODEC");
++    checkCodec("default factory for bzip2 codec", BZip2Codec.class, codec);
++
++    codec = factory.getCodecByClassName(DeflateCodec.class.getCanonicalName());
++    checkCodec("default factory for deflate codec", DeflateCodec.class, codec);
++    codec = factory.getCodecByName("deflate");
++    checkCodec("default factory for deflate codec", DeflateCodec.class, codec);
++    codec = factory.getCodecByName("deflatecodec");
++    checkCodec("default factory for deflate codec", DeflateCodec.class, codec);
++    codec = factory.getCodecByName("DEFLATE");
++    checkCodec("default factory for deflate codec", DeflateCodec.class, codec);
++    codec = factory.getCodecByName("DEFLATECODEC");
++    checkCodec("default factory for deflate codec", DeflateCodec.class, codec);
++
+     factory = setClasses(new Class[0]);
+     codec = factory.getCodec(new Path("/tmp/foo.bar"));
+     assertEquals("empty codec bar codec", null, codec);
+@@ -164,20 +193,32 @@ public class TestCodecFactory extends TestCase {
+     assertEquals("full factory for .bz2", null, codec);
+     codec = factory.getCodecByClassName(BZip2Codec.class.getCanonicalName());
+     assertEquals("full codec bzip2 codec", null, codec);
+-    
++
+     codec = factory.getCodec(new Path("/tmp/foo.bar"));
+     checkCodec("full factory bar codec", BarCodec.class, codec);
+     codec = factory.getCodecByClassName(BarCodec.class.getCanonicalName());
+     checkCodec("full factory bar codec", BarCodec.class, codec);
+-    
++    codec = factory.getCodecByName("bar");
++    checkCodec("full factory bar codec", BarCodec.class, codec);
++    codec = factory.getCodecByName("BAR");
++    checkCodec("full factory bar codec", BarCodec.class, codec);
++
+     codec = factory.getCodec(new Path("/tmp/foo/baz.foo.bar"));
+     checkCodec("full factory foo bar codec", FooBarCodec.class, codec);
+     codec = factory.getCodecByClassName(FooBarCodec.class.getCanonicalName());
+     checkCodec("full factory foo bar codec", FooBarCodec.class, codec);
+-    
++    codec = factory.getCodecByName("foobar");
++    checkCodec("full factory foo bar codec", FooBarCodec.class, codec);
++    codec = factory.getCodecByName("FOOBAR");
++    checkCodec("full factory foo bar codec", FooBarCodec.class, codec);
++
+     codec = factory.getCodec(new Path("/tmp/foo.foo"));
+     checkCodec("full factory foo codec", FooCodec.class, codec);
+     codec = factory.getCodecByClassName(FooCodec.class.getCanonicalName());
+     checkCodec("full factory foo codec", FooCodec.class, codec);
++    codec = factory.getCodecByName("foo");
++    checkCodec("full factory foo codec", FooCodec.class, codec);
++    codec = factory.getCodecByName("FOO");
++    checkCodec("full factory foo codec", FooCodec.class, codec);
+   }
+ }
+-- 
+1.7.0.4
+

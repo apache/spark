@@ -1,0 +1,29 @@
+From dc1797ec8380b07117bbc6d662e2f1f56b25e6bd Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Jun 2010 17:56:43 -0700
+Subject: [PATCH 0303/1179] HDFS-1207. stallReplicationWork should be marked volatile in FSNamesystem
+
+Description: Small bug fix for code used by tests only
+Reason: Fix sporadic failure of TestFileAppend4
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 11f117e..9038b63 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -239,7 +239,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   // Default replication
+   private int defaultReplication;
+   // Variable to stall new replication checks for testing purposes
+-  private boolean stallReplicationWork = false;
++  private volatile boolean stallReplicationWork = false;
+   // heartbeatRecheckInterval is how often namenode checks for expired datanodes
+   private long heartbeatRecheckInterval;
+   // heartbeatExpireInterval is how long namenode waits for datanode to report
+-- 
+1.7.0.4
+

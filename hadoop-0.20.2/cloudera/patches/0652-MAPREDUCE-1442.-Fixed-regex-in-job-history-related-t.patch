@@ -1,0 +1,71 @@
+From 055c06d1fba4cead09fe70e1cc56873f51927dfb Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 13 May 2010 23:54:54 -0700
+Subject: [PATCH 0652/1179] MAPREDUCE-1442. Fixed regex in job-history related to parsing Counter values.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12444349/mr-1442-y20s-v1.patch
+Author: Luke Lu
+Reason: Avoid StackOverflowError when JobHistory parses a really long line
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobHistory.java       |    2 +-
+ .../hadoop/mapred/TestJobHistoryParsing.java       |   17 ++++++++++++++---
+ 2 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index 49b47a8..2b6d173 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -95,7 +95,7 @@ public class JobHistory {
+ 
+   static final String KEY = "(\\w+)";
+   // value is any character other than quote, but escaped quotes can be there
+-  static final String VALUE = "[^\"\\\\]*(?:\\\\.[^\"\\\\]*)*"; 
++  static final String VALUE = "[^\"\\\\]*+(?:\\\\.[^\"\\\\]*+)*+";
+   
+   static final Pattern pattern = Pattern.compile(KEY + "=" + "\"" + VALUE + "\"");
+   
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java b/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java
+index 122421f..dc1e8e6 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java
+@@ -73,7 +73,15 @@ public class TestJobHistoryParsing  extends TestCase {
+                     "\t\b\n\f\"\n in it";
+     String value4 = "Value ends with escape\\";
+     String value5 = "Value ends with \\\" \\.\n";
+-    
++    StringBuilder sb = new StringBuilder("Longer value with many escaped "+
++        "chars, which tends to overflow the stack of brittle regex parsers");
++    for (int i = 0; i < 1000; ++i) {
++      sb.append(",");
++      sb.append("\\split.");
++      sb.append(i);
++    }
++    String value6 = sb.toString();
++
+     // Log the history version
+     JobHistory.MetaInfoManager.logMetaInfo(historyWriter);
+     
+@@ -82,8 +90,10 @@ public class TestJobHistoryParsing  extends TestCase {
+                                           Keys.TRACKER_NAME, 
+                                           Keys.JOBNAME, 
+                                           Keys.JOBCONF,
+-                                          Keys.USER},
+-                   new String[] {value1, value2, value3, value4, value5});
++                                          Keys.USER,
++                                          Keys.SPLITS},
++                   new String[] {value1, value2, value3, value4, value5,
++                                 value6});
+     // close history file
+     out.close();
+     historyWriter.remove(out);
+@@ -99,5 +109,6 @@ public class TestJobHistoryParsing  extends TestCase {
+     assertEquals(value3, job.get(Keys.JOBNAME));
+     assertEquals(value4, job.get(Keys.JOBCONF));
+     assertEquals(value5, job.get(Keys.USER));
++    assertEquals(value6, job.get(Keys.SPLITS));
+   }
+ }
+-- 
+1.7.0.4
+

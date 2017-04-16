@@ -1,0 +1,28 @@
+From a6f5e7109f538e2b9374c6518c80b0575e2dfa9f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Feb 2011 15:06:42 -0800
+Subject: [PATCH 0868/1179] Amend HADOOP-5489. hdfsproxy-env.sh.template was updated but not hdfsproxy-env.sh
+
+Reason: avoid local modifications to src tree on build
+Author: Todd Lipcon
+Ref: CDH-2588
+---
+ src/contrib/hdfsproxy/conf/hdfsproxy-env.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/hdfsproxy/conf/hdfsproxy-env.sh b/src/contrib/hdfsproxy/conf/hdfsproxy-env.sh
+index a0ff7a5..b0e6018 100644
+--- a/src/contrib/hdfsproxy/conf/hdfsproxy-env.sh
++++ b/src/contrib/hdfsproxy/conf/hdfsproxy-env.sh
+@@ -6,7 +6,7 @@
+ # remote nodes.
+ 
+ # The java implementation to use.  Required.
+-# export JAVA_HOME=/usr/lib/j2sdk1.5-sun
++# export JAVA_HOME=/usr/lib/j2sdk1.6-sun
+ 
+ # Extra Java CLASSPATH elements.  Optional.
+ # export HDFSPROXY_CLASSPATH=
+-- 
+1.7.0.4
+

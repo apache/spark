@@ -1,0 +1,351 @@
+<?xml version="1.0"?>
+<!--
+  Copyright 2002-2004 The Apache Software Foundation
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN" "http://forrest.apache.org/dtd/document-v20.dtd">
+
+<document>
+
+  <header>
+    <title>DistCp Guide</title>
+  </header>
+
+  <body>
+
+    <section>
+      <title>Overview</title>
+
+      <p>DistCp (distributed copy) is a tool used for large inter/intra-cluster
+      copying. It uses MapReduce to effect its distribution, error
+      handling and recovery, and reporting. It expands a list of files and
+      directories into input to map tasks, each of which will copy a partition
+      of the files specified in the source list. Its MapReduce pedigree has
+      endowed it with some quirks in both its semantics and execution. The
+      purpose of this document is to offer guidance for common tasks and to
+      elucidate its model.</p>
+
+    </section>
+
+    <section>
+      <title>Usage</title>
+
+      <section>
+        <title>Basic</title>
+        <p>The most common invocation of DistCp is an inter-cluster copy:</p>
+        <p><code>bash$ hadoop distcp hdfs://nn1:8020/foo/bar \</code><br/>
+           <code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 hdfs://nn2:8020/bar/foo</code></p>
+
+        <p>This will expand the namespace under <code>/foo/bar</code> on nn1
+        into a temporary file, partition its contents among a set of map
+        tasks, and start a copy on each TaskTracker from nn1 to nn2. Note
+        that DistCp expects absolute paths.</p>
+
+        <p>One can also specify multiple source directories on the command
+        line:</p>
+        <p><code>bash$ hadoop distcp hdfs://nn1:8020/foo/a \</code><br/>
+           <code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 hdfs://nn1:8020/foo/b \</code><br/>
+           <code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 hdfs://nn2:8020/bar/foo</code></p>
+
+        <p>Or, equivalently, from a file using the <code>-f</code> option:<br/>
+        <code>bash$ hadoop distcp -f hdfs://nn1:8020/srclist \</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              &nbsp;hdfs://nn2:8020/bar/foo</code><br/></p>
+
+        <p>Where <code>srclist</code> contains<br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b</code></p>
+
+        <p>When copying from multiple sources, DistCp will abort the copy with
+        an error message if two sources collide, but collisions at the
+        destination are resolved per the <a href="#options">options</a>
+        specified. By default, files already existing at the destination are
+        skipped (i.e. not replaced by the source file). A count of skipped
+        files is reported at the end of each job, but it may be inaccurate if a
+        copier failed for some subset of its files, but succeeded on a later
+        attempt (see <a href="#etc">Appendix</a>).</p>
+
+        <p>It is important that each TaskTracker can reach and communicate with
+        both the source and destination file systems. For HDFS, both the source
+        and destination must be running the same version of the protocol or use
+        a backwards-compatible protocol (see <a href="#cpver">Copying Between
+        Versions</a>).</p>
+
+        <p>After a copy, it is recommended that one generates and cross-checks
+        a listing of the source and destination to verify that the copy was
+        truly successful. Since DistCp employs both MapReduce and the
+        FileSystem API, issues in or between any of the three could adversely
+        and silently affect the copy. Some have had success running with
+        <code>-update</code> enabled to perform a second pass, but users should
+        be acquainted with its semantics before attempting this.</p>
+
+        <p>It's also worth noting that if another client is still writing to a
+        source file, the copy will likely fail. Attempting to overwrite a file
+        being written at the destination should also fail on HDFS. If a source
+        file is (re)moved before it is copied, the copy will fail with a
+        FileNotFoundException.</p>
+
+      </section> <!-- Basic -->
+
+      <section id="options">
+        <title>Options</title>
+
+        <section>
+        <title>Option Index</title>
+        <table>
+          <tr><th> Flag </th><th> Description </th><th> Notes </th></tr>
+
+          <tr><td><code>-p[rbugp]</code></td>
+              <td>Preserve<br/>
+                  &nbsp;&nbsp;r: replication number<br/>
+                  &nbsp;&nbsp;b: block size<br/>
+                  &nbsp;&nbsp;u: user<br/>
+                  &nbsp;&nbsp;g: group<br/>
+                  &nbsp;&nbsp;p: permission<br/></td>
+              <td>Modification times are not preserved. Also, when
+              <code>-update</code> is specified, status updates will
+              <strong>not</strong> be synchronized unless the file sizes
+              also differ (i.e. unless the file is re-created).
+              </td></tr>
+          <tr><td><code>-i</code></td>
+              <td>Ignore failures</td>
+              <td>As explained in the <a href="#etc">Appendix</a>, this option
+              will keep more accurate statistics about the copy than the
+              default case. It also preserves logs from failed copies, which
+              can be valuable for debugging. Finally, a failing map will not
+              cause the job to fail before all splits are attempted.
+              </td></tr>
+          <tr><td><code>-log &lt;logdir&gt;</code></td>
+              <td>Write logs to &lt;logdir&gt;</td>
+              <td>DistCp keeps logs of each file it attempts to copy as map
+              output. If a map fails, the log output will not be retained if
+              it is re-executed.
+              </td></tr>
+          <tr><td><code>-m &lt;num_maps&gt;</code></td>
+              <td>Maximum number of simultaneous copies</td>
+              <td>Specify the number of maps to copy data. Note that more maps
+              may not necessarily improve throughput.
+              </td></tr>
+          <tr><td><code>-overwrite</code></td>
+              <td>Overwrite destination</td>
+              <td>If a map fails and <code>-i</code> is not specified, all the
+              files in the split, not only those that failed, will be recopied.
+              As discussed in the <a href="#uo">following</a>, it also changes
+              the semantics for generating destination paths, so users should
+              use this carefully.
+              </td></tr>
+          <tr><td><code>-update</code></td>
+              <td>Overwrite if src size different from dst size</td>
+              <td>As noted in the preceding, this is not a &quot;sync&quot;
+              operation. The only criterion examined is the source and
+              destination file sizes; if they differ, the source file
+              replaces the destination file. As discussed in the
+              <a href="#uo">following</a>, it also changes the semantics for
+              generating destination paths, so users should use this carefully.
+              </td></tr>
+          <tr><td><code>-f &lt;urilist_uri&gt;</code></td>
+              <td>Use list at &lt;urilist_uri&gt; as src list</td>
+              <td>This is equivalent to listing each source on the command
+              line. The <code>urilist_uri</code> list should be a fully
+              qualified URI.
+              </td></tr>
+          <tr><td><code>-filelimit &lt;n&gt;</code></td>
+              <td>Limit the total number of files to be &lt;= n</td>
+              <td>See also <a href="#Symbolic-Representations">Symbolic
+                  Representations</a>.
+              </td></tr>
+          <tr><td><code>-sizelimit &lt;n&gt;</code></td>
+              <td>Limit the total size to be &lt;= n bytes</td>
+              <td>See also <a href="#Symbolic-Representations">Symbolic
+                  Representations</a>.
+              </td></tr>
+          <tr><td><code>-delete</code></td>
+              <td>Delete the files existing in the dst but not in src</td>
+              <td>The deletion is done by FS Shell.  So the trash will be used,
+                  if it is enable.
+              </td></tr>
+
+        </table>
+
+      </section>
+
+      <section id="Symbolic-Representations">
+        <title>Symbolic Representations</title>
+        <p>
+        The parameter &lt;n&gt; in <code>-filelimit</code>
+        and <code>-sizelimit</code> can be specified with symbolic
+        representation.  For examples,
+        </p>
+        <ul>
+          <li>1230k = 1230 * 1024 = 1259520</li>
+          <li>891g = 891 * 1024^3 = 956703965184</li>
+        </ul>
+      </section>
+
+      <section id="uo">
+        <title>Update and Overwrite</title>
+
+        <p>It's worth giving some examples of <code>-update</code> and
+        <code>-overwrite</code>. Consider a copy from <code>/foo/a</code> and
+        <code>/foo/b</code> to <code>/bar/foo</code>, where the sources contain
+        the following:</p>
+
+        <p><code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a/aa</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a/ab</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b/ba</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b/ab</code></p>
+
+        <p>If either <code>-update</code> or <code>-overwrite</code> is set,
+        then both sources will map an entry to <code>/bar/foo/ab</code> at the
+        destination. For both options, the contents of each source directory
+        are compared with the <strong>contents</strong> of the destination
+        directory. Rather than permit this conflict, DistCp will abort.</p>
+
+        <p>In the default case, both <code>/bar/foo/a</code> and
+        <code>/bar/foo/b</code> will be created and neither will collide.</p>
+
+        <p>Now consider a legal copy using <code>-update</code>:<br/>
+        <code>distcp -update hdfs://nn1:8020/foo/a \</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              hdfs://nn1:8020/foo/b \</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              hdfs://nn2:8020/bar</code></p>
+
+        <p>With sources/sizes:</p>
+
+        <p><code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a/aa 32</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a/ab 32</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b/ba 64</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b/bb 32</code></p>
+
+        <p>And destination/sizes:</p>
+
+        <p><code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/aa 32</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/ba 32</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/bb 64</code></p>
+
+        <p>Will effect:</p>
+
+        <p><code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/aa 32</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/ab 32</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/ba 64</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/bb 32</code></p>
+
+        <p>Only <code>aa</code> is not overwritten on nn2. If
+        <code>-overwrite</code> were specified, all elements would be
+        overwritten.</p>
+
+      </section> <!-- Update and Overwrite -->
+
+      </section> <!-- Options -->
+
+    </section> <!-- Usage -->
+
+    <section id="etc">
+      <title>Appendix</title>
+
+      <section>
+        <title>Map sizing</title>
+
+          <p>DistCp makes a faint attempt to size each map comparably so that
+          each copies roughly the same number of bytes. Note that files are the
+          finest level of granularity, so increasing the number of simultaneous
+          copiers (i.e. maps) may not always increase the number of
+          simultaneous copies nor the overall throughput.</p>
+
+          <p>If <code>-m</code> is not specified, DistCp will attempt to
+          schedule work for <code>min (total_bytes / bytes.per.map, 20 *
+          num_task_trackers)</code> where <code>bytes.per.map</code> defaults
+          to 256MB.</p>
+
+          <p>Tuning the number of maps to the size of the source and
+          destination clusters, the size of the copy, and the available
+          bandwidth is recommended for long-running and regularly run jobs.</p>
+
+      </section>
+
+      <section id="cpver">
+        <title>Copying between versions of HDFS</title>
+
+        <p>For copying between two different versions of Hadoop, one will
+        usually use HftpFileSystem. This is a read-only FileSystem, so DistCp
+        must be run on the destination cluster (more specifically, on
+        TaskTrackers that can write to the destination cluster). Each source is
+        specified as <code>hftp://&lt;dfs.http.address&gt;/&lt;path&gt;</code>
+        (the default <code>dfs.http.address</code> is
+        &lt;namenode&gt;:50070).</p>
+
+      </section>
+
+      <section>
+        <title>MapReduce and other side-effects</title>
+
+        <p>As has been mentioned in the preceding, should a map fail to copy
+        one of its inputs, there will be several side-effects.</p>
+
+        <ul>
+
+          <li>Unless <code>-i</code> is specified, the logs generated by that
+          task attempt will be replaced by the previous attempt.</li>
+
+          <li>Unless <code>-overwrite</code> is specified, files successfully
+          copied by a previous map on a re-execution will be marked as
+          &quot;skipped&quot;.</li>
+
+          <li>If a map fails <code>mapred.map.max.attempts</code> times, the
+          remaining map tasks will be killed (unless <code>-i</code> is
+          set).</li>
+
+          <li>If <code>mapred.speculative.execution</code> is set set
+          <code>final</code> and <code>true</code>, the result of the copy is
+          undefined.</li>
+
+        </ul>
+
+      </section>
+
+      <!--
+      <section>
+        <title>Firewalls and SSL</title>
+
+        <p>To copy over HTTP, use the HftpFileSystem as described in the
+        preceding <a href="#cpver">section</a>, and ensure that the required
+        port(s) are open.</p>
+
+        <p>TODO</p>
+
+      </section>
+      -->
+
+    </section> <!-- Appendix -->
+
+  </body>
+
+</document>

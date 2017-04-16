@@ -1,0 +1,148 @@
+From 921c135653736bcc279700435358058762bc8f78 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:56:43 -0800
+Subject: [PATCH 0082/1179] CLOUDERA-BUILD. More Sqoop documentation updates
+
+Author: Aaron Kimball
+---
+ src/contrib/sqoop/doc/SqoopUserGuide.txt |    2 +-
+ src/contrib/sqoop/doc/direct.txt         |   51 ++++++++++++++++++++++++++++++
+ src/contrib/sqoop/doc/mysql.txt          |   42 ------------------------
+ src/contrib/sqoop/doc/supported-dbs.txt  |    1 +
+ 4 files changed, 53 insertions(+), 43 deletions(-)
+ create mode 100644 src/contrib/sqoop/doc/direct.txt
+ delete mode 100644 src/contrib/sqoop/doc/mysql.txt
+
+diff --git a/src/contrib/sqoop/doc/SqoopUserGuide.txt b/src/contrib/sqoop/doc/SqoopUserGuide.txt
+index f4db8ff..3c84767 100644
+--- a/src/contrib/sqoop/doc/SqoopUserGuide.txt
++++ b/src/contrib/sqoop/doc/SqoopUserGuide.txt
+@@ -55,7 +55,7 @@ include::classnames.txt[]
+ 
+ include::misc-args.txt[]
+ 
+-include::mysql.txt[]
++include::direct.txt[]
+ 
+ include::hive.txt[]
+ 
+diff --git a/src/contrib/sqoop/doc/direct.txt b/src/contrib/sqoop/doc/direct.txt
+new file mode 100644
+index 0000000..5c5e512
+--- /dev/null
++++ b/src/contrib/sqoop/doc/direct.txt
+@@ -0,0 +1,51 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Direct-mode Imports
++------------------
++
++While the JDBC-based import method used by Sqoop provides it with the
++ability to read from a variety of databases using a generic driver, it
++is not the most high-performance method available. Sqoop can read from
++certain database systems faster by using their built-in export tools.
++
++For example, Sqoop can read from a local MySQL database by using the +mysqldump+
++tool distributed with MySQL. If you run Sqoop on the same machine where a
++MySQL database is present, you can take advantage of this faster
++import method by running Sqoop with the +--direct+ argument. This
++combined with a connect string that begins with +jdbc:mysql://+ will
++inform Sqoop that it should select the faster access method.
++
++If your delimiters exactly match the delimiters used by +mysqldump+,
++then Sqoop will use a fast-path that copies the data directly from
+++mysqldump+'s output into HDFS. Otherwise, Sqoop will parse +mysqldump+'s
++output into fields and transcode them into the user-specified delimiter set.
++This incurs additional processing, so performance may suffer.
++For convenience, the +--mysql-delimiters+
++argument will set all the output delimiters to be consistent with
+++mysqldump+'s format.
++
++Sqoop also provides a direct-mode backend for PostgreSQL that uses the
+++COPY TO STDOUT+ protocol from +psql+. No specific delimiter set provides
++better performance; Sqoop will forward delimiter control arguments to
+++psql+.
++
++The "Supported Databases" section provides a full list of database vendors
++which have direct-mode support from Sqoop.
++
+diff --git a/src/contrib/sqoop/doc/mysql.txt b/src/contrib/sqoop/doc/mysql.txt
+deleted file mode 100644
+index 6beb52f..0000000
+--- a/src/contrib/sqoop/doc/mysql.txt
++++ /dev/null
+@@ -1,42 +0,0 @@
+-
+-////
+-   Licensed to the Apache Software Foundation (ASF) under one or more
+-   contributor license agreements.  See the NOTICE file distributed with
+-   this work for additional information regarding copyright ownership.
+-   The ASF licenses this file to You under the Apache License, Version 2.0
+-   (the "License"); you may not use this file except in compliance with
+-   the License.  You may obtain a copy of the License at
+-
+-       http://www.apache.org/licenses/LICENSE-2.0
+-
+-   Unless required by applicable law or agreed to in writing, software
+-   distributed under the License is distributed on an "AS IS" BASIS,
+-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-   See the License for the specific language governing permissions and
+-   limitations under the License.
+-////
+-
+-
+-Fast MySQL Imports
+-------------------
+-
+-While the JDBC-based import method used by Sqoop provides it with the
+-ability to read from a variety of databases using a generic driver, it
+-is not the most high-performance method available. Sqoop can read from
+-a local MySQL database considerably faster by using the +mysqldump+ tool
+-distributed with MySQL. If you run Sqoop on the same machine where a
+-MySQL database is present, you can take advantage of this faster
+-import method by running Sqoop with the +--direct+ argument. This
+-combined with a connect string that begins with +jdbc:mysql://+ will
+-inform Sqoop that it should select the faster access method.
+-
+-If your delimiters exactly match the delimiters used by +mysqldump+,
+-then Sqoop will use a fast-path that copies the data directly from
+-+mysqldump+'s output into HDFS. Otherwise, Sqoop will parse +mysqldump+'s
+-output into fields and transcode them into the user-specified delimiter set.
+-This incurs additional processing, so performance may suffer.
+-For convenience, the +--mysql-delimiters+
+-argument will set all the output delimiters to be consistent with
+-+mysqldump+'s format.
+-
+-
+diff --git a/src/contrib/sqoop/doc/supported-dbs.txt b/src/contrib/sqoop/doc/supported-dbs.txt
+index 2e8b8cf..aebd9c3 100644
+--- a/src/contrib/sqoop/doc/supported-dbs.txt
++++ b/src/contrib/sqoop/doc/supported-dbs.txt
+@@ -43,6 +43,7 @@ Database    version  +--direct+ support?  connect string matches
+ HSQLDB      1.8.0+   No                   +jdbc:hsqldb:*//+
+ MySQL       5.0+     Yes                  +jdbc:mysql://+
+ Oracle      10.2.0+  No                   +jdbc:oracle:*//+
++PostgreSQL  8.3+     Yes                  +jdbc:postgresql://+
+ ----------------------------------------------------------------
+ 
+ Sqoop may work with older versions of the databases listed, but we have
+-- 
+1.7.0.4
+

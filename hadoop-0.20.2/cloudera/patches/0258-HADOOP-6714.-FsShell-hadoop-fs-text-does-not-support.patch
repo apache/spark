@@ -1,0 +1,48 @@
+From 11bc9be1ff2fd994046acd660afa7631f9203cfb Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 27 May 2010 17:44:00 -0700
+Subject: [PATCH 0258/1179] HADOOP-6714. FsShell 'hadoop fs -text' does not support compression codecs.
+
+Currently, 'hadoop fs -text myfile' looks at the first few magic bytes
+of a file to determine whether it is gzip compressed or a sequence
+file. This means 'fs -text' cannot properly decode .deflate or .bz2
+files (or other codecs specified via configuration).
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-1136
+---
+ src/core/org/apache/hadoop/fs/FsShell.java |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FsShell.java b/src/core/org/apache/hadoop/fs/FsShell.java
+index b138992..37fc6f6 100644
+--- a/src/core/org/apache/hadoop/fs/FsShell.java
++++ b/src/core/org/apache/hadoop/fs/FsShell.java
+@@ -38,6 +38,8 @@ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.io.SequenceFile;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.io.compress.CompressionCodec;
++import org.apache.hadoop.io.compress.CompressionCodecFactory;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.util.ReflectionUtils;
+@@ -394,6 +396,14 @@ public class FsShell extends Configured implements Tool {
+ 
+   private InputStream forMagic(Path p, FileSystem srcFs) throws IOException {
+     FSDataInputStream i = srcFs.open(p);
++
++    // check codecs
++    CompressionCodecFactory cf = new CompressionCodecFactory(getConf());
++    CompressionCodec codec = cf.getCodec(p);
++    if (codec != null) {
++      return codec.createInputStream(i);
++    }
++
+     switch(i.readShort()) {
+       case 0x1f8b: // RFC 1952
+         i.seek(0);
+-- 
+1.7.0.4
+

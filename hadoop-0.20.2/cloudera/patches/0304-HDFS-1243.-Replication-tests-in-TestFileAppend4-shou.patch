@@ -1,0 +1,34 @@
+From 7276208c2789f2c3961c6dc9fa1d2757774971b1 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 16 Jun 2010 12:16:25 -0700
+Subject: [PATCH 0304/1179] HDFS-1243. Replication tests in TestFileAppend4 should wait for a second for replication to occur
+
+Reason: Test error - fix sporadic failure of TestFileAppend4
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../org/apache/hadoop/hdfs/TestFileAppend4.java    |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+index a13e3ff..7548bb5 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+@@ -466,8 +466,12 @@ public class TestFileAppend4 extends TestCase {
+           fs1.getFileStatus(file1), 0, BLOCK_SIZE);
+       LOG.info("Checking blocks");
+       assertTrue("Should have one block", bl.length == 1);
+-      assertTrue("Should have 2 replicas for that block, not " + 
+-                 bl[0].getNames().length, bl[0].getNames().length == 2);  
++      
++      // Wait up to 1 second for block replication - we may have
++      // only replication 1 for a brief moment after close, since
++      // closing only waits for fs.replcation.min replicas, and
++      // it may take some millis before the other DN reports block
++      waitForBlockReplication(fs1, file1.toString(), 2, 1);
+ 
+       assertFileSize(fs1, BLOCK_SIZE*3/4);
+       checkFile(fs1, BLOCK_SIZE*3/4);
+-- 
+1.7.0.4
+

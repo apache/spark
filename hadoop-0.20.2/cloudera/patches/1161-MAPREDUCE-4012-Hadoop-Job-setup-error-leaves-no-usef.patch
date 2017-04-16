@@ -1,0 +1,29 @@
+From ef5bef8f073eeefdecafca2e3660bf855bf7df07 Mon Sep 17 00:00:00 2001
+From: Patrick Hunt <phunt@cloudera.com>
+Date: Tue, 3 Apr 2012 15:43:44 +0000
+Subject: [PATCH 1161/1179] MAPREDUCE-4012 Hadoop Job setup error leaves no useful info to users. (tgraves)
+
+Author: Thomas Graves
+Reason: Bug
+Ref: CDH-4854
+---
+ .../apache/hadoop/mapred/LinuxTaskController.java  |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+index 2f592af..2874744 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+@@ -191,7 +191,8 @@ class LinuxTaskController extends TaskController {
+     } catch (ExitCodeException e) {
+       int exitCode = shExec.getExitCode();
+       logOutput(shExec.getOutput());
+-      throw new IOException("Job initialization failed (" + exitCode + ")", e);
++      throw new IOException("Job initialization failed (" + exitCode + 
++          ") with output: " + shExec.getOutput(), e);
+     }
+   }
+ 
+-- 
+1.7.0.4
+

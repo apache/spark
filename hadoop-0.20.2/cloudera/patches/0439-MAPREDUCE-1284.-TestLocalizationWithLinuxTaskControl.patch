@@ -1,0 +1,28 @@
+From 6804e20bd4d9ee5e0005b61d202ce7dd928b5b22 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 23 Jan 2010 20:01:51 +0530
+Subject: [PATCH 0439/1179] MAPREDUCE-1284. TestLocalizationWithLinuxTaskController fails
+
+Patch: https://issues.apache.org/jira/secure/attachment/12427577/MR-1284.patch
+Author: Ravi Gummadi
+Ref: CDH-648
+---
+ src/c++/task-controller/task-controller.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/c++/task-controller/task-controller.c b/src/c++/task-controller/task-controller.c
+index 09ec522..3d208cc 100644
+--- a/src/c++/task-controller/task-controller.c
++++ b/src/c++/task-controller/task-controller.c
+@@ -271,7 +271,7 @@ static int secure_path(const char *path, uid_t uid, gid_t gid,
+     mode_t file_mode, mode_t dir_mode) {
+   FTS *tree = NULL; // the file hierarchy
+   FTSENT *entry = NULL; // a file in the hierarchy
+-  char *paths[] = { (char *) path };
++  char *paths[] = { (char *) path, NULL };//array needs to be NULL-terminated
+   int process_path = 0;
+   int dir = 0;
+   int error_code = 0;
+-- 
+1.7.0.4
+

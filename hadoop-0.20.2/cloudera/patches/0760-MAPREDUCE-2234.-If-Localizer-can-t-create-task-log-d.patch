@@ -1,0 +1,262 @@
+From bda05051c5ad4c56d210427bbe6445c3db66573e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 7 Jan 2011 14:20:01 -0800
+Subject: [PATCH 0760/1179] MAPREDUCE-2234. If Localizer can't create task log directory, it should fail on the spot.
+
+Reason: Make common source of support tickets easier to diagnose
+Author: Todd Lipcon
+Ref: CDH-2500
+---
+ .../org/apache/hadoop/mapred/TaskController.java   |    6 +-
+ .../mapreduce/server/tasktracker/Localizer.java    |    6 +-
+ .../hadoop/mapred/TestTaskTrackerDirectories.java  |  139 ++++++++++++++++++++
+ .../hadoop/mapred/TestTaskTrackerLocalization.java |   30 ++++
+ 4 files changed, 176 insertions(+), 5 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskController.java b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+index b031e6f..f65824d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
+ import org.apache.hadoop.mapred.JvmManager.JvmEnv;
+ import org.apache.hadoop.mapreduce.server.tasktracker.Localizer;
++import org.apache.hadoop.util.DiskChecker;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+ 
+@@ -77,7 +78,7 @@ public abstract class TaskController implements Configurable {
+     for (String localDir : this.mapredLocalDirs) {
+       // Set up the mapred-local directories.
+       File mapredlocalDir = new File(localDir);
+-      if (!mapredlocalDir.exists() && !mapredlocalDir.mkdirs()) {
++      if (!mapredlocalDir.isDirectory() && !mapredlocalDir.mkdirs()) {
+         LOG.warn("Unable to create mapred-local directory : "
+             + mapredlocalDir.getPath());
+       } else {
+@@ -88,12 +89,13 @@ public abstract class TaskController implements Configurable {
+ 
+     // Set up the user log directory
+     File taskLog = TaskLog.getUserLogDir();
+-    if (!taskLog.exists() && !taskLog.mkdirs()) {
++    if (!taskLog.isDirectory() && !taskLog.mkdirs()) {
+       LOG.warn("Unable to create taskLog directory : " + taskLog.getPath());
+     } else {
+       Localizer.PermissionsHandler.setPermissions(taskLog,
+           Localizer.PermissionsHandler.sevenFiveFive);
+     }
++    DiskChecker.checkDir(TaskLog.getUserLogDir());
+   }
+ 
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java b/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java
+index 8d97fdd..d55e224 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java
+@@ -365,13 +365,13 @@ public class Localizer {
+    * 
+    * @param jobId
+    */
+-  public void initializeJobLogDir(JobID jobId) {
++  public void initializeJobLogDir(JobID jobId) throws IOException {
+     File jobUserLogDir = TaskLog.getJobDir(jobId);
+     if (!jobUserLogDir.exists()) {
+       boolean ret = jobUserLogDir.mkdirs();
+       if (!ret) {
+-        LOG.warn("Could not create job user log directory: " + jobUserLogDir);
+-        return;
++        throw new IOException("Could not create job user log directory: " +
++            jobUserLogDir);
+       }
+     }
+     Localizer.PermissionsHandler.setPermissions(jobUserLogDir,
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java
+new file mode 100644
+index 0000000..150a6b9
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerDirectories.java
+@@ -0,0 +1,139 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import static org.junit.Assert.*;
++
++import java.io.File;
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.RawLocalFileSystem;
++import org.junit.Test;
++import org.junit.Before;
++
++/**
++ * Tests for the correct behavior of the TaskTracker starting up with
++ * respect to its local-disk directories.
++ */
++public class TestTaskTrackerDirectories {
++  private final String TEST_DIR = new File("build/test/testmapredlocaldir")
++    .getAbsolutePath();
++  
++  @Before
++  public void deleteTestDir() throws IOException {
++    FileUtil.fullyDelete(new File(TEST_DIR));
++    assertFalse("Could not delete " + TEST_DIR,
++        new File(TEST_DIR).exists());
++  }
++  
++  @Test
++  public void testCreatesLocalDirs() throws Exception {
++    Configuration conf = new Configuration();
++    String[] dirs = new String[] {
++        TEST_DIR + "/local1",
++        TEST_DIR + "/local2"
++    };
++    
++    conf.setStrings("mapred.local.dir", dirs);
++    setupTaskController(conf);
++
++    for (String dir : dirs) {
++      checkDir(dir);
++    }
++  }
++  
++  @Test
++  public void testFixesLocalDirPermissions() throws Exception {
++    Configuration conf = new Configuration();
++    String[] dirs = new String[] {
++        TEST_DIR + "/badperms"
++    };
++    
++    new File(dirs[0]).mkdirs();
++    FileUtil.chmod(dirs[0], "000");
++
++    conf.setStrings("mapred.local.dir", dirs);
++    setupTaskController(conf);
++    
++    for (String dir : dirs) {
++      checkDir(dir);
++    }
++  }
++  
++  @Test
++  public void testCreatesLogDir() throws Exception {
++    File dir = TaskLog.getUserLogDir();
++    FileUtil.fullyDelete(dir);
++    
++    setupTaskController(new Configuration());
++    
++    checkDir(dir.getAbsolutePath());
++  }
++  
++  /**
++   * If the log dir can't be created, the TT should fail to start since
++   * it will be unable to localize or run tasks.
++   */
++  @Test
++  public void testCantCreateLogDir() throws Exception {
++    File dir = TaskLog.getUserLogDir();
++    FileUtil.fullyDelete(dir);
++    assertTrue("Making file in place of log dir",
++        dir.createNewFile());
++
++    try {
++      setupTaskController(new Configuration());
++      fail("Didn't throw!");
++    } catch (IOException ioe) {
++      System.err.println("Got expected exception");
++      ioe.printStackTrace(System.out);
++    }
++  }
++  
++  @Test
++  public void testFixesLogDirPermissions() throws Exception {
++    File dir = TaskLog.getUserLogDir();
++    FileUtil.fullyDelete(dir);
++    dir.mkdirs();
++    FileUtil.chmod(dir.getAbsolutePath(), "000");
++    
++    setupTaskController(new Configuration());
++    
++    checkDir(dir.getAbsolutePath());
++  }
++  
++  private void setupTaskController(Configuration conf) throws IOException {
++    TaskController tc = new DefaultTaskController();
++    tc.setConf(conf);
++    tc.setup();
++  }
++
++  private void checkDir(String dir) throws IOException {
++    FileSystem fs = RawLocalFileSystem.get(new Configuration());
++    File f = new File(dir);
++    assertTrue(dir + "should exist", f.exists());
++    FileStatus stat = fs.getFileStatus(new Path(dir));
++    assertEquals(dir + " has correct permissions",
++        0755, stat.getPermission().toShort());
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+index a08989c..9fec567 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+@@ -407,6 +407,36 @@ public class TestTaskTrackerLocalization extends TestCase {
+     checkJobLocalization();
+   }
+ 
++  /**
++   * Test that, if the job log dir can't be created, the job will fail
++   * during localization rather than at the time when the task itself
++   * tries to write into it.
++   */
++  public void testJobLocalizationFailsIfLogDirUnwritable()
++      throws Exception {
++    if (!canRun()) {
++      return;
++    }
++
++    File logDir = TaskLog.getJobDir(jobId);
++    File logDirParent = logDir.getParentFile();
++
++    try {
++      assertTrue(logDirParent.mkdirs() || logDirParent.isDirectory());
++      FileUtil.fullyDelete(logDir);
++      FileUtil.chmod(logDirParent.getAbsolutePath(), "000");
++
++      tracker.localizeJob(tip);
++      fail("No exception");
++    } catch (IOException ioe) {
++      LOG.info("Got exception", ioe);
++      assertTrue(ioe.getMessage().contains("Could not create job user log"));
++    } finally {
++      // Put it back just to be safe
++      FileUtil.chmod(logDirParent.getAbsolutePath(), "755");
++    }
++  }
++
+   protected void checkJobLocalization()
+       throws IOException {
+     // Check the directory structure
+-- 
+1.7.0.4
+

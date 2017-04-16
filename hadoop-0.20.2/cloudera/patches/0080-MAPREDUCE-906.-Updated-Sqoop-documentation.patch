@@ -1,0 +1,2556 @@
+From 89a96d8fff80ac809dbda9582044a7c6b3986d16 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:56:07 -0800
+Subject: [PATCH 0080/1179] MAPREDUCE-906. Updated Sqoop documentation
+
+Description: Provides the latest documentation for Sqoop, in both user-guide and manpage form. Built with asciidoc.
+Reason: Documentation
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/contrib/sqoop/build.xml                        |    8 +
+ src/contrib/sqoop/doc/.gitignore                   |    3 +
+ src/contrib/sqoop/doc/Makefile                     |   43 +
+ src/contrib/sqoop/doc/Sqoop-manpage.txt            |  177 ++++
+ src/contrib/sqoop/doc/SqoopUserGuide.html          |  959 --------------------
+ src/contrib/sqoop/doc/SqoopUserGuide.txt           |   63 ++
+ src/contrib/sqoop/doc/classnames.txt               |   43 +
+ src/contrib/sqoop/doc/connecting.txt               |   85 ++
+ src/contrib/sqoop/doc/controlling-input-format.txt |   42 +
+ .../sqoop/doc/controlling-output-format.txt        |   38 +
+ src/contrib/sqoop/doc/full-db-import.txt           |   92 ++
+ src/contrib/sqoop/doc/hive.txt                     |   58 ++
+ src/contrib/sqoop/doc/input-formatting-args.txt    |   34 +
+ src/contrib/sqoop/doc/input-formatting.txt         |   24 +
+ src/contrib/sqoop/doc/intro.txt                    |   34 +
+ src/contrib/sqoop/doc/listing-dbs.txt              |   35 +
+ src/contrib/sqoop/doc/listing-tables.txt           |   34 +
+ src/contrib/sqoop/doc/misc-args.txt                |   32 +
+ src/contrib/sqoop/doc/mysql.txt                    |   42 +
+ src/contrib/sqoop/doc/output-formatting-args.txt   |   39 +
+ src/contrib/sqoop/doc/output-formatting.txt        |   44 +
+ src/contrib/sqoop/doc/sqoop.1                      |  273 ------
+ src/contrib/sqoop/doc/supported-dbs.txt            |   54 ++
+ src/contrib/sqoop/doc/table-import.txt             |   68 ++
+ src/contrib/sqoop/readme.txt                       |   15 +
+ 25 files changed, 1107 insertions(+), 1232 deletions(-)
+ create mode 100644 src/contrib/sqoop/doc/.gitignore
+ create mode 100644 src/contrib/sqoop/doc/Makefile
+ create mode 100644 src/contrib/sqoop/doc/Sqoop-manpage.txt
+ delete mode 100644 src/contrib/sqoop/doc/SqoopUserGuide.html
+ create mode 100644 src/contrib/sqoop/doc/SqoopUserGuide.txt
+ create mode 100644 src/contrib/sqoop/doc/classnames.txt
+ create mode 100644 src/contrib/sqoop/doc/connecting.txt
+ create mode 100644 src/contrib/sqoop/doc/controlling-input-format.txt
+ create mode 100644 src/contrib/sqoop/doc/controlling-output-format.txt
+ create mode 100644 src/contrib/sqoop/doc/full-db-import.txt
+ create mode 100644 src/contrib/sqoop/doc/hive.txt
+ create mode 100644 src/contrib/sqoop/doc/input-formatting-args.txt
+ create mode 100644 src/contrib/sqoop/doc/input-formatting.txt
+ create mode 100644 src/contrib/sqoop/doc/intro.txt
+ create mode 100644 src/contrib/sqoop/doc/listing-dbs.txt
+ create mode 100644 src/contrib/sqoop/doc/listing-tables.txt
+ create mode 100644 src/contrib/sqoop/doc/misc-args.txt
+ create mode 100644 src/contrib/sqoop/doc/mysql.txt
+ create mode 100644 src/contrib/sqoop/doc/output-formatting-args.txt
+ create mode 100644 src/contrib/sqoop/doc/output-formatting.txt
+ delete mode 100644 src/contrib/sqoop/doc/sqoop.1
+ create mode 100644 src/contrib/sqoop/doc/supported-dbs.txt
+ create mode 100644 src/contrib/sqoop/doc/table-import.txt
+ create mode 100644 src/contrib/sqoop/readme.txt
+
+diff --git a/src/contrib/sqoop/build.xml b/src/contrib/sqoop/build.xml
+index 8962267..b3a736d 100644
+--- a/src/contrib/sqoop/build.xml
++++ b/src/contrib/sqoop/build.xml
+@@ -152,4 +152,12 @@ to call at top-level: ant deploy-contrib compile-core-test
+     <fail if="tests.failed">Tests failed!</fail>
+   </target>
+ 
++  <target name="doc">
++    <exec executable="make" failonerror="true">
++      <arg value="-C" />
++      <arg value="${basedir}/doc" />
++      <arg value="BUILDROOT=${build.dir}" />
++    </exec>
++  </target>
++
+ </project>
+diff --git a/src/contrib/sqoop/doc/.gitignore b/src/contrib/sqoop/doc/.gitignore
+new file mode 100644
+index 0000000..1a9a2df
+--- /dev/null
++++ b/src/contrib/sqoop/doc/.gitignore
+@@ -0,0 +1,3 @@
++/Sqoop-manpage.xml
++/sqoop.1
++/Sqoop-web.html
+diff --git a/src/contrib/sqoop/doc/Makefile b/src/contrib/sqoop/doc/Makefile
+new file mode 100644
+index 0000000..6ccc666
+--- /dev/null
++++ b/src/contrib/sqoop/doc/Makefile
+@@ -0,0 +1,43 @@
++#  Licensed to the Apache Software Foundation (ASF) under one or more
++#  contributor license agreements.  See the NOTICE file distributed with
++#  this work for additional information regarding copyright ownership.
++#  The ASF licenses this file to You under the Apache License, Version 2.0
++#  (the "License"); you may not use this file except in compliance with
++#  the License.  You may obtain a copy of the License at#
++#
++#      http://www.apache.org/licenses/LICENSE-2.0
++#
++#  Unless required by applicable law or agreed to in writing, software
++#  distributed under the License is distributed on an "AS IS" BASIS,
++#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++#  See the License for the specific language governing permissions and
++#  limitations under the License.
++
++BUILDROOT=../../../../build/contrib/sqoop
++BUILD_DIR=$(BUILDROOT)/doc
++
++all: man userguide
++
++man: $(BUILD_DIR)/sqoop.1.gz
++
++userguide: $(BUILD_DIR)/SqoopUserGuide.html
++
++$(BUILD_DIR)/sqoop.1.gz: Sqoop-manpage.txt *formatting*.txt
++	asciidoc -b docbook -d manpage Sqoop-manpage.txt
++	xmlto man Sqoop-manpage.xml
++	gzip sqoop.1
++	rm Sqoop-manpage.xml
++	mkdir -p $(BUILD_DIR)
++	mv sqoop.1.gz $(BUILD_DIR)
++
++$(BUILD_DIR)/SqoopUserGuide.html: SqoopUserGuide.txt *.txt
++	asciidoc SqoopUserGuide.txt
++	mkdir -p $(BUILD_DIR)
++	mv SqoopUserGuide.html $(BUILD_DIR)
++
++clean:
++	-rm $(BUILD_DIR)/sqoop.1.gz
++	-rm $(BUILD_DIR)/SqoopUserGuide.html
++
++.PHONY: all man userguide clean
++
+diff --git a/src/contrib/sqoop/doc/Sqoop-manpage.txt b/src/contrib/sqoop/doc/Sqoop-manpage.txt
+new file mode 100644
+index 0000000..a26391d
+--- /dev/null
++++ b/src/contrib/sqoop/doc/Sqoop-manpage.txt
+@@ -0,0 +1,177 @@
++sqoop(1)
++========
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++NAME
++----
++sqoop - SQL-to-Hadoop import tool
++
++SYNOPSIS
++--------
++'sqoop' <options>
++
++DESCRIPTION
++-----------
++Sqoop is a tool designed to help users of large data import existing
++relational databases into their Hadoop clusters. Sqoop uses JDBC to
++connect to a database, examine each table's schema, and auto-generate
++the necessary classes to import data into HDFS. It then instantiates
++a MapReduce job to read tables from the database via the DBInputFormat
++(JDBC-based InputFormat). Tables are read into a set of files loaded
++into HDFS. Both SequenceFile and text-based targets are supported. Sqoop
++also supports high-performance imports from select databases including MySQL.
++
++OPTIONS
++-------
++
++The +--connect+ option is always required. To perform an import, one of
+++--table+ or +--all-tables+ is required as well. Alternatively, you can
++specify +--generate-only+ or one of the arguments in "Additional commands."
++
++
++Database connection options
++~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++--connect (jdbc-uri)::
++  Specify JDBC connect string (required)
++
++--driver (class-name)::
++  Manually specify JDBC driver class to use
++
++--username (username)::
++  Set authentication username
++
++--password (password)::
++  Set authentication password
++  (Note: This is very insecure. You should use -P instead.)
++
++-P::
++  Prompt for user password
++
++--direct::
++  Use direct import fast path (mysql only)
++
++Import control options
++~~~~~~~~~~~~~~~~~~~~~~
++
++--all-tables::
++  Import all tables in database
++  (Ignores +--table+, +--columns+, +--order-by+, and +--where+)
++
++--columns (col,col,col...)::
++  Columns to export from table
++
++--split-by (column-name)
++  Column of the table used to split the table for parallel import
++
++--hadoop-home (dir)::
++  Override $HADOOP_HOME
++
++--hive-home (dir)::
++  Override $HIVE_HOME
++
++--warehouse-dir (dir)::
++  Tables are uploaded to the HDFS path +/warehouse/dir/(tablename)/+
++
++--as-sequencefile::
++  Imports data to SequenceFiles
++
++--as-textfile::
++  Imports data as plain text (default)
++
++--hive-import::
++  If set, then import the table into Hive
++
++--table (table-name)::
++  The table to import
++
++--where (clause)
++Import only the rows for which _clause_ is true.
++e.g.: `--where "user_id > 400 AND hidden == 0"`
++
++
++Output line formatting options
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++include::output-formatting.txt[]
++include::output-formatting-args.txt[]
++
++Input line parsing options
++~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++include::input-formatting.txt[]
++include::input-formatting-args.txt[]
++
++Code generation options
++~~~~~~~~~~~~~~~~~~~~~~~
++
++--bindir (dir)::
++  Output directory for compiled objects
++
++--class-name (name)::
++  Sets the name of the class to generate. By default, classes are
++  named after the table they represent. Using this parameters
++  ignores +--package-name+.
++
++--generate-only::
++  Stop after code generation; do not import
++
++--outdir (dir)::
++  Output directory for generated code
++
++--package-name (package)::
++  Puts auto-generated classes in the named Java package
++
++Additional commands
++~~~~~~~~~~~~~~~~~~~
++
++These commands cause Sqoop to report information and exit;
++no import or code generation is performed.
++
++--debug-sql (statement)::
++  Execute 'statement' in SQL and display the results
++
++--help::
++  Display usage information and exit
++
++--list-databases::
++  List all databases available and exit
++
++--list-tables::
++  List tables in database and exit
++
++
++ENVIRONMENT
++-----------
++
++JAVA_HOME::
++  As part of its import process, Sqoop generates and compiles Java code
++  by invoking the Java compiler *javac*(1). As a result, JAVA_HOME must
++  be set to the location of your JDK (note: This cannot just be a JRE).
++  e.g., +/usr/java/default+. Hadoop (and Sqoop) requires Sun Java 1.6 which
++  can be downloaded from http://java.sun.com.
++
++HADOOP_HOME::
++  The location of the Hadoop jar files. If you installed Hadoop via RPM
++  or DEB, these are in +/usr/lib/hadoop-20+.
++
++HIVE_HOME::
++  If you are performing a Hive import, you must identify the location of
++  Hive's jars and configuration. If you installed Hive via RPM or DEB,
++  these are in +/usr/lib/hive+.
++
+diff --git a/src/contrib/sqoop/doc/SqoopUserGuide.html b/src/contrib/sqoop/doc/SqoopUserGuide.html
+deleted file mode 100644
+index 714f058..0000000
+--- a/src/contrib/sqoop/doc/SqoopUserGuide.html
++++ /dev/null
+@@ -1,959 +0,0 @@
+-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+-    "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+-<head>
+-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+-<meta name="generator" content="AsciiDoc 8.2.7" />
+-<style type="text/css">
+-/* Debug borders */
+-p, li, dt, dd, div, pre, h1, h2, h3, h4, h5, h6 {
+-/*
+-  border: 1px solid red;
+-*/
+-}
+-
+-body {
+-  margin: 1em 5% 1em 5%;
+-}
+-
+-a {
+-  color: blue;
+-  text-decoration: underline;
+-}
+-a:visited {
+-  color: fuchsia;
+-}
+-
+-em {
+-  font-style: italic;
+-  color: navy;
+-}
+-
+-strong {
+-  font-weight: bold;
+-  color: #083194;
+-}
+-
+-tt {
+-  color: navy;
+-}
+-
+-h1, h2, h3, h4, h5, h6 {
+-  color: #527bbd;
+-  font-family: sans-serif;
+-  margin-top: 1.2em;
+-  margin-bottom: 0.5em;
+-  line-height: 1.3;
+-}
+-
+-h1, h2, h3 {
+-  border-bottom: 2px solid silver;
+-}
+-h2 {
+-  padding-top: 0.5em;
+-}
+-h3 {
+-  float: left;
+-}
+-h3 + * {
+-  clear: left;
+-}
+-
+-div.sectionbody {
+-  font-family: serif;
+-  margin-left: 0;
+-}
+-
+-hr {
+-  border: 1px solid silver;
+-}
+-
+-p {
+-  margin-top: 0.5em;
+-  margin-bottom: 0.5em;
+-}
+-
+-ul, ol, li > p {
+-  margin-top: 0;
+-}
+-
+-pre {
+-  padding: 0;
+-  margin: 0;
+-}
+-
+-span#author {
+-  color: #527bbd;
+-  font-family: sans-serif;
+-  font-weight: bold;
+-  font-size: 1.1em;
+-}
+-span#email {
+-}
+-span#revision {
+-  font-family: sans-serif;
+-}
+-
+-div#footer {
+-  font-family: sans-serif;
+-  font-size: small;
+-  border-top: 2px solid silver;
+-  padding-top: 0.5em;
+-  margin-top: 4.0em;
+-}
+-div#footer-text {
+-  float: left;
+-  padding-bottom: 0.5em;
+-}
+-div#footer-badges {
+-  float: right;
+-  padding-bottom: 0.5em;
+-}
+-
+-div#preamble,
+-div.tableblock, div.imageblock, div.exampleblock, div.verseblock,
+-div.quoteblock, div.literalblock, div.listingblock, div.sidebarblock,
+-div.admonitionblock {
+-  margin-right: 10%;
+-  margin-top: 1.5em;
+-  margin-bottom: 1.5em;
+-}
+-div.admonitionblock {
+-  margin-top: 2.5em;
+-  margin-bottom: 2.5em;
+-}
+-
+-div.content { /* Block element content. */
+-  padding: 0;
+-}
+-
+-/* Block element titles. */
+-div.title, caption.title {
+-  color: #527bbd;
+-  font-family: sans-serif;
+-  font-weight: bold;
+-  text-align: left;
+-  margin-top: 1.0em;
+-  margin-bottom: 0.5em;
+-}
+-div.title + * {
+-  margin-top: 0;
+-}
+-
+-td div.title:first-child {
+-  margin-top: 0.0em;
+-}
+-div.content div.title:first-child {
+-  margin-top: 0.0em;
+-}
+-div.content + div.title {
+-  margin-top: 0.0em;
+-}
+-
+-div.sidebarblock > div.content {
+-  background: #ffffee;
+-  border: 1px solid silver;
+-  padding: 0.5em;
+-}
+-
+-div.listingblock {
+-  margin-right: 0%;
+-}
+-div.listingblock > div.content {
+-  border: 1px solid silver;
+-  background: #f4f4f4;
+-  padding: 0.5em;
+-}
+-
+-div.quoteblock {
+-  padding-left: 2.0em;
+-}
+-div.quoteblock > div.attribution {
+-  padding-top: 0.5em;
+-  text-align: right;
+-}
+-
+-div.verseblock {
+-  padding-left: 2.0em;
+-}
+-div.verseblock > div.content {
+-  white-space: pre;
+-}
+-div.verseblock > div.attribution {
+-  padding-top: 0.75em;
+-  text-align: left;
+-}
+-/* DEPRECATED: Pre version 8.2.7 verse style literal block. */
+-div.verseblock + div.attribution {
+-  text-align: left;
+-}
+-
+-div.admonitionblock .icon {
+-  vertical-align: top;
+-  font-size: 1.1em;
+-  font-weight: bold;
+-  text-decoration: underline;
+-  color: #527bbd;
+-  padding-right: 0.5em;
+-}
+-div.admonitionblock td.content {
+-  padding-left: 0.5em;
+-  border-left: 2px solid silver;
+-}
+-
+-div.exampleblock > div.content {
+-  border-left: 2px solid silver;
+-  padding: 0.5em;
+-}
+-
+-div.imageblock div.content { padding-left: 0; }
+-div.imageblock img { border: 1px solid silver; }
+-span.image img { border-style: none; }
+-
+-dl {
+-  margin-top: 0.8em;
+-  margin-bottom: 0.8em;
+-}
+-dt {
+-  margin-top: 0.5em;
+-  margin-bottom: 0;
+-  font-style: normal;
+-}
+-dd > *:first-child {
+-  margin-top: 0.1em;
+-}
+-
+-ul, ol {
+-    list-style-position: outside;
+-}
+-div.olist > ol {
+-  list-style-type: decimal;
+-}
+-div.olist2 > ol {
+-  list-style-type: lower-alpha;
+-}
+-
+-div.tableblock > table {
+-  border: 3px solid #527bbd;
+-}
+-thead {
+-  font-family: sans-serif;
+-  font-weight: bold;
+-}
+-tfoot {
+-  font-weight: bold;
+-}
+-
+-div.hlist {
+-  margin-top: 0.8em;
+-  margin-bottom: 0.8em;
+-}
+-div.hlist td {
+-  padding-bottom: 15px;
+-}
+-td.hlist1 {
+-  vertical-align: top;
+-  font-style: normal;
+-  padding-right: 0.8em;
+-}
+-td.hlist2 {
+-  vertical-align: top;
+-}
+-
+-@media print {
+-  div#footer-badges { display: none; }
+-}
+-
+-div#toctitle {
+-  color: #527bbd;
+-  font-family: sans-serif;
+-  font-size: 1.1em;
+-  font-weight: bold;
+-  margin-top: 1.0em;
+-  margin-bottom: 0.1em;
+-}
+-
+-div.toclevel1, div.toclevel2, div.toclevel3, div.toclevel4 {
+-  margin-top: 0;
+-  margin-bottom: 0;
+-}
+-div.toclevel2 {
+-  margin-left: 2em;
+-  font-size: 0.9em;
+-}
+-div.toclevel3 {
+-  margin-left: 4em;
+-  font-size: 0.9em;
+-}
+-div.toclevel4 {
+-  margin-left: 6em;
+-  font-size: 0.9em;
+-}
+-/* Workarounds for IE6's broken and incomplete CSS2. */
+-
+-div.sidebar-content {
+-  background: #ffffee;
+-  border: 1px solid silver;
+-  padding: 0.5em;
+-}
+-div.sidebar-title, div.image-title {
+-  color: #527bbd;
+-  font-family: sans-serif;
+-  font-weight: bold;
+-  margin-top: 0.0em;
+-  margin-bottom: 0.5em;
+-}
+-
+-div.listingblock div.content {
+-  border: 1px solid silver;
+-  background: #f4f4f4;
+-  padding: 0.5em;
+-}
+-
+-div.quoteblock-attribution {
+-  padding-top: 0.5em;
+-  text-align: right;
+-}
+-
+-div.verseblock-content {
+-  white-space: pre;
+-}
+-div.verseblock-attribution {
+-  padding-top: 0.75em;
+-  text-align: left;
+-}
+-
+-div.exampleblock-content {
+-  border-left: 2px solid silver;
+-  padding-left: 0.5em;
+-}
+-
+-/* IE6 sets dynamically generated links as visited. */
+-div#toc a:visited { color: blue; }
+-
+-/* Because IE6 child selector is broken. */
+-div.olist2 ol {
+-  list-style-type: lower-alpha;
+-}
+-div.olist2 div.olist ol {
+-  list-style-type: decimal;
+-}
+-</style>
+-<title></title>
+-</head>
+-<body>
+-<div id="header">
+-</div>
+-<h2 id="_introduction">Introduction</h2>
+-<div class="sectionbody">
+-<div class="para"><p>Sqoop is a tool designed to help users of large data import
+-existing relational databases into their Hadoop clusters. Sqoop uses
+-JDBC to connect to a database, examine each table's schema, and
+-auto-generate the necessary classes to import data into HDFS. It
+-then instantiates a MapReduce job to read tables from the database
+-via the DBInputFormat (JDBC-based InputFormat). Tables are read
+-into a set of files loaded into HDFS. Both SequenceFile and
+-text-based targets are supported. Sqoop also supports high-performance
+-imports from select databases including MySQL.</p></div>
+-<div class="para"><p>This document describes how to get started using Sqoop to import
+-your data into Hadoop.</p></div>
+-</div>
+-<h2 id="_getting_sqoop">Getting Sqoop</h2>
+-<div class="sectionbody">
+-<div class="para"><p>Sqoop is an open source program contributed to the Apache
+-Hadoop project, and included in
+-<a href="http://www.cloudera.com/hadoop">Cloudera's Distribution for Hadoop</a>.
+-The most recent release already contains Sqoop. If you've
+-been using our RPM packages, running <tt>yum update hadoop-0.20</tt>
+-should bring you up to date. Debian users can upgrade to the
+-newest release of Cloudera's Distribution for Hadoop by
+-running <tt>apt-get update &amp;&amp; apt-get install hadoop0.20</tt>.</p></div>
+-<div class="admonitionblock">
+-<table><tr>
+-<td class="icon">
+-<div class="title">Note</div>
+-</td>
+-<td class="content">
+-<div class="title">Sqoop and Hadoop 0.18.3</div>A version of Sqoop compatible with Hadoop 0.18.3 was
+-included with Cloudera's Distribution for Hadoop 0.18.3. All
+-new Sqoop development, however, will focus on the 0.20 branch
+-of Hadoop. This document describes some features only present
+-on the 0.20 branch of Sqoop.</td>
+-</tr></table>
+-</div>
+-</div>
+-<h2 id="_the_sqoop_command_line">The Sqoop Command Line</h2>
+-<div class="sectionbody">
+-<div class="para"><p>The main way to execute Sqoop is via a program installed
+-as <tt>/usr/bin/sqoop</tt>. You pass this program options describing the
+-import job you want to perform. If you need a hint, running
+-<tt>sqoop &#8212;help</tt> will print out a list of all the command line
+-options available. The <tt>sqoop(1)</tt> manual page will also describe
+-Sqoop's available arguments in greater detail (type <tt>man sqoop</tt> to
+-read it.) The following subsections will describe the most
+-common modes of operation.</p></div>
+-<h3 id="_connecting_to_a_database_server">Connecting to a Database Server</h3><div style="clear:left"></div>
+-<div class="para"><p>Sqoop is designed to import tables from a database into HDFS. As such,
+-it requires a <em>connect string</em> that describes how to connect to the
+-database. The <em>connect string</em> looks like a URL, and is communicated to
+-Sqoop with the <tt>&#8212;connect</tt> argument. This describes the server and
+-database to connect to; it may also specify the port. e.g.:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/employees</tt></pre>
+-</div></div>
+-<div class="para"><p>This string will connect to a MySQL database named <tt>employees</tt> on the
+-host <tt>database.example.com</tt>. It's important that you <strong>do not</strong> use the URL
+-<tt>localhost</tt> if you intend to use Sqoop with a distributed Hadoop
+-cluster. The connect string you supply will be used on TaskTracker nodes
+-throughout your MapReduce cluster; if they're told to connect to the
+-literal name <tt>localhost</tt>, they'll each reach a different
+-database (or more likely, no database at all)! Instead, you should use
+-the full hostname or IP address of the database host that can be seen
+-by all your remote nodes.</p></div>
+-<div class="para"><p>You may need to authenticate against the database before you can
+-access it. The <tt>&#8212;username</tt> and <tt>&#8212;password</tt> or <tt>-P</tt> parameters can
+-be used to supply a username and a password to the database. e.g.:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/employees \
+-    --username aaron --password 12345</tt></pre>
+-</div></div>
+-<div class="admonitionblock">
+-<table><tr>
+-<td class="icon">
+-<div class="title">Warning</div>
+-</td>
+-<td class="content">
+-<div class="title">Password security</div>The <tt>&#8212;password</tt> parameter is insecure, as other users may
+-be able to read your password from the command-line arguments via
+-the output of programs such as <tt>ps</tt>. The <strong><tt>-P</tt></strong> argument will read
+-a password from a console prompt, and is the preferred method of
+-entering credentials. Credentials may still be transferred between
+-nodes of the MapReduce cluster using insecure means.</td>
+-</tr></table>
+-</div>
+-<div class="para"><p>Sqoop automatically supports several databases, including MySQL. Connect strings beginning
+-with <tt>jdbc:mysql://</tt> are handled automatically by
+-JDBC drivers that are bundled with Sqoop. (A full list of databases with
+-built-in support is provided in the "Supported Databases" section, below.</p></div>
+-<div class="para"><p>You can use Sqoop with any other
+-JDBC-compliant database as well. First, download the appropriate JDBC
+-driver for the database you want to import from, and install the .jar
+-file in the <tt>/usr/hadoop/lib</tt> directory on all machines in your Hadoop
+-cluster, or some other directory which is in the classpath
+-on all nodes. Each driver jar also has a specific driver class which defines
+-the entry-point to the driver. For example, MySQL's Connector/J library has
+-a driver class of <tt>com.mysql.jdbc.Driver</tt>. Refer to your database
+-vendor-specific documentation to determine the main driver class.
+-This class must be provided as an argument to Sqoop with <tt>&#8212;driver</tt>.</p></div>
+-<div class="para"><p>For example, to connect to a postgres database, first download the driver from
+-<a href="http://jdbc.postgresql.org">http://jdbc.postgresql.org</a> and
+-install it in your Hadoop lib path.
+-Then run Sqoop with something like:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:postgresql://postgres-server.example.com/employees \
+-    --driver org.postgresql.Driver</tt></pre>
+-</div></div>
+-<div class="admonitionblock">
+-<table><tr>
+-<td class="icon">
+-<div class="title">Note</div>
+-</td>
+-<td class="content">Sqoop uses the JDBC specification to connect to databases; this
+-should provide a versatile client that interoperates with many different
+-databases. We have thoroughly tested this tool with a few databases, such as MySQL.
+-A complete list is provided in the "Supported Databases" section below. If
+-you try this tool with another database, please share your success (or
+-problems!) with us on our
+-<a href="http://getsatisfaction.com/cloudera/products/cloudera_sqoop">Sqoop
+-support and feedback</a> page.</td>
+-</tr></table>
+-</div>
+-<h3 id="_listing_available_databases">Listing Available Databases</h3><div style="clear:left"></div>
+-<div class="para"><p>Once connected to a database server, you can list the available
+-databases with the <tt>&#8212;list-databases</tt> parameter. This currently is supported
+-only by HSQLDB and MySQL. Note that in this case, the connect string does
+-not include a database name, just a server address.</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/ --list-databases
+-information_schema
+-employees</tt></pre>
+-</div></div>
+-<div class="para"><p><em>This only works with HSQLDB and MySQL. A vendor-agnostic implementation of
+-this function has not yet been implemented.</em></p></div>
+-<h3 id="_listing_available_tables">Listing Available Tables</h3><div style="clear:left"></div>
+-<div class="para"><p>Within a database, you can list the tables available for import with
+-the <tt>&#8212;list-tables</tt> command. The following example shows four tables available
+-within the "employees" example database:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/employees --list-tables
+-employee_names
+-payroll_checks
+-job_descriptions
+-office_supplies</tt></pre>
+-</div></div>
+-<h3 id="_automatic_full_database_import">Automatic Full-database Import</h3><div style="clear:left"></div>
+-<div class="para"><p>If you want to import all the tables in a database, you can use the
+-<tt>&#8212;all-tables</tt> command to do so:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/employees --all-tables</tt></pre>
+-</div></div>
+-<div class="para"><p>This will query the database for the available tables, generate an ORM
+-class for each table, and run a MapReduce job to import each one.
+-Hadoop uses the DBInputFormat to read from a database into a Mapper
+-instance. To read a table into a MapReduce program requires creating a
+-class to hold the fields of one row of the table. One of the benefits
+-of Sqoop is that it generates this class definition for you, based on
+-the table definition in the database.</p></div>
+-<div class="para"><p>The generated <tt>.java</tt> files are, by default, placed in the current
+-directory. You can supply a different directory with the <tt>&#8212;outdir</tt>
+-parameter. These are then compiled into <tt>.class</tt> and <tt>.jar</tt> files for use
+-by the MapReduce job that it launches. These files are created in a
+-temporary directory. You can redirect this target with <tt>&#8212;bindir</tt>.</p></div>
+-<div class="para"><p>Each table will be imported into a separate directory in HDFS, with
+-the same name as the table. For instance, if my Hadoop username is
+-aaron, the above command would have generated the following
+-directories in HDFS:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>/user/aaron/employee_names
+-/user/aaron/payroll_checks
+-/user/aaron/job_descriptions
+-/user/aaron/office_supplies</tt></pre>
+-</div></div>
+-<div class="para"><p>You can change the base directory under which the tables are loaded
+-with the <tt>&#8212;warehouse-dir</tt> parameter. For example:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/employees --all-tables \
+-    --warehouse-dir /common/warehouse</tt></pre>
+-</div></div>
+-<div class="para"><p>This would create the following directories instead:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>/common/warehouse/employee_names
+-/common/warehouse/payroll_checks
+-/common/warehouse/job_descriptions
+-/common/warehouse/office_supplies</tt></pre>
+-</div></div>
+-<div class="para"><p>By default the data will be read into text files in HDFS. Each of the
+-columns will be represented as comma-delimited text. Each row is
+-terminated by a newline. See the section on "Controlling the Output
+-Format" below for information on how to change these delimiters.</p></div>
+-<div class="para"><p>If you want to leverage compression and binary file formats, the
+-<tt>&#8212;as-sequencefile</tt> argument to Sqoop will import the table
+-to a set of SequenceFiles instead. This stores each field of each
+-database record in a separate object in a SequenceFile.
+-This representation is also likely to be higher performance when used
+-as an input to subsequent MapReduce programs as it does not require
+-parsing. For completeness, Sqoop provides an <tt>&#8212;as-textfile</tt> option, which is
+-implied by default. An <tt>&#8212;as-textfile</tt> on the command-line will override
+-a previous <tt>&#8212;as-sequencefile</tt> argument.</p></div>
+-<div class="para"><p>The SequenceFile format will embed the records from the database as
+-objects using the code generated by Sqoop. It is important that you
+-retain the <tt>.java</tt> file for this class, as you will need to be able to
+-instantiate the same type to read the objects back later, in other
+-user-defined applications.</p></div>
+-<h3 id="_importing_individual_tables">Importing Individual Tables</h3><div style="clear:left"></div>
+-<div class="para"><p>In addition to full-database imports, Sqoop will allow you to import
+-individual tables. Instead of using <tt>&#8212;all-tables</tt>, specify the name of
+-a particular table with the <tt>&#8212;table</tt> argument:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/employees \
+-    --table employee_names</tt></pre>
+-</div></div>
+-<div class="para"><p>You can further specify a subset of the columns in a table by using
+-the <tt>&#8212;columns</tt> argument. This takes a list of column names, delimited
+-by commas, with no spaces in between. e.g.:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/employees \
+-    --table employee_names --columns employee_id,first_name,last_name,dept_id</tt></pre>
+-</div></div>
+-<div class="para"><p>Sqoop will use a MapReduce job to read sections of the table in
+-parallel. For the MapReduce tasks to divide the table space, the
+-results returned by the database must be orderable. Sqoop will
+-automatically detect the primary key for a table and use that to order
+-the results. If no primary key is available, or (less likely) you want
+-to order the results along a different column, you can specify the
+-column name with <tt>&#8212;order-by</tt>.</p></div>
+-<div class="admonitionblock">
+-<table><tr>
+-<td class="icon">
+-<div class="title">Important</div>
+-</td>
+-<td class="content">
+-<div class="title">Row ordering</div>To guarantee correctness of your input, you must select an
+-ordering column for which each row has a unique value. If duplicate
+-values appear in the ordering column, the results of the import are
+-undefined, and Sqoop will not be able to detect the error.</td>
+-</tr></table>
+-</div>
+-<div class="para"><p>Finally, you can control which rows of a table are imported via the
+-<tt>&#8212;where</tt> argument. With this argument, you may specify a clause to be
+-appended to the SQL statement used to select rows from the table,
+-e.g.:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/employees \
+-  --table employee_names --where "employee_id &gt; 40 AND active = 1"</tt></pre>
+-</div></div>
+-<div class="para"><p>The <tt>&#8212;columns</tt>, <tt>&#8212;order-by</tt>, and <tt>&#8212;where</tt> arguments are incompatible with
+-<tt>&#8212;all-tables</tt>. If you require special handling for some of the tables,
+-then you must manually run a separate import job for each table.</p></div>
+-<h3 id="_controlling_the_output_format">Controlling the Output Format</h3><div style="clear:left"></div>
+-<div class="para"><p>The delimiters used to separate fields and records can be specified
+-on the command line, as can a quoting character and an escape character
+-(for quoting delimiters inside a values). Data imported with
+-<tt>&#8212;as-textfile</tt> will be formatted according to these parameters. Classes
+-generated by Sqoop will encode this information, so using <tt>toString()</tt>
+-from a data record stored <tt>&#8212;as-sequencefile</tt> will reproduce your
+-specified formatting.</p></div>
+-<div class="para"><p>The <tt>(char)</tt> argument for each argument in this section can be specified
+-either as a normal character (e.g., <tt>&#8212;fields-terminated-by ,</tt>) or via
+-an escape sequence. Arguments of the form <tt>\0xhhh</tt> will be interpreted
+-as a hexidecimal representation of a character with hex number <em>hhh</em>.
+-Arguments of the form <tt>\0ooo</tt> will be treated as an octal representation
+-of a character represented by octal number <em>ooo</em>. The special escapes
+-<tt>\n</tt>, <tt>\r</tt>, <tt>\"</tt>, <tt>\b</tt>, <tt>\t</tt>, and <tt>\\</tt> act as they do inside Java strings. <tt>\0</tt> will be
+-treated as NUL. This will insert NUL characters between fields or lines
+-(if used for <tt>&#8212;fields-terminated-by</tt> or <tt>&#8212;lines-terminated-by</tt>), or will
+-disable enclosing/escaping if used for one of the <tt>&#8212;enclosed-by</tt>,
+-<tt>&#8212;optionally-enclosed-by</tt>, or <tt>&#8212;escaped-by</tt> arguments.</p></div>
+-<div class="para"><p>The default delimiters are <tt>,</tt> for fields, <tt>\n</tt> for records, no quote
+-character, and no escape character. Note that this can lead to
+-ambiguous/unparsible records if you import database records containing
+-commas or newlines in the field data. For unambiguous parsing, both must
+-be enabled, e.g., via <tt>&#8212;mysql-delimiters</tt>.</p></div>
+-<div class="para"><p>The following arguments allow you to control the output format of
+-records:</p></div>
+-<div class="vlist"><dl>
+-<dt>
+-&#8212;fields-terminated-by (char)
+-</dt>
+-<dd>
+-<p>
+-  Sets the field separator character
+-</p>
+-</dd>
+-<dt>
+-&#8212;lines-terminated-by (char)
+-</dt>
+-<dd>
+-<p>
+-  Sets the end-of-line character
+-</p>
+-</dd>
+-<dt>
+-&#8212;optionally-enclosed-by (char)
+-</dt>
+-<dd>
+-<p>
+-  Sets a field-enclosing character which may be used if a
+-  value contains delimiter characters.
+-</p>
+-</dd>
+-<dt>
+-&#8212;enclosed-by (char)
+-</dt>
+-<dd>
+-<p>
+-  Sets a field-enclosing character which will be used for all fields.
+-</p>
+-</dd>
+-<dt>
+-&#8212;escaped-by (char)
+-</dt>
+-<dd>
+-<p>
+-  Sets the escape character
+-</p>
+-</dd>
+-<dt>
+-&#8212;mysql-delimiters
+-</dt>
+-<dd>
+-<p>
+-Uses MySQL's default delimiter set:
+-</p>
+-<div class="para"><p>fields: ,  lines: \n  escaped-by: \  optionally-enclosed-by: '</p></div>
+-</dd>
+-</dl></div>
+-<div class="para"><p>For example, we may want to separate records by tab characters, with
+-every record surrounded by "double quotes", and internal quote marks
+-escaped by a backslash (<tt>\</tt>) character:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/employees \
+-  --table employee_names --fields-terminated-by \t \
+-  --lines-terminated-by \n --enclosed-by '\"' --escaped-by '\\'</tt></pre>
+-</div></div>
+-<h3 id="_controlling_the_input_format">Controlling the Input Format</h3><div style="clear:left"></div>
+-<div class="para"><p>Record classes generated by Sqoop include both a <tt>toString()</tt> method
+-that formats output records, and a <tt>parse()</tt> method that interprets
+-text based on an input delimiter set. The input delimiters default to
+-the same ones chosen for output delimiters, but you can override these
+-settings to support converting from one set of delimiters to another.</p></div>
+-<div class="para"><p>The following arguments allow you to control the input format of
+-records:</p></div>
+-<div class="vlist"><dl>
+-<dt>
+-&#8212;input-fields-terminated-by (char)
+-</dt>
+-<dd>
+-<p>
+-  Sets the input field separator
+-</p>
+-</dd>
+-<dt>
+-&#8212;input-lines-terminated-by (char)
+-</dt>
+-<dd>
+-<p>
+-  Sets the input end-of-line char
+-</p>
+-</dd>
+-<dt>
+-&#8212;input-optionally-enclosed-by (char)
+-</dt>
+-<dd>
+-<p>
+-  Sets an input field-enclosing character
+-</p>
+-</dd>
+-<dt>
+-&#8212;input-enclosed-by (char)
+-</dt>
+-<dd>
+-<p>
+-  Sets a required input field encloser
+-</p>
+-</dd>
+-<dt>
+-&#8212;input-escaped-by (char)
+-</dt>
+-<dd>
+-<p>
+-  Sets the input escape character
+-</p>
+-</dd>
+-</dl></div>
+-<div class="para"><p>If you have already imported data into HDFS in a text-based
+-representation and want to change the delimiters being used, you
+-should regenerate the class via <tt>sqoop &#8212;generate-only</tt>, specifying
+-the new delimiters with <tt>&#8212;fields-terminated-by</tt>, etc., and the old
+-delimiters with <tt>&#8212;input-fields-terminated-by</tt>, etc. Then run a
+-MapReduce job where your mapper creates an instance of your record
+-class, uses its <tt>parse()</tt> method to read the fields using the old
+-delimiters, and emits a new <tt>Text</tt> output value via the record's
+-<tt>toString()</tt> method, which will use the new delimiters. You'll then
+-want to regenerate the class another time without the
+-<tt>&#8212;input-fields-terminated-by</tt> specified so that the new delimiters
+-are used for both input and output.</p></div>
+-<h3 id="_generated_class_names">Generated Class Names</h3><div style="clear:left"></div>
+-<div class="para"><p>By default, classes are named after the table they represent. e.g.,
+-<tt>sqoop &#8212;table foo</tt> will generate a file named <tt>foo.java</tt>. You can
+-override the generated class name with the <tt>&#8212;class-name</tt> argument.</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/employees \
+-  --table employee_names --class-name com.example.EmployeeNames</tt></pre>
+-</div></div>
+-<div class="para"><p><em>This generates a file named <tt>com/example/EmployeeNames.java</tt></em></p></div>
+-<div class="para"><p>If you want to specify a package name for generated classes, but
+-still want them to be named after the table they represent, you
+-can instead use the argument <tt>&#8212;package-name</tt>:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>$ sqoop --connect jdbc:mysql://database.example.com/employees \
+-  --table employee_names --package-name com.example</tt></pre>
+-</div></div>
+-<div class="para"><p><em>This generates a file named <tt>com/example/employee_names.java</tt></em></p></div>
+-<h3 id="_miscellaneous_additional_arguments">Miscellaneous Additional Arguments</h3><div style="clear:left"></div>
+-<div class="para"><p>If you want to generate the Java classes to represent tables without
+-actually performing an import, supply a connect string and
+-(optionally) credentials as above, as well as <tt>&#8212;all-tables</tt> or
+-<tt>&#8212;table</tt>, but also use the <tt>&#8212;generate-only</tt> argument. This will
+-generate the classes and cease further operation.</p></div>
+-<div class="para"><p>You can override the <tt>$HADOOP_HOME</tt> environment variable within Sqoop
+-with the <tt>&#8212;hadoop-home</tt> argument. You can override the <tt>$HIVE_HOME</tt>
+-environment variable with <tt>&#8212;hive-home</tt>.</p></div>
+-</div>
+-<h2 id="_fast_mysql_imports">Fast MySQL Imports</h2>
+-<div class="sectionbody">
+-<div class="para"><p>While the JDBC-based import method used by Sqoop provides it with the
+-ability to read from a variety of databases using a generic driver, it
+-is not the most high-performance method available. Sqoop can read from
+-a local MySQL database considerably faster by using the <tt>mysqldump</tt> tool
+-distributed with MySQL. If you run Sqoop on the same machine where a
+-MySQL database is present, you can take advantage of this faster
+-import method by running Sqoop with the <tt>&#8212;direct</tt> argument. This
+-combined with a connect string that begins with <tt>jdbc:mysql://</tt> will
+-inform Sqoop that it should select the faster access method.</p></div>
+-<div class="para"><p>If your delimiters exactly match the delimiters used by <tt>mysqldump</tt>,
+-then Sqoop will use a fast-path that copies the data directly from
+-<tt>mysqldump</tt>'s output into HDFS. Otherwise, Sqoop will parse <tt>mysqldump</tt>'s
+-output into fields and transcode them into the user-specified delimiter set.
+-This incurs additional processing, so performance may suffer.
+-For convenience, the <tt>&#8212;mysql-delimiters</tt>
+-argument will set all the output delimiters to be consistent with
+-<tt>mysqldump</tt>'s format.</p></div>
+-</div>
+-<h2 id="_importing_data_into_hive">Importing Data Into Hive</h2>
+-<div class="sectionbody">
+-<div class="para"><p>Sqoop's primary function is to upload your data into files in HDFS. If
+-you have a Hive metastore associated with your HDFS cluster, Sqoop can
+-also import the data into Hive by generating and executing a <tt>CREATE
+-TABLE</tt> statement to define the data's layout in Hive. Importing data
+-into Hive is as simple as adding the <strong><tt>&#8212;hive-import</tt></strong> option to your
+-Sqoop command line.</p></div>
+-<div class="para"><p>After your data is imported into HDFS, Sqoop will generate a Hive
+-script containing a <tt>CREATE TABLE</tt> operation defining your columns using
+-Hive's types, and a <tt>LOAD DATA INPATH</tt> statement to move the data files
+-into Hive's warehouse directory. The script will be executed by
+-calling the installed copy of hive on the machine where Sqoop is run.
+-If you have multiple Hive installations, or <tt>hive</tt> is not in your
+-<tt>$PATH</tt> use the <tt><strong>&#8212;hive-home</strong></tt> option to identify the Hive installation
+-directory. Sqoop will use <tt>$HIVE_HOME/bin/hive</tt> from here.</p></div>
+-<div class="admonitionblock">
+-<table><tr>
+-<td class="icon">
+-<div class="title">Note</div>
+-</td>
+-<td class="content">This function is incompatible with <tt>&#8212;as-sequencefile</tt>.</td>
+-</tr></table>
+-</div>
+-<div class="para"><p>Hive's text parser does not know how to support escaping or enclosing
+-characters. Sqoop will print a warning if you use <tt>&#8212;escaped-by</tt>,
+-<tt>&#8212;enclosed-by</tt>, or <tt>&#8212;optionally-enclosed-by</tt> since Hive does not know
+-how to parse these. It will pass the field and record terminators through
+-to Hive. If you do not set any delimiters and do use <tt>&#8212;hive-import</tt>,
+-the field delimiter will be set to <tt>^A</tt> and the record delimiter will
+-be set to <tt>\n</tt> to be consistent with Hive's defaults.</p></div>
+-<h3 id="_hive_s_type_system">Hive's Type System</h3><div style="clear:left"></div>
+-<div class="para"><p>Hive users will note that there is not a one-to-one mapping between
+-SQL types and Hive types. In general, SQL types that do not have a
+-direct mapping (e.g., <tt>DATE</tt>, <tt>TIME</tt>, and <tt>TIMESTAMP</tt>) will be coerced to
+-<tt>STRING</tt> in Hive. The <tt>NUMERIC</tt> and <tt>DECIMAL</tt> SQL types will be coerced to
+-<tt>DOUBLE</tt>. In these cases, Sqoop will emit a warning in its log messages
+-informing you of the loss of precision.</p></div>
+-</div>
+-<h2 id="_supported_databases">Supported Databases</h2>
+-<div class="sectionbody">
+-<div class="para"><p>Sqoop uses JDBC to connect to databases. JDBC is a compatibility layer
+-that allows a program to access many different databases through a common
+-API. Slight differences in the SQL language spoken by each database, however,
+-may mean that Sqoop can't use every database out of the box, or that some
+-databases may be used in an inefficient manner.</p></div>
+-<div class="para"><p>When you provide a connect string to Sqoop, it inspects the protocol scheme to
+-determine appropriate vendor-specific logic to use. If Sqoop knows about
+-a given database, it will work automatically. If not, you may need to
+-specify the driver class to load via <tt>&#8212;driver</tt>. This will use a generic
+-code path which will use standard SQL to access the database. Sqoop provides
+-some databases with faster, non-JDBC-based access mechanisms. These can be
+-enabled by specfying the <tt>&#8212;direct</tt> parameter.</p></div>
+-<div class="para"><p>Sqoop includes vendor-specific code paths for the following databases:</p></div>
+-<div class="tableblock">
+-<table rules="all"
+-frame="hsides"
+-cellspacing="0" cellpadding="4">
+-<col width="137" />
+-<col width="102" />
+-<col width="240" />
+-<col width="251" />
+-<thead>
+-  <tr>
+-    <th align="left">
+-    Database
+-    </th>
+-    <th align="left">
+-    version
+-    </th>
+-    <th align="left">
+-    <tt>&#8212;direct</tt> support?
+-    </th>
+-    <th align="left">
+-    connect string matches
+-    </th>
+-  </tr>
+-</thead>
+-<tbody valign="top">
+-  <tr>
+-    <td align="left">
+-    HSQLDB
+-    </td>
+-    <td align="left">
+-    1.8.0+
+-    </td>
+-    <td align="left">
+-    No
+-    </td>
+-    <td align="left">
+-    <tt>jdbc:hsqldb:*//</tt>
+-    </td>
+-  </tr>
+-  <tr>
+-    <td align="left">
+-    MySQL
+-    </td>
+-    <td align="left">
+-    5.0+
+-    </td>
+-    <td align="left">
+-    Yes
+-    </td>
+-    <td align="left">
+-    <tt>jdbc:mysql://</tt>
+-    </td>
+-  </tr>
+-  <tr>
+-    <td align="left">
+-    Oracle
+-    </td>
+-    <td align="left">
+-    10.2.0+
+-    </td>
+-    <td align="left">
+-    No
+-    </td>
+-    <td align="left">
+-    <tt>jdbc:oracle:*//</tt>
+-    </td>
+-  </tr>
+-</tbody>
+-</table>
+-</div>
+-<div class="para"><p>Sqoop may work with older versions of the databases listed, but we have
+-only tested it with the versions specified above.</p></div>
+-<div class="para"><p>Even if Sqoop supports a database internally, you may still need to
+-install the database vendor's JDBC driver in your <tt>$HADOOP_HOME/lib</tt>
+-path. Cloudera's Distribution for Hadoop includes JDBC drivers for
+-HSQLDB and MySQL.</p></div>
+-</div>
+-<h2 id="_troubleshooting_and_getting_help">Troubleshooting and Getting Help</h2>
+-<div class="sectionbody">
+-<div class="para"><p>Sqoop's output is emitted via log4j, a logging system for Java
+-that is used by other components of Hadoop. If Sqoop is failing
+-to import your tables correctly, you can enable more verbose logging
+-by adding the following line to <tt>/etc/hadoop/conf/log4j.properties</tt>:</p></div>
+-<div class="listingblock">
+-<div class="content">
+-<pre><tt>log4j.logger.org.apache.hadoop.sqoop=DEBUG</tt></pre>
+-</div></div>
+-<div class="para"><p>If you continue to have trouble using Sqoop, drop us a line on our
+-<a href="http://getsatisfaction.com/cloudera/products/cloudera_sqoop">community
+-support portal</a> and we'll help you out.</p></div>
+-</div>
+-<div id="footer">
+-<div id="footer-text">
+-Last updated 2009-08-13 16:20:31 PDT
+-</div>
+-</div>
+-</body>
+-</html>
+diff --git a/src/contrib/sqoop/doc/SqoopUserGuide.txt b/src/contrib/sqoop/doc/SqoopUserGuide.txt
+new file mode 100644
+index 0000000..f4db8ff
+--- /dev/null
++++ b/src/contrib/sqoop/doc/SqoopUserGuide.txt
+@@ -0,0 +1,63 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++include::intro.txt[]
++
++
++The Sqoop Command Line
++----------------------
++
++To execute Sqoop, run with Hadoop:
++----
++$ bin/hadoop jar contrib/sqoop/hadoop-$(version)-sqoop.jar (arguments)
++----
++
++NOTE:Throughput this document, we will use `sqoop` as shorthand for the
++above. i.e., `$ sqoop (arguments)`
++
++You pass this program options describing the
++import job you want to perform. If you need a hint, running Sqoop with
++`--help` will print out a list of all the command line
++options available. The +sqoop(1)+ manual page will also describe
++Sqoop's available arguments in greater detail. The manual page is built
++in `$HADOOP_HOME/build/contrib/sqoop/doc/sqoop.1.gz`.
++The following subsections will describe the most common modes of operation.
++
++include::connecting.txt[]
++
++include::listing-dbs.txt[]
++
++include::listing-tables.txt[]
++
++include::full-db-import.txt[]
++
++include::table-import.txt[]
++
++include::controlling-output-format.txt[]
++
++include::classnames.txt[]
++
++include::misc-args.txt[]
++
++include::mysql.txt[]
++
++include::hive.txt[]
++
++include::supported-dbs.txt[]
++
+diff --git a/src/contrib/sqoop/doc/classnames.txt b/src/contrib/sqoop/doc/classnames.txt
+new file mode 100644
+index 0000000..ab84bcf
+--- /dev/null
++++ b/src/contrib/sqoop/doc/classnames.txt
+@@ -0,0 +1,43 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Generated Class Names
++~~~~~~~~~~~~~~~~~~~~~
++
++By default, classes are named after the table they represent. e.g.,
+++sqoop --table foo+ will generate a file named +foo.java+. You can
++override the generated class name with the +--class-name+ argument.
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/employees \
++  --table employee_names --class-name com.example.EmployeeNames
++----
++_This generates a file named +com/example/EmployeeNames.java+_
++
++If you want to specify a package name for generated classes, but
++still want them to be named after the table they represent, you
++can instead use the argument +--package-name+:
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/employees \
++  --table employee_names --package-name com.example
++----
++_This generates a file named +com/example/employee_names.java+_
++
++
+diff --git a/src/contrib/sqoop/doc/connecting.txt b/src/contrib/sqoop/doc/connecting.txt
+new file mode 100644
+index 0000000..8d60057
+--- /dev/null
++++ b/src/contrib/sqoop/doc/connecting.txt
+@@ -0,0 +1,85 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Connecting to a Database Server
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++Sqoop is designed to import tables from a database into HDFS. As such,
++it requires a _connect string_ that describes how to connect to the
++database. The _connect string_ looks like a URL, and is communicated to
++Sqoop with the +--connect+ argument. This describes the server and
++database to connect to; it may also specify the port. e.g.:
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/employees
++----
++
++This string will connect to a MySQL database named +employees+ on the
++host +database.example.com+. It's important that you *do not* use the URL
+++localhost+ if you intend to use Sqoop with a distributed Hadoop
++cluster. The connect string you supply will be used on TaskTracker nodes
++throughout your MapReduce cluster; if they're told to connect to the
++literal name +localhost+, they'll each reach a different
++database (or more likely, no database at all)! Instead, you should use
++the full hostname or IP address of the database host that can be seen
++by all your remote nodes.
++
++You may need to authenticate against the database before you can
++access it. The +--username+ and +--password+ or +-P+ parameters can
++be used to supply a username and a password to the database. e.g.:
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/employees \
++    --username aaron --password 12345
++----
++
++.Password security
++WARNING: The +--password+ parameter is insecure, as other users may
++be able to read your password from the command-line arguments via
++the output of programs such as `ps`. The *+-P+* argument will read
++a password from a console prompt, and is the preferred method of
++entering credentials. Credentials may still be transferred between
++nodes of the MapReduce cluster using insecure means.
++
++Sqoop automatically supports several databases, including MySQL. Connect strings beginning
++with +jdbc:mysql://+ are handled automatically Sqoop, though you may need
++to install the driver yourself. (A full list of databases with
++built-in support is provided in the "Supported Databases" section, below.)
++
++You can use Sqoop with any other
++JDBC-compliant database as well. First, download the appropriate JDBC
++driver for the database you want to import from, and install the .jar
++file in the +/usr/hadoop/lib+ directory on all machines in your Hadoop
++cluster, or some other directory which is in the classpath
++on all nodes. Each driver jar also has a specific driver class which defines
++the entry-point to the driver. For example, MySQL's Connector/J library has
++a driver class of +com.mysql.jdbc.Driver+. Refer to your database
++vendor-specific documentation to determine the main driver class.
++This class must be provided as an argument to Sqoop with +--driver+.
++
++For example, to connect to a postgres database, first download the driver from
++link:http://jdbc.postgresql.org[http://jdbc.postgresql.org] and
++install it in your Hadoop lib path.
++Then run Sqoop with something like:
++
++----
++$ sqoop --connect jdbc:postgresql://postgres-server.example.com/employees \
++    --driver org.postgresql.Driver
++----
++
+diff --git a/src/contrib/sqoop/doc/controlling-input-format.txt b/src/contrib/sqoop/doc/controlling-input-format.txt
+new file mode 100644
+index 0000000..4a5268c
+--- /dev/null
++++ b/src/contrib/sqoop/doc/controlling-input-format.txt
+@@ -0,0 +1,42 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Controlling the Input Format
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++include::input-formatting.txt[]
++
++The following arguments allow you to control the input format of
++records:
++
++include::input-formatting-args.txt[]
++
++If you have already imported data into HDFS in a text-based
++representation and want to change the delimiters being used, you
++should regenerate the class via `sqoop --generate-only`, specifying
++the new delimiters with +--fields-terminated-by+, etc., and the old
++delimiters with +--input-fields-terminated-by+, etc. Then run a
++MapReduce job where your mapper creates an instance of your record
++class, uses its +parse()+ method to read the fields using the old
++delimiters, and emits a new +Text+ output value via the record's
+++toString()+ method, which will use the new delimiters. You'll then
++want to regenerate the class another time without the
+++--input-fields-terminated-by+ specified so that the new delimiters
++are used for both input and output.
++
+diff --git a/src/contrib/sqoop/doc/controlling-output-format.txt b/src/contrib/sqoop/doc/controlling-output-format.txt
+new file mode 100644
+index 0000000..f871611
+--- /dev/null
++++ b/src/contrib/sqoop/doc/controlling-output-format.txt
+@@ -0,0 +1,38 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Controlling the Output Format
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++include::output-formatting.txt[]
++
++The following arguments allow you to control the output format of
++records:
++
++include::output-formatting-args.txt[]
++
++For example, we may want to separate records by tab characters, with
++every record surrounded by "double quotes", and internal quote marks
++escaped by a backslash (+\+) character:
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/employees \
++  --table employee_names --fields-terminated-by \t \
++  --lines-terminated-by \n --enclosed-by '\"' --escaped-by '\\'
++----
++
+diff --git a/src/contrib/sqoop/doc/full-db-import.txt b/src/contrib/sqoop/doc/full-db-import.txt
+new file mode 100644
+index 0000000..1f7ec15
+--- /dev/null
++++ b/src/contrib/sqoop/doc/full-db-import.txt
+@@ -0,0 +1,92 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Automatic Full-database Import
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++If you want to import all the tables in a database, you can use the
+++--all-tables+ command to do so:
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/employees --all-tables
++----
++
++This will query the database for the available tables, generate an ORM
++class for each table, and run a MapReduce job to import each one.
++Hadoop uses the DBInputFormat to read from a database into a Mapper
++instance. To read a table into a MapReduce program requires creating a
++class to hold the fields of one row of the table. One of the benefits
++of Sqoop is that it generates this class definition for you, based on
++the table definition in the database.
++
++The generated +.java+ files are, by default, placed in the current
++directory. You can supply a different directory with the +--outdir+
++parameter. These are then compiled into +.class+ and +.jar+ files for use
++by the MapReduce job that it launches. These files are created in a
++temporary directory. You can redirect this target with +--bindir+.
++
++Each table will be imported into a separate directory in HDFS, with
++the same name as the table. For instance, if my Hadoop username is
++aaron, the above command would have generated the following
++directories in HDFS:
++
++----
++/user/aaron/employee_names
++/user/aaron/payroll_checks
++/user/aaron/job_descriptions
++/user/aaron/office_supplies
++----
++
++You can change the base directory under which the tables are loaded
++with the +--warehouse-dir+ parameter. For example:
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/employees --all-tables \
++    --warehouse-dir /common/warehouse
++----
++
++This would create the following directories instead:
++
++----
++/common/warehouse/employee_names
++/common/warehouse/payroll_checks
++/common/warehouse/job_descriptions
++/common/warehouse/office_supplies
++----
++
++By default the data will be read into text files in HDFS. Each of the
++columns will be represented as comma-delimited text. Each row is
++terminated by a newline. See the section on "Controlling the Output
++Format" below for information on how to change these delimiters.
++
++If you want to leverage compression and binary file formats, the
+++--as-sequencefile+ argument to Sqoop will import the table
++to a set of SequenceFiles instead. This stores each field of each
++database record in a separate object in a SequenceFile.
++This representation is also likely to be higher performance when used
++as an input to subsequent MapReduce programs as it does not require
++parsing. For completeness, Sqoop provides an +--as-textfile+ option, which is
++implied by default. An +--as-textfile+ on the command-line will override
++a previous +--as-sequencefile+ argument.
++
++The SequenceFile format will embed the records from the database as
++objects using the code generated by Sqoop. It is important that you
++retain the +.java+ file for this class, as you will need to be able to
++instantiate the same type to read the objects back later, in other
++user-defined applications.
++
+diff --git a/src/contrib/sqoop/doc/hive.txt b/src/contrib/sqoop/doc/hive.txt
+new file mode 100644
+index 0000000..e0c4b85
+--- /dev/null
++++ b/src/contrib/sqoop/doc/hive.txt
+@@ -0,0 +1,58 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Importing Data Into Hive
++------------------------
++
++Sqoop's primary function is to upload your data into files in HDFS. If
++you have a Hive metastore associated with your HDFS cluster, Sqoop can
++also import the data into Hive by generating and executing a +CREATE
++TABLE+ statement to define the data's layout in Hive. Importing data
++into Hive is as simple as adding the *+--hive-import+* option to your
++Sqoop command line.
++
++After your data is imported into HDFS, Sqoop will generate a Hive
++script containing a +CREATE TABLE+ operation defining your columns using
++Hive's types, and a +LOAD DATA INPATH+ statement to move the data files
++into Hive's warehouse directory. The script will be executed by
++calling the installed copy of hive on the machine where Sqoop is run.
++If you have multiple Hive installations, or +hive+ is not in your
+++$PATH+ use the +*--hive-home*+ option to identify the Hive installation
++directory. Sqoop will use +$HIVE_HOME/bin/hive+ from here.
++
++NOTE: This function is incompatible with +--as-sequencefile+.
++
++Hive's text parser does not know how to support escaping or enclosing
++characters. Sqoop will print a warning if you use +--escaped-by+,
+++--enclosed-by+, or +--optionally-enclosed-by+ since Hive does not know
++how to parse these. It will pass the field and record terminators through
++to Hive. If you do not set any delimiters and do use +--hive-import+,
++the field delimiter will be set to +^A+ and the record delimiter will
++be set to +\n+ to be consistent with Hive's defaults.
++
++Hive's Type System
++~~~~~~~~~~~~~~~~~~
++
++Hive users will note that there is not a one-to-one mapping between
++SQL types and Hive types. In general, SQL types that do not have a
++direct mapping (e.g., +DATE+, +TIME+, and +TIMESTAMP+) will be coerced to
+++STRING+ in Hive. The +NUMERIC+ and +DECIMAL+ SQL types will be coerced to
+++DOUBLE+. In these cases, Sqoop will emit a warning in its log messages
++informing you of the loss of precision.
++
+diff --git a/src/contrib/sqoop/doc/input-formatting-args.txt b/src/contrib/sqoop/doc/input-formatting-args.txt
+new file mode 100644
+index 0000000..0a41ccd
+--- /dev/null
++++ b/src/contrib/sqoop/doc/input-formatting-args.txt
+@@ -0,0 +1,34 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++--input-fields-terminated-by (char)::
++  Sets the input field separator
++
++--input-lines-terminated-by (char)::
++  Sets the input end-of-line char
++
++--input-optionally-enclosed-by (char)::
++  Sets an input field-enclosing character
++
++--input-enclosed-by (char)::
++  Sets a required input field encloser
++
++--input-escaped-by (char)::
++  Sets the input escape character
++
+diff --git a/src/contrib/sqoop/doc/input-formatting.txt b/src/contrib/sqoop/doc/input-formatting.txt
+new file mode 100644
+index 0000000..d3d82f1
+--- /dev/null
++++ b/src/contrib/sqoop/doc/input-formatting.txt
+@@ -0,0 +1,24 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++Record classes generated by Sqoop include both a +toString()+ method
++that formats output records, and a +parse()+ method that interprets
++text based on an input delimiter set. The input delimiters default to
++the same ones chosen for output delimiters, but you can override these
++settings to support converting from one set of delimiters to another.
++
+diff --git a/src/contrib/sqoop/doc/intro.txt b/src/contrib/sqoop/doc/intro.txt
+new file mode 100644
+index 0000000..0a7b338
+--- /dev/null
++++ b/src/contrib/sqoop/doc/intro.txt
+@@ -0,0 +1,34 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Introduction
++------------
++
++Sqoop is a tool designed to help users of large data import
++existing relational databases into their Hadoop clusters. Sqoop uses
++JDBC to connect to a database, examine each table's schema, and
++auto-generate the necessary classes to import data into HDFS. It
++then instantiates a MapReduce job to read tables from the database
++via the DBInputFormat (JDBC-based InputFormat). Tables are read
++into a set of files loaded into HDFS. Both SequenceFile and
++text-based targets are supported. Sqoop also supports high-performance
++imports from select databases including MySQL.
++
++This document describes how to get started using Sqoop to import
++your data into Hadoop.
+diff --git a/src/contrib/sqoop/doc/listing-dbs.txt b/src/contrib/sqoop/doc/listing-dbs.txt
+new file mode 100644
+index 0000000..c66ee8e
+--- /dev/null
++++ b/src/contrib/sqoop/doc/listing-dbs.txt
+@@ -0,0 +1,35 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Listing Available Databases
++~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++Once connected to a database server, you can list the available
++databases with the +--list-databases+ parameter. This currently is supported
++only by HSQLDB and MySQL. Note that in this case, the connect string does
++not include a database name, just a server address.
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/ --list-databases
++information_schema
++employees
++----
++_This only works with HSQLDB and MySQL. A vendor-agnostic implementation of
++this function has not yet been implemented._
++
+diff --git a/src/contrib/sqoop/doc/listing-tables.txt b/src/contrib/sqoop/doc/listing-tables.txt
+new file mode 100644
+index 0000000..83933e0
+--- /dev/null
++++ b/src/contrib/sqoop/doc/listing-tables.txt
+@@ -0,0 +1,34 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Listing Available Tables
++~~~~~~~~~~~~~~~~~~~~~~~~
++
++Within a database, you can list the tables available for import with
++the +--list-tables+ command. The following example shows four tables available
++within the "employees" example database:
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/employees --list-tables
++employee_names
++payroll_checks
++job_descriptions
++office_supplies
++----
++
+diff --git a/src/contrib/sqoop/doc/misc-args.txt b/src/contrib/sqoop/doc/misc-args.txt
+new file mode 100644
+index 0000000..decccd2
+--- /dev/null
++++ b/src/contrib/sqoop/doc/misc-args.txt
+@@ -0,0 +1,32 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Miscellaneous Additional Arguments
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++If you want to generate the Java classes to represent tables without
++actually performing an import, supply a connect string and
++(optionally) credentials as above, as well as +--all-tables+ or
+++--table+, but also use the +--generate-only+ argument. This will
++generate the classes and cease further operation.
++
++You can override the +$HADOOP_HOME+ environment variable within Sqoop
++with the +--hadoop-home+ argument. You can override the +$HIVE_HOME+
++environment variable with +--hive-home+.
++
+diff --git a/src/contrib/sqoop/doc/mysql.txt b/src/contrib/sqoop/doc/mysql.txt
+new file mode 100644
+index 0000000..6beb52f
+--- /dev/null
++++ b/src/contrib/sqoop/doc/mysql.txt
+@@ -0,0 +1,42 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Fast MySQL Imports
++------------------
++
++While the JDBC-based import method used by Sqoop provides it with the
++ability to read from a variety of databases using a generic driver, it
++is not the most high-performance method available. Sqoop can read from
++a local MySQL database considerably faster by using the +mysqldump+ tool
++distributed with MySQL. If you run Sqoop on the same machine where a
++MySQL database is present, you can take advantage of this faster
++import method by running Sqoop with the +--direct+ argument. This
++combined with a connect string that begins with +jdbc:mysql://+ will
++inform Sqoop that it should select the faster access method.
++
++If your delimiters exactly match the delimiters used by +mysqldump+,
++then Sqoop will use a fast-path that copies the data directly from
+++mysqldump+'s output into HDFS. Otherwise, Sqoop will parse +mysqldump+'s
++output into fields and transcode them into the user-specified delimiter set.
++This incurs additional processing, so performance may suffer.
++For convenience, the +--mysql-delimiters+
++argument will set all the output delimiters to be consistent with
+++mysqldump+'s format.
++
++
+diff --git a/src/contrib/sqoop/doc/output-formatting-args.txt b/src/contrib/sqoop/doc/output-formatting-args.txt
+new file mode 100644
+index 0000000..4d9130f
+--- /dev/null
++++ b/src/contrib/sqoop/doc/output-formatting-args.txt
+@@ -0,0 +1,39 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++--fields-terminated-by (char)::
++  Sets the field separator character
++
++--lines-terminated-by (char)::
++  Sets the end-of-line character
++
++--optionally-enclosed-by (char)::
++  Sets a field-enclosing character which may be used if a
++  value contains delimiter characters.
++
++--enclosed-by (char)::
++  Sets a field-enclosing character which will be used for all fields.
++
++--escaped-by (char)::
++  Sets the escape character
++
++--mysql-delimiters::
++Uses MySQL's default delimiter set:
+++
++fields: ,  lines: \n  escaped-by: \  optionally-enclosed-by: '
++
+diff --git a/src/contrib/sqoop/doc/output-formatting.txt b/src/contrib/sqoop/doc/output-formatting.txt
+new file mode 100644
+index 0000000..e4fe9ff
+--- /dev/null
++++ b/src/contrib/sqoop/doc/output-formatting.txt
+@@ -0,0 +1,44 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++The delimiters used to separate fields and records can be specified
++on the command line, as can a quoting character and an escape character
++(for quoting delimiters inside a values). Data imported with
+++--as-textfile+ will be formatted according to these parameters. Classes
++generated by Sqoop will encode this information, so using +toString()+
++from a data record stored +--as-sequencefile+ will reproduce your
++specified formatting.
++
++The +(char)+ argument for each argument in this section can be specified
++either as a normal character (e.g., +--fields-terminated-by ,+) or via
++an escape sequence. Arguments of the form +\0xhhh+ will be interpreted
++as a hexidecimal representation of a character with hex number _hhh_.
++Arguments of the form +\0ooo+ will be treated as an octal representation
++of a character represented by octal number _ooo_. The special escapes
+++\n+, +\r+, +\"+, +\b+, +\t+, and +\\+ act as they do inside Java strings. +\0+ will be
++treated as NUL. This will insert NUL characters between fields or lines
++(if used for +--fields-terminated-by+ or +--lines-terminated-by+), or will
++disable enclosing/escaping if used for one of the +--enclosed-by+,
+++--optionally-enclosed-by+, or +--escaped-by+ arguments.
++
++The default delimiters are +,+ for fields, +\n+ for records, no quote
++character, and no escape character. Note that this can lead to
++ambiguous/unparsible records if you import database records containing
++commas or newlines in the field data. For unambiguous parsing, both must
++be enabled, e.g., via +--mysql-delimiters+.
++
+diff --git a/src/contrib/sqoop/doc/sqoop.1 b/src/contrib/sqoop/doc/sqoop.1
+deleted file mode 100644
+index 1ec6eb6..0000000
+--- a/src/contrib/sqoop/doc/sqoop.1
++++ /dev/null
+@@ -1,273 +0,0 @@
+-.\"     Title: sqoop
+-.\"    Author: 
+-.\" Generator: DocBook XSL Stylesheets v1.73.2 <http://docbook.sf.net/>
+-.\"      Date: 08/13/2009
+-.\"    Manual: 
+-.\"    Source: 
+-.\"
+-.TH "SQOOP" "1" "08/13/2009" "" ""
+-.\" disable hyphenation
+-.nh
+-.\" disable justification (adjust text to left margin only)
+-.ad l
+-.SH "NAME"
+-sqoop \- SQL-to-Hadoop import tool
+-.SH "SYNOPSIS"
+-\fIsqoop\fR <options>
+-.sp
+-.SH "DESCRIPTION"
+-Sqoop is a tool designed to help users of large data import existing relational databases into their Hadoop clusters\&. Sqoop uses JDBC to connect to a database, examine each table\'s schema, and auto\-generate the necessary classes to import data into HDFS\&. It then instantiates a MapReduce job to read tables from the database via the DBInputFormat (JDBC\-based InputFormat)\&. Tables are read into a set of files loaded into HDFS\&. Both SequenceFile and text\-based targets are supported\&. Sqoop also supports high\-performance imports from select databases including MySQL\&.
+-.sp
+-.SH "OPTIONS"
+-The \-\-connect option is always required\&. To perform an import, one of \-\-table or \-\-all\-tables is required as well\&. Alternatively, you can specify \-\-generate\-only or one of the arguments in "Additional commands\&."
+-.sp
+-.SS "Database connection options"
+-.PP
+-\-\-connect (jdbc\-uri)
+-.RS 4
+-Specify JDBC connect string (required)
+-.RE
+-.PP
+-\-\-driver (class\-name)
+-.RS 4
+-Manually specify JDBC driver class to use
+-.RE
+-.PP
+-\-\-username (username)
+-.RS 4
+-Set authentication username
+-.RE
+-.PP
+-\-\-password (password)
+-.RS 4
+-Set authentication password (Note: This is very insecure\&. You should use \-P instead\&.)
+-.RE
+-.PP
+-\-P
+-.RS 4
+-Prompt for user password
+-.RE
+-.PP
+-\-\-direct
+-.RS 4
+-Use direct import fast path (mysql only)
+-.RE
+-.SS "Import control options"
+-.PP
+-\-\-all\-tables
+-.RS 4
+-Import all tables in database (Ignores
+-\-\-table,
+-\-\-columns,
+-\-\-order\-by, and
+-\-\-where)
+-.RE
+-.PP
+-\-\-columns (col,col,col\&...)
+-.RS 4
+-Columns to export from table
+-.RE
+-\-\-order\-by (column\-name) Column of the table used to order results
+-.PP
+-\-\-hadoop\-home (dir)
+-.RS 4
+-Override $HADOOP_HOME
+-.RE
+-.PP
+-\-\-hive\-home (dir)
+-.RS 4
+-Override $HIVE_HOME
+-.RE
+-.PP
+-\-\-warehouse\-dir (dir)
+-.RS 4
+-Tables are uploaded to the HDFS path
+-/warehouse/dir/(tablename)/
+-.RE
+-.PP
+-\-\-as\-sequencefile
+-.RS 4
+-Imports data to SequenceFiles
+-.RE
+-.PP
+-\-\-as\-textfile
+-.RS 4
+-Imports data as plain text (default)
+-.RE
+-.PP
+-\-\-hive\-import
+-.RS 4
+-If set, then import the table into Hive
+-.RE
+-.PP
+-\-\-table (table\-name)
+-.RS 4
+-The table to import
+-.RE
+-\-\-where (clause) Import only the rows for which \fIclause\fR is true\&. e\&.g\&.: \-\-where "user_id > 400 AND hidden == 0"
+-.sp
+-.SS "Output line formatting options"
+-The delimiters used to separate fields and records can be specified on the command line, as can a quoting character and an escape character (for quoting delimiters inside a values)\&. Data imported with \-\-as\-textfile will be formatted according to these parameters\&. Classes generated by Sqoop will encode this information, so using toString() from a data record stored \-\-as\-sequencefile will reproduce your specified formatting\&.
+-.sp
+-The (char) argument for each argument in this section can be specified either as a normal character (e\&.g\&., \-\-fields\-terminated\-by ,) or via an escape sequence\&. Arguments of the form \e0xhhh will be interpreted as a hexidecimal representation of a character with hex number \fIhhh\fR\&. Arguments of the form \e0ooo will be treated as an octal representation of a character represented by octal number \fIooo\fR\&. The special escapes \en, \er, \e", \eb, \et, and \e\e act as they do inside Java strings\&. \e0 will be treated as NUL\&. This will insert NUL characters between fields or lines (if used for \-\-fields\-terminated\-by or \-\-lines\-terminated\-by), or will disable enclosing/escaping if used for one of the \-\-enclosed\-by, \-\-optionally\-enclosed\-by, or \-\-escaped\-by arguments\&.
+-.sp
+-The default delimiters are , for fields, \en for records, no quote character, and no escape character\&. Note that this can lead to ambiguous/unparsible records if you import database records containing commas or newlines in the field data\&. For unambiguous parsing, both must be enabled, e\&.g\&., via \-\-mysql\-delimiters\&.
+-.PP
+-\-\-fields\-terminated\-by (char)
+-.RS 4
+-Sets the field separator character
+-.RE
+-.PP
+-\-\-lines\-terminated\-by (char)
+-.RS 4
+-Sets the end\-of\-line character
+-.RE
+-.PP
+-\-\-optionally\-enclosed\-by (char)
+-.RS 4
+-Sets a field\-enclosing character which may be used if a value contains delimiter characters\&.
+-.RE
+-.PP
+-\-\-enclosed\-by (char)
+-.RS 4
+-Sets a field\-enclosing character which will be used for all fields\&.
+-.RE
+-.PP
+-\-\-escaped\-by (char)
+-.RS 4
+-Sets the escape character
+-.RE
+-.PP
+-\-\-mysql\-delimiters
+-.RS 4
+-Uses MySQL\'s default delimiter set:
+-.sp
+-fields: , lines: \en escaped\-by: \e optionally\-enclosed\-by: \'
+-.RE
+-.SS "Input line parsing options"
+-Record classes generated by Sqoop include both a toString() method that formats output records, and a parse() method that interprets text based on an input delimiter set\&. The input delimiters default to the same ones chosen for output delimiters, but you can override these settings to support converting from one set of delimiters to another\&.
+-.PP
+-\-\-input\-fields\-terminated\-by (char)
+-.RS 4
+-Sets the input field separator
+-.RE
+-.PP
+-\-\-input\-lines\-terminated\-by (char)
+-.RS 4
+-Sets the input end\-of\-line char
+-.RE
+-.PP
+-\-\-input\-optionally\-enclosed\-by (char)
+-.RS 4
+-Sets an input field\-enclosing character
+-.RE
+-.PP
+-\-\-input\-enclosed\-by (char)
+-.RS 4
+-Sets a required input field encloser
+-.RE
+-.PP
+-\-\-input\-escaped\-by (char)
+-.RS 4
+-Sets the input escape character
+-.RE
+-.SS "Code generation options"
+-.PP
+-\-\-bindir (dir)
+-.RS 4
+-Output directory for compiled objects
+-.RE
+-.PP
+-\-\-class\-name (name)
+-.RS 4
+-Sets the name of the class to generate\&. By default, classes are named after the table they represent\&. Using this parameters ignores
+-\-\-package\-name\&.
+-.RE
+-.PP
+-\-\-generate\-only
+-.RS 4
+-Stop after code generation; do not import
+-.RE
+-.PP
+-\-\-outdir (dir)
+-.RS 4
+-Output directory for generated code
+-.RE
+-.PP
+-\-\-package\-name (package)
+-.RS 4
+-Puts auto\-generated classes in the named Java package
+-.RE
+-.SS "Additional commands"
+-These commands cause Sqoop to report information and exit; no import or code generation is performed\&.
+-.PP
+-\-\-debug\-sql (statement)
+-.RS 4
+-Execute
+-\fIstatement\fR
+-in SQL and display the results
+-.RE
+-.PP
+-\-\-help
+-.RS 4
+-Display usage information and exit
+-.RE
+-.PP
+-\-\-list\-databases
+-.RS 4
+-List all databases available and exit
+-.RE
+-.PP
+-\-\-list\-tables
+-.RS 4
+-List tables in database and exit
+-.RE
+-.SH "ENVIRONMENT"
+-.PP
+-JAVA_HOME
+-.RS 4
+-As part of its import process, Sqoop generates and compiles Java code by invoking the Java compiler
+-\fBjavac\fR(1)\&. As a result, JAVA_HOME must be set to the location of your JDK (note: This cannot just be a JRE)\&. e\&.g\&.,
+-/usr/java/default\&. Hadoop (and Sqoop) requires Sun Java 1\&.6 which can be downloaded from
+-\fIhttp://java\&.sun\&.com\fR\&.
+-.RE
+-.PP
+-HADOOP_HOME
+-.RS 4
+-The location of the Hadoop jar files\&. If you installed Hadoop via RPM or DEB, these are in
+-/usr/lib/hadoop\-20\&.
+-.RE
+-.PP
+-HIVE_HOME
+-.RS 4
+-If you are performing a Hive import, you must identify the location of Hive\'s jars and configuration\&. If you installed Hive via RPM or DEB, these are in
+-/usr/lib/hive\&.
+-.RE
+-.SH "TROUBLESHOOTING"
+-Sqoop\'s output is emitted via log4j, a logging system for Java that is used by other components of Hadoop\&. If Sqoop is failing to import your tables correctly, you can enable more verbose logging by adding the following line to /etc/hadoop/conf/log4j\&.properties:
+-.sp
+-.sp
+-.RS 4
+-.nf
+-log4j\&.logger\&.org\&.apache\&.hadoop\&.sqoop=DEBUG
+-.fi
+-.RE
+-If you continue to have trouble using Sqoop, drop us a line on our \fIcommunity support portal\fR\&[1] and we\'ll help you out\&.
+-.sp
+-.SH "SEE ALSO"
+-\fBhadoop\fR(1)
+-.sp
+-.SH "AUTHOR"
+-Written by Aaron Kimball <\fIaaron@cloudera\&.com\fR\&[2]>
+-.sp
+-.SH "NOTES"
+-.IP " 1." 4
+-community support portal
+-.RS 4
+-\%http://getsatisfaction.com/cloudera/products/cloudera_sqoop
+-.RE
+-.IP " 2." 4
+-aaron@cloudera.com
+-.RS 4
+-\%mailto:aaron@cloudera.com
+-.RE
+diff --git a/src/contrib/sqoop/doc/supported-dbs.txt b/src/contrib/sqoop/doc/supported-dbs.txt
+new file mode 100644
+index 0000000..2e8b8cf
+--- /dev/null
++++ b/src/contrib/sqoop/doc/supported-dbs.txt
+@@ -0,0 +1,54 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Supported Databases
++-------------------
++
++Sqoop uses JDBC to connect to databases. JDBC is a compatibility layer
++that allows a program to access many different databases through a common
++API. Slight differences in the SQL language spoken by each database, however,
++may mean that Sqoop can't use every database out of the box, or that some
++databases may be used in an inefficient manner.
++
++When you provide a connect string to Sqoop, it inspects the protocol scheme to
++determine appropriate vendor-specific logic to use. If Sqoop knows about
++a given database, it will work automatically. If not, you may need to
++specify the driver class to load via +--driver+. This will use a generic
++code path which will use standard SQL to access the database. Sqoop provides
++some databases with faster, non-JDBC-based access mechanisms. These can be
++enabled by specfying the +--direct+ parameter.
++
++Sqoop includes vendor-specific code paths for the following databases:
++
++[grid="all"]
++`-----------`--------`--------------------`---------------------
++Database    version  +--direct+ support?  connect string matches
++----------------------------------------------------------------
++HSQLDB      1.8.0+   No                   +jdbc:hsqldb:*//+
++MySQL       5.0+     Yes                  +jdbc:mysql://+
++Oracle      10.2.0+  No                   +jdbc:oracle:*//+
++----------------------------------------------------------------
++
++Sqoop may work with older versions of the databases listed, but we have
++only tested it with the versions specified above.
++
++Even if Sqoop supports a database internally, you may still need to
++install the database vendor's JDBC driver in your +$HADOOP_HOME/lib+
++path.
++
+diff --git a/src/contrib/sqoop/doc/table-import.txt b/src/contrib/sqoop/doc/table-import.txt
+new file mode 100644
+index 0000000..8ad2ccf
+--- /dev/null
++++ b/src/contrib/sqoop/doc/table-import.txt
+@@ -0,0 +1,68 @@
++
++////
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++////
++
++
++Importing Individual Tables
++~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++In addition to full-database imports, Sqoop will allow you to import
++individual tables. Instead of using +--all-tables+, specify the name of
++a particular table with the +--table+ argument:
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/employees \
++    --table employee_names
++----
++
++You can further specify a subset of the columns in a table by using
++the +--columns+ argument. This takes a list of column names, delimited
++by commas, with no spaces in between. e.g.:
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/employees \
++    --table employee_names --columns employee_id,first_name,last_name,dept_id
++----
++
++Sqoop will use a MapReduce job to read sections of the table in
++parallel. For the MapReduce tasks to divide the table space, the
++results returned by the database must be orderable. Sqoop will
++automatically detect the primary key for a table and use that to order
++the results. If no primary key is available, or (less likely) you want
++to order the results along a different column, you can specify the
++column name with +--split-by+.
++
++.Row ordering
++IMPORTANT:  To guarantee correctness of your input, you must select an
++ordering column for which each row has a unique value. If duplicate
++values appear in the ordering column, the results of the import are
++undefined, and Sqoop will not be able to detect the error.
++
++Finally, you can control which rows of a table are imported via the
+++--where+ argument. With this argument, you may specify a clause to be
++appended to the SQL statement used to select rows from the table,
++e.g.:
++
++----
++$ sqoop --connect jdbc:mysql://database.example.com/employees \
++  --table employee_names --where "employee_id > 40 AND active = 1"
++----
++
++The +--columns+, +--split-by+, and +--where+ arguments are incompatible with
+++--all-tables+. If you require special handling for some of the tables,
++then you must manually run a separate import job for each table.
++
+diff --git a/src/contrib/sqoop/readme.txt b/src/contrib/sqoop/readme.txt
+new file mode 100644
+index 0000000..40f5fbf
+--- /dev/null
++++ b/src/contrib/sqoop/readme.txt
+@@ -0,0 +1,15 @@
++Sqoop documentation is in the doc/ directory in asciidoc format.
++
++Run 'ant doc' to build the documentation. It will be created in
++$HADOOP_HOME/build/contrib/sqoop/doc.
++
++There will be a manpage (sqoop.1.gz) and a User Guide formatted in HTML.
++
++This process requires the following programs:
++  asciidoc
++  gzip
++  make
++  python 2.5+
++  xmlto
++
++For more information about asciidoc, see http://www.methods.co.nz/asciidoc/
+-- 
+1.7.0.4
+

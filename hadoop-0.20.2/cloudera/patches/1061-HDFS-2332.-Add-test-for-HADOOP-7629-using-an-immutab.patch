@@ -1,0 +1,115 @@
+From 4c8f9e91fde59526b729c56276c5649e58fa10fb Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 27 Sep 2011 20:41:15 -0700
+Subject: [PATCH 1061/1179] HDFS-2332. Add test for HADOOP-7629 (using an immutable FsPermission object as an RPC parameter fails).
+
+Author: Todd Lipcon
+Reason: unit test corresponding to other backport
+Ref: CDH-3568
+---
+ .../org/apache/hadoop/hdfs/TestDFSPermission.java  |   54 +++++++++++--------
+ 1 files changed, 31 insertions(+), 23 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java b/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
+index 540dbad..1a7b44e 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
+@@ -75,6 +75,7 @@ public class TestDFSPermission extends TestCase {
+   final private static Path NON_EXISTENT_FILE = new Path("/NonExistentFile");
+ 
+   private FileSystem fs;
++  private MiniDFSCluster cluster;
+   private static Random r;
+ 
+   static {
+@@ -108,21 +109,26 @@ public class TestDFSPermission extends TestCase {
+     }
+   }
+ 
++  @Override
++  public void setUp() throws IOException {
++    cluster = new MiniDFSCluster(conf, 3, true, null);
++    cluster.waitActive();
++  }
++  
++  @Override
++  public void tearDown() throws IOException {
++    if (cluster != null) {
++      cluster.shutdown();
++    }
++  }
++
+   /** This tests if permission setting in create, mkdir, and 
+    * setPermission works correctly
+    */
+   public void testPermissionSetting() throws Exception {
+-    MiniDFSCluster cluster = new MiniDFSCluster(conf, 3, true, null);
+-    try {
+-      cluster.waitActive();
+-      fs = FileSystem.get(conf);
+-      LOG.info("ROOT=" + fs.getFileStatus(new Path("/")));
+-      testPermissionSetting(OpType.CREATE); // test file creation
+-      testPermissionSetting(OpType.MKDIRS); // test directory creation
+-    } finally {
+-      fs.close();
+-      cluster.shutdown();
+-    }
++    fs = FileSystem.get(conf);
++    testPermissionSetting(OpType.CREATE); // test file creation
++    testPermissionSetting(OpType.MKDIRS); // test directory creation
+   }
+ 
+   /* check permission setting works correctly for file or directory */
+@@ -226,17 +232,22 @@ public class TestDFSPermission extends TestCase {
+     }
+   }
+ 
++  /**
++   * check that ImmutableFsPermission can be used as the argument
++   * to setPermission
++   */
++  public void testImmutableFsPermission() throws IOException {
++    fs = FileSystem.get(conf);
++
++    // set the permission of the root to be world-wide rwx
++    fs.setPermission(new Path("/"),
++        FsPermission.createImmutable((short)0777));
++  }
++
+   /* check if the ownership of a file/directory is set correctly */
+   public void testOwnership() throws Exception {
+-    MiniDFSCluster cluster = new MiniDFSCluster(conf, 3, true, null);
+-    try {
+-      cluster.waitActive();
+-      testOwnership(OpType.CREATE); // test file creation
+-      testOwnership(OpType.MKDIRS); // test directory creation
+-    } finally {
+-      fs.close();
+-      cluster.shutdown();
+-    }
++    testOwnership(OpType.CREATE); // test file creation
++    testOwnership(OpType.MKDIRS); // test directory creation
+   }
+ 
+   /* change a file/directory's owner and group.
+@@ -323,9 +334,7 @@ public class TestDFSPermission extends TestCase {
+   /* Check if namenode performs permission checking correctly for
+    * superuser, file owner, group owner, and other users */
+   public void testPermissionChecking() throws Exception {
+-    MiniDFSCluster cluster = new MiniDFSCluster(conf, 3, true, null);
+     try {
+-      cluster.waitActive();
+       fs = FileSystem.get(conf);
+ 
+       // set the permission of the root to be world-wide rwx
+@@ -382,7 +391,6 @@ public class TestDFSPermission extends TestCase {
+           parentPermissions, permissions, parentPaths, filePaths, dirPaths);
+     } finally {
+       fs.close();
+-      cluster.shutdown();
+     }
+   }
+ 
+-- 
+1.7.0.4
+

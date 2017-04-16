@@ -1,0 +1,62 @@
+From a30c033c1eed744948ddfddb82b81b06e12bba46 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 16 Apr 2010 15:19:08 -0700
+Subject: [PATCH 0280/1179] HDFS-561. Fix read timeouts in write pipeline to stage correctly
+
+Description: Previously, the read timeout on the write pipeline was
+             incorrectly calculated. This caused the client to detect
+             the wrong failed datanode when a datanode's network
+             failed or froze for another reason.
+Reason: Fix recovery behavior for frozen datanodes
+Author: Kan Zhang
+Ref: CDH-659
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |    4 +++-
+ .../hadoop/hdfs/server/common/HdfsConstants.java   |    1 +
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |    3 ++-
+ 3 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 560e162..ec8a9ff 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -659,7 +659,9 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       final DatanodeInfo[] datanodes = lb.getLocations();
+       
+       //try each datanode location of the block
+-      final int timeout = 3000 * datanodes.length + socketTimeout;
++      final int timeout = (socketTimeout > 0) ? (socketTimeout + 
++        HdfsConstants.READ_TIMEOUT_EXTENSION * datanodes.length) : 0;
++     
+       boolean done = false;
+       for(int j = 0; !done && j < datanodes.length; j++) {
+         //connect to a datanode
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java b/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
+index 0ca3cef..8705182 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
+@@ -48,6 +48,7 @@ public interface HdfsConstants {
+ 
+   // Timeouts for communicating with DataNode for streaming writes/reads
+   public static int READ_TIMEOUT = 60 * 1000;
++  public static int READ_TIMEOUT_EXTENSION = 3 * 1000;
+   public static int WRITE_TIMEOUT = 8 * 60 * 1000;
+   public static int WRITE_TIMEOUT_EXTENSION = 5 * 1000; //for write pipeline
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index e1ced9d..c4008c5 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -295,7 +295,8 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+         mirrorTarget = NetUtils.createSocketAddr(mirrorNode);
+         mirrorSock = datanode.newSocket();
+         try {
+-          int timeoutValue = numTargets * datanode.socketTimeout;
++          int timeoutValue = datanode.socketTimeout +
++                             (HdfsConstants.READ_TIMEOUT_EXTENSION * numTargets);
+           int writeTimeout = datanode.socketWriteTimeout + 
+                              (HdfsConstants.WRITE_TIMEOUT_EXTENSION * numTargets);
+           NetUtils.connect(mirrorSock, mirrorTarget, timeoutValue);
+-- 
+1.7.0.4
+

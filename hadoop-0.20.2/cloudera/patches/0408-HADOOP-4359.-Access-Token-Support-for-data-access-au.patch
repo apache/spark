@@ -1,0 +1,2593 @@
+From 459d8d98b1ad0675b0e1525dfa23e445e1f82453 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 22 Dec 2009 00:16:39 -0800
+Subject: [PATCH 0408/1179] HADOOP-4359. Access Token: Support for data access authorization checking on DataNodes
+
+Patch: https://issues.apache.org/jira/secure/attachment/12428711/HADOOP-4359-0_20.2.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12435352/4359.patch
+Author: Kan Zhang
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/security/AccessKey.java |  110 ++++++++
+ .../org/apache/hadoop/security/AccessToken.java    |   89 ++++++
+ .../apache/hadoop/security/AccessTokenHandler.java |  289 ++++++++++++++++++++
+ .../apache/hadoop/security/ExportedAccessKeys.java |  138 ++++++++++
+ .../security/InvalidAccessTokenException.java      |   36 +++
+ src/hdfs/hdfs-default.xml                          |   23 ++
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |  161 +++++++++---
+ .../hadoop/hdfs/protocol/ClientProtocol.java       |    4 +-
+ .../hadoop/hdfs/protocol/DataTransferProtocol.java |   15 +-
+ .../apache/hadoop/hdfs/protocol/LocatedBlock.java  |   12 +
+ .../hadoop/hdfs/server/balancer/Balancer.java      |   68 +++++
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   42 +++
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |  101 +++++++-
+ .../hdfs/server/namenode/DatanodeDescriptor.java   |    1 +
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   90 ++++++-
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |    4 +-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    7 +
+ .../hadoop/hdfs/server/namenode/NamenodeFsck.java  |    1 +
+ .../hdfs/server/protocol/DatanodeProtocol.java     |    7 +-
+ .../hdfs/server/protocol/DatanodeRegistration.java |    5 +
+ .../hdfs/server/protocol/KeyUpdateCommand.java     |   69 +++++
+ .../hdfs/server/protocol/NamenodeProtocol.java     |   13 +-
+ .../hadoop/hdfs/TestClientBlockVerification.java   |    4 +-
+ .../hadoop/hdfs/TestDataTransferProtocol.java      |   10 +
+ .../hadoop/hdfs/server/balancer/TestBalancer.java  |   63 +++--
+ .../hdfs/server/datanode/TestBlockReplacement.java |    2 +
+ .../hadoop/hdfs/server/datanode/TestDiskError.java |    2 +
+ .../apache/hadoop/security/TestAccessToken.java    |   89 ++++++
+ src/webapps/datanode/browseBlock.jsp               |   25 ++-
+ src/webapps/datanode/tail.jsp                      |    4 +-
+ 30 files changed, 1387 insertions(+), 97 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/security/AccessKey.java
+ create mode 100644 src/core/org/apache/hadoop/security/AccessToken.java
+ create mode 100644 src/core/org/apache/hadoop/security/AccessTokenHandler.java
+ create mode 100644 src/core/org/apache/hadoop/security/ExportedAccessKeys.java
+ create mode 100644 src/core/org/apache/hadoop/security/InvalidAccessTokenException.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/server/protocol/KeyUpdateCommand.java
+ create mode 100644 src/test/org/apache/hadoop/security/TestAccessToken.java
+
+diff --git a/src/core/org/apache/hadoop/security/AccessKey.java b/src/core/org/apache/hadoop/security/AccessKey.java
+new file mode 100644
+index 0000000..81b6383
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/AccessKey.java
+@@ -0,0 +1,110 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import javax.crypto.Mac;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableUtils;
++
++/**
++ * Key used for generating and verifying access tokens
++ */
++public class AccessKey implements Writable {
++  private long keyID;
++  private Text key;
++  private long expiryDate;
++  private Mac mac;
++
++  public AccessKey() {
++    this(0L, new Text(), 0L);
++  }
++
++  public AccessKey(long keyID, Text key, long expiryDate) {
++    this.keyID = keyID;
++    this.key = key;
++    this.expiryDate = expiryDate;
++  }
++
++  public long getKeyID() {
++    return keyID;
++  }
++
++  public Text getKey() {
++    return key;
++  }
++
++  public long getExpiryDate() {
++    return expiryDate;
++  }
++
++  public Mac getMac() {
++    return mac;
++  }
++
++  public void setMac(Mac mac) {
++    this.mac = mac;
++  }
++
++  static boolean isEqual(Object a, Object b) {
++    return a == null ? b == null : a.equals(b);
++  }
++
++  /** {@inheritDoc} */
++  public boolean equals(Object obj) {
++    if (obj == this) {
++      return true;
++    }
++    if (obj instanceof AccessKey) {
++      AccessKey that = (AccessKey) obj;
++      return this.keyID == that.keyID && isEqual(this.key, that.key)
++          && this.expiryDate == that.expiryDate;
++    }
++    return false;
++  }
++
++  /** {@inheritDoc} */
++  public int hashCode() {
++    return key == null ? 0 : key.hashCode();
++  }
++
++  // ///////////////////////////////////////////////
++  // Writable
++  // ///////////////////////////////////////////////
++  /**
++   */
++  public void write(DataOutput out) throws IOException {
++    WritableUtils.writeVLong(out, keyID);
++    key.write(out);
++    WritableUtils.writeVLong(out, expiryDate);
++  }
++
++  /**
++   */
++  public void readFields(DataInput in) throws IOException {
++    keyID = WritableUtils.readVLong(in);
++    key.readFields(in);
++    expiryDate = WritableUtils.readVLong(in);
++  }
++}
+\ No newline at end of file
+diff --git a/src/core/org/apache/hadoop/security/AccessToken.java b/src/core/org/apache/hadoop/security/AccessToken.java
+new file mode 100644
+index 0000000..5a5d9a7
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/AccessToken.java
+@@ -0,0 +1,89 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++
++public class AccessToken implements Writable {
++  public static final AccessToken DUMMY_TOKEN = new AccessToken();
++  private Text tokenID;
++  private Text tokenAuthenticator;
++
++  public AccessToken() {
++    this(new Text(), new Text());
++  }
++
++  public AccessToken(Text tokenID, Text tokenAuthenticator) {
++    this.tokenID = tokenID;
++    this.tokenAuthenticator = tokenAuthenticator;
++  }
++
++  public Text getTokenID() {
++    return tokenID;
++  }
++
++  public Text getTokenAuthenticator() {
++    return tokenAuthenticator;
++  }
++
++  static boolean isEqual(Object a, Object b) {
++    return a == null ? b == null : a.equals(b);
++  }
++
++  /** {@inheritDoc} */
++  public boolean equals(Object obj) {
++    if (obj == this) {
++      return true;
++    }
++    if (obj instanceof AccessToken) {
++      AccessToken that = (AccessToken) obj;
++      return isEqual(this.tokenID, that.tokenID)
++          && isEqual(this.tokenAuthenticator, that.tokenAuthenticator);
++    }
++    return false;
++  }
++
++  /** {@inheritDoc} */
++  public int hashCode() {
++    return tokenAuthenticator == null ? 0 : tokenAuthenticator.hashCode();
++  }
++
++  // ///////////////////////////////////////////////
++  // Writable
++  // ///////////////////////////////////////////////
++  /**
++   */
++  public void write(DataOutput out) throws IOException {
++    tokenID.write(out);
++    tokenAuthenticator.write(out);
++  }
++
++  /**
++   */
++  public void readFields(DataInput in) throws IOException {
++    tokenID.readFields(in);
++    tokenAuthenticator.readFields(in);
++  }
++
++}
+\ No newline at end of file
+diff --git a/src/core/org/apache/hadoop/security/AccessTokenHandler.java b/src/core/org/apache/hadoop/security/AccessTokenHandler.java
+new file mode 100644
+index 0000000..8ede2bb
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/AccessTokenHandler.java
+@@ -0,0 +1,289 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.ByteArrayInputStream;
++import java.io.ByteArrayOutputStream;
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.security.NoSuchAlgorithmException;
++import java.security.GeneralSecurityException;
++import java.security.SecureRandom;
++import java.util.EnumSet;
++import java.util.HashMap;
++import java.util.Iterator;
++import java.util.Map;
++
++import javax.crypto.KeyGenerator;
++import javax.crypto.Mac;
++import javax.crypto.spec.SecretKeySpec;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.WritableUtils;
++
++/**
++ * AccessTokenHandler can be instantiated in 2 modes, master mode and slave
++ * mode. Master can generate new access keys and export access keys to slaves,
++ * while slaves can only import and use access keys received from master. Both
++ * master and slave can generate and verify access tokens. Typically, master
++ * mode is used by NN and slave mode is used by DN.
++ */
++public class AccessTokenHandler {
++  private static final Log LOG = LogFactory.getLog(AccessTokenHandler.class);
++  public static final String STRING_ENABLE_ACCESS_TOKEN = "dfs.access.token.enable";
++  public static final String STRING_ACCESS_KEY_UPDATE_INTERVAL = "dfs.access.key.update.interval";
++  public static final String STRING_ACCESS_TOKEN_LIFETIME = "dfs.access.token.lifetime";
++
++  private final boolean isMaster;
++  /*
++   * keyUpdateInterval is the interval that NN updates its access keys. It
++   * should be set long enough so that all live DN's and Balancer should have
++   * sync'ed their access keys with NN at least once during each interval.
++   */
++  private final long keyUpdateInterval;
++  private final long tokenLifetime;
++  private long serialNo = new SecureRandom().nextLong();
++  private KeyGenerator keyGen;
++  private AccessKey currentKey;
++  private AccessKey nextKey;
++  private Map<Long, AccessKey> allKeys;
++
++  public static enum AccessMode {
++    READ, WRITE, COPY, REPLACE
++  };
++
++  /**
++   * Constructor
++   * 
++   * @param isMaster
++   * @param keyUpdateInterval
++   * @param tokenLifetime
++   * @throws IOException
++   */
++  public AccessTokenHandler(boolean isMaster, long keyUpdateInterval,
++      long tokenLifetime) throws IOException {
++    this.isMaster = isMaster;
++    this.keyUpdateInterval = keyUpdateInterval;
++    this.tokenLifetime = tokenLifetime;
++    this.allKeys = new HashMap<Long, AccessKey>();
++    if (isMaster) {
++      try {
++        generateKeys();
++        initMac(currentKey);
++      } catch (GeneralSecurityException e) {
++        throw (IOException) new IOException(
++            "Failed to create AccessTokenHandler").initCause(e);
++      }
++    }
++  }
++
++  /** Initialize access keys */
++  private synchronized void generateKeys() throws NoSuchAlgorithmException {
++    keyGen = KeyGenerator.getInstance("HmacSHA1");
++    /*
++     * Need to set estimated expiry dates for currentKey and nextKey so that if
++     * NN crashes, DN can still expire those keys. NN will stop using the newly
++     * generated currentKey after the first keyUpdateInterval, however it may
++     * still be used by DN and Balancer to generate new tokens before they get a
++     * chance to sync their keys with NN. Since we require keyUpdInterval to be
++     * long enough so that all live DN's and Balancer will sync their keys with
++     * NN at least once during the period, the estimated expiry date for
++     * currentKey is set to now() + 2 * keyUpdateInterval + tokenLifetime.
++     * Similarly, the estimated expiry date for nextKey is one keyUpdateInterval
++     * more.
++     */
++    serialNo++;
++    currentKey = new AccessKey(serialNo, new Text(keyGen.generateKey()
++        .getEncoded()), System.currentTimeMillis() + 2 * keyUpdateInterval
++        + tokenLifetime);
++    serialNo++;
++    nextKey = new AccessKey(serialNo, new Text(keyGen.generateKey()
++        .getEncoded()), System.currentTimeMillis() + 3 * keyUpdateInterval
++        + tokenLifetime);
++    allKeys.put(currentKey.getKeyID(), currentKey);
++    allKeys.put(nextKey.getKeyID(), nextKey);
++  }
++
++  /** Initialize Mac function */
++  private synchronized void initMac(AccessKey key) throws IOException {
++    try {
++      Mac mac = Mac.getInstance("HmacSHA1");
++      mac.init(new SecretKeySpec(key.getKey().getBytes(), "HmacSHA1"));
++      key.setMac(mac);
++    } catch (GeneralSecurityException e) {
++      throw (IOException) new IOException(
++          "Failed to initialize Mac for access key, keyID=" + key.getKeyID())
++          .initCause(e);
++    }
++  }
++
++  /** Export access keys, only to be used in master mode */
++  public synchronized ExportedAccessKeys exportKeys() {
++    if (!isMaster)
++      return null;
++    if (LOG.isDebugEnabled())
++      LOG.debug("Exporting access keys");
++    return new ExportedAccessKeys(true, keyUpdateInterval, tokenLifetime,
++        currentKey, allKeys.values().toArray(new AccessKey[0]));
++  }
++
++  private synchronized void removeExpiredKeys() {
++    long now = System.currentTimeMillis();
++    for (Iterator<Map.Entry<Long, AccessKey>> it = allKeys.entrySet()
++        .iterator(); it.hasNext();) {
++      Map.Entry<Long, AccessKey> e = it.next();
++      if (e.getValue().getExpiryDate() < now) {
++        it.remove();
++      }
++    }
++  }
++
++  /**
++   * Set access keys, only to be used in slave mode
++   */
++  public synchronized void setKeys(ExportedAccessKeys exportedKeys)
++      throws IOException {
++    if (isMaster || exportedKeys == null)
++      return;
++    LOG.info("Setting access keys");
++    removeExpiredKeys();
++    this.currentKey = exportedKeys.getCurrentKey();
++    initMac(currentKey);
++    AccessKey[] receivedKeys = exportedKeys.getAllKeys();
++    for (int i = 0; i < receivedKeys.length; i++) {
++      if (receivedKeys[i] == null)
++        continue;
++      this.allKeys.put(receivedKeys[i].getKeyID(), receivedKeys[i]);
++    }
++  }
++
++  /**
++   * Update access keys, only to be used in master mode
++   */
++  public synchronized void updateKeys() throws IOException {
++    if (!isMaster)
++      return;
++    LOG.info("Updating access keys");
++    removeExpiredKeys();
++    // set final expiry date of retiring currentKey
++    allKeys.put(currentKey.getKeyID(), new AccessKey(currentKey.getKeyID(),
++        currentKey.getKey(), System.currentTimeMillis() + keyUpdateInterval
++            + tokenLifetime));
++    // update the estimated expiry date of new currentKey
++    currentKey = new AccessKey(nextKey.getKeyID(), nextKey.getKey(), System
++        .currentTimeMillis()
++        + 2 * keyUpdateInterval + tokenLifetime);
++    initMac(currentKey);
++    allKeys.put(currentKey.getKeyID(), currentKey);
++    // generate a new nextKey
++    serialNo++;
++    nextKey = new AccessKey(serialNo, new Text(keyGen.generateKey()
++        .getEncoded()), System.currentTimeMillis() + 3 * keyUpdateInterval
++        + tokenLifetime);
++    allKeys.put(nextKey.getKeyID(), nextKey);
++  }
++
++  /** Check if token is well formed */
++  private synchronized Boolean verifyToken(long keyID, AccessToken token)
++      throws IOException {
++    AccessKey key = allKeys.get(keyID);
++    if (key == null) {
++      LOG.warn("Access key for keyID=" + keyID + " doesn't exist.");
++      return false;
++    }
++    if (key.getMac() == null) {
++      initMac(key);
++    }
++    Text tokenID = token.getTokenID();
++    Text authenticator = new Text(key.getMac().doFinal(tokenID.getBytes()));
++    return authenticator.equals(token.getTokenAuthenticator());
++  }
++
++  /** Generate an access token for current user */
++  public AccessToken generateToken(long blockID, EnumSet<AccessMode> modes)
++      throws IOException {
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUGI();
++    String userID = (ugi == null ? null : ugi.getUserName());
++    return generateToken(userID, blockID, modes);
++  }
++
++  /** Generate an access token for a specified user */
++  public synchronized AccessToken generateToken(String userID, long blockID,
++      EnumSet<AccessMode> modes) throws IOException {
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Generating access token for user=" + userID + ", blockID="
++          + blockID + ", access modes=" + modes + ", keyID="
++          + currentKey.getKeyID());
++    }
++    if (modes == null || modes.isEmpty())
++      throw new IOException("access modes can't be null or empty");
++    ByteArrayOutputStream buf = new ByteArrayOutputStream(4096);
++    DataOutputStream out = new DataOutputStream(buf);
++    WritableUtils.writeVLong(out, System.currentTimeMillis() + tokenLifetime);
++    WritableUtils.writeVLong(out, currentKey.getKeyID());
++    WritableUtils.writeString(out, userID);
++    WritableUtils.writeVLong(out, blockID);
++    WritableUtils.writeVInt(out, modes.size());
++    for (AccessMode aMode : modes) {
++      WritableUtils.writeEnum(out, aMode);
++    }
++    Text tokenID = new Text(buf.toByteArray());
++    return new AccessToken(tokenID, new Text(currentKey.getMac().doFinal(
++        tokenID.getBytes())));
++  }
++
++  /** Check if access should be allowed. userID is not checked if null */
++  public Boolean checkAccess(AccessToken token, String userID, long blockID,
++      AccessMode mode) throws IOException {
++    long oExpiry = 0;
++    long oKeyID = 0;
++    String oUserID = null;
++    long oBlockID = 0;
++    EnumSet<AccessMode> oModes = EnumSet.noneOf(AccessMode.class);
++
++    try {
++      ByteArrayInputStream buf = new ByteArrayInputStream(token.getTokenID()
++          .getBytes());
++      DataInputStream in = new DataInputStream(buf);
++      oExpiry = WritableUtils.readVLong(in);
++      oKeyID = WritableUtils.readVLong(in);
++      oUserID = WritableUtils.readString(in);
++      oBlockID = WritableUtils.readVLong(in);
++      int length = WritableUtils.readVInt(in);
++      for (int i = 0; i < length; ++i) {
++        oModes.add(WritableUtils.readEnum(in, AccessMode.class));
++      }
++    } catch (IOException e) {
++      throw (IOException) new IOException(
++          "Unable to parse access token for user=" + userID + ", blockID="
++              + blockID + ", access mode=" + mode).initCause(e);
++    }
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Verifying access token for user=" + userID + ", blockID="
++          + blockID + ", access mode=" + mode + ", keyID=" + oKeyID);
++    }
++    return (userID == null || userID.equals(oUserID)) && oBlockID == blockID
++        && System.currentTimeMillis() < oExpiry && oModes.contains(mode)
++        && verifyToken(oKeyID, token);
++  }
++
++}
+\ No newline at end of file
+diff --git a/src/core/org/apache/hadoop/security/ExportedAccessKeys.java b/src/core/org/apache/hadoop/security/ExportedAccessKeys.java
+new file mode 100644
+index 0000000..e5ab293
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/ExportedAccessKeys.java
+@@ -0,0 +1,138 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++import java.util.Arrays;
++
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableFactories;
++import org.apache.hadoop.io.WritableFactory;
++
++/**
++ * Object for passing access keys
++ */
++public class ExportedAccessKeys implements Writable {
++  public static final ExportedAccessKeys DUMMY_KEYS = new ExportedAccessKeys();
++  private boolean isAccessTokenEnabled;
++  private long keyUpdateInterval;
++  private long tokenLifetime;
++  private AccessKey currentKey;
++  private AccessKey[] allKeys;
++
++  public ExportedAccessKeys() {
++    this(false, 0, 0, new AccessKey(), new AccessKey[0]);
++  }
++
++  ExportedAccessKeys(boolean isAccessTokenEnabled, long keyUpdateInterval,
++      long tokenLifetime, AccessKey currentKey, AccessKey[] allKeys) {
++    this.isAccessTokenEnabled = isAccessTokenEnabled;
++    this.keyUpdateInterval = keyUpdateInterval;
++    this.tokenLifetime = tokenLifetime;
++    this.currentKey = currentKey;
++    this.allKeys = allKeys;
++  }
++
++  public boolean isAccessTokenEnabled() {
++    return isAccessTokenEnabled;
++  }
++
++  public long getKeyUpdateInterval() {
++    return keyUpdateInterval;
++  }
++
++  public long getTokenLifetime() {
++    return tokenLifetime;
++  }
++
++  public AccessKey getCurrentKey() {
++    return currentKey;
++  }
++
++  public AccessKey[] getAllKeys() {
++    return allKeys;
++  }
++
++  static boolean isEqual(Object a, Object b) {
++    return a == null ? b == null : a.equals(b);
++  }
++
++  /** {@inheritDoc} */
++  public boolean equals(Object obj) {
++    if (obj == this) {
++      return true;
++    }
++    if (obj instanceof ExportedAccessKeys) {
++      ExportedAccessKeys that = (ExportedAccessKeys) obj;
++      return this.isAccessTokenEnabled == that.isAccessTokenEnabled
++          && this.keyUpdateInterval == that.keyUpdateInterval
++          && this.tokenLifetime == that.tokenLifetime
++          && isEqual(this.currentKey, that.currentKey)
++          && Arrays.equals(this.allKeys, that.allKeys);
++    }
++    return false;
++  }
++
++  /** {@inheritDoc} */
++  public int hashCode() {
++    return currentKey == null ? 0 : currentKey.hashCode();
++  }
++
++  // ///////////////////////////////////////////////
++  // Writable
++  // ///////////////////////////////////////////////
++  static { // register a ctor
++    WritableFactories.setFactory(ExportedAccessKeys.class,
++        new WritableFactory() {
++          public Writable newInstance() {
++            return new ExportedAccessKeys();
++          }
++        });
++  }
++
++  /**
++   */
++  public void write(DataOutput out) throws IOException {
++    out.writeBoolean(isAccessTokenEnabled);
++    out.writeLong(keyUpdateInterval);
++    out.writeLong(tokenLifetime);
++    currentKey.write(out);
++    out.writeInt(allKeys.length);
++    for (int i = 0; i < allKeys.length; i++) {
++      allKeys[i].write(out);
++    }
++  }
++
++  /**
++   */
++  public void readFields(DataInput in) throws IOException {
++    isAccessTokenEnabled = in.readBoolean();
++    keyUpdateInterval = in.readLong();
++    tokenLifetime = in.readLong();
++    currentKey.readFields(in);
++    this.allKeys = new AccessKey[in.readInt()];
++    for (int i = 0; i < allKeys.length; i++) {
++      allKeys[i] = new AccessKey();
++      allKeys[i].readFields(in);
++    }
++  }
++
++}
+\ No newline at end of file
+diff --git a/src/core/org/apache/hadoop/security/InvalidAccessTokenException.java b/src/core/org/apache/hadoop/security/InvalidAccessTokenException.java
+new file mode 100644
+index 0000000..eabce15
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/InvalidAccessTokenException.java
+@@ -0,0 +1,36 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++
++/**
++ * Access token verification failed.
++ */
++public class InvalidAccessTokenException extends IOException {
++  private static final long serialVersionUID = 168L;
++
++  public InvalidAccessTokenException() {
++    super();
++  }
++
++  public InvalidAccessTokenException(String msg) {
++    super(msg);
++  }
++}
+diff --git a/src/hdfs/hdfs-default.xml b/src/hdfs/hdfs-default.xml
+index b748b12..c94543c 100644
+--- a/src/hdfs/hdfs-default.xml
++++ b/src/hdfs/hdfs-default.xml
+@@ -190,6 +190,29 @@ creations/deletions), or "all".</description>
+ </property>
+ 
+ <property>
++  <name>dfs.access.token.enable</name>
++  <value>false</value>
++  <description>
++    If "true", access tokens are used as capabilities for accessing datanodes.
++    If "false", no access tokens are checked on accessing datanodes.
++  </description>
++</property>
++
++<property>
++  <name>dfs.access.key.update.interval</name>
++  <value>600</value>
++  <description>
++    Interval in minutes at which namenode updates its access keys.
++  </description>
++</property>
++
++<property>
++  <name>dfs.access.token.lifetime</name>
++  <value>600</value>
++  <description>The lifetime of access tokens in minutes.</description>
++</property>
++
++<property>
+   <name>dfs.data.dir</name>
+   <value>${hadoop.tmp.dir}/dfs/data</value>
+   <description>Determines where on the local filesystem an DFS data node
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 53623b1..12095ed 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -34,7 +34,9 @@ import org.apache.hadoop.hdfs.server.common.UpgradeStatusReport;
+ import org.apache.hadoop.hdfs.server.datanode.DataNode;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.hdfs.server.namenode.NotReplicatedYetException;
++import org.apache.hadoop.security.InvalidAccessTokenException;
+ import org.apache.hadoop.security.AccessControlException;
++import org.apache.hadoop.security.AccessToken;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.util.*;
+ 
+@@ -646,14 +648,21 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       ClientProtocol namenode, SocketFactory socketFactory, int socketTimeout
+       ) throws IOException {
+     //get all block locations
+-    final List<LocatedBlock> locatedblocks
++    List<LocatedBlock> locatedblocks
+         = callGetBlockLocations(namenode, src, 0, Long.MAX_VALUE).getLocatedBlocks();
+     final DataOutputBuffer md5out = new DataOutputBuffer();
+     int bytesPerCRC = 0;
+     long crcPerBlock = 0;
++    boolean refetchBlocks = false;
++    int lastRetriedIndex = -1;
+ 
+     //get block checksum for each block
+     for(int i = 0; i < locatedblocks.size(); i++) {
++      if (refetchBlocks) {  // refetch to get fresh tokens
++        locatedblocks = callGetBlockLocations(namenode, src, 0, Long.MAX_VALUE)
++            .getLocatedBlocks();
++        refetchBlocks = false;
++      }
+       LocatedBlock lb = locatedblocks.get(i);
+       final Block block = lb.getBlock();
+       final DatanodeInfo[] datanodes = lb.getLocations();
+@@ -687,12 +696,28 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           out.write(DataTransferProtocol.OP_BLOCK_CHECKSUM);
+           out.writeLong(block.getBlockId());
+           out.writeLong(block.getGenerationStamp());
++          lb.getAccessToken().write(out);
+           out.flush();
+          
+           final short reply = in.readShort();
+           if (reply != DataTransferProtocol.OP_STATUS_SUCCESS) {
+-            throw new IOException("Bad response " + reply + " for block "
+-                + block + " from datanode " + datanodes[j].getName());
++            if (reply == DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN
++                && i > lastRetriedIndex) {
++              if (LOG.isDebugEnabled()) {
++                LOG.debug("Got access token error in response to OP_BLOCK_CHECKSUM "
++                    + "for file " + src + " for block " + block
++                    + " from datanode " + datanodes[j].getName()
++                    + ". Will retry the block once.");
++              }
++              lastRetriedIndex = i;
++              done = true; // actually it's not done; but we'll retry
++              i--; // repeat at i-th block
++              refetchBlocks = true;
++              break;
++            } else {
++              throw new IOException("Bad response " + reply + " for block "
++                  + block + " from datanode " + datanodes[j].getName());
++            }
+           }
+ 
+           //read byte-per-checksum
+@@ -1330,24 +1355,26 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       checksumSize = this.checksum.getChecksumSize();
+     }
+ 
+-    public static BlockReader newBlockReader(Socket sock, String file, long blockId, 
++    public static BlockReader newBlockReader(Socket sock, String file, long blockId, AccessToken accessToken, 
+         long genStamp, long startOffset, long len, int bufferSize) throws IOException {
+-      return newBlockReader(sock, file, blockId, genStamp, startOffset, len, bufferSize,
++      return newBlockReader(sock, file, blockId, accessToken, genStamp, startOffset, len, bufferSize,
+           true);
+     }
+ 
+     /** Java Doc required */
+     public static BlockReader newBlockReader( Socket sock, String file, long blockId, 
++                                       AccessToken accessToken,
+                                        long genStamp,
+                                        long startOffset, long len,
+                                        int bufferSize, boolean verifyChecksum)
+                                        throws IOException {
+-      return newBlockReader(sock, file, blockId, genStamp, startOffset,
++      return newBlockReader(sock, file, blockId, accessToken, genStamp, startOffset,
+                             len, bufferSize, verifyChecksum, "");
+     }
+ 
+     public static BlockReader newBlockReader( Socket sock, String file,
+                                        long blockId, 
++                                       AccessToken accessToken,
+                                        long genStamp,
+                                        long startOffset, long len,
+                                        int bufferSize, boolean verifyChecksum,
+@@ -1365,6 +1392,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       out.writeLong( startOffset );
+       out.writeLong( len );
+       Text.writeString(out, clientName);
++      accessToken.write(out);
+       out.flush();
+       
+       //
+@@ -1375,12 +1403,19 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           new BufferedInputStream(NetUtils.getInputStream(sock), 
+                                   bufferSize));
+       
+-      if ( in.readShort() != DataTransferProtocol.OP_STATUS_SUCCESS ) {
+-        throw new IOException("Got error in response to OP_READ_BLOCK " +
+-                              "self=" + sock.getLocalSocketAddress() +
+-                              ", remote=" + sock.getRemoteSocketAddress() + 
+-                              " for file " + file + 
+-                              " for block " + blockId);
++      short status = in.readShort();
++      if (status != DataTransferProtocol.OP_STATUS_SUCCESS) {
++        if (status == DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN) {
++          throw new InvalidAccessTokenException(
++              "Got access token error in response to OP_READ_BLOCK "
++                  + "for file " + file + " for block " + blockId);
++        } else {
++          throw new IOException("Got error in response to OP_READ_BLOCK " +
++                                "self=" + sock.getLocalSocketAddress() +
++                                ", remote=" + sock.getRemoteSocketAddress() + 
++                                " for file " + file + 
++                                " for block " + blockId);
++        }
+       }
+       DataChecksum checksum = DataChecksum.newDataChecksum( in );
+       //Warning when we get CHECKSUM_NULL?
+@@ -1598,6 +1633,32 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       return blk;
+     }
+ 
++    /** Fetch a block from namenode and cache it */
++    private synchronized void fetchAndCacheBlockAt(long offset) throws IOException {
++      int targetBlockIdx = locatedBlocks.findBlock(offset);
++      if (targetBlockIdx < 0) { // block is not cached
++        targetBlockIdx = LocatedBlocks.getInsertIndex(targetBlockIdx);
++      }
++      // fetch blocks
++      LocatedBlocks newBlocks;
++      newBlocks = callGetBlockLocations(namenode, src, offset, prefetchSize);
++      if (newBlocks == null) {
++        throw new IOException("Could not find target position " + offset);
++      }
++      locatedBlocks.insertRange(targetBlockIdx, newBlocks.getLocatedBlocks());
++    }
++
++    /** Fetch a block without caching */
++    private LocatedBlock fetchBlockAt(long offset) throws IOException {
++      LocatedBlocks newBlocks;
++      newBlocks = callGetBlockLocations(namenode, src, offset, prefetchSize);
++      if (newBlocks == null) {
++        throw new IOException("Could not find target position " + offset);
++      }
++      int index = newBlocks.findBlock(offset);
++      return newBlocks.get(index);
++    }
++    
+     /**
+      * Get blocks in the specified range.
+      * Fetch them from the namenode if not cached.
+@@ -1659,17 +1720,18 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       }
+ 
+       //
+-      // Compute desired block
+-      //
+-      LocatedBlock targetBlock = getBlockAt(target, true);
+-      assert (target==this.pos) : "Wrong postion " + pos + " expect " + target;
+-      long offsetIntoBlock = target - targetBlock.getStartOffset();
+-
+-      //
+       // Connect to best DataNode for desired Block, with potential offset
+       //
+       DatanodeInfo chosenNode = null;
+-      while (s == null) {
++      int refetchToken = 1; // only need to get a new access token once
++      while (true) {
++        //
++        // Compute desired block
++        //
++        LocatedBlock targetBlock = getBlockAt(target, true);
++        assert (target==this.pos) : "Wrong postion " + pos + " expect " + target;
++        long offsetIntoBlock = target - targetBlock.getStartOffset();
++
+         DNAddrPair retval = chooseDataNode(targetBlock);
+         chosenNode = retval.info;
+         InetSocketAddress targetAddr = retval.addr;
+@@ -1679,17 +1741,33 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           NetUtils.connect(s, targetAddr, socketTimeout);
+           s.setSoTimeout(socketTimeout);
+           Block blk = targetBlock.getBlock();
++          AccessToken accessToken = targetBlock.getAccessToken();
+           
+           blockReader = BlockReader.newBlockReader(s, src, blk.getBlockId(), 
++              accessToken, 
+               blk.getGenerationStamp(),
+               offsetIntoBlock, blk.getNumBytes() - offsetIntoBlock,
+               buffersize, verifyChecksum, clientName);
+           return chosenNode;
+         } catch (IOException ex) {
+-          // Put chosen node into dead list, continue
+           LOG.debug("Failed to connect to " + targetAddr + ":" 
+                     + StringUtils.stringifyException(ex));
+-          addToDeadNodes(chosenNode);
++          if (ex instanceof InvalidAccessTokenException && refetchToken-- > 0) {
++            /*
++             * Get a new access token and retry. Retry is needed in 2 cases. 1)
++             * When both NN and DN re-started while DFSClient holding a cached
++             * access token. 2) In the case that NN fails to update its
++             * access key at pre-set interval (by a wide margin) and
++             * subsequently restarts. In this case, DN re-registers itself with
++             * NN and receives a new access key, but DN will delete the old
++             * access key from its memory since it's considered expired based on
++             * the estimated expiration date.
++             */
++            fetchAndCacheBlockAt(target);
++          } else {
++            // Put chosen node into dead list, continue
++            addToDeadNodes(chosenNode);
++          }
+           if (s != null) {
+             try {
+               s.close();
+@@ -1699,7 +1777,6 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           s = null;
+         }
+       }
+-      return chosenNode;
+     }
+ 
+     /**
+@@ -1872,13 +1949,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       // Connect to best DataNode for desired Block, with potential offset
+       //
+       Socket dn = null;
+-            
+-      while (true) {
+-        // cached block locations may have been updated by chooseDataNode()
+-        // or fetchBlockAt(). Always get the latest list of locations at the 
+-        // start of the loop.
+-        block = getBlockAt(block.getStartOffset(), false);
+-
++      int numAttempts = block.getLocations().length;
++      IOException ioe = null;
++      int refetchToken = 1; // only need to get a new access token once
++      
++      while (dn == null && numAttempts-- > 0 ) {
+         DNAddrPair retval = chooseDataNode(block);
+         DatanodeInfo chosenNode = retval.info;
+         InetSocketAddress targetAddr = retval.addr;
+@@ -1888,11 +1963,13 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           dn = socketFactory.createSocket();
+           NetUtils.connect(dn, targetAddr, socketTimeout);
+           dn.setSoTimeout(socketTimeout);
++          AccessToken accessToken = block.getAccessToken();
+               
+           int len = (int) (end - start + 1);
+               
+           reader = BlockReader.newBlockReader(dn, src, 
+                                               block.getBlock().getBlockId(),
++                                              accessToken,
+                                               block.getBlock().getGenerationStamp(),
+                                               start, len, buffersize, 
+                                               verifyChecksum, clientName);
+@@ -1908,10 +1985,22 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+                    e.getPos() + " from " + chosenNode.getName());
+           reportChecksumFailure(src, block.getBlock(), chosenNode);
+         } catch (IOException e) {
+-          LOG.warn("Failed to connect to " + targetAddr + 
+-                   " for file " + src + 
+-                   " for block " + block.getBlock().getBlockId() + ":"  +
+-                   StringUtils.stringifyException(e));
++          ioe = e;
++          if (e instanceof InvalidAccessTokenException && refetchToken-- > 0) {
++            LOG.info("Invalid access token when connecting to " + targetAddr
++                + " for file " + src + " for block "
++                + block.getBlock() + ":"
++                + StringUtils.stringifyException(e)
++                + ", get a new access token and retry...");
++            block = fetchBlockAt(block.getStartOffset());
++            numAttempts = block.getLocations().length;
++            continue;
++          } else {
++            LOG.warn("Failed to connect to " + targetAddr + 
++                     " for file " + src + 
++                     " for block " + block.getBlock().getBlockId() + ":"  +
++                     StringUtils.stringifyException(e));
++          }
+         } finally {
+           IOUtils.closeStream(reader);
+           IOUtils.closeSocket(dn);
+@@ -2144,6 +2233,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     DataOutputStream blockStream;
+     DataInputStream blockReplyStream;
+     private Block block;
++    private AccessToken accessToken;
+     final private long blockSize;
+     private DataChecksum checksum;
+     private LinkedList<Packet> dataQueue = new LinkedList<Packet>();
+@@ -2686,6 +2776,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         //
+         if (newBlock != null) {
+           block = newBlock.getBlock();
++          accessToken = newBlock.getAccessToken();
+           nodes = newBlock.getLocations();
+         }
+ 
+@@ -2880,6 +2971,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         DatanodeInfo[] excluded = excludedNodes.toArray(new DatanodeInfo[0]);
+         lb = locateFollowingBlock(startTime, excluded.length > 0 ? excluded : null);
+         block = lb.getBlock();
++        accessToken = lb.getAccessToken();
+         nodes = lb.getLocations();
+   
+         //
+@@ -2954,6 +3046,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         for (int i = 1; i < nodes.length; i++) {
+           nodes[i].write(out);
+         }
++        accessToken.write(out);
+         checksum.writeHeader( out );
+         out.flush();
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+index f6d4fcc..06e64fb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+@@ -40,9 +40,9 @@ public interface ClientProtocol extends VersionedProtocol {
+    * Compared to the previous version the following changes have been introduced:
+    * (Only the latest change is reflected.
+    * The log of historical changes can be retrieved from the svn).
+-   * 41: saveNamespace introduced.
++   * 42: All LocatedBlock objects contain access tokens
+    */
+-  public static final long versionID = 41L;
++  public static final long versionID = 42L;
+   
+   ///////////////////////////////////////
+   // File contents
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java
+index 2d8754f..eef1bab 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java
+@@ -34,15 +34,11 @@ public interface DataTransferProtocol {
+    * when protocol changes. It is not very obvious. 
+    */
+   /*
+-   * Version 14:
+-   *    OP_REPLACE_BLOCK is sent from the Balancer server to the destination,
+-   *    including the block id, source, and proxy.
+-   *    OP_COPY_BLOCK is sent from the destination to the proxy, which contains
+-   *    only the block id.
+-   *    A reply to OP_COPY_BLOCK sends the block content.
+-   *    A reply to OP_REPLACE_BLOCK includes an operation status.
++   * Version 15:
++   *    Added a new status OP_STATUS_ERROR_ACCESS_TOKEN
++   *    Access token is now required on all DN operations
+    */
+-  public static final int DATA_TRANSFER_VERSION = 14;
++  public static final int DATA_TRANSFER_VERSION = 15;
+ 
+   // Processed at datanode stream-handler
+   public static final byte OP_WRITE_BLOCK = (byte) 80;
+@@ -57,7 +53,8 @@ public interface DataTransferProtocol {
+   public static final int OP_STATUS_ERROR_CHECKSUM = 2;  
+   public static final int OP_STATUS_ERROR_INVALID = 3;  
+   public static final int OP_STATUS_ERROR_EXISTS = 4;  
+-  public static final int OP_STATUS_CHECKSUM_OK = 5;  
++  public static final int OP_STATUS_ERROR_ACCESS_TOKEN = 5;
++  public static final int OP_STATUS_CHECKSUM_OK = 6;
+ 
+   /* seqno for a heartbeat packet */
+   public static final int HEARTBEAT_SEQNO = -1;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/LocatedBlock.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/LocatedBlock.java
+index 49a8c0a..62829ca 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/LocatedBlock.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/LocatedBlock.java
+@@ -18,6 +18,7 @@
+ package org.apache.hadoop.hdfs.protocol;
+ 
+ import org.apache.hadoop.io.*;
++import org.apache.hadoop.security.AccessToken;
+ 
+ import java.io.*;
+ 
+@@ -43,6 +44,7 @@ public class LocatedBlock implements Writable {
+   // else false. If block has few corrupt replicas, they are filtered and 
+   // their locations are not part of this object
+   private boolean corrupt;
++  private AccessToken accessToken = new AccessToken();
+ 
+   /**
+    */
+@@ -76,6 +78,14 @@ public class LocatedBlock implements Writable {
+     }
+   }
+ 
++  public AccessToken getAccessToken() {
++    return accessToken;
++  }
++
++  public void setAccessToken(AccessToken token) {
++    this.accessToken = token;
++  }
++
+   /**
+    */
+   public Block getBlock() {
+@@ -112,6 +122,7 @@ public class LocatedBlock implements Writable {
+   // Writable
+   ///////////////////////////////////////////
+   public void write(DataOutput out) throws IOException {
++    accessToken.write(out);
+     out.writeBoolean(corrupt);
+     out.writeLong(offset);
+     b.write(out);
+@@ -122,6 +133,7 @@ public class LocatedBlock implements Writable {
+   }
+ 
+   public void readFields(DataInput in) throws IOException {
++    accessToken.readFields(in);
+     this.corrupt = in.readBoolean();
+     offset = in.readLong();
+     this.b = new Block();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/balancer/Balancer.java b/src/hdfs/org/apache/hadoop/hdfs/server/balancer/Balancer.java
+index 78c6caa..c6b8cf0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/balancer/Balancer.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/balancer/Balancer.java
+@@ -33,6 +33,7 @@ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Collection;
+ import java.util.Date;
++import java.util.EnumSet;
+ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.Iterator;
+@@ -71,8 +72,12 @@ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.NetworkTopology;
++import org.apache.hadoop.security.AccessToken;
++import org.apache.hadoop.security.AccessTokenHandler;
++import org.apache.hadoop.security.ExportedAccessKeys;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.Daemon;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Tool;
+ import org.apache.hadoop.util.ToolRunner;
+@@ -190,6 +195,11 @@ public class Balancer implements Tool {
+   private NamenodeProtocol namenode;
+   private ClientProtocol client;
+   private FileSystem fs;
++  private boolean isAccessTokenEnabled;
++  private boolean shouldRun;
++  private long keyUpdaterInterval;
++  private AccessTokenHandler accessTokenHandler;
++  private Daemon keyupdaterthread = null; // AccessKeyUpdater thread
+   private final static Random rnd = new Random();
+   
+   // all data node lists
+@@ -359,6 +369,13 @@ public class Balancer implements Tool {
+       out.writeLong(block.getBlock().getGenerationStamp());
+       Text.writeString(out, source.getStorageID());
+       proxySource.write(out);
++      AccessToken accessToken = AccessToken.DUMMY_TOKEN;
++      if (isAccessTokenEnabled) {
++        accessToken = accessTokenHandler.generateToken(null, block.getBlock()
++            .getBlockId(), EnumSet.of(AccessTokenHandler.AccessMode.REPLACE,
++            AccessTokenHandler.AccessMode.COPY));
++      }
++      accessToken.write(out);
+       out.flush();
+     }
+     
+@@ -366,6 +383,8 @@ public class Balancer implements Tool {
+     private void receiveResponse(DataInputStream in) throws IOException {
+       short status = in.readShort();
+       if (status != DataTransferProtocol.OP_STATUS_SUCCESS) {
++        if (status == DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN)
++          throw new IOException("block move failed due to access token error");
+         throw new IOException("block move is failed");
+       }
+     }
+@@ -841,6 +860,48 @@ public class Balancer implements Tool {
+     this.namenode = createNamenode(conf);
+     this.client = DFSClient.createNamenode(conf);
+     this.fs = FileSystem.get(conf);
++    ExportedAccessKeys keys = namenode.getAccessKeys();
++    this.isAccessTokenEnabled = keys.isAccessTokenEnabled();
++    if (isAccessTokenEnabled) {
++      long accessKeyUpdateInterval = keys.getKeyUpdateInterval();
++      long accessTokenLifetime = keys.getTokenLifetime();
++      LOG.info("Access token params received from NN: keyUpdateInterval="
++          + accessKeyUpdateInterval / (60 * 1000) + " min(s), tokenLifetime="
++          + accessTokenLifetime / (60 * 1000) + " min(s)");
++      this.accessTokenHandler = new AccessTokenHandler(false,
++          accessKeyUpdateInterval, accessTokenLifetime);
++      this.accessTokenHandler.setKeys(keys);
++      /*
++       * Balancer should sync its access keys with NN more frequently than NN
++       * updates its access keys
++       */
++      this.keyUpdaterInterval = accessKeyUpdateInterval / 4;
++      LOG.info("Balancer will update its access keys every "
++          + keyUpdaterInterval / (60 * 1000) + " minute(s)");
++      this.keyupdaterthread = new Daemon(new AccessKeyUpdater());
++      this.shouldRun = true;
++      this.keyupdaterthread.start();
++    }
++  }
++  
++  /**
++   * Periodically updates access keys.
++   */
++  class AccessKeyUpdater implements Runnable {
++
++    public void run() {
++      while (shouldRun) {
++        try {
++          accessTokenHandler.setKeys(namenode.getAccessKeys());
++        } catch (Exception e) {
++          LOG.error(StringUtils.stringifyException(e));
++        }
++        try {
++          Thread.sleep(keyUpdaterInterval);
++        } catch (InterruptedException ie) {
++        }
++      }
++    }
+   }
+   
+   /* Build a NamenodeProtocol connection to the namenode and
+@@ -857,6 +918,7 @@ public class Balancer implements Tool {
+     Map<String,RetryPolicy> methodNameToPolicyMap =
+         new HashMap<String, RetryPolicy>();
+     methodNameToPolicyMap.put("getBlocks", methodPolicy);
++    methodNameToPolicyMap.put("getAccessKeys", methodPolicy);
+ 
+     UserGroupInformation ugi;
+     try {
+@@ -1505,6 +1567,12 @@ public class Balancer implements Tool {
+       dispatcherExecutor.shutdownNow();
+       moverExecutor.shutdownNow();
+ 
++      shouldRun = false;
++      try {
++        if (keyupdaterthread != null) keyupdaterthread.interrupt();
++      } catch (Exception e) {
++        LOG.warn("Exception shutting down access key updater thread", e);
++      }
+       // close the output file
+       IOUtils.closeStream(out); 
+       if (fs != null) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index af9eaba..155d301 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -34,6 +34,7 @@ import java.security.SecureRandom;
+ import java.util.AbstractList;
+ import java.util.ArrayList;
+ import java.util.Arrays;
++import java.util.EnumSet;
+ import java.util.HashMap;
+ import java.util.LinkedList;
+ import java.util.List;
+@@ -72,6 +73,7 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeCommand;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
+ import org.apache.hadoop.hdfs.server.protocol.DisallowedDatanodeException;
++import org.apache.hadoop.hdfs.server.protocol.KeyUpdateCommand;
+ import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
+ import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
+ import org.apache.hadoop.hdfs.server.protocol.UpgradeCommand;
+@@ -83,6 +85,9 @@ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.ipc.Server;
+ import org.apache.hadoop.net.DNS;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.AccessToken;
++import org.apache.hadoop.security.AccessTokenHandler;
++import org.apache.hadoop.security.ExportedAccessKeys;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.authorize.ConfiguredPolicy;
+ import org.apache.hadoop.security.authorize.PolicyProvider;
+@@ -200,6 +205,10 @@ public class DataNode extends Configured
+    */
+   int artificialBlockReceivedDelay = 0;
+ 
++  boolean isAccessTokenEnabled;
++  AccessTokenHandler accessTokenHandler;
++  boolean isAccessTokenInitialized = false;
++  
+   public DataBlockScanner blockScanner = null;
+   public Daemon blockScannerThread = null;
+   
+@@ -577,6 +586,27 @@ public class DataNode extends Configured
+           + ". Expecting " + storage.getStorageID());
+     }
+     
++    if (!isAccessTokenInitialized) {
++      /* first time registering with NN */
++      ExportedAccessKeys keys = dnRegistration.exportedKeys;
++      this.isAccessTokenEnabled = keys.isAccessTokenEnabled();
++      if (isAccessTokenEnabled) {
++        long accessKeyUpdateInterval = keys.getKeyUpdateInterval();
++        long accessTokenLifetime = keys.getTokenLifetime();
++        LOG.info("Access token params received from NN: keyUpdateInterval="
++            + accessKeyUpdateInterval / (60 * 1000) + " min(s), tokenLifetime="
++            + accessTokenLifetime / (60 * 1000) + " min(s)");
++        this.accessTokenHandler = new AccessTokenHandler(false,
++            accessKeyUpdateInterval, accessTokenLifetime);
++      }
++      isAccessTokenInitialized = true;
++    }
++
++    if (isAccessTokenEnabled) {
++      accessTokenHandler.setKeys(dnRegistration.exportedKeys);
++      dnRegistration.exportedKeys = ExportedAccessKeys.DUMMY_KEYS;
++    }
++
+     // random short delay - helps scatter the BR from all DNs
+     scheduleBlockReport(initialBlockReportDelay);
+   }
+@@ -966,6 +996,12 @@ public class DataNode extends Configured
+     case DatanodeProtocol.DNA_RECOVERBLOCK:
+       recoverBlocks(bcmd.getBlocks(), bcmd.getTargets());
+       break;
++    case DatanodeProtocol.DNA_ACCESSKEYUPDATE:
++      LOG.info("DatanodeCommand action: DNA_ACCESSKEYUPDATE");
++      if (isAccessTokenEnabled) {
++        accessTokenHandler.setKeys(((KeyUpdateCommand) cmd).getExportedKeys());
++      }
++      break;
+     default:
+       LOG.warn("Unknown DatanodeCommand action: " + cmd.getAction());
+     }
+@@ -1222,6 +1258,12 @@ public class DataNode extends Configured
+         for (int i = 1; i < targets.length; i++) {
+           targets[i].write(out);
+         }
++        AccessToken accessToken = AccessToken.DUMMY_TOKEN;
++        if (isAccessTokenEnabled) {
++          accessToken = accessTokenHandler.generateToken(null, b.getBlockId(),
++              EnumSet.of(AccessTokenHandler.AccessMode.WRITE));
++        }
++        accessToken.write(out);
+         // send data & checksum
+         blockSender.sendBlock(out, baseStream, null);
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index c4008c5..ab7997f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -38,6 +38,8 @@ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.io.MD5Hash;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.AccessToken;
++import org.apache.hadoop.security.AccessTokenHandler;
+ import org.apache.hadoop.util.DataChecksum;
+ import org.apache.hadoop.util.StringUtils;
+ import static org.apache.hadoop.hdfs.server.datanode.DataNode.DN_CLIENTTRACE_FORMAT;
+@@ -169,12 +171,26 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+     long startOffset = in.readLong();
+     long length = in.readLong();
+     String clientName = Text.readString(in);
+-    // send the block
++    AccessToken accessToken = new AccessToken();
++    accessToken.readFields(in);
+     OutputStream baseStream = NetUtils.getOutputStream(s, 
+         datanode.socketWriteTimeout);
+     DataOutputStream out = new DataOutputStream(
+                  new BufferedOutputStream(baseStream, SMALL_BUFFER_SIZE));
+     
++    if (datanode.isAccessTokenEnabled
++        && !datanode.accessTokenHandler.checkAccess(accessToken, null, blockId,
++            AccessTokenHandler.AccessMode.READ)) {
++      try {
++        out.writeShort(DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN);
++        out.flush();
++        throw new IOException("Access token verification failed, on client "
++            + "request for reading block " + block);
++      } finally {
++        IOUtils.closeStream(out);
++      }
++    }
++    // send the block
+     BlockSender blockSender = null;
+     final String clientTraceFmt =
+       clientName.length() > 0 && ClientTraceLog.isInfoEnabled()
+@@ -263,10 +279,28 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+       tmp.readFields(in);
+       targets[i] = tmp;
+     }
++    AccessToken accessToken = new AccessToken();
++    accessToken.readFields(in);
++    DataOutputStream replyOut = null;   // stream to prev target
++    replyOut = new DataOutputStream(
++                   NetUtils.getOutputStream(s, datanode.socketWriteTimeout));
++    if (datanode.isAccessTokenEnabled
++        && !datanode.accessTokenHandler.checkAccess(accessToken, null, block
++            .getBlockId(), AccessTokenHandler.AccessMode.WRITE)) {
++      try {
++        if (client.length() != 0) {
++          Text.writeString(replyOut, datanode.dnRegistration.getName());
++          replyOut.flush();
++        }
++        throw new IOException("Access token verification failed, on client "
++            + "request for writing block " + block);
++      } finally {
++        IOUtils.closeStream(replyOut);
++      }
++    }
+ 
+     DataOutputStream mirrorOut = null;  // stream to next target
+     DataInputStream mirrorIn = null;    // reply from next target
+-    DataOutputStream replyOut = null;   // stream to prev target
+     Socket mirrorSock = null;           // socket to next target
+     BlockReceiver blockReceiver = null; // responsible for data handling
+     String mirrorNode = null;           // the name:port of next target
+@@ -280,10 +314,6 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+           s.getLocalSocketAddress().toString(),
+           isRecovery, client, srcDataNode, datanode);
+ 
+-      // get a connection back to the previous target
+-      replyOut = new DataOutputStream(
+-                     NetUtils.getOutputStream(s, datanode.socketWriteTimeout));
+-
+       //
+       // Open network conn to backup machine, if 
+       // appropriate
+@@ -324,6 +354,7 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+           for ( int i = 1; i < targets.length; i++ ) {
+             targets[i].write( mirrorOut );
+           }
++          accessToken.write(mirrorOut);
+ 
+           blockReceiver.writeChecksumHeader(mirrorOut);
+           mirrorOut.flush();
+@@ -449,8 +480,24 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+    */
+   void getBlockChecksum(DataInputStream in) throws IOException {
+     final Block block = new Block(in.readLong(), 0 , in.readLong());
++    AccessToken accessToken = new AccessToken();
++    accessToken.readFields(in);
++    DataOutputStream out = new DataOutputStream(NetUtils.getOutputStream(s,
++        datanode.socketWriteTimeout));
++    if (datanode.isAccessTokenEnabled
++        && !datanode.accessTokenHandler.checkAccess(accessToken, null, block
++            .getBlockId(), AccessTokenHandler.AccessMode.READ)) {
++      try {
++        out.writeShort(DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN);
++        out.flush();
++        throw new IOException(
++            "Access token verification failed, on getBlockChecksum() "
++                + "for block " + block);
++      } finally {
++        IOUtils.closeStream(out);
++      }
++    }
+ 
+-    DataOutputStream out = null;
+     final MetaDataInputStream metadataIn = datanode.data.getMetaDataInputStream(block);
+     final DataInputStream checksumIn = new DataInputStream(new BufferedInputStream(
+         metadataIn, BUFFER_SIZE));
+@@ -473,8 +520,6 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+       }
+ 
+       //write reply
+-      out = new DataOutputStream(
+-          NetUtils.getOutputStream(s, datanode.socketWriteTimeout));
+       out.writeShort(DataTransferProtocol.OP_STATUS_SUCCESS);
+       out.writeInt(bytesPerCRC);
+       out.writeLong(crcPerBlock);
+@@ -497,10 +542,24 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+     // Read in the header
+     long blockId = in.readLong(); // read block id
+     Block block = new Block(blockId, 0, in.readLong());
++    AccessToken accessToken = new AccessToken();
++    accessToken.readFields(in);
++    if (datanode.isAccessTokenEnabled
++        && !datanode.accessTokenHandler.checkAccess(accessToken, null, blockId,
++            AccessTokenHandler.AccessMode.COPY)) {
++      LOG.warn("Invalid access token in request from "
++          + s.getRemoteSocketAddress() + " for copying block " + block);
++      sendResponse(s,
++          (short) DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN,
++          datanode.socketWriteTimeout);
++      return;
++    }
+ 
+     if (!dataXceiverServer.balanceThrottler.acquire()) { // not able to start
+       LOG.info("Not able to copy block " + blockId + " to " 
+           + s.getRemoteSocketAddress() + " because threads quota is exceeded.");
++      sendResponse(s, (short)DataTransferProtocol.OP_STATUS_ERROR, 
++          datanode.socketWriteTimeout);
+       return;
+     }
+ 
+@@ -519,6 +578,8 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+       reply = new DataOutputStream(new BufferedOutputStream(
+           baseStream, SMALL_BUFFER_SIZE));
+ 
++      // send status first
++      reply.writeShort((short)DataTransferProtocol.OP_STATUS_SUCCESS);
+       // send block content to the target
+       long read = blockSender.sendBlock(reply, baseStream, 
+                                         dataXceiverServer.balanceThrottler);
+@@ -559,6 +620,17 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+     String sourceID = Text.readString(in); // read del hint
+     DatanodeInfo proxySource = new DatanodeInfo(); // read proxy source
+     proxySource.readFields(in);
++    AccessToken accessToken = new AccessToken();
++    accessToken.readFields(in);
++    if (datanode.isAccessTokenEnabled
++        && !datanode.accessTokenHandler.checkAccess(accessToken, null, blockId,
++            AccessTokenHandler.AccessMode.REPLACE)) {
++      LOG.warn("Invalid access token in request from "
++          + s.getRemoteSocketAddress() + " for replacing block " + block);
++      sendResponse(s, (short)DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN,
++          datanode.socketWriteTimeout);
++      return;
++    }
+ 
+     if (!dataXceiverServer.balanceThrottler.acquire()) { // not able to start
+       LOG.warn("Not able to receive block " + blockId + " from " 
+@@ -593,11 +665,22 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+       proxyOut.writeByte(DataTransferProtocol.OP_COPY_BLOCK); // op code
+       proxyOut.writeLong(block.getBlockId()); // block id
+       proxyOut.writeLong(block.getGenerationStamp()); // block id
++      accessToken.write(proxyOut);
+       proxyOut.flush();
+ 
+       // receive the response from the proxy
+       proxyReply = new DataInputStream(new BufferedInputStream(
+           NetUtils.getInputStream(proxySock), BUFFER_SIZE));
++      short status = proxyReply.readShort();
++      if (status != DataTransferProtocol.OP_STATUS_SUCCESS) {
++        if (status == DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN) {
++          throw new IOException("Copy block " + block + " from "
++              + proxySock.getRemoteSocketAddress()
++              + " failed due to access token error");
++        }
++        throw new IOException("Copy block " + block + " from "
++            + proxySock.getRemoteSocketAddress() + " failed");
++      }
+       // open a block receiver and check if the block does not exist
+       blockReceiver = new BlockReceiver(
+           block, proxyReply, proxySock.getRemoteSocketAddress().toString(),
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DatanodeDescriptor.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DatanodeDescriptor.java
+index f87c85d..c4f5cf7 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DatanodeDescriptor.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DatanodeDescriptor.java
+@@ -91,6 +91,7 @@ public class DatanodeDescriptor extends DatanodeInfo {
+   // isAlive == heartbeats.contains(this)
+   // This is an optimization, because contains takes O(n) time on Arraylist
+   protected boolean isAlive = false;
++  protected boolean needKeyUpdate = false;
+ 
+   /** A queue of blocks to be replicated by this datanode */
+   private BlockQueue replicateBlocks = new BlockQueue();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 665d34c..ff8025f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -31,6 +31,8 @@ import org.apache.hadoop.hdfs.server.namenode.BlocksMap.BlockInfo;
+ import org.apache.hadoop.hdfs.server.namenode.metrics.FSNamesystemMBean;
+ import org.apache.hadoop.hdfs.server.namenode.metrics.FSNamesystemMetrics;
+ import org.apache.hadoop.security.AccessControlException;
++import org.apache.hadoop.security.AccessTokenHandler;
++import org.apache.hadoop.security.ExportedAccessKeys;
+ import org.apache.hadoop.security.PermissionChecker;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation;
+@@ -48,6 +50,7 @@ import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations.BlockWithLocat
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeCommand;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
+ import org.apache.hadoop.hdfs.server.protocol.DisallowedDatanodeException;
++import org.apache.hadoop.hdfs.server.protocol.KeyUpdateCommand;
+ import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
+ import org.apache.hadoop.hdfs.server.protocol.UpgradeCommand;
+ import org.apache.hadoop.fs.ContentSummary;
+@@ -132,6 +135,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   private FSNamesystemMetrics myFSMetrics;
+   private long capacityTotal = 0L, capacityUsed = 0L, capacityRemaining = 0L;
+   private int totalLoad = 0;
++  boolean isAccessTokenEnabled;
++  AccessTokenHandler accessTokenHandler;
++  private long accessKeyUpdateInterval;
++  private long accessTokenLifetime;
+ 
+   volatile long pendingReplicationBlocksCount = 0L;
+   volatile long corruptReplicaBlocksCount = 0L;
+@@ -324,6 +331,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     pendingReplications = new PendingReplicationBlocks(
+                             conf.getInt("dfs.replication.pending.timeout.sec", 
+                                         -1) * 1000L);
++    if (isAccessTokenEnabled) {
++      accessTokenHandler = new AccessTokenHandler(true,
++          accessKeyUpdateInterval, accessTokenLifetime);
++    }
+     this.hbthread = new Daemon(new HeartbeatMonitor());
+     this.lmthread = new Daemon(leaseManager.new Monitor());
+     this.replthread = new Daemon(new ReplicationMonitor());
+@@ -442,6 +453,18 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+                                          20*(int)(heartbeatInterval/1000));
+     this.accessTimePrecision = conf.getLong("dfs.access.time.precision", 0);
+     this.supportAppends = conf.getBoolean("dfs.support.append", false);
++    this.isAccessTokenEnabled = conf.getBoolean(
++        AccessTokenHandler.STRING_ENABLE_ACCESS_TOKEN, false);
++    if (isAccessTokenEnabled) {
++      this.accessKeyUpdateInterval = conf.getLong(
++          AccessTokenHandler.STRING_ACCESS_KEY_UPDATE_INTERVAL, 600) * 60 * 1000L; // 10 hrs
++      this.accessTokenLifetime = conf.getLong(
++          AccessTokenHandler.STRING_ACCESS_TOKEN_LIFETIME, 600) * 60 * 1000L; // 10 hrs
++    }
++    LOG.info("isAccessTokenEnabled=" + isAccessTokenEnabled
++        + " accessKeyUpdateInterval=" + accessKeyUpdateInterval / (60 * 1000)
++        + " min(s), accessTokenLifetime=" + accessTokenLifetime / (60 * 1000)
++        + " min(s)");
+   }
+ 
+   /**
+@@ -658,6 +681,16 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   }
+   
+   /**
++   * Get access keys
++   * 
++   * @return current access keys
++   */
++  ExportedAccessKeys getAccessKeys() {
++    return isAccessTokenEnabled ? accessTokenHandler.exportKeys()
++        : ExportedAccessKeys.DUMMY_KEYS;
++  }
++
++  /**
+    * Get all valid locations of the block & add the block to results
+    * return the length of the added block; 0 if the block is not added
+    */
+@@ -866,8 +899,13 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+           }
+         }
+       }
+-      results.add(new LocatedBlock(blocks[curBlk], machineSet, curPos,
+-                  blockCorrupt));
++      LocatedBlock b = new LocatedBlock(blocks[curBlk], machineSet, curPos,
++          blockCorrupt);
++      if (isAccessTokenEnabled) {
++        b.setAccessToken(accessTokenHandler.generateToken(b.getBlock()
++            .getBlockId(), EnumSet.of(AccessTokenHandler.AccessMode.READ)));
++      }
++      results.add(b); 
+       curPos += blocks[curBlk].getNumBytes();
+       curBlk++;
+     } while (curPos < endOff 
+@@ -1224,6 +1262,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+ 
+           lb = new LocatedBlock(last, targets, 
+                                 fileLength-storedBlock.getNumBytes());
++          if (isAccessTokenEnabled) {
++            lb.setAccessToken(accessTokenHandler.generateToken(lb.getBlock()
++                .getBlockId(), EnumSet.of(AccessTokenHandler.AccessMode.WRITE)));
++          }
+ 
+           // Remove block from replication queue.
+           updateNeededReplications(last, 0, 0);
+@@ -1348,7 +1390,12 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     }
+         
+     // Create next block
+-    return new LocatedBlock(newBlock, targets, fileLength);
++    LocatedBlock b = new LocatedBlock(newBlock, targets, fileLength);
++    if (isAccessTokenEnabled) {
++      b.setAccessToken(accessTokenHandler.generateToken(b.getBlock()
++          .getBlockId(), EnumSet.of(AccessTokenHandler.AccessMode.WRITE)));
++    }
++    return b;
+   }
+ 
+   /**
+@@ -2157,6 +2204,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+                                       nodeReg.getInfoPort(),
+                                       nodeReg.getIpcPort());
+     nodeReg.updateRegInfo(dnReg);
++    nodeReg.exportedKeys = getAccessKeys();
+       
+     NameNode.stateChangeLog.info(
+                                  "BLOCK* NameSystem.registerDatanode: "
+@@ -2360,7 +2408,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+           return new DatanodeCommand[] {cmd};
+         }
+       
+-        ArrayList<DatanodeCommand> cmds = new ArrayList<DatanodeCommand>(2);
++        ArrayList<DatanodeCommand> cmds = new ArrayList<DatanodeCommand>(3);
+         //check pending replication
+         cmd = nodeinfo.getReplicationCommand(
+               maxReplicationStreams - xmitsInProgress);
+@@ -2372,6 +2420,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+         if (cmd != null) {
+           cmds.add(cmd);
+         }
++        // check access key update
++        if (isAccessTokenEnabled && nodeinfo.needKeyUpdate) {
++          cmds.add(new KeyUpdateCommand(accessTokenHandler.exportKeys()));
++          nodeinfo.needKeyUpdate = false;
++        }
+         if (!cmds.isEmpty()) {
+           return cmds.toArray(new DatanodeCommand[cmds.size()]);
+         }
+@@ -2403,21 +2456,44 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       totalLoad -= node.getXceiverCount();
+     }
+   }
++
+   /**
+-   * Periodically calls heartbeatCheck().
++   * Update access keys.
++   */
++  void updateAccessKey() throws IOException {
++    this.accessTokenHandler.updateKeys();
++    synchronized (heartbeats) {
++      for (DatanodeDescriptor nodeInfo : heartbeats) {
++        nodeInfo.needKeyUpdate = true;
++      }
++    }
++  }
++
++  /**
++   * Periodically calls heartbeatCheck() and updateAccessKey()
+    */
+   class HeartbeatMonitor implements Runnable {
++    private long lastHeartbeatCheck;
++    private long lastAccessKeyUpdate;
+     /**
+      */
+     public void run() {
+       while (fsRunning) {
+         try {
+-          heartbeatCheck();
++          long now = now();
++          if (lastHeartbeatCheck + heartbeatRecheckInterval < now) {
++            heartbeatCheck();
++            lastHeartbeatCheck = now;
++          }
++          if (isAccessTokenEnabled && (lastAccessKeyUpdate + accessKeyUpdateInterval < now)) {
++            updateAccessKey();
++            lastAccessKeyUpdate = now;
++          }
+         } catch (Exception e) {
+           FSNamesystem.LOG.error(StringUtils.stringifyException(e));
+         }
+         try {
+-          Thread.sleep(heartbeatRecheckInterval);
++          Thread.sleep(5000);  // 5 seconds
+         } catch (InterruptedException ie) {
+         }
+       }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index 11f989a..4900dd8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -116,7 +116,7 @@ public class JspHelper {
+     return chosenNode;
+   }
+   public void streamBlockInAscii(InetSocketAddress addr, long blockId, 
+-                                 long genStamp, long blockSize, 
++                                 AccessToken accessToken, long genStamp, long blockSize, 
+                                  long offsetIntoBlock, long chunkSizeToView, JspWriter out) 
+     throws IOException {
+     if (chunkSizeToView == 0) return;
+@@ -129,7 +129,7 @@ public class JspHelper {
+       // Use the block name for file name. 
+       DFSClient.BlockReader blockReader = 
+         DFSClient.BlockReader.newBlockReader(s, addr.toString() + ":" + blockId,
+-                                             blockId, genStamp ,offsetIntoBlock, 
++                                             blockId, accessToken, genStamp ,offsetIntoBlock, 
+                                              amtToRead, 
+                                              conf.getInt("io.file.buffer.size",
+                                                          4096));
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 24c2879..ba6dcff 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -37,6 +37,7 @@ import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeCommand;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
++import org.apache.hadoop.hdfs.server.protocol.KeyUpdateCommand;
+ import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
+ import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
+ import org.apache.hadoop.hdfs.server.protocol.UpgradeCommand;
+@@ -50,6 +51,7 @@ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.NetworkTopology;
+ import org.apache.hadoop.net.Node;
++import org.apache.hadoop.security.ExportedAccessKeys;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+@@ -777,6 +779,11 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     }
+   }
+ 
++  /** {@inheritDoc} */
++  public ExportedAccessKeys getAccessKeys() throws IOException {
++    return namesystem.getAccessKeys();
++  }
++
+   /**
+    */
+   public void errorReport(DatanodeRegistration nodeReg,
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
+index 57a9096..6a798a8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
+@@ -425,6 +425,7 @@ public class NamenodeFsck {
+           DFSClient.BlockReader.newBlockReader(s, targetAddr.toString() + ":" + 
+                                                block.getBlockId(), 
+                                                block.getBlockId(), 
++                                               lblock.getAccessToken(),
+                                                block.getGenerationStamp(), 
+                                                0, -1,
+                                                conf.getInt("io.file.buffer.size", 4096));
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+index 0af90e6..3c5b29d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+@@ -35,10 +35,10 @@ import org.apache.hadoop.ipc.VersionedProtocol;
+  **********************************************************************/
+ public interface DatanodeProtocol extends VersionedProtocol {
+   /**
+-   * 19: SendHeartbeat returns an array of DatanodeCommand objects
+-   *     in stead of a DatanodeCommand object.
++   * 20: SendHeartbeat may return KeyUpdateCommand
++   *     Register returns access keys inside DatanodeRegistration object
+    */
+-  public static final long versionID = 19L;
++  public static final long versionID = 20L;
+   
+   // error code
+   final static int NOTIFY = 0;
+@@ -57,6 +57,7 @@ public interface DatanodeProtocol extends VersionedProtocol {
+   final static int DNA_REGISTER = 4;   // re-register
+   final static int DNA_FINALIZE = 5;   // finalize previous upgrade
+   final static int DNA_RECOVERBLOCK = 6;  // request a block recovery
++  final static int DNA_ACCESSKEYUPDATE = 7;  // update access key
+ 
+   /** 
+    * Register Datanode.
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeRegistration.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeRegistration.java
+index 7da145c..7ec443f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeRegistration.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeRegistration.java
+@@ -29,6 +29,7 @@ import org.apache.hadoop.hdfs.server.datanode.DataStorage;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableFactories;
+ import org.apache.hadoop.io.WritableFactory;
++import org.apache.hadoop.security.ExportedAccessKeys;
+ 
+ /** 
+  * DatanodeRegistration class conatins all information the Namenode needs
+@@ -46,6 +47,7 @@ public class DatanodeRegistration extends DatanodeID implements Writable {
+   }
+ 
+   public StorageInfo storageInfo;
++  public ExportedAccessKeys exportedKeys;
+ 
+   /**
+    * Default constructor.
+@@ -60,6 +62,7 @@ public class DatanodeRegistration extends DatanodeID implements Writable {
+   public DatanodeRegistration(String nodeName) {
+     super(nodeName);
+     this.storageInfo = new StorageInfo();
++    this.exportedKeys = new ExportedAccessKeys();
+   }
+   
+   public void setInfoPort(int infoPort) {
+@@ -112,6 +115,7 @@ public class DatanodeRegistration extends DatanodeID implements Writable {
+     out.writeInt(storageInfo.getLayoutVersion());
+     out.writeInt(storageInfo.getNamespaceID());
+     out.writeLong(storageInfo.getCTime());
++    exportedKeys.write(out);
+   }
+ 
+   /** {@inheritDoc} */
+@@ -124,5 +128,6 @@ public class DatanodeRegistration extends DatanodeID implements Writable {
+     storageInfo.layoutVersion = in.readInt();
+     storageInfo.namespaceID = in.readInt();
+     storageInfo.cTime = in.readLong();
++    exportedKeys.readFields(in);
+   }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/KeyUpdateCommand.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/KeyUpdateCommand.java
+new file mode 100644
+index 0000000..929751b
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/KeyUpdateCommand.java
+@@ -0,0 +1,69 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.protocol;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableFactories;
++import org.apache.hadoop.io.WritableFactory;
++import org.apache.hadoop.security.ExportedAccessKeys;
++
++public class KeyUpdateCommand extends DatanodeCommand {
++  private ExportedAccessKeys keys;
++
++  KeyUpdateCommand() {
++    this(new ExportedAccessKeys());
++  }
++
++  public KeyUpdateCommand(ExportedAccessKeys keys) {
++    super(DatanodeProtocol.DNA_ACCESSKEYUPDATE);
++    this.keys = keys;
++  }
++
++  public ExportedAccessKeys getExportedKeys() {
++    return this.keys;
++  }
++
++  // ///////////////////////////////////////////////
++  // Writable
++  // ///////////////////////////////////////////////
++  static { // register a ctor
++    WritableFactories.setFactory(KeyUpdateCommand.class, new WritableFactory() {
++      public Writable newInstance() {
++        return new KeyUpdateCommand();
++      }
++    });
++  }
++
++  /**
++   */
++  public void write(DataOutput out) throws IOException {
++    super.write(out);
++    keys.write(out);
++  }
++
++  /**
++   */
++  public void readFields(DataInput in) throws IOException {
++    super.readFields(in);
++    keys.readFields(in);
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java
+index 614370c..2aea3e0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java
+@@ -23,6 +23,7 @@ import java.io.IOException;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.server.namenode.CheckpointSignature;
+ import org.apache.hadoop.ipc.VersionedProtocol;
++import org.apache.hadoop.security.ExportedAccessKeys;
+ 
+ /*****************************************************************************
+  * Protocol that a secondary NameNode uses to communicate with the NameNode.
+@@ -30,9 +31,9 @@ import org.apache.hadoop.ipc.VersionedProtocol;
+  *****************************************************************************/
+ public interface NamenodeProtocol extends VersionedProtocol {
+   /**
+-   * 2: Added getEditLogSize(), rollEditLog(), rollFSImage().
++   * 3: new method added: getAccessKeys()
+    */
+-  public static final long versionID = 2L;
++  public static final long versionID = 3L;
+ 
+   /** Get a list of blocks belonged to <code>datanode</code>
+     * whose total size is equal to <code>size</code>
+@@ -46,6 +47,14 @@ public interface NamenodeProtocol extends VersionedProtocol {
+   throws IOException;
+ 
+   /**
++   * Get the current access keys
++   * 
++   * @return ExportedAccessKeys containing current access keys
++   * @throws IOException 
++   */
++  public ExportedAccessKeys getAccessKeys() throws IOException;
++
++  /**
+    * Get the size of the current edit log (in bytes).
+    * @return The number of bytes in the current edit log.
+    * @throws IOException
+diff --git a/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java b/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
+index 08ea7c4..e5cd3ff 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
++++ b/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
+@@ -92,7 +92,9 @@ public class TestClientBlockVerification {
+     s.setSoTimeout(HdfsConstants.READ_TIMEOUT);
+ 
+     return DFSClient.BlockReader.newBlockReader(
+-      s, targetAddr.toString()+ ":" + block.getBlockId(), block.getBlockId(),
++      s, targetAddr.toString()+ ":" + block.getBlockId(),
++      block.getBlockId(),
++      testBlock.getAccessToken(),
+       block.getGenerationStamp(),
+       offset, lenToRead,
+       conf.getInt("io.file.buffer.size", 4096));
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDataTransferProtocol.java b/src/test/org/apache/hadoop/hdfs/TestDataTransferProtocol.java
+index d6ebd00..a43c67a 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDataTransferProtocol.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDataTransferProtocol.java
+@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.AccessToken;
+ import org.apache.hadoop.util.DataChecksum;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.DFSClient.DFSDataInputStream;
+@@ -178,6 +179,7 @@ public class TestDataTransferProtocol extends TestCase {
+     Text.writeString(sendOut, "cl");// clientID
+     sendOut.writeBoolean(false); // no src node info
+     sendOut.writeInt(0);           // number of downstream targets
++    AccessToken.DUMMY_TOKEN.write(sendOut);
+     sendOut.writeByte((byte)DataChecksum.CHECKSUM_CRC32);
+     
+     // bad bytes per checksum
+@@ -213,6 +215,7 @@ public class TestDataTransferProtocol extends TestCase {
+     Text.writeString(sendOut, "cl");// clientID
+     sendOut.writeBoolean(false); // no src node info
+     sendOut.writeInt(0);
++    AccessToken.DUMMY_TOKEN.write(sendOut);
+     sendOut.writeByte((byte)DataChecksum.CHECKSUM_CRC32);
+     sendOut.writeInt((int)512);
+     sendOut.writeInt(4);           // size of packet
+@@ -240,6 +243,7 @@ public class TestDataTransferProtocol extends TestCase {
+     Text.writeString(sendOut, "cl");// clientID
+     sendOut.writeBoolean(false); // no src node info
+     sendOut.writeInt(0);
++    AccessToken.DUMMY_TOKEN.write(sendOut);
+     sendOut.writeByte((byte)DataChecksum.CHECKSUM_CRC32);
+     sendOut.writeInt((int)512);    // checksum size
+     sendOut.writeInt(8);           // size of packet
+@@ -269,6 +273,7 @@ public class TestDataTransferProtocol extends TestCase {
+     sendOut.writeLong(fileLen);
+     recvOut.writeShort((short)DataTransferProtocol.OP_STATUS_ERROR);
+     Text.writeString(sendOut, "cl");
++    AccessToken.DUMMY_TOKEN.write(sendOut);
+     sendRecvData("Wrong block ID " + newBlockId + " for read", false); 
+ 
+     // negative block start offset
+@@ -280,6 +285,7 @@ public class TestDataTransferProtocol extends TestCase {
+     sendOut.writeLong(-1L);
+     sendOut.writeLong(fileLen);
+     Text.writeString(sendOut, "cl");
++    AccessToken.DUMMY_TOKEN.write(sendOut);
+     sendRecvData("Negative start-offset for read for block " + 
+                  firstBlock.getBlockId(), false);
+ 
+@@ -292,6 +298,7 @@ public class TestDataTransferProtocol extends TestCase {
+     sendOut.writeLong(fileLen);
+     sendOut.writeLong(fileLen);
+     Text.writeString(sendOut, "cl");
++    AccessToken.DUMMY_TOKEN.write(sendOut);
+     sendRecvData("Wrong start-offset for reading block " +
+                  firstBlock.getBlockId(), false);
+     
+@@ -306,6 +313,7 @@ public class TestDataTransferProtocol extends TestCase {
+     sendOut.writeLong(0);
+     sendOut.writeLong(-1-random.nextInt(oneMil));
+     Text.writeString(sendOut, "cl");
++    AccessToken.DUMMY_TOKEN.write(sendOut);
+     sendRecvData("Negative length for reading block " +
+                  firstBlock.getBlockId(), false);
+     
+@@ -320,6 +328,7 @@ public class TestDataTransferProtocol extends TestCase {
+     sendOut.writeLong(0);
+     sendOut.writeLong(fileLen + 1);
+     Text.writeString(sendOut, "cl");
++    AccessToken.DUMMY_TOKEN.write(sendOut);
+     sendRecvData("Wrong length for reading block " +
+                  firstBlock.getBlockId(), false);
+     
+@@ -332,6 +341,7 @@ public class TestDataTransferProtocol extends TestCase {
+     sendOut.writeLong(0);
+     sendOut.writeLong(fileLen);
+     Text.writeString(sendOut, "cl");
++    AccessToken.DUMMY_TOKEN.write(sendOut);
+     readFile(fileSys, file, fileLen);
+   }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/balancer/TestBalancer.java b/src/test/org/apache/hadoop/hdfs/server/balancer/TestBalancer.java
+index 094d4c5..3ed5bf5 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/balancer/TestBalancer.java
++++ b/src/test/org/apache/hadoop/hdfs/server/balancer/TestBalancer.java
+@@ -34,13 +34,13 @@ import org.apache.hadoop.hdfs.protocol.FSConstants.DatanodeReportType;
+ import org.apache.hadoop.hdfs.server.datanode.SimulatedFSDataset;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.security.AccessTokenHandler;
+ 
+ import junit.framework.TestCase;
+ /**
+  * This class tests if a balancer schedules tasks correctly.
+  */
+ public class TestBalancer extends TestCase {
+-  private static final Configuration CONF = new Configuration();
+   final private static long CAPACITY = 500L;
+   final private static String RACK0 = "/rack0";
+   final private static String RACK1 = "/rack1";
+@@ -56,14 +56,18 @@ public class TestBalancer extends TestCase {
+   private Random r = new Random();
+ 
+   static {
+-    CONF.setLong("dfs.block.size", DEFAULT_BLOCK_SIZE);
+-    CONF.setInt("io.bytes.per.checksum", DEFAULT_BLOCK_SIZE);
+-    CONF.setLong("dfs.heartbeat.interval", 1L);
+-    CONF.setBoolean(SimulatedFSDataset.CONFIG_PROPERTY_SIMULATED, true);
+-    CONF.setLong("dfs.balancer.movedWinWidth", 2000L);
+     Balancer.setBlockMoveWaitTime(1000L) ;
+   }
+ 
++  private void initConf(Configuration conf) {
++    conf.setBoolean(AccessTokenHandler.STRING_ENABLE_ACCESS_TOKEN, false);
++    conf.setLong("dfs.block.size", DEFAULT_BLOCK_SIZE);
++    conf.setInt("io.bytes.per.checksum", DEFAULT_BLOCK_SIZE);
++    conf.setLong("dfs.heartbeat.interval", 1L);
++    conf.setBoolean(SimulatedFSDataset.CONFIG_PROPERTY_SIMULATED, true);
++    conf.setLong("dfs.balancer.movedWinWidth", 2000L);
++  }
++
+   /* create a file with a length of <code>fileLen</code> */
+   private void createFile(long fileLen, short replicationFactor)
+   throws IOException {
+@@ -77,11 +81,11 @@ public class TestBalancer extends TestCase {
+   /* fill up a cluster with <code>numNodes</code> datanodes 
+    * whose used space to be <code>size</code>
+    */
+-  private Block[] generateBlocks(long size, short numNodes) throws IOException {
+-    cluster = new MiniDFSCluster( CONF, numNodes, true, null);
++  private Block[] generateBlocks(Configuration conf, long size, short numNodes) throws IOException {
++    cluster = new MiniDFSCluster( conf, numNodes, true, null);
+     try {
+       cluster.waitActive();
+-      client = DFSClient.createNamenode(CONF);
++      client = DFSClient.createNamenode(conf);
+ 
+       short replicationFactor = (short)(numNodes-1);
+       long fileLen = size/replicationFactor;
+@@ -140,7 +144,7 @@ public class TestBalancer extends TestCase {
+    * then redistribute blocks according the required distribution.
+    * Afterwards a balancer is running to balance the cluster.
+    */
+-  private void testUnevenDistribution(
++  private void testUnevenDistribution(Configuration conf,
+       long distribution[], long capacities[], String[] racks) throws Exception {
+     int numDatanodes = distribution.length;
+     if (capacities.length != numDatanodes || racks.length != numDatanodes) {
+@@ -154,18 +158,18 @@ public class TestBalancer extends TestCase {
+     }
+ 
+     // fill the cluster
+-    Block[] blocks = generateBlocks(totalUsedSpace, (short)numDatanodes);
++    Block[] blocks = generateBlocks(conf, totalUsedSpace, (short)numDatanodes);
+ 
+     // redistribute blocks
+     Block[][] blocksDN = distributeBlocks(
+         blocks, (short)(numDatanodes-1), distribution);
+ 
+     // restart the cluster: do NOT format the cluster
+-    CONF.set("dfs.safemode.threshold.pct", "0.0f"); 
+-    cluster = new MiniDFSCluster(0, CONF, numDatanodes,
++    conf.set("dfs.safemode.threshold.pct", "0.0f"); 
++    cluster = new MiniDFSCluster(0, conf, numDatanodes,
+         false, true, null, racks, capacities);
+     cluster.waitActive();
+-    client = DFSClient.createNamenode(CONF);
++    client = DFSClient.createNamenode(conf);
+ 
+     cluster.injectBlocks(blocksDN);
+ 
+@@ -173,7 +177,7 @@ public class TestBalancer extends TestCase {
+     for(long capacity:capacities) {
+       totalCapacity += capacity;
+     }
+-    runBalancer(totalUsedSpace, totalCapacity);
++    runBalancer(conf, totalUsedSpace, totalCapacity);
+   }
+ 
+   /* wait for one heartbeat */
+@@ -194,15 +198,15 @@ public class TestBalancer extends TestCase {
+    * @param newCapacity new node's capacity
+    * @param new 
+    */
+-  private void test(long[] capacities, String[] racks, 
++  private void test(Configuration conf, long[] capacities, String[] racks, 
+       long newCapacity, String newRack) throws Exception {
+     int numOfDatanodes = capacities.length;
+     assertEquals(numOfDatanodes, racks.length);
+-    cluster = new MiniDFSCluster(0, CONF, capacities.length, true, true, null, 
++    cluster = new MiniDFSCluster(0, conf, capacities.length, true, true, null, 
+         racks, capacities);
+     try {
+       cluster.waitActive();
+-      client = DFSClient.createNamenode(CONF);
++      client = DFSClient.createNamenode(conf);
+ 
+       long totalCapacity=0L;
+       for(long capacity:capacities) {
+@@ -212,25 +216,25 @@ public class TestBalancer extends TestCase {
+       long totalUsedSpace = totalCapacity*3/10;
+       createFile(totalUsedSpace/numOfDatanodes, (short)numOfDatanodes);
+       // start up an empty node with the same capacity and on the same rack
+-      cluster.startDataNodes(CONF, 1, true, null,
++      cluster.startDataNodes(conf, 1, true, null,
+           new String[]{newRack}, new long[]{newCapacity});
+ 
+       totalCapacity += newCapacity;
+ 
+       // run balancer and validate results
+-      runBalancer(totalUsedSpace, totalCapacity);
++      runBalancer(conf, totalUsedSpace, totalCapacity);
+     } finally {
+       cluster.shutdown();
+     }
+   }
+ 
+   /* Start balancer and check if the cluster is balanced after the run */
+-  private void runBalancer( long totalUsedSpace, long totalCapacity )
++  private void runBalancer(Configuration conf, long totalUsedSpace, long totalCapacity )
+   throws Exception {
+     waitForHeartBeat(totalUsedSpace, totalCapacity);
+ 
+     // start rebalancing
+-    balancer = new Balancer(CONF);
++    balancer = new Balancer(conf);
+     balancer.run(new String[0]);
+ 
+     waitForHeartBeat(totalUsedSpace, totalCapacity);
+@@ -258,18 +262,27 @@ public class TestBalancer extends TestCase {
+   /** Test a cluster with even distribution, 
+    * then a new empty node is added to the cluster*/
+   public void testBalancer0() throws Exception {
++    Configuration conf = new Configuration();
++    initConf(conf);
+     /** one-node cluster test*/
+     // add an empty node with half of the CAPACITY & the same rack
+-    test(new long[]{CAPACITY}, new String[]{RACK0}, CAPACITY/2, RACK0);
++    test(conf, new long[]{CAPACITY}, new String[]{RACK0}, CAPACITY/2, RACK0);
+ 
+     /** two-node cluster test */
+-    test(new long[]{CAPACITY, CAPACITY}, new String[]{RACK0, RACK1},
++    test(conf, new long[]{CAPACITY, CAPACITY}, new String[]{RACK0, RACK1},
+         CAPACITY, RACK2);
++    
++    /** End-to-end testing of access token, involving NN, DN, and Balancer */
++    Configuration newConf = new Configuration(conf);
++    newConf.setBoolean(AccessTokenHandler.STRING_ENABLE_ACCESS_TOKEN, true);
++    test(newConf, new long[]{CAPACITY}, new String[]{RACK0}, CAPACITY/2, RACK0);
+   }
+ 
+   /** Test unevenly distributed cluster */
+   public void testBalancer1() throws Exception {
+-    testUnevenDistribution(
++    Configuration conf = new Configuration();
++    initConf(conf);
++    testUnevenDistribution(conf,
+         new long[] {50*CAPACITY/100, 10*CAPACITY/100},
+         new long[]{CAPACITY, CAPACITY},
+         new String[] {RACK0, RACK1});
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestBlockReplacement.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestBlockReplacement.java
+index 45eb65a..76c1a2d 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestBlockReplacement.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestBlockReplacement.java
+@@ -47,6 +47,7 @@ import org.apache.hadoop.hdfs.server.common.Util;
+ import org.apache.hadoop.hdfs.server.datanode.BlockTransferThrottler;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.AccessToken;
+ /**
+  * This class tests if block replacement request to data nodes work correctly.
+  */
+@@ -231,6 +232,7 @@ public class TestBlockReplacement extends TestCase {
+     out.writeLong(block.getGenerationStamp());
+     Text.writeString(out, source.getStorageID());
+     sourceProxy.write(out);
++    AccessToken.DUMMY_TOKEN.write(out);
+     out.flush();
+     // receiveResponse
+     DataInputStream reply = new DataInputStream(sock.getInputStream());
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java
+index 9d49d45..c893f16 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java
+@@ -31,6 +31,7 @@ import org.apache.hadoop.hdfs.protocol.DataTransferProtocol;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.AccessToken;
+ 
+ import junit.framework.TestCase;
+ 
+@@ -119,6 +120,7 @@ public class TestDiskError extends TestCase {
+       Text.writeString( out, "" );
+       out.writeBoolean(false); // Not sending src node information
+       out.writeInt(0);
++      AccessToken.DUMMY_TOKEN.write(out);
+       
+       // write check header
+       out.writeByte( 1 );
+diff --git a/src/test/org/apache/hadoop/security/TestAccessToken.java b/src/test/org/apache/hadoop/security/TestAccessToken.java
+new file mode 100644
+index 0000000..cd3cc4c
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/TestAccessToken.java
+@@ -0,0 +1,89 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.util.EnumSet;
++
++import org.apache.hadoop.io.TestWritable;
++
++import junit.framework.TestCase;
++
++/** Unit tests for access tokens */
++public class TestAccessToken extends TestCase {
++  long accessKeyUpdateInterval = 10 * 60 * 1000; // 10 mins
++  long accessTokenLifetime = 2 * 60 * 1000; // 2 mins
++  long blockID1 = 0L;
++  long blockID2 = 10L;
++  long blockID3 = -108L;
++
++  /** test Writable */
++  public void testWritable() throws Exception {
++    TestWritable.testWritable(ExportedAccessKeys.DUMMY_KEYS);
++    AccessTokenHandler handler = new AccessTokenHandler(true,
++        accessKeyUpdateInterval, accessTokenLifetime);
++    ExportedAccessKeys keys = handler.exportKeys();
++    TestWritable.testWritable(keys);
++    TestWritable.testWritable(AccessToken.DUMMY_TOKEN);
++    AccessToken token = handler.generateToken(blockID3, EnumSet
++        .allOf(AccessTokenHandler.AccessMode.class));
++    TestWritable.testWritable(token);
++  }
++
++  private void tokenGenerationAndVerification(AccessTokenHandler master,
++      AccessTokenHandler slave) throws Exception {
++    // single-mode tokens
++    for (AccessTokenHandler.AccessMode mode : AccessTokenHandler.AccessMode
++        .values()) {
++      // generated by master
++      AccessToken token1 = master.generateToken(blockID1, EnumSet.of(mode));
++      assertTrue(master.checkAccess(token1, null, blockID1, mode));
++      assertTrue(slave.checkAccess(token1, null, blockID1, mode));
++      // generated by slave
++      AccessToken token2 = slave.generateToken(blockID2, EnumSet.of(mode));
++      assertTrue(master.checkAccess(token2, null, blockID2, mode));
++      assertTrue(slave.checkAccess(token2, null, blockID2, mode));
++    }
++    // multi-mode tokens
++    AccessToken mtoken = master.generateToken(blockID3, EnumSet
++        .allOf(AccessTokenHandler.AccessMode.class));
++    for (AccessTokenHandler.AccessMode mode : AccessTokenHandler.AccessMode
++        .values()) {
++      assertTrue(master.checkAccess(mtoken, null, blockID3, mode));
++      assertTrue(slave.checkAccess(mtoken, null, blockID3, mode));
++    }
++  }
++
++  /** test access key and token handling */
++  public void testAccessTokenHandler() throws Exception {
++    AccessTokenHandler masterHandler = new AccessTokenHandler(true,
++        accessKeyUpdateInterval, accessTokenLifetime);
++    AccessTokenHandler slaveHandler = new AccessTokenHandler(false,
++        accessKeyUpdateInterval, accessTokenLifetime);
++    ExportedAccessKeys keys = masterHandler.exportKeys();
++    slaveHandler.setKeys(keys);
++    tokenGenerationAndVerification(masterHandler, slaveHandler);
++    // key updating
++    masterHandler.updateKeys();
++    tokenGenerationAndVerification(masterHandler, slaveHandler);
++    keys = masterHandler.exportKeys();
++    slaveHandler.setKeys(keys);
++    tokenGenerationAndVerification(masterHandler, slaveHandler);
++  }
++
++}
+diff --git a/src/webapps/datanode/browseBlock.jsp b/src/webapps/datanode/browseBlock.jsp
+index 8ee469d..b3b1f59 100644
+--- a/src/webapps/datanode/browseBlock.jsp
++++ b/src/webapps/datanode/browseBlock.jsp
+@@ -12,6 +12,8 @@
+   import="org.apache.hadoop.io.*"
+   import="org.apache.hadoop.conf.*"
+   import="org.apache.hadoop.net.DNS"
++  import="org.apache.hadoop.security.AccessToken"
++  import="org.apache.hadoop.security.AccessTokenHandler"
+   import="org.apache.hadoop.util.*"
+   import="java.text.DateFormat"
+ %>
+@@ -190,6 +192,26 @@
+     }
+     blockId = Long.parseLong(blockIdStr);
+ 
++    final DFSClient dfs = new DFSClient(jspHelper.nameNodeAddr, jspHelper.conf);
++    
++    AccessToken accessToken = AccessToken.DUMMY_TOKEN;
++    if (JspHelper.conf
++        .getBoolean(AccessTokenHandler.STRING_ENABLE_ACCESS_TOKEN, false)) {
++      List<LocatedBlock> blks = dfs.namenode.getBlockLocations(filename, 0,
++          Long.MAX_VALUE).getLocatedBlocks();
++      if (blks == null || blks.size() == 0) {
++        out.print("Can't locate file blocks");
++        dfs.close();
++        return;
++      }
++      for (int i = 0; i < blks.size(); i++) {
++        if (blks.get(i).getBlock().getBlockId() == blockId) {
++          accessToken = blks.get(i).getAccessToken();
++          break;
++        }
++      }
++    }
++    
+     String blockGenStamp = null;
+     long genStamp = 0;
+     blockGenStamp = req.getParameter("genstamp");
+@@ -240,7 +262,6 @@
+     out.print("<hr>");
+ 
+     //Determine the prev & next blocks
+-    DFSClient dfs = new DFSClient(jspHelper.nameNodeAddr, jspHelper.conf);
+     long nextStartOffset = 0;
+     long nextBlockSize = 0;
+     String nextBlockIdStr = null;
+@@ -355,7 +376,7 @@
+     try {
+     jspHelper.streamBlockInAscii(
+             new InetSocketAddress(req.getServerName(), datanodePort), blockId, 
+-            genStamp, blockSize, startOffset, chunkSizeToView, out);
++            accessToken, genStamp, blockSize, startOffset, chunkSizeToView, out);
+     } catch (Exception e){
+         out.print(e);
+     }
+diff --git a/src/webapps/datanode/tail.jsp b/src/webapps/datanode/tail.jsp
+index 63d6a14..9c61210 100644
+--- a/src/webapps/datanode/tail.jsp
++++ b/src/webapps/datanode/tail.jsp
+@@ -12,6 +12,7 @@
+   import="org.apache.hadoop.io.*"
+   import="org.apache.hadoop.conf.*"
+   import="org.apache.hadoop.net.DNS"
++  import="org.apache.hadoop.security.AccessToken"
+   import="org.apache.hadoop.util.*"
+   import="org.apache.hadoop.net.NetUtils"
+   import="java.text.DateFormat"
+@@ -82,6 +83,7 @@
+     LocatedBlock lastBlk = blocks.get(blocks.size() - 1);
+     long blockSize = lastBlk.getBlock().getNumBytes();
+     long blockId = lastBlk.getBlock().getBlockId();
++    AccessToken accessToken = lastBlk.getAccessToken();
+     long genStamp = lastBlk.getBlock().getGenerationStamp();
+     DatanodeInfo chosenNode;
+     try {
+@@ -98,7 +100,7 @@
+     else startOffset = 0;
+ 
+     out.print("<textarea cols=\"100\" rows=\"25\" wrap=\"virtual\" style=\"width:100%\" READONLY>");
+-    jspHelper.streamBlockInAscii(addr, blockId, genStamp, blockSize, startOffset, chunkSizeToView, out);
++    jspHelper.streamBlockInAscii(addr, blockId, accessToken, genStamp, blockSize, startOffset, chunkSizeToView, out);
+     out.print("</textarea>");
+     dfs.close();
+   }
+-- 
+1.7.0.4
+

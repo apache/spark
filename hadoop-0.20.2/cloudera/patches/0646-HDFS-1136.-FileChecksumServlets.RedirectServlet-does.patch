@@ -1,0 +1,75 @@
+From 5127aafd818ec2c57d02481f221bff3534e12d14 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 7 May 2010 15:08:14 -0700
+Subject: [PATCH 0646/1179] HDFS-1136. FileChecksumServlets.RedirectServlet doesn't carry forward the delegation token
+
+Patch: https://issues.apache.org/jira/secure/attachment/12443986/HDFS-1136-BP20-2.patch
+Author: Boris Shkolnik
+Reason: Security
+Ref: CDH-648
+---
+ .../hadoop/hdfs/server/namenode/DfsServlet.java    |   14 +++++++++++---
+ .../hdfs/server/namenode/FileChecksumServlets.java |    4 +++-
+ 2 files changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+index b2d4f73..a1a09e8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+@@ -35,6 +35,8 @@ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.hdfs.protocol.DatanodeID;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
+ 
+ /**
+  * A base class for the servlets in DFS.
+@@ -65,8 +67,10 @@ abstract class DfsServlet extends HttpServlet {
+   }
+ 
+   /** Create a URI for redirecting request */
+-  protected URI createRedirectUri(String servletpath, UserGroupInformation ugi,
+-      DatanodeID host, HttpServletRequest request) throws URISyntaxException {
++  protected URI createRedirectUri(
++      String servletpath, UserGroupInformation ugi,
++      DatanodeID host, HttpServletRequest request, 
++      String tokenString)  throws URISyntaxException {
+     final String hostname = host instanceof DatanodeInfo?
+         ((DatanodeInfo)host).getHostName(): host.getHost();
+     final String scheme = request.getScheme();
+@@ -74,8 +78,12 @@ abstract class DfsServlet extends HttpServlet {
+         (Integer)getServletContext().getAttribute("datanode.https.port")
+         : host.getInfoPort();
+     final String filename = request.getPathInfo();
++    String dt="";
++    if(tokenString!=null) {
++      dt = JspHelper.SET_DELEGATION + tokenString;
++    }
+     return new URI(scheme, null, hostname, port, servletpath,
+-        "filename=" + filename + "&ugi=" + ugi.getShortUserName(), null);
++        "filename=" + filename + "&ugi=" + ugi.getShortUserName() + dt, null);
+   }
+ 
+   /** Get filename from the request */
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
+index a80b31a..df94cca 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
+@@ -55,10 +55,12 @@ public class FileChecksumServlets {
+       final ServletContext context = getServletContext();
+       Configuration conf = (Configuration) context.getAttribute(JspHelper.CURRENT_CONF);
+       final UserGroupInformation ugi = getUGI(request, conf);
++      String tokenString = request.getParameter(JspHelper.DELEGATION_PARAMETER_NAME);
+       final NameNode namenode = (NameNode)context.getAttribute("name.node");
+       final DatanodeID datanode = namenode.namesystem.getRandomDatanode();
+       try {
+-        final URI uri = createRedirectUri("/getFileChecksum", ugi, datanode, request); 
++        final URI uri = 
++          createRedirectUri("/getFileChecksum", ugi, datanode, request, tokenString);
+         response.sendRedirect(uri.toURL().toString());
+       } catch(URISyntaxException e) {
+         throw new ServletException(e); 
+-- 
+1.7.0.4
+

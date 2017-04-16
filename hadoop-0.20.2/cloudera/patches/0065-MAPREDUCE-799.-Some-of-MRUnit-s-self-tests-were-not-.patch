@@ -1,0 +1,200 @@
+From 7fda23b419b1c98e84eea43a0f35191d41032e18 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:51:53 -0800
+Subject: [PATCH 0065/1179] MAPREDUCE-799. Some of MRUnit's self-tests were not being run
+
+Description: Due to method naming issues, some test cases were not being executed.
+Reason: Bugfix; test coverage
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/mrunit/TestMapDriver.java    |   14 +++++++-------
+ .../apache/hadoop/mrunit/TestMapReduceDriver.java  |    6 +++---
+ .../org/apache/hadoop/mrunit/TestReduceDriver.java |   18 +++++++++---------
+ 3 files changed, 19 insertions(+), 19 deletions(-)
+
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapDriver.java
+index 5823948..2c4a796 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapDriver.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapDriver.java
+@@ -60,14 +60,14 @@ public class TestMapDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun1() {
++  public void testTestRun1() {
+     driver.withInput(new Text("foo"), new Text("bar"))
+             .withOutput(new Text("foo"), new Text("bar"))
+             .runTest();
+   }
+ 
+   @Test
+-  public void TesttestRun2() {
++  public void testTestRun2() {
+     try {
+       driver.withInput(new Text("foo"), new Text("bar"))
+             .runTest();
+@@ -78,7 +78,7 @@ public class TestMapDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun3() {
++  public void testTestRun3() {
+     try {
+       driver.withInput(new Text("foo"), new Text("bar"))
+             .withOutput(new Text("foo"), new Text("bar"))
+@@ -91,7 +91,7 @@ public class TestMapDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun4() {
++  public void testTestRun4() {
+     try {
+       driver.withInput(new Text("foo"), new Text("bar"))
+             .withOutput(new Text("foo"), new Text("bar"))
+@@ -104,7 +104,7 @@ public class TestMapDriver extends TestCase {
+ 
+   }
+   @Test
+-  public void TesttestRun5() {
++  public void testTestRun5() {
+     try {
+       driver.withInput(new Text("foo"), new Text("bar"))
+             .withOutput(new Text("foo"), new Text("somethingelse"))
+@@ -116,7 +116,7 @@ public class TestMapDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun6() {
++  public void testTestRun6() {
+     try {
+       driver.withInput(new Text("foo"), new Text("bar"))
+               .withOutput(new Text("someotherkey"), new Text("bar"))
+@@ -128,7 +128,7 @@ public class TestMapDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun7() {
++  public void testTestRun7() {
+     try {
+       driver.withInput(new Text("foo"), new Text("bar"))
+             .withOutput(new Text("someotherkey"), new Text("bar"))
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapReduceDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapReduceDriver.java
+index 6629a4a..e4009a0 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapReduceDriver.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapReduceDriver.java
+@@ -88,7 +88,7 @@ public class TestMapReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun1() {
++  public void testTestRun1() {
+     driver
+             .withInput(new Text("foo"), new LongWritable(FOO_IN_A))
+             .withInput(new Text("foo"), new LongWritable(FOO_IN_B))
+@@ -99,7 +99,7 @@ public class TestMapReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun2() {
++  public void testTestRun2() {
+     driver
+             .withInput(new Text("foo"), new LongWritable(FOO_IN_A))
+             .withInput(new Text("bar"), new LongWritable(BAR_IN))
+@@ -110,7 +110,7 @@ public class TestMapReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun3() {
++  public void testTestRun3() {
+     try {
+       driver
+             .withInput(new Text("foo"), new LongWritable(FOO_IN_A))
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestReduceDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestReduceDriver.java
+index 8f643b0..381f136 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestReduceDriver.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestReduceDriver.java
+@@ -75,7 +75,7 @@ public class TestReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun1() {
++  public void testTestRun1() {
+     driver
+             .withInputKey(new Text("foo"))
+             .withOutput(new Text("foo"), new LongWritable(0))
+@@ -83,7 +83,7 @@ public class TestReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun2() {
++  public void testTestRun2() {
+     driver
+             .withInputKey(new Text("foo"))
+             .withInputValue(new LongWritable(IN_A))
+@@ -93,7 +93,7 @@ public class TestReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun3() {
++  public void testTestRun3() {
+     try {
+       driver
+             .withInputKey(new Text("foo"))
+@@ -109,7 +109,7 @@ public class TestReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun4() {
++  public void testTestRun4() {
+     try {
+       driver
+             .withInputKey(new Text("foo"))
+@@ -124,7 +124,7 @@ public class TestReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun5() {
++  public void testTestRun5() {
+     try {
+       driver
+             .withInputKey(new Text("foo"))
+@@ -139,7 +139,7 @@ public class TestReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun6() {
++  public void testTestRun6() {
+     try {
+       driver
+             .withInputKey(new Text("foo"))
+@@ -155,7 +155,7 @@ public class TestReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun7() {
++  public void testTestRun7() {
+     try {
+       driver
+               .withInputKey(new Text("foo"))
+@@ -171,7 +171,7 @@ public class TestReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun8() {
++  public void testTestRun8() {
+     try {
+       driver
+             .withInputKey(new Text("foo"))
+@@ -187,7 +187,7 @@ public class TestReduceDriver extends TestCase {
+   }
+ 
+   @Test
+-  public void TesttestRun9() {
++  public void testTestRun9() {
+     try {
+       driver
+             .withInputKey(new Text("foo"))
+-- 
+1.7.0.4
+

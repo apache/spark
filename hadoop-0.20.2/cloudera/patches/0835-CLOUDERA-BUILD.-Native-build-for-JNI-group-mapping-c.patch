@@ -1,0 +1,109 @@
+From 1fb15b9ee1b9edd5961b5972da4062117b4709e5 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 10 Feb 2011 20:58:22 -0800
+Subject: [PATCH 0835/1179] CLOUDERA-BUILD. Native build for JNI group mapping code
+
+Original JNI patch is against Yahoo's distro which has divergent build files.
+---
+ build.xml                                          |   10 ++++++
+ src/native/Makefile.am                             |    1 +
+ src/native/configure.ac                            |    1 +
+ .../src/org/apache/hadoop/security/Makefile.am     |   34 ++++++++++++++++++++
+ 4 files changed, 46 insertions(+), 0 deletions(-)
+ create mode 100644 src/native/src/org/apache/hadoop/security/Makefile.am
+
+diff --git a/build.xml b/build.xml
+index 62d2843..60c1799 100644
+--- a/build.xml
++++ b/build.xml
+@@ -559,6 +559,7 @@
+     <mkdir dir="${build.native}/lib"/>
+     <mkdir dir="${build.native}/src/org/apache/hadoop/io/compress/zlib"/>
+     <mkdir dir="${build.native}/src/org/apache/hadoop/io/nativeio"/>
++    <mkdir dir="${build.native}/src/org/apache/hadoop/security"/>
+ 
+   	<javah
+   	  classpath="${build.classes}"
+@@ -577,6 +578,15 @@
+   	  >
+   	  <class name="org.apache.hadoop.io.nativeio.NativeIO" />
+   	</javah>
++  	<javah
++  	  classpath="${build.classes}"
++  	  destdir="${build.native}/src/org/apache/hadoop/security"
++      force="yes"
++  	  verbose="yes"
++  	  >
++          <class name="org.apache.hadoop.security.JniBasedUnixGroupsMapping" />
++          <class name="org.apache.hadoop.security.JniBasedUnixGroupsNetgroupMapping" />
++  	</javah>
+ 
+ 	<exec dir="${build.native}" executable="sh" failonerror="true">
+ 	  <env key="OS_NAME" value="${os.name}"/>
+diff --git a/src/native/Makefile.am b/src/native/Makefile.am
+index ded661c..d5fd90a 100644
+--- a/src/native/Makefile.am
++++ b/src/native/Makefile.am
+@@ -34,6 +34,7 @@ export PLATFORM = $(shell echo $$OS_NAME | tr [A-Z] [a-z])
+ # List the sub-directories here
+ SUBDIRS = src/org/apache/hadoop/io/compress/zlib \
+ 	src/org/apache/hadoop/io/nativeio \
++	src/org/apache/hadoop/security \
+ 	lib
+ 
+ # The following export is needed to build libhadoop.so in the 'lib' directory
+diff --git a/src/native/configure.ac b/src/native/configure.ac
+index c9fb26a..2448427 100644
+--- a/src/native/configure.ac
++++ b/src/native/configure.ac
+@@ -99,6 +99,7 @@ AC_FUNC_STRERROR_R
+ AC_CONFIG_FILES([Makefile
+                  src/org/apache/hadoop/io/compress/zlib/Makefile
+                  src/org/apache/hadoop/io/nativeio/Makefile
++                 src/org/apache/hadoop/security/Makefile
+                  lib/Makefile])
+ AC_OUTPUT
+ 
+diff --git a/src/native/src/org/apache/hadoop/security/Makefile.am b/src/native/src/org/apache/hadoop/security/Makefile.am
+new file mode 100644
+index 0000000..8567408
+--- /dev/null
++++ b/src/native/src/org/apache/hadoop/security/Makefile.am
+@@ -0,0 +1,34 @@
++#
++# Licensed to the Apache Software Foundation (ASF) under one
++# or more contributor license agreements.  See the NOTICE file
++# distributed with this work for additional information
++# regarding copyright ownership.  The ASF licenses this file
++# to you under the Apache License, Version 2.0 (the
++# "License"); you may not use this file except in compliance
++# with the License.  You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++
++#
++# Makefile template for building JNI security tools for Hadoop
++#
++
++# The 'vpath directive' to locate the actual source files 
++vpath %.c $(HADOOP_NATIVE_SRCDIR)/$(subdir)
++
++AM_CPPFLAGS = @JNI_CPPFLAGS@ -I$(HADOOP_NATIVE_SRCDIR)/src
++AM_LDFLAGS = @JNI_LDFLAGS@
++AM_CFLAGS = -g -Wall -fPIC -O2 -m$(JVM_DATA_MODEL)
++
++noinst_LTLIBRARIES = libhadoopsecurity.la
++libhadoopsecurity_la_SOURCES = getGroup.c JniBasedUnixGroupsMapping.c JniBasedUnixGroupsNetgroupMapping.c
++#
++#vim: sw=4: ts=4: noet
++#
+-- 
+1.7.0.4
+

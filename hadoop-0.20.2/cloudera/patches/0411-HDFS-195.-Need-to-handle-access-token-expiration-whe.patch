@@ -1,0 +1,266 @@
+From ad1f19c5727c6457a4e37c26cc1ede0dae3b76ec Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 22 Dec 2009 18:05:31 -0800
+Subject: [PATCH 0411/1179] HDFS-195. Need to handle access token expiration when re-establishing the pipeline for dfs write
+
+Patch: https://issues.apache.org/jira/secure/attachment/12428788/HDFS-195-0_20.1.patch
+Author: Kan Zhang
+Ref: CDH-648
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   25 +++++++++++++------
+ .../hdfs/protocol/ClientDatanodeProtocol.java      |   11 ++++----
+ .../hadoop/hdfs/protocol/DataTransferProtocol.java |    9 ++++---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   24 +++++++++++++++----
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |    9 +++++-
+ .../hadoop/hdfs/TestDataTransferProtocol.java      |    4 ++-
+ 6 files changed, 57 insertions(+), 25 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 12095ed..0681aef 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2773,12 +2773,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+ 
+         // If the block recovery generated a new generation stamp, use that
+         // from now on.  Also, setup new pipeline
+-        //
+-        if (newBlock != null) {
+-          block = newBlock.getBlock();
+-          accessToken = newBlock.getAccessToken();
+-          nodes = newBlock.getLocations();
+-        }
++        // newBlock should never be null and it should contain a newly
++        // generated access token.
++        block = newBlock.getBlock();
++        accessToken = newBlock.getAccessToken();
++        nodes = newBlock.getLocations();
+ 
+         this.hasError = false;
+         lastException = null;
+@@ -2872,6 +2871,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       //
+       if (lastBlock != null) {
+         block = lastBlock.getBlock();
++        accessToken = lastBlock.getAccessToken();
+         long usedInLastBlock = stat.getLen() % blockSize;
+         int freeInLastBlock = (int)(blockSize - usedInLastBlock);
+ 
+@@ -3004,6 +3004,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     //
+     private boolean createBlockOutputStream(DatanodeInfo[] nodes, String client,
+                     boolean recoveryFlag) {
++      short pipelineStatus = (short)DataTransferProtocol.OP_STATUS_SUCCESS;
+       String firstBadLink = "";
+       if (LOG.isDebugEnabled()) {
+         for (int i = 0; i < nodes.length; i++) {
+@@ -3051,9 +3052,17 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         out.flush();
+ 
+         // receive ack for connect
++        pipelineStatus = blockReplyStream.readShort();
+         firstBadLink = Text.readString(blockReplyStream);
+-        if (firstBadLink.length() != 0) {
+-          throw new IOException("Bad connect ack with firstBadLink " + firstBadLink);
++        if (pipelineStatus != DataTransferProtocol.OP_STATUS_SUCCESS) {
++          if (pipelineStatus == DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN) {
++            throw new InvalidAccessTokenException(
++                "Got access token error for connect ack with firstBadLink as "
++                    + firstBadLink);
++          } else {
++            throw new IOException("Bad connect ack with firstBadLink as "
++                + firstBadLink);
++          }
+         }
+ 
+         blockStream = out;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientDatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientDatanodeProtocol.java
+index 96833a7..5930782 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientDatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientDatanodeProtocol.java
+@@ -29,17 +29,18 @@ public interface ClientDatanodeProtocol extends VersionedProtocol {
+   public static final Log LOG = LogFactory.getLog(ClientDatanodeProtocol.class);
+ 
+   /**
+-   *4: added getBlockInfo
++   * 4: added getBlockInfo
++   * 5: never return null and always return a newly generated access token
+    */
+-  public static final long versionID = 3L;
++  public static final long versionID = 5L;
+ 
+   /** Start generation-stamp recovery for specified block
+    * @param block the specified block
+    * @param keepLength keep the block length
+    * @param targets the list of possible locations of specified block
+-   * @return the new blockid if recovery successful and the generation stamp
+-   * got updated as part of the recovery, else returns null if the block id
+-   * not have any data and the block was deleted.
++   * @return either a new generation stamp, or the original generation stamp. 
++   * Regardless of whether a new generation stamp is returned, a newly 
++   * generated access token is returned as part of the return value.
+    * @throws IOException
+    */
+   LocatedBlock recoverBlock(Block block, boolean keepLength,
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java
+index e0f1707..236a2d3 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java
+@@ -34,11 +34,12 @@ public interface DataTransferProtocol {
+    * when protocol changes. It is not very obvious. 
+    */
+   /*
+-   * Version 15:
+-   *    Added a new status OP_STATUS_ERROR_ACCESS_TOKEN
+-   *    Access token is now required on all DN operations
++   * Version 16:
++   *    Datanode now needs to send back a status code together 
++   *    with firstBadLink during pipeline setup for dfs write
++   *    (only for DFSClients, not for other datanodes).
+    */
+-  public static final int DATA_TRANSFER_VERSION = 15;
++  public static final int DATA_TRANSFER_VERSION = 16;
+ 
+   // Processed at datanode stream-handler
+   public static final byte OP_WRITE_BLOCK = (byte) 80;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 155d301..c5717a8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -1599,8 +1599,9 @@ public class DataNode extends Configured
+    * replicas and truncate the rest to that length.
+    **/
+   private LocatedBlock recoverBlock(Block block, boolean keepLength,
+-      DatanodeID[] datanodeids, boolean closeFile) throws IOException {
++      DatanodeInfo[] targets, boolean closeFile) throws IOException {
+ 
++    DatanodeID[] datanodeids = (DatanodeID[])targets;
+     // If the block is already being recovered, then skip recovering it.
+     // This can happen if the namenode and client start recovering the same
+     // file at the same time.
+@@ -1699,7 +1700,7 @@ public class DataNode extends Configured
+       if (!keepLength) {
+         block.setNumBytes(minlength);
+       }
+-      return syncBlock(block, syncList, closeFile);
++      return syncBlock(block, syncList, targets, closeFile);
+     } finally {
+       synchronized (ongoingRecovery) {
+         ongoingRecovery.remove(block);
+@@ -1709,7 +1710,7 @@ public class DataNode extends Configured
+ 
+   /** Block synchronization */
+   private LocatedBlock syncBlock(Block block, List<BlockRecord> syncList,
+-      boolean closeFile) throws IOException {
++      DatanodeInfo[] targets, boolean closeFile) throws IOException {
+     if (LOG.isDebugEnabled()) {
+       LOG.debug("block=" + block + ", (length=" + block.getNumBytes()
+           + "), syncList=" + syncList + ", closeFile=" + closeFile);
+@@ -1720,7 +1721,13 @@ public class DataNode extends Configured
+     if (syncList.isEmpty()) {
+       namenode.commitBlockSynchronization(block, 0, 0, closeFile, true,
+           DatanodeID.EMPTY_ARRAY);
+-      return null;
++      //always return a new access token even if everything else stays the same
++      LocatedBlock b = new LocatedBlock(block, targets);
++      if (isAccessTokenEnabled) {
++        b.setAccessToken(accessTokenHandler.generateToken(null, b.getBlock()
++            .getBlockId(), EnumSet.of(AccessTokenHandler.AccessMode.WRITE)));
++      }
++      return b;
+     }
+ 
+     List<DatanodeID> successList = new ArrayList<DatanodeID>();
+@@ -1748,7 +1755,14 @@ public class DataNode extends Configured
+       for (int i = 0; i < nlist.length; i++) {
+         info[i] = new DatanodeInfo(nlist[i]);
+       }
+-      return new LocatedBlock(newblock, info); // success
++      LocatedBlock b = new LocatedBlock(newblock, info); // success
++      // should have used client ID to generate access token, but since 
++      // owner ID is not checked, we simply pass null for now.
++      if (isAccessTokenEnabled) {
++        b.setAccessToken(accessTokenHandler.generateToken(null, b.getBlock()
++            .getBlockId(), EnumSet.of(AccessTokenHandler.AccessMode.WRITE)));
++      }
++      return b;
+     }
+ 
+     //failed
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index a4c0041..77f0f1c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -285,6 +285,7 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+             .getBlockId(), AccessTokenHandler.AccessMode.WRITE)) {
+       try {
+         if (client.length() != 0) {
++          replyOut.writeShort((short)DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN);
+           Text.writeString(replyOut, datanode.dnRegistration.getName());
+           replyOut.flush();
+         }
+@@ -303,6 +304,7 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+     String firstBadLink = "";           // first datanode that failed in connection setup
+ 
+     updateThreadName("receiving block " + block + " client=" + client);
++    short mirrorInStatus = (short)DataTransferProtocol.OP_STATUS_SUCCESS;
+     try {
+       // open a block receiver and check if the block does not exist
+       blockReceiver = new BlockReceiver(block, in, 
+@@ -357,8 +359,9 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+ 
+           // read connect ack (only for clients, not for replication req)
+           if (client.length() != 0) {
++            mirrorInStatus = mirrorIn.readShort();
+             firstBadLink = Text.readString(mirrorIn);
+-            if (LOG.isDebugEnabled() || firstBadLink.length() > 0) {
++            if (LOG.isDebugEnabled() || mirrorInStatus != DataTransferProtocol.OP_STATUS_SUCCESS) {
+               LOG.info("Datanode " + targets.length +
+                        " got response for connect ack " +
+                        " from downstream datanode with firstbadlink as " +
+@@ -368,6 +371,7 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+ 
+         } catch (IOException e) {
+           if (client.length() != 0) {
++            replyOut.writeShort((short)DataTransferProtocol.OP_STATUS_ERROR);
+             Text.writeString(replyOut, mirrorNode);
+             replyOut.flush();
+           }
+@@ -390,11 +394,12 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+ 
+       // send connect ack back to source (only for clients)
+       if (client.length() != 0) {
+-        if (LOG.isDebugEnabled() || firstBadLink.length() > 0) {
++        if (LOG.isDebugEnabled() || mirrorInStatus != DataTransferProtocol.OP_STATUS_SUCCESS) {
+           LOG.info("Datanode " + targets.length +
+                    " forwarding connect ack to upstream firstbadlink is " +
+                    firstBadLink);
+         }
++        replyOut.writeShort(mirrorInStatus);
+         Text.writeString(replyOut, firstBadLink);
+         replyOut.flush();
+       }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDataTransferProtocol.java b/src/test/org/apache/hadoop/hdfs/TestDataTransferProtocol.java
+index a43c67a..de14983 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDataTransferProtocol.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDataTransferProtocol.java
+@@ -225,6 +225,7 @@ public class TestDataTransferProtocol extends TestCase {
+     
+     // bad data chunk length
+     sendOut.writeInt(-1-random.nextInt(oneMil));
++    recvOut.writeShort((short)DataTransferProtocol.OP_STATUS_SUCCESS);
+     Text.writeString(recvOut, ""); // first bad node
+     recvOut.writeLong(100);        // sequencenumber
+     recvOut.writeShort((short)DataTransferProtocol.OP_STATUS_ERROR);
+@@ -254,7 +255,8 @@ public class TestDataTransferProtocol extends TestCase {
+     sendOut.writeInt(0);           // chunk length
+     sendOut.writeInt(0);           // zero checksum
+     //ok finally write a block with 0 len
+-    Text.writeString(recvOut, "");
++    recvOut.writeShort((short)DataTransferProtocol.OP_STATUS_SUCCESS);
++    Text.writeString(recvOut, ""); // first bad node
+     new DataTransferProtocol.PipelineAck(100, 
+         new short[]{DataTransferProtocol.OP_STATUS_SUCCESS}).write(recvOut);
+     sendRecvData("Writing a zero len block blockid " + newBlockId, false);
+-- 
+1.7.0.4
+

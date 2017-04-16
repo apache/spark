@@ -1,0 +1,194 @@
+From b6f790774d34ed34bb7c649142dc770c25121ac3 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:10:13 -0800
+Subject: [PATCH 0109/1179] HADOOP-5981. HADOOP-2838 doesnt work as expected
+
+Description: The substitution feature i.e X=$X:/tmp doesnt work as expected.
+
+<p>This issue completes the feature mentioned in <a href="http://issues.apache.org/jira/browse/HADOOP-2838" title="Add HADOOP_LIBRARY_PATH config setting so Hadoop will include external directories for jni"><del>HADOOP-2838</del></a>. <a href="http://issues.apache.org/jira/browse/HADOOP-2838" title="Add HADOOP_LIBRARY_PATH config setting so Hadoop will include external directories for jni"><del>HADOOP-2838</del></a> provided a way to set env variables in child process. This issue provides a way to inherit tt's env variables and append or reset it. So now <br/>
+X=$X:y will inherit X (if  there) and append y to it. </p>
+Reason: Bugfix
+Author: Amar Kamat
+Ref: UNKNOWN
+
+commit eb635e4de3a8b2b5bd9f34225770f24be42dcd83
+Author: Chad Metcalf <chad@cloudera.com>
+Date:   Tue Sep 15 22:29:50 2009 -0700
+
+    HADOOP-5981: HADOOP-2838 doesnt work as expected
+---
+ .../org/apache/hadoop/mapred/TaskRunner.java       |   44 +++++++++++++++-----
+ .../apache/hadoop/mapred/TestMiniMRChildTask.java  |   38 +++++++++++++----
+ 2 files changed, 63 insertions(+), 19 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index 2c7a784..f83bd46 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -101,6 +101,7 @@ abstract class TaskRunner extends Thread {
+   
+   @Override
+   public final void run() {
++    String errorInfo = "Child Error";
+     try {
+       
+       //before preparing the job localize 
+@@ -407,16 +408,36 @@ abstract class TaskRunner extends Thread {
+       if (mapredChildEnv != null && mapredChildEnv.length() > 0) {
+         String childEnvs[] = mapredChildEnv.split(",");
+         for (String cEnv : childEnvs) {
+-          String[] parts = cEnv.split("="); // split on '='
+-          String value = env.get(parts[0]);
+-          if (value != null) {
+-            // replace $env with the tt's value of env
+-            value = parts[1].replaceAll("$" + parts[0], value);
+-          } else {
+-            // for cases where x=$x:/tmp is passed and x doesnt exist
+-            value = parts[1].replaceAll("$" + parts[0], "");
++          try {
++            String[] parts = cEnv.split("="); // split on '='
++            String value = env.get(parts[0]);
++            if (value != null) {
++              // replace $env with the child's env constructed by tt's
++              // example LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp
++              value = parts[1].replace("$" + parts[0], value);
++            } else {
++              // this key is not configured by the tt for the child .. get it 
++              // from the tt's env
++              // example PATH=$PATH:/tmp
++              value = System.getenv(parts[0]);
++              if (value != null) {
++                // the env key is present in the tt's env
++                value = parts[1].replace("$" + parts[0], value);
++              } else {
++                // the env key is note present anywhere .. simply set it
++                // example X=$X:/tmp or X=/tmp
++                value = parts[1].replace("$" + parts[0], "");
++              }
++            }
++            env.put(parts[0], value);
++          } catch (Throwable t) {
++            // set the error msg
++            errorInfo = "Invalid User environment settings : " + mapredChildEnv 
++                        + ". Failed to parse user-passed environment param."
++                        + " Expecting : env1=value1,env2=value2...";
++            LOG.warn(errorInfo);
++            throw t;
+           }
+-          env.put(parts[0], value);
+         }
+       }
+ 
+@@ -446,9 +467,10 @@ abstract class TaskRunner extends Thread {
+         LOG.fatal(t.getTaskID()+" reporting FSError", ie);
+       }
+     } catch (Throwable throwable) {
+-      LOG.warn(t.getTaskID()+" Child Error", throwable);
++      LOG.warn(t.getTaskID() + errorInfo, throwable);
++      Throwable causeThrowable = new Throwable(errorInfo, throwable);
+       ByteArrayOutputStream baos = new ByteArrayOutputStream();
+-      throwable.printStackTrace(new PrintStream(baos));
++      causeThrowable.printStackTrace(new PrintStream(baos));
+       try {
+         tracker.reportDiagnosticInfo(t.getTaskID(), baos.toString());
+       } catch (IOException e) {
+diff --git a/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java b/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java
+index c2b97d9..4a67e3a 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java
++++ b/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java
+@@ -84,7 +84,8 @@ public class TestMiniMRChildTask extends TestCase {
+   }
+ 
+   // configure a job
+-  private void configure(JobConf conf, Path inDir, Path outDir, String input) 
++  private void configure(JobConf conf, Path inDir, Path outDir, String input,
++                         Class<? extends Mapper> map) 
+   throws IOException {
+     // set up the input file system and write input text.
+     FileSystem inFs = inDir.getFileSystem(conf);
+@@ -102,7 +103,7 @@ public class TestMiniMRChildTask extends TestCase {
+ 
+     // configure the mapred Job which creates a tempfile in map.
+     conf.setJobName("testmap");
+-    conf.setMapperClass(MapClass.class);        
++    conf.setMapperClass(map);
+     conf.setReducerClass(IdentityReducer.class);
+     conf.setNumMapTasks(1);
+     conf.setNumReduceTasks(0);
+@@ -126,7 +127,7 @@ public class TestMiniMRChildTask extends TestCase {
+                          Path outDir,
+                          String input)
+   throws IOException {
+-    configure(conf, inDir, outDir, input);
++    configure(conf, inDir, outDir, input, MapClass.class);
+ 
+     FileSystem outFs = outDir.getFileSystem(conf);
+     
+@@ -149,17 +150,27 @@ public class TestMiniMRChildTask extends TestCase {
+   // Mappers that simply checks if the desired user env are present or not
+   static class EnvCheckMapper extends MapReduceBase implements
+       Mapper<WritableComparable, Writable, WritableComparable, Writable> {
++    private static String PATH;
++    
+     public void map(WritableComparable key, Writable value,
+         OutputCollector<WritableComparable, Writable> out, Reporter reporter)
+         throws IOException {
+-      // check if X=$X:/abc works
++      // check if the pwd is there in LD_LIBRARY_PATH
++      String pwd = System.getenv("PWD");
++      assertTrue("LD doesnt contain pwd", 
++                 System.getenv("LD_LIBRARY_PATH").contains(pwd));
++      
++      // check if X=$X:/abc works for LD_LIBRARY_PATH
+       checkEnv("LD_LIBRARY_PATH", "/tmp", "append");
+       // check if X=/tmp works for an already existing parameter
+       checkEnv("HOME", "/tmp", "noappend");
+-      // check if my_path=/tmp for a new env variable
++      // check if X=/tmp for a new env variable
+       checkEnv("MY_PATH", "/tmp", "noappend");
+-      // check if new_path=$new_path:/tmp works and results into :/tmp
++      // check if X=$X:/tmp works for a new env var and results into :/tmp
+       checkEnv("NEW_PATH", ":/tmp", "noappend");
++      // check if X=$(tt's X var):/tmp for an old env variable inherited from 
++      // the tt
++      checkEnv("PATH",  PATH + ":/tmp", "noappend");
+     }
+ 
+     private void checkEnv(String envName, String expValue, String mode) 
+@@ -181,6 +192,10 @@ public class TestMiniMRChildTask extends TestCase {
+         }
+       }
+     }
++    
++    public void configure(JobConf conf) {
++      PATH = conf.get("path");
++    }
+   }
+ 
+   @Override
+@@ -256,13 +271,20 @@ public class TestMiniMRChildTask extends TestCase {
+       Path outDir = new Path("testing/wc/output1");
+       String input = "The input";
+       
+-      configure(conf, inDir, outDir, input);
++      configure(conf, inDir, outDir, input, EnvCheckMapper.class);
+ 
+       FileSystem outFs = outDir.getFileSystem(conf);
+       
++      // test 
++      //  - new SET of new var (MY_PATH)
++      //  - set of old var (HOME)
++      //  - append to an old var from modified env (LD_LIBRARY_PATH)
++      //  - append to an old var from tt's env (PATH)
++      //  - append to a new var (NEW_PATH)
+       conf.set("mapred.child.env", 
+                "MY_PATH=/tmp,HOME=/tmp,LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp,"
+-               + "NEW_PATH=$NEW_PATH:/tmp");
++               + "PATH=$PATH:/tmp,NEW_PATH=$NEW_PATH:/tmp");
++      conf.set("path", System.getenv("PATH"));
+ 
+       JobClient.runJob(conf);
+       outFs.delete(outDir, true);
+-- 
+1.7.0.4
+

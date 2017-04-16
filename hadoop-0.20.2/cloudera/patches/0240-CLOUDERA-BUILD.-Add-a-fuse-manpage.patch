@@ -1,0 +1,62 @@
+From 148d291aa14a4481dc206d2fc9a8527eb6761488 Mon Sep 17 00:00:00 2001
+From: newalex <newalex@ubuntu64-build01.(none)>
+Date: Fri, 16 Apr 2010 15:48:14 -0700
+Subject: [PATCH 0240/1179] CLOUDERA-BUILD. Add a fuse manpage
+
+Description: Adding a fuse_dfs manpage and adding a manpage to the build.
+Reason: New Feature
+Author: Alex Newman
+Ref: CDH-927
+---
+ cloudera/files/fuse_dfs.1.gz |  Bin 0 -> 1165 bytes
+ cloudera/install_hadoop.sh   |    1 +
+ 2 files changed, 1 insertions(+), 0 deletions(-)
+ create mode 100644 cloudera/files/fuse_dfs.1.gz
+
+diff --git a/cloudera/files/fuse_dfs.1.gz b/cloudera/files/fuse_dfs.1.gz
+new file mode 100644
+index 0000000000000000000000000000000000000000..089cb462fd46f40203a1c95655f586c47f0767aa
+GIT binary patch
+literal 1165
+zcmV;81akWyiwFqrgTqSz17>w|WnW}wb1pFey;i|)<2DdIS6?x3FD($uP7VufkOozn
+z1a>#E4coiuqA3hYq-<^|QXnZS{`=05lI^zGc2B)Y<Z$Nk&6_8sF9TRuQwZn4@1%oL
+zDgmwZyClV}tu<u{!-{Dbu9+*OgtBpB!%LT5QbdxjC&wkYgh5tYso-jSIfel|N!`4`
+z;G+{3o|$f#a)TsER}+|J&kxD*+{+N2O`|<voyq;<3JTRYkB688S%UP?;uC{hnc@|=
+z*vmqsG12PtY`$1cSNL{!0`fZyIsB2}<Mn8CgXQ<a-d^9-#`;^hskGm4;k?w$OQUaN
+zru&E0FU#p-J)O_~nk->TnbrZmTV%=5!x1U*<qin8f&kH5#wBHC>U>XXP((%wvDiG+
+zA=J|a42JvyhK7s0*$$EqLe!_?w$WPZEhX?f0j045o6=~G2sj|w$XYlE750#Ah3j*g
+zcx`wor}1gSIJX!yNHT@w(&hI8YQ+jcw{o>8WO)c>x}#XM-N|AX)-<bxMv%~&Msdgm
+z-U#m&(0P->n&cw`O=Y79DHK*<5!@HrTPYkRES+b0dIU)=IfF>A-+(Wi`XA8I&SB$a
+zB}~)7ER5zz;l#9{3?AmviozRvIHqA%K*5Tg;Kw}7<5u2y@$b2gVgF2mOj+Zx5-u<(
+z48~)ZYGxU(gu8+%k6;Lf-!UI_G$b9lUEoC<95RwKF^VK{p#&vBIx4frhare`n_j?(
+z)P6nkReh>2_gE}h;^bIacz3REQwtl0DGUfT#Iza}gqVVCX=Li?Ge=S^&zrK03jJ``
+z^T6y@(5T0)4)*aHl&9SZ4ct)Yc40&W<L-wKcRzMWt$`%k3GIN<>Hz&#OFMC6)LMzx
+z>28OKadh1-dC)9Zfj$u@JS-PX_mN0p2)vi>KO%Fv-Gm}8K?{r|oYs&tA`F}%=RnqC
+zUvlBe`H)Z4C>k${A4%+wXn4iR5X!;rPjHpKORwHVLwTG&Jp?;}k?_Tci;^|Uk9Le3
+zQxC`K)p$ttF=Dw&9(#8|uuwNjk@VTw&<VYl)@U3l4|`@M%c-Pzqq#$ol-5+I&qWdu
+zJp7hDFCvID^NbeUPiJpI*YC&UF(M5KN1=;o*hvzmG)^$ihDI&-a_SuE?}><!U<M%}
+zSt8DmsA@WwR6zt1l^QCXhms)(s#!2Z>SAxO6wOD@ir46|C)-HQe8Y!N$2P!<C2~Q&
+z42UUMbpRdO5bXp4B|(z3k2rE;d{c+->{%ej^}K!m&AbKV=rAOnjX_NI!nPMDLBklv
+zU4v$yrpx*4`C+z>3Y}#4^Z8;knd7&Z=)kXQnBjhEyV-6f+G-RM8jOn;g<&ztui2;U
+z>nS=Nf@?H<;jc8mXwHW|9W|_zC8m11-#kt4mf7<2W|6HYNp|u%5q%Et^i`V+a%&}u
+z8DF~2Rrni0O7aW^-f5e{l*}!o;}-z}A^pPk4EO;VmqoXK=>9RXkL$^NnS7Ti@dh)|
+f((llX7A?c~p9^Igj_}gLRJX~WG=3j8PzeA48a*{z
+
+literal 0
+HcmV?d00001
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index f966350..0f35b82 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -191,6 +191,7 @@ cp ${BUILD_DIR}/../../docs/sqoop/sqoop.1.gz $MAN_DIR/man1/sqoop-$APACHE_BRANCH.1
+ ############################################################
+ 
+ if [ ! -z "$NATIVE_BUILD_STRING" ]; then
++  cp ${CLOUDERA_SOURCE_DIR}/fuse_dfs.1.gz $MAN_DIR/man1/
+   # Fuse 
+   mkdir -p $LIB_DIR/bin
+   mv  ${BUILD_DIR}/contrib/fuse-dfs/* $LIB_DIR/bin
+-- 
+1.7.0.4
+

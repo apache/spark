@@ -1,0 +1,27 @@
+From b02ac3f86f9d929316edd10855721b67459192ba Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 20 Jan 2011 13:12:06 -0800
+Subject: [PATCH 0788/1179] MAPREDUCE-2277. Fix TestCapacitySchedulerWithJobTracker intermittent failure
+
+Reason: test failure
+Author: Todd Lipcon
+Ref: CDH-2547
+---
+ .../TestCapacitySchedulerWithJobTracker.java       |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacitySchedulerWithJobTracker.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacitySchedulerWithJobTracker.java
+index 04b80eb..b8763f5 100644
+--- a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacitySchedulerWithJobTracker.java
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacitySchedulerWithJobTracker.java
+@@ -110,6 +110,7 @@ public class TestCapacitySchedulerWithJobTracker extends
+     sleepJob2.setConf(conf2);
+     JobConf sleep2 = sleepJob2.setupJobConf(3, 3, 5, 3, 5, 3);
+     jobs[1] = runJob(sleep2, false);
++    jobs[0].waitForCompletion();
+     assertTrue("Sleep job submitted to queue 1 is not successful", jobs[0]
+         .isSuccessful());
+     assertTrue("Sleep job submitted to queue 2 is not successful", jobs[1]
+-- 
+1.7.0.4
+

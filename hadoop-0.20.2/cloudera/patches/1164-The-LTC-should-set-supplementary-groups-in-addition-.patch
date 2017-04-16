@@ -1,0 +1,35 @@
+From 2a444b734bdf643bfc80c68b98b8c69fe2e2a12b Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Wed, 14 Mar 2012 11:16:06 -0700
+Subject: [PATCH 1164/1179] The LTC should set supplementary groups in addition to euid and egid when switching users.
+ (cherry picked from commit 78ca997f549a89d60b39ae466f02a2797fa8003a)
+
+---
+ src/c++/task-controller/impl/task-controller.c |   11 +++++++++++
+ 1 files changed, 11 insertions(+), 0 deletions(-)
+
+diff --git a/src/c++/task-controller/impl/task-controller.c b/src/c++/task-controller/impl/task-controller.c
+index c1f857a..563932a 100644
+--- a/src/c++/task-controller/impl/task-controller.c
++++ b/src/c++/task-controller/impl/task-controller.c
+@@ -590,6 +590,17 @@ int set_user(const char *user) {
+   if (user_detail == NULL) {
+     return -1;
+   }
++
++  if (geteuid() == user_detail->pw_uid) {
++    return 0;
++  }
++
++  if (initgroups(user, user_detail->pw_gid) != 0) {
++    fprintf(LOGFILE, "Error setting supplementary groups for user %s: %s\n",
++        user, strerror(errno));
++    return -1;
++  }
++
+   return change_effective_user(user_detail->pw_uid, user_detail->pw_gid);
+ }
+ 
+-- 
+1.7.0.4
+

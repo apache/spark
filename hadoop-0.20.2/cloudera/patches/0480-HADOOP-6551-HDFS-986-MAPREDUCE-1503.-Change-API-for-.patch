@@ -1,0 +1,777 @@
+From 2471700c34dece87f611cceaf5b961647ab58700 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 19 Feb 2010 15:58:46 -0800
+Subject: [PATCH 0480/1179] HADOOP-6551, HDFS-986, MAPREDUCE-1503. Change API for tokens to throw
+ exceptions instead of returning booleans.
+
+Author: Owen O'Malley
+Ref: CDH-648
+---
+ .gitignore                                         |    4 +
+ .../AbstractDelegationTokenSecretManager.java      |   77 +++++++++++---------
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   16 +++--
+ .../apache/hadoop/hdfs/DistributedFileSystem.java  |    9 +--
+ .../hadoop/hdfs/protocol/ClientProtocol.java       |    7 +-
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    6 +-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    8 ++-
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |   22 ++++--
+ .../hadoop/mapred/JobSubmissionProtocol.java       |   13 ++--
+ .../org/apache/hadoop/mapred/JobTracker.java       |    6 +-
+ .../org/apache/hadoop/mapred/LocalJobRunner.java   |    7 +-
+ .../apache/hadoop/hdfs/TestDFSClientRetries.java   |    7 +-
+ .../hadoop/hdfs/security/TestDelegationToken.java  |   41 ++++++++---
+ .../token/delegation/TestDelegationToken.java      |   30 ++++++--
+ .../token/delegation/TestDelegationToken.java      |   76 +++++++++++++++-----
+ 15 files changed, 217 insertions(+), 112 deletions(-)
+
+diff --git a/.gitignore b/.gitignore
+index cecce34..8748c9f 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -19,6 +19,8 @@
+ .settings
+ .svn
+ build/
++build.properties
++build-fi/
+ conf/masters
+ conf/slaves
+ conf/hadoop-env.sh
+@@ -29,6 +31,8 @@ conf/hdfs-site.xml
+ conf/hadoop-policy.xml
+ conf/capacity-scheduler.xml
+ docs/api/
++ivy/ivy-*.jar
++ivy/maven-ant-tasks-*.jar
+ logs/
+ src/contrib/ec2/bin/hadoop-ec2-env.sh
+ src/contrib/index/conf/index-config.xml
+diff --git a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
+index 52e2e1e..779349a 100644
+--- a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
++++ b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
+@@ -34,6 +34,8 @@ import javax.crypto.SecretKey;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.SecretManager;
+ import org.apache.hadoop.util.Daemon;
+@@ -185,11 +187,15 @@ extends AbstractDelegationTokenIdentifier>
+   }
+ 
+   /**
+-   * Renew a delegation token. Canceled tokens are not renewed. Return true if
+-   * the token is successfully renewed; false otherwise.
++   * Renew a delegation token.
++   * @param token the token to renew
++   * @param renewer the full principal name of the user doing the renewal
++   * @return the new expiration time
++   * @throws InvalidToken if the token is invalid
++   * @throws AccessControlException if the user can't renew token
+    */
+-  public Boolean renewToken(Token<TokenIdent> token,
+-      String renewer) throws InvalidToken, IOException {
++  public long renewToken(Token<TokenIdent> token,
++                         String renewer) throws InvalidToken, IOException {
+     long now = System.currentTimeMillis();
+     ByteArrayInputStream buf = new ByteArrayInputStream(token.getIdentifier());
+     DataInputStream in = new DataInputStream(buf);
+@@ -197,71 +203,76 @@ extends AbstractDelegationTokenIdentifier>
+     id.readFields(in);
+     synchronized (currentTokens) {
+       if (currentTokens.get(id) == null) {
+-        LOG.warn("Renewal request for unknown token");
+-        return false;
++        throw new InvalidToken("Renewal request for unknown token");
+       }
+     }
+     if (id.getMaxDate() < now) {
+-      LOG.warn("Client " + renewer + " tries to renew an expired token");
+-      return false;
++      throw new InvalidToken("User " + renewer + 
++                             " tried to renew an expired token");
+     }
+-    if (id.getRenewer() == null || !id.getRenewer().toString().equals(renewer)) {
+-      LOG.warn("Client " + renewer + " tries to renew a token with "
+-          + "renewer specified as " + id.getRenewer());
+-      return false;
++    if (id.getRenewer() == null) {
++      throw new AccessControlException("User " + renewer + 
++                                       " tried to renew a token without " +
++                                       "a renewer");
++    }
++    if (!id.getRenewer().toString().equals(renewer)) {
++      throw new AccessControlException("Client " + renewer + 
++                                       " tries to renew a token with " +
++                                       "renewer specified as " + 
++                                       id.getRenewer());
+     }
+     DelegationKey key = null;
+     synchronized (this) {
+       key = allKeys.get(id.getMasterKeyId());
+     }
+     if (key == null) {
+-      LOG.warn("Unable to find master key for keyId=" + id.getMasterKeyId() 
+-          + " from cache. Failed to renew an unexpired token with sequenceNumber=" 
+-          + id.getSequenceNumber() + ", issued by this key");
+-      return false;
++      throw new InvalidToken("Unable to find master key for keyId=" + 
++                             id.getMasterKeyId() +
++                             " from cache. Failed to renew an unexpired token"+
++                             " with sequenceNumber=" + id.getSequenceNumber());
+     }
+     byte[] password = createPassword(token.getIdentifier(), key.getKey());
+     if (!Arrays.equals(password, token.getPassword())) {
+-      LOG.warn("Client " + renewer + " is trying to renew a token with wrong password");
+-      return false;
++      throw new AccessControlException("Client " + renewer + 
++                                       " is trying to renew a token with " +
++                                       "wrong password");
+     }
+     DelegationTokenInformation info = new DelegationTokenInformation(
+         Math.min(id.getMaxDate(), now + tokenRenewInterval), password);
+     synchronized (currentTokens) {
+       currentTokens.put(id, info);
+     }
+-    return true;
++    return info.getRenewDate();
+   }
+   
+   /**
+-   * Cancel a token by removing it from cache. Return true if 
+-   * token exists in cache; false otherwise.
++   * Cancel a token by removing it from cache.
++   * @throws InvalidToken for invalid token
++   * @throws AccessControlException if the user isn't allowed to cancel
+    */
+-  public Boolean cancelToken(Token<TokenIdent> token,
++  public void cancelToken(Token<TokenIdent> token,
+       String canceller) throws IOException {
+     ByteArrayInputStream buf = new ByteArrayInputStream(token.getIdentifier());
+     DataInputStream in = new DataInputStream(buf);
+     TokenIdent id = createIdentifier();
+     id.readFields(in);
+-    if (id.getRenewer() == null) {
+-      LOG.warn("Renewer is null: Invalid Identifier");
+-      return false;
+-    }
+     if (id.getUser() == null) {
+-      LOG.warn("owner is null: Invalid Identifier");
+-      return false;
++      throw new InvalidToken("Token with no owner");
+     }
+     String owner = id.getUser().getUserName();
+-    String renewer = id.getRenewer().toString();
+-    if (!canceller.equals(owner) && !canceller.equals(renewer)) {
+-      LOG.warn(canceller + " is not authorized to cancel the token");
+-      return false;
++    Text renewer = id.getRenewer();
++    if (!canceller.equals(owner) && 
++        (renewer == null || !canceller.equals(renewer.toString()))) {
++      throw new AccessControlException(canceller + 
++                                      " is not authorized to cancel the token");
+     }
+     DelegationTokenInformation info = null;
+     synchronized (currentTokens) {
+       info = currentTokens.remove(id);
+     }
+-    return info != null;
++    if (info == null) {
++      throw new InvalidToken("Token not found");
++    }
+   }
+   
+   /**
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index b0cce27..9ca221f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -270,18 +270,24 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     return namenode.getDelegationToken(renewer);
+   }
+ 
+-  public Boolean renewDelegationToken(Token<DelegationTokenIdentifier> token)
++  public long renewDelegationToken(Token<DelegationTokenIdentifier> token)
+       throws InvalidToken, IOException {
+     try {
+       return namenode.renewDelegationToken(token);
+     } catch (RemoteException re) {
+-      throw re.unwrapRemoteException(InvalidToken.class);
++      throw re.unwrapRemoteException(InvalidToken.class,
++                                     AccessControlException.class);
+     }
+   }
+ 
+-  public Boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token)
+-      throws IOException {
+-    return namenode.cancelDelegationToken(token);
++  public void cancelDelegationToken(Token<DelegationTokenIdentifier> token)
++      throws InvalidToken, IOException {
++    try {
++      namenode.cancelDelegationToken(token);
++    } catch (RemoteException re) {
++      throw re.unwrapRemoteException(InvalidToken.class,
++                                     AccessControlException.class);
++    }
+   }
+   
+   /**
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+index 0b43ccd..2394d97 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+@@ -517,10 +517,10 @@ public class DistributedFileSystem extends FileSystem {
+    * Renew an existing delegation token.
+    * 
+    * @param token delegation token obtained earlier
+-   * @return True if renewed successfully else false
++   * @return the new expiration time
+    * @throws IOException
+    */
+-  public Boolean renewDelegationToken(Token<DelegationTokenIdentifier> token)
++  public long renewDelegationToken(Token<DelegationTokenIdentifier> token)
+       throws InvalidToken, IOException {
+     return dfs.renewDelegationToken(token);
+   }
+@@ -529,11 +529,10 @@ public class DistributedFileSystem extends FileSystem {
+    * Cancel an existing delegation token.
+    * 
+    * @param token delegation token
+-   * @return True if canceled successfully else false
+    * @throws IOException
+    */
+-  public Boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token)
++  public void cancelDelegationToken(Token<DelegationTokenIdentifier> token)
+       throws IOException {
+-    return dfs.cancelDelegationToken(token);
++    dfs.cancelDelegationToken(token);
+   }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+index 9e55a16..0fc73f1 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+@@ -513,19 +513,18 @@ public interface ClientProtocol extends VersionedProtocol {
+    * Renew an existing delegation token.
+    *
+    * @param token delegation token obtained earlier
+-   * @return True if renewed successfully else false
++   * @return the new expiration time
+    * @throws IOException
+    */
+-  public Boolean renewDelegationToken(Token<DelegationTokenIdentifier> token)
++  public long renewDelegationToken(Token<DelegationTokenIdentifier> token)
+       throws IOException;
+ 
+   /**
+    * Cancel an existing delegation token.
+    *
+    * @param token delegation token
+-   * @return True if canceled successfully else false
+    * @throws IOException
+    */
+-  public Boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token)
++  public void cancelDelegationToken(Token<DelegationTokenIdentifier> token)
+       throws IOException;
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index d4e3d04..db28dbd 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -5166,15 +5166,15 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     return new Token<DelegationTokenIdentifier>(dtId, dtSecretManager);
+   }
+ 
+-  public Boolean renewDelegationToken(Token<DelegationTokenIdentifier> token)
++  public long renewDelegationToken(Token<DelegationTokenIdentifier> token)
+       throws InvalidToken, IOException {
+     String renewer = UserGroupInformation.getCurrentUser().getShortUserName();
+     return dtSecretManager.renewToken(token, renewer);
+   }
+ 
+-  public Boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token)
++  public void cancelDelegationToken(Token<DelegationTokenIdentifier> token)
+       throws IOException {
+     String canceller = UserGroupInformation.getCurrentUser().getShortUserName();
+-    return dtSecretManager.cancelToken(token, canceller);
++    dtSecretManager.cancelToken(token, canceller);
+   }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index d2a9c0b..816c133 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -391,14 +391,16 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     return namesystem.getDelegationToken(renewer);
+   }
+ 
+-  public Boolean renewDelegationToken(Token<DelegationTokenIdentifier> token)
++  @Override
++  public long renewDelegationToken(Token<DelegationTokenIdentifier> token)
+       throws InvalidToken, IOException {
+     return namesystem.renewDelegationToken(token);
+   }
+ 
+-  public Boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token)
++  @Override
++  public void cancelDelegationToken(Token<DelegationTokenIdentifier> token)
+       throws IOException {
+-    return namesystem.cancelDelegationToken(token);
++    namesystem.cancelDelegationToken(token);
+   }
+   
+   /** {@inheritDoc} */
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index df17c35..1a4a6fa 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -69,6 +69,7 @@ import org.apache.hadoop.mapreduce.JobSubmissionFiles;
+ import org.apache.hadoop.mapreduce.security.TokenCache;
+ import org.apache.hadoop.mapreduce.split.JobSplitWriter;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+@@ -1884,29 +1885,34 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+   /**
+    * Renew a delegation token
+    * @param token the token to renew
+-   * @return true if the renewal went well
++   * @return the new expiration time
+    * @throws InvalidToken
+    * @throws IOException
+    */
+-  public boolean renewDelegationToken(Token<DelegationTokenIdentifier> token)
++  public long renewDelegationToken(Token<DelegationTokenIdentifier> token)
+   throws InvalidToken, IOException, InterruptedException {
+     try {
+       return jobSubmitClient.renewDelegationToken(token);
+     } catch (RemoteException re) {
+-      throw re.unwrapRemoteException(InvalidToken.class);
++      throw re.unwrapRemoteException(InvalidToken.class,
++                                     AccessControlException.class);
+     }
+   }
+ 
+   /**
+    * Cancel a delegation token from the JobTracker
+    * @param token the token to cancel
+-   * @return true if everything went well
+    * @throws IOException
+    */
+-  public boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token
+-                                       ) throws IOException, 
+-                                                InterruptedException {
+-    return jobSubmitClient.cancelDelegationToken(token);
++  public void cancelDelegationToken(Token<DelegationTokenIdentifier> token
++                                    ) throws IOException, 
++                                             InterruptedException {
++    try {
++      jobSubmitClient.cancelDelegationToken(token);
++    } catch (RemoteException re) {
++      throw re.unwrapRemoteException(InvalidToken.class,
++                                     AccessControlException.class);
++    }
+   }
+  
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+index 36db62e..876b10e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+@@ -262,21 +262,20 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+   /**
+    * Renew an existing delegation token
+    * @param token the token to renew
+-   * @return true if the token was successfully renewed
++   * @return the new expiration time
+    * @throws IOException
+    * @throws InterruptedException
+    */ 
+-  public boolean renewDelegationToken(Token<DelegationTokenIdentifier> token
+-                                      ) throws IOException,
+-                                               InterruptedException;
++  public long renewDelegationToken(Token<DelegationTokenIdentifier> token
++                                   ) throws IOException,
++                                            InterruptedException;
+ 
+   /**
+    * Cancel a delegation token.
+    * @param token the token to cancel
+-   * @return true if the token was successfully canceled
+    * @throws IOException
+    * @throws InterruptedException
+    */ 
+-  public boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token
+-                                       ) throws IOException,InterruptedException;
++  public void cancelDelegationToken(Token<DelegationTokenIdentifier> token
++                                    ) throws IOException,InterruptedException;
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 6b23db5..f978356 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -3869,11 +3869,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * Discard a current delegation token.
+    */ 
+   @Override
+-  public boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token
++  public void cancelDelegationToken(Token<DelegationTokenIdentifier> token
+                                        ) throws IOException,
+                                                 InterruptedException {
+     String user = UserGroupInformation.getCurrentUser().getUserName();
+-    return secretManager.cancelToken(token, user);
++    secretManager.cancelToken(token, user);
+   }  
+   /**
+    * Get a new delegation token.
+@@ -3896,7 +3896,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * Renew a delegation token to extend its lifetime.
+    */ 
+   @Override
+-  public boolean renewDelegationToken(Token<DelegationTokenIdentifier> token
++  public long renewDelegationToken(Token<DelegationTokenIdentifier> token
+                                       ) throws IOException,
+                                                InterruptedException {
+     String user = UserGroupInformation.getCurrentUser().getUserName();
+diff --git a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+index e34f2ce..2061579 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+@@ -542,10 +542,9 @@ class LocalJobRunner implements JobSubmissionProtocol {
+   }
+   
+   @Override
+-  public boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token
++  public void cancelDelegationToken(Token<DelegationTokenIdentifier> token
+                                        ) throws IOException,
+                                                 InterruptedException {
+-    return false;
+   }  
+   @Override
+   public Token<DelegationTokenIdentifier> 
+@@ -553,9 +552,9 @@ class LocalJobRunner implements JobSubmissionProtocol {
+     return null;
+   }  
+   @Override
+-  public boolean renewDelegationToken(Token<DelegationTokenIdentifier> token
++  public long renewDelegationToken(Token<DelegationTokenIdentifier> token
+                                       ) throws IOException,InterruptedException{
+-    return false;
++    return 0;
+   }  
+ 
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java b/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
+index b018578..6decebf 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
+@@ -234,14 +234,13 @@ public class TestDFSClientRetries extends TestCase {
+       return null;
+     }
+ 
+-    public Boolean renewDelegationToken(Token<DelegationTokenIdentifier> token)
++    public long renewDelegationToken(Token<DelegationTokenIdentifier> token)
+         throws InvalidToken, IOException {
+-      return false;
++      return 0;
+     }
+ 
+-    public Boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token)
++    public void cancelDelegationToken(Token<DelegationTokenIdentifier> token)
+         throws IOException {
+-      return false;
+     }
+   }
+   
+diff --git a/src/test/org/apache/hadoop/hdfs/security/TestDelegationToken.java b/src/test/org/apache/hadoop/hdfs/security/TestDelegationToken.java
+index 9822d8e..dc5ae95 100644
+--- a/src/test/org/apache/hadoop/hdfs/security/TestDelegationToken.java
++++ b/src/test/org/apache/hadoop/hdfs/security/TestDelegationToken.java
+@@ -33,6 +33,8 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.DistributedFileSystem;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.AccessControlException;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+@@ -79,8 +81,13 @@ public class TestDelegationToken {
+     Token<DelegationTokenIdentifier> token = generateDelegationToken(
+         "SomeUser", "JobTracker");
+     // Fake renewer should not be able to renew
+-	  Assert.assertFalse(dtSecretManager.renewToken(token, "FakeRenewer"));
+-	  Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
++    try {
++  	  dtSecretManager.renewToken(token, "FakeRenewer");
++  	  Assert.fail("should have failed");
++    } catch (AccessControlException ace) {
++      // PASS
++    }
++	  dtSecretManager.renewToken(token, "JobTracker");
+     DelegationTokenIdentifier identifier = new DelegationTokenIdentifier();
+     byte[] tokenId = token.getIdentifier();
+     identifier.readFields(new DataInputStream(
+@@ -96,10 +103,15 @@ public class TestDelegationToken {
+ 	  } catch (InvalidToken e) {
+ 	    //Success
+ 	  }
+-	  Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
++	  dtSecretManager.renewToken(token, "JobTracker");
+ 	  Log.info("Sleep beyond the max lifetime");
+ 	  Thread.sleep(5000);
+-	  Assert.assertFalse(dtSecretManager.renewToken(token, "JobTracker"));
++	  try {
++  	  dtSecretManager.renewToken(token, "JobTracker");
++  	  Assert.fail("should have been expired");
++	  } catch (InvalidToken it) {
++	    // PASS
++	  }
+   }
+   
+   @Test 
+@@ -109,9 +121,19 @@ public class TestDelegationToken {
+     Token<DelegationTokenIdentifier> token = generateDelegationToken(
+         "SomeUser", "JobTracker");
+     //Fake renewer should not be able to renew
+-    Assert.assertFalse(dtSecretManager.cancelToken(token, "FakeCanceller"));
+-    Assert.assertTrue(dtSecretManager.cancelToken(token, "JobTracker"));
+-    Assert.assertFalse(dtSecretManager.renewToken(token, "JobTracker"));
++    try {
++      dtSecretManager.cancelToken(token, "FakeCanceller");
++      Assert.fail("should have failed");
++    } catch (AccessControlException ace) {
++      // PASS
++    }
++    dtSecretManager.cancelToken(token, "JobTracker");
++    try {
++      dtSecretManager.renewToken(token, "JobTracker");
++      Assert.fail("should have failed");
++    } catch (InvalidToken it) {
++      // PASS
++    }
+   }
+   
+   @Test
+@@ -126,6 +148,7 @@ public class TestDelegationToken {
+              new ByteArrayInputStream(tokenId)));
+     Log.info("A valid token should have non-null password, and should be renewed successfully");
+     Assert.assertTrue(null != dtSecretManager.retrievePassword(identifier));
+-    Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
+-  } 
++    dtSecretManager.renewToken(token, "JobTracker");
++  }
++ 
+ }
+diff --git a/src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationToken.java b/src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationToken.java
+index e526152..ff10623 100644
+--- a/src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationToken.java
++++ b/src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationToken.java
+@@ -28,8 +28,11 @@ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.JobClient;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.MiniMRCluster;
++import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.SecretManager.InvalidToken;
++import org.junit.Assert;
+ import org.junit.Before;
+ import org.junit.Test;
+ 
+@@ -85,12 +88,27 @@ public class TestDelegationToken {
+     System.out.println("max time: " + maxTime);
+     assertTrue("createTime < current", createTime < currentTime);
+     assertTrue("current < maxTime", currentTime < maxTime);
+-    assertTrue("alice renew", client.renewDelegationToken(token));
+-    assertTrue("alice renew", client.renewDelegationToken(token));
+-    assertFalse("bob renew", bobClient.renewDelegationToken(token));
+-    assertFalse("bob cancel", bobClient.cancelDelegationToken(token));
+-    assertTrue("alice cancel", client.cancelDelegationToken(token));
+-    assertFalse("second alice cancel", client.cancelDelegationToken(token));
++    client.renewDelegationToken(token);
++    client.renewDelegationToken(token);
++    try {
++      bobClient.renewDelegationToken(token);
++      Assert.fail("bob renew");
++    } catch (AccessControlException ace) {
++      // PASS
++    }
++    try {
++      bobClient.cancelDelegationToken(token);
++      Assert.fail("bob renew");
++    } catch (AccessControlException ace) {
++      // PASS
++    }
++    client.cancelDelegationToken(token);
++    try {
++      client.cancelDelegationToken(token);
++      Assert.fail("second alice cancel");
++    } catch (InvalidToken it) {
++      // PASS
++    }
+   }
+ }
+ 
+diff --git a/src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java b/src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java
+index 244ff5a..b10e773 100644
+--- a/src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java
++++ b/src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java
+@@ -23,26 +23,28 @@ import java.io.DataInput;
+ import java.io.DataInputStream;
+ import java.io.DataOutput;
+ import java.io.IOException;
++import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+-import java.util.Arrays;
+-import java.util.Collection;
+ import java.util.List;
+ 
+ import junit.framework.Assert;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.DataInputBuffer;
+ import org.apache.hadoop.io.DataOutputBuffer;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.token.Token;
+-import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
++import org.apache.hadoop.util.StringUtils;
+ import org.junit.Test;
+-import org.mortbay.log.Log;
+ 
+ import static org.junit.Assert.*;
+ 
+ public class TestDelegationToken {
++  private static final Log LOG = LogFactory.getLog(TestDelegationToken.class);
+   private static final Text KIND = new Text("MY KIND");
+ 
+   public static class TestDelegationTokenIdentifier 
+@@ -137,25 +139,44 @@ public class TestDelegationToken {
+         owner), new Text(renewer), null);
+     return new Token<TestDelegationTokenIdentifier>(dtId, dtSecretManager);
+   }
++  
++  private void shouldThrow(PrivilegedExceptionAction<Object> action,
++                           Class<? extends Throwable> except) {
++    try {
++      action.run();
++      Assert.fail("action did not throw " + except);
++    } catch (Throwable th) {
++      LOG.info("Caught an exception: " + StringUtils.stringifyException(th));
++      assertEquals("action threw wrong exception", except, th.getClass());
++    }
++  }
++
+   @Test
+   public void testDelegationTokenSecretManager() throws Exception {
+-    TestDelegationTokenSecretManager dtSecretManager = 
++    final TestDelegationTokenSecretManager dtSecretManager = 
+       new TestDelegationTokenSecretManager(24*60*60*1000,
+           3*1000,1*1000,3600000);
+     try {
+       dtSecretManager.startThreads();
+-      Token<TestDelegationTokenIdentifier> token = generateDelegationToken(
++      final Token<TestDelegationTokenIdentifier> token = 
++        generateDelegationToken(
+           dtSecretManager, "SomeUser", "JobTracker");
+       // Fake renewer should not be able to renew
+-      Assert.assertFalse(dtSecretManager.renewToken(token, "FakeRenewer"));
+-      Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
++      shouldThrow(new PrivilegedExceptionAction<Object>() {
++        public Object run() throws Exception {
++          dtSecretManager.renewToken(token, "FakeRenewer");
++          return null;
++        }
++      }, AccessControlException.class);
++      long time = dtSecretManager.renewToken(token, "JobTracker");
++      assertTrue("renew time is in future", time > System.currentTimeMillis());
+       TestDelegationTokenIdentifier identifier = 
+         new TestDelegationTokenIdentifier();
+       byte[] tokenId = token.getIdentifier();
+       identifier.readFields(new DataInputStream(
+           new ByteArrayInputStream(tokenId)));
+       Assert.assertTrue(null != dtSecretManager.retrievePassword(identifier));
+-      Log.info("Sleep to expire the token");
++      LOG.info("Sleep to expire the token");
+       Thread.sleep(2000);
+       //Token should be expired
+       try {
+@@ -165,31 +186,49 @@ public class TestDelegationToken {
+       } catch (InvalidToken e) {
+         //Success
+       }
+-      Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
+-      Log.info("Sleep beyond the max lifetime");
++      dtSecretManager.renewToken(token, "JobTracker");
++      LOG.info("Sleep beyond the max lifetime");
+       Thread.sleep(2000);
+-      Assert.assertFalse(dtSecretManager.renewToken(token, "JobTracker"));
++      
++      shouldThrow(new PrivilegedExceptionAction<Object>() {
++        public Object run() throws Exception {
++          dtSecretManager.renewToken(token, "JobTracker");
++          return null;
++        }
++      }, InvalidToken.class);
+     } finally {
+       dtSecretManager.stopThreads();
+     }
+   }
++
+   @Test 
+   public void testCancelDelegationToken() throws Exception {
+-    TestDelegationTokenSecretManager dtSecretManager = 
++    final TestDelegationTokenSecretManager dtSecretManager = 
+       new TestDelegationTokenSecretManager(24*60*60*1000,
+         10*1000,1*1000,3600000);
+     try {
+       dtSecretManager.startThreads();
+-      Token<TestDelegationTokenIdentifier> token = generateDelegationToken(
+-          dtSecretManager, "SomeUser", "JobTracker");
++      final Token<TestDelegationTokenIdentifier> token = 
++        generateDelegationToken(dtSecretManager, "SomeUser", "JobTracker");
+       //Fake renewer should not be able to renew
+-      Assert.assertFalse(dtSecretManager.cancelToken(token, "FakeCanceller"));
+-      Assert.assertTrue(dtSecretManager.cancelToken(token, "JobTracker"));
+-      Assert.assertFalse(dtSecretManager.renewToken(token, "JobTracker"));
++      shouldThrow(new PrivilegedExceptionAction<Object>() {
++        public Object run() throws Exception {
++          dtSecretManager.renewToken(token, "FakeCanceller");
++          return null;
++        }
++      }, AccessControlException.class);
++      dtSecretManager.cancelToken(token, "JobTracker");
++      shouldThrow(new PrivilegedExceptionAction<Object>() {
++        public Object run() throws Exception {
++          dtSecretManager.renewToken(token, "JobTracker");
++          return null;
++        }
++      }, InvalidToken.class);
+     } finally {
+       dtSecretManager.stopThreads();
+     }
+   }
++
+   @Test
+   public void testRollMasterKey() throws Exception {
+     TestDelegationTokenSecretManager dtSecretManager = 
+@@ -226,6 +265,7 @@ public class TestDelegationToken {
+       dtSecretManager.stopThreads();
+     }
+   }
++
+   @Test
+   @SuppressWarnings("unchecked")
+   public void testDelegationTokenSelector() throws Exception {
+-- 
+1.7.0.4
+

@@ -1,0 +1,28 @@
+From bdafb1dbffd0d5f2fbc6ee022e1c8df6500fd638 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 11 Jul 2011 18:49:14 -0700
+Subject: [PATCH 1020/1179] MAPREDUCE-2670. Fixing spelling mistake in FairSchedulerServlet.java.
+
+Reason: Bug
+Author: Eli Collins
+Ref: DISTRO-273
+---
+ .../apache/hadoop/mapred/FairSchedulerServlet.java |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java
+index 6f83a68..dfa4653 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java
+@@ -127,7 +127,7 @@ public class FairSchedulerServlet extends HttpServlet {
+     String hostname = StringUtils.simpleHostname(
+         jobTracker.getJobTrackerMachine());
+     out.print("<html><head>");
+-    out.printf("<title>%s Fair Scheduler Admininstration</title>\n", hostname);
++    out.printf("<title>%s Fair Scheduler Administration</title>\n", hostname);
+     out.print("<link rel=\"stylesheet\" type=\"text/css\" " + 
+         "href=\"/static/hadoop.css\">\n");
+     out.print("</head><body>\n");
+-- 
+1.7.0.4
+

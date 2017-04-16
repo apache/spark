@@ -1,0 +1,489 @@
+From 78625c0dfb4e0f819f79ce29d215097e87790012 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 29 Sep 2010 22:44:25 -0700
+Subject: [PATCH 0715/1179] HADOOP-6408. Add a servlet at /conf to display running configuration
+
+Reason: Easier debugging and support
+Author: Todd Lipcon
+Ref: CDH-2175
+---
+ src/core/org/apache/hadoop/conf/ConfServlet.java   |   97 +++++++++++++++++
+ src/core/org/apache/hadoop/conf/Configuration.java |   98 +++++++++---------
+ src/core/org/apache/hadoop/http/HttpServer.java    |    5 +-
+ .../org/apache/hadoop/conf/TestConfServlet.java    |  111 ++++++++++++++++++++
+ 4 files changed, 261 insertions(+), 50 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/conf/ConfServlet.java
+ create mode 100644 src/test/org/apache/hadoop/conf/TestConfServlet.java
+
+diff --git a/src/core/org/apache/hadoop/conf/ConfServlet.java b/src/core/org/apache/hadoop/conf/ConfServlet.java
+new file mode 100644
+index 0000000..1dba8c8
+--- /dev/null
++++ b/src/core/org/apache/hadoop/conf/ConfServlet.java
+@@ -0,0 +1,97 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.conf;
++
++import java.io.IOException;
++import java.io.OutputStreamWriter;
++import java.io.Writer;
++
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServlet;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++
++import org.apache.hadoop.http.HttpServer;
++
++/**
++ * A servlet to print out the running configuration data.
++ */
++public class ConfServlet extends HttpServlet {
++  private static final long serialVersionUID = 1L;
++
++  private static final String FORMAT_JSON = "json";
++  private static final String FORMAT_XML = "xml";
++  private static final String FORMAT_PARAM = "format";
++
++  /**
++   * Return the Configuration of the daemon hosting this servlet.
++   * This is populated when the HttpServer starts.
++   */
++  private Configuration getConfFromContext() {
++    Configuration conf = (Configuration)getServletContext().getAttribute(
++        HttpServer.CONF_CONTEXT_ATTRIBUTE);
++    assert conf != null;
++    return conf;
++  }
++
++  @Override
++  public void doGet(HttpServletRequest request, HttpServletResponse response)
++      throws ServletException, IOException {
++    String format = request.getParameter(FORMAT_PARAM);
++    if (null == format) {
++      format = FORMAT_XML;
++    }
++
++    if (FORMAT_XML.equals(format)) {
++      response.setContentType("text/xml");
++    } else if (FORMAT_JSON.equals(format)) {
++      response.setContentType("text/javascript");
++    }
++
++    OutputStreamWriter out = new OutputStreamWriter(response.getOutputStream());
++    try {
++      writeResponse(getConfFromContext(), out, format);
++    } catch (BadFormatException bfe) {
++      response.sendError(HttpServletResponse.SC_BAD_REQUEST, bfe.getMessage());
++    }
++    out.close();
++  }
++
++  /**
++   * Guts of the servlet - extracted for easy testing.
++   */
++  static void writeResponse(Configuration conf, Writer out, String format)
++    throws IOException, BadFormatException {
++    if (FORMAT_JSON.equals(format)) {
++      Configuration.dumpConfiguration(conf, out);
++    } else if (FORMAT_XML.equals(format)) {
++      conf.writeXml(out);
++    } else {
++      throw new BadFormatException("Bad format: " + format);
++    }
++  }
++
++  public static class BadFormatException extends Exception {
++    private static final long serialVersionUID = 1L;
++
++    public BadFormatException(String msg) {
++      super(msg);
++    }
++  }
++
++}
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index 624058d..a6f2bb6 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -27,6 +27,7 @@ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.InputStreamReader;
+ import java.io.OutputStream;
++import java.io.OutputStreamWriter;
+ import java.io.Reader;
+ import java.io.Writer;
+ import java.net.URL;
+@@ -55,6 +56,7 @@ import javax.xml.parsers.DocumentBuilder;
+ import javax.xml.parsers.DocumentBuilderFactory;
+ import javax.xml.parsers.ParserConfigurationException;
+ import javax.xml.transform.Transformer;
++import javax.xml.transform.TransformerException;
+ import javax.xml.transform.TransformerFactory;
+ import javax.xml.transform.dom.DOMSource;
+ import javax.xml.transform.stream.StreamResult;
+@@ -69,6 +71,7 @@ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ import org.codehaus.jackson.JsonFactory;
+ import org.codehaus.jackson.JsonGenerator;
++import org.w3c.dom.Comment;
+ import org.w3c.dom.DOMException;
+ import org.w3c.dom.Document;
+ import org.w3c.dom.Element;
+@@ -155,6 +158,12 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+   private ArrayList<Object> resources = new ArrayList<Object>();
+ 
+   /**
++   * The value reported as the setting resource when a key is set
++   * by code rather than a file resource.
++   */
++  static final String UNKNOWN_RESOURCE = "Unknown";
++
++  /**
+    * List of configuration parameters marked <b>final</b>. 
+    */
+   private Set<String> finalParameters = new HashSet<String>();
+@@ -178,12 +187,6 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+     CACHE_CLASSES = new ConcurrentHashMap<ClassLoader, Map<String, Class<?>>>();
+   
+   /**
+-   * Flag to indicate if the storage of resource which updates a key needs 
+-   * to be stored for each key
+-   */
+-  private boolean storeResource;
+-  
+-  /**
+    * Stores the mapping of key to the resource which modifies or loads 
+    * the key most recently
+    */
+@@ -230,27 +233,10 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    */
+   public Configuration(boolean loadDefaults) {
+     this.loadDefaults = loadDefaults;
++    updatingResource = new HashMap<String, String>();
+     synchronized(Configuration.class) {
+       REGISTRY.put(this, null);
+     }
+-    this.storeResource = false;
+-  }
+-  
+-  /**
+-   * A new configuration with the same settings and additional facility for
+-   * storage of resource to each key which loads or updates 
+-   * the key most recently
+-   * @param other the configuration from which to clone settings
+-   * @param storeResource flag to indicate if the storage of resource to 
+-   * each key is to be stored
+-   */
+-  private Configuration(Configuration other, boolean storeResource) {
+-    this(other);
+-    this.loadDefaults = other.loadDefaults;
+-    this.storeResource = storeResource;
+-    if (storeResource) {
+-      updatingResource = new HashMap<String, String>();
+-    }
+   }
+   
+   /** 
+@@ -269,6 +255,8 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+      if (other.overlay!=null) {
+        this.overlay = (Properties)other.overlay.clone();
+      }
++
++     this.updatingResource = new HashMap<String, String>(other.updatingResource);
+    }
+    
+     this.finalParameters = new HashSet<String>(other.finalParameters);
+@@ -448,6 +436,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+   public void set(String name, String value) {
+     getOverlay().setProperty(name, value);
+     getProps().setProperty(name, value);
++    updatingResource.put(name, UNKNOWN_RESOURCE);
+   }
+   
+   /**
+@@ -1180,10 +1169,8 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+       loadResources(properties, resources, quietmode);
+       if (overlay!= null) {
+         properties.putAll(overlay);
+-        if (storeResource) {
+-          for (Map.Entry<Object,Object> item: overlay.entrySet()) {
+-            updatingResource.put((String) item.getKey(), "Unknown");
+-          }
++        for (Map.Entry<Object,Object> item: overlay.entrySet()) {
++          updatingResource.put((String) item.getKey(), UNKNOWN_RESOURCE);
+         }
+       }
+     }
+@@ -1360,9 +1347,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+           if (value != null) {
+             if (!finalParameters.contains(attr)) {
+               properties.setProperty(attr, value);
+-              if (storeResource) {
+-                updatingResource.put(attr, name.toString());
+-              }
++              updatingResource.put(attr, name.toString());
+             } else {
+               LOG.warn(name+":a attempt to override final parameter: "+attr
+                      +";  Ignoring.");
+@@ -1390,12 +1375,22 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+   }
+ 
+   /** 
+-   * Write out the non-default properties in this configuration to the give
++   * Write out the non-default properties in this configuration to the given
+    * {@link OutputStream}.
+    * 
+    * @param out the output stream to write to.
+    */
+   public void writeXml(OutputStream out) throws IOException {
++    writeXml(new OutputStreamWriter(out));
++  }
++
++  /** 
++   * Write out the non-default properties in this configuration to the given
++   * {@link Writer}.
++   * 
++   * @param out the writer to write to.
++   */
++  public synchronized void writeXml(Writer out) throws IOException {
+     Properties properties = getProps();
+     try {
+       Document doc =
+@@ -1414,7 +1409,12 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+         }
+         Element propNode = doc.createElement("property");
+         conf.appendChild(propNode);
+-      
++
++        if (updatingResource != null) {
++          Comment commentNode = doc.createComment(
++            "Loaded from " + updatingResource.get(name));
++          propNode.appendChild(commentNode);
++        }
+         Element nameNode = doc.createElement("name");
+         nameNode.appendChild(doc.createTextNode(name));
+         propNode.appendChild(nameNode);
+@@ -1431,8 +1431,10 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+       TransformerFactory transFactory = TransformerFactory.newInstance();
+       Transformer transformer = transFactory.newTransformer();
+       transformer.transform(source, result);
+-    } catch (Exception e) {
+-      throw new RuntimeException(e);
++    } catch (TransformerException te) {
++      throw new IOException(te);
++    } catch (ParserConfigurationException pe) {
++      throw new IOException(pe);
+     }
+   }
+ 
+@@ -1447,26 +1449,26 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    * @param out the Writer to write to
+    * @throws IOException
+    */
+-  public static void dumpConfiguration(Configuration conf, 
++  public static void dumpConfiguration(Configuration config,
+       Writer out) throws IOException {
+-    Configuration config = new Configuration(conf,true);
+-    config.reloadConfiguration();
+     JsonFactory dumpFactory = new JsonFactory();
+     JsonGenerator dumpGenerator = dumpFactory.createJsonGenerator(out);
+     dumpGenerator.writeStartObject();
+     dumpGenerator.writeFieldName("properties");
+     dumpGenerator.writeStartArray();
+     dumpGenerator.flush();
+-    for (Map.Entry<Object,Object> item: config.getProps().entrySet()) {
+-      dumpGenerator.writeStartObject();
+-      dumpGenerator.writeStringField("key", (String) item.getKey());
+-      dumpGenerator.writeStringField("value", 
+-          config.get((String) item.getKey()));
+-      dumpGenerator.writeBooleanField("isFinal",
+-          config.finalParameters.contains(item.getKey()));
+-      dumpGenerator.writeStringField("resource",
+-          config.updatingResource.get(item.getKey()));
+-      dumpGenerator.writeEndObject();
++    synchronized (config) {
++      for (Map.Entry<Object,Object> item: config.getProps().entrySet()) {
++        dumpGenerator.writeStartObject();
++        dumpGenerator.writeStringField("key", (String) item.getKey());
++        dumpGenerator.writeStringField("value", 
++                                       config.get((String) item.getKey()));
++        dumpGenerator.writeBooleanField("isFinal",
++                                        config.finalParameters.contains(item.getKey()));
++        dumpGenerator.writeStringField("resource",
++                                       config.updatingResource.get(item.getKey()));
++        dumpGenerator.writeEndObject();
++      }
+     }
+     dumpGenerator.writeEndArray();
+     dumpGenerator.writeEndObject();
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index 10e9b38..9419e18 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -43,6 +43,7 @@ import javax.servlet.http.HttpServletResponse;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.conf.ConfServlet;
+ import org.apache.hadoop.log.LogLevel;
+ import org.apache.hadoop.metrics.MetricsServlet;
+ import org.apache.hadoop.security.Krb5AndCertsSslSocketConnector;
+@@ -87,11 +88,10 @@ public class HttpServer implements FilterContainer {
+ 
+   // The ServletContext attribute where the daemon Configuration
+   // gets stored.
+-  static final String CONF_CONTEXT_ATTRIBUTE = "hadoop.conf";
++  public static final String CONF_CONTEXT_ATTRIBUTE = "hadoop.conf";
+   static final String ADMINS_ACL = "admins.acl";
+ 
+   private AccessControlList adminsAcl;
+-
+   protected final Server webServer;
+   protected final Connector listener;
+   protected final WebAppContext webAppContext;
+@@ -264,6 +264,7 @@ public class HttpServer implements FilterContainer {
+     addServlet("stacks", "/stacks", StackServlet.class);
+     addServlet("logLevel", "/logLevel", LogLevel.Servlet.class);
+     addServlet("metrics", "/metrics", MetricsServlet.class);
++    addServlet("conf", "/conf", ConfServlet.class);
+   }
+ 
+   public void addContext(Context ctxt, boolean isFiltered)
+diff --git a/src/test/org/apache/hadoop/conf/TestConfServlet.java b/src/test/org/apache/hadoop/conf/TestConfServlet.java
+new file mode 100644
+index 0000000..edc0cab
+--- /dev/null
++++ b/src/test/org/apache/hadoop/conf/TestConfServlet.java
+@@ -0,0 +1,111 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.conf;
++
++import java.io.StringWriter;
++import java.io.StringReader;
++import java.util.Map;
++import javax.xml.parsers.DocumentBuilder;
++import javax.xml.parsers.DocumentBuilderFactory;
++
++import org.mortbay.util.ajax.JSON;
++import org.mortbay.util.ajax.JSON.Output;
++import org.w3c.dom.Document;
++import org.w3c.dom.Element;
++import org.w3c.dom.Node;
++import org.w3c.dom.NodeList;
++import org.xml.sax.InputSource;
++
++import junit.framework.TestCase;
++import org.junit.Test;
++
++/**
++ * Basic test case that the ConfServlet can write configuration
++ * to its output in XML and JSON format.
++ */
++public class TestConfServlet extends TestCase {
++  private static final String TEST_KEY = "testconfservlet.key";
++  private static final String TEST_VAL = "testval";
++
++  private Configuration getTestConf() {
++    Configuration testConf = new Configuration();
++    testConf.set(TEST_KEY, TEST_VAL);
++    return testConf;
++  }
++
++  @Test
++  @SuppressWarnings("unchecked")
++  public void testWriteJson() throws Exception {
++    StringWriter sw = new StringWriter();
++    ConfServlet.writeResponse(getTestConf(), sw, "json");
++    String json = sw.toString();
++    boolean foundSetting = false;
++    Object parsed = JSON.parse(json);
++    Object[] properties = ((Map<String, Object[]>)parsed).get("properties");
++    for (Object o : properties) {
++      Map<String, Object> propertyInfo = (Map<String, Object>)o;
++      String key = (String)propertyInfo.get("key");
++      String val = (String)propertyInfo.get("value");
++      String resource = (String)propertyInfo.get("resource");
++      System.err.println("k: " + key + " v: " + val + " r: " + resource);
++      if (TEST_KEY.equals(key) && TEST_VAL.equals(val)
++          && Configuration.UNKNOWN_RESOURCE.equals(resource)) {
++        foundSetting = true;
++      }
++    }
++    assertTrue(foundSetting);
++  }
++
++  @Test
++  public void testWriteXml() throws Exception {
++    StringWriter sw = new StringWriter();
++    ConfServlet.writeResponse(getTestConf(), sw, "xml");
++    String xml = sw.toString();
++
++    DocumentBuilderFactory docBuilderFactory 
++      = DocumentBuilderFactory.newInstance();
++    DocumentBuilder builder = docBuilderFactory.newDocumentBuilder();
++    Document doc = builder.parse(new InputSource(new StringReader(xml)));
++    NodeList nameNodes = doc.getElementsByTagName("name");
++    boolean foundSetting = false;
++    for (int i = 0; i < nameNodes.getLength(); i++) {
++      Node nameNode = nameNodes.item(i);
++      String key = nameNode.getTextContent();
++      System.err.println("xml key: " + key);
++      if (TEST_KEY.equals(key)) {
++        foundSetting = true;
++        Element propertyElem = (Element)nameNode.getParentNode();
++        String val = propertyElem.getElementsByTagName("value").item(0).getTextContent();
++        assertEquals(TEST_VAL, val);
++      }
++    }
++    assertTrue(foundSetting);
++  }
++
++  @Test
++  public void testBadFormat() throws Exception {
++    StringWriter sw = new StringWriter();
++    try {
++      ConfServlet.writeResponse(getTestConf(), sw, "not a format");
++      fail("writeResponse with bad format didn't throw!");
++    } catch (ConfServlet.BadFormatException bfe) {
++      // expected
++    }
++    assertEquals("", sw.toString());
++  }
++}
+\ No newline at end of file
+-- 
+1.7.0.4
+

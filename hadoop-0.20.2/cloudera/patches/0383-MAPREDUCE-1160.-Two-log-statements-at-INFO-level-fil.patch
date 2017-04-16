@@ -1,0 +1,72 @@
+From ef18bb354fc9cd2b0f99bc141e094d328f4f1f14 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 29 Oct 2009 10:19:27 +0530
+Subject: [PATCH 0383/1179] MAPREDUCE-1160. Two log statements at INFO level fill up jobtracker logs
+
+Patch: https://issues.apache.org/jira/secure/attachment/12423534/MAPREDUCE-1160-20.patch
+Author: Ravi Gummadi
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    8 ++++++--
+ .../apache/hadoop/mapred/ResourceEstimator.java    |   12 ++++++++----
+ 2 files changed, 14 insertions(+), 6 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index ed6cbde..92fe97b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -1909,7 +1909,9 @@ public class JobInProgress {
+                                           final int maxCacheLevel,
+                                           final double avgProgress) {
+     if (numMapTasks == 0) {
+-      LOG.info("No maps to schedule for " + profile.getJobID());
++      if(LOG.isDebugEnabled()) {
++        LOG.debug("No maps to schedule for " + profile.getJobID());
++      }
+       return -1;
+     }
+ 
+@@ -2123,7 +2125,9 @@ public class JobInProgress {
+                                              int numUniqueHosts,
+                                              double avgProgress) {
+     if (numReduceTasks == 0) {
+-      LOG.info("No reduces to schedule for " + profile.getJobID());
++      if(LOG.isDebugEnabled()) {
++        LOG.debug("No reduces to schedule for " + profile.getJobID());
++      }
+       return -1;
+     }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/ResourceEstimator.java b/src/mapred/org/apache/hadoop/mapred/ResourceEstimator.java
+index e7d6517..6e9154e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ResourceEstimator.java
++++ b/src/mapred/org/apache/hadoop/mapred/ResourceEstimator.java
+@@ -56,9 +56,11 @@ class ResourceEstimator {
+       completedMapsInputSize+=(tip.getMapInputSize()+1);
+       completedMapsOutputSize+=ts.getOutputSize();
+ 
+-      LOG.info("completedMapsUpdates:"+completedMapsUpdates+"  "+
+-          "completedMapsInputSize:"+completedMapsInputSize+"  " +
+-        "completedMapsOutputSize:"+completedMapsOutputSize);
++      if(LOG.isDebugEnabled()) {
++        LOG.debug("completedMapsUpdates:"+completedMapsUpdates+"  "+
++                  "completedMapsInputSize:"+completedMapsInputSize+"  " +
++                  "completedMapsOutputSize:"+completedMapsOutputSize);
++      }
+     }
+   }
+ 
+@@ -73,7 +75,9 @@ class ResourceEstimator {
+       //add desiredMaps() so that randomwriter case doesn't blow up
+       long estimate = Math.round((inputSize * 
+           completedMapsOutputSize * 2.0)/completedMapsInputSize);
+-      LOG.debug("estimate total map output will be " + estimate);
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("estimate total map output will be " + estimate);
++      }
+       return estimate;
+     }
+   }
+-- 
+1.7.0.4
+

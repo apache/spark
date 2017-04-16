@@ -1,0 +1,10 @@
+0 del
+1 upd hadoop
+2 del
+3 upd hadoop
+4 del
+5 upd hadoop
+6 del
+7 upd hadoop
+8 del
+9 upd hadoop

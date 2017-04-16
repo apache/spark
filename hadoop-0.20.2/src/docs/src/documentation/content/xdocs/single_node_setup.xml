@@ -1,0 +1,293 @@
+<?xml version="1.0"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN" "http://forrest.apache.org/dtd/document-v20.dtd">
+
+<document>
+  
+  <header>
+    <title>Single Node Setup</title>
+  </header>
+  
+  <body>
+  
+    <section>
+      <title>Purpose</title>
+      
+      <p>This document describes how to set up and configure a single-node Hadoop
+      installation so that you can quickly perform simple operations using Hadoop
+      MapReduce and the Hadoop Distributed File System (HDFS).</p>
+      
+    </section>
+    
+    <section id="PreReqs">
+      <title>Prerequisites</title>
+      
+      <section>
+        <title>Supported Platforms</title>
+        
+        <ul>
+          <li>
+            GNU/Linux is supported as a development and production platform. 
+            Hadoop has been demonstrated on GNU/Linux clusters with 2000 nodes.
+          </li>
+          <li>
+            Win32 is supported as a <em>development platform</em>. Distributed 
+            operation has not been well tested on Win32, so it is not 
+            supported as a <em>production platform</em>.
+          </li>
+        </ul>        
+      </section>
+      
+      <section>
+        <title>Required Software</title>
+        <p>Required software for Linux and Windows include:</p>
+        <ol>
+          <li>
+            Java<sup>TM</sup> 1.6.x, preferably from Sun, must be installed.
+          </li>
+          <li>
+            <strong>ssh</strong> must be installed and <strong>sshd</strong> must 
+            be running to use the Hadoop scripts that manage remote Hadoop 
+            daemons.
+          </li>
+        </ol>
+        <p>Additional requirements for Windows include:</p>
+        <ol>
+          <li>
+            <a href="http://www.cygwin.com/">Cygwin</a> - Required for shell 
+            support in addition to the required software above. 
+          </li>
+        </ol>
+      </section>
+
+      <section>
+        <title>Installing Software</title>
+          
+        <p>If your cluster doesn't have the requisite software you will need to
+        install it.</p>
+          
+        <p>For example on Ubuntu Linux:</p>
+        <p>
+          <code>$ sudo apt-get install ssh</code><br/>
+          <code>$ sudo apt-get install rsync</code>
+        </p>
+          
+        <p>On Windows, if you did not install the required software when you 
+        installed cygwin, start the cygwin installer and select the packages:</p>
+        <ul>
+          <li>openssh - the <em>Net</em> category</li>
+        </ul>
+      </section>
+      
+    </section>
+    
+    <section>
+      <title>Download</title>
+      
+      <p>
+        To get a Hadoop distribution, download a recent 
+        <a href="ext:releases">stable release</a> from one of the Apache Download
+        Mirrors.
+      </p>
+    </section>
+
+    <section>
+      <title>Prepare to Start the Hadoop Cluster</title>
+      <p>
+        Unpack the downloaded Hadoop distribution. In the distribution, edit the
+        file <code>conf/hadoop-env.sh</code> to define at least 
+        <code>JAVA_HOME</code> to be the root of your Java installation.
+      </p>
+
+	  <p>
+	    Try the following command:<br/>
+        <code>$ bin/hadoop</code><br/>
+        This will display the usage documentation for the <strong>hadoop</strong> 
+        script.
+      </p>
+      
+      <p>Now you are ready to start your Hadoop cluster in one of the three supported
+      modes:
+      </p>
+      <ul>
+        <li>Local (Standalone) Mode</li>
+        <li>Pseudo-Distributed Mode</li>
+        <li>Fully-Distributed Mode</li>
+      </ul>
+    </section>
+    
+    <section id="Local">
+      <title>Standalone Operation</title>
+      
+      <p>By default, Hadoop is configured to run in a non-distributed 
+      mode, as a single Java process. This is useful for debugging.</p>
+      
+      <p>
+        The following example copies the unpacked <code>conf</code> directory to 
+        use as input and then finds and displays every match of the given regular 
+        expression. Output is written to the given <code>output</code> directory.
+        <br/>
+        <code>$ mkdir input</code><br/>
+        <code>$ cp conf/*.xml input</code><br/>
+        <code>
+          $ bin/hadoop jar hadoop-examples-*.jar grep input output 'dfs[a-z.]+'
+        </code><br/>
+        <code>$ cat output/*</code>
+      </p>
+    </section>
+    
+    <section id="PseudoDistributed">
+      <title>Pseudo-Distributed Operation</title>
+
+	  <p>Hadoop can also be run on a single-node in a pseudo-distributed mode 
+	  where each Hadoop daemon runs in a separate Java process.</p>
+	  
+      <section>
+        <title>Configuration</title>
+        <p>Use the following:
+        <br/><br/>
+        <code>conf/core-site.xml</code>:</p>
+        
+        <source>
+&lt;configuration&gt;
+     &lt;property&gt;
+         &lt;name&gt;fs.default.name&lt;/name&gt;
+         &lt;value&gt;hdfs://localhost:9000&lt;/value&gt;
+     &lt;/property&gt;
+&lt;/configuration&gt;
+</source>
+      
+        <p><br/><code>conf/hdfs-site.xml</code>:</p>  
+<source>
+&lt;configuration&gt;
+     &lt;property&gt;
+         &lt;name&gt;dfs.replication&lt;/name&gt;
+         &lt;value&gt;1&lt;/value&gt;
+     &lt;/property&gt;
+&lt;/configuration&gt;
+</source>        
+        
+      
+        <p><br/><code>conf/mapred-site.xml</code>:</p>
+<source>
+&lt;configuration&gt;
+     &lt;property&gt;
+         &lt;name&gt;mapred.job.tracker&lt;/name&gt;
+         &lt;value&gt;localhost:9001&lt;/value&gt;
+     &lt;/property&gt;
+&lt;/configuration&gt;
+</source>        
+        
+        
+        
+      </section>
+
+      <section>
+        <title>Setup passphraseless <em>ssh</em></title>
+        
+        <p>
+          Now check that you can ssh to the localhost without a passphrase:<br/>
+          <code>$ ssh localhost</code>
+        </p>
+        
+        <p>
+          If you cannot ssh to localhost without a passphrase, execute the 
+          following commands:<br/>
+   		  <code>$ ssh-keygen -t dsa -P '' -f ~/.ssh/id_dsa</code><br/>
+		  <code>$ cat ~/.ssh/id_dsa.pub >> ~/.ssh/authorized_keys</code>
+		</p>
+      </section>
+    
+      <section>
+        <title>Execution</title>
+        
+        <p>
+          Format a new distributed-filesystem:<br/>
+          <code>$ bin/hadoop namenode -format</code>
+        </p>
+
+		<p>
+		  Start the hadoop daemons:<br/>
+          <code>$ bin/start-all.sh</code>
+        </p>
+
+        <p>The hadoop daemon log output is written to the 
+        <code>${HADOOP_LOG_DIR}</code> directory (defaults to 
+        <code>${HADOOP_HOME}/logs</code>).</p>
+
+        <p>Browse the web interface for the NameNode and the JobTracker; by
+        default they are available at:</p>
+        <ul>
+          <li>
+            <code>NameNode</code> - 
+            <a href="http://localhost:50070/">http://localhost:50070/</a>
+          </li>
+          <li>
+            <code>JobTracker</code> - 
+            <a href="http://localhost:50030/">http://localhost:50030/</a>
+          </li>
+        </ul>
+        
+        <p>
+          Copy the input files into the distributed filesystem:<br/>
+		  <code>$ bin/hadoop fs -put conf input</code>
+		</p>
+		
+        <p>
+          Run some of the examples provided:<br/>
+          <code>
+            $ bin/hadoop jar hadoop-examples-*.jar grep input output 'dfs[a-z.]+'
+          </code>
+        </p>
+        
+        <p>Examine the output files:</p>
+        <p>
+          Copy the output files from the distributed filesystem to the local 
+          filesytem and examine them:<br/>
+          <code>$ bin/hadoop fs -get output output</code><br/>
+          <code>$ cat output/*</code>
+        </p>
+        <p> or </p>
+        <p>
+          View the output files on the distributed filesystem:<br/>
+          <code>$ bin/hadoop fs -cat output/*</code>
+        </p>
+
+		<p>
+		  When you're done, stop the daemons with:<br/>
+		  <code>$ bin/stop-all.sh</code>
+		</p>
+      </section>
+    </section>
+    
+    <section id="FullyDistributed">
+      <title>Fully-Distributed Operation</title>
+      
+	  <p>For information on setting up fully-distributed, non-trivial clusters
+	  see <a href="cluster_setup.html">Cluster Setup</a>.</p>  
+    </section>
+    
+    <p>
+      <em>Java and JNI are trademarks or registered trademarks of 
+      Sun Microsystems, Inc. in the United States and other countries.</em>
+    </p>
+    
+  </body>
+  
+</document>

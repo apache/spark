@@ -1,0 +1,94 @@
+From d0b28bf2a7ebeff419c7226310aaff7de290af22 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 10 Sep 2010 09:41:32 -0700
+Subject: [PATCH 0688/1179] HADOOP-6881. The efficient comparators aren't always used except for BytesWritable and Text.
+
+Reason: Bug
+Author: Owen O'Malley
+Ref: CDH-2112
+---
+ .../org/apache/hadoop/io/WritableComparator.java   |   31 ++++++++++++++++++--
+ src/test/org/apache/hadoop/io/TestWritable.java    |   23 ++++++++++++++
+ 2 files changed, 51 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/WritableComparator.java b/src/core/org/apache/hadoop/io/WritableComparator.java
+index b0b08b4..332e5eb 100644
+--- a/src/core/org/apache/hadoop/io/WritableComparator.java
++++ b/src/core/org/apache/hadoop/io/WritableComparator.java
+@@ -38,13 +38,38 @@ public class WritableComparator implements RawComparator {
+     new HashMap<Class, WritableComparator>(); // registry
+ 
+   /** Get a comparator for a {@link WritableComparable} implementation. */
+-  public static synchronized WritableComparator get(Class<? extends WritableComparable> c) {
++  public static synchronized 
++  WritableComparator get(Class<? extends WritableComparable> c) {
+     WritableComparator comparator = comparators.get(c);
+-    if (comparator == null)
+-      comparator = new WritableComparator(c, true);
++    if (comparator == null) {
++      // force the static initializers to run
++      forceInit(c);
++      // look to see if it is defined now
++      comparator = comparators.get(c);
++      // if not, use the generic one
++      if (comparator == null) {
++        comparator = new WritableComparator(c, true);
++        comparators.put(c, comparator);
++      }
++    }
+     return comparator;
+   }
+ 
++  /**
++   * Force initialization of the static members.
++   * As of Java 5, referencing a class doesn't force it to initialize. Since
++   * this class requires that the classes be initialized to declare their
++   * comparators, we force that initialization to happen.
++   * @param cls the class to initialize
++   */
++  private static void forceInit(Class<?> cls) {
++    try {
++      Class.forName(cls.getName(), true, cls.getClassLoader());
++    } catch (ClassNotFoundException e) {
++      throw new IllegalArgumentException("Can't initialize class " + cls, e);
++    }
++  } 
++
+   /** Register an optimized comparator for a {@link WritableComparable}
+    * implementation. */
+   public static synchronized void define(Class c,
+diff --git a/src/test/org/apache/hadoop/io/TestWritable.java b/src/test/org/apache/hadoop/io/TestWritable.java
+index 9e7de1e..a60ef1b 100644
+--- a/src/test/org/apache/hadoop/io/TestWritable.java
++++ b/src/test/org/apache/hadoop/io/TestWritable.java
+@@ -96,4 +96,27 @@ public class TestWritable extends TestCase {
+     return after;
+   }
+ 	
++  private static class FrobComparator extends WritableComparator {
++    public FrobComparator() { super(Frob.class); }
++    @Override public int compare(byte[] b1, int s1, int l1,
++                                 byte[] b2, int s2, int l2) {
++      return 0;
++    }
++  }
++
++  private static class Frob implements WritableComparable {
++    static {                                     // register default comparator
++      WritableComparator.define(Frob.class, new FrobComparator());
++    }
++    @Override public void write(DataOutput out) throws IOException {}
++    @Override public void readFields(DataInput in) throws IOException {}
++    @Override public int compareTo(Object o) { return 0; }
++  }
++
++  /** Test that comparator is defined. */
++  public static void testGetComparator() throws Exception {
++    assert(WritableComparator.get(Frob.class) instanceof FrobComparator);
++  }
++
++
+ }
+-- 
+1.7.0.4
+

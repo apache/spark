@@ -1,0 +1,39 @@
+From db680058f5796fc41d61242d60bc86b1b25facf9 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:52:07 -0800
+Subject: [PATCH 0218/1179] MAPREDUCE-1469. Sqoop should disable speculative execution in export
+
+Description: Concurrent writers of the same output shard may cause the database to try to insert duplicate primary keys concurrently. Not a good situation. Speculative execution should be forced off for this operation.
+Reason: Bugfix (race condition)
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../apache/hadoop/sqoop/mapreduce/ExportJob.java   |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/ExportJob.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/ExportJob.java
+index e3aed3a..84eb8f7 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/ExportJob.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapreduce/ExportJob.java
+@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.NullWritable;
+ import org.apache.hadoop.io.SequenceFile;
++import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.mapreduce.lib.db.DBConfiguration;
+ import org.apache.hadoop.mapreduce.lib.db.DBOutputFormat;
+@@ -172,6 +173,10 @@ public class ExportJob {
+       FileInputFormat.addInputPath(job, inputPath);
+       job.setNumReduceTasks(0);
+ 
++      // Concurrent writes of the same records would be problematic.
++      JobConf jobConf = (JobConf) job.getConfiguration();
++      jobConf.setMapSpeculativeExecution(false);
++
+       ConnManager mgr = new ConnFactory(conf).getManager(options);
+       String username = options.getUsername();
+       if (null == username || username.length() == 0) {
+-- 
+1.7.0.4
+

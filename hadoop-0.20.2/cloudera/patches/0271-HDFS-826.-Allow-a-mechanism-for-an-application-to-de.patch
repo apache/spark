@@ -1,0 +1,132 @@
+From 8e888717294496caae825d7f3f609d0661e7997a Mon Sep 17 00:00:00 2001
+From: Dhruba Borthakur <dhruba@apache.org>
+Date: Thu, 10 Jun 2010 18:46:03 +0000
+Subject: [PATCH 0271/1179] HDFS-826. Allow a mechanism for an application to detect that datanode(s) have died in the write pipeline. (dhruba)
+
+Description: Adds an API in DFSOutputStream to determine the current length
+             of the write pipeline.
+Reason: Necessary for better reliability of HBase write-ahead logs.
+Author: Dhruba Borthakur
+Ref: CDH-931
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   29 ++++++++++++++++---
+ .../org/apache/hadoop/hdfs/TestFileCreation.java   |   17 ++++++++++-
+ 2 files changed, 39 insertions(+), 7 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 7d81118..094ca88 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2159,6 +2159,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     private int maxRecoveryErrorCount = 5; // try block recovery 5 times
+     private volatile boolean appendChunk = false;   // appending to existing partial block
+     private long initialFileSize = 0; // at time of file open
++    private Progressable progress;
++    private short blockReplication; // replication factor of file
+ 
+     private void setLastException(IOException e) {
+       if (lastException == null) {
+@@ -2697,13 +2699,12 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       }
+     }
+ 
+-    private Progressable progress;
+-
+     private DFSOutputStream(String src, long blockSize, Progressable progress,
+-        int bytesPerChecksum) throws IOException {
++        int bytesPerChecksum, short replication) throws IOException {
+       super(new PureJavaCrc32(), bytesPerChecksum, 4);
+       this.src = src;
+       this.blockSize = blockSize;
++      this.blockReplication = replication;
+       this.progress = progress;
+       if (progress != null) {
+         LOG.debug("Set non-null progress callback on DFSOutputStream "+src);
+@@ -2727,7 +2728,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     DFSOutputStream(String src, FsPermission masked, boolean overwrite,
+         short replication, long blockSize, Progressable progress,
+         int buffersize, int bytesPerChecksum) throws IOException {
+-      this(src, blockSize, progress, bytesPerChecksum);
++      this(src, blockSize, progress, bytesPerChecksum, replication);
+ 
+       computePacketChunkSize(writePacketSize, bytesPerChecksum);
+ 
+@@ -2749,7 +2750,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     DFSOutputStream(String src, int buffersize, Progressable progress,
+         LocatedBlock lastBlock, FileStatus stat,
+         int bytesPerChecksum) throws IOException {
+-      this(src, stat.getBlockSize(), progress, bytesPerChecksum);
++      this(src, stat.getBlockSize(), progress, bytesPerChecksum, stat.getReplication());
+       initialFileSize = stat.getLen(); // length of file when opened
+ 
+       //
+@@ -3169,6 +3170,24 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     }
+ 
+     /**
++     * Returns the number of replicas of current block. This can be different
++     * from the designated replication factor of the file because the NameNode
++     * does not replicate the block to which a client is currently writing to.
++     * The client continues to write to a block even if a few datanodes in the
++     * write pipeline have failed. If the current block is full and the next
++     * block is not yet allocated, then this API will return 0 because there are
++     * no replicas in the pipeline.
++     */
++    public int getNumCurrentReplicas() throws IOException {
++      synchronized(dataQueue) {
++        if (nodes == null) {
++          return blockReplication;
++        }
++        return nodes.length;
++      }
++    }
++
++    /**
+      * Waits till all existing data is flushed and confirmations 
+      * received from datanodes. 
+      */
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileCreation.java b/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
+index c1912b8..3d6a36f 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
+@@ -93,7 +93,7 @@ public class TestFileCreation extends junit.framework.TestCase {
+     byte[] buffer = AppendTestUtil.randomBytes(seed, size);
+     stm.write(buffer, 0, size);
+   }
+-
++  
+   //
+   // verify that the data written to the full blocks are sane
+   // 
+@@ -478,7 +478,16 @@ public class TestFileCreation extends junit.framework.TestCase {
+                          + "Created file " + file1);
+ 
+       // write two full blocks.
+-      writeFile(stm, numBlocks * blockSize);
++      int remainingPiece = blockSize/2;
++      int blocksMinusPiece = numBlocks * blockSize - remainingPiece;
++      writeFile(stm, blocksMinusPiece);
++      stm.sync();
++      int actualRepl = ((DFSClient.DFSOutputStream)(stm.getWrappedStream())).
++                        getNumCurrentReplicas();
++      // if we sync on a block boundary, actualRepl will be 0
++      assertTrue(file1 + " should be replicated to 1 datanodes, not " + actualRepl,
++                 actualRepl == 1);
++      writeFile(stm, remainingPiece);
+       stm.sync();
+ 
+       // rename file wile keeping it open.
+@@ -686,6 +695,10 @@ public class TestFileCreation extends junit.framework.TestCase {
+       FSDataOutputStream out = TestFileCreation.createFile(dfs, fpath, DATANODE_NUM);
+       out.write("something".getBytes());
+       out.sync();
++      int actualRepl = ((DFSClient.DFSOutputStream)(out.getWrappedStream())).
++                        getNumCurrentReplicas();
++      assertTrue(f + " should be replicated to " + DATANODE_NUM + " datanodes.",
++                 actualRepl == DATANODE_NUM);
+ 
+       // set the soft and hard limit to be 1 second so that the
+       // namenode triggers lease recovery
+-- 
+1.7.0.4
+

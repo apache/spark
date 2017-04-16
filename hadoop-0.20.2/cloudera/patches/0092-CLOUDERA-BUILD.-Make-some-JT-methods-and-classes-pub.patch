@@ -1,0 +1,167 @@
+From 90f9c40df18fe464383de52e3d3952638a393e34 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 15:01:08 -0800
+Subject: [PATCH 0092/1179] CLOUDERA-BUILD. Make some JT methods and classes public for use from within contrib plugins
+
+Author: Henry Robinson
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    8 ++++----
+ .../org/apache/hadoop/mapred/TaskInProgress.java   |    6 +++---
+ .../org/apache/hadoop/mapred/TaskStatus.java       |    4 ++--
+ .../apache/hadoop/mapred/TaskTrackerStatus.java    |   12 ++++++------
+ 4 files changed, 15 insertions(+), 15 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 85310ee..0fbddec 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -615,7 +615,7 @@ public class JobInProgress {
+    * Get the list of map tasks
+    * @return the raw array of maps for this job
+    */
+-  TaskInProgress[] getMapTasks() {
++  public TaskInProgress[] getMapTasks() {
+     return maps;
+   }
+     
+@@ -623,7 +623,7 @@ public class JobInProgress {
+    * Get the list of cleanup tasks
+    * @return the array of cleanup tasks for the job
+    */
+-  TaskInProgress[] getCleanupTasks() {
++  public TaskInProgress[] getCleanupTasks() {
+     return cleanup;
+   }
+   
+@@ -631,7 +631,7 @@ public class JobInProgress {
+    * Get the list of setup tasks
+    * @return the array of setup tasks for the job
+    */
+-  TaskInProgress[] getSetupTasks() {
++  public TaskInProgress[] getSetupTasks() {
+     return setup;
+   }
+   
+@@ -639,7 +639,7 @@ public class JobInProgress {
+    * Get the list of reduce tasks
+    * @return the raw array of reduce tasks for this job
+    */
+-  TaskInProgress[] getReduceTasks() {
++  public TaskInProgress[] getReduceTasks() {
+     return reduces;
+   }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+index 1aeefaf..4c845b4 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+@@ -50,7 +50,7 @@ import org.apache.hadoop.net.Node;
+  * ever have to handle.  Once those are up, the TIP is dead.
+  * **************************************************************
+  */
+-class TaskInProgress {
++public class TaskInProgress {
+   static final int MAX_TASK_EXECS = 1;
+   int maxTaskAttempts = 4;    
+   static final double SPECULATIVE_GAP = 0.2;
+@@ -428,7 +428,7 @@ class TaskInProgress {
+    * task ID and overall status, plus reports for all the
+    * component task-threads that have ever been started.
+    */
+-  synchronized TaskReport generateSingleReport() {
++  public synchronized TaskReport generateSingleReport() {
+     ArrayList<String> diagnostics = new ArrayList<String>();
+     for (List<String> l : taskDiagnosticData.values()) {
+       diagnostics.addAll(l);
+@@ -464,7 +464,7 @@ class TaskInProgress {
+    * @param taskId the id of the required task
+    * @return the list of diagnostics for that task
+    */
+-  synchronized List<String> getDiagnosticInfo(TaskAttemptID taskId) {
++  public synchronized List<String> getDiagnosticInfo(TaskAttemptID taskId) {
+     return taskDiagnosticData.get(taskId);
+   }
+     
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskStatus.java b/src/mapred/org/apache/hadoop/mapred/TaskStatus.java
+index d0c7e39..dac8db0 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskStatus.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskStatus.java
+@@ -32,7 +32,7 @@ import org.apache.hadoop.io.WritableUtils;
+  * not intended to be a comprehensive piece of data.
+  *
+  **************************************************/
+-abstract class TaskStatus implements Writable, Cloneable {
++public abstract class TaskStatus implements Writable, Cloneable {
+   static final Log LOG =
+     LogFactory.getLog(TaskStatus.class.getName());
+   
+@@ -67,7 +67,7 @@ abstract class TaskStatus implements Writable, Cloneable {
+                     State runState, String diagnosticInfo,
+                     String stateString, String taskTracker,
+                     Phase phase, Counters counters) {
+-    this.taskid = taskid;
++    this.taskid = taskid;    
+     this.progress = progress;
+     this.runState = runState;
+     this.diagnosticInfo = diagnosticInfo;
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java b/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
+index bcc54e7..3b5efde 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
+@@ -29,7 +29,7 @@ import java.util.*;
+  * unique TaskTracker it knows about.
+  *
+  **************************************************/
+-class TaskTrackerStatus implements Writable {
++public class TaskTrackerStatus implements Writable {
+ 
+   static {                                        // register a ctor
+     WritableFactories.setFactory
+@@ -52,7 +52,7 @@ class TaskTrackerStatus implements Writable {
+   /**
+    * Class representing a collection of resources on this tasktracker.
+    */
+-  static class ResourceStatus implements Writable {
++  public static class ResourceStatus implements Writable {
+     
+     private long totalVirtualMemory;
+     private long totalPhysicalMemory;
+@@ -85,7 +85,7 @@ class TaskTrackerStatus implements Writable {
+      * 
+      * @return the maximum amount of virtual memory on the tasktracker in bytes.
+      */
+-    long getTotalVirtualMemory() {
++    public long getTotalVirtualMemory() {
+       return totalVirtualMemory;
+     }
+ 
+@@ -107,7 +107,7 @@ class TaskTrackerStatus implements Writable {
+      * 
+      * @return maximum amount of physical memory on the tasktracker in bytes.
+      */
+-    long getTotalPhysicalMemory() {
++    public long getTotalPhysicalMemory() {
+       return totalPhysicalMemory;
+     }
+ 
+@@ -163,7 +163,7 @@ class TaskTrackerStatus implements Writable {
+      * Will return LONG_MAX if space hasn't been measured yet.
+      * @return bytes of available local disk space on this tasktracker.
+      */    
+-    long getAvailableSpace() {
++    public long getAvailableSpace() {
+       return availableSpace;
+     }
+     
+@@ -314,7 +314,7 @@ class TaskTrackerStatus implements Writable {
+    * 
+    * @return the resource status
+    */
+-  ResourceStatus getResourceStatus() {
++  public ResourceStatus getResourceStatus() {
+     return resStatus;
+   }
+   
+-- 
+1.7.0.4
+

@@ -1,0 +1,57 @@
+From 8f3777a09e9cc3e260e68c1a177908204b0dad8c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 19 Mar 2010 13:26:36 +0530
+Subject: [PATCH 0574/1179] MAPREDUCE-1417. Forrest documentation should be updated to reflect the changes in MAPREDUCE-744
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439247/MAPREDUCE-1417-20.patch
+Author: Ravi Gummadi
+Ref: CDH-648
+---
+ .../content/xdocs/mapred_tutorial.xml              |   31 +++++++++++++++++++-
+ 1 files changed, 30 insertions(+), 1 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+index 403ffcc..9ce33b0 100644
+--- a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
++++ b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+@@ -1916,7 +1916,36 @@
+           <code>mapred.job.classpath.{files|archives}</code>. Similarly the
+           cached files that are symlinked into the working directory of the
+           task can be used to distribute native libraries and load them.</p>
+-          
++          <section>
++            <title>Private and Public DistributedCache Files</title>
++            <p>DistributedCache files can be private or public, that 
++               determines how they can be shared on the slave nodes.</p>
++            <ul>
++              <li>"Private" DistributedCache files are cached in a local
++              directory private to the user whose jobs need these
++              files. These files are shared by all
++              tasks and jobs of the specific user only and cannot be accessed by
++              jobs of other users on the slaves. A DistributedCache file becomes private by
++              virtue of its permissions on the file system where the files
++              are uploaded, typically HDFS. If the file has no world readable
++              access, or if the directory path leading to the file has no
++              world executable access for lookup, then the file becomes private.
++              </li>
++              <li>"Public" DistributedCache files are cached in a global
++              directory and the file access is setup such that they are 
++              publicly visible to all users. These files can be shared by
++              tasks and jobs of all users on the slaves.
++              A DistributedCache file becomes public by virtue of its permissions
++              on the file system where the files are uploaded, typically HDFS. 
++              If the file has world readable access, AND if the directory
++              path leading to the file has world executable access for lookup,
++              then the file becomes public. In other words, if the user intends
++              to make a file publicly available to all users, the file permissions
++              must be set to be world readable, and the directory permissions
++              on the path leading to the file must be world executable. 
++              </li>
++            </ul>
++          </section>
+         </section>
+         
+         <section>
+-- 
+1.7.0.4
+

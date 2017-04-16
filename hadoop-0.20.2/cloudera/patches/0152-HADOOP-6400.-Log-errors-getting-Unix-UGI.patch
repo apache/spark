@@ -1,0 +1,36 @@
+From 7fd2cb371354219abd108fda35087f08dc481b35 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:27:31 -0800
+Subject: [PATCH 0152/1179] HADOOP-6400. Log errors getting Unix UGI
+
+Description: For various reasons, the calls out to `whoami` and `id` can fail when trying to get the unix UGI information. Currently it silently ignores failures and uses the default DrWho/Tardis ugi. This is extremely confusing for users - we should log the exception at warn level when the shell execs fail.
+Reason: Debug logging improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ .../hadoop/security/UnixUserGroupInformation.java  |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UnixUserGroupInformation.java b/src/core/org/apache/hadoop/security/UnixUserGroupInformation.java
+index 62cbb65..dcb13b9 100644
+--- a/src/core/org/apache/hadoop/security/UnixUserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UnixUserGroupInformation.java
+@@ -244,6 +244,7 @@ public class UnixUserGroupInformation extends UserGroupInformation {
+       try {
+         userName =  getUnixUserName();
+       } catch (Exception e) {
++        LOG.warn("Couldn't get unix username, using " + DEFAULT_USERNAME, e);
+         userName = DEFAULT_USERNAME;
+       }
+ 
+@@ -263,6 +264,7 @@ public class UnixUserGroupInformation extends UserGroupInformation {
+       try {
+         groupNames = getUnixGroups();
+       } catch (Exception e) {
++        LOG.warn("Couldn't get unix groups, using " + DEFAULT_GROUP, e);
+         groupNames = new String[1];
+         groupNames[0] = DEFAULT_GROUP;
+       }
+-- 
+1.7.0.4
+

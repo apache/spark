@@ -1,0 +1,61 @@
+From 0929aa6f798e6e1b736bc8715ade29686bec08f3 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Fri, 11 Mar 2011 18:49:07 -0800
+Subject: [PATCH 0923/1179] HADOOP-7183. WritableComparator.get should not cache comparator objects
+
+Reason: regression in HADOOP-6881
+Author: Tom White
+Ref: CDH-2810
+---
+ .../org/apache/hadoop/io/WritableComparator.java   |    4 ++--
+ src/test/org/apache/hadoop/io/TestWritable.java    |   14 +++++++++++++-
+ 2 files changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/WritableComparator.java b/src/core/org/apache/hadoop/io/WritableComparator.java
+index 332e5eb..122305d 100644
+--- a/src/core/org/apache/hadoop/io/WritableComparator.java
++++ b/src/core/org/apache/hadoop/io/WritableComparator.java
+@@ -49,7 +49,6 @@ public class WritableComparator implements RawComparator {
+       // if not, use the generic one
+       if (comparator == null) {
+         comparator = new WritableComparator(c, true);
+-        comparators.put(c, comparator);
+       }
+     }
+     return comparator;
+@@ -71,7 +70,8 @@ public class WritableComparator implements RawComparator {
+   } 
+ 
+   /** Register an optimized comparator for a {@link WritableComparable}
+-   * implementation. */
++   * implementation. Comparators registered with this method must be
++   * thread-safe. */
+   public static synchronized void define(Class c,
+                                          WritableComparator comparator) {
+     comparators.put(c, comparator);
+diff --git a/src/test/org/apache/hadoop/io/TestWritable.java b/src/test/org/apache/hadoop/io/TestWritable.java
+index a60ef1b..a456882 100644
+--- a/src/test/org/apache/hadoop/io/TestWritable.java
++++ b/src/test/org/apache/hadoop/io/TestWritable.java
+@@ -118,5 +118,17 @@ public class TestWritable extends TestCase {
+     assert(WritableComparator.get(Frob.class) instanceof FrobComparator);
+   }
+ 
+-
++  private static class Foo implements WritableComparable {
++    @Override public void write(DataOutput out) throws IOException {}
++    @Override public void readFields(DataInput in) throws IOException {}
++    @Override public int compareTo(Object o) { return 0; }
++    // No comparator registered
++  }
++  
++  public static void testUnregisteredComparators() throws Exception {
++    WritableComparator firstComparator = WritableComparator.get(Foo.class);
++    WritableComparator secondComparator = WritableComparator.get(Foo.class);
++    assertNotSame("Should create a new comparator instance for unregistered " +
++        "comparators", firstComparator, secondComparator);
++  }
+ }
+-- 
+1.7.0.4
+

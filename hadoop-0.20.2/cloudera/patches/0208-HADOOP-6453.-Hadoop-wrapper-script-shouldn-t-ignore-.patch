@@ -1,0 +1,49 @@
+From 2466310d0e2a426e848860e9a8411b8ea14e1bb1 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:47:07 -0800
+Subject: [PATCH 0208/1179] HADOOP-6453. Hadoop wrapper script shouldn't ignore an existing JAVA_LIBRARY_PATH
+
+Description: Currently the hadoop wrapper script assumes its the only place that uses JAVA_LIBRARY_PATH and initializes it to a blank line.
+
+<p>JAVA_LIBRARY_PATH=''</p>
+
+<p>This prevents anyone from setting this outside of the hadoop wrapper (say hadoop-config.sh) for their own native libraries.</p>
+
+<p>The fix is pretty simple. Don't initialize it to '' and append the native libs like normal. </p>
+Reason: Bugfix (environment)
+Author: Chad Metcalf
+Ref: UNKNOWN
+---
+ bin/hadoop |   11 ++++++++---
+ 1 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 273549f..af3db20 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -251,14 +251,19 @@ if $cygwin; then
+   HADOOP_HOME=`cygpath -w "$HADOOP_HOME"`
+   HADOOP_LOG_DIR=`cygpath -w "$HADOOP_LOG_DIR"`
+   TOOL_PATH=`cygpath -p -w "$TOOL_PATH"`
++  JAVA_LIBRARY_PATH=`cygpath -p -w "$JAVA_LIBRARY_PATH"`
+ fi
++
+ # setup 'java.library.path' for native-hadoop code if necessary
+-JAVA_LIBRARY_PATH=''
+ if [ -d "${HADOOP_HOME}/build/native" -o -d "${HADOOP_HOME}/lib/native" ]; then
+   JAVA_PLATFORM=`CLASSPATH=${CLASSPATH} ${JAVA} -Xmx32m org.apache.hadoop.util.PlatformName | sed -e "s/ /_/g"`
+-  
++ 
+   if [ -d "$HADOOP_HOME/build/native" ]; then
+-    JAVA_LIBRARY_PATH=${HADOOP_HOME}/build/native/${JAVA_PLATFORM}/lib
++    if [ "x$JAVA_LIBRARY_PATH" != "x" ]; then
++        JAVA_LIBRARY_PATH=${JAVA_LIBRARY_PATH}:${HADOOP_HOME}/build/native/${JAVA_PLATFORM}/lib
++    else
++        JAVA_LIBRARY_PATH=${HADOOP_HOME}/build/native/${JAVA_PLATFORM}/lib
++    fi
+   fi
+   
+   if [ -d "${HADOOP_HOME}/lib/native" ]; then
+-- 
+1.7.0.4
+

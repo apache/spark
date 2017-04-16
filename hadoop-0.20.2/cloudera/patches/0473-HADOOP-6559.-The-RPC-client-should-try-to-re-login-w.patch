@@ -1,0 +1,185 @@
+From 67e25d271e93cc035ed664f9bfa16705f6a45958 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 14 Feb 2010 23:34:54 -0800
+Subject: [PATCH 0473/1179] HADOOP-6559. The RPC client should try to re-login when it detects that the TGT expired
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435851/h-6559.6.bp20.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Client.java         |   35 ++++++++++-
+ .../hadoop/security/UserGroupInformation.java      |   62 ++++++++++++++++++-
+ 2 files changed, 89 insertions(+), 8 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index be8a683..8997787 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -371,6 +371,35 @@ public class Client {
+       }
+     }
+     
++    private synchronized void setupSaslConnection(final InputStream in2, 
++        final OutputStream out2) 
++    throws javax.security.sasl.SaslException,IOException,InterruptedException {
++      try {
++        saslRpcClient = new SaslRpcClient(authMethod, token,
++            serverPrincipal);
++        saslRpcClient.saslConnect(in2, out2);
++      } catch (javax.security.sasl.SaslException je) {
++        if (authMethod == AuthMethod.KERBEROS && 
++            UserGroupInformation.isLoginKeytabBased()) {
++          //try re-login
++          UserGroupInformation.getCurrentUser().reloginFromKeytab();
++          //try setting up the connection again
++          try {
++            saslRpcClient = new SaslRpcClient(authMethod, token,
++                serverPrincipal);
++            saslRpcClient.saslConnect(in2, out2);
++          } catch (javax.security.sasl.SaslException jee) {
++            UserGroupInformation.
++            setLastUnsuccessfulAuthenticationAttemptTime
++            (System.currentTimeMillis());
++            LOG.warn("Couldn't setup connection for " + 
++                UserGroupInformation.getCurrentUser().getUserName() +
++                " to " + serverPrincipal + " even after relogin.");
++            throw jee;
++          }
++        } else throw je;
++      }
++    }
+     /** Connect to the server and set up the I/O streams. It then sends
+      * a header to the server and starts
+      * the connection thread that waits for responses.
+@@ -417,10 +446,8 @@ public class Client {
+           }
+           ticket.doAs(new PrivilegedExceptionAction<Object>() {
+             @Override
+-            public Object run() throws IOException {
+-              saslRpcClient = new SaslRpcClient(authMethod, token,
+-                  serverPrincipal);
+-              saslRpcClient.saslConnect(in2, out2);
++            public Object run() throws IOException, InterruptedException {
++              setupSaslConnection(in2, out2);
+               return null;
+             }
+           });
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index f634fdb..ecd061b 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -126,6 +126,10 @@ public class UserGroupInformation {
+   private static boolean useKerberos;
+   /** Server-side groups fetching service */
+   private static Groups groups;
++  /** The last authentication time */
++  private static long lastUnsuccessfulAuthenticationAttemptTime;
++  
++  public static final long MIN_TIME_BEFORE_RELOGIN = 10 * 60 * 1000L;
+   
+   /**Environment variable pointing to the token cache file*/
+   public static final String HADOOP_TOKEN_FILE_LOCATION = 
+@@ -198,6 +202,8 @@ public class UserGroupInformation {
+ 
+   private final Subject subject;
+   
++  private static LoginContext login;
++  
+   private static final String OS_LOGIN_MODULE_NAME;
+   private static final Class<? extends Principal> OS_PRINCIPAL_CLASS;
+   private static final boolean windows = 
+@@ -274,6 +280,7 @@ public class UserGroupInformation {
+     static {
+       USER_KERBEROS_OPTIONS.put("doNotPrompt", "true");
+       USER_KERBEROS_OPTIONS.put("useTicketCache", "true");
++      USER_KERBEROS_OPTIONS.put("renewTGT", "true");
+       String ticketCache = System.getenv("KRB5CCNAME");
+       if (ticketCache != null) {
+         USER_KERBEROS_OPTIONS.put("ticketCache", ticketCache);
+@@ -289,8 +296,6 @@ public class UserGroupInformation {
+       KEYTAB_KERBEROS_OPTIONS.put("doNotPrompt", "true");
+       KEYTAB_KERBEROS_OPTIONS.put("useKeyTab", "true");
+       KEYTAB_KERBEROS_OPTIONS.put("storeKey", "true");
+-      KEYTAB_KERBEROS_OPTIONS.put("useTicketCache", "true");
+-      KEYTAB_KERBEROS_OPTIONS.put("renewTGT", "true");
+     }
+     private static final AppConfigurationEntry KEYTAB_KERBEROS_LOGIN =
+       new AppConfigurationEntry(Krb5LoginModule.class.getName(),
+@@ -351,7 +356,6 @@ public class UserGroupInformation {
+   static UserGroupInformation getLoginUser() throws IOException {
+     if (loginUser == null) {
+       try {
+-        LoginContext login;
+         if (isSecurityEnabled()) {
+           login = new LoginContext(HadoopConfiguration.USER_KERBEROS_CONFIG_NAME);
+         } else {
+@@ -387,7 +391,7 @@ public class UserGroupInformation {
+     keytabFile = path;
+     keytabPrincipal = user;
+     try {
+-      LoginContext login = 
++      login = 
+         new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME);
+       login.login();
+       loginUser = new UserGroupInformation(login.getSubject());
+@@ -396,7 +400,57 @@ public class UserGroupInformation {
+                             path, le);
+     }
+   }
++  
++  /**
++   * Re-Login a user in from a keytab file. Loads a user identity from a keytab
++   * file and login them in. They become the currently logged-in user. This
++   * method assumes that {@link #loginUserFromKeytab(String, String)} had 
++   * happened already.
++   * The Subject field of this UserGroupInformation object is updated to have
++   * the new credentials.
++   * @throws IOException on a failure
++   */
++  public synchronized void reloginFromKeytab()
++  throws IOException {
++    if (!isSecurityEnabled())
++      return;
++    if (login == null || keytabFile == null) {
++      throw new IOException("loginUserFromKeyTab must be done first");
++    }
++    if (System.currentTimeMillis() -lastUnsuccessfulAuthenticationAttemptTime <
++          MIN_TIME_BEFORE_RELOGIN) {
++      LOG.warn("Not attempting to re-login since the last re-login was " +
++          "attempted less than " + (MIN_TIME_BEFORE_RELOGIN/1000) + " seconds"+
++          " before.");
++      return;
++    }
++    try {
++      LOG.info("Initiating logout for " + getUserName());
++      //clear up the kerberos state. But the tokens are not cleared! As per 
++      //the Java kerberos login module code, only the kerberos credentials
++      //are cleared
++      login.logout();
++      //login and also update the subject field of this instance to 
++      //have the new credentials (pass it to the LoginContext constructor)
++      login = 
++        new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, 
++            getSubject());
++      LOG.info("Initiating re-login for " + keytabPrincipal);
++      login.login();
++    } catch (LoginException le) {
++      throw new IOException("Login failure for " + keytabPrincipal + 
++          " from keytab " + keytabFile, le);
++    } 
++  }
+ 
++  public synchronized static void 
++    setLastUnsuccessfulAuthenticationAttemptTime(long time) {
++    lastUnsuccessfulAuthenticationAttemptTime = time;
++  }
++  
++  public synchronized static boolean isLoginKeytabBased() {
++    return keytabFile != null;
++  }
+   /**
+    * Create a user from a login name. It is intended to be used for remote
+    * users in RPC, since it won't have any credentials.
+-- 
+1.7.0.4
+

@@ -1,0 +1,819 @@
+From 641090318603c47bfd55e1eea2b039f37e5b723a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 14 May 2010 19:20:10 -0700
+Subject: [PATCH 0295/1179] HDFS-1218. Replicas that are recovered during DN startup should not be allowed to truncate better replicas.
+
+Description: If a datanode loses power and then recovers, its replicas
+             may be truncated due to the recovery of the local FS
+             journal. This patch ensures that a replica truncated by
+             a power loss does not truncate the block on HDFS.
+Reason: Potential dataloss bug uncovered by power failure simulation
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   12 ++
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   96 ++++++++---
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |   81 ++++++++-
+ .../hdfs/server/datanode/FSDatasetInterface.java   |    3 +
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    2 +
+ .../hdfs/server/protocol/BlockRecoveryInfo.java    |   66 +++++++
+ .../server/protocol/InterDatanodeProtocol.java     |    6 +
+ .../org/apache/hadoop/hdfs/TestFileAppend4.java    |  188 +++++++++++++++++---
+ .../org/apache/hadoop/hdfs/TestLeaseRecovery.java  |   15 ++-
+ .../hdfs/server/datanode/FSDatasetTestUtil.java    |    9 +-
+ .../hdfs/server/datanode/SimulatedFSDataset.java   |    8 +
+ 11 files changed, 430 insertions(+), 56 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/server/protocol/BlockRecoveryInfo.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 9548589..2d81c53 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2420,6 +2420,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+ 
+           // This is used by unit test to trigger race conditions.
+           if (artificialSlowdown != 0 && clientRunning) {
++            LOG.debug("Sleeping for artificial slowdown of " +
++                artificialSlowdown + "ms");
+             try { 
+               Thread.sleep(artificialSlowdown); 
+             } catch (InterruptedException e) {}
+@@ -3280,6 +3282,16 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         s = null;
+       }
+     }
++    
++    /**
++     * Harsh abort method that should only be used from tests - this
++     * is in order to prevent pipeline recovery when eg a DN shuts down.
++     */
++    void abortForTests() throws IOException {
++      streamer.close();
++      response.close();
++      closed = true;
++    }
+  
+     // shutdown datastreamer and responseprocessor threads.
+     private void closeThreads() throws IOException {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 391abb3..3a0f86c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -67,6 +67,7 @@ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.hdfs.server.namenode.StreamFile;
+ import org.apache.hadoop.hdfs.server.protocol.BlockCommand;
+ import org.apache.hadoop.hdfs.server.protocol.BlockMetaDataInfo;
++import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryInfo;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeCommand;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
+@@ -1431,6 +1432,7 @@ public class DataNode extends Configured
+     if (LOG.isDebugEnabled()) {
+       LOG.debug("block=" + block);
+     }
++    
+     Block stored = data.getStoredBlock(block.getBlockId());
+ 
+     if (stored == null) {
+@@ -1449,6 +1451,11 @@ public class DataNode extends Configured
+     data.validateBlockMetadata(stored);
+     return info;
+   }
++  
++  @Override
++  public BlockRecoveryInfo getBlockRecoveryInfo(Block block) throws IOException {
++    return data.getBlockRecoveryInfo(block.getBlockId());
++  }
+ 
+   public Daemon recoverBlocks(final Block[] blocks, final DatanodeInfo[][] targets) {
+     Daemon d = new Daemon(threadGroup, new Runnable() {
+@@ -1500,21 +1507,26 @@ public class DataNode extends Configured
+   private static class BlockRecord { 
+     final DatanodeID id;
+     final InterDatanodeProtocol datanode;
+-    final Block block;
++    final BlockRecoveryInfo info;
+     
+-    BlockRecord(DatanodeID id, InterDatanodeProtocol datanode, Block block) {
++    BlockRecord(DatanodeID id, InterDatanodeProtocol datanode,
++        BlockRecoveryInfo info) {
+       this.id = id;
+       this.datanode = datanode;
+-      this.block = block;
++      this.info = info;
+     }
+ 
+     /** {@inheritDoc} */
+     public String toString() {
+-      return "block:" + block + " node:" + id;
++      return "BlockRecord(info=" + info + " node=" + id + ")";
+     }
+   }
+ 
+-  /** Recover a block */
++  /** Recover a block
++   * @param keepLength if true, will only recover replicas that have the same length
++   * as the block passed in. Otherwise, will calculate the minimum length of the
++   * replicas and truncate the rest to that length.
++   **/
+   private LocatedBlock recoverBlock(Block block, boolean keepLength,
+       DatanodeID[] datanodeids, boolean closeFile) throws IOException {
+ 
+@@ -1533,11 +1545,18 @@ public class DataNode extends Configured
+       ongoingRecovery.put(block, block);
+     }
+     try {
+-      List<BlockRecord> syncList = new ArrayList<BlockRecord>();
+-      long minlength = Long.MAX_VALUE;
+       int errorCount = 0;
+ 
+-      //check generation stamps
++      // Number of "replicasBeingWritten" in 0.21 parlance - these are replicas
++      // on DNs that are still alive from when the write was happening
++      int rbwCount = 0;
++      // Number of "replicasWaitingRecovery" in 0.21 parlance - these replicas
++      // have survived a DN restart, and thus might be truncated (eg if the
++      // DN died because of a machine power failure, and when the ext3 journal
++      // replayed, it truncated the file
++      int rwrCount = 0;
++      
++      List<BlockRecord> blockRecords = new ArrayList<BlockRecord>();
+       for(DatanodeID id : datanodeids) {
+         try {
+           InterDatanodeProtocol datanode;
+@@ -1547,19 +1566,24 @@ public class DataNode extends Configured
+           } else {
+             datanode = DataNode.createInterDataNodeProtocolProxy(id, getConf());
+           }
+-          BlockMetaDataInfo info = datanode.getBlockMetaDataInfo(block);
+-          if (info != null && info.getGenerationStamp() >= block.getGenerationStamp()) {
+-            if (keepLength) {
+-              if (info.getNumBytes() == block.getNumBytes()) {
+-                syncList.add(new BlockRecord(id, datanode, new Block(info)));
+-              }
+-            }
+-            else {
+-              syncList.add(new BlockRecord(id, datanode, new Block(info)));
+-              if (info.getNumBytes() < minlength) {
+-                minlength = info.getNumBytes();
+-              }
+-            }
++          BlockRecoveryInfo info = datanode.getBlockRecoveryInfo(block);
++          if (info == null) {
++            LOG.info("No block metadata found for block " + block + " on datanode "
++                + id);
++            continue;
++          }
++          if (info.getBlock().getGenerationStamp() < block.getGenerationStamp()) {
++            LOG.info("Only old generation stamp " + info.getBlock().getGenerationStamp()
++                + " found on datanode " + id + " (needed block=" +
++                block + ")");
++            continue;
++          }
++          blockRecords.add(new BlockRecord(id, datanode, info));
++
++          if (info.wasRecoveredOnStartup()) {
++            rwrCount++;
++          } else {
++            rbwCount++;
+           }
+         } catch (IOException e) {
+           ++errorCount;
+@@ -1569,6 +1593,34 @@ public class DataNode extends Configured
+         }
+       }
+ 
++      // If we *only* have replicas from post-DN-restart, then we should
++      // include them in determining length. Otherwise they might cause us
++      // to truncate too short.
++      boolean shouldRecoverRwrs = (rbwCount == 0);
++      
++      List<BlockRecord> syncList = new ArrayList<BlockRecord>();
++      long minlength = Long.MAX_VALUE;
++      
++      for (BlockRecord record : blockRecords) {
++        BlockRecoveryInfo info = record.info;
++        assert (info != null && info.getBlock().getGenerationStamp() >= block.getGenerationStamp());
++        if (!shouldRecoverRwrs && info.wasRecoveredOnStartup()) {
++          LOG.info("Not recovering replica " + record + " since it was recovered on "
++              + "startup and we have better replicas");
++          continue;
++        }
++        if (keepLength) {
++          if (info.getBlock().getNumBytes() == block.getNumBytes()) {
++            syncList.add(record);
++          }
++        } else {          
++          syncList.add(record);
++          if (info.getBlock().getNumBytes() < minlength) {
++            minlength = info.getBlock().getNumBytes();
++          }
++        }
++      }
++
+       if (syncList.isEmpty() && errorCount > 0) {
+         throw new IOException("All datanodes failed: block=" + block
+             + ", datanodeids=" + Arrays.asList(datanodeids));
+@@ -1607,7 +1659,7 @@ public class DataNode extends Configured
+ 
+     for(BlockRecord r : syncList) {
+       try {
+-        r.datanode.updateBlock(r.block, newblock, closeFile);
++        r.datanode.updateBlock(r.info.getBlock(), newblock, closeFile);
+         successList.add(r.id);
+       } catch (IOException e) {
+         InterDatanodeProtocol.LOG.warn("Failed to updateBlock (newblock="
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index b39f67b..22cdeea 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -44,6 +44,7 @@ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.hdfs.server.datanode.metrics.FSDatasetMBean;
++import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryInfo;
+ import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
+ import org.apache.hadoop.metrics.util.MBeanUtil;
+ import org.apache.hadoop.util.DataChecksum;
+@@ -539,7 +540,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       for (BlockAndFile b : blockSet) {
+         File f = b.pathfile;  // full path name of block file
+         volumeMap.put(b.block, new DatanodeBlockInfo(this, f));
+-        ongoingCreates.put(b.block, new ActiveFile(f));
++        ongoingCreates.put(b.block, ActiveFile.createStartupRecoveryFile(f));
+         if (DataNode.LOG.isDebugEnabled()) {
+           DataNode.LOG.debug("recoverBlocksBeingWritten for block " + b.block);
+         }
+@@ -725,19 +726,34 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     final File file;
+     final List<Thread> threads = new ArrayList<Thread>(2);
+     private volatile long visibleLength;
+-
++    /**
++     * Set to true if this file was recovered during datanode startup.
++     * This may indicate that the file has been truncated (eg during
++     * underlying filesystem journal replay)
++     */
++    final boolean wasRecoveredOnStartup;
++    
+     ActiveFile(File f, List<Thread> list) {
+-      this(f);
++      this(f, false);
+       if (list != null) {
+         threads.addAll(list);
+       }
+       threads.add(Thread.currentThread());
+     }
+ 
+-    // no active threads associated with this ActiveFile
+-    ActiveFile(File f) {
++    /**
++     * Create an ActiveFile from a file on disk during DataNode startup.
++     * This factory method is just to make it clear when the purpose
++     * of this constructor is.
++     */
++    public static ActiveFile createStartupRecoveryFile(File f) {
++      return new ActiveFile(f, true);
++    }
++
++    private ActiveFile(File f, boolean recovery) {
+       file = f;
+       visibleLength = f.length();
++      wasRecoveredOnStartup = recovery;
+     }
+ 
+     public long getVisibleLength() {
+@@ -767,7 +783,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+   }
+ 
+   /** Find the corresponding meta data file from a given block file */
+-  static File findMetaFile(final File blockFile) throws IOException {
++  public static File findMetaFile(final File blockFile) throws IOException {
+     final String prefix = blockFile.getName() + "_";
+     final File parent = blockFile.getParentFile();
+     File[] matches = parent.listFiles(new FilenameFilter() {
+@@ -1162,12 +1178,31 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+           + ") to newlen (=" + newlen + ")");
+     }
+ 
++    if (newlen == 0) {
++      // Special case for truncating to 0 length, since there's no previous
++      // chunk.
++      RandomAccessFile blockRAF = new RandomAccessFile(blockFile, "rw");
++      try {
++        //truncate blockFile 
++        blockRAF.setLength(newlen);   
++      } finally {
++        blockRAF.close();
++      }
++      //update metaFile 
++      RandomAccessFile metaRAF = new RandomAccessFile(metaFile, "rw");
++      try {
++        metaRAF.setLength(BlockMetadataHeader.getHeaderSize());
++      } finally {
++        metaRAF.close();
++      }
++      return;
++    }
+     DataChecksum dcs = BlockMetadataHeader.readHeader(metaFile).getChecksum(); 
+     int checksumsize = dcs.getChecksumSize();
+     int bpc = dcs.getBytesPerChecksum();
+-    long n = (newlen - 1)/bpc + 1;
+-    long newmetalen = BlockMetadataHeader.getHeaderSize() + n*checksumsize;
+-    long lastchunkoffset = (n - 1)*bpc;
++    long newChunkCount = (newlen - 1)/bpc + 1;
++    long newmetalen = BlockMetadataHeader.getHeaderSize() + newChunkCount*checksumsize;
++    long lastchunkoffset = (newChunkCount - 1)*bpc;
+     int lastchunksize = (int)(newlen - lastchunkoffset); 
+     byte[] b = new byte[Math.max(lastchunksize, checksumsize)]; 
+ 
+@@ -1792,4 +1827,32 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+   public String getStorageInfo() {
+     return toString();
+   }
++
++  @Override
++  public synchronized  BlockRecoveryInfo getBlockRecoveryInfo(long blockId) 
++      throws IOException {
++    Block stored = getStoredBlock(blockId);
++
++    if (stored == null) {
++      return null;
++    }
++    
++    ActiveFile activeFile = ongoingCreates.get(stored);
++    boolean isRecovery = (activeFile != null) && activeFile.wasRecoveredOnStartup;
++    
++    
++    BlockRecoveryInfo info = new BlockRecoveryInfo(
++        stored, isRecovery);
++    if (DataNode.LOG.isDebugEnabled()) {
++      DataNode.LOG.debug("getBlockMetaDataInfo successful block=" + stored +
++                " length " + stored.getNumBytes() +
++                " genstamp " + stored.getGenerationStamp());
++    }
++
++    // paranoia! verify that the contents of the stored block
++    // matches the block file on disk.
++    validateBlockMetadata(stored);
++
++    return info;
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
+index b1a9ccb..d057d95 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
+@@ -28,6 +28,7 @@ import java.io.OutputStream;
+ 
+ 
+ import org.apache.hadoop.hdfs.server.datanode.metrics.FSDatasetMBean;
++import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryInfo;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+@@ -300,4 +301,6 @@ public interface FSDatasetInterface extends FSDatasetMBean {
+    * @return true if more then minimum valid volumes left in the FSDataSet
+    */
+   public boolean hasEnoughResources();
++
++  public BlockRecoveryInfo getBlockRecoveryInfo(long blockId) throws IOException;
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 0490994..839465c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -1887,6 +1887,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    * @param lease The lease for the client creating the file
+    */
+   void internalReleaseLeaseOne(Lease lease, String src) throws IOException {
++    assert Thread.holdsLock(this);
++
+     LOG.info("Recovering lease=" + lease + ", src=" + src);
+ 
+     INodeFile iFile = dir.getFileINode(src);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/BlockRecoveryInfo.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/BlockRecoveryInfo.java
+new file mode 100644
+index 0000000..336a60d
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/BlockRecoveryInfo.java
+@@ -0,0 +1,66 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.protocol;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.io.Writable;
++
++public class BlockRecoveryInfo implements Writable {
++  private Block block;
++  private boolean wasRecoveredOnStartup;
++  
++  public BlockRecoveryInfo() {
++    block = new Block();
++    wasRecoveredOnStartup = false;
++  }
++  
++  public BlockRecoveryInfo(Block block,
++      boolean wasRecoveredOnStartup)
++  {
++    this.block = new Block(block);
++    this.wasRecoveredOnStartup = wasRecoveredOnStartup;
++  }
++  
++  @Override
++  public void readFields(DataInput in) throws IOException {
++    block.readFields(in);
++    wasRecoveredOnStartup = in.readBoolean();
++  }
++  
++  @Override
++  public void write(DataOutput out) throws IOException {
++    block.write(out);
++    out.writeBoolean(wasRecoveredOnStartup);    
++  }
++
++  public Block getBlock() {
++    return block;
++  }
++  public boolean wasRecoveredOnStartup() {
++    return wasRecoveredOnStartup;
++  }
++  
++  public String toString() {
++    return "BlockRecoveryInfo(block=" + block +
++      " wasRecoveredOnStartup=" + wasRecoveredOnStartup + ")";
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
+index fd3a0f3..a70bad7 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
+@@ -41,6 +41,12 @@ public interface InterDatanodeProtocol extends VersionedProtocol {
+   BlockMetaDataInfo getBlockMetaDataInfo(Block block) throws IOException;
+ 
+   /**
++   * @return the BlockRecoveryInfo for a block
++   * @return null if the block is not found
++   */
++  BlockRecoveryInfo getBlockRecoveryInfo(Block block) throws IOException;
++  
++  /**
+    * Update the block to the new generation stamp and length.  
+    */
+   void updateBlock(Block oldblock, Block newblock, boolean finalize) throws IOException;
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+index 4f1f50d..91791ae 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+@@ -18,20 +18,26 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DFSClient.DFSOutputStream;
++import org.apache.hadoop.hdfs.MiniDFSCluster.DataNodeProperties;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.DatanodeID;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
++import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
+ import org.apache.hadoop.hdfs.protocol.FSConstants.SafeModeAction;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+ import org.apache.hadoop.hdfs.server.datanode.DataNode;
++import org.apache.hadoop.hdfs.server.datanode.FSDataset;
++import org.apache.hadoop.hdfs.server.datanode.FSDatasetTestUtil;
+ import org.apache.hadoop.hdfs.server.datanode.SimulatedFSDataset;
+ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
++import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
+ import org.apache.hadoop.hdfs.server.namenode.LeaseExpiredException;
+ import org.apache.hadoop.hdfs.server.namenode.LeaseManager;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.hdfs.server.namenode.FSEditLog;
+ import org.apache.hadoop.hdfs.server.namenode.FSImageAdapter;
++import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.fs.BlockLocation;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -199,11 +205,9 @@ public class TestFileAppend4 extends TestCase {
+         
+         int actual = b.getNames().length;
+         if ( actual < expected ) {
+-          if (true || iters > 0) {
+-            LOG.info("Not enough replicas for " + b +
+-                               " yet. Expecting " + expected + ", got " + 
+-                               actual + ".");
+-          }
++          LOG.info("Not enough replicas for " + b +
++              " yet. Expecting " + expected + ", got " + 
++              actual + ".");
+           replOk = false;
+           break;
+         }
+@@ -232,8 +236,20 @@ public class TestFileAppend4 extends TestCase {
+     AppendTestUtil.check(whichfs, file1, fileSize);
+   }
+   
+-  private void corruptDatanode(int dnNumber) throws Exception {
+-    // get the FS data of the 2nd datanode
++  enum CorruptionType {
++    CORRUPT_LAST_CHUNK,
++    TRUNCATE_BLOCK_TO_ZERO,
++    TRUNCATE_BLOCK_HALF;
++  }
++  
++  /**
++   * Corrupt all of the blocks in the blocksBeingWritten dir
++   * for the specified datanode number. The corruption is
++   * specifically the last checksum chunk of the file being
++   * modified by writing random data into it.
++   */
++  private void corruptDataNode(int dnNumber, CorruptionType type) throws Exception {
++    // get the FS data of the specified datanode
+     File data_dir = new File(System.getProperty("test.build.data"),
+                              "dfs/data/data" + 
+                              Integer.toString(dnNumber*2 + 1) + 
+@@ -243,21 +259,38 @@ public class TestFileAppend4 extends TestCase {
+       // only touch the actual data, not the metadata (with CRC)
+       if (block.getName().startsWith("blk_") && 
+          !block.getName().endsWith("meta")) {
+-        RandomAccessFile file = new RandomAccessFile(block, "rw");
+-        FileChannel channel = file.getChannel();
+-
+-        Random r = new Random();
+-        long lastBlockSize = channel.size() % 512;
+-        long position = channel.size() - lastBlockSize;
+-        int length = r.nextInt((int)(channel.size() - position + 1));
+-        byte[] buffer = new byte[length];
+-        r.nextBytes(buffer);
+-
+-        channel.write(ByteBuffer.wrap(buffer), position);
+-        System.out.println("Deliberately corrupting file " + block.getName() + 
+-                           " at offset " + position +
+-                           " length " + length);
+-        file.close();
++        if (type == CorruptionType.CORRUPT_LAST_CHUNK) {
++          RandomAccessFile file = new RandomAccessFile(block, "rw");
++          FileChannel channel = file.getChannel();
++          Random r = new Random();
++          long lastBlockSize = channel.size() % 512;
++          long position = channel.size() - lastBlockSize;
++          int length = r.nextInt((int)(channel.size() - position + 1));
++          byte[] buffer = new byte[length];
++          r.nextBytes(buffer);
++
++
++          channel.write(ByteBuffer.wrap(buffer), position);
++          System.out.println("Deliberately corrupting file " + block.getName() + 
++                             " at offset " + position +
++                             " length " + length);
++          file.close();
++
++        } else if (type == CorruptionType.TRUNCATE_BLOCK_TO_ZERO) {
++          LOG.info("Truncating block file at " + block);
++          RandomAccessFile blockFile = new RandomAccessFile(block, "rw");
++          blockFile.setLength(0);
++          blockFile.close();
++          
++          RandomAccessFile metaFile = new RandomAccessFile(
++              FSDataset.findMetaFile(block), "rw");
++          metaFile.setLength(0);
++          metaFile.close();
++        } else if (type == CorruptionType.TRUNCATE_BLOCK_HALF) {
++          FSDatasetTestUtil.truncateBlockFile(block, block.length() / 2);
++        } else {
++          assert false;
++        }
+         ++corrupted;
+       }
+     }
+@@ -523,7 +556,7 @@ public class TestFileAppend4 extends TestCase {
+       LOG.info("STOPPED first instance of the cluster");
+ 
+       // give the second datanode a bad CRC
+-      corruptDatanode(corruptDN);
++      corruptDataNode(corruptDN, CorruptionType.CORRUPT_LAST_CHUNK);
+       
+       // restart the cluster
+       cluster = new MiniDFSCluster(conf, 3, false, null);
+@@ -1022,6 +1055,115 @@ public class TestFileAppend4 extends TestCase {
+   }
+ 
+   /**
++   * Test for what happens when the machine doing the write totally
++   * loses power, and thus when it restarts, the local replica has been
++   * truncated to 0 bytes (very common with journaling filesystems)
++   */
++  public void testTruncatedPrimaryDN() throws Exception {
++    LOG.info("START");
++    runDNRestartCorruptType(CorruptionType.TRUNCATE_BLOCK_TO_ZERO);
++  }
++  
++  /**
++   * Test for what happens when the machine doing the write loses power
++   * but a previous length of the block being written had made it to the
++   * journal
++   */
++  public void testHalfLengthPrimaryDN() throws Exception {
++    LOG.info("START");
++    runDNRestartCorruptType(CorruptionType.TRUNCATE_BLOCK_HALF);
++  }
++  
++  private void runDNRestartCorruptType(CorruptionType corrupt) throws Exception {
++    cluster = new MiniDFSCluster(conf, 3, true, null);
++    FileSystem fs1 = cluster.getFileSystem();
++    try {
++      short rep = 3; // replication
++      assertTrue(BLOCK_SIZE%4 == 0);
++
++      file1 = new Path("/dnDeath.dat");
++
++      // write 1/2 block & close
++      stm = fs1.create(file1, true, 1024, rep, 4096);
++      AppendTestUtil.write(stm, 0, 1024);
++      stm.sync();
++      loseLeases(fs1);
++      
++      DFSOutputStream dfso = (DFSOutputStream)stm.getWrappedStream();
++      dfso.abortForTests();
++      
++      // close the primary DN
++      DataNodeProperties badDN = cluster.stopDataNode(0);
++      
++      // Truncate the block on the primary DN
++      corruptDataNode(0, corrupt);
++
++      // Start the DN back up
++      cluster.restartDataNode(badDN);
++
++      // Recover the lease
++      FileSystem fs2 = AppendTestUtil.createHdfsWithDifferentUsername(fs1.getConf());
++      recoverFile(fs2);
++      
++      assertFileSize(fs2, 1024);
++      checkFile(fs2, 1024);
++    } finally {
++      // explicitly do not shut down fs1, since it's been frozen up by
++      // killing the DataStreamer and not allowing recovery
++      cluster.shutdown();
++    }
++  }
++
++  public void testFullClusterPowerLoss() throws Exception {
++    cluster = new MiniDFSCluster(conf, 2, true, null);
++    FileSystem fs1 = cluster.getFileSystem();
++    try {
++      short rep = 2; // replication
++      assertTrue(BLOCK_SIZE%4 == 0);
++
++      file1 = new Path("/dnDeath.dat");
++
++      // write 1/2 block & close
++      stm = fs1.create(file1, true, 1024, rep, 4096);
++      AppendTestUtil.write(stm, 0, 1024);
++      stm.sync();
++      loseLeases(fs1);
++      
++      DFSOutputStream dfso = (DFSOutputStream)stm.getWrappedStream();
++      dfso.abortForTests();
++      
++      // close the DNs
++      DataNodeProperties badDN = cluster.stopDataNode(0);
++      DataNodeProperties badDN2 = cluster.stopDataNode(0); // what was 1 is now 0
++      assertNotNull(badDN);
++      assertNotNull(badDN2);
++      
++      // Truncate one of them as if its journal got corrupted
++      corruptDataNode(0, CorruptionType.TRUNCATE_BLOCK_HALF);
++      
++      // Start the DN back up
++      cluster.restartDataNode(badDN);
++      cluster.restartDataNode(badDN2);
++      
++      // Wait for a heartbeat to make sure we get the initial block
++      // report of the replicasBeingWritten
++      cluster.waitForDNHeartbeat(0, 10000);
++      cluster.waitForDNHeartbeat(1, 10000);
++      
++      // Recover the lease
++      FileSystem fs2 = AppendTestUtil.createHdfsWithDifferentUsername(fs1.getConf());
++      recoverFile(fs2);
++      
++      assertFileSize(fs2, 512);
++      checkFile(fs2, 512);
++    } finally {
++      // explicitly do not shut down fs1, since it's been frozen up by
++      // killing the DataStreamer and not allowing recovery
++      cluster.shutdown();
++    }    
++  }
++
++  /**
+    * Mockito answer helper that triggers one latch as soon as the
+    * method is called, then waits on another before continuing.
+    */
+diff --git a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
+index 87a2fea..2131306 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
++++ b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
+@@ -51,12 +51,22 @@ public class TestLeaseRecovery extends junit.framework.TestCase {
+     return m;
+   }
+ 
++  public void testBlockSynchronization() throws Exception {
++    runTestBlockSynchronization(false);
++  }
++  public void testBlockSynchronizationWithZeroBlock() throws Exception {
++    runTestBlockSynchronization(true);
++  }
++
++
+   /**
+    * The following test first creates a file with a few blocks.
+    * It randomly truncates the replica of the last block stored in each datanode.
+    * Finally, it triggers block synchronization to synchronize all stored block.
++   * @param forceOneBlockToZero if true, will truncate one block to 0 length
+    */
+-  public void testBlockSynchronization() throws Exception {
++  public void runTestBlockSynchronization(boolean forceOneBlockToZero)
++  throws Exception {
+     final int ORG_FILE_SIZE = 3000; 
+     Configuration conf = new Configuration();
+     conf.setLong("dfs.block.size", BLOCK_SIZE);
+@@ -103,6 +113,9 @@ public class TestLeaseRecovery extends junit.framework.TestCase {
+       for(int i = 0; i < REPLICATION_NUM; i++) {
+         newblocksizes[i] = AppendTestUtil.nextInt(lastblocksize);
+       }
++      if (forceOneBlockToZero) {
++        newblocksizes[0] = 0;
++      }
+       DataNode.LOG.info("newblocksizes = " + Arrays.asList(newblocksizes)); 
+ 
+       //update blocks with random block sizes
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/FSDatasetTestUtil.java b/src/test/org/apache/hadoop/hdfs/server/datanode/FSDatasetTestUtil.java
+index 94dbc21..e4d7429 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/FSDatasetTestUtil.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/FSDatasetTestUtil.java
+@@ -39,9 +39,16 @@ public abstract class FSDatasetTestUtil {
+       throw new IOException("Can't find block file for block " +
+                             block + " on DN " + dn);
+     }
+-    File metaFile = ds.findMetaFile(blockFile);
++    File metaFile = FSDataset.findMetaFile(blockFile);
+     FSDataset.truncateBlock(blockFile, metaFile,
+                             block.getNumBytes(), newLength);
+   }
++  
++  public static void truncateBlockFile(File blockFile, long newLength)
++    throws IOException {
++    File metaFile = FSDataset.findMetaFile(blockFile);
++    FSDataset.truncateBlock(blockFile, metaFile,
++                            blockFile.length(), newLength);    
++  }
+ 
+ }
+\ No newline at end of file
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java b/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java
+index f3d9446..7f24eb0 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java
+@@ -34,6 +34,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.hdfs.server.datanode.metrics.FSDatasetMBean;
++import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryInfo;
+ import org.apache.hadoop.metrics.util.MBeanUtil;
+ import org.apache.hadoop.util.DataChecksum;
+ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+@@ -683,4 +684,11 @@ public class SimulatedFSDataset  implements FSConstants, FSDatasetInterface, Con
+   public boolean hasEnoughResources() {
+     return true;
+   }
++
++  @Override
++  public BlockRecoveryInfo getBlockRecoveryInfo(long blockId)
++      throws IOException {
++    Block stored = getStoredBlock(blockId);
++    return new BlockRecoveryInfo(stored, false);
++  }
+ }
+-- 
+1.7.0.4
+

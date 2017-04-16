@@ -1,0 +1,567 @@
+From 20f55449358f96fd20f74f3f92c24dce763158e1 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 14 May 2010 12:58:38 +0530
+Subject: [PATCH 0653/1179] MAPREDUCE-1716. Truncate logs of finished tasks to prevent node thrash due to excessive logging
+
+Patch: https://issues.apache.org/jira/secure/attachment/12444476/patch-log-truncation-bugs-20100514.txt
+Author: Vinod K V
+Ref: YDH
+---
+ .../apache/hadoop/mapred/TaskLogsTruncater.java    |   98 +++++++++----
+ .../hadoop/mapred/TestTaskLogsTruncater.java       |  163 ++++++++++++--------
+ 2 files changed, 165 insertions(+), 96 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java b/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java
+index c31ef95..7e46338 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java
+@@ -19,9 +19,9 @@
+ package org.apache.hadoop.mapred;
+ 
+ import java.io.File;
++import java.io.FileInputStream;
+ import java.io.FileNotFoundException;
+-import java.io.FileReader;
+-import java.io.FileWriter;
++import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.util.HashMap;
+ import java.util.List;
+@@ -51,6 +51,8 @@ public class TaskLogsTruncater {
+   static final String REDUCE_USERLOG_RETAIN_SIZE =
+     "mapreduce.cluster.reduce.userlog.retain-size";
+   static final int DEFAULT_RETAIN_SIZE = -1;
++  static final String TRUNCATED_MSG =
++      "[ ... this log file was truncated because of excess length]\n";
+   
+   long mapRetainSize, reduceRetainSize;
+ 
+@@ -97,8 +99,8 @@ public class TaskLogsTruncater {
+ 
+     File attemptLogDir = lInfo.getLogLocation();
+ 
+-    FileWriter tmpFileWriter;
+-    FileReader logFileReader;
++    FileOutputStream tmpFileOutputStream;
++    FileInputStream logFileInputStream;
+     // Now truncate file by file
+     logNameLoop: for (LogName logName : LogName.values()) {
+ 
+@@ -114,9 +116,11 @@ public class TaskLogsTruncater {
+       // //// End of optimization
+ 
+       // Truncation is needed for this log-file. Go ahead now.
++
++      // ////// Open truncate.tmp file for writing //////
+       File tmpFile = new File(attemptLogDir, "truncate.tmp");
+       try {
+-        tmpFileWriter = new FileWriter(tmpFile);
++        tmpFileOutputStream = new FileOutputStream(tmpFile);
+       } catch (IOException ioe) {
+         LOG.warn("Cannot open " + tmpFile.getAbsolutePath()
+             + " for writing truncated log-file "
+@@ -124,19 +128,28 @@ public class TaskLogsTruncater {
+             + ". Continuing with other log files. ", ioe);
+         continue;
+       }
++      // ////// End of opening truncate.tmp file //////
+ 
++      // ////// Open logFile for reading //////
+       try {
+-        logFileReader = new FileReader(logFile);
++        logFileInputStream = new FileInputStream(logFile);
+       } catch (FileNotFoundException fe) {
+         if (LOG.isDebugEnabled()) {
+           LOG.debug("Cannot open " + logFile.getAbsolutePath()
+               + " for reading. Continuing with other log files");
+         }
++        try {
++          tmpFileOutputStream.close();
++        } catch (IOException e) {
++          LOG.warn("Cannot close tmpFileOutputStream for "
++              + tmpFile.getAbsolutePath(), e);
++        }
+         if (!tmpFile.delete()) {
+           LOG.warn("Cannot delete tmpFile " + tmpFile.getAbsolutePath());
+         }
+         continue;
+       }
++      // ////// End of opening logFile for reading //////
+ 
+       long newCurrentOffset = 0;
+       // Process each attempt from the ordered list passed.
+@@ -152,7 +165,7 @@ public class TaskLogsTruncater {
+           newLogFileDetail =
+               truncateALogFileOfAnAttempt(task.getTaskID(),
+                   taskLogFileDetails.get(task).get(logName), retainSize,
+-                  tmpFileWriter, logFileReader, logName);
++                  tmpFileOutputStream, logFileInputStream, logName);
+         } catch (IOException ioe) {
+           LOG.warn("Cannot truncate the log file "
+               + logFile.getAbsolutePath()
+@@ -161,6 +174,18 @@ public class TaskLogsTruncater {
+           // revert back updatedTaskLogFileDetails
+           copyOriginalIndexFileInfo(lInfo, taskLogFileDetails,
+               updatedTaskLogFileDetails, logName);
++          try {
++            logFileInputStream.close();
++          } catch (IOException e) {
++            LOG.warn("Cannot close logFileInputStream for "
++                + logFile.getAbsolutePath(), e);
++          }
++          try {
++            tmpFileOutputStream.close();
++          } catch (IOException e) {
++            LOG.warn("Cannot close tmpFileOutputStream for "
++                + tmpFile.getAbsolutePath(), e);
++          }
+           if (!tmpFile.delete()) {
+             LOG.warn("Cannot delete tmpFile " + tmpFile.getAbsolutePath());
+           }
+@@ -183,8 +208,9 @@ public class TaskLogsTruncater {
+         }
+       }
+ 
++      // ////// Close the file streams ////////////
+       try {
+-        tmpFileWriter.close();
++        tmpFileOutputStream.close();
+       } catch (IOException ioe) {
+         LOG.warn("Couldn't close the tmp file " + tmpFile.getAbsolutePath()
+             + ". Deleting it.", ioe);
+@@ -194,8 +220,17 @@ public class TaskLogsTruncater {
+           LOG.warn("Cannot delete tmpFile " + tmpFile.getAbsolutePath());
+         }
+         continue;
++      } finally {
++        try {
++          logFileInputStream.close();
++        } catch (IOException e) {
++          LOG.warn("Cannot close logFileInputStream for "
++              + logFile.getAbsolutePath(), e);
++        }
+       }
++      // ////// End of closing the file streams ////////////
+ 
++      // ////// Commit the changes from tmp file to the logFile ////////////
+       if (!tmpFile.renameTo(logFile)) {
+         // If the tmpFile cannot be renamed revert back
+         // updatedTaskLogFileDetails to maintain the consistency of the
+@@ -206,6 +241,7 @@ public class TaskLogsTruncater {
+           LOG.warn("Cannot delete tmpFile " + tmpFile.getAbsolutePath());
+         }
+       }
++      // ////// End of committing the changes to the logFile ////////////
+     }
+ 
+     if (indexModified) {
+@@ -296,18 +332,20 @@ public class TaskLogsTruncater {
+    * @param taskID Task whose logs need to be truncated
+    * @param oldLogFileDetail contains the original log details for the attempt
+    * @param taskRetainSize retain-size
+-   * @param tmpFileWriter New log file to write to. Already opened in append
++   * @param tmpFileOutputStream New log file to write to. Already opened in append
+    *          mode.
+-   * @param logFileReader Original log file to read from.
++   * @param logFileInputStream Original log file to read from.
+    * @return
+    * @throws IOException
+    */
+   private LogFileDetail truncateALogFileOfAnAttempt(
+       final TaskAttemptID taskID, final LogFileDetail oldLogFileDetail,
+-      final long taskRetainSize, final FileWriter tmpFileWriter,
+-      final FileReader logFileReader,
+-      final LogName logName) throws IOException {
++      final long taskRetainSize,
++      final FileOutputStream tmpFileOutputStream,
++      final FileInputStream logFileInputStream, final LogName logName)
++      throws IOException {
+     LogFileDetail newLogFileDetail = new LogFileDetail();
++    long logSize = 0;
+ 
+     // ///////////// Truncate log file ///////////////////////
+ 
+@@ -318,38 +356,42 @@ public class TaskLogsTruncater {
+       LOG.info("Truncating " + logName + " logs for " + taskID + " from "
+           + oldLogFileDetail.length + "bytes to " + taskRetainSize
+           + "bytes.");
+-      newLogFileDetail.length = taskRetainSize;
++      logSize = taskRetainSize;
++      byte[] truncatedMsgBytes = TRUNCATED_MSG.getBytes();
++      tmpFileOutputStream.write(truncatedMsgBytes);
++      newLogFileDetail.length += truncatedMsgBytes.length;
+     } else {
+       LOG.debug("No truncation needed for " + logName + " logs for " + taskID
+           + " length is " + oldLogFileDetail.length + " retain size "
+           + taskRetainSize + "bytes.");
+-      newLogFileDetail.length = oldLogFileDetail.length;
++      logSize = oldLogFileDetail.length;
+     }
+-    long charsSkipped =
+-        logFileReader.skip(oldLogFileDetail.length
+-            - newLogFileDetail.length);
+-    if (charsSkipped != oldLogFileDetail.length - newLogFileDetail.length) {
+-      throw new IOException("Erroneously skipped " + charsSkipped
++    long bytesSkipped =
++        logFileInputStream.skip(oldLogFileDetail.length
++            - logSize);
++    if (bytesSkipped != oldLogFileDetail.length - logSize) {
++      throw new IOException("Erroneously skipped " + bytesSkipped
+           + " instead of the expected "
+-          + (oldLogFileDetail.length - newLogFileDetail.length)
++          + (oldLogFileDetail.length - logSize)
+           + " while truncating " + logName + " logs for " + taskID );
+     }
+     long alreadyRead = 0;
+-    while (alreadyRead < newLogFileDetail.length) {
+-      char tmpBuf[]; // Temporary buffer to read logs
+-      if (newLogFileDetail.length - alreadyRead >= DEFAULT_BUFFER_SIZE) {
+-        tmpBuf = new char[DEFAULT_BUFFER_SIZE];
++    while (alreadyRead < logSize) {
++      byte tmpBuf[]; // Temporary buffer to read logs
++      if (logSize - alreadyRead >= DEFAULT_BUFFER_SIZE) {
++        tmpBuf = new byte[DEFAULT_BUFFER_SIZE];
+       } else {
+-        tmpBuf = new char[(int) (newLogFileDetail.length - alreadyRead)];
++        tmpBuf = new byte[(int) (logSize - alreadyRead)];
+       }
+-      int bytesRead = logFileReader.read(tmpBuf);
++      int bytesRead = logFileInputStream.read(tmpBuf);
+       if (bytesRead < 0) {
+         break;
+       } else {
+         alreadyRead += bytesRead;
+       }
+-      tmpFileWriter.write(tmpBuf);
++      tmpFileOutputStream.write(tmpBuf);
+     }
++    newLogFileDetail.length += logSize;
+     // ////// End of truncating log file ///////////////////////
+ 
+     return newLogFileDetail;
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskLogsTruncater.java b/src/test/org/apache/hadoop/mapred/TestTaskLogsTruncater.java
+index d7045e6..853896c 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskLogsTruncater.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskLogsTruncater.java
+@@ -20,13 +20,13 @@ package org.apache.hadoop.mapred;
+ 
+ import java.io.DataOutputStream;
+ import java.io.File;
+-import java.io.FileReader;
+-import java.io.FileWriter;
++import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.net.URI;
+ import java.util.Arrays;
+ import java.util.HashMap;
+ import java.util.Map;
++import java.util.Random;
+ 
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.commons.logging.Log;
+@@ -49,8 +49,7 @@ import org.apache.hadoop.mapreduce.split.JobSplit;
+ import org.junit.After;
+ import org.junit.Test;
+ 
+-import static org.junit.Assert.assertTrue;
+-import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.*;
+ 
+ /**
+  * Verify the logs' truncation functionality.
+@@ -58,6 +57,7 @@ import static org.junit.Assert.assertEquals;
+ public class TestTaskLogsTruncater {
+ 
+   static final Log LOG = LogFactory.getLog(TestTaskLogsTruncater.class);
++  private static int truncatedMsgSize = TaskLogsTruncater.TRUNCATED_MSG.getBytes().length; 
+ 
+   /**
+    * clean-up any stale directories after enabling writable permissions for all
+@@ -74,9 +74,8 @@ public class TestTaskLogsTruncater {
+     }
+   }
+ 
+-  void writeRealBytes(TaskAttemptID firstAttemptID,
+-      TaskAttemptID attemptID, LogName logName, long numBytes, char data)
+-      throws IOException {
++  private void writeBytes(TaskAttemptID firstAttemptID, TaskAttemptID attemptID,
++      LogName logName, long numBytes, boolean random, char data) throws IOException {
+ 
+     File logFile = TaskLog.getTaskLogFile(firstAttemptID, false, logName);
+     File logLocation = logFile.getParentFile();
+@@ -99,16 +98,33 @@ public class TestTaskLogsTruncater {
+     // Need to call up front to set currenttaskid.
+     TaskLog.syncLogs(logLocation.toString(), attemptID, false);
+ 
+-    FileWriter writer = new FileWriter(logFile, true);
++    FileOutputStream outputStream = new FileOutputStream(logFile, true);
++    Random r = new Random();
+     for (long i = 0; i < numBytes; i++) {
+-      writer.write(data);
++      if(random) {
++        outputStream.write(r.nextInt());
++      } else {
++        outputStream.write(data);
++      }
+     }
+-    writer.close();
++    outputStream.close();
+     TaskLog.syncLogs(logLocation.toString(), attemptID, false);
+-    LOG.info("Written " + numBytes + " real bytes to the log file "
++    LOG.info("Written " + logFile.length() + " real bytes to the log file "
+         + logFile);
+   }
+ 
++  private void writeRandomBytes(TaskAttemptID firstAttemptID,
++      TaskAttemptID attemptID, LogName logName, long numBytes)
++      throws IOException {
++    writeBytes(firstAttemptID, attemptID, logName, numBytes, true, ' ');
++  }
++
++  private void writeRealChars(TaskAttemptID firstAttemptID,
++      TaskAttemptID attemptID, LogName logName, long numChars, char data)
++      throws IOException {
++    writeBytes(firstAttemptID, attemptID, logName, numChars, false, data);
++  }
++
+   private static Map<LogName, Long> getAllLogsFileLengths(
+       TaskAttemptID tid, boolean isCleanup) throws IOException {
+     Map<LogName, Long> allLogsFileLengths = new HashMap<LogName, Long>();
+@@ -158,7 +174,7 @@ public class TestTaskLogsTruncater {
+ 
+     // Let the tasks write logs within retain-size
+     for (LogName log : LogName.values()) {
+-      writeRealBytes(attemptID, attemptID, log, 500, 'H');
++      writeRandomBytes(attemptID, attemptID, log, 500);
+     }
+     File logIndex = TaskLog.getIndexFile(attemptID, false);
+     long indexModificationTimeStamp = logIndex.lastModified();
+@@ -219,7 +235,7 @@ public class TestTaskLogsTruncater {
+ 
+     // Let the tasks write some logs
+     for (LogName log : LogName.values()) {
+-      writeRealBytes(attemptID, attemptID, log, 1500, 'H');
++      writeRandomBytes(attemptID, attemptID, log, 1500);
+     }
+ 
+     File attemptDir = TaskLog.getAttemptDir(attemptID, false);
+@@ -259,7 +275,7 @@ public class TestTaskLogsTruncater {
+ 
+     // Let the tasks write logs more than retain-size
+     for (LogName log : LogName.values()) {
+-      writeRealBytes(attemptID, attemptID, log, 1500, 'H');
++      writeRandomBytes(attemptID, attemptID, log, 1500);
+     }
+ 
+     File attemptDir = TaskLog.getAttemptDir(attemptID, false);
+@@ -275,18 +291,18 @@ public class TestTaskLogsTruncater {
+     Map<LogName, Long> logLengths = getAllLogsFileLengths(attemptID, false);
+     for (LogName log : LogName.values()) {
+       File logFile = TaskLog.getTaskLogFile(attemptID, false, log);
+-      assertEquals(1000, logFile.length());
++      assertEquals(1000 + truncatedMsgSize, logFile.length());
+       // The index file should also be proper.
+-      assertEquals(1000, logLengths.get(log).longValue());
++      assertEquals(1000 + truncatedMsgSize, logLengths.get(log).longValue());
+     }
+ 
+     // truncate once again
+     logLengths = getAllLogsFileLengths(attemptID, false);
+     for (LogName log : LogName.values()) {
+       File logFile = TaskLog.getTaskLogFile(attemptID, false, log);
+-      assertEquals(1000, logFile.length());
++      assertEquals(1000 + truncatedMsgSize, logFile.length());
+       // The index file should also be proper.
+-      assertEquals(1000, logLengths.get(log).longValue());
++      assertEquals(1000 + truncatedMsgSize, logLengths.get(log).longValue());
+     }
+   }
+ 
+@@ -310,8 +326,8 @@ public class TestTaskLogsTruncater {
+                             0);
+ 
+     // Let the tasks write logs more than retain-size
+-    writeRealBytes(attemptID, attemptID, LogName.SYSLOG, 1500, 'H');
+-    writeRealBytes(attemptID, attemptID, LogName.STDERR, 500, 'H');
++    writeRandomBytes(attemptID, attemptID, LogName.SYSLOG, 1500);
++    writeRandomBytes(attemptID, attemptID, LogName.STDERR, 500);
+ 
+     File attemptDir = TaskLog.getAttemptDir(attemptID, false);
+     assertTrue(attemptDir + " doesn't exist!", attemptDir.exists());
+@@ -325,21 +341,29 @@ public class TestTaskLogsTruncater {
+ 
+     Map<LogName, Long> logLengths = getAllLogsFileLengths(attemptID, false);
+     File logFile = TaskLog.getTaskLogFile(attemptID, false, LogName.SYSLOG);
+-    assertEquals(1000, logFile.length());
++    assertEquals(1000 + truncatedMsgSize, logFile.length());
+     // The index file should also be proper.
+-    assertEquals(1000, logLengths.get(LogName.SYSLOG).longValue());
++    assertEquals(1000 + truncatedMsgSize, logLengths.get(LogName.SYSLOG)
++        .longValue());
++    String syslog = TestMiniMRMapRedDebugScript.readTaskLog(LogName.SYSLOG,
++        attemptID, false);
++    assertTrue(syslog.startsWith(TaskLogsTruncater.TRUNCATED_MSG));
+     logFile = TaskLog.getTaskLogFile(attemptID, false, LogName.STDERR);
+     assertEquals(500, logFile.length());
+     // The index file should also be proper.
+     assertEquals(500, logLengths.get(LogName.STDERR).longValue());
++    String stderr = TestMiniMRMapRedDebugScript.readTaskLog(LogName.STDERR,
++        attemptID, false);
++    assertFalse(stderr.startsWith(TaskLogsTruncater.TRUNCATED_MSG));
+ 
+     // truncate once again
+     logManager.addLogEvent(new JvmFinishedEvent(jvmInfo));
+     logLengths = getAllLogsFileLengths(attemptID, false);
+     logFile = TaskLog.getTaskLogFile(attemptID, false, LogName.SYSLOG);
+-    assertEquals(1000, logFile.length());
++    assertEquals(1000 + truncatedMsgSize, logFile.length());
+     // The index file should also be proper.
+-    assertEquals(1000, logLengths.get(LogName.SYSLOG).longValue());
++    assertEquals(1000 + truncatedMsgSize, logLengths.get(LogName.SYSLOG)
++        .longValue());
+     logFile = TaskLog.getTaskLogFile(attemptID, false, LogName.STDERR);
+     assertEquals(500, logFile.length());
+     // The index file should also be proper.
+@@ -365,7 +389,7 @@ public class TestTaskLogsTruncater {
+                              0);
+ 
+     // Let the tasks write logs more than retain-size
+-    writeRealBytes(attempt1, attempt1, LogName.SYSLOG, 200, 'A');
++    writeRealChars(attempt1, attempt1, LogName.SYSLOG, 200, 'A');
+ 
+     File attemptDir = TaskLog.getAttemptDir(attempt1, false);
+     assertTrue(attemptDir + " doesn't exist!", attemptDir.exists());
+@@ -375,13 +399,13 @@ public class TestTaskLogsTruncater {
+     Task task2 = new MapTask(null, attempt2, 0, new JobSplit.TaskSplitIndex(),
+                              0);
+     // Let attempt2 also write some logs
+-    writeRealBytes(attempt1, attempt2, LogName.SYSLOG, 100, 'B');
++    writeRealChars(attempt1, attempt2, LogName.SYSLOG, 100, 'B');
+     // Start yet another attempt in the same JVM
+     TaskAttemptID attempt3 = new TaskAttemptID(baseTaskID, attemptsCount++);
+     Task task3 = new MapTask(null, attempt3, 0, new JobSplit.TaskSplitIndex(),
+                              0);
+     // Let attempt3 also write some logs
+-    writeRealBytes(attempt1, attempt3, LogName.SYSLOG, 225, 'C');
++    writeRealChars(attempt1, attempt3, LogName.SYSLOG, 225, 'C');
+     // Finish the JVM.
+     JVMInfo jvmInfo = new JVMInfo(attemptDir, 
+         Arrays.asList((new Task[] { task1, task2, task3 })));
+@@ -390,46 +414,50 @@ public class TestTaskLogsTruncater {
+     // The log-file should now be truncated.
+     assertTrue(attemptDir.exists());
+     File logFile = TaskLog.getTaskLogFile(attempt1, false, LogName.SYSLOG);
+-    assertEquals(400, logFile.length());
++    assertEquals(400  + (2 * truncatedMsgSize), logFile.length());
+     // The index files should also be proper.
+-    assertEquals(150, getAllLogsFileLengths(attempt1, false).get(
+-        LogName.SYSLOG).longValue());
+-    assertEquals(100, getAllLogsFileLengths(attempt2, false).get(
+-        LogName.SYSLOG).longValue());
+-    assertEquals(150, getAllLogsFileLengths(attempt3, false).get(
+-        LogName.SYSLOG).longValue());
+-
+-    // assert the data.
+-    FileReader reader =
+-        new FileReader(TaskLog.getTaskLogFile(attempt1, false, LogName.SYSLOG));
+-    int ch, bytesRead = 0;
+-    boolean dataValid = true;
+-    while ((ch = reader.read()) != -1) {
+-      bytesRead++;
+-      if (bytesRead <= 150) {
+-        if ((char) ch != 'A') {
+-          LOG.warn("Truncation didn't happen properly. At "
+-              + (bytesRead + 1) + "th byte, expected 'A' but found "
+-              + (char) ch);
+-          dataValid = false;
+-        }
+-      } else if (bytesRead <= 250) {
+-        if ((char) ch != 'B') {
+-          LOG.warn("Truncation didn't happen properly. At "
+-              + (bytesRead + 1) + "th byte, expected 'B' but found "
+-              + (char) ch);
+-          dataValid = false;
+-        }
+-      } else if ((char) ch != 'C') {
+-        LOG.warn("Truncation didn't happen properly. At " + (bytesRead + 1)
+-            + "th byte, expected 'C' but found " + (char) ch);
+-        dataValid = false;
++    assertEquals(150 + truncatedMsgSize, getAllLogsFileLengths(attempt1, false)
++        .get(LogName.SYSLOG).longValue());
++    assertEquals(100, getAllLogsFileLengths(attempt2, false)
++        .get(LogName.SYSLOG).longValue());
++    assertEquals(150 + truncatedMsgSize, getAllLogsFileLengths(attempt3, false)
++        .get(LogName.SYSLOG).longValue());
++
++    // assert data for attempt1
++    String syslog = TestMiniMRMapRedDebugScript.readTaskLog(LogName.SYSLOG,
++        attempt1, false);
++    assertTrue(syslog.startsWith(TaskLogsTruncater.TRUNCATED_MSG));
++    String truncatedLog = syslog.substring(truncatedMsgSize);
++    for (int i = 0 ; i < 150; i++) {
++      assertEquals("Truncation didn't happen properly. At "
++         + (i + 1) + "th byte, expected 'A' but found "
++         + truncatedLog.charAt(i), 'A', truncatedLog.charAt(i));
++    }
++    
++    // assert data for attempt2
++    syslog = TestMiniMRMapRedDebugScript.readTaskLog(LogName.SYSLOG,
++          attempt2, false);
++    for (int i = 0 ; i < 100; i++) {
++        assertEquals("Truncation didn't happen properly. At "
++           + (i + 1) + "th byte, expected 'B' but found "
++           + truncatedLog.charAt(i), 'B', syslog.charAt(i));
+       }
++    
++    // assert data for attempt3
++    syslog = TestMiniMRMapRedDebugScript.readTaskLog(LogName.SYSLOG,
++        attempt3, false);
++    assertTrue(syslog.startsWith(TaskLogsTruncater.TRUNCATED_MSG));
++    truncatedLog = syslog.substring(truncatedMsgSize);
++    for (int i = 0 ; i < 150; i++) {
++      assertEquals("Truncation didn't happen properly. At "
++         + (i + 1) + "th byte, expected 'C' but found "
++         + truncatedLog.charAt(i), 'C', truncatedLog.charAt(i));
+     }
+-    assertTrue("Log-truncation didn't happen properly!", dataValid);
+ 
+     logManager.addLogEvent(new JvmFinishedEvent(jvmInfo));
+-    assertEquals(400, logFile.length());
++    // First and third attempts' logs are only truncated, so include 2*length of
++    // TRUNCATED_MSG header
++    assertEquals(400 + 2 * truncatedMsgSize, logFile.length());
+   }
+ 
+   private static String TEST_ROOT_DIR =
+@@ -500,13 +528,12 @@ public class TestTaskLogsTruncater {
+             TaskLog.getTaskLogFile(tce.getTaskAttemptId(), false,
+                 TaskLog.LogName.STDOUT).length();
+         assertTrue("STDOUT log file length for " + tce.getTaskAttemptId()
+-            + " is " + length + " and not <=10000", length <= 10000);
++            + " is " + length + " and not <=" + 10000 + truncatedMsgSize,
++            length <= 10000 + truncatedMsgSize);
+         if (tce.isMap) {
+           String stderr = TestMiniMRMapRedDebugScript.readTaskLog(
+               LogName.STDERR, tce.getTaskAttemptId(), false);
+           System.out.println("STDERR log:" + stderr);
+-          assertTrue(stderr.length() > 0);
+-          assertTrue(stderr.length() < 10000);
+           assertTrue(stderr.equals(STDERR_LOG));
+         }
+       }
+@@ -591,9 +618,9 @@ public class TestTaskLogsTruncater {
+                   TaskLog.LogName.DEBUGOUT);
+           if (debugOutFile.exists()) {
+             long length = debugOutFile.length();
+-            assertTrue("DEBUGOUT log file length for "
+-                + tce.getTaskAttemptId() + " is " + length
+-                + " and not =10000", length == 10000);
++            assertTrue("DEBUGOUT log file length for " + tce.getTaskAttemptId()
++                + " is " + length + " and not " + 10000 + truncatedMsgSize,
++                length == 10000 + truncatedMsgSize);
+           }
+         }
+       }
+-- 
+1.7.0.4
+

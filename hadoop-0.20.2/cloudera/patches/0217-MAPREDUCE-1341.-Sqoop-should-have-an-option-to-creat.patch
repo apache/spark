@@ -1,0 +1,290 @@
+From a5ccc56a79fc53de5ff16c6cb996f41a4216c28d Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:51:29 -0800
+Subject: [PATCH 0217/1179] MAPREDUCE-1341. Sqoop should have an option to create hive tables and skip the table import step
+
+Description: In case the client only needs to create tables in hive, it would be helpful if Sqoop had an optional parameter:
+
+<p>--hive-create-only</p>
+
+<p>which would omit the time consuming table import step, generate hive create table statements and run them.</p>
+
+<p>Also adds --hive-overwrite flag which allows overwriting of existing table definition.
+
+Reason: New feature
+Author: Leonid Furman
+Ref: UNKNOWN
+---
+ src/contrib/sqoop/doc/Sqoop-manpage.txt            |    7 ++++++
+ src/contrib/sqoop/doc/hive.txt                     |   20 ++++++++++-------
+ .../src/java/org/apache/hadoop/sqoop/Sqoop.java    |    9 +++++--
+ .../java/org/apache/hadoop/sqoop/SqoopOptions.java |   22 ++++++++++++++++++++
+ .../org/apache/hadoop/sqoop/hive/HiveImport.java   |    4 ++-
+ .../apache/hadoop/sqoop/hive/TableDefWriter.java   |    6 ++++-
+ .../apache/hadoop/sqoop/hive/TestHiveImport.java   |   18 ++++++++++++++++
+ .../hadoop/sqoop/hive/TestTableDefWriter.java      |    2 +-
+ .../sqoop/testdata/hive/scripts/createOnlyImport.q |    1 +
+ .../testdata/hive/scripts/createOverwriteImport.q  |    1 +
+ .../testdata/hive/scripts/customDelimImport.q      |    2 +-
+ .../sqoop/testdata/hive/scripts/dateImport.q       |    2 +-
+ .../sqoop/testdata/hive/scripts/failingImport.q    |    2 +-
+ .../sqoop/testdata/hive/scripts/normalImport.q     |    2 +-
+ .../sqoop/testdata/hive/scripts/numericImport.q    |    2 +-
+ 15 files changed, 81 insertions(+), 19 deletions(-)
+ create mode 100644 src/contrib/sqoop/testdata/hive/scripts/createOnlyImport.q
+ create mode 100644 src/contrib/sqoop/testdata/hive/scripts/createOverwriteImport.q
+
+diff --git a/src/contrib/sqoop/doc/Sqoop-manpage.txt b/src/contrib/sqoop/doc/Sqoop-manpage.txt
+index 4658896..84da64c 100644
+--- a/src/contrib/sqoop/doc/Sqoop-manpage.txt
++++ b/src/contrib/sqoop/doc/Sqoop-manpage.txt
+@@ -97,6 +97,13 @@ Import control options
+ --hive-import::
+   If set, then import the table into Hive
+ 
++--hive-create-only::
++  Creates table in hive and skips the data import step
++
++--hive-overwrite::
++  Overwrites existing table in hive.
++  By default it does not overwrite existing table.
++
+ --table (table-name)::
+   The table to import
+ 
+diff --git a/src/contrib/sqoop/doc/hive.txt b/src/contrib/sqoop/doc/hive.txt
+index 2a4ef90..4947500 100644
+--- a/src/contrib/sqoop/doc/hive.txt
++++ b/src/contrib/sqoop/doc/hive.txt
+@@ -27,14 +27,18 @@ TABLE+ statement to define the data's layout in Hive. Importing data
+ into Hive is as simple as adding the *+--hive-import+* option to your
+ Sqoop command line.
+ 
+-After your data is imported into HDFS, Sqoop will generate a Hive
+-script containing a +CREATE TABLE+ operation defining your columns using
+-Hive's types, and a +LOAD DATA INPATH+ statement to move the data files
+-into Hive's warehouse directory. The script will be executed by
+-calling the installed copy of hive on the machine where Sqoop is run.
+-If you have multiple Hive installations, or +hive+ is not in your
+-+$PATH+ use the *+--hive-home+* option to identify the Hive installation
+-directory. Sqoop will use +$HIVE_HOME/bin/hive+ from here.
++By default the data is imported into HDFS, but you can skip this operation
++by using the *+--hive-create+* option. Optionally, you can specify the
++*+--hive-overwrite+* option to indicate that existing table in hive must
++be replaced. After your data is imported into HDFS or this step is
++omitted, Sqoop will generate a Hive script containing a +CREATE TABLE+
++operation defining your columns using Hive's types, and a +LOAD DATA INPATH+
++statement to move the data files into Hive's warehouse directory if
++*+--hive-create+* option is not added. The script will be executed by calling
++the installed copy of hive on the machine where Sqoop is run. If you have
++multiple Hive installations, or +hive+ is not in your +$PATH+ use the
++*+--hive-home+* option to identify the Hive installation directory.
++Sqoop will use +$HIVE_HOME/bin/hive+ from here.
+ 
+ NOTE: This function is incompatible with +--as-sequencefile+.
+ 
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java
+index 8090aea..bfbf4f9 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java
+@@ -118,9 +118,12 @@ public class Sqoop extends Configured implements Tool {
+     jarFile = generateORM(tableName);
+ 
+     if (options.getAction() == SqoopOptions.ControlAction.FullImport) {
+-      // Proceed onward to do the import.
+-      ImportJobContext context = new ImportJobContext(tableName, jarFile, options);
+-      manager.importTable(context);
++      // check if data import is to be performed
++      if (!options.doCreateHiveTableOnly()) {
++        // Proceed onward to do the import.
++        ImportJobContext context = new ImportJobContext(tableName, jarFile, options);
++        manager.importTable(context);
++      }
+ 
+       // If the user wants this table to be in Hive, perform that post-load.
+       if (options.doHiveImport()) {
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
+index 49a3050..d11788b 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
+@@ -100,6 +100,8 @@ public class SqoopOptions {
+   private String tmpDir; // where temp data goes; usually /tmp
+   private String hiveHome;
+   private boolean hiveImport;
++  private boolean createHiveTableOnly;
++  private boolean overwriteHiveTable;
+   private String hiveTableName;
+   private String packageName; // package to prepend to auto-named classes.
+   private String className; // package+class to apply to individual table import.
+@@ -204,6 +206,8 @@ public class SqoopOptions {
+ 
+       this.direct = getBooleanProperty(props, "direct.import", this.direct);
+       this.hiveImport = getBooleanProperty(props, "hive.import", this.hiveImport);
++      this.createHiveTableOnly = getBooleanProperty(props, "hive.create.table.only", this.createHiveTableOnly);
++      this.overwriteHiveTable = getBooleanProperty(props, "hive.overwrite.table", this.overwriteHiveTable);
+       this.useCompression = getBooleanProperty(props, "compression", this.useCompression);
+       this.directSplitSize = getLongProperty(props, "direct.split.size",
+           this.directSplitSize);
+@@ -513,6 +517,10 @@ public class SqoopOptions {
+           this.hiveHome = args[++i];
+         } else if (args[i].equals("--hive-import")) {
+           this.hiveImport = true;
++        } else if (args[i].equals("--hive-create-only")) {
++          this.createHiveTableOnly = true;
++        } else if (args[i].equals("--hive-overwrite")) {
++          this.overwriteHiveTable = true;
+         } else if (args[i].equals("--hive-table")) {
+           this.hiveTableName = args[++i];
+         } else if (args[i].equals("--num-mappers") || args[i].equals("-m")) {
+@@ -780,6 +788,20 @@ public class SqoopOptions {
+   }
+ 
+   /**
++   * @return the user-specified option to create tables in hive with no loading
++   */
++  public boolean doCreateHiveTableOnly() {
++    return createHiveTableOnly;
++  }
++
++  /**
++   * @return the user-specified option to overwrite existing table in hive
++   */
++  public boolean doOverwriteHiveTable() {
++    return overwriteHiveTable;
++  }
++
++  /**
+    * @return location where .java files go; guaranteed to end with '/'
+    */
+   public String getCodeOutputDir() {
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/HiveImport.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/HiveImport.java
+index 13559e0..836448a 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/HiveImport.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/HiveImport.java
+@@ -150,7 +150,9 @@ public class HiveImport {
+         FileOutputStream fos = new FileOutputStream(tempFile);
+         w = new BufferedWriter(new OutputStreamWriter(fos));
+         w.write(createTableStr, 0, createTableStr.length());
+-        w.write(loadDataStmtStr, 0, loadDataStmtStr.length());
++        if (!options.doCreateHiveTableOnly()) {
++          w.write(loadDataStmtStr, 0, loadDataStmtStr.length());
++        }
+       } catch (IOException ioe) {
+         LOG.error("Error writing Hive load-in script: " + ioe.toString());
+         ioe.printStackTrace();
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/TableDefWriter.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/TableDefWriter.java
+index c2b3645..1fd907d 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/TableDefWriter.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/hive/TableDefWriter.java
+@@ -121,7 +121,11 @@ public class TableDefWriter {
+ 
+     String [] colNames = getColumnNames();
+     StringBuilder sb = new StringBuilder();
+-    sb.append("CREATE TABLE " + outputTableName + " ( ");
++    if (options.doOverwriteHiveTable()) {
++      sb.append("CREATE TABLE " + outputTableName + " ( ");
++    } else {
++      sb.append("CREATE TABLE IF NOT EXISTS " + outputTableName + " ( ");
++    }
+ 
+     boolean first = true;
+     for (String col : colNames) {
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
+index 25f87c7..9ce05e6 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
+@@ -109,6 +109,24 @@ public class TestHiveImport extends ImportJobTestCase {
+     runImportTest("NORMAL_HIVE_IMPORT", types, vals, "normalImport.q", null);
+   }
+ 
++  /** Test that table is created in hive with no data import */
++  @Test
++  public void testCreateOnlyHiveImport() throws IOException {
++    String [] types = { "VARCHAR(32)", "INTEGER", "CHAR(64)" };
++    String [] vals = { "'test'", "42", "'somestring'" };
++    String [] extraArgs = {"--hive-create-only"};
++    runImportTest("CREATE_ONLY_HIVE_IMPORT", types, vals, "createOnlyImport.q", extraArgs);
++  }
++
++  /** Test that table is created in hive and replaces the existing table if any */
++  @Test
++  public void testCreateOverwriteHiveImport() throws IOException {
++    String [] types = { "VARCHAR(32)", "INTEGER", "CHAR(64)" };
++    String [] vals = { "'test'", "42", "'somestring'" };
++    String [] extraArgs = {"--hive-create-only", "--hive-overwrite"};
++    runImportTest("CREATE_OVERWRITE_HIVE_IMPORT", types, vals, "createOverwriteImport.q", extraArgs);
++  }
++
+   /** Test that dates are coerced properly to strings */
+   @Test
+   public void testDate() throws IOException {
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestTableDefWriter.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestTableDefWriter.java
+index 0653885..98b2294 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestTableDefWriter.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestTableDefWriter.java
+@@ -73,7 +73,7 @@ public class TestTableDefWriter extends TestCase {
+     LOG.debug("Load data stmt: " + loadData);
+ 
+     // Assert that the statements generated have the form we expect.
+-    assertTrue(createTable.indexOf("CREATE TABLE outputTable") != -1);
++    assertTrue(createTable.indexOf("CREATE TABLE IF NOT EXISTS outputTable") != -1);
+     assertTrue(loadData.indexOf("INTO TABLE outputTable") != -1);
+     assertTrue(loadData.indexOf("/inputTable'") != -1);
+   }
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/createOnlyImport.q b/src/contrib/sqoop/testdata/hive/scripts/createOnlyImport.q
+new file mode 100644
+index 0000000..6863304
+--- /dev/null
++++ b/src/contrib/sqoop/testdata/hive/scripts/createOnlyImport.q
+@@ -0,0 +1 @@
++CREATE TABLE IF NOT EXISTS CREATE_ONLY_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 INT, DATA_COL2 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/createOverwriteImport.q b/src/contrib/sqoop/testdata/hive/scripts/createOverwriteImport.q
+new file mode 100644
+index 0000000..d0b9beb
+--- /dev/null
++++ b/src/contrib/sqoop/testdata/hive/scripts/createOverwriteImport.q
+@@ -0,0 +1 @@
++CREATE TABLE CREATE_OVERWRITE_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 INT, DATA_COL2 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/customDelimImport.q b/src/contrib/sqoop/testdata/hive/scripts/customDelimImport.q
+index 1e7defb..38a5f65 100644
+--- a/src/contrib/sqoop/testdata/hive/scripts/customDelimImport.q
++++ b/src/contrib/sqoop/testdata/hive/scripts/customDelimImport.q
+@@ -1,2 +1,2 @@
+-CREATE TABLE CUSTOM_DELIM_IMPORT ( DATA_COL0 STRING, DATA_COL1 INT, DATA_COL2 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\054' LINES TERMINATED BY '\174' STORED AS TEXTFILE;
++CREATE TABLE IF NOT EXISTS CUSTOM_DELIM_IMPORT ( DATA_COL0 STRING, DATA_COL1 INT, DATA_COL2 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\054' LINES TERMINATED BY '\174' STORED AS TEXTFILE;
+ LOAD DATA INPATH 'file:BASEPATH/sqoop/warehouse/CUSTOM_DELIM_IMPORT' INTO TABLE CUSTOM_DELIM_IMPORT;
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/dateImport.q b/src/contrib/sqoop/testdata/hive/scripts/dateImport.q
+index 223f67a..21446d4 100644
+--- a/src/contrib/sqoop/testdata/hive/scripts/dateImport.q
++++ b/src/contrib/sqoop/testdata/hive/scripts/dateImport.q
+@@ -1,2 +1,2 @@
+-CREATE TABLE DATE_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
++CREATE TABLE IF NOT EXISTS DATE_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
+ LOAD DATA INPATH 'file:BASEPATH/sqoop/warehouse/DATE_HIVE_IMPORT' INTO TABLE DATE_HIVE_IMPORT;
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/failingImport.q b/src/contrib/sqoop/testdata/hive/scripts/failingImport.q
+index 223f67a..21446d4 100644
+--- a/src/contrib/sqoop/testdata/hive/scripts/failingImport.q
++++ b/src/contrib/sqoop/testdata/hive/scripts/failingImport.q
+@@ -1,2 +1,2 @@
+-CREATE TABLE DATE_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
++CREATE TABLE IF NOT EXISTS DATE_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
+ LOAD DATA INPATH 'file:BASEPATH/sqoop/warehouse/DATE_HIVE_IMPORT' INTO TABLE DATE_HIVE_IMPORT;
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/normalImport.q b/src/contrib/sqoop/testdata/hive/scripts/normalImport.q
+index 76e690c..7cb31bc 100644
+--- a/src/contrib/sqoop/testdata/hive/scripts/normalImport.q
++++ b/src/contrib/sqoop/testdata/hive/scripts/normalImport.q
+@@ -1,2 +1,2 @@
+-CREATE TABLE NORMAL_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 INT, DATA_COL2 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
++CREATE TABLE IF NOT EXISTS NORMAL_HIVE_IMPORT ( DATA_COL0 STRING, DATA_COL1 INT, DATA_COL2 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
+ LOAD DATA INPATH 'file:BASEPATH/sqoop/warehouse/NORMAL_HIVE_IMPORT' INTO TABLE NORMAL_HIVE_IMPORT;
+diff --git a/src/contrib/sqoop/testdata/hive/scripts/numericImport.q b/src/contrib/sqoop/testdata/hive/scripts/numericImport.q
+index 263b295..f0690d1 100644
+--- a/src/contrib/sqoop/testdata/hive/scripts/numericImport.q
++++ b/src/contrib/sqoop/testdata/hive/scripts/numericImport.q
+@@ -1,2 +1,2 @@
+-CREATE TABLE NUMERIC_HIVE_IMPORT ( DATA_COL0 DOUBLE, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
++CREATE TABLE IF NOT EXISTS NUMERIC_HIVE_IMPORT ( DATA_COL0 DOUBLE, DATA_COL1 STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\001' LINES TERMINATED BY '\012' STORED AS TEXTFILE;
+ LOAD DATA INPATH 'file:BASEPATH/sqoop/warehouse/NUMERIC_HIVE_IMPORT' INTO TABLE NUMERIC_HIVE_IMPORT;
+-- 
+1.7.0.4
+

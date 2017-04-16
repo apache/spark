@@ -1,0 +1,690 @@
+From 53dd2c7f23291ee58a5d0d4ab8bab1b5bf47b2ba Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Mar 2011 10:31:04 -0800
+Subject: [PATCH 0940/1179] HDFS-1520, HDFS-1554, HDFS-1555. Add new lightweight recoverLease API for use by HBase
+
+This adds a limited-public API recoverLease() which is used by the HBase master
+when recovering the HBase write-ahead log.
+
+Author: Hairong Kuang, backport help from Andrew Purtell
+Ref: CDH-2812
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   16 ++
+ .../apache/hadoop/hdfs/DistributedFileSystem.java  |   13 ++
+ .../hadoop/hdfs/protocol/ClientProtocol.java       |   10 +
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    2 +-
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |  162 ++++++++++++-----
+ .../hadoop/hdfs/server/namenode/LeaseManager.java  |    6 +
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   10 +-
+ .../hdfs/server/protocol/DatanodeProtocol.java     |   18 ++-
+ .../apache/hadoop/hdfs/TestDFSClientRetries.java   |    5 +-
+ .../org/apache/hadoop/hdfs/TestFileAppend4.java    |    4 +-
+ .../org/apache/hadoop/hdfs/TestLeaseRecovery2.java |  198 +++++++++++++-------
+ .../hdfs/server/namenode/NameNodeAdapter.java      |    4 +-
+ 12 files changed, 317 insertions(+), 131 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 7ade82b..20bc161 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -549,6 +549,22 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   }
+ 
+   /**
++   * Recover a file's lease
++   * @param src a file's path
++   * @return true if the file is already closed
++   * @throws IOException
++   */
++  boolean recoverLease(String src) throws IOException {
++    checkOpen();
++    try {
++      return namenode.recoverLease(src, clientName);
++    } catch (RemoteException re) {
++      throw re.unwrapRemoteException(FileNotFoundException.class,
++                                     AccessControlException.class);
++    }
++  }
++
++  /**
+    * Append to an existing HDFS file.  
+    * 
+    * @param src file name
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+index d948eb4..b85cd57 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+@@ -188,6 +188,19 @@ public class DistributedFileSystem extends FileSystem {
+           dfs.open(getPathName(f), bufferSize, verifyChecksum, statistics));
+   }
+ 
++  /**
++   * Start the lease recovery of a file
++   *
++   * @param f a file
++   * @return true if the file is already closed
++   * @throws IOException if an error occurs
++   * @throws NoSuchMethodException if server does not support this function
++   */
++  public boolean recoverLease(Path f)
++      throws IOException, NoSuchMethodException {
++    return dfs.recoverLease(getPathName(f));
++  }
++
+   /** This optional operation is not yet supported. */
+   public FSDataOutputStream append(Path f, int bufferSize,
+       Progressable progress) throws IOException {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+index 59e13a9..2a66325 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+@@ -134,6 +134,16 @@ public interface ClientProtocol extends VersionedProtocol {
+   public LocatedBlock append(String src, String clientName) throws IOException;
+ 
+   /**
++   * Start lease recovery
++   * 
++   * @param src path of the file to start lease recovery
++   * @param clientName name of the current client
++   * @return true if the file is already closed
++   * @throws IOException
++   */
++  public boolean recoverLease(String src, String clientName) throws IOException;
++
++  /**
+    * Set replication for an existing file.
+    * <p>
+    * The NameNode sets replication to the new value and returns.
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index fac0cd7..e3ecb69 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -1863,7 +1863,7 @@ public class DataNode extends Configured
+ 
+     List<DatanodeID> successList = new ArrayList<DatanodeID>();
+ 
+-    long generationstamp = namenode.nextGenerationStamp(block);
++    long generationstamp = namenode.nextGenerationStamp(block, closeFile);
+     Block newblock = new Block(block.getBlockId(), block.getNumBytes(), generationstamp);
+ 
+     for(BlockRecord r : syncList) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 73c4964..b269720 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -1154,51 +1154,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+ 
+     try {
+       INode myFile = dir.getFileINode(src);
+-      if (myFile != null && myFile.isUnderConstruction()) {
+-        INodeFileUnderConstruction pendingFile = (INodeFileUnderConstruction) myFile;
+-        //
+-        // If the file is under construction , then it must be in our
+-        // leases. Find the appropriate lease record.
+-        //
+-        Lease lease = leaseManager.getLease(holder);
+-        //
+-        // We found the lease for this file. And surprisingly the original
+-        // holder is trying to recreate this file. This should never occur.
+-        //
+-        if (lease != null) {
+-          Lease leaseFile = leaseManager.getLeaseByPath(src);
+-          if (leaseFile != null && leaseFile.equals(lease)) { 
+-            throw new AlreadyBeingCreatedException(
+-                                                 "failed to create file " + src + " for " + holder +
+-                                                 " on client " + clientMachine + 
+-                                                 " because current leaseholder is trying to recreate file.");
+-          }
+-        }
+-        //
+-        // Find the original holder.
+-        //
+-        lease = leaseManager.getLease(pendingFile.clientName);
+-        if (lease == null) {
+-          throw new AlreadyBeingCreatedException(
+-                                                 "failed to create file " + src + " for " + holder +
+-                                                 " on client " + clientMachine + 
+-                                                 " because pendingCreates is non-null but no leases found.");
+-        }
+-        //
+-        // If the original holder has not renewed in the last SOFTLIMIT 
+-        // period, then start lease recovery.
+-        //
+-        if (lease.expiredSoftLimit()) {
+-          LOG.info("startFile: recover lease " + lease + ", src=" + src +
+-                   " from client " + pendingFile.clientName);
+-          internalReleaseLease(lease, src);
+-        }
+-        throw new AlreadyBeingCreatedException("failed to create file " + src + " for " + holder +
+-                                               " on client " + clientMachine + 
+-                                               ", because this file is already being created by " +
+-                                               pendingFile.getClientName() + 
+-                                               " on " + pendingFile.getClientMachine());
+-      }
++      recoverLeaseInternal(myFile, src, holder, clientMachine, false);
+ 
+       try {
+         verifyReplication(src, replication, clientMachine);
+@@ -1273,6 +1229,102 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+   }
+ 
+   /**
++   * Recover lease;
++   * Immediately revoke the lease of the current lease holder and start lease
++   * recovery so that the file can be forced to be closed.
++   *
++   * @param src the path of the file to start lease recovery
++   * @param holder the lease holder's name
++   * @param clientMachine the client machine's name
++   * @return true if the file is already closed
++   * @throws IOException
++   */
++  synchronized boolean recoverLease(String src, String holder, String clientMachine)
++  throws IOException {
++    if (isInSafeMode()) {
++      throw new SafeModeException(
++          "Cannot recover the lease of " + src, safeMode);
++    }
++    if (!DFSUtil.isValidName(src)) {
++      throw new IOException("Invalid file name: " + src);
++    }
++
++    INode inode = dir.getFileINode(src);
++    if (inode == null) {
++      throw new FileNotFoundException("File not found " + src);
++    }
++
++    if (!inode.isUnderConstruction()) {
++      return true;
++    }
++    if (isPermissionEnabled) {
++      checkPathAccess(src, FsAction.WRITE);
++    }
++
++    recoverLeaseInternal(inode, src, holder, clientMachine, true);
++    return false;
++  }
++
++  private void recoverLeaseInternal(INode fileInode,
++      String src, String holder, String clientMachine, boolean force)
++  throws IOException {
++    if (fileInode != null && fileInode.isUnderConstruction()) {
++      INodeFileUnderConstruction pendingFile = (INodeFileUnderConstruction) fileInode;
++      //
++      // If the file is under construction , then it must be in our
++      // leases. Find the appropriate lease record.
++      //
++      Lease lease = leaseManager.getLease(holder);
++      //
++      // We found the lease for this file. And surprisingly the original
++      // holder is trying to recreate this file. This should never occur.
++      //
++      if (!force && lease != null) {
++        Lease leaseFile = leaseManager.getLeaseByPath(src);
++        if (leaseFile != null && leaseFile.equals(lease)) {
++          throw new AlreadyBeingCreatedException(
++                    "failed to create file " + src + " for " + holder +
++                    " on client " + clientMachine +
++                    " because current leaseholder is trying to recreate file.");
++        }
++      }
++      //
++      // Find the original holder.
++      //
++      lease = leaseManager.getLease(pendingFile.clientName);
++      if (lease == null) {
++        throw new AlreadyBeingCreatedException(
++                    "failed to create file " + src + " for " + holder +
++                    " on client " + clientMachine +
++                    " because pendingCreates is non-null but no leases found.");
++      }
++      if (force) {
++        // close now: no need to wait for soft lease expiration and
++        // close only the file src
++        LOG.info("recoverLease: recover lease " + lease + ", src=" + src +
++                 " from client " + pendingFile.clientName);
++        internalReleaseLeaseOne(lease, src);
++      } else {
++        //
++        // If the original holder has not renewed in the last SOFTLIMIT
++        // period, then start lease recovery.
++        //
++        if (lease.expiredSoftLimit()) {
++          LOG.info("startFile: recover lease " + lease + ", src=" + src +
++              " from client " + pendingFile.clientName);
++          internalReleaseLease(lease, src);
++        }
++        throw new AlreadyBeingCreatedException(
++            "failed to create file " + src + " for " + holder +
++            " on client " + clientMachine +
++            ", because this file is already being created by " +
++            pendingFile.getClientName() +
++            " on " + pendingFile.getClientMachine());
++      }
++    }
++  }
++
++  /**
+    * Append to an existing file in the namespace.
+    */
+   LocatedBlock appendFile(String src, String holder, String clientMachine
+@@ -5088,8 +5140,13 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+   /**
+    * Verifies that the block is associated with a file that has a lease.
+    * Increments, logs and then returns the stamp
++   *
++   * @param block block
++   * @param fromNN if it is for lease recovery initiated by NameNode
++   * @return a new generation stamp
+    */
+-  synchronized long nextGenerationStampForBlock(Block block) throws IOException {
++  synchronized long nextGenerationStampForBlock(Block block, boolean fromNN)
++  throws IOException {
+     if (isInSafeMode()) {
+       throw new SafeModeException("Cannot get nextGenStamp for " + block, safeMode);
+     }
+@@ -5105,6 +5162,19 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+       LOG.info(msg);
+       throw new IOException(msg);
+     }
++    // Disallow client-initiated recovery once NameNode initiated lease recovery
++    // starts
++    // There should always be a lease if the file is under recovery, but be
++    // paranoid about NPEs
++    Lease lease =
++      leaseManager.getLeaseByPath(FSDirectory.getFullPathName(fileINode));
++    if (!fromNN && (lease != null) && 
++        HdfsConstants.NN_RECOVERY_LEASEHOLDER.equals(lease.getHolder())) {
++      String msg = block +
++        "is being recovered by NameNode, ignoring the request from a client";
++      LOG.info(msg);
++      throw new IOException(msg);
++    }
+     if (!((INodeFileUnderConstruction)fileINode).setLastRecoveryTime(now())) {
+       String msg = block + " is already being recovered, ignoring this request.";
+       LOG.info(msg);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/LeaseManager.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/LeaseManager.java
+index 61e22eb..1be5453 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/LeaseManager.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/LeaseManager.java
+@@ -201,6 +201,12 @@ public class LeaseManager {
+       this.holder = holder;
+       renew();
+     }
++
++    /** Get the holder of the lease */
++    public String getHolder() {
++      return holder;
++    }
++
+     /** Only LeaseManager object can renew a lease */
+     private void renew() {
+       this.lastUpdate = FSNamesystem.now();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index a7a1923..b3c4ab0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -599,6 +599,12 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   }
+ 
+   /** {@inheritDoc} */
++  public boolean recoverLease(String src, String clientName) throws IOException {
++    String clientMachine = getClientMachine();
++    return namesystem.recoverLease(src, clientName, clientMachine);
++  }
++
++  /** {@inheritDoc} */
+   public boolean setReplication(String src, 
+                                 short replication
+                                 ) throws IOException {
+@@ -691,8 +697,8 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   }
+ 
+   /** {@inheritDoc} */
+-  public long nextGenerationStamp(Block block) throws IOException{
+-    return namesystem.nextGenerationStampForBlock(block);
++  public long nextGenerationStamp(Block block, boolean fromNN) throws IOException{
++    return namesystem.nextGenerationStampForBlock(block, fromNN);
+   }
+ 
+   /** {@inheritDoc} */
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+index 1f12634..ddb9e25 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+@@ -41,10 +41,11 @@ import org.apache.hadoop.security.KerberosInfo;
+     clientPrincipal = DFSConfigKeys.DFS_DATANODE_USER_NAME_KEY)
+ public interface DatanodeProtocol extends VersionedProtocol {
+   /**
+-   * 26: Remove getBlockLocations optimization
++   * 27: nextGenerationStamp has a new parameter indicating if it is for
++   * NameNode initiated lease recovery or not
+    */
+-  public static final long versionID = 26L;
+-  
++  public static final long versionID = 27L;
++
+   // error code
+   final static int NOTIFY = 0;
+   final static int DISK_ERROR = 1; // there are still valid volumes on DN
+@@ -146,12 +147,17 @@ public interface DatanodeProtocol extends VersionedProtocol {
+    * }
+    */
+   public void reportBadBlocks(LocatedBlock[] blocks) throws IOException;
+-  
++
+   /**
+    * @return the next GenerationStamp to be associated with the specified
+-   * block. 
++   * Get the next GenerationStamp to be associated with the specified
++   * block.
++   *
++   * @param block block
++   * @param fromNN if it is for lease recovery initiated by NameNode
++   * @return a new generation stamp
+    */
+-  public long nextGenerationStamp(Block block) throws IOException;
++  public long nextGenerationStamp(Block block, boolean fromNN) throws IOException;
+ 
+   /**
+    * Commit block synchronization in lease recovery
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java b/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
+index b27dc2f..9e0bdb3 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
+@@ -37,7 +37,6 @@ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.io.*;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.security.AccessControlException;
+-import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+@@ -231,6 +230,10 @@ public class TestDFSClientRetries extends TestCase {
+ 
+     public void setTimes(String src, long mtime, long atime) throws IOException {}
+ 
++    public boolean recoverLease(String src, String clientName) throws IOException {
++      return true;
++    }
++
+     public Token<DelegationTokenIdentifier> getDelegationToken(Text renewer)
+         throws IOException {
+       return null;
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+index 638c169..033e8bb 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+@@ -1297,7 +1297,7 @@ public class TestFileAppend4 extends TestCase {
+    * recovery from the first one, since it has a lower gen stamp.
+    */
+   public void testSimultaneousRecoveries() throws Exception {
+-        LOG.info("START");
++    LOG.info("START");
+     cluster = new MiniDFSCluster(conf, 3, true, null);
+     FileSystem fs1 = cluster.getFileSystem();;
+     final FileSystem fs2 = AppendTestUtil.createHdfsWithDifferentUsername(fs1.getConf());
+@@ -1313,7 +1313,7 @@ public class TestFileAppend4 extends TestCase {
+       nn.namesystem = spy(nn.namesystem);
+       NameNodeAdapter.callNextGenerationStampForBlock(
+         doAnswer(delayer).when(nn.namesystem),
+-        (Block)anyObject());
++        (Block)anyObject(), anyBoolean());
+ 
+       final AtomicReference<Throwable> err = new AtomicReference<Throwable>();
+       Thread recoverThread = new Thread("Recovery thread") {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery2.java b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery2.java
+index 476efda..20fe2e1 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery2.java
++++ b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery2.java
+@@ -44,17 +44,16 @@ public class TestLeaseRecovery2 extends junit.framework.TestCase {
+   static final long BLOCK_SIZE = 1024;
+   static final int FILE_SIZE = 1024*16;
+   static final short REPLICATION_NUM = (short)3;
+-  static byte[] buffer = new byte[FILE_SIZE];
+-  
++  private static byte[] buffer = new byte[FILE_SIZE];
++  private final Configuration conf = new Configuration();
++  private final int bufferSize = conf.getInt("io.file.buffer.size", 4096);
++
+   static private String fakeUsername = "fakeUser1";
+   static private String fakeGroup = "supergroup";
+ 
+   public void testBlockSynchronization() throws Exception {
+     final long softLease = 1000;
+     final long hardLease = 60 * 60 *1000;
+-    final short repl = 3;
+-    final Configuration conf = new Configuration();
+-    final int bufferSize = conf.getInt("io.file.buffer.size", 4096);
+     conf.setLong("dfs.block.size", BLOCK_SIZE);
+     conf.setInt("dfs.heartbeat.interval", 1);
+   //  conf.setInt("io.bytes.per.checksum", 16);
+@@ -75,87 +74,144 @@ public class TestLeaseRecovery2 extends junit.framework.TestCase {
+ 
+       //create a file
+       DistributedFileSystem dfs = (DistributedFileSystem)cluster.getFileSystem();
+-      // create a random file name
+-      String filestr = "/foo" + AppendTestUtil.nextInt();
+-      System.out.println("filestr=" + filestr);
+-      Path filepath = new Path(filestr);
+-      FSDataOutputStream stm = dfs.create(filepath, true,
+-          bufferSize, repl, BLOCK_SIZE);
+-      assertTrue(dfs.dfs.exists(filestr));
+-
+-      // write random number of bytes into it.
+       int size = AppendTestUtil.nextInt(FILE_SIZE);
+-      System.out.println("size=" + size);
+-      stm.write(buffer, 0, size);
+-
+-      // sync file
+-      AppendTestUtil.LOG.info("sync");
+-      stm.sync();
+-      AppendTestUtil.LOG.info("leasechecker.interruptAndJoin()");
+-      dfs.dfs.leasechecker.interruptAndJoin();
++      Path filepath = createFile(dfs, size, true);
+ 
+       // set the soft limit to be 1 second so that the
+       // namenode triggers lease recovery on next attempt to write-for-open.
+       cluster.setLeasePeriod(softLease, hardLease);
+ 
+-      // try to re-open the file before closing the previous handle. This
+-      // should fail but will trigger lease recovery.
+-      {
+-        UserGroupInformation ugi = 
+-          UserGroupInformation.createUserForTesting(fakeUsername, 
+-                                                    new String [] { fakeGroup});
+-        
+-        FileSystem dfs2 = DFSTestUtil.getFileSystemAs(ugi, conf);
+-  
+-        boolean done = false;
+-        for(int i = 0; i < 10 && !done; i++) {
+-          AppendTestUtil.LOG.info("i=" + i);
+-          try {
+-            dfs2.create(filepath, false, bufferSize, repl, BLOCK_SIZE);
+-            fail("Creation of an existing file should never succeed.");
+-          } catch (IOException ioe) {
+-            final String message = ioe.getMessage();
+-            if (message.contains("file exists")) {
+-              AppendTestUtil.LOG.info("done", ioe);
+-              done = true;
+-            }
+-            else if (message.contains(AlreadyBeingCreatedException.class.getSimpleName())) {
+-              AppendTestUtil.LOG.info("GOOD! got " + message);
+-            }
+-            else {
+-              AppendTestUtil.LOG.warn("UNEXPECTED IOException", ioe);
+-            }
+-          }
+-
+-          if (!done) {
+-            AppendTestUtil.LOG.info("sleep " + 5000 + "ms");
+-            try {Thread.sleep(5000);} catch (InterruptedException e) {}
+-          }
+-        }
+-        assertTrue(done);
+-      }
++      recoverLeaseUsingCreate(filepath);
++      verifyFile(dfs, filepath, actual, size);
++
++      //test recoverLease
++      // set the soft limit to be 1 hour but recoverLease should
++      // close the file immediately
++      cluster.setLeasePeriod(hardLease, hardLease);
++      size = AppendTestUtil.nextInt(FILE_SIZE);
++      filepath = createFile(dfs, size, false);
++
++      // test recoverLese from a different client
++      recoverLease(filepath, null);
++      verifyFile(dfs, filepath, actual, size);
+ 
+-      AppendTestUtil.LOG.info("Lease for file " +  filepath + " is recovered. "
+-          + "Validating its contents now...");
++      // test recoverlease from the same client
++      size = AppendTestUtil.nextInt(FILE_SIZE);
++      filepath = createFile(dfs, size, false);
+ 
+-      // verify that file-size matches
+-      assertTrue("File should be " + size + " bytes, but is actually " +
+-                 " found to be " + dfs.getFileStatus(filepath).getLen() +
+-                 " bytes",
+-                 dfs.getFileStatus(filepath).getLen() == size);
++      // create another file using the same client
++      Path filepath1 = new Path("/foo" + AppendTestUtil.nextInt());
++      FSDataOutputStream stm = dfs.create(filepath1, true,
++          bufferSize, REPLICATION_NUM, BLOCK_SIZE);
+ 
+-      // verify that there is enough data to read.
+-      System.out.println("File size is good. Now validating sizes from datanodes...");
+-      FSDataInputStream stmin = dfs.open(filepath);
+-      stmin.readFully(0, actual, 0, size);
+-      stmin.close();
++      // recover the first file
++      recoverLease(filepath, dfs);
++      verifyFile(dfs, filepath, actual, size);
++
++      // continue to write to the second file
++      stm.write(buffer, 0, size);
++      stm.close();
++      verifyFile(dfs, filepath1, actual, size);
+     }
+     finally {
+       try {
+-        if (cluster != null) {cluster.shutdown();}
++        if (cluster != null) {cluster.getFileSystem().close();cluster.shutdown();}
+       } catch (Exception e) {
+         // ignore
+       }
+     }
+   }
++
++  private void recoverLease(Path filepath, DistributedFileSystem dfs2)
++  throws Exception {
++    if (dfs2==null) {
++      UserGroupInformation ugi = 
++        UserGroupInformation.createUserForTesting(fakeUsername, 
++            new String [] { fakeGroup });
++      dfs2 = (DistributedFileSystem)DFSTestUtil.getFileSystemAs(ugi, conf);
++    }
++    while (!dfs2.recoverLease(filepath)) {
++      AppendTestUtil.LOG.info("sleep " + 5000 + "ms");
++      Thread.sleep(5000);
++    }
++  }
++
++  // try to re-open the file before closing the previous handle. This
++  // should fail but will trigger lease recovery.
++  private Path createFile(DistributedFileSystem dfs, int size,
++      boolean triggerSoftLease) throws IOException, InterruptedException {
++    // create a random file name
++    String filestr = "/foo" + AppendTestUtil.nextInt();
++    System.out.println("filestr=" + filestr);
++    Path filepath = new Path(filestr);
++    FSDataOutputStream stm = dfs.create(filepath, true,
++        bufferSize, REPLICATION_NUM, BLOCK_SIZE);
++    assertTrue(dfs.dfs.exists(filestr));
++
++    // write random number of bytes into it.
++    System.out.println("size=" + size);
++    stm.write(buffer, 0, size);
++
++    // sync file
++    AppendTestUtil.LOG.info("sync");
++    stm.sync();
++    if (triggerSoftLease) {
++      AppendTestUtil.LOG.info("leasechecker.interruptAndJoin()");
++      dfs.dfs.leasechecker.interruptAndJoin();
++    }
++    return filepath;
++  }
++
++  private void recoverLeaseUsingCreate(Path filepath) 
++      throws IOException, InterruptedException {
++    UserGroupInformation ugi = 
++      UserGroupInformation.createUserForTesting(fakeUsername, 
++          new String [] { fakeGroup});
++    FileSystem dfs2 = DFSTestUtil.getFileSystemAs(ugi, conf);
++
++    boolean done = false;
++    for(int i = 0; i < 10 && !done; i++) {
++      AppendTestUtil.LOG.info("i=" + i);
++      try {
++        dfs2.create(filepath, false, bufferSize, (short)1, BLOCK_SIZE);
++        fail("Creation of an existing file should never succeed.");
++      } catch (IOException ioe) {
++        final String message = ioe.getMessage();
++        if (message.contains("file exists")) {
++          AppendTestUtil.LOG.info("done", ioe);
++          done = true;
++        }
++        else if (message.contains(AlreadyBeingCreatedException.class.getSimpleName())) {
++          AppendTestUtil.LOG.info("GOOD! got " + message);
++        }
++        else {
++          AppendTestUtil.LOG.warn("UNEXPECTED IOException", ioe);
++        }
++      }
++
++      if (!done) {
++        AppendTestUtil.LOG.info("sleep " + 5000 + "ms");
++        try {Thread.sleep(5000);} catch (InterruptedException e) {}
++      }
++    }
++    assertTrue(done);
++  }
++
++  private void verifyFile(FileSystem dfs, Path filepath, byte[] actual,
++      int size) throws IOException {
++    AppendTestUtil.LOG.info("Lease for file " +  filepath + " is recovered. "
++        + "Validating its contents now...");
++
++    // verify that file-size matches
++    assertTrue("File should be " + size + " bytes, but is actually " +
++        " found to be " + dfs.getFileStatus(filepath).getLen() +
++        " bytes",
++        dfs.getFileStatus(filepath).getLen() == size);
++
++    // verify that there is enough data to read.
++    System.out.println("File size is good. Now validating sizes from datanodes...");
++    FSDataInputStream stmin = dfs.open(filepath);
++    stmin.readFully(0, actual, 0, size);
++    stmin.close();
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java b/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
+index 9509376..cc03803 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
+@@ -27,8 +27,8 @@ public abstract class NameNodeAdapter {
+   }
+ 
+   public static long callNextGenerationStampForBlock(
+-    FSNamesystem fsn, Block block) throws IOException {
+-    return fsn.nextGenerationStampForBlock(block);
++    FSNamesystem fsn, Block block, boolean fromNN) throws IOException {
++    return fsn.nextGenerationStampForBlock(block, fromNN);
+   }
+ 
+   /**
+-- 
+1.7.0.4
+

@@ -1,0 +1,48 @@
+From af1598cf2f8ce26c43f74b0be684662287e34095 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 18:03:25 -0800
+Subject: [PATCH 0808/1179] HDFS-1101. TestDiskError should check all nodes in cluster for test case
+
+Reason: Test failure
+Author: Chris Douglas
+Ref: CDH-2622
+---
+ .../hadoop/hdfs/server/datanode/TestDiskError.java |   18 ++++++++----------
+ 1 files changed, 8 insertions(+), 10 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java
+index 456483e..6a1a244 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java
+@@ -162,20 +162,18 @@ public class TestDiskError extends TestCase {
+     
+     try {
+       // Start the cluster
+-      cluster = 
+-        new MiniDFSCluster(0, conf, 1, true,  
+-                          true, false,  null, null, null, null);
++      cluster = new MiniDFSCluster(conf, 1, true, null);
+       cluster.waitActive();
+       
+       // Check permissions on directories in 'dfs.data.dir'
+       FileSystem localFS = FileSystem.getLocal(conf);
+-      String[] dataDirs = conf.getStrings(DataNode.DATA_DIR_KEY);
+-      for (String dir : dataDirs) {
+-        Path dataDir = new Path(dir);
+-        FsPermission actual = localFS.getFileStatus(dataDir).getPermission(); 
+-        assertEquals("Permission for dir: " + dataDir + ", is " + actual + 
+-                         ", while expected is " + expected, 
+-                     expected, actual);
++      for (DataNode dn : cluster.getDataNodes()) {
++        String[] dataDirs = dn.getConf().getStrings(DataNode.DATA_DIR_KEY);
++        for (String dir : dataDirs) {
++          Path dataDir = new Path(dir);
++          FsPermission actual = localFS.getFileStatus(dataDir).getPermission();
++          assertEquals("Permission for dir: " + dataDir, expected, actual);
++        }
+       }
+     } finally {
+       if (cluster != null)
+-- 
+1.7.0.4
+

@@ -1,0 +1,105 @@
+From 95d64157f05d467dad3e1190a5cba2a3f89b0925 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 20 May 2010 17:15:13 -0700
+Subject: [PATCH 0254/1179] CLOUDERA-BUILD. Rename the fuse_dfs wrapper.
+
+Description: Rename the fuse_dfs wrapper to hadoop-fuse-dfs.
+
+Reason: Improvement
+Author: Alex Newman
+Ref: CDH-1103
+---
+ cloudera/files/fuse_dfs.1.gz        |  Bin 1165 -> 0 bytes
+ cloudera/files/hadoop-fuse-dfs.1.gz |  Bin 0 -> 1178 bytes
+ cloudera/install_hadoop.sh          |    4 ++--
+ 3 files changed, 2 insertions(+), 2 deletions(-)
+ delete mode 100644 cloudera/files/fuse_dfs.1.gz
+ create mode 100644 cloudera/files/hadoop-fuse-dfs.1.gz
+
+diff --git a/cloudera/files/fuse_dfs.1.gz b/cloudera/files/fuse_dfs.1.gz
+deleted file mode 100644
+index 089cb462fd46f40203a1c95655f586c47f0767aa..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 1165
+zcmV;81akWyiwFqrgTqSz17>w|WnW}wb1pFey;i|)<2DdIS6?x3FD($uP7VufkOozn
+z1a>#E4coiuqA3hYq-<^|QXnZS{`=05lI^zGc2B)Y<Z$Nk&6_8sF9TRuQwZn4@1%oL
+zDgmwZyClV}tu<u{!-{Dbu9+*OgtBpB!%LT5QbdxjC&wkYgh5tYso-jSIfel|N!`4`
+z;G+{3o|$f#a)TsER}+|J&kxD*+{+N2O`|<voyq;<3JTRYkB688S%UP?;uC{hnc@|=
+z*vmqsG12PtY`$1cSNL{!0`fZyIsB2}<Mn8CgXQ<a-d^9-#`;^hskGm4;k?w$OQUaN
+zru&E0FU#p-J)O_~nk->TnbrZmTV%=5!x1U*<qin8f&kH5#wBHC>U>XXP((%wvDiG+
+zA=J|a42JvyhK7s0*$$EqLe!_?w$WPZEhX?f0j045o6=~G2sj|w$XYlE750#Ah3j*g
+zcx`wor}1gSIJX!yNHT@w(&hI8YQ+jcw{o>8WO)c>x}#XM-N|AX)-<bxMv%~&Msdgm
+z-U#m&(0P->n&cw`O=Y79DHK*<5!@HrTPYkRES+b0dIU)=IfF>A-+(Wi`XA8I&SB$a
+zB}~)7ER5zz;l#9{3?AmviozRvIHqA%K*5Tg;Kw}7<5u2y@$b2gVgF2mOj+Zx5-u<(
+z48~)ZYGxU(gu8+%k6;Lf-!UI_G$b9lUEoC<95RwKF^VK{p#&vBIx4frhare`n_j?(
+z)P6nkReh>2_gE}h;^bIacz3REQwtl0DGUfT#Iza}gqVVCX=Li?Ge=S^&zrK03jJ``
+z^T6y@(5T0)4)*aHl&9SZ4ct)Yc40&W<L-wKcRzMWt$`%k3GIN<>Hz&#OFMC6)LMzx
+z>28OKadh1-dC)9Zfj$u@JS-PX_mN0p2)vi>KO%Fv-Gm}8K?{r|oYs&tA`F}%=RnqC
+zUvlBe`H)Z4C>k${A4%+wXn4iR5X!;rPjHpKORwHVLwTG&Jp?;}k?_Tci;^|Uk9Le3
+zQxC`K)p$ttF=Dw&9(#8|uuwNjk@VTw&<VYl)@U3l4|`@M%c-Pzqq#$ol-5+I&qWdu
+zJp7hDFCvID^NbeUPiJpI*YC&UF(M5KN1=;o*hvzmG)^$ihDI&-a_SuE?}><!U<M%}
+zSt8DmsA@WwR6zt1l^QCXhms)(s#!2Z>SAxO6wOD@ir46|C)-HQe8Y!N$2P!<C2~Q&
+z42UUMbpRdO5bXp4B|(z3k2rE;d{c+->{%ej^}K!m&AbKV=rAOnjX_NI!nPMDLBklv
+zU4v$yrpx*4`C+z>3Y}#4^Z8;knd7&Z=)kXQnBjhEyV-6f+G-RM8jOn;g<&ztui2;U
+z>nS=Nf@?H<;jc8mXwHW|9W|_zC8m11-#kt4mf7<2W|6HYNp|u%5q%Et^i`V+a%&}u
+z8DF~2Rrni0O7aW^-f5e{l*}!o;}-z}A^pPk4EO;VmqoXK=>9RXkL$^NnS7Ti@dh)|
+f((llX7A?c~p9^Igj_}gLRJX~WG=3j8PzeA48a*{z
+
+diff --git a/cloudera/files/hadoop-fuse-dfs.1.gz b/cloudera/files/hadoop-fuse-dfs.1.gz
+new file mode 100644
+index 0000000000000000000000000000000000000000..38e2fb5f7265bbd4b3d3078f6b5816a8a1eb00ac
+GIT binary patch
+literal 1178
+zcmV;L1ZDdliwFoSyY))|188AnZ*OodW_5FAEo5eME-?VTR!wi?HV{2mzhdBCS|FC4
+z92VFh4eB%r>?W}d+q>wZDGW-aEN&=LASo;U_njf-4<y@mPrXSRa^~^Pn@6S3J(ydQ
+z3+KR>(m^4WfL8i4NinpsrYN9aF%A6{bGejIG)}B};nH(jk)*3Jl#Clw_bJlH2%JN2
+zR9mUwVt77;9z06jyh87j6BeGBZkTetBuSTJn2w(AlDFHR`|xBM?E$NfZ||3otHycU
+z%N)o8q=y!t7-Y)iFTllC<|2*xmS3i``Es(vx0`pc{)9e<zY=`B91N}y%vRXz%d6U0
+ze+^fa_G>PjmzsHL^mR;ld$;^;F`2I>v*|Z;CQK>QI>2{}3>tbk;3h8J4xv{N0DH^0
+zq~uJU#-s*C45bij&O$jl!(<M<K0kxL;Ua4`z2rfN`W*(_Xf5@I^7v9fVXVNuHJT$3
+z4%i5!GVF&6+srn??Nggb0z4O!__Su6TU^vjMhY1xDz*Y@#d1N1bG682u?uCotyr`z
+zWnPAFnpHw0R%lJ5IAj73hDQwOyh&k23X_4YqEUntax1V1#)bA)3P%YG=UJ8>KvIKF
+zAkyo1;0wF{2XqwKt-Y*-X*!s>(Htopn--M8&0JcMdt-NpG|URfSzZc$$iqB_vc`*l
+z&vjV#J_#~qjmJv(fkAF?J$9*Pmf@FhRxrf@48iav^Kj6SD+4du;N+32iBTkp3neH4
+z(ovZ$KJ-DPoAe9@B>KyNuj*rcxy5410_Vue+`Chmn_Ac~T47G8A*R)+AjA}8OOsPa
+zD>{&3dDav~ROrLao(E<(g62PlI@pI}P@c9F8n~g(m0?5#<L;-2o1Z(R)<6<Hh9Y3J
+z+QB~5QX~cjt(AD3?sS+KC)kzAoo1N|^ocm=;d9RPekD>E7T!wtA1gDtS%)GnL3@lO
+z9KRuFL>M?j27;``zGT9a9U`BoQS@dMKa#lLqTvN6LnsH=zraQMA-(tzedT`gco$p+
+z2Eyk9E(+EtKj`dam|hHnr{IdkGP&<;9u=mcZj>VFvy-6{dMmBbI8q+A%u1F~N%2Z^
+zhaxGgsg5^F5)s_}F?yOu5bv!t`tp8A_fB;AaX1_z;E;C^nu#u+Bw<+NAmfN=l=NOz
+zoiV*lM8pJ72nop<ag;<=)4rq%T97E%P~mhb`GTODIYXo_wg^knm}D$}iB@}bkL1KY
+ze7H|G0ah%L39@HEOu?}O=+KSmDiD|n%A`2r$c*t#9d6{4g}CkweLsFTec=G;HzcLC
+zL1^~Owr59q!w`mDyQZHfi`n$)Zn}zk9gl8jv-x^F!&{qJ!3#J{^nQlBNpB^ZY{Z9l
+z<Dy~VvY6!e(dW@Wr|47(uF>$7ztA+JRqyucsBfJ}G1cSk`f+lz7%jf6=cCm)8690u
+zMAySJebe;bim#QZaD3_dSm6%`>B=)yeJ6NYretOrWjPB-2=G_7Wx#hxyv)1!uKODq
+seOirYi{yuq60a~7E&WDaY0)x#|20>p;fONLO?9384KJLlO^68q0IKpenE(I)
+
+literal 0
+HcmV?d00001
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 4eaef0f..3dc69a6 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -191,13 +191,13 @@ cp ${BUILD_DIR}/../../docs/sqoop/sqoop.1.gz $MAN_DIR/man1/sqoop-$APACHE_BRANCH.1
+ ############################################################
+ 
+ if [ ! -z "$NATIVE_BUILD_STRING" ]; then
+-  cp ${CLOUDERA_SOURCE_DIR}/fuse_dfs.1.gz $MAN_DIR/man1/
++  cp ${CLOUDERA_SOURCE_DIR}/hadoop-fuse-dfs.1.gz $MAN_DIR/man1/
+   # Fuse 
+   mkdir -p $LIB_DIR/bin
+   mv  ${BUILD_DIR}/contrib/fuse-dfs/* $LIB_DIR/bin
+   rmdir ${BUILD_DIR}/contrib/fuse-dfs 
+ 
+-  fuse_wrapper=${BIN_DIR}/fuse_dfs
++  fuse_wrapper=${BIN_DIR}/hadoop-fuse-dfs
+   cat > $fuse_wrapper << EOF
+ #!/bin/bash
+ 
+-- 
+1.7.0.4
+

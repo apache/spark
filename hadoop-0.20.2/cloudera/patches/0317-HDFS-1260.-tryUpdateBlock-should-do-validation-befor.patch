@@ -1,0 +1,203 @@
+From bf08bde983501e3ce8ebf6197049262518580611 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 23 Jun 2010 16:14:50 -0700
+Subject: [PATCH 0317/1179] HDFS-1260. tryUpdateBlock should do validation before renaming meta file
+
+Description: Solves bug where block became inaccessible in certain failure
+             conditions (particularly network partitions). Observed under
+             HBase workload at user site.
+Reason: Potential loss of synced data when write pipeline fails
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |   19 +++--
+ .../org/apache/hadoop/hdfs/TestFileAppend4.java    |   91 +++++++++++++++++++-
+ .../hdfs/server/namenode/NameNodeAdapter.java      |    7 ++
+ 3 files changed, 108 insertions(+), 9 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index d6be89d..6e4db87 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -1154,13 +1154,8 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     File oldMetaFile = findMetaFile(blockFile);
+     long oldgs = parseGenerationStamp(blockFile, oldMetaFile);
+     
+-    //rename meta file to a tmp file
+-    File tmpMetaFile = new File(oldMetaFile.getParent(),
+-        oldMetaFile.getName()+"_tmp" + newblock.getGenerationStamp());
+-    if (!oldMetaFile.renameTo(tmpMetaFile)){
+-      throw new IOException("Cannot rename block meta file to " + tmpMetaFile);
+-    }
+-
++    // First validate the update
++    
+     //update generation stamp
+     if (oldgs > newblock.getGenerationStamp()) {
+       throw new IOException("Cannot update block (id=" + newblock.getBlockId()
+@@ -1173,6 +1168,16 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       throw new IOException("Cannot update block file (=" + blockFile
+           + ") length from " + oldblock.getNumBytes() + " to " + newblock.getNumBytes());
+     }
++
++    // Now perform the update
++
++    //rename meta file to a tmp file
++    File tmpMetaFile = new File(oldMetaFile.getParent(),
++        oldMetaFile.getName()+"_tmp" + newblock.getGenerationStamp());
++    if (!oldMetaFile.renameTo(tmpMetaFile)){
++      throw new IOException("Cannot rename block meta file to " + tmpMetaFile);
++    }
++
+     if (newblock.getNumBytes() < oldblock.getNumBytes()) {
+       truncateBlock(blockFile, tmpMetaFile, oldblock.getNumBytes(), newblock.getNumBytes());
+     }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+index 7548bb5..f01cc37 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+@@ -1273,6 +1273,69 @@ public class TestFileAppend4 extends TestCase {
+     }
+   }
+ 
++  /**
++   * Test case where recovery starts on one node, but it's very slow
++   * (delayed right after nextGenerationStamp). A second recovery attempt
++   * completes while this one is being slow. Then we should reject the
++   * recovery from the first one, since it has a lower gen stamp.
++   */
++  public void testSimultaneousRecoveries() throws Exception {
++        LOG.info("START");
++    cluster = new MiniDFSCluster(conf, 3, true, null);
++    FileSystem fs1 = cluster.getFileSystem();;
++    final FileSystem fs2 = AppendTestUtil.createHdfsWithDifferentUsername(fs1.getConf());
++    try {
++      createFile(fs1, "/testSimultaneousRecoveries", 3, BBW_SIZE);
++      stm.sync();
++      loseLeases(fs1);
++
++      // Make the first nextGenerationStamp call get delayed
++      DelayAnswer delayer = new DelayAnswer(false);
++
++      NameNode nn = cluster.getNameNode();
++      nn.namesystem = spy(nn.namesystem);
++      NameNodeAdapter.callNextGenerationStampForBlock(
++        doAnswer(delayer).when(nn.namesystem),
++        (Block)anyObject());
++
++      final AtomicReference<Throwable> err = new AtomicReference<Throwable>();
++      Thread recoverThread = new Thread("Recovery thread") {
++        public void run() {
++          try {
++            recoverFile(fs2);
++          } catch (Throwable t) {
++            err.set(t);
++          }
++        }
++      };
++      recoverThread.start();
++
++      LOG.info("Waiting for first nextGenerationStamp to return");
++      delayer.waitForCall();
++
++      LOG.info("Allowing recovery time to try again");
++      Thread.sleep(10000);
++
++      LOG.info("Proceeding first recovery with old GS");
++      delayer.proceed();
++
++      LOG.info("Joining on recovery thread");
++      recoverThread.join();
++
++      LOG.info("Waiting a few seconds for blocks to get corrupted");
++      Thread.sleep(5000);
++
++      // close() should write recovered bbw to HDFS block
++      assertFileSize(fs2, BBW_SIZE); 
++      checkFile(fs2, BBW_SIZE);
++    } finally {
++      fs2.close();
++      fs1.close();
++      cluster.shutdown();
++    }
++    LOG.info("STOP");
++  }
++
+   
+   /**
+    * Mockito answer helper that triggers one latch as soon as the
+@@ -1282,6 +1345,20 @@ public class TestFileAppend4 extends TestCase {
+     private final CountDownLatch fireLatch = new CountDownLatch(1);
+     private final CountDownLatch waitLatch = new CountDownLatch(1);
+ 
++    boolean delayBefore = true;
++
++    int numTimes = 1;
++
++    public DelayAnswer() {}
++
++    /**
++     * @param delayBefore if true, the delay is before the method is called.
++     * if false, the delay is after the method returns.
++     */
++    public DelayAnswer(boolean delayBefore) {
++      this.delayBefore = delayBefore;
++    }
++
+     /**
+      * Wait until the method is called.
+      */
+@@ -1297,7 +1374,11 @@ public class TestFileAppend4 extends TestCase {
+       waitLatch.countDown();
+     }
+ 
+-    public Object answer(InvocationOnMock invocation) throws Throwable {
++    private void doDelay() throws Throwable {
++      synchronized (this) {
++        if (--numTimes < 0) return;
++      }
++
+       LOG.info("DelayAnswer firing fireLatch");
+       fireLatch.countDown();
+       try {
+@@ -1307,7 +1388,13 @@ public class TestFileAppend4 extends TestCase {
+       } catch (InterruptedException ie) {
+         throw new IOException("Interrupted waiting on latch", ie);
+       }
+-      return invocation.callRealMethod();
++    }
++
++    public Object answer(InvocationOnMock invocation) throws Throwable {
++      if (delayBefore) doDelay();
++      Object ret = invocation.callRealMethod();
++      if (!delayBefore) doDelay();
++      return ret;
+     }
+   }
+ 
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java b/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
+index 55ff19e..8f1d34e 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
+@@ -17,11 +17,18 @@
+  */
+ package org.apache.hadoop.hdfs.server.namenode;
+ import java.io.IOException;
++import org.apache.hadoop.hdfs.protocol.Block;
+ 
+ public abstract class NameNodeAdapter {
+   public static boolean checkFileProgress(FSNamesystem fsn, String path, boolean checkall) throws IOException {
+     INodeFile f = fsn.dir.getFileINode(path);
+     return fsn.checkFileProgress(f, checkall);
+   }
++
++  public static long callNextGenerationStampForBlock(
++    FSNamesystem fsn, Block block) throws IOException {
++    return fsn.nextGenerationStampForBlock(block);
++  }
++
+ }
+ 
+-- 
+1.7.0.4
+

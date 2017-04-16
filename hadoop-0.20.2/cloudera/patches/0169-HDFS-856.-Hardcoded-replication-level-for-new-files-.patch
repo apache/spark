@@ -1,0 +1,43 @@
+From a4cf3e8e86cbd42bef25eb3aab7e464ac86e3068 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:31:19 -0800
+Subject: [PATCH 0169/1179] HDFS-856. Hardcoded replication level for new files in fuse-dfs
+
+Description: In fuse-dfs, the number of replicas is always hardcoded to 3 in the arguments to hdfsOpenFile.  We should use the setting in the hadoop configuration instead.
+Reason: Configuration improvement
+Author: Brian Bockelman
+Ref: UNKNOWN
+---
+ src/contrib/fuse-dfs/src/fuse_impls_open.c     |    2 +-
+ src/contrib/fuse-dfs/src/fuse_impls_truncate.c |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_open.c b/src/contrib/fuse-dfs/src/fuse_impls_open.c
+index 68261e8..569b52c 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_open.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_open.c
+@@ -50,7 +50,7 @@ int dfs_open(const char *path, struct fuse_file_info *fi)
+     return -EIO;
+   }
+ 
+-  if ((fh->hdfsFH = hdfsOpenFile(fh->fs, path, flags,  0, 3, 0)) == NULL) {
++  if ((fh->hdfsFH = hdfsOpenFile(fh->fs, path, flags,  0, 0, 0)) == NULL) {
+     syslog(LOG_ERR, "ERROR: could not connect open file %s:%d\n", __FILE__, __LINE__);
+     return -EIO;
+   }
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_truncate.c b/src/contrib/fuse-dfs/src/fuse_impls_truncate.c
+index 86e8c3d..7132b8a 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_truncate.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_truncate.c
+@@ -54,7 +54,7 @@ int dfs_truncate(const char *path, off_t size)
+   int flags = O_WRONLY | O_CREAT;
+ 
+   hdfsFile file;
+-  if ((file = (hdfsFile)hdfsOpenFile(userFS, path, flags,  0, 3, 0)) == NULL) {
++  if ((file = (hdfsFile)hdfsOpenFile(userFS, path, flags,  0, 0, 0)) == NULL) {
+     syslog(LOG_ERR, "ERROR: could not connect open file %s:%d\n", __FILE__, __LINE__);
+     return -EIO;
+   }
+-- 
+1.7.0.4
+

@@ -1,0 +1,113 @@
+From bdd9f9900811d5032e0c29b013ef45b46f7ffea2 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 3 Aug 2011 13:43:49 -0700
+Subject: [PATCH 1030/1179] HDFS-1109. HFTP and URL Encoding.
+
+Reason: Bug
+Author: Dmytro Molkov
+Ref: CDH-3304
+---
+ .../hadoop/hdfsproxy/ProxyFileDataServlet.java     |    4 ++--
+ .../apache/hadoop/hdfsproxy/ProxyFileForward.java  |    4 ++--
+ .../hdfs/server/namenode/FileDataServlet.java      |    4 ++--
+ .../hadoop/hdfs/server/namenode/StreamFile.java    |    3 ++-
+ .../org/apache/hadoop/hdfs/TestHftpFileSystem.java |    2 +-
+ src/webapps/datanode/browseBlock.jsp               |    5 +++--
+ 6 files changed, 12 insertions(+), 10 deletions(-)
+
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+index 330d599..dea0b7f 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+@@ -49,8 +49,8 @@ public class ProxyFileDataServlet extends FileDataServlet {
+     }
+     
+     return new URI(request.getScheme(), null, request.getServerName(), request
+-        .getServerPort(), "/streamFile", "filename=" + i.getFullName(parent) 
+-        + "&ugi=" + ugi.getShortUserName() + dtParam, null);
++        .getServerPort(), "/streamFile" + i.getFullName(parent),
++         "&ugi=" + ugi.getShortUserName() + dtParam, null);
+   }
+ 
+   /** {@inheritDoc} */
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileForward.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileForward.java
+index b0ea8f7..6f27269 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileForward.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileForward.java
+@@ -28,12 +28,12 @@ public class ProxyFileForward extends ProxyForwardServlet {
+   @Override
+   protected String buildForwardPath(HttpServletRequest request, String pathInfo) {
+     String path = "/streamFile";
+-    path += "?filename=" + request.getPathInfo();
++    path += request.getPathInfo();
+     String userID = (String) request.
+         getAttribute("org.apache.hadoop.hdfsproxy.authorized.userID");
+     UserGroupInformation ugi = ProxyUtil.getProxyUGIFor(userID);
+     if (ugi != null) {
+-      path += "&ugi=" + ugi.getShortUserName();
++      path += "?ugi=" + ugi.getShortUserName();
+     }
+     return path;
+   }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+index 92d134a..04b87a0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+@@ -61,8 +61,8 @@ public class FileDataServlet extends DfsServlet {
+         "https".equals(scheme)
+           ? (Integer)getServletContext().getAttribute("datanode.https.port")
+           : host.getInfoPort(),
+-        "/streamFile", "filename=" + i.getFullName(parent) + 
+-        "&ugi=" + ugi.getShortUserName() + dtParam, null);
++        "/streamFile" + i.getFullName(parent), 
++        "ugi=" + ugi.getShortUserName() + dtParam, null);
+   }
+ 
+   private static JspHelper jspHelper = null;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+index 4732146..3b514a3 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+@@ -66,7 +66,8 @@ public class StreamFile extends DfsServlet {
+   @SuppressWarnings("unchecked")
+   public void doGet(HttpServletRequest request, HttpServletResponse response)
+     throws ServletException, IOException {
+-    String filename = request.getParameter("filename");
++    final String filename = request.getPathInfo() != null ?
++        request.getPathInfo() : "/";
+     if (filename == null || filename.length() == 0) {
+       response.setContentType("text/plain");
+       PrintWriter out = response.getWriter();
+diff --git a/src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java b/src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java
+index 99484cb..a0aa829 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java
++++ b/src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java
+@@ -37,7 +37,7 @@ import org.apache.hadoop.fs.Path;
+  */
+ public class TestHftpFileSystem {
+   private static final Random RAN = new Random();
+-  private static final Path TEST_FILE = new Path("/testfile1");
++  private static final Path TEST_FILE = new Path("/testfile1+1");
+   
+   private static Configuration config = null;
+   private static MiniDFSCluster cluster = null;
+diff --git a/src/webapps/datanode/browseBlock.jsp b/src/webapps/datanode/browseBlock.jsp
+index 4ec2b2e..cbd69ed 100644
+--- a/src/webapps/datanode/browseBlock.jsp
++++ b/src/webapps/datanode/browseBlock.jsp
+@@ -88,9 +88,10 @@
+     //Add the various links for looking at the file contents
+     //URL for downloading the full file
+     String downloadUrl = "http://" + req.getServerName() + ":" +
+-                         + req.getServerPort() + "/streamFile?" + "filename="
++                         + req.getServerPort() + "/streamFile"
+                          + URLEncoder.encode(filename, "UTF-8")
+-                         + JspHelper.SET_DELEGATION + tokenString;
++                         + "?" + JspHelper.DELEGATION_PARAMETER_NAME
++                         + "=" + tokenString;
+     out.print("<a name=\"viewOptions\"></a>");
+     out.print("<a href=\"" + downloadUrl + "\">Download this file</a><br>");
+     
+-- 
+1.7.0.4
+

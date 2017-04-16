@@ -1,0 +1,49 @@
+From 1fc17ad34e8288b54503eeb15f788eb4e6a070dc Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:54:37 -0800
+Subject: [PATCH 0074/1179] MAPREDUCE-875. Make DBRecordReader execute queries lazily
+
+Description: DBInputFormat's DBRecordReader executes the user's SQL query in the constructor. If the query is long-running, this can cause task timeout. The user is unable to spawn a background thread (e.g., in a MapRunnable) to inform Hadoop of on-going progress.
+Reason: Scalability improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../hadoop/mapreduce/lib/db/DBRecordReader.java    |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBRecordReader.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBRecordReader.java
+index 60ba702..57fdfb2 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBRecordReader.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBRecordReader.java
+@@ -49,7 +49,7 @@ import org.apache.hadoop.conf.Configuration;
+  */
+ public class DBRecordReader<T extends DBWritable> extends
+     RecordReader<LongWritable, T> {
+-  private ResultSet results;
++  private ResultSet results = null;
+ 
+   private Class<T> inputClass;
+ 
+@@ -91,8 +91,6 @@ public class DBRecordReader<T extends DBWritable> extends
+     this.conditions = cond;
+     this.fieldNames = fields;
+     this.tableName = table;
+-    
+-    this.results = executeQuery(getSelectQuery());
+   }
+ 
+   protected ResultSet executeQuery(String query) throws SQLException {
+@@ -214,6 +212,10 @@ public class DBRecordReader<T extends DBWritable> extends
+       if (value == null) {
+         value = createValue();
+       }
++      if (null == this.results) {
++        // First time into this method, run the query.
++        this.results = executeQuery(getSelectQuery());
++      }
+       if (!results.next())
+         return false;
+ 
+-- 
+1.7.0.4
+

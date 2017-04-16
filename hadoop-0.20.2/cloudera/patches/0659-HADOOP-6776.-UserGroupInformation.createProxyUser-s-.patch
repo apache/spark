@@ -1,0 +1,33 @@
+From 5459775249f78827a23863322002f5b0695a04d7 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 19 May 2010 14:08:04 -0700
+Subject: [PATCH 0659/1179] HADOOP-6776. UserGroupInformation.createProxyUser's javadoc is broken
+
+Patch: https://issues.apache.org/jira/secure/attachment/12444980/6776.patch
+Author: Devaraj Das
+Ref: YDH
+---
+ .../hadoop/security/UserGroupInformation.java      |    7 +++----
+ 1 files changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 5e063e4..5b27ddb 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -786,10 +786,9 @@ public class UserGroupInformation {
+   /**
+    * Create a proxy user using username of the effective user and the ugi of the
+    * real user.
+-   *
+-   * @param effective
+-   *          user, UGI for real user.
+-   * @return
++   * @param user
++   * @param realUser
++   * @return proxyUser ugi
+    */
+   public static UserGroupInformation createProxyUser(String user,
+       UserGroupInformation realUser) {
+-- 
+1.7.0.4
+

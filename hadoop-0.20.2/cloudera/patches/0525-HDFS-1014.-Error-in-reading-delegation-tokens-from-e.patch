@@ -1,0 +1,193 @@
+From ebc7ac47eb93eeab3f8b8987ac74a56b0e40a982 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 1 Mar 2010 17:25:45 -0800
+Subject: [PATCH 0525/1179] HDFS-1014. Error in reading delegation tokens from edit logs.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437547/HDFS-1014-y20.1.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |   10 ++-
+ .../namenode/TestCheckPointForSecurityTokens.java  |   81 ++++++++++++++++++--
+ 2 files changed, 80 insertions(+), 11 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index 76eec38..afeaa84 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -511,9 +511,6 @@ public class FSEditLog {
+         numOpRenewDelegationToken = 0, numOpCancelDelegationToken = 0,
+         numOpUpdateMasterKey = 0, numOpOther = 0;
+ 
+-    DelegationTokenIdentifier delegationTokenId = new DelegationTokenIdentifier();
+-    DelegationKey delegationKey = new DelegationKey();
+-
+     long startTime = FSNamesystem.now();
+ 
+     DataInputStream in = new DataInputStream(new BufferedInputStream(edits));
+@@ -807,6 +804,8 @@ public class FSEditLog {
+                 + " for version " + logVersion);
+           }
+           numOpGetDelegationToken++;
++          DelegationTokenIdentifier delegationTokenId = 
++              new DelegationTokenIdentifier();
+           delegationTokenId.readFields(in);
+           long expiryTime = readLong(in);
+           fsNamesys.getDelegationTokenSecretManager()
+@@ -819,6 +818,8 @@ public class FSEditLog {
+                 + " for version " + logVersion);
+           }
+           numOpRenewDelegationToken++;
++          DelegationTokenIdentifier delegationTokenId = 
++              new DelegationTokenIdentifier();
+           delegationTokenId.readFields(in);
+           long expiryTime = readLong(in);
+           fsNamesys.getDelegationTokenSecretManager()
+@@ -831,6 +832,8 @@ public class FSEditLog {
+                 + " for version " + logVersion);
+           }
+           numOpCancelDelegationToken++;
++          DelegationTokenIdentifier delegationTokenId = 
++              new DelegationTokenIdentifier();
+           delegationTokenId.readFields(in);
+           fsNamesys.getDelegationTokenSecretManager()
+               .updatePersistedTokenCancellation(delegationTokenId);
+@@ -842,6 +845,7 @@ public class FSEditLog {
+                 + " for version " + logVersion);
+           }
+           numOpUpdateMasterKey++;
++          DelegationKey delegationKey = new DelegationKey();
+           delegationKey.readFields(in);
+           fsNamesys.getDelegationTokenSecretManager().updatePersistedMasterKey(
+               delegationKey);
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckPointForSecurityTokens.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckPointForSecurityTokens.java
+index 34c2fb8..7348717 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckPointForSecurityTokens.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckPointForSecurityTokens.java
+@@ -43,6 +43,7 @@ public class TestCheckPointForSecurityTokens {
+   static final int fileSize = 8192;
+   static final int numDatanodes = 3;
+   short replication = 3;
++  MiniDFSCluster cluster = null;
+ 
+   NameNode startNameNode( Configuration conf,
+                           String imageDirs,
+@@ -57,13 +58,22 @@ public class TestCheckPointForSecurityTokens {
+     Assert.assertTrue(nn.isInSafeMode());
+     return nn;
+   }
+-
++  
++  private void cancelToken(Token<DelegationTokenIdentifier> token)
++      throws IOException {
++    cluster.getNameNode().getNamesystem().cancelDelegationToken(token);
++  }
++  
++  private void renewToken(Token<DelegationTokenIdentifier> token)
++      throws IOException {
++      cluster.getNameNode().getNamesystem().renewDelegationToken(token);
++  }
++  
+   /**
+    * Tests save namepsace.
+    */
+   @Test
+   public void testSaveNamespace() throws IOException {
+-    MiniDFSCluster cluster = null;
+     DistributedFileSystem fs = null;
+     try {
+       Configuration conf = new Configuration();
+@@ -73,8 +83,10 @@ public class TestCheckPointForSecurityTokens {
+       FSNamesystem namesystem = cluster.getNameNode().getNamesystem();
+       namesystem.getDelegationTokenSecretManager().startThreads();
+       String renewer = UserGroupInformation.getLoginUser().getUserName();
+-      Token<DelegationTokenIdentifier> token = namesystem
++      Token<DelegationTokenIdentifier> token1 = namesystem
+           .getDelegationToken(new Text(renewer)); 
++      Token<DelegationTokenIdentifier> token2 = namesystem
++          .getDelegationToken(new Text(renewer));
+       
+       // Saving image without safe mode should fail
+       DFSAdmin admin = new DFSAdmin(conf);
+@@ -97,20 +109,73 @@ public class TestCheckPointForSecurityTokens {
+       for(File ed : editsDirs) {
+         Assert.assertTrue(new File(ed, "current/edits").length() == Integer.SIZE/Byte.SIZE);
+       }
+-
+-      // restart cluster and verify file exists
++      // restart cluster
+       cluster.shutdown();
+       cluster = null;
+-
++      
+       cluster = new MiniDFSCluster(conf, numDatanodes, false, null);
+       cluster.waitActive();
+       //Should be able to renew & cancel the delegation token after cluster restart
+       try {
+-        cluster.getNameNode().getNamesystem().renewDelegationToken(token);
+-        cluster.getNameNode().getNamesystem().cancelDelegationToken(token);
++        renewToken(token1);
++        renewToken(token2);
++      } catch (IOException e) {
++        Assert.fail("Could not renew or cancel the token");
++      }
++      
++      namesystem = cluster.getNameNode().getNamesystem();
++      namesystem.getDelegationTokenSecretManager().startThreads();
++      Token<DelegationTokenIdentifier> token3 = namesystem
++          .getDelegationToken(new Text(renewer));
++      Token<DelegationTokenIdentifier> token4 = namesystem
++          .getDelegationToken(new Text(renewer));
++      
++      // restart cluster again
++      cluster.shutdown();
++      cluster = null;
++      
++      cluster = new MiniDFSCluster(conf, numDatanodes, false, null);
++      cluster.waitActive();
++      
++      namesystem = cluster.getNameNode().getNamesystem();
++      namesystem.getDelegationTokenSecretManager().startThreads();
++      Token<DelegationTokenIdentifier> token5 = namesystem
++      .getDelegationToken(new Text(renewer));
++
++      try {
++        renewToken(token1);
++        renewToken(token2);
++        renewToken(token3);
++        renewToken(token4);
++        renewToken(token5);
+       } catch (IOException e) {
+         Assert.fail("Could not renew or cancel the token");
+       }
++      
++      // restart cluster again
++      cluster.shutdown();
++      cluster = null;
++      
++      cluster = new MiniDFSCluster(conf, numDatanodes, false, null);
++      cluster.waitActive();
++      
++      namesystem = cluster.getNameNode().getNamesystem();
++      namesystem.getDelegationTokenSecretManager().startThreads();
++      try {
++        renewToken(token1);
++        cancelToken(token1);
++        renewToken(token2);
++        cancelToken(token2);
++        renewToken(token3);
++        cancelToken(token3);
++        renewToken(token4);
++        cancelToken(token4);
++        renewToken(token5);
++        cancelToken(token5);
++      } catch (IOException e) {
++        Assert.fail("Could not renew or cancel the token");
++      }
++      
+     } finally {
+       if(fs != null) fs.close();
+       if(cluster!= null) cluster.shutdown();
+-- 
+1.7.0.4
+

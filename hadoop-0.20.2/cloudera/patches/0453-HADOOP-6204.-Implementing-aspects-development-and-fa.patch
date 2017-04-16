@@ -1,0 +1,637 @@
+From 77510480a8b45b2f9e605b720671d609d7bf4687 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 2 Feb 2010 16:25:41 -0800
+Subject: [PATCH 0453/1179] HADOOP-6204. Implementing aspects development and fault injection framework for Hadoop
+
+Patch: https://issues.apache.org/jira/secure/attachment/12434616/HADOOP-6204-ydist.patch
+Author: Konstantin Boudnik
+Ref: YDH
+---
+ .eclipse.templates/.classpath                      |    2 +
+ build.xml                                          |  111 +++++++++++++++--
+ ivy.xml                                            |   15 ++-
+ ivy/libraries.properties                           |    2 +
+ src/contrib/vaidya/build.xml                       |    1 -
+ src/saveVersion.sh                                 |    3 +-
+ src/test/aop/build/aop.xml                         |  132 ++++++++++++++++++++
+ src/test/aop/org/apache/hadoop/fi/FiConfig.java    |   50 ++++++++
+ .../aop/org/apache/hadoop/fi/ProbabilityModel.java |  106 ++++++++++++++++
+ src/test/fi-site.xml                               |   31 +++++
+ 10 files changed, 437 insertions(+), 16 deletions(-)
+ create mode 100644 src/test/aop/build/aop.xml
+ create mode 100644 src/test/aop/org/apache/hadoop/fi/FiConfig.java
+ create mode 100644 src/test/aop/org/apache/hadoop/fi/ProbabilityModel.java
+ create mode 100644 src/test/fi-site.xml
+
+diff --git a/.eclipse.templates/.classpath b/.eclipse.templates/.classpath
+index 686b9cb..fadd4f9 100644
+--- a/.eclipse.templates/.classpath
++++ b/.eclipse.templates/.classpath
+@@ -42,6 +42,8 @@
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/slf4j-api-1.4.3.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/slf4j-log4j12-1.4.3.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/xmlenc-0.52.jar"/>
++        <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/aspectjrt-1.6.5.jar"/>
++        <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/aspectjtools-1.6.5.jar"/>
+ 	<classpathentry kind="lib" path="src/test/lib/ftplet-api-1.0.0-SNAPSHOT.jar"/>
+ 	<classpathentry kind="lib" path="src/test/lib/ftpserver-core-1.0.0-SNAPSHOT.jar"/>
+ 	<classpathentry kind="lib" path="src/test/lib/ftpserver-server-1.0.0-SNAPSHOT.jar"/>
+diff --git a/build.xml b/build.xml
+index 23c321f..557e4d0 100644
+--- a/build.xml
++++ b/build.xml
+@@ -30,6 +30,7 @@
+   <property name="name" value="hadoop"/>
+   <property name="version" value="0.20.3-CDH3-SNAPSHOT"/>
+   <property name="final.name" value="${name}-${version}"/>
++  <property name="test.final.name" value="${name}-test-${version}"/>
+   <property name="year" value="2009"/>
+   
+ 
+@@ -366,6 +367,8 @@
+    </exec>
+   </target>
+ 
++  <import file="${test.src.dir}/aop/build/aop.xml"/>
++
+   <!-- ====================================================== -->
+   <!-- Compile the Java files                                 -->
+   <!-- ====================================================== -->
+@@ -477,7 +480,7 @@
+       so that the timestamp of package-info.java is newer than the timestamp
+       of the output directory -->
+     <exec executable="sh">
+-       <arg line="src/saveVersion.sh ${version}"/>
++       <arg line="src/saveVersion.sh ${version} ${build.dir}"/>
+        <env key="HADOOP_REVISION" value="${cloudera.hash}" />
+     </exec>
+ 	
+@@ -613,6 +616,8 @@
+     <tar compression="gzip" destfile="${build.classes}/bin.tgz">
+       <tarfileset dir="bin" mode="755"/>
+     </tar>
++    <property name="jar.properties.list"
++      value="commons-logging.properties, log4j.properties, hadoop-metrics.properties"/>
+     <jar jarfile="${build.dir}/${core.final.name}.jar"
+          basedir="${build.classes}">
+       <manifest>
+@@ -622,9 +627,8 @@
+           <attribute name="Implementation-Vendor" value="Apache"/>
+         </section>
+       </manifest>
+-      <fileset file="${conf.dir}/commons-logging.properties"/>
+-      <fileset file="${conf.dir}/log4j.properties"/>
+-      <fileset file="${conf.dir}/hadoop-metrics.properties"/>
++      <fileset dir="${conf.dir}" includes="${jar.properties.list}" />
++      <fileset file="${jar.extra.properties.list}" />
+       <zipfileset dir="${build.webapps}" prefix="webapps"/>
+     </jar>
+   </target>
+@@ -781,6 +785,76 @@
+   </target>
+ 
+   <!-- ================================================================== -->
++  <!-- Fault injection customization section.
++       These targets ought to be copied over to other projects and modified
++       as needed -->
++  <!-- ================================================================== -->
++  <target name="-classes-compilation" depends="compile-core-classes,
++      compile-hdfs-classes, compile-mapred-classes, compile-core-test"/>
++  <target name="run-test-core-fault-inject" depends="injectfaults"
++	  description="Run full set of the unit tests with fault injection">
++    <macro-run-tests-fault-inject target.name="test-core"
++      testcasesonly="false"/>
++  </target>
++
++  <target name="jar-test-fault-inject" depends="injectfaults"
++    description="Make hadoop-test-fi.jar">
++    <macro-jar-test-fault-inject
++      target.name="jar-test"
++      jar.final.name="test.final.name"
++      jar.final.value="${test.final.name}-fi" />
++  </target>
++
++  <target name="jar-fault-inject" depends="injectfaults"
++    description="Make hadoop-fi.jar">
++    <macro-jar-fault-inject
++      target.name="jar"
++      jar.final.name="final.name"
++      jar.final.value="${final.name}-fi" />
++  </target>
++
++  <!--This target is not included into the the top level list of target
++  for it serves a special "regression" testing purpose of non-FI tests in
++  FI environment -->
++  <target name="run-fault-inject-with-testcaseonly" depends="injectfaults">
++    <fail unless="testcase">Can't run this target without -Dtestcase setting!
++    </fail>
++    <macro-run-tests-fault-inject target.name="test-core"
++      testcasesonly="true"/>
++  </target>
++  <!-- ================================================================== -->
++  <!-- End of Fault injection customization section                       -->
++  <!-- ================================================================== -->
++
++  <condition property="tests.notestcase">
++    <and>
++      <isfalse value="${test.fault.inject}"/>
++      <not>
++        <isset property="testcase"/>
++      </not>
++    </and>
++  </condition>
++  <condition property="tests.notestcase.fi">
++    <and>
++      <not>
++        <isset property="testcase" />
++      </not>
++      <istrue value="${test.fault.inject}" />
++    </and>
++  </condition>
++  <condition property="tests.testcase">
++    <and>
++      <isfalse value="${test.fault.inject}" />
++      <isset property="testcase" />
++    </and>
++  </condition>
++  <condition property="tests.testcase.fi">
++    <and>
++      <istrue value="${test.fault.inject}" />
++      <isset property="testcase" />
++    </and>
++  </condition>
++  <!-- ================================================================== -->
+   <!-- Run unit tests                                                     --> 
+   <!-- ================================================================== -->
+   <target name="test-core" depends="jar-test" description="Run core unit tests">
+@@ -792,6 +866,8 @@
+     <mkdir dir="${test.log.dir}"/>
+   	<copy file="${test.src.dir}/hadoop-policy.xml" 
+   	  todir="${test.build.extraconf}" />
++    <copy file="${test.src.dir}/fi-site.xml"
++      todir="${test.build.extraconf}" />
+     <junit showoutput="${test.output}"
+       printsummary="${test.junit.printsummary}"
+       haltonfailure="${test.junit.haltonfailure}"
+@@ -823,13 +899,30 @@
+          <propertyref name="compile.c++"/>
+       </syspropertyset>
+       <classpath refid="${test.classpath.id}"/>
++      <syspropertyset id="FaultProbabilityProperties">
++        <propertyref regex="fi.*"/>
++      </syspropertyset>
+       <formatter type="${test.junit.output.format}" />
+-      <batchtest todir="${test.build.dir}" unless="testcase">
++      <batchtest todir="${test.build.dir}" if="tests.notestcase">
+         <fileset dir="${test.src.dir}"
+-	         includes="**/${test.include}.java"
+-		 excludes="**/${test.exclude}.java" />
++           includes="**/${test.include}.java"
++           excludes="**/${test.exclude}.java aop/**" />
++      </batchtest>
++      <batchtest todir="${test.build.dir}" if="tests.notestcase.fi">
++        <fileset dir="${test.src.dir}/aop"
++          includes="**/${test.include}.java"
++          excludes="**/${test.exclude}.java" />
++      </batchtest>
++      <batchtest todir="${test.build.dir}" if="tests.testcase">
++        <fileset dir="${test.src.dir}"
++          includes="**/${testcase}.java" excludes="aop/**"/>
++      </batchtest>
++      <batchtest todir="${test.build.dir}" if="tests.testcase.fi">
++        <fileset dir="${test.src.dir}/aop" includes="**/${testcase}.java"/>
+       </batchtest>
+-      <batchtest todir="${test.build.dir}" if="testcase">
++      <!--The following batch is for very special occasions only when
++      a non-FI tests are needed to be executed against FI-environment -->
++      <batchtest todir="${test.build.dir}" if="tests.testcaseonly">
+         <fileset dir="${test.src.dir}" includes="**/${testcase}.java"/>
+       </batchtest>
+     </junit>
+@@ -1320,7 +1413,7 @@
+   <!-- ================================================================== -->
+   <!-- Clean.  Delete the build files, and their directories              -->
+   <!-- ================================================================== -->
+-  <target name="clean" depends="clean-contrib, clean-sign" description="Clean.  Delete the build files, and their directories">
++  <target name="clean" depends="clean-contrib, clean-sign, clean-fi" description="Clean.  Delete the build files, and their directories">
+     <delete dir="${build.dir}"/>
+     <delete dir="${docs.src}/build"/>
+     <delete dir="${src.docs.cn}/build"/>
+diff --git a/ivy.xml b/ivy.xml
+index 99a6203..1b5c752 100644
+--- a/ivy.xml
++++ b/ivy.xml
+@@ -264,11 +264,16 @@
+       name="jackson-mapper-asl"
+       rev="1.0.1"
+       conf="common->default"/>
+-    <dependency org="org.mockito"
+-      name="mockito-all"
+-      rev="${mockito-all.version}"
+-      conf="common->master"/>
+-
++    <dependency org="org.aspectj"
++      name="aspectjrt"
++      rev="${aspectj.version}"
++      conf="common->default">
++    </dependency>
++    <dependency org="org.aspectj"
++      name="aspectjtools"
++      rev="${aspectj.version}"
++      conf="common->default">
++    </dependency>
+     </dependencies>
+ 
+ </ivy-module>
+diff --git a/ivy/libraries.properties b/ivy/libraries.properties
+index 7ff9c33..4a1d0ec 100644
+--- a/ivy/libraries.properties
++++ b/ivy/libraries.properties
+@@ -20,6 +20,8 @@ hadoop.version=0.20.0
+ apacheant.version=1.7.0
+ ant-task.version=2.0.10
+ 
++aspectj.version=1.6.5
++
+ checkstyle.version=4.2
+ 
+ commons-cli.version=1.2
+diff --git a/src/contrib/vaidya/build.xml b/src/contrib/vaidya/build.xml
+index eda5991..b6e428b 100644
+--- a/src/contrib/vaidya/build.xml
++++ b/src/contrib/vaidya/build.xml
+@@ -20,7 +20,6 @@
+ <project name="vaidya" default="jar">
+ 
+ 	<import file="../build-contrib.xml" />
+-        <import file="../../../build.xml" />
+ 
+ 	<target name="init">
+ 		<mkdir dir="${build.dir}" />
+diff --git a/src/saveVersion.sh b/src/saveVersion.sh
+index 675c9a7..f2b97ba 100755
+--- a/src/saveVersion.sh
++++ b/src/saveVersion.sh
+@@ -19,6 +19,7 @@
+ # This file is used to generate the BuildStamp.java class that
+ # records the user, url, revision and timestamp.
+ version=$1
++build_dir=$2
+ user=`whoami`
+ date=`date`
+ if [ -d .git ]; then
+@@ -34,7 +35,7 @@ fi
+ revision=${HADOOP_REVISION:-$revision}
+ srcChecksum=`find src -name '*.java' | LC_ALL=C sort | xargs md5sum | md5sum | cut -d ' ' -f 1`
+ 
+-mkdir -p build/src/org/apache/hadoop
++mkdir -p $build_dir/src/org/apache/hadoop
+ cat << EOF | \
+   sed -e "s/VERSION/$version/" -e "s/USER/$user/" -e "s/DATE/$date/" \
+       -e "s|URL|$url|" -e "s/REV/$revision/" -e "s/SRCCHECKSUM/$srcChecksum/" \
+diff --git a/src/test/aop/build/aop.xml b/src/test/aop/build/aop.xml
+new file mode 100644
+index 0000000..6900dde
+--- /dev/null
++++ b/src/test/aop/build/aop.xml
+@@ -0,0 +1,132 @@
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++<project name="aspects">
++  <property name="build-fi.dir" value="${basedir}/build-fi"/>
++  <property name="hadoop-fi.jar" location="${build.dir}/${final.name}-fi.jar" />
++  <property name="compile-inject.output" value="${build-fi.dir}/compile-fi.log"/>
++  <property name="aspectversion" value="1.6.5"/>
++  <property file="${basedir}/build.properties"/>
++
++  <!--All Fault Injection (FI) related targets are located in this session -->
++    
++  <target name="clean-fi">
++    <delete dir="${build-fi.dir}"/>
++  </target>
++  
++  <!-- Weaving aspects in place
++  	Later on one can run 'ant jar-fault-inject' to create
++  	Hadoop jar file with instrumented classes
++  -->
++  <target name="compile-fault-inject" 
++  	depends="-classes-compilation">
++    <!-- AspectJ task definition -->
++    <taskdef
++      resource="org/aspectj/tools/ant/taskdefs/aspectjTaskdefs.properties">
++      <classpath>
++        <pathelement 
++          location="${common.ivy.lib.dir}/aspectjtools-${aspectversion}.jar"/>
++      </classpath>
++    </taskdef>
++    <echo message="Start weaving aspects in place"/>
++    <iajc
++      encoding="${build.encoding}" 
++      srcdir="${core.src.dir};${mapred.src.dir};${hdfs.src.dir};${build.src};${test.src.dir}/aop" 
++      includes="org/apache/hadoop/**/*.java, org/apache/hadoop/**/*.aj"
++      excludes="org/apache/hadoop/record/**/*"
++      destDir="${build.classes}"
++      debug="${javac.debug}"
++      target="${javac.version}"
++      source="${javac.version}"
++      deprecation="${javac.deprecation}"
++      fork="true"
++      maxmem="256m"
++      >
++      <classpath refid="test.classpath"/>
++    </iajc>
++    <loadfile property="injection.failure" srcfile="${compile-inject.output}">
++     <filterchain>
++       <linecontainsregexp>
++         <regexp pattern='iajc.*warning'/>
++       </linecontainsregexp>
++     </filterchain>
++   </loadfile>
++   <fail if="injection.failure">
++     Broken binding of advises: ${line.separator}${injection.failure}
++   </fail>
++    <echo message="Weaving of aspects is finished"/>
++  </target>
++
++  <target name="injectfaults" 
++  	description="Instrument classes with faults and other AOP advices">
++    <mkdir dir="${build-fi.dir}"/>
++    <delete file="${compile-inject.output}"/>
++    <subant buildpath="${basedir}" target="compile-fault-inject"
++      output="${compile-inject.output}">
++      <property name="build.dir" value="${build-fi.dir}"/>
++    </subant>
++  </target>
++
++  <macrodef name="macro-run-tests-fault-inject">
++    <attribute name="target.name" />
++    <attribute name="testcasesonly" />
++    <sequential>
++      <subant buildpath="build.xml" target="@{target.name}">
++        <property name="build.dir" value="${build-fi.dir}"/>
++        <property name="test.fault.inject" value="yes"/>
++        <property name="test.include" value="TestFi*"/>
++        <!-- This one is needed for the special "regression" target only -->
++        <property name="special.fi.testcasesonly" value="@{testcasesonly}"/>
++      </subant>
++    </sequential>
++  </macrodef>
++	
++  <!-- ================================================================== -->
++  <!-- Make hadoop-fi.jar including all Fault injected artifacts         -->
++  <!-- ================================================================== -->
++  <macrodef name="macro-jar-fault-inject">
++    <attribute name="target.name" />
++    <attribute name="jar.final.name" />
++    <attribute name="jar.final.value" />
++    <sequential>
++      <subant buildpath="build.xml" target="@{target.name}">
++        <property name="build.dir" value="${build-fi.dir}"/>
++        <property name="@{jar.final.name}" value="@{jar.final.value}"/>
++        <property name="jar.extra.properties.list" 
++        	  value="${test.src.dir}/fi-site.xml" />
++      </subant>
++    </sequential>
++  </macrodef>
++
++  <!-- ================================================================== -->
++  <!-- Make test jar files including all Fault Injected artifacts         -->
++  <!-- ================================================================== -->
++
++  <macrodef name="macro-jar-test-fault-inject">
++    <attribute name="target.name" />
++    <attribute name="jar.final.name" />
++    <attribute name="jar.final.value" />
++    <sequential>
++      <subant buildpath="build.xml" target="@{target.name}">
++        <property name="build.dir" value="${build-fi.dir}"/>
++        <property name="@{jar.final.name}" 
++                  value="@{jar.final.value}"/>
++      </subant>
++    </sequential>
++  </macrodef>
++
++  <!--End of Fault Injection (FI) related session-->
++</project>
+diff --git a/src/test/aop/org/apache/hadoop/fi/FiConfig.java b/src/test/aop/org/apache/hadoop/fi/FiConfig.java
+new file mode 100644
+index 0000000..799ba19
+--- /dev/null
++++ b/src/test/aop/org/apache/hadoop/fi/FiConfig.java
+@@ -0,0 +1,50 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.fi;
++
++import org.apache.hadoop.conf.Configuration;
++
++/**
++ * This class wraps the logic around fault injection configuration file
++ * Default file is expected to be found in src/test/fi-site.xml
++ * This default file should be copied by JUnit Ant's tasks to 
++ * build/test/extraconf folder before tests are ran
++ * An alternative location can be set through
++ *   -Dfi.config=<file_name>
++ */
++public class FiConfig {
++  private static final String CONFIG_PARAMETER = ProbabilityModel.FPROB_NAME + "config";
++  private static final String DEFAULT_CONFIG = "fi-site.xml";
++  private static Configuration conf;
++  static {
++    if (conf == null) {
++      conf = new Configuration(false);
++      String configName = System.getProperty(CONFIG_PARAMETER, DEFAULT_CONFIG);
++      conf.addResource(configName);
++    }
++  }
++  
++  /**
++   * Method provides access to local Configuration 
++   * 
++   * @return Configuration initialized with fault injection's parameters
++   */
++  public static Configuration getConfig() {
++    return conf;
++  }
++}
+diff --git a/src/test/aop/org/apache/hadoop/fi/ProbabilityModel.java b/src/test/aop/org/apache/hadoop/fi/ProbabilityModel.java
+new file mode 100644
+index 0000000..891e147
+--- /dev/null
++++ b/src/test/aop/org/apache/hadoop/fi/ProbabilityModel.java
+@@ -0,0 +1,106 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.fi;
++
++import java.util.Random;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++
++/**
++ * This class is responsible for the decision of when a fault 
++ * has to be triggered within a class of Hadoop
++ * 
++ *  Default probability of injection is set to 0%. To change it
++ *  one can set the sys. prop. -Dfi.*=<new probability level>
++ *  Another way to do so is to set this level through FI config file,
++ *  located under src/test/fi-site.conf
++ *  
++ *  To change the level one has to specify the following sys,prop.:
++ *  -Dfi.<name of fault location>=<probability level> in the runtime
++ *  Probability level is specified by a float between 0.0 and 1.0
++ *  
++ *  <name of fault location> might be represented by a short classname
++ *  or otherwise. This decision is left up to the discretion of aspects
++ *  developer, but has to be consistent through the code 
++ */
++public class ProbabilityModel {
++  private static Random generator = new Random();
++  private static final Log LOG = LogFactory.getLog(ProbabilityModel.class);
++
++  static final String FPROB_NAME = "fi.";
++  private static final String ALL_PROBABILITIES = FPROB_NAME + "*";
++  private static final float DEFAULT_PROB = 0.00f; //Default probability is 0%
++  private static final float MAX_PROB = 1.00f; // Max probability is 100%
++
++  private static Configuration conf = FiConfig.getConfig();
++
++  static {
++    // Set new default probability if specified through a system.property
++    // If neither is specified set default probability to DEFAULT_PROB 
++    conf.set(ALL_PROBABILITIES, 
++        System.getProperty(ALL_PROBABILITIES, 
++            conf.get(ALL_PROBABILITIES, Float.toString(DEFAULT_PROB))));
++
++    LOG.info(ALL_PROBABILITIES + "=" + conf.get(ALL_PROBABILITIES));
++  }
++
++  /**
++   * Simplistic method to check if we have reached the point of injection
++   * @param klassName is the name of the probability level to check. 
++   *  If a configuration has been set for "fi.myClass" then you can check if the
++   *  inject criteria has been reached by calling this method with "myClass"
++   *  string as its parameter
++   * @return true if the probability threshold has been reached; false otherwise
++   */
++  public static boolean injectCriteria(String klassName) {
++    boolean trigger = false;
++    if (generator.nextFloat() < getProbability(klassName)) {
++      trigger = true;
++    }
++    return trigger;
++  }
++
++  /**
++   * This primitive checks for arbitrary set of desired probability. If the 
++   * level hasn't been set method will return default setting.
++   * The probability expected to be set as an float between 0.0 and 1.0
++   * @param klass is the name of the resource
++   * @return float representation of configured probability level of 
++   *  the requested resource or default value if hasn't been set
++   */
++  protected static float getProbability(final String klass) {
++    String newProbName = FPROB_NAME + klass;
++
++    String newValue = System.getProperty(newProbName, conf.get(ALL_PROBABILITIES));
++    if (newValue != null && !newValue.equals(conf.get(newProbName)))
++      conf.set(newProbName, newValue);
++
++    float ret = conf.getFloat(newProbName,
++        conf.getFloat(ALL_PROBABILITIES, DEFAULT_PROB));
++    LOG.debug("Request for " + newProbName + " returns=" + ret);
++    // Make sure that probability level is valid.
++    if (ret < DEFAULT_PROB || ret > MAX_PROB) {
++      LOG.info("Probability level is incorrect. Default value is set");
++      ret = conf.getFloat(ALL_PROBABILITIES, DEFAULT_PROB);
++    }
++    
++    return ret;
++  }
++}
+diff --git a/src/test/fi-site.xml b/src/test/fi-site.xml
+new file mode 100644
+index 0000000..cfd3b27
+--- /dev/null
++++ b/src/test/fi-site.xml
+@@ -0,0 +1,31 @@
++<?xml version="1.0"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
++
++<!-- Put fault injection specific property overrides in this file. -->
++
++<configuration>
++  <property>
++    <name>fi.*</name>
++    <value>0.00</value>
++    <description>
++    	Default probability level for all injected faults specified 
++    	as a floating number between 0 and 1.00
++    </description>
++  </property>
++</configuration>
+-- 
+1.7.0.4
+

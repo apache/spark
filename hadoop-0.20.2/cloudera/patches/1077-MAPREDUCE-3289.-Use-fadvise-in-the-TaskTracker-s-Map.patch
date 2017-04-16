@@ -1,0 +1,77 @@
+From b45a9f40b02b5d5859c389bfa7b17df94317614a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Nov 2011 14:40:01 -0800
+Subject: [PATCH 1077/1179] MAPREDUCE-3289. Use fadvise in the TaskTracker's MapOutputServlet.
+
+The TaskTracker now uses the posix_fadvise syscall to page in map output
+before serving it to the reducers. After serving the output, it evicts
+it from the buffer cache since it will not be read again in the majority
+of cases.
+
+This new behavior can be disabled by setting mapred.tasktracker.shuffle.fadvise
+to false.
+
+This patch differs from the upstream version since the upstream version applies
+to the NodeManager in MR2.
+
+Reason: Low-risk performance improvement
+Author: Todd Lipcon
+Ref: CDH-3818
+---
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   19 ++++++++++++++++++-
+ 1 files changed, 18 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 4aea926..e385a4a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -278,7 +278,8 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   static final String TT_OUTOFBAND_HEARBEAT =
+     "mapreduce.tasktracker.outofband.heartbeat";
+   private volatile boolean oobHeartbeatOnTaskCompletion;
+-  
++  private boolean manageOsCacheInShuffle = false;
++
+   // Track number of completed tasks to send an out-of-band heartbeat
+   private IntWritable finishedCount = new IntWritable(0);
+   
+@@ -869,6 +870,10 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     
+     oobHeartbeatOnTaskCompletion = 
+       fConf.getBoolean(TT_OUTOFBAND_HEARBEAT, false);
++    
++    manageOsCacheInShuffle = fConf.getBoolean(
++        "mapred.tasktracker.shuffle.fadvise",
++        true);
+   }
+ 
+   private void startJettyBugMonitor() {
+@@ -3797,6 +3802,12 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+         mapOutputIn = SecureIOUtils.openForRead(
+             new File(mapOutputFileName.toUri().getPath()), runAsUserName);
+ 
++        // readahead if possible
++        if (tracker.manageOsCacheInShuffle && info.partLength > 0) {
++          NativeIO.posixFadviseIfPossible(mapOutputIn.getFD(),
++              info.startOffset, info.partLength, NativeIO.POSIX_FADV_WILLNEED);
++        }
++
+         //seek to the correct offset for the reduce
+         mapOutputIn.skip(info.startOffset);
+         long rem = info.partLength;
+@@ -3817,6 +3828,12 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+             mapOutputIn.read(buffer, 0, (int)Math.min(rem, MAX_BYTES_TO_READ));
+         }
+         
++        // drop cache if possible
++        if (tracker.manageOsCacheInShuffle && info.partLength > 0) {
++          NativeIO.posixFadviseIfPossible(mapOutputIn.getFD(),
++              info.startOffset, info.partLength, NativeIO.POSIX_FADV_DONTNEED);
++        }
++
+         if (LOG.isDebugEnabled()) {
+           LOG.info("Sent out " + totalRead + " bytes for reduce: " + reduce + 
+                  " from map: " + mapId + " given " + info.partLength + "/" + 
+-- 
+1.7.0.4
+

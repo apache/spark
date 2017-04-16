@@ -1,0 +1,99 @@
+From 935bf0003568fa985ea241b5e68c1dc462395d13 Mon Sep 17 00:00:00 2001
+From: Roman Shaposhnik <rvs@cloudera.com>
+Date: Wed, 17 Aug 2011 20:47:10 -0700
+Subject: [PATCH 1036/1179] CLOUDERA BUILD. Provide libsnappyjava.so
+
+---
+ cloudera/do-release-build   |   18 +++++++++++++++++-
+ cloudera/getsnappysource.sh |   20 ++++++++++++++++++--
+ 2 files changed, 35 insertions(+), 3 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 67bf126..2de74fa 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -51,10 +51,11 @@ failIfNotOK
+ echo "Downloading Snappy"
+ 
+ SNAPPY_VERSION=1.0.3
++SNAPPY_JAVA_VERSION=1.0.3.1
+ 
+ # Get Snappy source
+ #
+-sh -x ${RELEASE_DIR}/cloudera/getsnappysource.sh ${SNAPPY_VERSION} ${RELEASE_DIR}/cloudera ${BUILDDIR}
++sh -x ${RELEASE_DIR}/cloudera/getsnappysource.sh ${SNAPPY_VERSION} ${SNAPPY_JAVA_VERSION} ${RELEASE_DIR}/cloudera ${BUILDDIR}
+ failIfNotOK
+ 
+ echo "Building Snappy"
+@@ -83,6 +84,21 @@ fi
+ make install CXXFLAGS="-O2 -DNDEBUG" DESTDIR=${SNAPPY_BUILDDIR} ${LIBTOOL_VAR}
+ failIfNotOK
+ 
++echo "Building snappy-java"
++
++cd ${BUILDDIR}/snappy-java-${SNAPPY_JAVA_VERSION}
++failIfNotOK
++
++SNAPPY_ARCHIVE=${BUILDDIR}/snappy-${SNAPPY_VERSION}.tar.gz
++mkdir target
++mvn compile
++make SNAPPY_OUT=target SNAPPY_ARCHIVE=${SNAPPY_ARCHIVE} \
++     SNAPPY_UNPACKED=${SNAPPY_ARCHIVE} SNAPPY_SRC_DIR=${SNAPPY_DIR} native
++failIfNotOK
++
++cp target/libsnappyjava.so ${SNAPPY_BUILDDIR}/usr/local/lib
++failIfNotOK
++
+ #
+ # Building Hadoop
+ #
+diff --git a/cloudera/getsnappysource.sh b/cloudera/getsnappysource.sh
+index 221a161..dc8f0c9 100755
+--- a/cloudera/getsnappysource.sh
++++ b/cloudera/getsnappysource.sh
+@@ -27,13 +27,17 @@ failIfNotOK() {
+ }
+ 
+ SNAPPY_VERSION=$1
+-CACHEDIR=$2
+-BUILDDIR=$3
++SNAPPY_JAVA_VERSION=$2
++CACHEDIR=$3
++BUILDDIR=$4
+ 
+ SNAPPY_SRC_TAR=snappy-${SNAPPY_VERSION}.tar.gz
+ SNAPPY_SRC_TAR_URL="http://snappy.googlecode.com/files/${SNAPPY_SRC_TAR}"
++SNAPPY_JAVA_SRC_TAR=snappy-java-${SNAPPY_JAVA_VERSION}.tar.gz
++SNAPPY_JAVA_SRC_TAR_URL="http://snappy-java.googlecode.com/files/${SNAPPY_JAVA_SRC_TAR}"
+ 
+ SNAPPY_SRC_TAR_PATH=${CACHEDIR}/${SNAPPY_SRC_TAR}
++SNAPPY_JAVA_SRC_TAR_PATH=${CACHEDIR}/${SNAPPY_JAVA_SRC_TAR}
+ 
+ if [ ! -f ${SNAPPY_SRC_TAR_PATH} ]
+ then
+@@ -44,10 +48,22 @@ then
+   SNAPPY_SRC_TAR_PATH=${BUILDDIR}/${SNAPPY_SRC_TAR}
+ fi
+ 
++if [ ! -f ${SNAPPY_JAVA_SRC_TAR_PATH} ]
++then
++  cd ${BUILDDIR}
++  failIfNotOK
++  wget -O ${SNAPPY_JAVA_SRC_TAR} ${SNAPPY_JAVA_SRC_TAR_URL} 
++  failIfNotOK
++  SNAPPY_JAVA_SRC_TAR_PATH=${BUILDDIR}/${SNAPPY_JAVA_SRC_TAR}
++fi
++
+ cd ${BUILDDIR}
+ failIfNotOK
+ 
+ tar xzf ${SNAPPY_SRC_TAR_PATH}
+ failIfNotOK
+ 
++tar xzf ${SNAPPY_JAVA_SRC_TAR_PATH}
++failIfNotOK
++
+ exit 0
+-- 
+1.7.0.4
+

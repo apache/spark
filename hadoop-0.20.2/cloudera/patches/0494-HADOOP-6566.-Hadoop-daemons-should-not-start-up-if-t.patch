@@ -1,0 +1,351 @@
+From 645b54a053bf565ef2a0f36be8c5a02f80a2775a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 23 Feb 2010 23:35:49 -0800
+Subject: [PATCH 0494/1179] HADOOP-6566. Hadoop daemons should not start up if the ownership/permissions on the directories used at runtime are misconfigured
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436814/HADOOP-6566_yhadoop20.patch
+Author: Arun C Murthy
+Ref: CDH-648
+---
+ .../apache/hadoop/fs/permission/FsPermission.java  |   12 +++-
+ src/core/org/apache/hadoop/util/DiskChecker.java   |   93 ++++++++++++++++++++
+ src/hdfs/hdfs-default.xml                          |    8 ++
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   28 +++++--
+ .../org/apache/hadoop/hdfs/MiniDFSCluster.java     |    2 +-
+ .../hadoop/hdfs/server/datanode/TestDiskError.java |   33 +++++++
+ .../org/apache/hadoop/security/TestPermission.java |    4 +-
+ 7 files changed, 169 insertions(+), 11 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/permission/FsPermission.java b/src/core/org/apache/hadoop/fs/permission/FsPermission.java
+index bac25ec..72568b7 100644
+--- a/src/core/org/apache/hadoop/fs/permission/FsPermission.java
++++ b/src/core/org/apache/hadoop/fs/permission/FsPermission.java
+@@ -86,6 +86,15 @@ public class FsPermission implements Writable {
+     this.otheraction = other.otheraction;
+   }
+   
++  /**
++   * Construct by given mode, either in octal or symbolic format.
++   * @param mode mode as a string, either in octal or symbolic format
++   * @throws IllegalArgumentException if <code>mode</code> is invalid
++   */
++  public FsPermission(String mode) {
++    this(new UmaskParser(mode).getUMask());
++  }
++  
+   /** Return user {@link FsAction}. */
+   public FsAction getUserAction() {return useraction;}
+ 
+@@ -180,13 +189,14 @@ public class FsPermission implements Writable {
+       } else {
+         String confUmask = conf.get(UMASK_LABEL);
+         if(confUmask != null) { // UMASK_LABEL is set
+-          umask = new UmaskParser(confUmask).getUMask();
++          return new FsPermission(confUmask);
+         }
+       }
+     }
+     
+     return new FsPermission((short)umask);
+   }
++  
+   /** Set the user file creation mask (umask) */
+   public static void setUMask(Configuration conf, FsPermission umask) {
+     conf.set(UMASK_LABEL, String.format("%1$03o", umask.toShort()));
+diff --git a/src/core/org/apache/hadoop/util/DiskChecker.java b/src/core/org/apache/hadoop/util/DiskChecker.java
+index 4c471db..f618aeb 100644
+--- a/src/core/org/apache/hadoop/util/DiskChecker.java
++++ b/src/core/org/apache/hadoop/util/DiskChecker.java
+@@ -19,8 +19,16 @@
+ package org.apache.hadoop.util;
+ 
+ import java.io.File;
++import java.io.FileNotFoundException;
+ import java.io.IOException;
+ 
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.LocalFileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsAction;
++import org.apache.hadoop.fs.permission.FsPermission;
++
+ /**
+  * Class that provides utility functions for checking disk problem
+  */
+@@ -68,6 +76,11 @@ public class DiskChecker {
+                                       (canonDir.mkdir() || canonDir.exists()));
+   }
+   
++  /**
++   * Create the directory if it doesn't exist and 
++   * @param dir
++   * @throws DiskErrorException
++   */
+   public static void checkDir(File dir) throws DiskErrorException {
+     if (!mkdirsWithExistsCheck(dir))
+       throw new DiskErrorException("can not create directory: " 
+@@ -86,4 +99,84 @@ public class DiskChecker {
+                                    + dir.toString());
+   }
+ 
++  private static void checkPermission(Path dir, 
++                                     FsPermission expected, FsPermission actual) 
++  throws IOException {
++    // Check for permissions
++    if (!actual.equals(expected)) {
++      throw new IOException("Incorrect permission for " + dir + 
++                            ", expected: " + expected + ", while actual: " + 
++                            actual);
++    }
++
++  }
++  
++  /** 
++   * Create the directory or check permissions if it already exists.
++   * 
++   * The semantics of mkdirsWithExistsAndPermissionCheck method is different 
++   * from the mkdirs method provided in the Sun's java.io.File class in the 
++   * following way:
++   * While creating the non-existent parent directories, this method checks for
++   * the existence of those directories if the mkdir fails at any point (since
++   * that directory might have just been created by some other process).
++   * If both mkdir() and the exists() check fails for any seemingly 
++   * non-existent directory, then we signal an error; Sun's mkdir would signal
++   * an error (return false) if a directory it is attempting to create already
++   * exists or the mkdir fails.
++   * @param localFS local filesystem
++   * @param dir directory to be created or checked
++   * @param expected expected permission
++   * @return true on success, false on failure
++   */
++  public static boolean mkdirsWithExistsAndPermissionCheck(
++      LocalFileSystem localFS, Path dir, FsPermission expected) 
++  throws IOException {
++    File directory = new File(dir.makeQualified(localFS).toUri().getPath());
++    if (!directory.exists()) {
++      boolean created = mkdirsWithExistsCheck(directory);
++      if (created) {
++        localFS.setPermission(dir, expected);
++        return true;
++      }
++    }
++
++    checkPermission(dir, expected, localFS.getFileStatus(dir).getPermission());
++    return true;
++  }
++  
++  /**
++   * Create the local directory if necessary, check permissions and also ensure 
++   * it can be read from and written into.
++   * @param localFS local filesystem
++   * @param dir directory
++   * @param expected permission
++   * @throws DiskErrorException
++   * @throws IOException
++   */
++  public static void checkDir(LocalFileSystem localFS, Path dir, 
++                              FsPermission expected) 
++  throws DiskErrorException, IOException {
++    if (!mkdirsWithExistsAndPermissionCheck(localFS, dir, expected))
++      throw new DiskErrorException("can not create directory: " 
++                                   + dir.toString());
++
++    FileStatus stat = localFS.getFileStatus(dir);
++    FsPermission actual = stat.getPermission();
++    
++    if (!stat.isDir())
++      throw new DiskErrorException("not a directory: " 
++                                   + dir.toString());
++            
++    FsAction user = actual.getUserAction();
++    if (!user.implies(FsAction.READ))
++      throw new DiskErrorException("directory is not readable: " 
++                                   + dir.toString());
++            
++    if (!user.implies(FsAction.WRITE))
++      throw new DiskErrorException("directory is not writable: " 
++                                   + dir.toString());
++  }
++
+ }
++
+diff --git a/src/hdfs/hdfs-default.xml b/src/hdfs/hdfs-default.xml
+index 7b04c68..b298685 100644
+--- a/src/hdfs/hdfs-default.xml
++++ b/src/hdfs/hdfs-default.xml
+@@ -225,6 +225,14 @@ creations/deletions), or "all".</description>
+ </property>
+ 
+ <property>
++  <name>dfs.datanode.data.dir.perm</name>
++  <value>755</value>
++  <description>Permissions for the directories on on the local filesystem where 
++  the DFS data node store its blocks. The permissions can either be octal or 
++  symbolic.</description>
++</property>
++
++<property>
+   <name>dfs.replication</name>
+   <value>3</value>
+   <description>Default block replication. 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 4692cc8..277f19f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -46,6 +46,11 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.conf.Configured;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.LocalFileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.DFSUtil;
+ import org.apache.hadoop.hdfs.HDFSPolicyProvider;
+ import org.apache.hadoop.hdfs.protocol.Block;
+@@ -219,6 +224,11 @@ public class DataNode extends Configured
+   private final static String KEYTAB_FILE_KEY = "dfs.datanode.keytab.file";
+   private final static String USER_NAME_KEY = "dfs.datanode.user.name.key";
+   
++  public static final String DATA_DIR_KEY = "dfs.data.dir";
++  public final static String DATA_DIR_PERMISSION_KEY = 
++    "dfs.datanode.data.dir.perm";
++  private static final String DEFAULT_DATA_DIR_PERMISSION = "755";
++  
+   // For InterDataNodeProtocol
+   public Server ipcServer;
+ 
+@@ -1354,7 +1364,7 @@ public class DataNode extends Configured
+           " anymore. RackID resolution is handled by the NameNode.");
+       System.exit(-1);
+     }
+-    String[] dataDirs = conf.getTrimmedStrings("dfs.data.dir");
++    String[] dataDirs = conf.getTrimmedStrings(DATA_DIR_KEY);
+     dnThreadName = "DataNode: [" +
+                         StringUtils.arrayToString(dataDirs) + "]";
+     return makeInstance(dataDirs, conf);
+@@ -1391,19 +1401,23 @@ public class DataNode extends Configured
+    */
+   public static DataNode makeInstance(String[] dataDirs, Configuration conf)
+     throws IOException {
++    LocalFileSystem localFS = FileSystem.getLocal(conf);
+     ArrayList<File> dirs = new ArrayList<File>();
+-    for (int i = 0; i < dataDirs.length; i++) {
+-      File data = new File(dataDirs[i]);
++    FsPermission dataDirPermission = 
++      new FsPermission(conf.get(DATA_DIR_PERMISSION_KEY, 
++                                DEFAULT_DATA_DIR_PERMISSION));
++    for (String dir : dataDirs) {
+       try {
+-        DiskChecker.checkDir(data);
+-        dirs.add(data);
++        DiskChecker.checkDir(localFS, new Path(dir), dataDirPermission);
++        dirs.add(new File(dir));
+       } catch(DiskErrorException e) {
+-        LOG.warn("Invalid directory in dfs.data.dir: " + e.getMessage());
++        LOG.warn("Invalid directory in " + DATA_DIR_KEY +  ": " + 
++                 e.getMessage());
+       }
+     }
+     if (dirs.size() > 0) 
+       return new DataNode(conf, dirs);
+-    LOG.error("All directories in dfs.data.dir are invalid.");
++    LOG.error("All directories in " + DATA_DIR_KEY + " are invalid.");
+     return null;
+   }
+ 
+diff --git a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+index 7a0b811..df76aca 100644
+--- a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
++++ b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+@@ -385,7 +385,7 @@ public class MiniDFSCluster {
+           throw new IOException("Mkdirs failed to create directory for DataNode "
+                                 + i + ": " + dir1 + " or " + dir2);
+         }
+-        dnConf.set("dfs.data.dir", dir1.getPath() + "," + dir2.getPath()); 
++        dnConf.set(DataNode.DATA_DIR_KEY, dir1.getPath() + "," + dir2.getPath());
+       }
+       if (simulatedCapacities != null) {
+         dnConf.setBoolean("dfs.datanode.simulateddatastorage", true);
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java
+index c019c21..ec725bc 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDiskError.java
+@@ -25,12 +25,14 @@ import java.net.Socket;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.DFSTestUtil;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.protocol.DataTransferProtocol;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.util.DiskChecker;
+ import org.apache.hadoop.hdfs.security.BlockAccessToken;
+ 
+ import junit.framework.TestCase;
+@@ -150,4 +152,35 @@ public class TestDiskError extends TestCase {
+       cluster.shutdown();
+     }
+   }
++  
++  public void testLocalDirs() throws Exception {
++    Configuration conf = new Configuration();
++    final String permStr = "755";
++    FsPermission expected = new FsPermission(permStr);
++    conf.set(DataNode.DATA_DIR_PERMISSION_KEY, permStr);
++    MiniDFSCluster cluster = null; 
++    
++    try {
++      // Start the cluster
++      cluster = 
++        new MiniDFSCluster(0, conf, 1, true,  
++                          true, false,  null, null, null, null);
++      cluster.waitActive();
++      
++      // Check permissions on directories in 'dfs.data.dir'
++      FileSystem localFS = FileSystem.getLocal(conf);
++      String[] dataDirs = conf.getStrings(DataNode.DATA_DIR_KEY);
++      for (String dir : dataDirs) {
++        Path dataDir = new Path(dir);
++        FsPermission actual = localFS.getFileStatus(dataDir).getPermission(); 
++        assertEquals("Permission for dir: " + dataDir + ", is " + actual + 
++                         ", while expected is " + expected, 
++                     expected, actual);
++      }
++    } finally {
++      if (cluster != null)
++        cluster.shutdown();
++    }
++    
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/security/TestPermission.java b/src/test/org/apache/hadoop/security/TestPermission.java
+index 0787e9d..43d333b 100644
+--- a/src/test/org/apache/hadoop/security/TestPermission.java
++++ b/src/test/org/apache/hadoop/security/TestPermission.java
+@@ -175,7 +175,7 @@ public class TestPermission extends TestCase {
+       RAN.nextBytes(data);
+       out.write(data);
+       out.close();
+-      nnfs.setPermission(CHILD_FILE1, new FsPermission((short)0700));
++      nnfs.setPermission(CHILD_FILE1, new FsPermission("700"));
+ 
+       // following read is legal
+       byte dataIn[] = new byte[FILE_LEN];
+@@ -207,7 +207,7 @@ public class TestPermission extends TestCase {
+       assertTrue(!canOpen(userfs, CHILD_FILE1));
+ 
+       nnfs.setPermission(ROOT_PATH, new FsPermission((short)0755));
+-      nnfs.setPermission(CHILD_DIR1, new FsPermission((short)0777));
++      nnfs.setPermission(CHILD_DIR1, new FsPermission("777"));
+       nnfs.setPermission(new Path("/"), new FsPermission((short)0777));
+       final Path RENAME_PATH = new Path("/foo/bar");
+       userfs.mkdirs(RENAME_PATH);
+-- 
+1.7.0.4
+

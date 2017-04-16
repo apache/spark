@@ -1,0 +1,2244 @@
+From 7362cada95bd07ff3b034f5c7fb15b42365c2d06 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 3 Sep 2010 16:55:59 -0700
+Subject: [PATCH 0684/1179] HADOOP-5467. Add offline image viewer tool for HDFS filesystem images
+
+Author: Jakob Homan
+Reason: Necessary for Hue Headlamp application
+Ref: CDH-2106
+---
+ bin/hadoop                                         |    5 +
+ build.xml                                          |    2 +
+ .../content/xdocs/hdfs_imageviewer.xml             |  187 ++++++++++
+ src/docs/src/documentation/content/xdocs/site.xml  |    1 +
+ .../hadoop/hdfs/server/namenode/FSImage.java       |    8 +-
+ .../hdfs/tools/offlineImageViewer/ImageLoader.java |   80 +++++
+ .../offlineImageViewer/ImageLoaderCurrent.java     |  296 ++++++++++++++++
+ .../tools/offlineImageViewer/ImageVisitor.java     |  153 ++++++++
+ .../offlineImageViewer/IndentedImageVisitor.java   |   99 ++++++
+ .../tools/offlineImageViewer/LsImageVisitor.java   |  172 +++++++++
+ .../offlineImageViewer/OfflineImageViewer.java     |  231 ++++++++++++
+ .../offlineImageViewer/TextWriterImageVisitor.java |  106 ++++++
+ .../tools/offlineImageViewer/XmlImageVisitor.java  |   88 +++++
+ .../offlineImageViewer/SpotCheckImageVisitor.java  |   89 +++++
+ .../TestOIVCanReadOldVersions.java                 |  132 +++++++
+ .../offlineImageViewer/TestOfflineImageViewer.java |  371 ++++++++++++++++++++
+ .../hdfs/tools/offlineImageViewer/fsimageV18       |  Bin 0 -> 2373 bytes
+ .../hdfs/tools/offlineImageViewer/fsimageV19       |  Bin 0 -> 2625 bytes
+ 18 files changed, 2018 insertions(+), 2 deletions(-)
+ create mode 100644 src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoader.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoaderCurrent.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/IndentedImageVisitor.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/LsImageVisitor.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/TextWriterImageVisitor.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/XmlImageVisitor.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/SpotCheckImageVisitor.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOIVCanReadOldVersions.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/fsimageV18
+ create mode 100644 src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/fsimageV19
+
+diff --git a/bin/hadoop b/bin/hadoop
+index c117123..c496676 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -74,6 +74,7 @@ if [ $# = 0 ]; then
+   echo "  jar <jar>            run a jar file"
+   echo "  distcp <srcurl> <desturl> copy file or directories recursively"
+   echo "  archive -archiveName NAME -p <parent path> <src>* <dest> create a hadoop archive"
++  echo "  oiv                  apply the offline fsimage viewer to an fsimage"
+   echo "  classpath            prints the class path needed to get the"
+   echo "                       Hadoop jar and the required libraries"
+   echo "  daemonlog            get/set the log level for each daemon"
+@@ -264,6 +265,10 @@ elif [ "$COMMAND" = "archive" ] ; then
+   CLASS=org.apache.hadoop.tools.HadoopArchives
+   CLASSPATH=${CLASSPATH}:${TOOL_PATH}
+   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
++elif [ "$COMMAND" = "oiv" ] ; then
++  CLASS=org.apache.hadoop.hdfs.tools.offlineImageViewer.OfflineImageViewer
++  CLASSPATH=${CLASSPATH}:${TOOL_PATH}
++  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+ elif [ "$COMMAND" = "sampler" ] ; then
+   CLASS=org.apache.hadoop.mapred.lib.InputSampler
+   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+diff --git a/build.xml b/build.xml
+index 6e89565..c478a0b 100644
+--- a/build.xml
++++ b/build.xml
+@@ -781,6 +781,8 @@
+     <copy file="${test.src.dir}/org/apache/hadoop/cli/clitest_data/data30bytes" todir="${test.cache.data}"/>
+     <copy file="${test.src.dir}/org/apache/hadoop/cli/clitest_data/data60bytes" todir="${test.cache.data}"/>
+     <copy file="${test.src.dir}/org/apache/hadoop/cli/clitest_data/data120bytes" todir="${test.cache.data}"/>
++    <copy file="${test.src.dir}/org/apache/hadoop/hdfs/tools/offlineImageViewer/fsimageV18" todir="${test.cache.data}"/>
++    <copy file="${test.src.dir}/org/apache/hadoop/hdfs/tools/offlineImageViewer/fsimageV19" todir="${test.cache.data}"/>
+   </target>
+ 
+   <!-- ================================================================== -->
+diff --git a/src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml b/src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml
+new file mode 100644
+index 0000000..4b088ff
+--- /dev/null
++++ b/src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml
+@@ -0,0 +1,187 @@
++<?xml version="1.0"?>
++<!--
++  Licensed to the Apache Software Foundation (ASF) under one or more
++  contributor license agreements.  See the NOTICE file distributed with
++  this work for additional information regarding copyright ownership.
++  The ASF licenses this file to You under the Apache License, Version 2.0
++  (the "License"); you may not use this file except in compliance with
++  the License.  You may obtain a copy of the License at
++
++      http://www.apache.org/licenses/LICENSE-2.0
++
++  Unless required by applicable law or agreed to in writing, software
++  distributed under the License is distributed on an "AS IS" BASIS,
++  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  See the License for the specific language governing permissions and
++  limitations under the License.
++-->
++
++<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN" "http://forrest.apache.org/dtd/document-v20.dtd">
++
++<document>
++
++  <header>
++    <title>Offline Image Viewer Guide</title>
++  </header>
++
++  <body>
++
++    <section>
++      <title>Overview</title>
++
++      <p>The Offline Image Viewer is a tool to dump the contents of hdfs
++      fsimage files to human-readable formats in order to allow offline analysis
++      and examination of an Hadoop cluster's namespace. The tool is able to
++      process very large image files relatively quickly, converting them to
++      one of several output formats. The tool handles the layout formats that
++      were included with Hadoop versions 16 and up. If the tool is not able to
++      process an image file, it will exit cleanly. The Offline Image Viewer does not require
++      an Hadoop cluster to be running; it is entirely offline in its operation.</p>
++
++      <p>The Offline Image Viewer provides several output processors:</p>
++        <ol>
++        <li><strong>Ls</strong> is the default output processor. It closely mimics the format of
++          the <code>lsr </code> command. It includes the same fields, in the same order, as
++          <code>lsr </code>: directory or file flag, permissions, replication, owner, group,
++          file size, modification date, and full path. Unlike the <code>lsr </code> command,
++          the root path is included. One important difference between the output
++          of the <code>lsr </code> command this processor, is that this output is not sorted
++          by directory name and contents. Rather, the files are listed in the
++          order in which they are stored in the fsimage file. Therefore, it is
++          not possible to directly compare the output of the <code>lsr </code> command this
++          this tool. The Ls processor uses information contained within the Inode blocks to
++          calculate file sizes and ignores the <code>-skipBlocks</code> option.</li>
++        <li><strong>Indented</strong> provides a more complete view of the fsimage's contents,
++          including all of the information included in the image, such as image
++          version, generation stamp and inode- and block-specific listings. This
++          processor uses indentation to organize the output into a hierarchal manner.
++          The <code>lsr </code> format is suitable for easy human comprehension.</li>
++        <li><strong>XML</strong> creates an XML document of the fsimage and includes all of the
++          information within the fsimage, similar to the <code>lsr </code> processor. The output
++          of this processor is amenable to automated processing and analysis with XML tools.
++          Due to the verbosity of the XML syntax, this processor will also generate
++          the largest amount of output.</li>
++        </ol>
++
++    </section> <!-- overview -->
++
++    <section>
++      <title>Usage</title>
++
++      <section>
++        <title>Basic</title>
++        <p>The simplest usage of the Offline Image Viewer is to provide just an input and output
++          file, via the <code>-i</code> and <code>-o</code> command-line switches:</p>
++
++        <p><code>bash$ bin/hdfs oiv -i fsimage -o fsimage.txt</code><br/></p>
++
++        <p>This will create a file named fsimage.txt in the current directory using
++        the Ls output processor.  For very large image files, this process may take
++        several minutes.</p>
++
++        <p>One can specify which output processor via the command-line switch <code>-p</code>.
++        For instance:</p>
++        <p><code>bash$ bin/hdfs oiv -i fsimage -o fsimage.xml -p XML</code><br/></p>
++
++        <p>or</p>
++
++        <p><code>bash$ bin/hdfs oiv -i fsimage -o fsimage.txt -p Indented</code><br/></p>
++
++        <p>This will run the tool using either the XML or Indented output processor,
++        respectively.</p>
++
++        <p>One command-line option worth considering is <code>-skipBlocks</code>, which
++        prevents the tool from explicitly enumerating all of the blocks that make up
++        a file in the namespace. This is useful for file systems that have very large
++        files. Enabling this option can significantly decrease the size of the resulting
++        output, as individual blocks are not included. Note, however, that the Ls processor
++        needs to enumerate the blocks and so overrides this option.</p>
++
++      </section> <!-- Basic -->
++      <section id="Example">
++        <title>Example</title>
++
++          <p>Consider the following contrived namespace:</p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;&nbsp;-&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;21:17&nbsp;/anotherDir</code></p>
++          <p><code>-rw-r--r--&nbsp;&nbsp;&nbsp;3&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;286631664&nbsp;2009-03-16&nbsp;21:15&nbsp;/anotherDir/biggerfile</code></p>
++          <p><code>-rw-r--r--&nbsp;&nbsp;&nbsp;3&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8754&nbsp;2009-03-16&nbsp;21:17&nbsp;/anotherDir/smallFile</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;&nbsp;-&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;21:11&nbsp;/mapredsystem</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;&nbsp;-&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;21:11&nbsp;/mapredsystem/theuser</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;&nbsp;-&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;21:11&nbsp;/mapredsystem/theuser/mapredsystem</code></p>
++          <p><code>drwx-wx-wx&nbsp;&nbsp;&nbsp;-&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;21:11&nbsp;/mapredsystem/theuser/mapredsystem/ip.redacted.com</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;&nbsp;-&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;21:12&nbsp;/one</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;&nbsp;-&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;21:12&nbsp;/one/two</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;&nbsp;-&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;21:16&nbsp;/user</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;&nbsp;-&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;21:19&nbsp;/user/theuser</code></p>
++          <p>Applying the Offline Image Processor against this file with default options would result in the following output:</p>
++          <p><code>machine:hadoop-0.21.0-dev&nbsp;theuser$&nbsp;bin/hdfs&nbsp;oiv&nbsp;-i&nbsp;fsimagedemo&nbsp;-o&nbsp;fsimage.txt</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;-&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;14:16&nbsp;/</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;-&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;14:17&nbsp;/anotherDir</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;-&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;14:11&nbsp;/mapredsystem</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;-&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;14:12&nbsp;/one</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;-&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;14:16&nbsp;/user</code></p>
++          <p><code>-rw-r--r--&nbsp;&nbsp;3&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;286631664&nbsp;2009-03-16&nbsp;14:15&nbsp;/anotherDir/biggerfile</code></p>
++          <p><code>-rw-r--r--&nbsp;&nbsp;3&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8754&nbsp;2009-03-16&nbsp;14:17&nbsp;/anotherDir/smallFile</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;-&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;14:11&nbsp;/mapredsystem/theuser</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;-&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;14:11&nbsp;/mapredsystem/theuser/mapredsystem</code></p>
++          <p><code>drwx-wx-wx&nbsp;&nbsp;-&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;14:11&nbsp;/mapredsystem/theuser/mapredsystem/ip.redacted.com</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;-&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;14:12&nbsp;/one/two</code></p>
++          <p><code>drwxr-xr-x&nbsp;&nbsp;-&nbsp;&nbsp;&nbsp;theuser&nbsp;supergroup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0&nbsp;2009-03-16&nbsp;14:19&nbsp;/user/theuser</code></p>
++          <p>Similarly, applying the Indented processor would generate output that begins with:</p>
++          <p><code>machine:hadoop-0.21.0-dev&nbsp;theuser$&nbsp;bin/hdfs&nbsp;oiv&nbsp;-i&nbsp;fsimagedemo&nbsp;-p&nbsp;Indented&nbsp;-o&nbsp;fsimage.txt</code></p>
++          <p><code>FSImage</code></p>
++          <p><code>&nbsp;&nbsp;ImageVersion&nbsp;=&nbsp;-19</code></p>
++          <p><code>&nbsp;&nbsp;NamespaceID&nbsp;=&nbsp;2109123098</code></p>
++          <p><code>&nbsp;&nbsp;GenerationStamp&nbsp;=&nbsp;1003</code></p>
++          <p><code>&nbsp;&nbsp;INodes&nbsp;[NumInodes&nbsp;=&nbsp;12]</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;Inode</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;INodePath&nbsp;=&nbsp;</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Replication&nbsp;=&nbsp;0</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ModificationTime&nbsp;=&nbsp;2009-03-16&nbsp;14:16</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AccessTime&nbsp;=&nbsp;1969-12-31&nbsp;16:00</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;BlockSize&nbsp;=&nbsp;0</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Blocks&nbsp;[NumBlocks&nbsp;=&nbsp;-1]</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;NSQuota&nbsp;=&nbsp;2147483647</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DSQuota&nbsp;=&nbsp;-1</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Permissions</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Username&nbsp;=&nbsp;theuser</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;GroupName&nbsp;=&nbsp;supergroup</code></p>
++          <p><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PermString&nbsp;=&nbsp;rwxr-xr-x</code></p>
++          <p><code>&hellip;remaining output omitted&hellip;</code></p>
++      </section> <!-- example-->
++
++    </section>
++
++      <section id="options">
++        <title>Options</title>
++
++        <section>
++        <title>Option Index</title>
++        <table>
++          <tr><th> Flag </th><th> Description </th></tr>
++          <tr><td><code>[-i|--inputFile] &lt;input file&gt;</code></td>
++              <td>Specify the input fsimage file to process. Required.</td></tr>
++          <tr><td><code>[-o|--outputFile] &lt;output file&gt;</code></td>
++              <td>Specify the output filename, if the specified output processor
++              generates one. If the specified file already exists, it is silently overwritten. Required.
++              </td></tr>
++          <tr><td><code>[-p|--processor] &lt;processor&gt;</code></td>
++                  <td>Specify the image processor to apply against the image file. Currently
++                    valid options are Ls (default), XML and Indented..
++                  </td></tr>
++          <tr><td><code>-skipBlocks</code></td>
++              <td>Do not enumerate individual blocks within files. This may save processing time
++              and outfile file space on namespaces with very large files. The <code>Ls</code> processor reads
++              the blocks to correctly determine file sizes and ignores this option.</td></tr>
++          <tr><td><code>-printToScreen</code></td>
++              <td>Pipe output of processor to console as well as specified file. On extremely 
++              large namespaces, this may increase processing time by an order of magnitude.</td></tr>
++          <tr><td><code>[-h|--help]</code></td>
++              <td>Display the tool usage and help information and exit.</td></tr>
++            </table>
++          </section> <!-- options -->
++    </section>
++
++  </body>
++
++</document>
+diff --git a/src/docs/src/documentation/content/xdocs/site.xml b/src/docs/src/documentation/content/xdocs/site.xml
+index 2cade86..2e4e613 100644
+--- a/src/docs/src/documentation/content/xdocs/site.xml
++++ b/src/docs/src/documentation/content/xdocs/site.xml
+@@ -55,6 +55,7 @@ See http://forrest.apache.org/docs/linking.html for more info.
+     <hdfs_arch          label="HDFS Architecture" href="hdfs_design.html" />
+     <hdfs_perm        label="Permissions" href="hdfs_permissions_guide.html" />
+     <hdfs_quotas      label="Quotas" href="hdfs_quota_admin_guide.html" />
++		<hdfs_imageviewer	label="Offline Image Viewer Guide"	href="hdfs_imageviewer.html" />
+     <hdfs_SLG         label="Synthetic Load Generator"  href="SLG_user_guide.html" />
+     <hdfs_libhdfs       label="C API libhdfs" href="libhdfs.html" />
+   </docs>
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index 704bd44..4ea49d8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -1772,7 +1772,10 @@ public class FSImage extends Storage {
+   }
+ 
+   static private final UTF8 U_STR = new UTF8();
+-  static String readString(DataInputStream in) throws IOException {
++  // This should be reverted to package private once the ImageLoader
++  // code is moved into this package. This method should not be called
++  // by other code.
++  public static String readString(DataInputStream in) throws IOException {
+     U_STR.readFields(in);
+     return U_STR.toString();
+   }
+@@ -1782,7 +1785,8 @@ public class FSImage extends Storage {
+     return s.isEmpty()? null: s;
+   }
+ 
+-  static byte[] readBytes(DataInputStream in) throws IOException {
++  // Same comments apply for this method as for readString()
++  public static byte[] readBytes(DataInputStream in) throws IOException {
+     U_STR.readFields(in);
+     int len = U_STR.getLength();
+     byte[] bytes = new byte[len];
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoader.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoader.java
+new file mode 100644
+index 0000000..1d13eb0
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoader.java
+@@ -0,0 +1,80 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.DataInputStream;
++import java.io.IOException;
++
++/**
++ * An ImageLoader can accept a DataInputStream to an Hadoop FSImage file
++ * and walk over its structure using the supplied ImageVisitor.
++ *
++ * Each implementation of ImageLoader is designed to rapidly process an
++ * image file.  As long as minor changes are made from one layout version
++ * to another, it is acceptable to tweak one implementation to read the next.
++ * However, if the layout version changes enough that it would make a
++ * processor slow or difficult to read, another processor should be created.
++ * This allows each processor to quickly read an image without getting
++ * bogged down in dealing with significant differences between layout versions.
++ */
++interface ImageLoader {
++
++  /**
++   * @param in DataInputStream pointing to an Hadoop FSImage file
++   * @param v Visit to apply to the FSImage file
++   * @param enumerateBlocks Should visitor visit each of the file blocks?
++   */
++  public void loadImage(DataInputStream in, ImageVisitor v,
++      boolean enumerateBlocks) throws IOException;
++
++  /**
++   * Can this processor handle the specified version of FSImage file?
++   *
++   * @param version FSImage version file
++   * @return True if this instance can process the file
++   */
++  public boolean canLoadVersion(int version);
++
++  /**
++   * Factory for obtaining version of image loader that can read
++   * a particular image format.
++   */
++  public class LoaderFactory {
++    // Java doesn't support static methods on interfaces, which necessitates
++    // this factory class
++
++    /**
++     * Find an image loader capable of interpreting the specified
++     * layout version number.  If none, return null;
++     *
++     * @param imageVersion fsimage layout version number to be processed
++     * @return ImageLoader that can interpret specified version, or null
++     */
++    static public ImageLoader getLoader(int version) {
++      // Easy to add more image processors as they are written
++      ImageLoader[] loaders = { new ImageLoaderCurrent() };
++
++      for (ImageLoader l : loaders) {
++        if (l.canLoadVersion(version))
++          return l;
++      }
++
++      return null;
++    }
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoaderCurrent.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoaderCurrent.java
+new file mode 100644
+index 0000000..85656b3
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoaderCurrent.java
+@@ -0,0 +1,296 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.DataInputStream;
++import java.io.IOException;
++import java.text.DateFormat;
++import java.text.SimpleDateFormat;
++import java.util.Date;
++
++import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.hdfs.protocol.DatanodeInfo.AdminStates;
++import org.apache.hadoop.hdfs.server.namenode.FSImage;
++import org.apache.hadoop.hdfs.tools.offlineImageViewer.ImageVisitor.ImageElement;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.WritableUtils;
++
++/**
++ * ImageLoaderCurrent processes Hadoop FSImage files and walks over
++ * them using a provided ImageVisitor, calling the visitor at each element
++ * enumerated below.
++ *
++ * The only difference between v18 and v19 was the utilization of the
++ * stickybit.  Therefore, the same viewer can reader either format.
++ *
++ * Versions -19 fsimage layout (with changes from -16 up):
++ * Image version (int)
++ * Namepsace ID (int)
++ * NumFiles (long)
++ * Generation stamp (long)
++ * INodes (count = NumFiles)
++ *  INode
++ *    Path (String)
++ *    Replication (short)
++ *    Modification Time (long as date)
++ *    Access Time (long) // added in -16
++ *    Block size (long)
++ *    Num blocks (int)
++ *    Blocks (count = Num blocks)
++ *      Block
++ *        Block ID (long)
++ *        Num bytes (long)
++ *        Generation stamp (long)
++ *    Namespace Quota (long)
++ *    Diskspace Quota (long) // added in -18
++ *    Permissions
++ *      Username (String)
++ *      Groupname (String)
++ *      OctalPerms (short -> String)  // Modified in -19
++ * NumINodesUnderConstruction (int)
++ * INodesUnderConstruction (count = NumINodesUnderConstruction)
++ *  INodeUnderConstruction
++ *    Path (bytes as string)
++ *    Replication (short)
++ *    Modification time (long as date)
++ *    Preferred block size (long)
++ *    Num blocks (int)
++ *    Blocks
++ *      Block
++ *        Block ID (long)
++ *        Num bytes (long)
++ *        Generation stamp (long)
++ *    Permissions
++ *      Username (String)
++ *      Groupname (String)
++ *      OctalPerms (short -> String)
++ *    Client Name (String)
++ *    Client Machine (String)
++ *    NumLocations (int)
++ *    DatanodeDescriptors (count = numLocations) // not loaded into memory
++ *      short                                    // but still in file
++ *      long
++ *      string
++ *      long
++ *      int
++ *      string
++ *      string
++ *      enum
++ *
++ */
++class ImageLoaderCurrent implements ImageLoader {
++  protected final DateFormat dateFormat = 
++                                      new SimpleDateFormat("yyyy-MM-dd HH:mm");
++  private static int [] versions = {-16, -17, -18, -19};
++  private int imageVersion = 0;
++
++  /* (non-Javadoc)
++   * @see ImageLoader#canProcessVersion(int)
++   */
++  @Override
++  public boolean canLoadVersion(int version) {
++    for(int v : versions)
++      if(v == version) return true;
++
++    return false;
++  }
++
++  /* (non-Javadoc)
++   * @see ImageLoader#processImage(java.io.DataInputStream, ImageVisitor, boolean)
++   */
++  @Override
++  public void loadImage(DataInputStream in, ImageVisitor v,
++      boolean skipBlocks) throws IOException {
++    try {
++      v.start();
++      v.visitEnclosingElement(ImageElement.FSImage);
++
++      imageVersion = in.readInt();
++      if( !canLoadVersion(imageVersion))
++        throw new IOException("Cannot process fslayout version " + imageVersion);
++
++      v.visit(ImageElement.ImageVersion, imageVersion);
++      v.visit(ImageElement.NamespaceID, in.readInt());
++
++      long numInodes = in.readLong();
++
++      v.visit(ImageElement.GenerationStamp, in.readLong());
++
++      processINodes(in, v, numInodes, skipBlocks);
++
++      processINodesUC(in, v, skipBlocks);
++
++      v.leaveEnclosingElement(); // FSImage
++      v.finish();
++    } catch(IOException e) {
++      // Tell the visitor to clean up, then re-throw the exception
++      v.finishAbnormally();
++      throw e;
++    }
++  }
++
++  /**
++   * Process the INodes under construction section of the fsimage.
++   *
++   * @param in DataInputStream to process
++   * @param v Visitor to walk over inodes
++   * @param numINUC Number of inodes recorded in file
++   * @param skipBlocks Walk over each block?
++   */
++  private void processINodesUC(DataInputStream in, ImageVisitor v,
++      boolean skipBlocks) throws IOException {
++    int numINUC = in.readInt();
++
++    v.visitEnclosingElement(ImageElement.INodesUnderConstruction,
++                           ImageElement.NumINodesUnderConstruction, numINUC);
++
++    for(int i = 0; i < numINUC; i++) {
++      v.visitEnclosingElement(ImageElement.INodeUnderConstruction);
++      byte [] name = FSImage.readBytes(in);
++      String n = new String(name, "UTF8");
++      v.visit(ImageElement.INodePath, n);
++      v.visit(ImageElement.Replication, in.readShort());
++      v.visit(ImageElement.ModificationTime, formatDate(in.readLong()));
++
++      v.visit(ImageElement.PreferredBlockSize, in.readLong());
++      int numBlocks = in.readInt();
++      processBlocks(in, v, numBlocks, skipBlocks);
++
++      processPermission(in, v);
++      v.visit(ImageElement.ClientName, FSImage.readString(in));
++      v.visit(ImageElement.ClientMachine, FSImage.readString(in));
++
++      // Skip over the datanode descriptors, which are still stored in the
++      // file but are not used by the datanode or loaded into memory
++      int numLocs = in.readInt();
++      for(int j = 0; j < numLocs; j++) {
++        in.readShort();
++        in.readLong();
++        in.readLong();
++        in.readLong();
++        in.readInt();
++        FSImage.readString(in);
++        FSImage.readString(in);
++        WritableUtils.readEnum(in, AdminStates.class);
++      }
++
++      v.leaveEnclosingElement(); // INodeUnderConstruction
++    }
++
++    v.leaveEnclosingElement(); // INodesUnderConstruction
++  }
++
++  /**
++   * Process the blocks section of the fsimage.
++   *
++   * @param in Datastream to process
++   * @param v Visitor to walk over inodes
++   * @param skipBlocks Walk over each block?
++   */
++  private void processBlocks(DataInputStream in, ImageVisitor v,
++      int numBlocks, boolean skipBlocks) throws IOException {
++    v.visitEnclosingElement(ImageElement.Blocks,
++                            ImageElement.NumBlocks, numBlocks);
++    
++    if(numBlocks == -1) { // directory, no blocks to process
++      v.leaveEnclosingElement(); // Blocks
++      return;
++    }
++    
++    if(skipBlocks) {
++      int bytesToSkip = ((Long.SIZE * 3 /* fields */) / 8 /*bits*/) * numBlocks;
++      if(in.skipBytes(bytesToSkip) != bytesToSkip)
++        throw new IOException("Error skipping over blocks");
++      
++    } else {
++      for(int j = 0; j < numBlocks; j++) {
++        v.visitEnclosingElement(ImageElement.Block);
++        v.visit(ImageElement.BlockID, in.readLong());
++        v.visit(ImageElement.NumBytes, in.readLong());
++        v.visit(ImageElement.GenerationStamp, in.readLong());
++        v.leaveEnclosingElement(); // Block
++      }
++    }
++    v.leaveEnclosingElement(); // Blocks
++  }
++
++  /**
++   * Extract the INode permissions stored in the fsimage file.
++   *
++   * @param in Datastream to process
++   * @param v Visitor to walk over inodes
++   */
++  private void processPermission(DataInputStream in, ImageVisitor v)
++      throws IOException {
++    v.visitEnclosingElement(ImageElement.Permissions);
++    v.visit(ImageElement.Username, Text.readString(in));
++    v.visit(ImageElement.GroupName, Text.readString(in));
++    FsPermission fsp = new FsPermission(in.readShort());
++    v.visit(ImageElement.PermString, fsp.toString());
++    v.leaveEnclosingElement(); // Permissions
++  }
++
++  /**
++   * Process the INode records stored in the fsimage.
++   *
++   * @param in Datastream to process
++   * @param v Visitor to walk over INodes
++   * @param numInodes Number of INodes stored in file
++   * @param skipBlocks Process all the blocks within the INode?
++   * @throws VisitException
++   * @throws IOException
++   */
++  private void processINodes(DataInputStream in, ImageVisitor v,
++      long numInodes, boolean skipBlocks) throws IOException {
++    v.visitEnclosingElement(ImageElement.INodes,
++        ImageElement.NumInodes, numInodes);
++
++    for(long i = 0; i < numInodes; i++) {
++      v.visitEnclosingElement(ImageElement.Inode);
++      v.visit(ImageElement.INodePath, FSImage.readString(in));
++      v.visit(ImageElement.Replication, in.readShort());
++      v.visit(ImageElement.ModificationTime, formatDate(in.readLong()));
++      if(imageVersion <= -17) // added in version -17
++        v.visit(ImageElement.AccessTime, formatDate(in.readLong()));
++      v.visit(ImageElement.BlockSize, in.readLong());
++      int numBlocks = in.readInt();
++
++      processBlocks(in, v, numBlocks, skipBlocks);
++
++      if(numBlocks != 0) {
++        v.visit(ImageElement.NSQuota, numBlocks <= 0 ? in.readLong() : -1);
++        if(imageVersion <= -18) // added in version -18
++          v.visit(ImageElement.DSQuota, numBlocks <= 0 ? in.readLong() : -1);
++      }
++
++      processPermission(in, v);
++      v.leaveEnclosingElement(); // INode
++    }
++    
++    v.leaveEnclosingElement(); // INodes
++  }
++
++  /**
++   * Helper method to format dates during processing.
++   * @param date Date as read from image file
++   * @return String version of date format
++   */
++  private String formatDate(long date) {
++    return dateFormat.format(new Date(date));
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java
+new file mode 100644
+index 0000000..3c0f2eb
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java
+@@ -0,0 +1,153 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.IOException;
++
++/**
++ * An implementation of ImageVisitor can traverse the structure of an
++ * Hadoop fsimage and respond to each of the structures within the file.
++ */
++abstract class ImageVisitor {
++
++  /**
++   * Structural elements of an FSImage that may be encountered within the
++   * file. ImageVisitors are able to handle processing any of these elements.
++   */
++  public enum ImageElement {
++    FSImage,
++    ImageVersion,
++    NamespaceID,
++    LayoutVersion,
++    NumInodes,
++    GenerationStamp,
++    INodes,
++    Inode,
++    INodePath,
++    Replication,
++    ModificationTime,
++    AccessTime,
++    BlockSize,
++    NumBlocks,
++    Blocks,
++    Block,
++    BlockID,
++    NumBytes,
++    NSQuota,
++    DSQuota,
++    Permissions,
++    NumINodesUnderConstruction,
++    INodesUnderConstruction,
++    INodeUnderConstruction,
++    PreferredBlockSize,
++    ClientName,
++    ClientMachine,
++    Username,
++    GroupName,
++    PermString
++  }
++  
++  /**
++   * Utility class for tracking descent into the structure of the fsimage.
++   */
++  static protected class DepthCounter {
++    private int depth = 0;
++
++    public void incLevel() { depth++; }
++    public void decLevel() { if(depth >= 1) depth--; }
++    public int  getLevel() { return depth; }
++  }
++
++  /**
++   * Begin visiting the fsimage structure.  Opportunity to perform
++   * any initialization necessary for the implementing visitor.
++   */
++  abstract void start() throws IOException;
++
++  /**
++   * Finish visiting the fsimage structure.  Opportunity to perform any
++   * clean up necessary for the implementing visitor.
++   */
++  abstract void finish() throws IOException;
++
++  /**
++   * Finish visiting the fsimage structure after an error has occurred
++   * during the processing.  Opportunity to perform any clean up necessary
++   * for the implementing visitor.
++   */
++  abstract void finishAbnormally() throws IOException;
++
++  /**
++   * Visit element of fsimage with specified value.
++   *
++   * @param element FSImage element
++   * @param value Element's value
++   */
++  abstract void visit(ImageElement element, String value) throws IOException;
++
++  // Convenience methods to automatically convert numeric value types to strings
++  void visit(ImageElement element, int value) throws IOException {
++    visit(element, Integer.toString(value));
++  }
++
++  void visit(ImageElement element, long value) throws IOException {
++    visit(element, Long.toString(value));
++  }
++
++  /**
++   * Begin visiting an element that encloses another element, such as
++   * the beginning of the list of blocks that comprise a file.
++   *
++   * @param element Element being visited
++   */
++  abstract void visitEnclosingElement(ImageElement element)
++     throws IOException;
++
++  /**
++   * Begin visiting an element that encloses another element, such as
++   * the beginning of the list of blocks that comprise a file.
++   *
++   * Also provide an additional key and value for the element, such as the
++   * number items within the element.
++   *
++   * @param element Element being visited
++   * @param key Key describing the element being visited
++   * @param value Value associated with element being visited
++   */
++  abstract void visitEnclosingElement(ImageElement element,
++      ImageElement key, String value) throws IOException;
++
++  // Convenience methods to automatically convert value types to strings
++  void visitEnclosingElement(ImageElement element,
++      ImageElement key, int value)
++     throws IOException {
++    visitEnclosingElement(element, key, Integer.toString(value));
++  }
++
++  void visitEnclosingElement(ImageElement element,
++      ImageElement key, long value)
++     throws IOException {
++    visitEnclosingElement(element, key, Long.toString(value));
++  }
++
++  /**
++   * Leave current enclosing element.  Called, for instance, at the end of
++   * processing the blocks that compromise a file.
++   */
++  abstract void leaveEnclosingElement() throws IOException;
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/IndentedImageVisitor.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/IndentedImageVisitor.java
+new file mode 100644
+index 0000000..9ae7c23
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/IndentedImageVisitor.java
+@@ -0,0 +1,99 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.IOException;
++
++/**
++ * IndentedImageVisitor walks over an FSImage and displays its structure 
++ * using indenting to organize sections within the image file.
++ */
++class IndentedImageVisitor extends TextWriterImageVisitor {
++  
++  public IndentedImageVisitor(String filename) throws IOException {
++    super(filename);
++  }
++
++  public IndentedImageVisitor(String filename, boolean printToScreen) throws IOException {
++    super(filename, printToScreen);
++  }
++
++  final private DepthCounter dc = new DepthCounter();// to track leading spacing
++
++  @Override
++  void start() throws IOException {}
++
++  @Override
++  void finish() throws IOException { super.finish(); }
++
++  @Override
++  void finishAbnormally() throws IOException {
++    System.out.println("*** Image processing finished abnormally.  Ending ***");
++    super.finishAbnormally();
++  }
++
++  @Override
++  void leaveEnclosingElement() throws IOException {
++    dc.decLevel();
++  }
++
++  @Override
++  void visit(ImageElement element, String value) throws IOException {
++    printIndents();
++    write(element + " = " + value + "\n");
++  }
++
++  @Override
++  void visitEnclosingElement(ImageElement element) throws IOException {
++    printIndents();
++    write(element + "\n");
++    dc.incLevel();
++  }
++
++  // Print element, along with associated key/value pair, in brackets
++  @Override
++  void visitEnclosingElement(ImageElement element,
++      ImageElement key, String value)
++      throws IOException {
++    printIndents();
++    write(element + " [" + key + " = " + value + "]\n");
++    dc.incLevel();
++  }
++
++  /**
++  * Print an appropriate number of spaces for the current level.
++  * FsImages can potentially be millions of lines long, so caching can
++  * significantly speed up output.
++  */
++  final private static String [] indents = { "",
++                                             "  ",
++                                             "    ",
++                                             "      ",
++                                             "        ",
++                                             "          ",
++                                             "            "};
++  private void printIndents() throws IOException {
++    try {
++      write(indents[dc.getLevel()]);
++    } catch (IndexOutOfBoundsException e) {
++      // There's no reason in an fsimage would need a deeper indent
++      for(int i = 0; i < dc.getLevel(); i++)
++        write(" ");
++    }
++   }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/LsImageVisitor.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/LsImageVisitor.java
+new file mode 100644
+index 0000000..546557d
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/LsImageVisitor.java
+@@ -0,0 +1,172 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.IOException;
++import java.util.Formatter;
++import java.util.LinkedList;
++
++/**
++ * LsImageVisitor displays the blocks of the namespace in a format very similar
++ * to the output of ls/lsr.  Entries are marked as directories or not,
++ * permissions listed, replication, username and groupname, along with size,
++ * modification date and full path.
++ *
++ * Note: A significant difference between the output of the lsr command
++ * and this image visitor is that this class cannot sort the file entries;
++ * they are listed in the order they are stored within the fsimage file. 
++ * Therefore, the output of this class cannot be directly compared to the
++ * output of the lsr command.
++ */
++class LsImageVisitor extends TextWriterImageVisitor {
++  final private LinkedList<ImageElement> elemQ = new LinkedList<ImageElement>();
++
++  private int numBlocks;
++  private String perms;
++  private int replication;
++  private String username;
++  private String group;
++  private long filesize;
++  private String modTime;
++  private String path;
++
++  private boolean inInode = false;
++  final private StringBuilder sb = new StringBuilder();
++  final private Formatter formatter = new Formatter(sb);
++
++  public LsImageVisitor(String filename) throws IOException {
++    super(filename);
++  }
++
++  public LsImageVisitor(String filename, boolean printToScreen) throws IOException {
++    super(filename, printToScreen);
++  }
++
++  /**
++   * Start a new line of output, reset values.
++   */
++  private void newLine() {
++    numBlocks = 0;
++    perms = username = group = path = "";
++    filesize = 0l;
++    replication = 0;
++
++    inInode = true;
++  }
++
++  /**
++   * All the values have been gathered.  Print them to the console in an
++   * ls-style format.
++   * @throws IOException
++   */
++  private final static int widthRepl = 2;  
++  private final static int widthUser = 8; 
++  private final static int widthGroup = 10; 
++  private final static int widthSize = 10;
++  private final static int widthMod = 10;
++  private final static String lsStr = " %" + widthRepl + "s %" + widthUser + 
++                                       "s %" + widthGroup + "s %" + widthSize +
++                                       "d %" + widthMod + "s %s";
++  private void printLine() throws IOException {
++    sb.append(numBlocks < 0 ? "d" : "-");
++    sb.append(perms);
++
++    formatter.format(lsStr, replication > 0 ? replication : "-",
++                           username, group, filesize, modTime, path);
++    sb.append("\n");
++
++    write(sb.toString());
++    sb.setLength(0); // clear string builder
++
++    inInode = false;
++  }
++
++  @Override
++  void start() throws IOException {}
++
++  @Override
++  void finish() throws IOException {
++    super.finish();
++  }
++
++  @Override
++  void finishAbnormally() throws IOException {
++    System.out.println("Output ended unexpectedly.");
++    super.finishAbnormally();
++  }
++
++  @Override
++  void leaveEnclosingElement() throws IOException {
++    ImageElement elem = elemQ.pop();
++
++    if(elem == ImageElement.Inode)
++      printLine();
++  }
++
++  // Maintain state of location within the image tree and record
++  // values needed to display the inode in ls-style format.
++  @Override
++  void visit(ImageElement element, String value) throws IOException {
++    if(inInode) {
++      switch(element) {
++      case INodePath:
++        if(value.equals("")) path = "/";
++        else path = value;
++        break;
++      case PermString:
++        perms = value;
++        break;
++      case Replication:
++        replication = Integer.valueOf(value);
++        break;
++      case Username:
++        username = value;
++        break;
++      case GroupName:
++        group = value;
++        break;
++      case NumBytes:
++        filesize += Long.valueOf(value);
++        break;
++      case ModificationTime:
++        modTime = value;
++        break;
++      default:
++        // This is OK.  We're not looking for all the values.
++        break;
++      }
++    }
++  }
++
++  @Override
++  void visitEnclosingElement(ImageElement element) throws IOException {
++    elemQ.push(element);
++    if(element == ImageElement.Inode)
++      newLine();
++  }
++
++  @Override
++  void visitEnclosingElement(ImageElement element,
++      ImageElement key, String value) throws IOException {
++    elemQ.push(element);
++    if(element == ImageElement.Inode)
++      newLine();
++    else if (element == ImageElement.Blocks)
++      numBlocks = Integer.valueOf(value);
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java
+new file mode 100644
+index 0000000..68926a9
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java
+@@ -0,0 +1,231 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.BufferedInputStream;
++import java.io.DataInputStream;
++import java.io.EOFException;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.IOException;
++
++import org.apache.commons.cli.CommandLine;
++import org.apache.commons.cli.CommandLineParser;
++import org.apache.commons.cli.OptionBuilder;
++import org.apache.commons.cli.Options;
++import org.apache.commons.cli.ParseException;
++import org.apache.commons.cli.PosixParser;
++
++/**
++ * OfflineImageViewer to dump the contents of an Hadoop image file to XML
++ * or the console.  Main entry point into utility, either via the
++ * command line or programatically.
++ */
++public class OfflineImageViewer {
++  private final static String usage = 
++    "Usage: bin/hdfs oiv [OPTIONS] -i INPUTFILE -o OUTPUTFILE\n" +
++    "Offline Image Viewer\n" + 
++    "View a Hadoop fsimage INPUTFILE using the specified PROCESSOR,\n" +
++    "saving the results in OUTPUTFILE.\n" +
++    "\n" +
++    "The oiv utility will attempt to parse correctly formed image files\n" +
++    "and will abort fail with mal-formed image files. Currently the\n" +
++    "supports FSImage layout versions -16 through -19.\n" +
++    "\n" +
++    "The tool works offline and does not require a running cluster in\n" +
++    "order to process an image file.\n" +
++    "\n" +
++    "The following image processors are available:\n" +
++    "  * Ls: The default image processor generates an lsr-style listing\n" +
++    "    of the files in the namespace, with the same fields in the same\n" +
++    "    order.  Note that in order to correctly determine file sizes,\n" +
++    "    this formatter cannot skip blocks and will override the\n" +
++    "    -skipBlocks option.\n" +
++    "  * Indented: This processor enumerates over all of the elements in\n" +
++    "    the fsimage file, using levels of indentation to delineate\n" +
++    "    sections within the file.\n" +
++    "  * XML: This processor creates an XML document with all elements of\n" +
++    "    the fsimage enumerated, suitable for further analysis by XML\n" +
++    "    tools.\n" +
++    "\n" + 
++    "Required command line arguments:\n" +
++    "-i,--inputFile <arg>   FSImage file to process.\n" +
++    "-o,--outputFile <arg>  Name of output file. If the specified\n" +
++    "                       file exists, it will be overwritten.\n" +
++    "\n" + 
++    "Optional command line arguments:\n" +
++    "-p,--processor <arg>   Select which type of processor to apply\n" +
++    "                       against image file. (Ls|XML|Indented).\n" +
++    "-h,--help              Display usage information and exit\n" +
++    "-printToScreen         For processors that write to a file, also\n" +
++    "                       output to screen. On large image files this\n" +
++    "                       will dramatically increase processing time.\n" +
++    "-skipBlocks            Skip inodes' blocks information. May\n" +
++    "                       significantly decrease output.\n" +
++    "                       (default = false).\n";
++
++  private final boolean skipBlocks;
++  private final String inputFile;
++  private final ImageVisitor processor;
++  
++  public OfflineImageViewer(String inputFile, ImageVisitor processor, 
++             boolean skipBlocks) {
++    this.inputFile = inputFile;
++    this.processor = processor;
++    this.skipBlocks = skipBlocks;
++  }
++
++  /**
++   * Process image file.
++   */
++  public void go() throws IOException  {
++    DataInputStream in = null;
++
++    try {
++      in = new DataInputStream(new BufferedInputStream(
++               new FileInputStream(new File(inputFile))));
++
++      int imageVersionFile = findImageVersion(in);
++
++      ImageLoader fsip =
++             ImageLoader.LoaderFactory.getLoader(imageVersionFile);
++
++      if(fsip == null) 
++        throw new IOException("No image processor to read version " +
++            imageVersionFile + " is available.");
++
++      fsip.loadImage(in, processor, skipBlocks);
++
++    } finally {
++      if(in != null) in.close();
++    }
++  }
++
++  /**
++   * Check an fsimage datainputstream's version number.
++   *
++   * The datainput stream is returned at the same point as it was passed in;
++   * this method has no effect on the datainputstream's read pointer.
++   *
++   * @param in Datainputstream of fsimage
++   * @return Filesystem layout version of fsimage represented by stream
++   * @throws IOException If problem reading from in
++   */
++  private int findImageVersion(DataInputStream in) throws IOException {
++    in.mark(42); // arbitrary amount, resetting immediately
++
++    int version = in.readInt();
++    in.reset();
++
++    return version;
++  }
++  
++  /**
++   * Build command-line options and descriptions
++   */
++  public static Options buildOptions() {
++    Options options = new Options();
++
++    // Build in/output file arguments, which are required, but there is no 
++    // addOption method that can specify this
++    OptionBuilder.isRequired();
++    OptionBuilder.hasArgs();
++    OptionBuilder.withLongOpt("outputFile");
++    options.addOption(OptionBuilder.create("o"));
++    
++    OptionBuilder.isRequired();
++    OptionBuilder.hasArgs();
++    OptionBuilder.withLongOpt("inputFile");
++    options.addOption(OptionBuilder.create("i"));
++    
++    options.addOption("p", "processor", true, "");
++    options.addOption("h", "help", false, "");
++    options.addOption("skipBlocks", false, "");
++    options.addOption("printToScreen", false, "");
++
++    return options;
++  }
++  
++  /**
++   * Entry point to command-line-driven operation.  User may specify
++   * options and start fsimage viewer from the command line.  Program
++   * will process image file and exit cleanly or, if an error is
++   * encountered, inform user and exit.
++   *
++   * @param args Command line options
++   * @throws IOException 
++   */
++  public static void main(String[] args) throws IOException {
++    Options options = buildOptions();
++    if(args.length == 0) {
++      printUsage();
++      return;
++    }
++    
++    CommandLineParser parser = new PosixParser();
++    CommandLine cmd;
++
++    try {
++      cmd = parser.parse(options, args);
++    } catch (ParseException e) {
++      System.out.println("Error parsing command-line options: ");
++      printUsage();
++      return;
++    }
++
++    if(cmd.hasOption("h")) { // print help and exit
++      printUsage();
++      return;
++    }
++
++    boolean skipBlocks = cmd.hasOption("skipBlocks");
++    boolean printToScreen = cmd.hasOption("printToScreen");
++    String inputFile = cmd.getOptionValue("i");
++    String processor = cmd.getOptionValue("p", "Ls");
++    String outputFile;
++    
++    ImageVisitor v;
++    if(processor.equals("Indented")) {
++      outputFile = cmd.getOptionValue("o");
++      v = new IndentedImageVisitor(outputFile, printToScreen);
++    } else if (processor.equals("XML")) {
++      outputFile = cmd.getOptionValue("o");
++      v = new XmlImageVisitor(outputFile, printToScreen);
++    } else {
++      outputFile = cmd.getOptionValue("o");
++      v = new LsImageVisitor(outputFile, printToScreen);
++      skipBlocks = false;
++    }
++    
++    try {
++      OfflineImageViewer d = new OfflineImageViewer(inputFile, v, skipBlocks);
++      d.go();
++    } catch (EOFException e) {
++      System.err.println("Input file ended unexpectedly.  Exiting");
++    } catch(IOException e) {
++      System.err.println("Encountered exception.  Exiting: " + e.getMessage());
++    }
++  }
++
++  /**
++   * Print application usage instructions.
++   */
++  private static void printUsage() {
++    System.out.println(usage);
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/TextWriterImageVisitor.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/TextWriterImageVisitor.java
+new file mode 100644
+index 0000000..8c24a40
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/TextWriterImageVisitor.java
+@@ -0,0 +1,106 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.FileWriter;
++import java.io.IOException;
++
++/**
++ * TextWriterImageProcessor mixes in the ability for ImageVisitor
++ * implementations to easily write their output to a text file.
++ *
++ * Implementing classes should be sure to call the super methods for the
++ * constructors, finish and finishAbnormally methods, in order that the
++ * underlying file may be opened and closed correctly.
++ *
++ * Note, this class does not add newlines to text written to file or (if
++ * enabled) screen.  This is the implementing class' responsibility.
++ */
++abstract class TextWriterImageVisitor extends ImageVisitor {
++  private boolean printToScreen = false;
++  private boolean okToWrite = false;
++  final private FileWriter fw;
++
++  /**
++   * Create a processor that writes to the file named.
++   *
++   * @param filename Name of file to write output to
++   */
++  public TextWriterImageVisitor(String filename) throws IOException {
++    this(filename, false);
++  }
++
++  /**
++   * Create a processor that writes to the file named and may or may not
++   * also output to the screen, as specified.
++   *
++   * @param filename Name of file to write output to
++   * @param printToScreen Mirror output to screen?
++   */
++  public TextWriterImageVisitor(String filename, boolean printToScreen)
++         throws IOException {
++    super();
++    this.printToScreen = printToScreen;
++    fw = new FileWriter(filename);
++    okToWrite = true;
++  }
++  
++  /* (non-Javadoc)
++   * @see org.apache.hadoop.hdfs.tools.offlineImageViewer.ImageVisitor#finish()
++   */
++  @Override
++  void finish() throws IOException {
++    close();
++  }
++
++  /* (non-Javadoc)
++   * @see org.apache.hadoop.hdfs.tools.offlineImageViewer.ImageVisitor#finishAbnormally()
++   */
++  @Override
++  void finishAbnormally() throws IOException {
++    close();
++  }
++
++  /**
++   * Close output stream and prevent further writing
++   */
++  private void close() throws IOException {
++    fw.close();
++    okToWrite = false;
++  }
++
++  /**
++   * Write parameter to output file (and possibly screen).
++   *
++   * @param toWrite Text to write to file
++   */
++  protected void write(String toWrite) throws IOException  {
++    if(!okToWrite)
++      throw new IOException("file not open for writing.");
++
++    if(printToScreen)
++      System.out.print(toWrite);
++
++      try {
++        fw.write(toWrite);
++      } catch (IOException e) {
++        okToWrite = false;
++        throw e;
++      }
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/XmlImageVisitor.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/XmlImageVisitor.java
+new file mode 100644
+index 0000000..8efc519
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/XmlImageVisitor.java
+@@ -0,0 +1,88 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.IOException;
++import java.util.LinkedList;
++
++/**
++ * An XmlImageVisitor walks over an fsimage structure and writes out
++ * an equivalent XML document that contains the fsimage's components.
++ */
++class XmlImageVisitor extends TextWriterImageVisitor {
++  final private LinkedList<ImageElement> tagQ =
++                                          new LinkedList<ImageElement>();
++
++  public XmlImageVisitor(String filename) throws IOException {
++    super(filename, false);
++  }
++
++  public XmlImageVisitor(String filename, boolean printToScreen)
++       throws IOException {
++    super(filename, printToScreen);
++  }
++
++  @Override
++  void finish() throws IOException {
++    super.finish();
++  }
++
++  @Override
++  void finishAbnormally() throws IOException {
++    write("\n<!-- Error processing image file.  Exiting -->\n");
++    super.finishAbnormally();
++  }
++
++  @Override
++  void leaveEnclosingElement() throws IOException {
++    if(tagQ.size() == 0)
++      throw new IOException("Tried to exit non-existent enclosing element " +
++                "in FSImage file");
++
++    ImageElement element = tagQ.pop();
++    write("</" + element.toString() + ">\n");
++  }
++
++  @Override
++  void start() throws IOException {
++    write("<?xml version=\"1.0\" ?>\n");
++  }
++
++  @Override
++  void visit(ImageElement element, String value) throws IOException {
++    writeTag(element.toString(), value);
++  }
++
++  @Override
++  void visitEnclosingElement(ImageElement element) throws IOException {
++    write("<" + element.toString() + ">\n");
++    tagQ.push(element);
++  }
++
++  @Override
++  void visitEnclosingElement(ImageElement element,
++      ImageElement key, String value)
++       throws IOException {
++    write("<" + element.toString() + " " + key + "=\"" + value +"\">\n");
++    tagQ.push(element);
++  }
++
++  private void writeTag(String tag, String value) throws IOException {
++    write("<" + tag + ">" + value + "</" + tag + ">\n");
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/SpotCheckImageVisitor.java b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/SpotCheckImageVisitor.java
+new file mode 100644
+index 0000000..b248062
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/SpotCheckImageVisitor.java
+@@ -0,0 +1,89 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.IOException;
++import java.util.HashSet;
++import java.util.Set;
++
++/**
++ * ImageVisitor to spot check an fsimage and generate several statistics
++ * about it that we can compare with known values to give a reasonable
++ * assertion that the image was processed correctly.
++ */
++class SpotCheckImageVisitor extends ImageVisitor {
++  
++  // Statistics gathered by the visitor for Inodes and InodesUnderConstruction
++  static public class ImageInfo {
++    public long totalNumBlocks = 0; // Total number of blocks in section
++    public Set<String> pathNames = new HashSet<String>(); // All path names
++    public long totalFileSize = 0; // Total size of all the files
++    public long totalReplications = 0; // Sum of all the replications
++  }
++
++  final private ImageInfo inodes = new ImageInfo();
++  final private ImageInfo INUCs = new ImageInfo();
++  private ImageInfo current = null;
++  
++  @Override
++  void visit(ImageElement element, String value) throws IOException {
++    if(element == ImageElement.NumBytes) 
++      current.totalFileSize += Long.valueOf(value);
++    else if (element == ImageElement.Replication)
++      current.totalReplications += Long.valueOf(value);
++    else if (element == ImageElement.INodePath)
++      current.pathNames.add(value);
++  }
++
++  @Override
++  void visitEnclosingElement(ImageElement element, ImageElement key,
++      String value) throws IOException {
++    switch(element) {
++    case INodes:
++      current = inodes;
++      break;
++    case INodesUnderConstruction:
++      current = INUCs;
++      break;
++    case Blocks:
++      current.totalNumBlocks += Long.valueOf(value);
++      break;
++      // OK to not have a default, we're skipping most of the values
++    }
++  }
++  
++  public ImageInfo getINodesInfo() { return inodes; }
++  
++  public ImageInfo getINUCsInfo() { return INUCs; }
++  
++  // Unnecessary visitor methods
++  @Override
++  void finish() throws IOException {}
++
++  @Override
++  void finishAbnormally() throws IOException {}
++
++  @Override
++  void leaveEnclosingElement() throws IOException {}
++
++  @Override
++  void start() throws IOException {}
++
++  @Override
++  void visitEnclosingElement(ImageElement element) throws IOException {}
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOIVCanReadOldVersions.java b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOIVCanReadOldVersions.java
+new file mode 100644
+index 0000000..4cfed3c
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOIVCanReadOldVersions.java
+@@ -0,0 +1,132 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.IOException;
++import java.util.Collections;
++import java.util.HashSet;
++import java.util.Set;
++
++import org.apache.hadoop.hdfs.tools.offlineImageViewer.SpotCheckImageVisitor.ImageInfo;
++
++import junit.framework.TestCase;
++
++public class TestOIVCanReadOldVersions extends TestCase {
++  // Location of fsimage files during testing.
++  public static final String TEST_CACHE_DATA_DIR =
++    System.getProperty("test.cache.data", "build/test/cache");
++  
++  // Verify that the image processor can correctly process prior Hadoop
++  // layout versions.  These fsimages were previously generated and stored
++  // with the test.  Test success indicates that no changes have been made
++  // to the OIV that causes older fsimages to be incorrectly processed.
++  public void testOldFSImages() {
++    // Define the expected values from the prior versions, as they were created
++    // and verified at time of creation
++    Set<String> pathNames = new HashSet<String>();
++    Collections.addAll(pathNames, "", /* root */
++                                  "/bar",
++                                  "/bar/dir0",
++                                  "/bar/dir0/file0",
++                                  "/bar/dir0/file1",
++                                  "/bar/dir1",
++                                  "/bar/dir1/file0",
++                                  "/bar/dir1/file1",
++                                  "/bar/dir2",
++                                  "/bar/dir2/file0",
++                                  "/bar/dir2/file1",
++                                  "/foo",
++                                  "/foo/dir0",
++                                  "/foo/dir0/file0",
++                                  "/foo/dir0/file1",
++                                  "/foo/dir0/file2",
++                                  "/foo/dir0/file3",
++                                  "/foo/dir1",
++                                  "/foo/dir1/file0",
++                                  "/foo/dir1/file1",
++                                  "/foo/dir1/file2",
++                                  "/foo/dir1/file3");
++    
++    Set<String> INUCpaths = new HashSet<String>();
++    Collections.addAll(INUCpaths, "/bar/dir0/file0",
++                                  "/bar/dir0/file1",
++                                  "/bar/dir1/file0",
++                                  "/bar/dir1/file1",
++                                  "/bar/dir2/file0",
++                                  "/bar/dir2/file1");
++    
++    ImageInfo v18Inodes = new ImageInfo(); // Hadoop version 18 inodes
++    v18Inodes.totalNumBlocks = 12;
++    v18Inodes.totalFileSize = 1069548540l;
++    v18Inodes.pathNames = pathNames;
++    v18Inodes.totalReplications = 14;
++    
++    ImageInfo v18INUCs = new ImageInfo(); // Hadoop version 18 inodes under construction
++    v18INUCs.totalNumBlocks = 0;
++    v18INUCs.totalFileSize = 0;
++    v18INUCs.pathNames = INUCpaths;
++    v18INUCs.totalReplications = 6;
++    
++    ImageInfo v19Inodes = new ImageInfo(); // Hadoop version 19 inodes
++    v19Inodes.totalNumBlocks = 12;
++    v19Inodes.totalFileSize = 1069548540l;
++    v19Inodes.pathNames = pathNames;
++    v19Inodes.totalReplications = 14;
++    
++    ImageInfo v19INUCs = new ImageInfo(); // Hadoop version 19 inodes under construction
++    v19INUCs.totalNumBlocks = 0;
++    v19INUCs.totalFileSize = 0;
++    v19INUCs.pathNames = INUCpaths;
++    v19INUCs.totalReplications = 6;
++    
++
++    spotCheck("18", TEST_CACHE_DATA_DIR + "/fsimageV18", v18Inodes, v18INUCs);
++    spotCheck("19", TEST_CACHE_DATA_DIR + "/fsimageV19", v19Inodes, v19INUCs);
++  }
++
++  // Check that running the processor now gives us the same values as before
++  private void spotCheck(String hadoopVersion, String input, 
++       ImageInfo inodes, ImageInfo INUCs) {
++    SpotCheckImageVisitor v = new SpotCheckImageVisitor();
++    OfflineImageViewer oiv = new OfflineImageViewer(input, v, false);
++    try {
++      oiv.go();
++    } catch (IOException e) {
++      fail("Error processing file: " + input);
++    }
++
++    compareSpotCheck(hadoopVersion, v.getINodesInfo(), inodes);
++    compareSpotCheck(hadoopVersion, v.getINUCsInfo(), INUCs);
++    System.out.println("Successfully processed fsimage file from Hadoop version " +
++                                                    hadoopVersion);
++  }
++
++  // Compare the spot check results of what we generated from the image
++  // processor and what we expected to receive
++  private void compareSpotCheck(String hadoopVersion, 
++                     ImageInfo generated, ImageInfo expected) {
++    assertEquals("Version " + hadoopVersion + ": Same number of total blocks", 
++                     expected.totalNumBlocks, generated.totalNumBlocks);
++    assertEquals("Version " + hadoopVersion + ": Same total file size", 
++                     expected.totalFileSize, generated.totalFileSize);
++    assertEquals("Version " + hadoopVersion + ": Same total replication factor", 
++                     expected.totalReplications, generated.totalReplications);
++    assertEquals("Version " + hadoopVersion + ": One-to-one matching of path names", 
++                     expected.pathNames, generated.pathNames);
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java
+new file mode 100644
+index 0000000..a6cd379
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java
+@@ -0,0 +1,371 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.BufferedReader;
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.EOFException;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.FileReader;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++import java.util.HashMap;
++import java.util.Set;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.protocol.FSConstants.SafeModeAction;
++
++/**
++ * Test function of OfflineImageViewer by:
++ *   * confirming it can correctly process a valid fsimage file and that
++ *     the processing generates a correct representation of the namespace
++ *   * confirming it correctly fails to process an fsimage file with a layout
++ *     version it shouldn't be able to handle
++ *   * confirm it correctly bails on malformed image files, in particular, a
++ *     file that ends suddenly.
++ */
++public class TestOfflineImageViewer extends TestCase {
++
++  // Elements of lines of ls-file output to be compared to FileStatus instance
++  private class LsElements {
++    public String perms;
++    public int replication;
++    public String username;
++    public String groupname;
++    public long filesize;
++    public char dir; // d if dir, - otherwise
++  }
++  
++  // namespace as written to dfs, to be compared with viewer's output
++  final HashMap<String, FileStatus> writtenFiles 
++                                           = new HashMap<String, FileStatus>();
++  
++  
++  private static String ROOT = System.getProperty("test.build.data","/tmp");
++  
++  // Main entry point into testing.  Necessary since we only want to generate
++  // the fsimage file once and use it for multiple tests. 
++  public void testOIV() {
++    File originalFsimage = null;
++    try {
++    originalFsimage = initFsimage();
++    assertNotNull("originalFsImage shouldn't be null", originalFsimage);
++    
++    // Tests:
++    outputOfLSVisitor(originalFsimage);
++    
++    unsupportedFSLayoutVersion(originalFsimage);
++    
++    truncatedFSImage(originalFsimage);
++    
++    } finally {
++      if(originalFsimage != null && originalFsimage.exists())
++        originalFsimage.delete();
++    }
++  }
++
++  // Create a populated namespace for later testing.  Save its contents to a
++  // data structure and store its fsimage location.
++  private File initFsimage() {
++    MiniDFSCluster cluster = null;
++    File orig = null;
++    try {
++      Configuration conf = new Configuration();
++      cluster = new MiniDFSCluster(conf, 4, true, null);
++      FileSystem hdfs = cluster.getFileSystem();
++      
++      int numDirs = 3;
++      int numFilesPerDir = 4;
++      int filesize = 256;
++      
++      // Create a reasonable namespace 
++      for(int i = 0; i < numDirs; i++)  {
++        Path dir = new Path("/dir" + i);
++        hdfs.mkdirs(dir);
++        writtenFiles.put(dir.toString(), pathToFileEntry(hdfs, dir.toString()));
++        for(int j = 0; j < numFilesPerDir; j++) {
++          Path file = new Path(dir, "file" + j);
++          FSDataOutputStream o = hdfs.create(file);
++          o.write(new byte[ filesize++ ]);
++          o.close();
++          
++          writtenFiles.put(file.toString(), pathToFileEntry(hdfs, file.toString()));
++        }
++      }
++
++      // Write results to the fsimage file
++      cluster.getNameNode().setSafeMode(SafeModeAction.SAFEMODE_ENTER);
++      cluster.getNameNode().saveNamespace();
++      
++      // Determine location of fsimage file
++      File [] files = cluster.getNameDirs().toArray(new File[0]);
++      orig =  new File(files[0], "current/fsimage");
++      
++      if(!orig.exists())
++        fail("Didn't generate or can't find fsimage.");
++
++    } catch (IOException e) {
++      fail("Failed trying to generate fsimage file: " + e.getMessage());
++    } finally {
++      if(cluster != null)
++        cluster.shutdown();
++    }
++    return orig;
++  }
++  
++  // Convenience method to generate a file status from file system for 
++  // later comparison
++  private FileStatus pathToFileEntry(FileSystem hdfs, String file) 
++        throws IOException {
++    return hdfs.getFileStatus(new Path(file));
++  }
++
++  // Verify that we can correctly generate an ls-style output for a valid 
++  // fsimage
++  private void outputOfLSVisitor(File originalFsimage) {
++    File testFile = new File(ROOT, "/basicCheck");
++    File outputFile = new File(ROOT, "/basicCheckOutput");
++    
++    try {
++      copyFile(originalFsimage, testFile);
++      
++      ImageVisitor v = new LsImageVisitor(outputFile.getPath(), true);
++      OfflineImageViewer oiv = new OfflineImageViewer(testFile.getPath(), v, false);
++
++      oiv.go();
++      
++      HashMap<String, LsElements> fileOutput = readLsfile(outputFile);
++      
++      compareNamespaces(writtenFiles, fileOutput);
++    } catch (IOException e) {
++      fail("Failed reading valid file: " + e.getMessage());
++    } finally {
++      if(testFile.exists()) testFile.delete();
++      if(outputFile.exists()) outputFile.delete();
++    }
++    System.out.println("Correctly generated ls-style output.");
++  }
++  
++  // Confirm that attempting to read an fsimage file with an unsupported
++  // layout results in an error
++  public void unsupportedFSLayoutVersion(File originalFsimage) {
++    File testFile = new File(ROOT, "/invalidLayoutVersion");
++    File outputFile = new File(ROOT, "invalidLayoutVersionOutput");
++    
++    try {
++      int badVersionNum = -432;
++      changeLayoutVersion(originalFsimage, testFile, badVersionNum);
++      ImageVisitor v = new LsImageVisitor(outputFile.getPath(), true);
++      OfflineImageViewer oiv = new OfflineImageViewer(testFile.getPath(), v, false);
++      
++      try {
++        oiv.go();
++        fail("Shouldn't be able to read invalid laytout version");
++      } catch(IOException e) {
++        if(!e.getMessage().contains(Integer.toString(badVersionNum)))
++          throw e; // wasn't error we were expecting
++        System.out.println("Correctly failed at reading bad image version.");
++      }
++    } catch (IOException e) {
++      fail("Problem testing unsupported layout version: " + e.getMessage());
++    } finally {
++      if(testFile.exists()) testFile.delete();
++      if(outputFile.exists()) outputFile.delete();
++    }
++  }
++  
++  // Verify that image viewer will bail on a file that ends unexpectedly
++  private void truncatedFSImage(File originalFsimage) {
++    File testFile = new File(ROOT, "/truncatedFSImage");
++    File outputFile = new File(ROOT, "/trucnatedFSImageOutput");
++    try {
++      copyPartOfFile(originalFsimage, testFile);
++      assertTrue("Created truncated fsimage", testFile.exists());
++      
++      ImageVisitor v = new LsImageVisitor(outputFile.getPath(), true);
++      OfflineImageViewer oiv = new OfflineImageViewer(testFile.getPath(), v, false);
++
++      try {
++        oiv.go();
++        fail("Managed to process a truncated fsimage file");
++      } catch (EOFException e) {
++        System.out.println("Correctly handled EOF");
++      }
++      
++    } catch (IOException e) {
++      fail("Failed testing truncatedFSImage: " + e.getMessage());
++    } finally {
++      if(testFile.exists()) testFile.delete();
++      if(outputFile.exists()) outputFile.delete();
++    }
++  }
++  
++  // Test that our ls file has all the same compenents of the original namespace
++  private void compareNamespaces(HashMap<String, FileStatus> written,
++      HashMap<String, LsElements> fileOutput) {
++    assertEquals( "Should be the same number of files in both, plus one for root"
++            + " in fileoutput", fileOutput.keySet().size(), 
++                                written.keySet().size() + 1);
++    Set<String> inFile = fileOutput.keySet();
++
++    // For each line in the output file, verify that the namespace had a
++    // filestatus counterpart 
++    for (String path : inFile) {
++      if (path.equals("/")) // root's not included in output from system call
++        continue;
++
++      assertTrue("Path in file (" + path + ") was written to fs", written
++          .containsKey(path));
++      
++      compareFiles(written.get(path), fileOutput.get(path));
++      
++      written.remove(path);
++    }
++
++    assertEquals("No more files were written to fs", 0, written.size());
++  }
++  
++  // Compare two files as listed in the original namespace FileStatus and
++  // the output of the ls file from the image processor
++  private void compareFiles(FileStatus fs, LsElements elements) {
++    assertEquals("directory listed as such",  
++                                        fs.isDir() ? 'd' : '-', elements.dir);
++    assertEquals("perms string equal", 
++                                fs.getPermission().toString(), elements.perms);
++    assertEquals("replication equal", fs.getReplication(), elements.replication);
++    assertEquals("owner equal", fs.getOwner(), elements.username);
++    assertEquals("group equal", fs.getGroup(), elements.groupname);
++    assertEquals("lengths equal", fs.getLen(), elements.filesize);
++  }
++
++  // Read the contents of the file created by the Ls processor
++  private HashMap<String, LsElements> readLsfile(File lsFile) throws IOException {
++    BufferedReader br = new BufferedReader(new FileReader(lsFile));
++    String line = null;
++    HashMap<String, LsElements> fileContents = new HashMap<String, LsElements>();
++    
++    while((line = br.readLine()) != null) 
++      readLsLine(line, fileContents);
++    
++    return fileContents;
++  }
++  
++  // Parse a line from the ls output.  Store permissions, replication, 
++  // username, groupname and filesize in hashmap keyed to the path name
++  private void readLsLine(String line, HashMap<String, LsElements> fileContents) {
++    String elements [] = line.split("\\s+");
++    
++    assertEquals("Not enough elements in ls output", 8, elements.length);
++    
++    LsElements lsLine = new LsElements();
++    
++    lsLine.dir = elements[0].charAt(0);
++    lsLine.perms = elements[0].substring(1);
++    lsLine.replication = elements[1].equals("-") 
++                                             ? 0 : Integer.valueOf(elements[1]);
++    lsLine.username = elements[2];
++    lsLine.groupname = elements[3];
++    lsLine.filesize = Long.valueOf(elements[4]);
++    // skipping date and time 
++    
++    String path = elements[7];
++    
++    // Check that each file in the ls output was listed once
++    assertFalse("LS file had duplicate file entries", 
++        fileContents.containsKey(path));
++    
++    fileContents.put(path, lsLine);
++  }
++  
++  // Copy one fsimage to another, changing the layout version in the process
++  private void changeLayoutVersion(File src, File dest, int newVersion) 
++         throws IOException {
++    DataInputStream in = null; 
++    DataOutputStream out = null; 
++    
++    try {
++      in = new DataInputStream(new FileInputStream(src));
++      out = new DataOutputStream(new FileOutputStream(dest));
++      
++      in.readInt();
++      out.writeInt(newVersion);
++      
++      byte [] b = new byte[1024];
++      while( in.read(b)  > 0 ) {
++        out.write(b);
++      }
++    } finally {
++      if(in != null) in.close();
++      if(out != null) out.close();
++    }
++  }
++  
++  // Only copy part of file into the other.  Used for testing truncated fsimage
++  private void copyPartOfFile(File src, File dest) throws IOException {
++    InputStream in = null;
++    OutputStream out = null;
++    
++    byte [] b = new byte[256];
++    int bytesWritten = 0;
++    int count;
++    int maxBytes = 700;
++    
++    try {
++      in = new FileInputStream(src);
++      out = new FileOutputStream(dest);
++      
++      while( (count = in.read(b))  > 0 && bytesWritten < maxBytes ) {
++        out.write(b);
++        bytesWritten += count;
++      } 
++    } finally {
++      if(in != null) in.close();
++      if(out != null) out.close();
++    }
++  }
++  
++  // Copy one file's contents into the other
++  private void copyFile(File src, File dest) throws IOException {
++    InputStream in = null;
++    OutputStream out = null;
++    
++    try {
++      in = new FileInputStream(src);
++      out = new FileOutputStream(dest);
++
++      byte [] b = new byte[1024];
++      while( in.read(b)  > 0 ) {
++        out.write(b);
++      }
++    } finally {
++      if(in != null) in.close();
++      if(out != null) out.close();
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/fsimageV18 b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/fsimageV18
+new file mode 100644
+index 0000000000000000000000000000000000000000..7b7a5f70a4460c9ca4f6f60c5e46dffe750c14e1
+GIT binary patch
+literal 2373
+zcmezW|NjTwlDjz!5FiGjn7=`2Mum2}Bxk4`!+#(EvFm{}TUJJXZeku+acMznQF>8+
+zX#wL~1{VFK#3GOikiPA8AQlLK^uYiQeQEjmAeA6}BCA0x5P<0c(OC6yg6z{z$t*Ge
+zDF<mT_5-m%fOyS@Amt#<bA3Q85FlQ&5lA^m^95xP3j_#i=7&35KP@vS)qsH!Vgw|l
+zSs<n`VDa%11~jdPFs%@O6Q|V>)z-FKAPY&+3bz#!V8m%PLbVl=I!Mt9w-pl7c(ros
+z0}~WV!eHDB4OYU@1J?{s7y->hYvzaBjN)J0lM+aw%)~dfmt*}Am3|~KAd~r})t=eP
+zucc=vgT$E+Fw}r(kT{OC0P`f+Dp>f~-e~}7f`$*1N4D#g$13*Eki>vY=2v=`CaIl}
+zos<R=XTHEt3!*{d#8_nnO?I~LZi6(ztkPMP@S=<T)?*|wkdd#$b-zs4y!e0}B+mSR
+z0a`9Fzb3{iV^|7@L?Fzn>ZkV&mv^OZM6>EmuEOv4yHBlo1Gee|Lp_KFTKWdRRcJW^
+zQUXD(Vt&KF@7?->3UJu~6$2Uhw$0$G7Z>AVZjc4Y;_0(*`5Bvk3k8V-K?9fsswc(?
+zusF2S=KyJgIYD`9)U>%V&zB&H0h!G2*3a(=7knn8iY_j!GDm&3sY3xsoI!x05ljQs
+z6XOI}+}b&qfwaM#VCdt(v7F%~xR8U20cDxrA6@saWb2<BQb=mS;w*{2hwKz*M}fo{
+z6d0PoG*CS;PJqWbB;UcDP<-Qq%x=xlcOavXobX|`@To@+(l)rFi`Sp7(VAOra{+9%
+z0RuD-Gk?J91O^5+^um>ta#`5LE!a6HGc~Uy-o(t()WX=p$bf;<(8yfR00_Ya3A*v{
+oxF(|PCdqiT)J#PAPKNPt*Ar0(kYqgR^#mEl!(C5AT|$KM00vHXu>b%7
+
+literal 0
+HcmV?d00001
+
+diff --git a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/fsimageV19 b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/fsimageV19
+new file mode 100644
+index 0000000000000000000000000000000000000000..7db8ccf695dbfbcfdd3cdb031d0655aac418ee12
+GIT binary patch
+literal 2625
+zcmb`IT}V_x6vxLMUDyf?NvoGMqKriM!^onib}cecH0i;55Y3M^R#(>)%8yMYBI!wj
+z9?YQ9CF&uu!Vn(}%;-rgddLXEr%YFUDD8vV?*Go6+1cA|xq`E>|FdWB{LYy<=gveT
+zk;Syqi?0bAX-wz}(}awxo}v!zKOqri;71UKHmv8*`Rgj`H#9XjR0nDU{^o{+FiEsm
+zRs`@QIH3?MdGNWi{)bcJ_hTkF)>fGTTb|EtLyisk*sHt&2c`j5F#<~-93X3am=n_h
+zyFMd>V9OA0$A`Hv4X}v`Sn}WiSq)*yVwv_Dudmuc5*QMd1e#SeQDYk*28a&f<Ou9n
+zbl=P&oUvK73^4?hkhLI07TD<MhMPmUVzWRu0>Qd+EeMeXDg*?pR9uA3t~9XRc<#k%
+zW$`gXE-SYUY7-^`CK~V1TntJ1!2z-w!jeU1G5g~l{;4ibRZ%6&zAJ-Yw=_N-ML51-
+zLg-vc>WSWt?70&7={RYF!fy}~y~Q^}4axV@Jz2>@LIvK^)N|>3aCm33<OBN4D!oxK
+z+7=GOPp3&c6n--yU0OT4KfGrlq0x|IZT)4Tq#ac90X;wVpw~Ba>U1Xj^b^s}MLKUL
+zWG)Yh!Yf^)HGsB>mY3xz#lPPE*a)<=u?x3s>35Fo8t8+cE|VZsu@>To)V*;yG0~{(
+z<kax=Okr*7yW>mu0hB_9Lo?QuuCjK!-tYaEmDG~?=n4GFxU7B?8a9&(ud!$A5=#Xt
+z!qU#0!y}!Ki+UuVV$wy6&rPd7uKv;cQ;v35<xkDNfS+t8ovJF&n@NS&-m|xWr2>tn
+zQvC3FMsP4^yW~?$x^(YV$|@~MKl_irFspUX<nKoKNe1asRe9b_D!eB=cz;nK_8#*B
+z^|XJkn|-!PZ8NDr%Wv);p4vT7dK;l+|F)Cm*Mj|h9yJ9A=~h+g8pBiwvFZ=`n0q3M
+zHk_WCf2`Ew^H$eiD9?80Iu7O?$aC#?5u4MMm*Y@A>d~YRAi99vx;*#w2%zhD6L-rR
+eSHJ>@6|k#*Jy&3GKdo;KSOBpC6StPBE&2<VeBMg{
+
+literal 0
+HcmV?d00001
+
+-- 
+1.7.0.4
+

@@ -1,0 +1,74 @@
+From af9ef1fcde9aa7ed6d84481837dd5c3e6e4ecc14 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 7 Dec 2010 18:29:42 -0800
+Subject: [PATCH 0746/1179] MAPREDUCE-1784. IFile should check for null compressor.
+
+Reason: Avoid NPE
+Author: Eli Collins
+Ref: CDH-862
+---
+ src/mapred/org/apache/hadoop/mapred/IFile.java |   25 ++++++++++++++++++-----
+ 1 files changed, 19 insertions(+), 6 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/IFile.java b/src/mapred/org/apache/hadoop/mapred/IFile.java
+index 574f6be..f33a7e8 100644
+--- a/src/mapred/org/apache/hadoop/mapred/IFile.java
++++ b/src/mapred/org/apache/hadoop/mapred/IFile.java
+@@ -39,6 +39,9 @@ import org.apache.hadoop.io.compress.Decompressor;
+ import org.apache.hadoop.io.serializer.SerializationFactory;
+ import org.apache.hadoop.io.serializer.Serializer;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
+ /**
+  * <code>IFile</code> is the simple <key-len, value-len, key, value> format
+  * for the intermediate map-outputs in Map-Reduce.
+@@ -48,6 +51,7 @@ import org.apache.hadoop.io.serializer.Serializer;
+  */
+ class IFile {
+ 
++  private static final Log LOG = LogFactory.getLog(IFile.class);
+   private static final int EOF_MARKER = -1;
+   
+   /**
+@@ -96,13 +100,17 @@ class IFile {
+       this.checksumOut = new IFileOutputStream(out);
+       this.rawOut = out;
+       this.start = this.rawOut.getPos();
+-      
+       if (codec != null) {
+         this.compressor = CodecPool.getCompressor(codec);
+-        this.compressor.reset();
+-        this.compressedOut = codec.createOutputStream(checksumOut, compressor);
+-        this.out = new FSDataOutputStream(this.compressedOut,  null);
+-        this.compressOutput = true;
++        if (this.compressor != null) {
++          this.compressor.reset();
++          this.compressedOut = codec.createOutputStream(checksumOut, compressor);
++          this.out = new FSDataOutputStream(this.compressedOut,  null);
++          this.compressOutput = true;
++        } else {
++          LOG.warn("Could not obtain compressor from CodecPool");
++          this.out = new FSDataOutputStream(checksumOut,null);
++        }
+       } else {
+         this.out = new FSDataOutputStream(checksumOut,null);
+       }
+@@ -294,7 +302,12 @@ class IFile {
+       checksumIn = new IFileInputStream(in,length);
+       if (codec != null) {
+         decompressor = CodecPool.getDecompressor(codec);
+-        this.in = codec.createInputStream(checksumIn, decompressor);
++        if (decompressor != null) {
++          this.in = codec.createInputStream(checksumIn, decompressor);
++        } else {
++          LOG.warn("Could not obtain decompressor from CodecPool");
++          this.in = checksumIn;
++        }
+       } else {
+         this.in = checksumIn;
+       }
+-- 
+1.7.0.4
+

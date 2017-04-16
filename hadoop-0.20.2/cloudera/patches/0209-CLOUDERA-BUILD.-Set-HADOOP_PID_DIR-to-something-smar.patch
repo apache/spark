@@ -1,0 +1,62 @@
+From bd4e81234dd12fa9534577f0caa0db5c3d0a99fc Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:47:30 -0800
+Subject: [PATCH 0209/1179] CLOUDERA-BUILD. Set HADOOP_PID_DIR to something smarter than /tmp
+
+Author: Chad Metcalf
+---
+ bin/hadoop-config.sh       |    4 ++++
+ build.xml                  |    1 +
+ cloudera/install_hadoop.sh |    5 +++--
+ 3 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/bin/hadoop-config.sh b/bin/hadoop-config.sh
+index 2f957a5..bd8ed66 100644
+--- a/bin/hadoop-config.sh
++++ b/bin/hadoop-config.sh
+@@ -104,6 +104,10 @@ fi
+ # Allow alternate conf dir location.
+ HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-$HADOOP_HOME/conf}"
+ 
++if [ -d $HADOOP_HOME/pids ]; then
++HADOOP_PID_DIR="${HADOOP_PID_DIR:-$HADOOP_HOME/pids}"
++fi
++
+ #check to see it is specified whether to use the slaves or the
+ # masters file
+ if [ $# -gt 1 ]
+diff --git a/build.xml b/build.xml
+index 62a51d9..bd5d782 100644
+--- a/build.xml
++++ b/build.xml
+@@ -1144,6 +1144,7 @@
+ 
+     <mkdir dir="${dist.dir}"/>
+     <mkdir dir="${dist.dir}/lib"/>
++    <mkdir dir="${dist.dir}/pids"/>
+     <mkdir dir="${dist.dir}/contrib"/>
+     <mkdir dir="${dist.dir}/bin"/>
+     <copy todir="${dist.dir}/lib" includeEmptyDirs="false" flatten="true">
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 003d709..26bf402 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -158,12 +158,13 @@ cp -a ${HADOOP_SRC_DIR}/* $SRC_DIR/
+ install -d -m 0755 $ETC_DIR/conf.empty
+ (cd ${BUILD_DIR}/conf && tar cf - .) | (cd $ETC_DIR/conf.empty && tar xf -)
+ 
+-# Link the HADOOP_HOME conf dir and log dir to installed locations
++# Link the HADOOP_HOME conf, log and pid dir to installed locations
+ rm -rf $LIB_DIR/conf
+ ln -s ${ETC_DIR#$PREFIX}/conf $LIB_DIR/conf
+ rm -rf $LIB_DIR/logs
+ ln -s /var/log/hadoop-$APACHE_BRANCH $LIB_DIR/logs
+-
++rm -rf $LIB_DIR/pids
++ln -s /var/run/hadoop-$APACHE_BRANCH $LIB_DIR/pids
+ 
+ # Make the pseudo-distributed config
+ for conf in conf.pseudo ; do
+-- 
+1.7.0.4
+

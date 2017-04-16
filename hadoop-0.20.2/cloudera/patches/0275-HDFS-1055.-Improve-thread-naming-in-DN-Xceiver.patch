@@ -1,0 +1,142 @@
+From 57783d0683f0d675423369e0a0f9f5dd520c17f2 Mon Sep 17 00:00:00 2001
+From: todd <todd@monster01.sf.cloudera.com>
+Date: Sun, 21 Mar 2010 03:36:45 -0700
+Subject: [PATCH 0275/1179] HDFS-1055. Improve thread naming in DN Xceiver
+
+Description: Names the threads created by the DataNode based on the action
+             they are performing.
+Reason: Eases diagnosis of datanode performance/lock contention issues.
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |   29 +++++++++++++++++---
+ .../hdfs/server/datanode/DataXceiverServer.java    |    3 +-
+ 2 files changed, 26 insertions(+), 6 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index 3763721..e1ced9d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -45,7 +45,7 @@ import static org.apache.hadoop.hdfs.server.datanode.DataNode.DN_CLIENTTRACE_FOR
+ /**
+  * Thread for processing incoming/outgoing data stream.
+  */
+-class DataXceiver implements Runnable, FSConstants {
++class DataXceiver extends Thread implements Runnable, FSConstants {
+   public static final Log LOG = DataNode.LOG;
+   static final Log ClientTraceLog = DataNode.ClientTraceLog;
+   
+@@ -57,7 +57,8 @@ class DataXceiver implements Runnable, FSConstants {
+   
+   public DataXceiver(Socket s, DataNode datanode, 
+       DataXceiverServer dataXceiverServer) {
+-    
++    super(datanode.threadGroup, "DataXceiver (initializing)");
++
+     this.s = s;
+     this.datanode = datanode;
+     this.dataXceiverServer = dataXceiverServer;
+@@ -65,6 +66,19 @@ class DataXceiver implements Runnable, FSConstants {
+     remoteAddress = s.getRemoteSocketAddress().toString();
+     localAddress = s.getLocalSocketAddress().toString();
+     LOG.debug("Number of active connections is: " + datanode.getXceiverCount());
++    updateThreadName("waiting for handshake");
++  }
++
++  /**
++   * Update the thread name to contain the current status.
++   */
++  private void updateThreadName(String status) {
++    StringBuilder sb = new StringBuilder();
++    sb.append("DataXceiver for client ").append(remoteAddress);
++    if (status != null) {
++      sb.append(" [").append(status).append("]");
++    }
++    this.setName(sb.toString());
+   }
+ 
+   /**
+@@ -81,6 +95,7 @@ class DataXceiver implements Runnable, FSConstants {
+         throw new IOException( "Version Mismatch" );
+       }
+       boolean local = s.getInetAddress().equals(s.getLocalAddress());
++      updateThreadName("waiting for operation");
+       byte op = in.readByte();
+       // Make sure the xciver count is not exceeded
+       int curXceiverCount = datanode.getXceiverCount();
+@@ -132,6 +147,7 @@ class DataXceiver implements Runnable, FSConstants {
+     } finally {
+       LOG.debug(datanode.dnRegistration + ":Number of active connections is: "
+                                + datanode.getXceiverCount());
++      updateThreadName("Cleaning up");
+       IOUtils.closeStream(in);
+       IOUtils.closeSocket(s);
+       dataXceiverServer.childSockets.remove(s);
+@@ -167,6 +183,7 @@ class DataXceiver implements Runnable, FSConstants {
+             datanode.dnRegistration.getStorageID(), block, "%d")
+         : datanode.dnRegistration + " Served block " + block + " to " +
+             s.getInetAddress();
++    updateThreadName("sending block " + block);
+     try {
+       try {
+         blockSender = new BlockSender(block, startOffset, length,
+@@ -254,6 +271,8 @@ class DataXceiver implements Runnable, FSConstants {
+     BlockReceiver blockReceiver = null; // responsible for data handling
+     String mirrorNode = null;           // the name:port of next target
+     String firstBadLink = "";           // first datanode that failed in connection setup
++
++    updateThreadName("receiving block " + block + " client=" + client);
+     try {
+       // open a block receiver and check if the block does not exist
+       blockReceiver = new BlockReceiver(block, in, 
+@@ -393,7 +412,7 @@ class DataXceiver implements Runnable, FSConstants {
+     Block block = new Block( in.readLong(), 0 , in.readLong());
+     MetaDataInputStream checksumIn = null;
+     DataOutputStream out = null;
+-    
++    updateThreadName("reading metadata for block " + block);
+     try {
+ 
+       checksumIn = datanode.data.getMetaDataInputStream(block);
+@@ -435,6 +454,7 @@ class DataXceiver implements Runnable, FSConstants {
+     final DataInputStream checksumIn = new DataInputStream(new BufferedInputStream(
+         metadataIn, BUFFER_SIZE));
+ 
++    updateThreadName("getting checksum for block " + block);
+     try {
+       //read metadata file
+       final BlockMetadataHeader header = BlockMetadataHeader.readHeader(checksumIn);
+@@ -486,7 +506,7 @@ class DataXceiver implements Runnable, FSConstants {
+     BlockSender blockSender = null;
+     DataOutputStream reply = null;
+     boolean isOpSuccess = true;
+-
++    updateThreadName("Copying block " + block);
+     try {
+       // check if the block exists or not
+       blockSender = new BlockSender(block, 0, -1, false, false, false, 
+@@ -553,6 +573,7 @@ class DataXceiver implements Runnable, FSConstants {
+     BlockReceiver blockReceiver = null;
+     DataInputStream proxyReply = null;
+     
++    updateThreadName("replacing block " + block + " from " + sourceID);
+     try {
+       // get the output stream to the proxy
+       InetSocketAddress proxyAddr = NetUtils.createSocketAddr(
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
+index 2da253b..dcc5033 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
+@@ -129,8 +129,7 @@ class DataXceiverServer implements Runnable, FSConstants {
+       try {
+         Socket s = ss.accept();
+         s.setTcpNoDelay(true);
+-        new Daemon(datanode.threadGroup, 
+-            new DataXceiver(s, datanode, this)).start();
++        new DataXceiver(s, datanode, this).start();
+       } catch (SocketTimeoutException ignored) {
+         // wake up to see if should continue to run
+       } catch (IOException ie) {
+-- 
+1.7.0.4
+

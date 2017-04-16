@@ -1,0 +1,93 @@
+From d6c9b1b1a69e27a2d7ea66cc6bca427ebc0ed426 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Wed, 21 Sep 2011 15:56:13 -0700
+Subject: [PATCH 1052/1179] HADOOP-7665. branch-0.20-security doesn't include SPNEGO settings in core-default.xml
+
+Reason: Bug
+Author: Aaron T. Myers
+Ref: CDH-3625
+---
+ src/core/core-default.xml |   68 +++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 68 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index 31d03cc..9456450 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -500,5 +500,73 @@
+   the timeout for an entry in that cache. </description>
+ </property>
+ 
++<!-- HTTP web-consoles Authentication -->
++
++<property>
++  <name>hadoop.http.authentication.type</name>
++  <value>simple</value>
++  <description>
++    Defines authentication used for Oozie HTTP endpoint.
++    Supported values are: simple | kerberos | #AUTHENTICATION_HANDLER_CLASSNAME#
++  </description>
++</property>
++
++<property>
++  <name>hadoop.http.authentication.token.validity</name>
++  <value>36000</value>
++  <description>
++    Indicates how long (in seconds) an authentication token is valid before it has
++    to be renewed.
++  </description>
++</property>
++
++<property>
++  <name>hadoop.http.authentication.signature.secret</name>
++  <value>hadoop</value>
++  <description>
++    The signature secret for signing the authentication tokens.
++    If not set a random secret is generated at startup time.
++    The same secret should be used for JT/NN/DN/TT configurations.
++  </description>
++</property>
++
++<property>
++  <name>hadoop.http.authentication.cookie.domain</name>
++  <value></value>
++  <description>
++    The domain to use for the HTTP cookie that stores the authentication token.
++    In order to authentiation to work correctly across all Hadoop nodes web-consoles
++    the domain must be correctly set.
++    IMPORTANT: when using IP addresses, browsers ignore cookies with domain settings.
++    For this setting to work properly all nodes in the cluster must be configured
++    to generate URLs with hostname.domain names on it.
++  </description>
++</property>
++
++<property>
++  <name>hadoop.http.authentication.simple.anonymous.allowed</name>
++  <value>true</value>
++  <description>
++    Indicates if anonymous requests are allowed when using 'simple' authentication.
++  </description>
++</property>
++
++<property>
++  <name>hadoop.http.authentication.kerberos.principal</name>
++  <value>HTTP/localhost@LOCALHOST</value>
++  <description>
++    Indicates the Kerberos principal to be used for HTTP endpoint.
++    The principal MUST start with 'HTTP/' as per Kerberos HTTP SPNEGO specification.
++  </description>
++</property>
++
++<property>
++  <name>hadoop.http.authentication.kerberos.keytab</name>
++  <value>${user.home}/hadoop.keytab</value>
++  <description>
++    Location of the keytab file with the credentials for the principal.
++    Referring to the same keytab file Oozie uses for its Kerberos credentials for Hadoop.
++  </description>
++</property>
+ 
+ </configuration>
+-- 
+1.7.0.4
+

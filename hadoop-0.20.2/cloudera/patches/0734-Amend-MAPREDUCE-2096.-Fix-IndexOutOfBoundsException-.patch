@@ -1,0 +1,29 @@
+From 374e10963329ec08d861774d056d1c5ee673f4c8 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 8 Oct 2010 12:43:11 -0700
+Subject: [PATCH 0734/1179] Amend MAPREDUCE-2096. Fix IndexOutOfBoundsException truncating logs when tasks produced no log output
+
+Author: Todd Lipcon
+Ref: CDH-648
+---
+ .../apache/hadoop/mapred/TaskLogsTruncater.java    |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java b/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java
+index 2ae827e..d6b4e59 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java
+@@ -75,6 +75,10 @@ public class TaskLogsTruncater {
+    * retainSize.
+    */
+   public void truncateLogs(JVMInfo lInfo) {
++    if (lInfo.getAllAttempts().isEmpty()) {
++      return;
++    }
++
+     Task firstAttempt = lInfo.getAllAttempts().get(0);
+     String owner;
+     try {
+-- 
+1.7.0.4
+

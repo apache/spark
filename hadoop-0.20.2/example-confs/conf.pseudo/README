@@ -1,0 +1,7 @@
+The conf.pseudo example configuration is for a psuedo-distributed cluster.
+
+A pseudo-distributed cluster is one in which all of the Hadoop daemons
+run separately, but on a single node.
+
+This is a good mode for developers to install on their own machines to
+ensure that their jobs will operate correctly on a real cluster.

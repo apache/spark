@@ -1,0 +1,636 @@
+From d23d17a52da7e94deac6d720e7d62706f00ee6f8 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Nov 2011 14:38:40 -0800
+Subject: [PATCH 1071/1179] HADOOP-7753. Support fadvise and sync_file_range in NativeIO. Add ReadaheadPool infrastructure for use in HDFS and MR.
+
+Reason: low-risk performance improvement
+Author: Todd Lipcon
+Ref: CDH-3818
+---
+ src/core/org/apache/hadoop/io/ReadaheadPool.java   |  240 ++++++++++++++++++++
+ .../org/apache/hadoop/io/nativeio/NativeIO.java    |   82 +++++++-
+ src/native/configure.ac                            |    9 +-
+ .../src/org/apache/hadoop/io/nativeio/Makefile.in  |    6 +-
+ .../src/org/apache/hadoop/io/nativeio/NativeIO.c   |   75 ++++++
+ .../apache/hadoop/io/nativeio/file_descriptor.c    |    5 +
+ .../src/org/apache/hadoop/security/Makefile.in     |    6 +-
+ .../apache/hadoop/io/nativeio/TestNativeIO.java    |   53 +++++
+ 8 files changed, 469 insertions(+), 7 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/io/ReadaheadPool.java
+
+diff --git a/src/core/org/apache/hadoop/io/ReadaheadPool.java b/src/core/org/apache/hadoop/io/ReadaheadPool.java
+new file mode 100644
+index 0000000..753fc92
+--- /dev/null
++++ b/src/core/org/apache/hadoop/io/ReadaheadPool.java
+@@ -0,0 +1,240 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.io;
++
++import java.io.FileDescriptor;
++import java.io.IOException;
++import java.util.concurrent.ArrayBlockingQueue;
++import java.util.concurrent.ThreadPoolExecutor;
++import java.util.concurrent.TimeUnit;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.nativeio.NativeIO;
++
++import com.google.common.base.Preconditions;
++import com.google.common.util.concurrent.ThreadFactoryBuilder;
++
++/**
++ * Manages a pool of threads which can issue readahead requests on file descriptors.
++ */
++//@InterfaceAudience.Private
++//@InterfaceStability.Evolving
++public class ReadaheadPool {
++  static final Log LOG = LogFactory.getLog(ReadaheadPool.class);
++  private static final int POOL_SIZE = 4;
++  private static final int MAX_POOL_SIZE = 16;
++  private static final int CAPACITY = 1024;
++  private final ThreadPoolExecutor pool;
++  
++  private static ReadaheadPool instance;
++
++  /**
++   * Return the singleton instance for the current process.
++   */
++  public static ReadaheadPool getInstance() {
++    synchronized (ReadaheadPool.class) {
++      if (instance == null && NativeIO.isAvailable()) {
++        instance = new ReadaheadPool();
++      }
++      return instance;
++    }
++  }
++  
++  private ReadaheadPool() {
++    pool = new ThreadPoolExecutor(POOL_SIZE, MAX_POOL_SIZE, 3L, TimeUnit.SECONDS,
++        new ArrayBlockingQueue<Runnable>(CAPACITY));
++    pool.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardOldestPolicy());
++    pool.setThreadFactory(new ThreadFactoryBuilder()
++      .setDaemon(true)
++      .setNameFormat("Readahead Thread #%d")
++      .build());
++  }
++
++  /**
++   * Issue a request to readahead on the given file descriptor.
++   * 
++   * @param identifier a textual identifier that will be used in error
++   * messages (e.g. the file name)
++   * @param fd the file descriptor to read ahead
++   * @param curPos the current offset at which reads are being issued
++   * @param readaheadLength the configured length to read ahead
++   * @param maxOffsetToRead the maximum offset that will be readahead
++   *        (useful if, for example, only some segment of the file is
++   *        requested by the user). Pass {@link Long.MAX_VALUE} to allow
++   *        readahead to the end of the file.
++   * @param lastReadahead the result returned by the previous invocation
++   *        of this function on this file descriptor, or null if this is
++   *        the first call
++   * @return an object representing this outstanding request, or null
++   *        if no readahead was performed
++   */
++  public ReadaheadRequest readaheadStream(
++      String identifier,
++      FileDescriptor fd,
++      long curPos,
++      long readaheadLength,
++      long maxOffsetToRead,
++      ReadaheadRequest lastReadahead) {
++    
++    Preconditions.checkArgument(curPos <= maxOffsetToRead,
++        "Readahead position %s higher than maxOffsetToRead %s",
++        curPos, maxOffsetToRead);
++
++    if (readaheadLength <= 0) {
++      return null;
++    }
++    
++    long lastOffset = Long.MIN_VALUE;
++    
++    if (lastReadahead != null) {
++      lastOffset = lastReadahead.getOffset();
++    }
++
++    // trigger each readahead when we have reached the halfway mark
++    // in the previous readahead. This gives the system time
++    // to satisfy the readahead before we start reading the data.
++    long nextOffset = lastOffset + readaheadLength / 2; 
++    if (curPos >= nextOffset) {
++      // cancel any currently pending readahead, to avoid
++      // piling things up in the queue. Each reader should have at most
++      // one outstanding request in the queue.
++      if (lastReadahead != null) {
++        lastReadahead.cancel();
++        lastReadahead = null;
++      }
++      
++      long length = Math.min(readaheadLength,
++          maxOffsetToRead - curPos);
++
++      if (length <= 0) {
++        // we've reached the end of the stream
++        return null;
++      }
++      
++      return submitReadahead(identifier, fd, curPos, length);
++    } else {
++      return lastReadahead;
++    }
++  }
++      
++  /**
++   * Submit a request to readahead on the given file descriptor.
++   * @param identifier a textual identifier used in error messages, etc.
++   * @param fd the file descriptor to readahead
++   * @param off the offset at which to start the readahead
++   * @param len the number of bytes to read
++   * @return an object representing this pending request
++   */
++  public ReadaheadRequest submitReadahead(
++      String identifier, FileDescriptor fd, long off, long len) {
++    ReadaheadRequestImpl req = new ReadaheadRequestImpl(
++        identifier, fd, off, len);
++    pool.execute(req);
++    if (LOG.isTraceEnabled()) {
++      LOG.trace("submit readahead: " + req);
++    }
++    return req;
++  }
++  
++  /**
++   * An outstanding readahead request that has been submitted to
++   * the pool. This request may be pending or may have been
++   * completed.
++   */
++  public interface ReadaheadRequest {
++    /**
++     * Cancels the request for readahead. This should be used
++     * if the reader no longer needs the requested data, <em>before</em>
++     * closing the related file descriptor.
++     * 
++     * It is safe to use even if the readahead request has already
++     * been fulfilled.
++     */
++    public void cancel();
++    
++    /**
++     * @return the requested offset
++     */
++    public long getOffset();
++
++    /**
++     * @return the requested length
++     */
++    public long getLength();
++  }
++  
++  private static class ReadaheadRequestImpl implements Runnable, ReadaheadRequest {
++    private final String identifier;
++    private final FileDescriptor fd;
++    private final long off, len;
++    private volatile boolean canceled = false;
++    
++    private ReadaheadRequestImpl(String identifier, FileDescriptor fd, long off, long len) {
++      this.identifier = identifier;
++      this.fd = fd;
++      this.off = off;
++      this.len = len;
++    }
++    
++    public void run() {
++      if (canceled) return;
++      // There's a very narrow race here that the file will close right at
++      // this instant. But if that happens, we'll likely receive an EBADF
++      // error below, and see that it's canceled, ignoring the error.
++      // It's also possible that we'll end up requesting readahead on some
++      // other FD, which may be wasted work, but won't cause a problem.
++      try {
++        NativeIO.posixFadviseIfPossible(fd, off, len,
++            NativeIO.POSIX_FADV_WILLNEED);
++      } catch (IOException ioe) {
++        if (canceled) {
++          // no big deal - the reader canceled the request and closed
++          // the file.
++          return;
++        }
++        LOG.warn("Failed readahead on " + identifier,
++            ioe);
++      }
++    }
++
++    @Override
++    public void cancel() {
++      canceled = true;
++      // We could attempt to remove it from the work queue, but that would
++      // add complexity. In practice, the work queues remain very short,
++      // so removing canceled requests has no gain.
++    }
++
++    @Override
++    public long getOffset() {
++      return off;
++    }
++
++    @Override
++    public long getLength() {
++      return len;
++    }
++
++    @Override
++    public String toString() {
++      return "ReadaheadRequestImpl [identifier='" + identifier + "', fd=" + fd
++          + ", off=" + off + ", len=" + len + "]";
++    }
++  }
++}
+diff --git a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+index 143551c..6a68362 100644
+--- a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
++++ b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+@@ -48,6 +48,35 @@ public class NativeIO {
+   public static final int O_FSYNC = O_SYNC;
+   public static final int O_NDELAY = O_NONBLOCK;
+ 
++  // Flags for posix_fadvise() from bits/fcntl.h
++  /* No further special treatment.  */
++  public static final int POSIX_FADV_NORMAL = 0; 
++  /* Expect random page references.  */
++  public static final int POSIX_FADV_RANDOM = 1; 
++  /* Expect sequential page references.  */
++  public static final int POSIX_FADV_SEQUENTIAL = 2; 
++  /* Will need these pages.  */
++  public static final int POSIX_FADV_WILLNEED = 3; 
++  /* Don't need these pages.  */
++  public static final int POSIX_FADV_DONTNEED = 4; 
++  /* Data will be accessed once.  */
++  public static final int POSIX_FADV_NOREUSE = 5; 
++
++
++  /* Wait upon writeout of all pages
++     in the range before performing the
++     write.  */
++  public static final int SYNC_FILE_RANGE_WAIT_BEFORE = 1;
++  /* Initiate writeout of all those
++     dirty pages in the range which are
++     not presently under writeback.  */
++  public static final int SYNC_FILE_RANGE_WRITE = 2;
++
++  /* Wait upon writeout of all pages in
++     the range after performing the
++     write.  */
++  public static final int SYNC_FILE_RANGE_WAIT_AFTER = 4;
++
+   private static final Log LOG = LogFactory.getLog(NativeIO.class);
+ 
+   private static boolean nativeLoaded = false;
+@@ -89,9 +118,16 @@ public class NativeIO {
+   /** Wrapper around chmod(2) */
+   public static native void chmod(String path, int mode) throws IOException;
+ 
++  static native void posix_fadvise(
++    FileDescriptor fd, long offset, long len, int flags) throws NativeIOException;
++
++  static native void sync_file_range(
++    FileDescriptor fd, long offset, long nbytes, int flags) throws NativeIOException;
++
+   private static native long getUIDForFDOwner(FileDescriptor fd) throws IOException;
+   private static native String getUserName(long uid) throws IOException;
+ 
++
+   /** Initialize the JNI method ID and class ID cache */
+   private static native void initNative();
+   
+@@ -107,6 +143,8 @@ public class NativeIO {
+     new ConcurrentHashMap<Long, CachedUid>();
+   private static long cacheTimeout;
+   private static boolean initialized = false;
++  private static boolean fadvisePossible = true;
++  private static boolean syncFileRangePossible = true;
+   
+   public static String getOwner(FileDescriptor fd) throws IOException {
+     ensureInitialized();
+@@ -123,7 +161,49 @@ public class NativeIO {
+     uidCache.put(uid, cUid);
+     return user;
+   }
+-    
++  
++  /**
++   * Call posix_fadvise on the given file descriptor. See the manpage
++   * for this syscall for more information. On systems where this
++   * call is not available, does nothing.
++   *
++   * @throws NativeIOException if there is an error with the syscall
++   */
++  public static void posixFadviseIfPossible(
++      FileDescriptor fd, long offset, long len, int flags)
++      throws NativeIOException {
++    if (nativeLoaded && fadvisePossible) {
++      try {
++        posix_fadvise(fd, offset, len, flags);
++      } catch (UnsupportedOperationException uoe) {
++        fadvisePossible = false;
++      } catch (UnsatisfiedLinkError ule) {
++        fadvisePossible = false;
++      }
++    }
++  }
++
++  /**
++   * Call sync_file_range on the given file descriptor. See the manpage
++   * for this syscall for more information. On systems where this
++   * call is not available, does nothing.
++   *
++   * @throws NativeIOException if there is an error with the syscall
++   */
++  public static void syncFileRangeIfPossible(
++      FileDescriptor fd, long offset, long nbytes, int flags)
++      throws NativeIOException {
++    if (nativeLoaded && syncFileRangePossible) {
++      try {
++        sync_file_range(fd, offset, nbytes, flags);
++      } catch (UnsupportedOperationException uoe) {
++        syncFileRangePossible = false;
++      } catch (UnsatisfiedLinkError ule) {
++        syncFileRangePossible = false;
++      }
++    }
++  }
++
+   private synchronized static void ensureInitialized() {
+     if (!initialized) {
+       cacheTimeout = 
+diff --git a/src/native/configure.ac b/src/native/configure.ac
+index da5965b..0e0cff2 100644
+--- a/src/native/configure.ac
++++ b/src/native/configure.ac
+@@ -39,6 +39,7 @@ AC_CONFIG_SRCDIR([src/org_apache_hadoop.h])
+ AC_CONFIG_AUX_DIR([config])
+ AC_CONFIG_MACRO_DIR([m4])
+ AC_CONFIG_HEADER([config.h])
++AC_GNU_SOURCE
+ 
+ AM_INIT_AUTOMAKE(hadoop,1.0.0)
+ 
+@@ -61,10 +62,8 @@ if test $JAVA_HOME != ""
+ then
+   JNI_LDFLAGS="-L$JAVA_HOME/jre/lib/$OS_ARCH/server"
+ fi
+-ldflags_bak=$LDFLAGS
+ LDFLAGS="$LDFLAGS $JNI_LDFLAGS"
+ AC_CHECK_LIB([jvm], [JNI_GetCreatedJavaVMs])
+-LDFLAGS=$ldflags_bak
+ AC_SUBST([JNI_LDFLAGS])
+ 
+ # Checks for header files.
+@@ -95,6 +94,12 @@ AC_CHECK_HEADERS([zlib.h zconf.h], AC_COMPUTE_NEEDED_DSO(z,HADOOP_ZLIB_LIBRARY),
+ dnl Check for snappy headers
+ AC_CHECK_HEADERS([snappy-c.h], AC_COMPUTE_NEEDED_DSO(snappy,HADOOP_SNAPPY_LIBRARY), AC_MSG_WARN(Snappy headers were not found... building without snappy.))
+ 
++dnl check for posix_fadvise
++AC_CHECK_HEADERS(fcntl.h, [AC_CHECK_FUNCS(posix_fadvise)])
++
++dnl check for sync_file_range
++AC_CHECK_HEADERS(fcntl.h, [AC_CHECK_FUNCS(sync_file_range)])
++
+ # Checks for typedefs, structures, and compiler characteristics.
+ AC_C_CONST
+ AC_SYS_LARGEFILE
+diff --git a/src/native/src/org/apache/hadoop/io/nativeio/Makefile.in b/src/native/src/org/apache/hadoop/io/nativeio/Makefile.in
+index 63a7686..12fc24e 100644
+--- a/src/native/src/org/apache/hadoop/io/nativeio/Makefile.in
++++ b/src/native/src/org/apache/hadoop/io/nativeio/Makefile.in
+@@ -59,8 +59,10 @@ host_triplet = @host@
+ subdir = src/org/apache/hadoop/io/nativeio
+ DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
+ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
+-am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
+-	$(top_srcdir)/configure.ac
++am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
++	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
++	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
++	$(top_srcdir)/acinclude.m4 $(top_srcdir)/configure.ac
+ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
+ 	$(ACLOCAL_M4)
+ mkinstalldirs = $(install_sh) -d
+diff --git a/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c b/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
+index 5593e6d..37e25f6 100644
+--- a/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
++++ b/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
+@@ -27,6 +27,7 @@
+ #include <string.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
++#include <sys/syscall.h>
+ #include <unistd.h>
+ 
+ #include "org_apache_hadoop.h"
+@@ -184,6 +185,80 @@ Java_org_apache_hadoop_io_nativeio_NativeIO_chmod(
+   (*env)->ReleaseStringUTFChars(env, j_path, path);
+ }
+ 
++/**
++ * public static native void posix_fadvise(
++ *   FileDescriptor fd, long offset, long len, int flags);
++ */
++JNIEXPORT void JNICALL
++Java_org_apache_hadoop_io_nativeio_NativeIO_posix_1fadvise(
++  JNIEnv *env, jclass clazz,
++  jobject fd_object, jlong offset, jlong len, jint flags)
++{
++#ifndef HAVE_POSIX_FADVISE
++  THROW(env, "java/lang/UnsupportedOperationException",
++        "fadvise support not available");
++#else
++  int fd = fd_get(env, fd_object);
++  PASS_EXCEPTIONS(env);
++
++  int err = 0;
++  if ((err = posix_fadvise(fd, (off_t)offset, (off_t)len, flags))) {
++    throw_ioe(env, err);
++  }
++#endif
++}
++
++#if defined(HAVE_SYNC_FILE_RANGE)
++#  define my_sync_file_range sync_file_range
++#elif defined(SYS_sync_file_range)
++// RHEL 5 kernels have sync_file_range support, but the glibc
++// included does not have the library function. We can
++// still call it directly, and if it's not supported by the
++// kernel, we'd get ENOSYS. See RedHat Bugzilla #518581
++static int manual_sync_file_range (int fd, __off64_t from, __off64_t to, unsigned int flags)
++{
++#ifdef __x86_64__
++  return syscall( SYS_sync_file_range, fd, from, to, flags);
++#else
++  return syscall (SYS_sync_file_range, fd,
++    __LONG_LONG_PAIR ((long) (from >> 32), (long) from),
++    __LONG_LONG_PAIR ((long) (to >> 32), (long) to),
++    flags);
++#endif
++}
++#define my_sync_file_range manual_sync_file_range
++#endif
++
++/**
++ * public static native void sync_file_range(
++ *   FileDescriptor fd, long offset, long len, int flags);
++ */
++JNIEXPORT void JNICALL
++Java_org_apache_hadoop_io_nativeio_NativeIO_sync_1file_1range(
++  JNIEnv *env, jclass clazz,
++  jobject fd_object, jlong offset, jlong len, jint flags)
++{
++#ifndef my_sync_file_range
++  THROW(env, "java/lang/UnsupportedOperationException",
++        "sync_file_range support not available");
++#else
++  int fd = fd_get(env, fd_object);
++  PASS_EXCEPTIONS(env);
++
++  if (my_sync_file_range(fd, (off_t)offset, (off_t)len, flags)) {
++    if (errno == ENOSYS) {
++      // we know the syscall number, but it's not compiled
++      // into the running kernel
++      THROW(env, "java/lang/UnsupportedOperationException",
++            "sync_file_range kernel support not available");
++      return;
++    } else {
++      throw_ioe(env, errno);
++    }
++  }
++#endif
++}
++
+ 
+ /*
+  * private static native long getUIDForFDOwner(FileDescriptor fd);
+diff --git a/src/native/src/org/apache/hadoop/io/nativeio/file_descriptor.c b/src/native/src/org/apache/hadoop/io/nativeio/file_descriptor.c
+index 0681db8..f2c5509 100644
+--- a/src/native/src/org/apache/hadoop/io/nativeio/file_descriptor.c
++++ b/src/native/src/org/apache/hadoop/io/nativeio/file_descriptor.c
+@@ -54,6 +54,11 @@ void fd_deinit(JNIEnv *env) {
+  * underlying fd, or throw if unavailable
+  */
+ int fd_get(JNIEnv* env, jobject obj) {
++  if (obj == NULL) {
++    THROW(env, "java/lang/NullPointerException",
++          "FileDescriptor object is null");
++    return -1;
++  }
+   return (*env)->GetIntField(env, obj, fd_descriptor);
+ }
+ 
+diff --git a/src/native/src/org/apache/hadoop/security/Makefile.in b/src/native/src/org/apache/hadoop/security/Makefile.in
+index 5572bf6..3d15ce3 100644
+--- a/src/native/src/org/apache/hadoop/security/Makefile.in
++++ b/src/native/src/org/apache/hadoop/security/Makefile.in
+@@ -59,8 +59,10 @@ host_triplet = @host@
+ subdir = src/org/apache/hadoop/security
+ DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
+ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
+-am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
+-	$(top_srcdir)/configure.ac
++am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
++	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
++	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
++	$(top_srcdir)/acinclude.m4 $(top_srcdir)/configure.ac
+ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
+ 	$(ACLOCAL_M4)
+ mkinstalldirs = $(install_sh) -d
+diff --git a/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java b/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
+index e6f2ca1..6d7ba4b 100644
+--- a/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
++++ b/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
+@@ -19,6 +19,7 @@ package org.apache.hadoop.io.nativeio;
+ 
+ import java.io.File;
+ import java.io.FileDescriptor;
++import java.io.FileInputStream;
+ import java.io.FileOutputStream;
+ import java.io.IOException;
+ import org.junit.Before;
+@@ -158,6 +159,58 @@ public class TestNativeIO {
+     assertPermissions(toChmod, 0644);
+   }
+ 
++
++  @Test
++  public void testPosixFadvise() throws Exception {
++    FileInputStream fis = new FileInputStream("/dev/zero");
++    try {
++      NativeIO.posix_fadvise(fis.getFD(), 0, 0,
++                             NativeIO.POSIX_FADV_SEQUENTIAL);
++    } finally {
++      fis.close();
++    }
++
++    try {
++      NativeIO.posix_fadvise(fis.getFD(), 0, 1024,
++                             NativeIO.POSIX_FADV_SEQUENTIAL);
++
++      fail("Did not throw on bad file");
++    } catch (NativeIOException nioe) {
++      assertEquals(Errno.EBADF, nioe.getErrno());
++    }
++    
++    try {
++      NativeIO.posix_fadvise(null, 0, 1024,
++                             NativeIO.POSIX_FADV_SEQUENTIAL);
++
++      fail("Did not throw on null file");
++    } catch (NullPointerException npe) {
++      // expected
++    }
++  }
++
++  @Test
++  public void testSyncFileRange() throws Exception {
++    FileOutputStream fos = new FileOutputStream(
++      new File(TEST_DIR, "testSyncFileRange"));
++    try {
++      fos.write("foo".getBytes());
++      NativeIO.sync_file_range(fos.getFD(), 0, 1024,
++                               NativeIO.SYNC_FILE_RANGE_WRITE);
++      // no way to verify that this actually has synced,
++      // but if it doesn't throw, we can assume it worked
++    } finally {
++      fos.close();
++    }
++    try {
++      NativeIO.sync_file_range(fos.getFD(), 0, 1024,
++                               NativeIO.SYNC_FILE_RANGE_WRITE);
++      fail("Did not throw on bad file");
++    } catch (NativeIOException nioe) {
++      assertEquals(Errno.EBADF, nioe.getErrno());
++    }
++  }
++
+   private void assertPermissions(File f, int expected) throws IOException {
+     FileSystem localfs = FileSystem.getLocal(new Configuration());
+     FsPermission perms = localfs.getFileStatus(
+-- 
+1.7.0.4
+

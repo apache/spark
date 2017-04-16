@@ -1,0 +1,50 @@
+From a67a0f77729fb9005b0c47872d6ba677f6434b41 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:41:34 -0800
+Subject: [PATCH 0040/1179] MAPREDUCE-713. Sqoop has some superfluous imports
+
+Description: Some classes have vestigial imports that should be removed
+Reason: Code cleanup
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../apache/hadoop/sqoop/hive/TestHiveImport.java   |    5 -----
+ .../hadoop/sqoop/manager/LocalMySQLTest.java       |    2 --
+ 2 files changed, 0 insertions(+), 7 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
+index 5ea5849..4f3f073 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/hive/TestHiveImport.java
+@@ -19,15 +19,10 @@
+ package org.apache.hadoop.sqoop.hive;
+ 
+ import java.io.IOException;
+-import java.sql.SQLException;
+ import java.util.ArrayList;
+ 
+-import junit.framework.TestCase;
+-
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+-import org.junit.After;
+-import org.junit.Before;
+ import org.junit.Test;
+ 
+ import org.apache.hadoop.fs.Path;
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
+index 9eb04d3..7a71a5d 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
+@@ -29,8 +29,6 @@ import java.sql.SQLException;
+ import java.sql.Statement;
+ import java.util.ArrayList;
+ 
+-import junit.framework.TestCase;
+-
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.junit.After;
+-- 
+1.7.0.4
+

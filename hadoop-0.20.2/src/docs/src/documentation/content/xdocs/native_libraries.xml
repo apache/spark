@@ -1,0 +1,232 @@
+<?xml version="1.0"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN" "http://forrest.apache.org/dtd/document-v20.dtd">
+
+<document>
+  
+  <header>
+    <title>Native Libraries Guide</title>
+  </header>
+  
+  <body>
+  
+  <section>
+  <title>Overview</title>
+  
+<p>This guide describes the native hadoop library and includes a small discussion about native shared libraries.</p>
+
+      <p><strong>Note:</strong> Depending on your environment, the term "native libraries" <em>could</em> 
+      refer to all *.so's you need to compile; and, the term "native compression" <em>could</em> refer to all *.so's 
+      you need to compile that are specifically related to compression.
+      Currently, however, this document only addresses the native hadoop library (<em>libhadoop.so</em>).</p>
+  
+  </section>
+  
+    <section>
+      <title>Native Hadoop Library </title>
+      
+      <p>Hadoop has native implementations of certain components for  
+      performance reasons and for non-availability of Java implementations. These 
+      components are available in a single, dynamically-linked native library called
+       the native hadoop library. On the *nix platforms the library is named <em>libhadoop.so</em>. </p>
+   
+    <section>
+      <title>Usage</title>
+      
+      <p>It is fairly easy to use the native hadoop library:</p>
+
+      <ol>
+              <li>
+          Review the <a href="#Components">components</a>.
+        </li>
+        <li>
+          Review the <a href="#Supported+Platforms">supported platforms</a>.
+        </li>
+        <li>
+          Either <a href="#Download">download</a> a hadoop release, which will 
+          include a pre-built version of the native hadoop library, or
+          <a href="#Build">build</a> your own version of the 
+          native hadoop library. Whether you download or build, the name for the library is 
+          the same: <em>libhadoop.so</em>
+        </li>
+        <li>
+          Install the compression codec development packages 
+          (<strong>&gt;zlib-1.2</strong>, <strong>&gt;gzip-1.2</strong>):
+          <ul>
+              <li>If you download the library, install one or more development packages - 
+              whichever compression codecs you want to use with your deployment.</li>
+              <li>If you build the library, it is <strong>mandatory</strong> 
+              to install both development packages.</li>
+          </ul>
+        </li>
+         <li>
+          Check the <a href="#Runtime">runtime</a> log files.
+        </li>
+      </ol>
+     </section>
+    <section>
+      <title>Components</title>
+     <p>The native hadoop library includes two components, the zlib and gzip 
+      <a href="http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/io/compress/CompressionCodec.html"> 
+      compression codecs</a>:
+      </p>
+      <ul>
+        <li><a href="ext:zlib">zlib</a></li>
+        <li><a href="ext:gzip">gzip</a></li>
+      </ul>
+      <p>The native hadoop library is imperative for gzip to work.</p>
+    </section>
+    
+    <section>
+      <title>Supported Platforms</title>
+      
+      <p>The native hadoop library is supported on *nix platforms only.
+      The library does not to work with <a href="ext:cygwin">Cygwin</a> 
+      or the <a href="ext:osx">Mac OS X</a> platform.</p>
+
+      <p>The native hadoop library is mainly used on the GNU/Linus platform and 
+      has been tested on these distributions:</p>
+      <ul>
+        <li>
+          <a href="http://www.redhat.com/rhel/">RHEL4</a>/<a href="http://fedoraproject.org/">Fedora</a>
+        </li>
+        <li><a href="http://www.ubuntu.com/">Ubuntu</a></li>
+        <li><a href="http://www.gentoo.org/">Gentoo</a></li>
+      </ul>
+
+      <p>On all the above distributions a 32/64 bit native hadoop library will work 
+      with a respective 32/64 bit jvm.</p>
+    </section>
+    
+    <section>
+      <title>Download</title>
+      
+      <p>The pre-built 32-bit i386-Linux native hadoop library is available as part of the 
+      hadoop distribution and is located in the <code>lib/native</code> directory. You can download the 
+      hadoop distribution from <a href="ext:releases/download">Hadoop Common Releases</a>.</p>
+      
+      <p>Be sure to install the zlib and/or gzip development packages - whichever compression 
+      codecs you want to use with your deployment.</p>
+     </section>    
+    
+    <section>
+      <title>Build</title>
+      
+      <p>The native hadoop library is written in <a href="http://en.wikipedia.org/wiki/ANSI_C">ANSI C</a> 
+      and is built using the GNU autotools-chain (autoconf, autoheader, automake, autoscan, libtool). 
+      This means it should be straight-forward to build the library on any platform with a standards-compliant 
+      C compiler and the GNU autotools-chain (see the <a href="#Supported+Platforms">supported platforms</a>).</p>
+
+      <p>The packages you need to install on the target platform are:</p>
+      <ul>
+        <li>
+          C compiler (e.g. <a href="http://gcc.gnu.org/">GNU C Compiler</a>)
+        </li>
+        <li>
+          GNU Autools Chain: 
+          <a href="http://www.gnu.org/software/autoconf/">autoconf</a>, 
+          <a href="http://www.gnu.org/software/automake/">automake</a>, 
+          <a href="http://www.gnu.org/software/libtool/">libtool</a>
+        </li>
+        <li> 
+          zlib-development package (stable version >= 1.2.0)
+        </li>
+      </ul>
+
+      <p>Once you installed the prerequisite packages use the standard hadoop <code>build.xml</code> 
+      file and pass along the <code>compile.native</code> flag (set to <code>true</code>) to build the native hadoop library:</p>
+
+      <p><code>$ ant -Dcompile.native=true &lt;target&gt;</code></p>
+
+      <p>You should see the newly-built library in:</p>
+
+      <p><code>$ build/native/&lt;platform&gt;/lib</code></p>
+
+      <p>where &lt;<code>platform</code>&gt; is a combination of the system-properties: 
+      <code>${os.name}-${os.arch}-${sun.arch.data.model}</code> (for example, Linux-i386-32).</p>
+
+      <p>Please note the following:</p>
+        <ul>
+          <li>
+            It is <strong>mandatory</strong> to install both the zlib and gzip
+            development packages on the target platform in order to build the 
+            native hadoop library; however, for deployment it is sufficient to 
+            install just one package if you wish to use only one codec.
+          </li>
+          <li>
+            It is necessary to have the correct 32/64 libraries for zlib,  
+            depending on the 32/64 bit jvm for the target platform, in order to 
+            build and deploy the native hadoop library.
+          </li>
+        </ul>
+    </section>
+    
+     <section>
+      <title>Runtime</title>
+      <p>The <code>bin/hadoop</code> script ensures that the native hadoop
+      library is on the library path via the system property: <br/>
+      <em>-Djava.library.path=&lt;path&gt;</em></p>
+
+      <p>During runtime, check the hadoop log files for your MapReduce tasks.</p>
+      
+      <ul>
+         <li>If everything is all right, then:<br/><br/>
+          <code> DEBUG util.NativeCodeLoader - Trying to load the custom-built native-hadoop library...  </code><br/>
+          <code> INFO  util.NativeCodeLoader - Loaded the native-hadoop library </code><br/>
+         </li>
+         
+         <li>If something goes wrong, then:<br/><br/>
+         <code>
+          INFO util.NativeCodeLoader - Unable to load native-hadoop library for 
+          your platform... using builtin-java classes where applicable
+        </code>
+         
+         </li>
+      </ul>
+    </section>
+     </section>
+    
+    <section>
+      <title>Native Shared Libraries</title>
+      <p>You can load <strong>any</strong> native shared library using  
+      <a href="mapred_tutorial.html#DistributedCache">DistributedCache</a> 
+      for <em>distributing</em> and <em>symlinking</em> the library files.</p>
+      
+      <p>This example shows you how to distribute a shared library, <code>mylib.so</code>, 
+      and load it from a MapReduce task.</p>
+      <ol>
+      <li> First copy the library to the HDFS: <br/>
+      <code>bin/hadoop fs -copyFromLocal mylib.so.1 /libraries/mylib.so.1</code>
+      </li>
+      <li> The job launching program should contain the following: <br/>
+      <code> DistributedCache.createSymlink(conf); </code> <br/>
+      <code> DistributedCache.addCacheFile("hdfs://host:port/libraries/mylib.so.1#mylib.so", conf);
+      </code>
+      </li>
+      <li> The MapReduce task can contain: <br/>
+      <code> System.loadLibrary("mylib.so"); </code>
+      </li>
+      </ol>
+      
+     <p><br/><strong>Note:</strong> If you downloaded or built the native hadoop library, you don’t need to use DistibutedCache to 
+     make the library available to your MapReduce tasks.</p>
+    </section>
+  </body>
+  
+</document>

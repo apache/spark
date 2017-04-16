@@ -1,0 +1,280 @@
+From 5966f146fdb0202c0ffd66d3ec3f0c7c4def6afe Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 15 Sep 2010 19:55:36 -0700
+Subject: [PATCH 0689/1179] Revert "HDFS-1000. libhdfs needs to be updated to use the new UGI"
+
+Description: This is being reverted to apply a newer version of the patch.
+Author: Devaraj Das
+Ref: UNKNOWN
+---
+ src/c++/libhdfs/hdfs.c      |  172 +++++++++++++++++++++++++++++--------------
+ src/c++/libhdfs/hdfs.h      |    3 +-
+ src/c++/libhdfs/hdfs_test.c |    5 +-
+ 3 files changed, 122 insertions(+), 58 deletions(-)
+
+diff --git a/src/c++/libhdfs/hdfs.c b/src/c++/libhdfs/hdfs.c
+index c40d31f..b84fef7 100644
+--- a/src/c++/libhdfs/hdfs.c
++++ b/src/c++/libhdfs/hdfs.c
+@@ -32,6 +32,8 @@
+ #define HADOOP_OSTRM    "org/apache/hadoop/fs/FSDataOutputStream"
+ #define HADOOP_STAT     "org/apache/hadoop/fs/FileStatus"
+ #define HADOOP_FSPERM   "org/apache/hadoop/fs/permission/FsPermission"
++#define HADOOP_UNIX_USER_GROUP_INFO "org/apache/hadoop/security/UnixUserGroupInformation"
++#define HADOOP_USER_GROUP_INFO "org/apache/hadoop/security/UserGroupInformation"
+ #define JAVA_NET_ISA    "java/net/InetSocketAddress"
+ #define JAVA_NET_URI    "java/net/URI"
+ #define JAVA_STRING     "java/lang/String"
+@@ -167,8 +169,8 @@ done:
+ 
+ 
+ hdfsFS hdfsConnect(const char* host, tPort port) {
+-  // conect with NULL as user name
+-  return hdfsConnectAsUser(host, port, NULL);
++  // connect with NULL as user name/groups
++  return hdfsConnectAsUser(host, port, NULL, NULL, 0);
+ }
+ 
+ /** Always return a new FileSystem handle */
+@@ -177,7 +179,7 @@ hdfsFS hdfsConnectNewInstance(const char* host, tPort port) {
+   return hdfsConnectAsUserNewInstance(host, port, NULL, NULL, 0);
+ }
+ 
+-hdfsFS hdfsConnectAsUser(const char* host, tPort port, const char *user)
++hdfsFS hdfsConnectAsUser(const char* host, tPort port, const char *user , const char **groups, int groups_size )
+ {
+     // JAVA EQUIVALENT:
+     //  FileSystem fs = FileSystem.get(new Configuration());
+@@ -192,7 +194,6 @@ hdfsFS hdfsConnectAsUser(const char* host, tPort port, const char *user)
+     jthrowable jExc = NULL;
+     char    *cURI = 0;
+     jobject gFsRef = NULL;
+-    jstring jUserString = NULL;
+ 
+ 
+     //Get the JNIEnv* corresponding to current thread
+@@ -214,8 +215,86 @@ hdfsFS hdfsConnectAsUser(const char* host, tPort port, const char *user)
+     }
+  
+     if (user != NULL) {
+-      jUserString = (*env)->NewStringUTF(env, user);
++
++      if (groups == NULL || groups_size <= 0) {
++        fprintf(stderr, "ERROR: groups must not be empty/null\n");
++        errno = EINVAL;
++        destroyLocalReference(env, jConfiguration);
++        return NULL;
++      }
++
++      jstring jUserString = (*env)->NewStringUTF(env, user);
++      jarray jGroups = constructNewArrayString(env, &jExc, groups, groups_size);
++      if (jGroups == NULL) {
++        errno = EINTERNAL;
++        fprintf(stderr, "ERROR: could not construct groups array\n");
++        destroyLocalReference(env, jConfiguration);
++        destroyLocalReference(env, jUserString);
++        return NULL;
++      }
++
++      jobject jUgi;
++      if ((jUgi = constructNewObjectOfClass(env, &jExc, HADOOP_UNIX_USER_GROUP_INFO, JMETHOD2(JPARAM(JAVA_STRING), JARRPARAM(JAVA_STRING), JAVA_VOID), jUserString, jGroups)) == NULL) {
++        fprintf(stderr,"failed to construct hadoop user unix group info object\n");
++        errno = errnoFromException(jExc, env, HADOOP_UNIX_USER_GROUP_INFO,
++                                   "init");
++        destroyLocalReference(env, jConfiguration);
++        destroyLocalReference(env, jUserString);
++        if (jGroups != NULL) {
++          destroyLocalReference(env, jGroups);
++        }          
++        return NULL;
++      }
++#define USE_UUGI
++#ifdef USE_UUGI
++
++      // UnixUserGroupInformation.UGI_PROPERTY_NAME
++      jstring jAttrString = (*env)->NewStringUTF(env,"hadoop.job.ugi");
++      
++      if (invokeMethod(env, &jVal, &jExc, STATIC, NULL, HADOOP_UNIX_USER_GROUP_INFO, "saveToConf",
++                       JMETHOD3(JPARAM(HADOOP_CONF), JPARAM(JAVA_STRING), JPARAM(HADOOP_UNIX_USER_GROUP_INFO), JAVA_VOID),
++                       jConfiguration, jAttrString, jUgi) != 0) {
++        errno = errnoFromException(jExc, env, HADOOP_FSPERM,
++                                   "init");
++        destroyLocalReference(env, jConfiguration);
++        destroyLocalReference(env, jUserString);
++        if (jGroups != NULL) {
++          destroyLocalReference(env, jGroups);
++        }          
++        destroyLocalReference(env, jUgi);
++        destroyLocalReference(env, jAttrString);
++        return NULL;
++      }
++
++      destroyLocalReference(env, jUserString);
++      destroyLocalReference(env, jGroups);
++      destroyLocalReference(env, jUgi);
++      destroyLocalReference(env, jAttrString);
++    }
++#else
++    
++    // what does "current" mean in the context of libhdfs ? does it mean for the last hdfs connection we used?
++    // that's why this code cannot be activated. We know the above use of the conf object should work well with 
++    // multiple connections.
++      if (invokeMethod(env, &jVal, &jExc, STATIC, NULL, HADOOP_USER_GROUP_INFO, "setCurrentUGI",
++                       JMETHOD1(JPARAM(HADOOP_USER_GROUP_INFO), JAVA_VOID),
++                       jUgi) != 0) {
++        errno = errnoFromException(jExc, env, HADOOP_USER_GROUP_INFO,
++                                   "setCurrentUGI");
++        destroyLocalReference(env, jConfiguration);
++        destroyLocalReference(env, jUserString);
++        if (jGroups != NULL) {
++          destroyLocalReference(env, jGroups);
++        }          
++        destroyLocalReference(env, jUgi);
++        return NULL;
++      }
++
++      destroyLocalReference(env, jUserString);
++      destroyLocalReference(env, jGroups);
++      destroyLocalReference(env, jUgi);
+     }
++#endif      
+     //Check what type of FileSystem the caller wants...
+     if (host == NULL) {
+         // fs = FileSytem::getLocal(conf);
+@@ -229,61 +308,43 @@ hdfsFS hdfsConnectAsUser(const char* host, tPort port, const char *user)
+         }
+         jFS = jVal.l;
+     }
+-    //FileSystem.get(conf) -> FileSystem.get(FileSystem.getDefaultUri(conf), 
+-    //                                       conf, user)
+     else if (!strcmp(host, "default") && port == 0) {
+-      if (invokeMethod(env, &jVal, &jExc, STATIC, NULL, HADOOP_FS,
+-                      "getDefaultUri", 
+-                      "(Lorg/apache/hadoop/conf/Configuration;)Ljava/net/URI;",
+-                      jConfiguration) != 0) {
+-        errno = errnoFromException(jExc, env, "org.apache.hadoop.fs.", 
+-                                   "FileSystem::getDefaultUri");
+-        goto done;
+-      }
+-      jURI = jVal.l;
+-      if (invokeMethod(env, &jVal, &jExc, STATIC, NULL, HADOOP_FS, "get",
+-                       JMETHOD3(JPARAM(JAVA_NET_URI),
+-                                JPARAM(HADOOP_CONF), JPARAM(JAVA_STRING), 
+-                                JPARAM(HADOOP_FS)),
+-                       jURI, jConfiguration, jUserString) != 0) {
+-        errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
+-                                   "Filesystem::get(URI, Configuration)");
+-        goto done;
+-      }
+-
+-      jFS = jVal.l;
++        //fs = FileSystem::get(conf); 
++        if (invokeMethod(env, &jVal, &jExc, STATIC, NULL,
++                         HADOOP_FS, "get",
++                         JMETHOD1(JPARAM(HADOOP_CONF),
++                                  JPARAM(HADOOP_FS)),
++                         jConfiguration) != 0) {
++            errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
++                                       "FileSystem::get");
++            goto done;
++        }
++        jFS = jVal.l;
+     }
+     else {
+-      // fs = FileSystem::get(URI, conf, ugi);
+-      cURI = malloc(strlen(host)+16);
+-      sprintf(cURI, "hdfs://%s:%d", host, (int)(port));
+-      if (cURI == NULL) {
+-        fprintf (stderr, "Couldn't allocate an object of size %d",
+-                 strlen(host) + 16);
+-        errno = EINTERNAL;			
+-        goto done;	
+-      }
++        // fs = FileSystem::get(URI, conf);
++        cURI = malloc(strlen(host)+16);
++        sprintf(cURI, "hdfs://%s:%d", host, (int)(port));
+ 
+-      jURIString = (*env)->NewStringUTF(env, cURI);
+-      if (invokeMethod(env, &jVal, &jExc, STATIC, NULL, JAVA_NET_URI,
+-                       "create", "(Ljava/lang/String;)Ljava/net/URI;",
+-                       jURIString) != 0) {
+-        errno = errnoFromException(jExc, env, "java.net.URI::create");
+-        goto done;
+-      }
+-      jURI = jVal.l;
++        jURIString = (*env)->NewStringUTF(env, cURI);
++        if (invokeMethod(env, &jVal, &jExc, STATIC, NULL, JAVA_NET_URI,
++                         "create", "(Ljava/lang/String;)Ljava/net/URI;",
++                         jURIString) != 0) {
++            errno = errnoFromException(jExc, env, "java.net.URI::create");
++            goto done;
++        }
++        jURI = jVal.l;
+ 
+-      if (invokeMethod(env, &jVal, &jExc, STATIC, NULL, HADOOP_FS, "get",
+-                       JMETHOD3(JPARAM(JAVA_NET_URI),
+-                                JPARAM(HADOOP_CONF), JPARAM(JAVA_STRING),
+-                                JPARAM(HADOOP_FS)),
+-                       jURI, jConfiguration, jUserString) != 0) {
+-        errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
+-                                   "Filesystem::get(URI, Configuration)");
+-        goto done;
+-      }
++        if (invokeMethod(env, &jVal, &jExc, STATIC, NULL, HADOOP_FS, "get",
++                         JMETHOD2(JPARAM(JAVA_NET_URI),
++                                  JPARAM(HADOOP_CONF), JPARAM(HADOOP_FS)),
++                         jURI, jConfiguration) != 0) {
++            errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
++                                       "Filesystem::get(URI, Configuration)");
++            goto done;
++        }
+ 
+-      jFS = jVal.l;
++        jFS = jVal.l;
+     }
+ 
+   done:
+@@ -292,7 +353,6 @@ hdfsFS hdfsConnectAsUser(const char* host, tPort port, const char *user)
+     destroyLocalReference(env, jConfiguration);
+     destroyLocalReference(env, jURIString);
+     destroyLocalReference(env, jURI);
+-    destroyLocalReference(env, jUserString);
+ 
+     if (cURI) free(cURI);
+ 
+diff --git a/src/c++/libhdfs/hdfs.h b/src/c++/libhdfs/hdfs.h
+index 35a90cc..88942cc 100644
+--- a/src/c++/libhdfs/hdfs.h
++++ b/src/c++/libhdfs/hdfs.h
+@@ -100,9 +100,10 @@ extern  "C" {
+      * (core-site/core-default.xml).
+      * @param port The port on which the server is listening.
+      * @param user the user name (this is hadoop domain user). Or NULL is equivelant to hhdfsConnect(host, port)
++     * @param groups the groups (these are hadoop domain groups)
+      * @return Returns a handle to the filesystem or NULL on error.
+      */
+-     hdfsFS hdfsConnectAsUser(const char* host, tPort port, const char *user);
++     hdfsFS hdfsConnectAsUser(const char* host, tPort port, const char *user , const char *groups[], int groups_size );
+ 
+ 
+     /** 
+diff --git a/src/c++/libhdfs/hdfs_test.c b/src/c++/libhdfs/hdfs_test.c
+index 605510f..1d2bd51 100644
+--- a/src/c++/libhdfs/hdfs_test.c
++++ b/src/c++/libhdfs/hdfs_test.c
+@@ -397,8 +397,11 @@ int main(int argc, char **argv) {
+ 
+       const char *tuser = "nobody";
+       const char* writePath = "/tmp/usertestfile.txt";
++      const char **groups =  (const char**)malloc(sizeof(char*)* 2);
++      groups[0] = "users";
++      groups[1] = "nobody";
+ 
+-      fs = hdfsConnectAsUser("default", 0, tuser);
++      fs = hdfsConnectAsUserNewInstance("default", 0, tuser, groups, 2);
+       if(!fs) {
+         fprintf(stderr, "Oops! Failed to connect to hdfs as user %s!\n",tuser);
+         exit(-1);
+-- 
+1.7.0.4
+

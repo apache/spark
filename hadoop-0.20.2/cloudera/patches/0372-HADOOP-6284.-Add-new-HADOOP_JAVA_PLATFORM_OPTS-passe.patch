@@ -1,0 +1,30 @@
+From e5b918e037e5a01a4098b43a20e3437b34022328 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 15 Oct 2009 16:26:26 +0530
+Subject: [PATCH 0372/1179] HADOOP-6284. Add new HADOOP_JAVA_PLATFORM_OPTS passed to the java PlatformName command
+
+Patch: http://issues.apache.org/jira/secure/attachment/12421342/HADOOP-6284-y0.20.1.patch
+Author: Koji Noguchi
+Ref: YDH
+---
+ bin/hadoop |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 058b1be..380c587 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -260,8 +260,8 @@ fi
+ 
+ # setup 'java.library.path' for native-hadoop code if necessary
+ if [ -d "${HADOOP_HOME}/build/native" -o -d "${HADOOP_HOME}/lib/native" ]; then
+-  JAVA_PLATFORM=`CLASSPATH=${CLASSPATH} ${JAVA} -Xmx32m org.apache.hadoop.util.PlatformName | sed -e "s/ /_/g"`
+- 
++  JAVA_PLATFORM=`CLASSPATH=${CLASSPATH} ${JAVA} -Xmx32m ${HADOOP_JAVA_PLATFORM_OPTS} org.apache.hadoop.util.PlatformName | sed -e "s/ /_/g"`
++  
+   if [ -d "$HADOOP_HOME/build/native" ]; then
+     if [ "x$JAVA_LIBRARY_PATH" != "x" ]; then
+         JAVA_LIBRARY_PATH=${JAVA_LIBRARY_PATH}:${HADOOP_HOME}/build/native/${JAVA_PLATFORM}/lib
+-- 
+1.7.0.4
+

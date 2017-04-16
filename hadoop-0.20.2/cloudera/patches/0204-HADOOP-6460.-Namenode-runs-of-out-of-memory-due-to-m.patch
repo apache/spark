@@ -1,0 +1,79 @@
+From 1c6dd471832946929928801dd9c9e4b79259ad9d Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:45:38 -0800
+Subject: [PATCH 0204/1179] HADOOP-6460. Namenode runs of out of memory due to memory leak in ipc Server
+
+Description: Namenode heap usage grows disproportional to the number objects supports (files, directories and blocks). Based on heap dump analysis, this is due to large growth in ByteArrayOutputStream allocated in o.a.h.ipc.Server.Handler.run().
+Reason: Bugfix (Scalability)
+Author: Suresh Srinivas
+Ref: UNKNOWN
+---
+ src/core/org/apache/hadoop/ipc/Server.java         |   17 +++++++++++++++--
+ .../apache/hadoop/ipc/TestIPCServerResponder.java  |    6 ++++++
+ 2 files changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 3b7b192..a7fbcd1 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -90,6 +90,12 @@ public abstract class Server {
+    */
+   private static final int MAX_QUEUE_SIZE_PER_HANDLER = 100;
+   
++  /**
++   * Initial and max size of response buffer
++   */
++  static int INITIAL_RESP_BUF_SIZE = 10240;
++  static int MAX_RESP_BUF_SIZE = 1024*1024;
++    
+   public static final Log LOG = LogFactory.getLog(Server.class);
+ 
+   private static final ThreadLocal<Server> SERVER = new ThreadLocal<Server>();
+@@ -933,7 +939,8 @@ public abstract class Server {
+     public void run() {
+       LOG.info(getName() + ": starting");
+       SERVER.set(Server.this);
+-      ByteArrayOutputStream buf = new ByteArrayOutputStream(10240);
++      ByteArrayOutputStream buf = 
++        new ByteArrayOutputStream(INITIAL_RESP_BUF_SIZE);
+       while (running) {
+         try {
+           final Call call = callQueue.take(); // pop the queue; maybe blocked here
+@@ -974,10 +981,16 @@ public abstract class Server {
+             error = StringUtils.stringifyException(e);
+           }
+           CurCall.set(null);
+-
+           setupResponse(buf, call, 
+                         (error == null) ? Status.SUCCESS : Status.ERROR, 
+                         value, errorClass, error);
++          // Discard the large buf and reset it back to 
++          // smaller size to freeup heap
++          if (buf.size() > MAX_RESP_BUF_SIZE) {
++            LOG.warn("Large response size " + buf.size() + " for call " + 
++                call.toString());
++            buf = new ByteArrayOutputStream(INITIAL_RESP_BUF_SIZE);
++          }
+           responder.doRespond(call);
+         } catch (InterruptedException e) {
+           if (running) {                          // unexpected -- log it
+diff --git a/src/test/org/apache/hadoop/ipc/TestIPCServerResponder.java b/src/test/org/apache/hadoop/ipc/TestIPCServerResponder.java
+index 2591da0..e1370fe 100644
+--- a/src/test/org/apache/hadoop/ipc/TestIPCServerResponder.java
++++ b/src/test/org/apache/hadoop/ipc/TestIPCServerResponder.java
+@@ -114,6 +114,12 @@ public class TestIPCServerResponder extends TestCase {
+     }
+   }
+ 
++  public void testResponseBuffer() throws Exception {
++    Server.INITIAL_RESP_BUF_SIZE = 1;
++    Server.MAX_RESP_BUF_SIZE = 1;
++    testServerResponder(1, true, 1, 1, 5);
++  }
++
+   public void testServerResponder() throws Exception {
+     testServerResponder(10, true, 1, 10, 200);
+   }
+-- 
+1.7.0.4
+

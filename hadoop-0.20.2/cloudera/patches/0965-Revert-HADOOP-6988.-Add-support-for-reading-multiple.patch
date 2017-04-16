@@ -1,0 +1,121 @@
+From d94813ecd0d4b3f63f4d30baa8a22a59dc76d5a8 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Tue, 24 May 2011 14:26:47 -0700
+Subject: [PATCH 0965/1179] Revert "HADOOP-6988. Add support for reading multiple hadoop delegation token files"
+
+This reverts commit ce67cd87f21543348ca5c137dee3ff0dc7f338dd.
+---
+ .../org/apache/hadoop/security/Credentials.java    |   11 -----------
+ .../hadoop/security/UserGroupInformation.java      |    4 ++--
+ .../content/xdocs/mapred_tutorial.xml              |    3 +--
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |   10 +++++++---
+ .../hadoop/mapreduce/security/TokenCache.java      |   10 +++++++---
+ 5 files changed, 17 insertions(+), 21 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/Credentials.java b/src/core/org/apache/hadoop/security/Credentials.java
+index 49d156d..7487876 100644
+--- a/src/core/org/apache/hadoop/security/Credentials.java
++++ b/src/core/org/apache/hadoop/security/Credentials.java
+@@ -40,7 +40,6 @@ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableUtils;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+-import org.apache.hadoop.util.StringUtils;
+ 
+ /**
+  * A class that provides the facilities of reading and writing 
+@@ -113,16 +112,6 @@ public class Credentials implements Writable {
+   public void addSecretKey(Text alias, byte[] key) {
+     secretKeysMap.put(alias, key);
+   }
+-
+-  public static Credentials readTokenStorageFiles(String paths, Configuration conf)
+-  throws IOException {
+-    Credentials credentials = new Credentials();
+-    for (String path : StringUtils.getStrings(paths)) {
+-      Credentials singleFileCredentials = readTokenStorageFile(new Path("file:///" + path), conf);
+-      credentials.addAll(singleFileCredentials);
+-    }
+-    return credentials;
+-  }
+  
+   /**
+    * Convenience method for reading a token storage file, and loading the Tokens
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 018c724..2ff7666 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -503,8 +503,8 @@ public class UserGroupInformation {
+         if (fileLocation != null && isSecurityEnabled()) {
+           // load the token storage file and put all of the tokens into the
+           // user.
+-          Credentials cred = Credentials.readTokenStorageFiles(fileLocation,
+-              conf);
++          Credentials cred = Credentials.readTokenStorageFile(
++              new Path("file:///" + fileLocation), conf);
+           for (Token<?> token: cred.getAllTokens()) {
+             loginUser.addToken(token);
+           }
+diff --git a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+index fabf8a4..d1d150e 100644
+--- a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
++++ b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+@@ -1654,8 +1654,7 @@
+              HADOOP_TOKEN_FILE_LOCATION and the framework sets this to point to the
+              localized file. In order to launch jobs from tasks or for doing any HDFS operation,
+              tasks must set the configuration "mapreduce.job.credentials.binary" to point to
+-             this token file. Either of these variables may be set to a comma-separated list of
+-             paths, each of which refers to a complete token file.</p> 
++             this token file.</p> 
+ 
+           <p>The HDFS delegation tokens passed to the JobTracker during job submission are
+              are cancelled by the JobTracker when the job completes. This is the default behavior
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index ff9130f..2613ddc 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -2036,9 +2036,13 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+   private void readTokensFromFiles(Configuration conf, Credentials credentials
+                                    ) throws IOException {
+     // add tokens and secrets coming from a token storage file
+-    String tokenPath = conf.get("mapreduce.job.credentials.binary");
+-    if (tokenPath != null) {
+-      credentials.addAll(Credentials.readTokenStorageFiles(tokenPath, conf));
++    String binaryTokenFilename =
++      conf.get("mapreduce.job.credentials.binary");
++    if (binaryTokenFilename != null) {
++      Credentials binary = 
++        Credentials.readTokenStorageFile(new Path("file:///" +  
++                                                  binaryTokenFilename), conf);
++      credentials.addAll(binary);
+     }
+     // add secret keys coming from a json file
+     String tokensFileName = conf.get("mapreduce.job.credentials.json");
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+index 4960509..25ac34a 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+@@ -95,13 +95,17 @@ public class TokenCache {
+         //this block of code to do with reading the file
+         if (readFile) {
+           readFile = false;
+-          String tokenPath = conf.get("mapreduce.job.credentials.binary");
+-          if (tokenPath != null) {
++          String binaryTokenFilename =
++            conf.get("mapreduce.job.credentials.binary");
++          if (binaryTokenFilename != null) {
++            Credentials binary;
+             try {
+-              credentials.addAll(Credentials.readTokenStorageFiles(tokenPath, conf));
++              binary = Credentials.readTokenStorageFile(new Path("file:///" +  
++                  binaryTokenFilename), conf);
+             } catch (IOException e) {
+               throw new RuntimeException(e);
+             }
++            credentials.addAll(binary);
+           }
+           if (TokenCache.getDelegationToken(credentials, fsName) != null) {
+             LOG.debug("DT for " + fsName  + " is already present");
+-- 
+1.7.0.4
+

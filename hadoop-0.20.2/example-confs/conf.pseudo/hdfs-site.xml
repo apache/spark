@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<configuration>
+  <property>
+    <name>dfs.replication</name>
+    <value>1</value>
+  </property>
+  <property>
+     <name>dfs.permissions</name>
+     <value>false</value>
+  </property>
+  <!-- Immediately exit safemode as soon as one DataNode checks in. 
+       On a multi-node cluster, these configurations must be removed.  -->
+  <property>
+    <name>dfs.safemode.extension</name>
+    <value>0</value>
+  </property>
+  <property>
+     <name>dfs.safemode.min.datanodes</name>
+     <value>1</value>
+  </property>
+  <property>
+     <!-- specify this so that running 'hadoop namenode -format' formats the right dir -->
+     <name>dfs.name.dir</name>
+     <value>/var/lib/hadoop-0.20/cache/hadoop/dfs/name</value>
+  </property>
+
+  <!-- Enable Hue Plugins -->
+  <property>
+    <name>dfs.namenode.plugins</name>
+    <value>org.apache.hadoop.thriftfs.NamenodePlugin</value>
+    <description>Comma-separated list of namenode plug-ins to be activated.
+    </description>
+  </property>
+  <property>
+    <name>dfs.datanode.plugins</name>
+    <value>org.apache.hadoop.thriftfs.DatanodePlugin</value>
+    <description>Comma-separated list of datanode plug-ins to be activated.
+    </description>
+  </property>
+  <property>
+    <name>dfs.thrift.address</name>
+    <value>0.0.0.0:10090</value>
+  </property>
+</configuration>

@@ -1,0 +1,66 @@
+From 763893247e8e94a6da8060d2335550b90cf0662e Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu00@gmail.com>
+Date: Thu, 28 Apr 2011 13:21:45 -0700
+Subject: [PATCH 0956/1179] MAPREDUCE-2457. job submission should inject group.name
+
+Description:
+Reason: common used functionality by FairScheduler
+Author: Alejandro Abdelnur
+Ref: CDH-3088
+---
+ .../hadoop/mapred/TestFairSchedulerSystem.java     |    6 ++++++
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    7 +++++++
+ 2 files changed, 13 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java
+index 9909bcf..df8bb0d 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java
+@@ -18,6 +18,7 @@
+ package org.apache.hadoop.mapred;
+ 
+ import org.apache.hadoop.examples.SleepJob;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.ToolRunner;
+ import org.apache.hadoop.conf.Configuration;
+ import java.io.BufferedReader;
+@@ -67,6 +68,7 @@ public class TestFairSchedulerSystem {
+     conf.set("mapred.fairscheduler.preemption.interval", "0");
+     conf.set("mapred.fairscheduler.preemption", "true");
+     conf.set("mapred.fairscheduler.eventlog.enabled", "true");
++    conf.set("mapred.fairscheduler.poolnameproperty", "group.name");
+     mr = new MiniMRCluster(taskTrackers, "file:///", 1, null, null, conf);
+   }
+ 
+@@ -145,6 +147,10 @@ public class TestFairSchedulerSystem {
+     // Just to be sure, slurp the content and make sure it looks like the scheduler
+     String contents = slurpContents(connection);
+     assertTrue(contents.contains("Fair Scheduler Administration"));
++
++    String userGroups[] = UserGroupInformation.getCurrentUser().getGroupNames();
++    String primaryGroup = ">" + userGroups[0] + "<";
++    assertTrue(contents.contains(primaryGroup));
+   }
+ 
+   private void checkTaskGraphServlet(JobID job) throws Exception {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 8910c37..1efde3b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -422,6 +422,13 @@ public class JobInProgress {
+             jobId.toString(), desc);
+         throw new IOException(desc);
+       }
++
++      String userGroups[] = userUGI.getGroupNames();
++      String primaryGroup = (userGroups.length > 0) ? userGroups[0] : null;
++      if (primaryGroup != null) {
++        conf.set("group.name", primaryGroup);
++      }
++
+       this.priority = conf.getJobPriority();
+       this.status.setJobPriority(this.priority);
+       this.profile = new JobProfile(user, jobId, 
+-- 
+1.7.0.4
+

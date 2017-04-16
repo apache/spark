@@ -1,0 +1,1369 @@
+From 8d991630bc1a04c70fbc31435b4fdb3f26033cf8 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sat, 25 Jun 2011 10:35:11 -0700
+Subject: [PATCH 0993/1179] HDFS-235. Add support for byte-ranges to hftp.
+ HDFS-2110. Cleanup StreamFile#sendPartialData.
+ HADOOP-7429. Add another IOUtils#copyBytes method.
+ HADOOP-7057. IOUtils.readFully and IOUtils.skipFully have typo in exception creation's message.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-3243
+---
+ src/core/org/apache/hadoop/io/IOUtils.java         |  108 ++++++---
+ .../apache/hadoop/hdfs/ByteRangeInputStream.java   |  152 +++++++++++
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |  114 +++-----
+ .../hdfs/server/namenode/FileDataServlet.java      |    4 +-
+ .../hadoop/hdfs/server/namenode/StreamFile.java    |   95 ++++++--
+ .../hadoop/hdfs/TestByteRangeInputStream.java      |  183 +++++++++++++
+ .../org/apache/hadoop/hdfs/TestHftpFileSystem.java |  125 +++++++++
+ .../hdfs/server/namenode/TestStreamFile.java       |  281 ++++++++++++++++++++
+ 8 files changed, 935 insertions(+), 127 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/ByteRangeInputStream.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/TestByteRangeInputStream.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestStreamFile.java
+
+diff --git a/src/core/org/apache/hadoop/io/IOUtils.java b/src/core/org/apache/hadoop/io/IOUtils.java
+index bb53c42..6a7ddd6 100644
+--- a/src/core/org/apache/hadoop/io/IOUtils.java
++++ b/src/core/org/apache/hadoop/io/IOUtils.java
+@@ -34,6 +34,7 @@ public class IOUtils {
+ 
+   /**
+    * Copies from one stream to another.
++   *
+    * @param in InputStrem to read from
+    * @param out OutputStream to write to
+    * @param buffSize the size of the buffer 
+@@ -42,7 +43,6 @@ public class IOUtils {
+    */
+   public static void copyBytes(InputStream in, OutputStream out, int buffSize, boolean close) 
+     throws IOException {
+-
+     PrintStream ps = out instanceof PrintStream ? (PrintStream)out : null;
+     byte buf[] = new byte[buffSize];
+     try {
+@@ -55,7 +55,7 @@ public class IOUtils {
+         bytesRead = in.read(buf);
+       }
+     } finally {
+-      if(close) {
++      if (close) {
+         out.close();
+         in.close();
+       }
+@@ -65,7 +65,8 @@ public class IOUtils {
+   /**
+    * Copies from one stream to another. <strong>closes the input and output streams 
+    * at the end</strong>.
+-   * @param in InputStrem to read from
++   *
++   * @param in InputStream to read from
+    * @param out OutputStream to write to
+    * @param conf the Configuration object 
+    */
+@@ -76,6 +77,7 @@ public class IOUtils {
+   
+   /**
+    * Copies from one stream to another.
++   *
+    * @param in InputStrem to read from
+    * @param out OutputStream to write to
+    * @param conf the Configuration object
+@@ -86,8 +88,45 @@ public class IOUtils {
+     throws IOException {
+     copyBytes(in, out, conf.getInt("io.file.buffer.size", 4096),  close);
+   }
+-  
+-  /** Reads len bytes in a loop.
++
++  /**
++   * Copies count bytes from one stream to another.
++   *
++   * @param in InputStream to read from
++   * @param out OutputStream to write to
++   * @param count number of bytes to copy
++   * @param close whether to close the streams
++   * @throws IOException if bytes can not be read or written
++   */
++  public static void copyBytes(InputStream in, OutputStream out, long count, 
++      boolean close) throws IOException {
++    byte buf[] = new byte[4096];
++    long bytesRemaining = count;
++    int bytesRead;
++
++    try {
++      while (bytesRemaining > 0) {
++        int bytesToRead = (int)
++          (bytesRemaining < buf.length ? bytesRemaining : buf.length);
++
++        bytesRead = in.read(buf, 0, bytesToRead);
++        if (bytesRead == -1)
++          break;
++
++        out.write(buf, 0, bytesRead);
++        bytesRemaining -= bytesRead;
++      }
++    } finally {
++      if (close) {
++        out.close();
++        in.close();
++      }
++    }
++  }
++
++  /**
++   * Reads len bytes in a loop.
++   *
+    * @param in The InputStream to read from
+    * @param buf The buffer to fill
+    * @param off offset from the buffer
+@@ -95,20 +134,22 @@ public class IOUtils {
+    * @throws IOException if it could not read requested number of bytes 
+    * for any reason (including EOF)
+    */
+-  public static void readFully( InputStream in, byte buf[],
+-      int off, int len ) throws IOException {
++  public static void readFully(InputStream in, byte buf[],
++      int off, int len) throws IOException {
+     int toRead = len;
+-    while ( toRead > 0 ) {
+-      int ret = in.read( buf, off, toRead );
+-      if ( ret < 0 ) {
+-        throw new IOException( "Premeture EOF from inputStream");
++    while (toRead > 0) {
++      int ret = in.read(buf, off, toRead);
++      if (ret < 0) {
++        throw new IOException("Premature EOF from inputStream");
+       }
+       toRead -= ret;
+       off += ret;
+     }
+   }
+ 
+-  /** Reads len bytes in a loop using the channel of the stream
++  /**
++   * Reads len bytes in a loop using the channel of the stream.
++   *
+    * @param fileChannel a FileChannel to read len bytes into buf
+    * @param buf The buffer to fill
+    * @param off offset from the buffer
+@@ -116,31 +157,33 @@ public class IOUtils {
+    * @throws IOException if it could not read requested number of bytes 
+    * for any reason (including EOF)
+    */
+-  public static void readFileChannelFully( FileChannel fileChannel, byte buf[],
+-      int off, int len ) throws IOException {
++  public static void readFileChannelFully(FileChannel fileChannel, byte buf[],
++      int off, int len) throws IOException {
+     int toRead = len;
+     ByteBuffer byteBuffer = ByteBuffer.wrap(buf, off, len);
+-    while ( toRead > 0 ) {
++    while (toRead > 0) {
+       int ret = fileChannel.read(byteBuffer);
+-      if ( ret < 0 ) {
+-        throw new IOException( "Premeture EOF from inputStream");
++      if (ret < 0) {
++        throw new IOException("Premature EOF from inputStream");
+       }
+       toRead -= ret;
+       off += ret;
+     }
+   }
+   
+-  /** Similar to readFully(). Skips bytes in a loop.
++  /**
++   * Similar to readFully(). Skips bytes in a loop.
++   *
+    * @param in The InputStream to skip bytes from
+    * @param len number of bytes to skip.
+    * @throws IOException if it could not skip requested number of bytes 
+    * for any reason (including EOF)
+    */
+-  public static void skipFully( InputStream in, long len ) throws IOException {
+-    while ( len > 0 ) {
+-      long ret = in.skip( len );
+-      if ( ret < 0 ) {
+-        throw new IOException( "Premeture EOF from inputStream");
++  public static void skipFully(InputStream in, long len) throws IOException {
++    while (len > 0) {
++      long ret = in.skip(len);
++      if (ret < 0) {
++        throw new IOException("Premeture EOF from inputStream");
+       }
+       len -= ret;
+     }
+@@ -149,15 +192,16 @@ public class IOUtils {
+   /**
+    * Close the Closeable objects and <b>ignore</b> any {@link IOException} or 
+    * null pointers. Must only be used for cleanup in exception handlers.
++   *
+    * @param log the log to record problems to at debug level. Can be null.
+    * @param closeables the objects to close
+    */
+   public static void cleanup(Log log, java.io.Closeable... closeables) {
+-    for(java.io.Closeable c : closeables) {
++    for (java.io.Closeable c : closeables) {
+       if (c != null) {
+         try {
+           c.close();
+-        } catch(IOException e) {
++        } catch (IOException e) {
+           if (log != null && log.isDebugEnabled()) {
+             log.debug("Exception in closing " + c, e);
+           }
+@@ -169,27 +213,29 @@ public class IOUtils {
+   /**
+    * Closes the stream ignoring {@link IOException}.
+    * Must only be called in cleaning up from exception handlers.
++   *
+    * @param stream the Stream to close
+    */
+-  public static void closeStream( java.io.Closeable stream ) {
++  public static void closeStream(java.io.Closeable stream) {
+     cleanup(null, stream);
+   }
+   
+   /**
+-   * Closes the socket ignoring {@link IOException} 
++   * Closes the socket ignoring {@link IOException}
++   *
+    * @param sock the Socket to close
+    */
+   public static void closeSocket( Socket sock ) {
+-    // avoids try { close() } dance
+-    if ( sock != null ) {
++    if (sock != null) {
+       try {
+        sock.close();
+-      } catch ( IOException ignored ) {
++      } catch (IOException ignored) {
+       }
+     }
+   }
+   
+-  /** /dev/null of OutputStreams.
++  /**
++   * The /dev/null of OutputStreams.
+    */
+   public static class NullOutputStream extends OutputStream {
+     public void write(byte[] b, int off, int len) throws IOException {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/ByteRangeInputStream.java b/src/hdfs/org/apache/hadoop/hdfs/ByteRangeInputStream.java
+new file mode 100644
+index 0000000..614e7f3
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/ByteRangeInputStream.java
+@@ -0,0 +1,152 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs;
++
++import java.io.IOException;
++import java.io.InputStream;
++import java.net.HttpURLConnection;
++import java.net.URL;
++import org.apache.hadoop.fs.FSInputStream;
++
++/**
++ * To support HTTP byte streams, a new connection to an HTTP server needs to be
++ * created each time. This class hides the complexity of those multiple 
++ * connections from the client. Whenever seek() is called, a new connection
++ * is made on the successive read(). The normal input stream functions are 
++ * connected to the currently active input stream. 
++ */
++class ByteRangeInputStream extends FSInputStream {
++  
++  /**
++   * This class wraps a URL to allow easy mocking when testing. The URL class
++   * cannot be easily mocked because it is public.
++   */
++  static class URLOpener {
++    protected URL url;
++  
++    public URLOpener(URL u) {
++      url = u;
++    }
++  
++    public void setURL(URL u) {
++      url = u;
++    }
++  
++    public URL getURL() {
++      return url;
++    }
++  
++    public HttpURLConnection openConnection() throws IOException {
++      return (HttpURLConnection)url.openConnection();
++    }  
++  }
++  
++  enum StreamStatus {
++    NORMAL, SEEK
++  }
++  protected InputStream in;
++  protected URLOpener originalURL;
++  protected URLOpener resolvedURL;
++  protected long startPos = 0;
++  protected long currentPos = 0;
++  protected StreamStatus status = StreamStatus.SEEK;
++
++  ByteRangeInputStream(final URL url) {
++    this(new URLOpener(url), new URLOpener(null));
++  }
++  
++  ByteRangeInputStream(URLOpener o, URLOpener r) {
++    this.originalURL = o;
++    this.resolvedURL = r;
++  }
++  
++  private InputStream getInputStream() throws IOException {
++    if (status != StreamStatus.NORMAL) {
++      if (in != null) {
++        in.close();
++        in = null;
++      }
++      
++      // Use the original url if no resolved url exists, if it
++      // is the first time a request is made.
++      final URLOpener opener =
++        (resolvedURL.getURL() == null) ? originalURL : resolvedURL;
++        
++      final HttpURLConnection connection = opener.openConnection();
++      connection.setRequestMethod("GET");
++      if (startPos != 0) {
++        connection.setRequestProperty("Range", "bytes="+startPos+"-");
++      }
++      connection.connect();
++      in = connection.getInputStream();
++      
++      int respCode = connection.getResponseCode();
++      if (startPos != 0 && respCode != HttpURLConnection.HTTP_PARTIAL) {
++        // We asked for a byte range but did not receive a partial content
++        // response...
++        throw new IOException("HTTP_PARTIAL expected, received " + respCode);
++      } else if (startPos == 0 && respCode != HttpURLConnection.HTTP_OK) {
++        // We asked for all bytes from the beginning but didn't receive a 200
++        // response (none of the other 2xx codes are valid here)
++        throw new IOException("HTTP_OK expected, received " + respCode);
++      }
++      
++      resolvedURL.setURL(connection.getURL());
++      status = StreamStatus.NORMAL;
++    }
++    
++    return in;
++  }
++  
++  public int read() throws IOException {
++    int ret = getInputStream().read();
++    if (ret != -1) {
++     currentPos++;
++    }
++    return ret;
++  }
++  
++  /**
++   * Seek to the given offset from the start of the file.
++   * The next read() will be from that location.  Can't
++   * seek past the end of the file.
++   */
++  public void seek(long pos) throws IOException {
++    if (pos != currentPos) {
++      startPos = pos;
++      currentPos = pos;
++      status = StreamStatus.SEEK;
++    }
++  }
++
++  /**
++   * Return the current offset from the start of the file.
++   */
++  public long getPos() throws IOException {
++    return currentPos;
++  }
++
++  /**
++   * Seeks a different copy of the data.  Returns true if
++   * found a new source, false otherwise.
++   */
++  public boolean seekToNewSource(long targetPos) throws IOException {
++    return false;
++  }
++}
+\ No newline at end of file
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index 5662d6a..42d17e3 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -40,7 +40,6 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.ContentSummary;
+ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+-import org.apache.hadoop.fs.FSInputStream;
+ import org.apache.hadoop.fs.FileChecksum;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -50,7 +49,6 @@ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.namenode.JspHelper;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+-import org.apache.hadoop.hdfs.server.namenode.StreamFile;
+ import org.apache.hadoop.hdfs.tools.DelegationTokenFetcher;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.RemoteException;
+@@ -67,6 +65,7 @@ import org.xml.sax.SAXException;
+ import org.xml.sax.XMLReader;
+ import org.xml.sax.helpers.DefaultHandler;
+ import org.xml.sax.helpers.XMLReaderFactory;
++import org.apache.hadoop.hdfs.ByteRangeInputStream;
+ 
+ /** An implementation of a protocol for accessing filesystems over HTTP.
+  * The following implementation provides a limited, read-only interface
+@@ -228,12 +227,26 @@ public class HftpFileSystem extends FileSystem {
+   }
+ 
+   /**
+-   * Open an HTTP connection to the namenode to read file data and metadata.
+-   * @param path The path component of the URL
+-   * @param query The query component of the URL
++   * Return a URL pointing to given path on the namenode.
++   *
++   * @param p path to obtain the URL for
++   * @return namenode URL referring to the given path
++   * @throws IOException on error constructing the URL
+    */
+-  protected HttpURLConnection openConnection(String path, String query)
+-      throws IOException {
++  URL getNamenodeFileURL(Path p) throws IOException {
++    return getNamenodeURL("/data" + p.toUri().getPath(),
++                          "ugi=" + getUgiParameter());
++  }
++
++  /**
++   * Return a URL pointing to given path on the namenode.
++   *
++   * @param path to obtain the URL for
++   * @param query string to append to the path
++   * @return namenode URL referring to the given path
++   * @throws IOException on error constructing the URL
++   */
++  URL getNamenodeURL(String path, String query) throws IOException {
+     try {
+       query = updateQuery(query);
+       final URL url = new URI("http", null, nnAddr.getHostName(),
+@@ -241,12 +254,26 @@ public class HftpFileSystem extends FileSystem {
+       if (LOG.isTraceEnabled()) {
+         LOG.trace("url=" + url);
+       }
+-      return (HttpURLConnection)url.openConnection();
++      return url;
+     } catch (URISyntaxException e) {
+-      throw (IOException)new IOException().initCause(e);
++      throw new IOException(e);
+     }
+   }
+-  
++
++  /**
++   * Open an HTTP connection to the namenode to read file data and metadata.
++   * @param path The path component of the URL
++   * @param query The query component of the URL
++   */
++  protected HttpURLConnection openConnection(String path, String query)
++      throws IOException {
++    final URL url = getNamenodeURL(path, query);
++    HttpURLConnection connection = (HttpURLConnection)url.openConnection();
++    connection.setRequestMethod("GET");
++    connection.connect();
++    return connection;
++  }
++
+   protected String updateQuery(String query) throws IOException {
+     String tokenString = null;
+     if (UserGroupInformation.isSecurityEnabled()) {
+@@ -261,64 +288,9 @@ public class HftpFileSystem extends FileSystem {
+   }
+ 
+   @Override
+-  public FSDataInputStream open(Path f, int buffersize) throws IOException {
+-    final HttpURLConnection connection = openConnection(
+-        "/data" + f.toUri().getPath(), "ugi=" + getUgiParameter());
+-    final InputStream in;
+-    try {
+-      connection.setRequestMethod("GET");
+-      connection.connect();
+-      in = connection.getInputStream();
+-    } catch(IOException ioe) {
+-      final int code = connection.getResponseCode();
+-      final String s = connection.getResponseMessage();
+-      throw s == null? ioe:
+-          new IOException(s + " (error code=" + code + ")", ioe);
+-    }
+-
+-    final String cl = connection.getHeaderField(StreamFile.CONTENT_LENGTH);
+-    final long filelength = cl == null? -1: Long.parseLong(cl);
+-    if (LOG.isDebugEnabled()) {
+-      LOG.debug("filelength = " + filelength);
+-    }
+-
+-    return new FSDataInputStream(new FSInputStream() {
+-        long currentPos = 0;
+-
+-        private void update(final boolean isEOF, final int n
+-            ) throws IOException {
+-          if (!isEOF) {
+-            currentPos += n;
+-          } else if (currentPos < filelength) {
+-            throw new IOException("Got EOF but byteread = " + currentPos
+-                + " < filelength = " + filelength);
+-          }
+-        }
+-        public int read() throws IOException {
+-          final int b = in.read();
+-          update(b == -1, 1);
+-          return b;
+-        }
+-        public int read(byte[] b, int off, int len) throws IOException {
+-          final int n = in.read(b, off, len);
+-          update(n == -1, n);
+-          return n;
+-        }
+-
+-        public void close() throws IOException {
+-          in.close();
+-        }
+-
+-        public void seek(long pos) throws IOException {
+-          throw new IOException("Can't seek!");
+-        }
+-        public long getPos() throws IOException {
+-          throw new IOException("Position unknown!");
+-        }
+-        public boolean seekToNewSource(long targetPos) throws IOException {
+-          return false;
+-        }
+-      });
++  public FSDataInputStream open(Path p, int buffersize) throws IOException {
++    URL u = getNamenodeFileURL(p);
++    return new FSDataInputStream(new ByteRangeInputStream(u));
+   }
+ 
+   /** Class to parse and store a listing reply from the server. */
+@@ -368,8 +340,6 @@ public class HftpFileSystem extends FileSystem {
+         xr.setContentHandler(this);
+         HttpURLConnection connection = openConnection("/listPaths" + path,
+             "ugi=" + getUgiParameter() + (recur? "&recursive=yes" : ""));
+-        connection.setRequestMethod("GET");
+-        connection.connect();
+ 
+         InputStream resp = connection.getInputStream();
+         xr.parse(new InputSource(resp));
+@@ -437,10 +407,6 @@ public class HftpFileSystem extends FileSystem {
+       try {
+         final XMLReader xr = XMLReaderFactory.createXMLReader();
+         xr.setContentHandler(this);
+-
+-        connection.setRequestMethod("GET");
+-        connection.connect();
+-
+         xr.parse(new InputSource(connection.getInputStream()));
+       } catch(SAXException e) {
+         final Exception embedded = e.getException();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+index a7f8a29..bf95f60 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+@@ -114,7 +114,7 @@ public class FileDataServlet extends DfsServlet {
+                 request.getParameter(JspHelper.DELEGATION_PARAMETER_NAME);
+               
+               HdfsFileStatus info = nn.getFileInfo(path);
+-              if ((info != null) && !info.isDir()) {
++              if (info != null && !info.isDir()) {
+                 try {
+                   response.sendRedirect(createUri(path, info, ugi, nn,
+                         request, delegationToken).toURL().toString());
+@@ -129,13 +129,11 @@ public class FileDataServlet extends DfsServlet {
+               return null;
+             }
+           });
+-
+     } catch (IOException e) {
+       response.sendError(400, e.getMessage());
+     } catch (InterruptedException e) {
+       response.sendError(400, e.getMessage());
+     }
+   }
+-
+ }
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+index b8a2a65..671022b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+@@ -21,16 +21,22 @@ import java.io.IOException;
+ import java.io.OutputStream;
+ import java.io.PrintWriter;
+ import java.net.InetSocketAddress;
++import java.util.Enumeration;
++import java.util.List;
+ 
+ import javax.servlet.ServletException;
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+ 
++import org.apache.hadoop.fs.FSInputStream;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DFSClient;
++import org.apache.hadoop.hdfs.DFSClient.DFSInputStream;
+ import org.apache.hadoop.hdfs.server.datanode.DataNode;
++import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.security.UserGroupInformation;
+-import org.apache.hadoop.conf.*;
++
++import org.mortbay.jetty.InclusiveByteRange;
+ 
+ public class StreamFile extends DfsServlet {
+   /** for java.io.Serializable */
+@@ -46,7 +52,7 @@ public class StreamFile extends DfsServlet {
+     }
+   }
+ 
+-  /** getting a client for connecting to dfs */
++  /* Return a DFS client to use to make the given HTTP request */
+   protected DFSClient getDFSClient(HttpServletRequest request)
+       throws IOException, InterruptedException {
+ 
+@@ -57,6 +63,7 @@ public class StreamFile extends DfsServlet {
+     return JspHelper.getDFSClient(ugi, nameNodeAddr, conf);
+   }
+   
++  @SuppressWarnings("unchecked")
+   public void doGet(HttpServletRequest request, HttpServletResponse response)
+     throws ServletException, IOException {
+     String filename = request.getParameter("filename");
+@@ -74,31 +81,81 @@ public class StreamFile extends DfsServlet {
+       response.sendError(400, e.getMessage());
+       return;
+     }
+-    
+-    final DFSClient.DFSInputStream in = dfs.open(filename);
++
++    Enumeration<String> reqRanges = request.getHeaders("Range");
++    if (reqRanges != null && !reqRanges.hasMoreElements()) {
++      reqRanges = null;
++    }
++
++    final DFSInputStream in = dfs.open(filename);
++    final long fileLen = in.getFileLength();
++
+     OutputStream os = response.getOutputStream();
+-    response.setHeader("Content-Disposition", "attachment; filename=\"" + 
+-                       filename + "\"");
+-    response.setContentType("application/octet-stream");
+-    response.setHeader(CONTENT_LENGTH, "" + in.getFileLength());
+-    byte buf[] = new byte[4096];
++
+     try {
+-      int bytesRead;
+-      while ((bytesRead = in.read(buf)) != -1) {
+-        os.write(buf, 0, bytesRead);
++      if (reqRanges != null) {
++        List<InclusiveByteRange> ranges =
++          InclusiveByteRange.satisfiableRanges(reqRanges, fileLen);
++        StreamFile.sendPartialData(in, os, response, fileLen, ranges, true);
++      } else {
++        // No ranges, so send entire file
++        response.setHeader("Content-Disposition", "attachment; filename=\"" + 
++                           filename + "\"");
++        response.setContentType("application/octet-stream");
++        response.setHeader(CONTENT_LENGTH, "" + in.getFileLength());
++        StreamFile.copyFromOffset(in, os, 0L, fileLen, true);
+       }
+-    } catch(IOException e) {
++    } catch (IOException e) {
+       if (LOG.isDebugEnabled()) {
+         LOG.debug("response.isCommitted()=" + response.isCommitted(), e);
+       }
+       throw e;
+     } finally {
+-      try {
+-        in.close();
+-        os.close();
+-      } finally {
+-        dfs.close();
+-      }
++      dfs.close();
++    }
++  }
++
++  /**
++   * Send a partial content response with the given range. If there are
++   * no satisfiable ranges, or if multiple ranges are requested, which
++   * is unsupported, respond with range not satisfiable.
++   *
++   * @param in stream to read from
++   * @param out stream to write to
++   * @param response http response to use
++   * @param contentLength for the response header
++   * @param ranges to write to respond with
++   * @param close whether to close the streams
++   * @throws IOException on error sending the response
++   */
++  static void sendPartialData(FSInputStream in,
++                              OutputStream out,
++                              HttpServletResponse response,
++                              long contentLength,
++                              List<InclusiveByteRange> ranges,
++                              boolean close)
++      throws IOException {
++    if (ranges == null || ranges.size() != 1) {
++      response.setContentLength(0);
++      response.setStatus(HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
++      response.setHeader("Content-Range",
++                InclusiveByteRange.to416HeaderRangeString(contentLength));
++    } else {
++      InclusiveByteRange singleSatisfiableRange = ranges.get(0);
++      long singleLength = singleSatisfiableRange.getSize(contentLength);
++      response.setStatus(HttpServletResponse.SC_PARTIAL_CONTENT);
++      response.setHeader("Content-Range", 
++        singleSatisfiableRange.toHeaderRangeString(contentLength));
++      copyFromOffset(in, out,
++                     singleSatisfiableRange.getFirst(contentLength),
++                     singleLength, close);
+     }
+   }
++
++  /* Copy count bytes at the given offset from one stream to another */
++  static void copyFromOffset(FSInputStream in, OutputStream out, long offset,
++      long count, boolean close) throws IOException {
++    in.seek(offset);
++    IOUtils.copyBytes(in, out, count, close);
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestByteRangeInputStream.java b/src/test/org/apache/hadoop/hdfs/TestByteRangeInputStream.java
+new file mode 100644
+index 0000000..02c79c0
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/TestByteRangeInputStream.java
+@@ -0,0 +1,183 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs;
++
++import java.io.ByteArrayInputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.net.HttpURLConnection;
++import java.net.MalformedURLException;
++import java.net.URL;
++
++import org.apache.hadoop.hdfs.ByteRangeInputStream;
++import org.apache.hadoop.hdfs.ByteRangeInputStream.URLOpener;
++
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++class MockHttpURLConnection extends HttpURLConnection {
++  MockURL m;
++  
++  public MockHttpURLConnection(URL u, MockURL m) {
++    super(u); 
++    this.m = m;
++  }
++  
++  public boolean usingProxy(){
++    return false;
++  }
++  
++  public void disconnect() {
++  }
++  
++  public void connect() throws IOException {
++    m.setMsg("Connect: "+url+", Range: "+getRequestProperty("Range"));
++  }
++  
++  public InputStream getInputStream() throws IOException {
++    return new ByteArrayInputStream("asdf".getBytes());
++  } 
++
++  public URL getURL() {
++    URL u = null;
++    try {
++      u = new URL("http://resolvedurl/");
++    } catch (Exception e) {
++      System.out.println(e.getMessage());
++    }
++    return u;
++  }
++  
++  public int getResponseCode() {
++    if (m.responseCode != -1) {
++      return m.responseCode;
++    } else {
++      if (getRequestProperty("Range") == null) {
++        return 200;
++      } else {
++        return 206;
++      }
++    }
++  }
++  
++}
++
++class MockURL extends URLOpener {
++  String msg;
++  public int responseCode = -1;
++  
++  public MockURL(URL u) {
++    super(u);
++  }
++
++  public MockURL(String s) throws MalformedURLException {
++    this(new URL(s));
++  }
++
++  public HttpURLConnection openConnection() throws IOException {
++    return new MockHttpURLConnection(url, this);
++  }    
++
++  public void setMsg(String s) {
++    msg = s;
++  }
++  
++  public String getMsg() {
++    return msg;
++  }
++}
++
++public class TestByteRangeInputStream {
++
++  @Test
++  public void testByteRange() throws IOException, InterruptedException {
++    MockURL o = new MockURL("http://test/");
++    MockURL r =  new MockURL((URL)null);
++    ByteRangeInputStream is = new ByteRangeInputStream(o, r);
++
++    assertEquals("getPos wrong", 0, is.getPos());
++
++    is.read();
++
++    assertEquals("Initial call made incorrectly", 
++                 "Connect: http://test/, Range: null",
++                 o.getMsg());
++
++    assertEquals("getPos should be 1 after reading one byte", 1, is.getPos());
++
++    o.setMsg(null);
++
++    is.read();
++
++    assertEquals("getPos should be 2 after reading two bytes", 2, is.getPos());
++
++    assertNull("No additional connections should have been made (no seek)",
++               o.getMsg());
++
++    r.setMsg(null);
++    r.setURL(new URL("http://resolvedurl/"));
++    
++    is.seek(100);
++    is.read();
++
++    assertEquals("Seek to 100 bytes made incorrectly", 
++                 "Connect: http://resolvedurl/, Range: bytes=100-",
++                 r.getMsg());
++
++    assertEquals("getPos should be 101 after reading one byte", 101, is.getPos());
++
++    r.setMsg(null);
++
++    is.seek(101);
++    is.read();
++
++    assertNull("Seek to 101 should not result in another request", r.getMsg());
++
++    r.setMsg(null);
++    is.seek(2500);
++    is.read();
++
++    assertEquals("Seek to 2500 bytes made incorrectly", 
++                 "Connect: http://resolvedurl/, Range: bytes=2500-",
++                 r.getMsg());
++
++    r.responseCode = 200;
++    is.seek(500);
++    
++    try {
++      is.read();
++      fail("Exception should be thrown when 200 response is given "
++           + "but 206 is expected");
++    } catch (IOException e) {
++      assertEquals("Should fail because incorrect response code was sent",
++                   "HTTP_PARTIAL expected, received 200", e.getMessage());
++    }
++
++    r.responseCode = 206;
++    is.seek(0);
++
++    try {
++      is.read();
++      fail("Exception should be thrown when 206 response is given "
++           + "but 200 is expected");
++    } catch (IOException e) {
++      assertEquals("Should fail because incorrect response code was sent",
++                   "HTTP_OK expected, received 206", e.getMessage());
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java b/src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java
+new file mode 100644
+index 0000000..99484cb
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java
+@@ -0,0 +1,125 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs;
++
++import java.io.IOException;
++import java.util.Random;
++
++import org.junit.Test;
++import org.junit.BeforeClass;
++import org.junit.AfterClass;
++import static org.junit.Assert.*;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataInputStream;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++
++/**
++ * Unittest for HftpFileSystem.
++ */
++public class TestHftpFileSystem {
++  private static final Random RAN = new Random();
++  private static final Path TEST_FILE = new Path("/testfile1");
++  
++  private static Configuration config = null;
++  private static MiniDFSCluster cluster = null;
++  private static FileSystem hdfs = null;
++  private static HftpFileSystem hftpFs = null;
++    
++  /**
++   * Setup hadoop mini-cluster for test.
++   */
++  @BeforeClass
++  public static void setUp() throws IOException {
++    final long seed = RAN.nextLong();
++    System.out.println("seed=" + seed);
++    RAN.setSeed(seed);
++
++    config = new Configuration();
++    config.set("slave.host.name", "localhost");
++
++    cluster = new MiniDFSCluster(config, 2, true, null);
++    hdfs = cluster.getFileSystem();
++    final String hftpuri = "hftp://" + config.get("dfs.http.address"); 
++    hftpFs = (HftpFileSystem) new Path(hftpuri).getFileSystem(config);
++  }
++  
++  /**
++   * Shutdown the hadoop mini-cluster.
++   */
++  @AfterClass
++  public static void tearDown() throws IOException {
++    hdfs.close();
++    hftpFs.close();
++    cluster.shutdown();
++  }
++  
++  /**
++   * Tests getPos() functionality.
++   */
++  @Test
++  public void testGetPos() throws Exception {
++    // Write a test file.
++    FSDataOutputStream out = hdfs.create(TEST_FILE, true);
++    out.writeBytes("0123456789");
++    out.close();
++    
++    FSDataInputStream in = hftpFs.open(TEST_FILE);
++    
++    // Test read().
++    for (int i = 0; i < 5; ++i) {
++      assertEquals(i, in.getPos());
++      in.read();
++    }
++    
++    // Test read(b, off, len).
++    assertEquals(5, in.getPos());
++    byte[] buffer = new byte[10];
++    assertEquals(2, in.read(buffer, 0, 2));
++    assertEquals(7, in.getPos());
++    
++    // Test read(b).
++    int bytesRead = in.read(buffer);
++    assertEquals(7 + bytesRead, in.getPos());
++    
++    // Test EOF.
++    for (int i = 0; i < 100; ++i) {
++      in.read();
++    }
++    assertEquals(10, in.getPos());
++    in.close();
++  }
++  
++  /**
++   * Tests seek().
++   */
++  @Test
++  public void testSeek() throws Exception {
++    // Write a test file.
++    FSDataOutputStream out = hdfs.create(TEST_FILE, true);
++    out.writeBytes("0123456789");
++    out.close();
++    
++    FSDataInputStream in = hftpFs.open(TEST_FILE);
++    in.seek(7);
++    assertEquals('7', in.read());
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStreamFile.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStreamFile.java
+new file mode 100644
+index 0000000..8cbd5c8
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStreamFile.java
+@@ -0,0 +1,281 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++
++import java.io.ByteArrayOutputStream;
++
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.Enumeration;
++import java.util.List;
++import java.util.Vector;
++import javax.servlet.http.HttpServletResponse;
++import org.apache.hadoop.fs.FSInputStream;
++import org.apache.hadoop.hdfs.server.namenode.StreamFile;
++import org.mortbay.jetty.InclusiveByteRange;
++
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++/*
++  Mock input stream class that always outputs the current position of the stream
++*/
++class MockFSInputStream extends FSInputStream {
++  long currentPos = 0;
++  public int read() throws IOException {
++    return (int)(currentPos++);
++  }
++
++  public void close() throws IOException {
++  }
++
++  public void seek(long pos) throws IOException {
++    currentPos = pos;
++  }
++  
++  public long getPos() throws IOException {
++    return currentPos;
++  }
++  
++  public boolean seekToNewSource(long targetPos) throws IOException {
++    return false;
++  }
++}
++
++
++class MockHttpServletResponse implements HttpServletResponse {
++
++  private int status = -1;
++  
++  public MockHttpServletResponse() {
++  }
++  
++  public int getStatus() {
++    return status;
++  }
++  
++  
++  public void setStatus(int sc) {
++    status = sc;
++  }
++  
++  public void setStatus(int sc, java.lang.String sm) {
++  }
++  
++  public void addIntHeader(String name, int value) {
++  }
++
++  public void setIntHeader(String name, int value) { 
++  }
++  
++  public void addHeader(String name, String value) {
++  }
++
++  public void setHeader(String name, String value) {
++  }
++  
++  public void addDateHeader(java.lang.String name, long date) {
++  }
++  
++  public void setDateHeader(java.lang.String name, long date) {
++  }
++
++  public void sendRedirect(java.lang.String location) { 
++  }
++  
++  public void sendError(int e) {
++  }
++  
++  public void sendError(int a, java.lang.String b) {
++  }
++  
++  public String encodeRedirectUrl(java.lang.String a) {
++    return null;
++  }
++  
++  public String encodeUrl(java.lang.String url) {
++    return null;
++  }
++  
++  public String encodeRedirectURL(java.lang.String url) {
++    return null;
++  }
++  
++  public String encodeURL(java.lang.String url) {
++    return null;
++  }
++  
++  public boolean containsHeader(java.lang.String name) {
++    return false;
++  }
++  
++  public void addCookie(javax.servlet.http.Cookie cookie) {
++  }
++  
++  public java.util.Locale getLocale() {
++    return null;
++  }
++  
++  public void setLocale(java.util.Locale loc) {
++  }
++  
++  public void reset() {
++  }
++  
++  public boolean isCommitted() {
++    return false;
++  }
++  
++  public void resetBuffer() {
++  }
++  
++  public void flushBuffer() {
++  }
++  
++  public int getBufferSize() {
++    return 0;
++  }
++  
++  public void setBufferSize(int size) {
++  }
++  
++  public void setContentType(java.lang.String type) {
++  }
++  
++  public void setContentLength(int len) {
++  }
++  
++  public void setCharacterEncoding(java.lang.String charset) {
++  }
++  
++  public java.io.PrintWriter getWriter() {
++    return null;
++  }
++  
++  public javax.servlet.ServletOutputStream getOutputStream() {
++    return null;
++  }
++  
++  public java.lang.String getContentType() {
++    return null;
++  }
++  
++  public java.lang.String getCharacterEncoding() {
++    return null;
++  }
++}
++
++
++public class TestStreamFile {
++  
++  // return an array matching the output of mockfsinputstream
++  private static byte[] getOutputArray(int start, int count) {
++    byte[] a = new byte[count];
++    
++    for (int i = 0; i < count; i++) {
++      a[i] = (byte)(start+i);
++    }
++
++    return a;
++  }
++  
++  @Test
++  public void testWriteTo() throws IOException, InterruptedException {
++
++    FSInputStream fsin = new MockFSInputStream();
++    ByteArrayOutputStream os = new ByteArrayOutputStream();
++
++    // new int[]{s_1, c_1, s_2, c_2, ..., s_n, c_n} means to test
++    // reading c_i bytes starting at s_i
++    int[] pairs = new int[]{ 0, 10000,
++                             50, 100,
++                             50, 6000,
++                             1000, 2000,
++                             0, 1,
++                             0, 0,
++                             5000, 0,
++                            };
++                            
++    assertTrue("Pairs array must be even", pairs.length % 2 == 0);
++    
++    for (int i = 0; i < pairs.length; i+=2) {
++      StreamFile.copyFromOffset(fsin, os, pairs[i], pairs[i+1], false);
++      assertArrayEquals("Reading " + pairs[i+1]
++                        + " bytes from offset " + pairs[i],
++                        getOutputArray(pairs[i], pairs[i+1]),
++                        os.toByteArray());
++      os.reset();
++    }
++    
++  }
++
++  @SuppressWarnings("unchecked")
++  private List<InclusiveByteRange> strToRanges(String s, int contentLength) {
++    List<String> l = Arrays.asList(new String[]{"bytes="+s});
++    Enumeration<String> e = (new Vector<String>(l)).elements();
++    return InclusiveByteRange.satisfiableRanges(e, contentLength);
++  }
++  
++  @Test
++  public void testSendPartialData() throws IOException, InterruptedException {
++    FSInputStream in = new MockFSInputStream();
++    ByteArrayOutputStream os = new ByteArrayOutputStream();
++
++    // test if multiple ranges, then 416
++    { 
++      List<InclusiveByteRange> ranges = strToRanges("0-,10-300", 500);
++      MockHttpServletResponse response = new MockHttpServletResponse();
++      StreamFile.sendPartialData(in, os, response, 500, ranges, false);
++      assertEquals("Multiple ranges should result in a 416 error",
++                   416, response.getStatus());
++    }
++                              
++    // test if no ranges, then 416
++    { 
++      os.reset();
++      MockHttpServletResponse response = new MockHttpServletResponse();
++      StreamFile.sendPartialData(in, os, response, 500, null, false);
++      assertEquals("No ranges should result in a 416 error",
++                   416, response.getStatus());
++    }
++
++    // test if invalid single range (out of bounds), then 416
++    { 
++      List<InclusiveByteRange> ranges = strToRanges("600-800", 500);
++      MockHttpServletResponse response = new MockHttpServletResponse();
++      StreamFile.sendPartialData(in, os, response, 500, ranges, false);
++      assertEquals("Single (but invalid) range should result in a 416",
++                   416, response.getStatus());
++    }
++
++      
++    // test if one (valid) range, then 206
++    { 
++      List<InclusiveByteRange> ranges = strToRanges("100-300", 500);
++      MockHttpServletResponse response = new MockHttpServletResponse();
++      StreamFile.sendPartialData(in, os, response, 500, ranges, false);
++      assertEquals("Single (valid) range should result in a 206",
++                   206, response.getStatus());
++      assertArrayEquals("Byte range from 100-300",
++                        getOutputArray(100, 201),
++                        os.toByteArray());
++    }
++    
++  }
++}
+-- 
+1.7.0.4
+

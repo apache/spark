@@ -1,0 +1,34 @@
+From c5645ced5c2b32c0657ba3ca60643165c28173ff Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 14 Jan 2011 00:42:43 -0800
+Subject: [PATCH 0789/1179] MAPREDUCE-1085. For tasks, "ulimit -v -1" is being run when user doesn't specify mapred.child.ulimit
+
+Reason: spurious errors in logs
+Author: Todd Lipcon
+Ref: CDH-2560
+---
+ .../org/apache/hadoop/mapred/TaskRunner.java       |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index 911d29f..ea75a8b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -317,8 +317,13 @@ abstract class TaskRunner extends Thread {
+    * @return
+    */
+   private List<String> getVMSetupCmd() {
+-    String[] ulimitCmd = Shell.getUlimitMemoryCommand(getChildUlimit(conf));
++
++    int ulimit = getChildUlimit(conf);
++    if (ulimit <= 0) {
++      return null;
++    }
+     List<String> setup = null;
++    String[] ulimitCmd = Shell.getUlimitMemoryCommand(ulimit);
+     if (ulimitCmd != null) {
+       setup = new ArrayList<String>();
+       for (String arg : ulimitCmd) {
+-- 
+1.7.0.4
+

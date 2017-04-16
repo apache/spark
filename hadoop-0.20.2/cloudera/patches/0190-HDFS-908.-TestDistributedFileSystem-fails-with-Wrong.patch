@@ -1,0 +1,47 @@
+From 47c404e0cf10ceb31336d2a77d53e0a971348102 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:37:37 -0800
+Subject: [PATCH 0190/1179] HDFS-908. TestDistributedFileSystem fails with Wrong FS on weird hosts
+
+Description: On the same host where I experienced <a href="http://issues.apache.org/jira/browse/HDFS-874" title="TestHDFSFileContextMainOperations fails on weirdly configured DNS hosts">HDFS-874</a>, I also experience this failure for TestDistributedFileSystem:
+
+<p>Testcase: testFileChecksum took 0.492 sec<br/>
+  Caused an ERROR<br/>
+Wrong FS: hftp://localhost.localdomain:59782/filechecksum/foo0, expected: hftp://127.0.0.1:59782<br/>
+java.lang.IllegalArgumentException: Wrong FS: hftp://localhost.localdomain:59782/filechecksum/foo0, expected: hftp://127.0.0.1:59782<br/>
+  at org.apache.hadoop.fs.FileSystem.checkPath(FileSystem.java:310)<br/>
+  at org.apache.hadoop.fs.FileSystem.makeQualified(FileSystem.java:222)<br/>
+  at org.apache.hadoop.hdfs.HftpFileSystem.getFileChecksum(HftpFileSystem.java:318)<br/>
+  at org.apache.hadoop.hdfs.TestDistributedFileSystem.testFileChecksum(TestDistributedFileSystem.java:166)</p>
+
+<p>Doesn't appear to occur on trunk or branch-0.21.</p>
+Reason: bugfix
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ .../hadoop/hdfs/TestDistributedFileSystem.java     |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java b/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
+index dd9767b..764b104 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
+@@ -130,9 +130,14 @@ public class TestDistributedFileSystem extends junit.framework.TestCase {
+ 
+     final MiniDFSCluster cluster = new MiniDFSCluster(conf, 2, true, null);
+     final FileSystem hdfs = cluster.getFileSystem();
+-    final String hftpuri = "hftp://" + conf.get("dfs.http.address");
++
++    final String hftpuri = "hftp://127.0.0.1:" +
++      cluster.getNameNode().getHttpAddress().getPort();
++
+     System.out.println("hftpuri=" + hftpuri);
+     final FileSystem hftp = new Path(hftpuri).getFileSystem(conf);
++    System.out.println("hftpuri back=" + hftp.getUri());
++    assertEquals(hftp.getUri().toString(), hftpuri.toString());
+ 
+     final String dir = "/filechecksum";
+     final int block_size = 1024;
+-- 
+1.7.0.4
+

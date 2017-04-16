@@ -1,0 +1,583 @@
+From 11d842c61eb63c156e1c3f753d795868bbd2fa0a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 23 Sep 2010 13:03:53 -0700
+Subject: [PATCH 0706/1179] HADOOP-6815. refreshSuperUserGroupsConfiguration should use server side configuration for the refresh
+
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/security/Groups.java    |    4 +
+ .../security/RefreshUserMappingsProtocol.java      |    5 +-
+ .../hadoop/security/authorize/ProxyUsers.java      |   27 +++--
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    8 +-
+ .../org/apache/hadoop/hdfs/tools/DFSAdmin.java     |    4 +-
+ .../org/apache/hadoop/mapred/JobTracker.java       |    8 +-
+ .../org/apache/hadoop/mapred/tools/MRAdmin.java    |    4 +-
+ .../security/TestDelegationTokenForProxyUser.java  |    1 +
+ .../server/namenode/NNThroughputBenchmark.java     |    2 +-
+ .../hadoop/security/TestDoAsEffectiveUser.java     |   10 ++
+ .../TestMapredGroupMappingServiceRefresh.java      |  116 ++++++++++++++++++++
+ .../hadoop/security/TestRefreshUserMappings.java   |   52 ++++++++-
+ 12 files changed, 209 insertions(+), 32 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/Groups.java b/src/core/org/apache/hadoop/security/Groups.java
+index 3860049..386d711 100644
+--- a/src/core/org/apache/hadoop/security/Groups.java
++++ b/src/core/org/apache/hadoop/security/Groups.java
+@@ -114,6 +114,10 @@ public class Groups {
+    * Get the groups being used to map user-to-groups.
+    * @return the groups being used to map user-to-groups.
+    */
++  public static Groups getUserToGroupsMappingService() {
++    return getUserToGroupsMappingService(new Configuration()); 
++  }
++
+   public static Groups getUserToGroupsMappingService(Configuration conf) {
+     if(GROUPS == null) {
+       LOG.debug(" Creating new Groups object");
+diff --git a/src/core/org/apache/hadoop/security/RefreshUserMappingsProtocol.java b/src/core/org/apache/hadoop/security/RefreshUserMappingsProtocol.java
+index 902f759..c794061 100644
+--- a/src/core/org/apache/hadoop/security/RefreshUserMappingsProtocol.java
++++ b/src/core/org/apache/hadoop/security/RefreshUserMappingsProtocol.java
+@@ -41,13 +41,12 @@ public interface RefreshUserMappingsProtocol extends VersionedProtocol {
+    * @param conf
+    * @throws IOException
+    */
+-  public void refreshUserToGroupsMappings(Configuration conf) throws IOException;
++  public void refreshUserToGroupsMappings() throws IOException;
+   
+   /**
+    * Refresh superuser proxy group list
+-   * @param conf
+    * @throws IOException
+    */
+-  public void refreshSuperUserGroupsConfiguration(Configuration conf) 
++  public void refreshSuperUserGroupsConfiguration() 
+   throws IOException;
+ }
+diff --git a/src/core/org/apache/hadoop/security/authorize/ProxyUsers.java b/src/core/org/apache/hadoop/security/authorize/ProxyUsers.java
+index 0dd8a42..d7b3d1d 100644
+--- a/src/core/org/apache/hadoop/security/authorize/ProxyUsers.java
++++ b/src/core/org/apache/hadoop/security/authorize/ProxyUsers.java
+@@ -34,7 +34,7 @@ public class ProxyUsers {
+   public static final String CONF_GROUPS = ".groups";
+   public static final String CONF_HADOOP_PROXYUSER = "hadoop.proxyuser.";
+   public static final String CONF_HADOOP_PROXYUSER_RE = "hadoop\\.proxyuser\\.";
+-  private static Configuration conf=null;
++  private static boolean init = false;
+   // list of groups and hosts per proxyuser
+   private static Map<String, Collection<String>> proxyGroups = 
+     new HashMap<String, Collection<String>>();
+@@ -44,13 +44,20 @@ public class ProxyUsers {
+   /**
+    * reread the conf and get new values for "hadoop.proxyuser.*.groups/hosts"
+    */
+-  public static synchronized void refreshSuperUserGroupsConfiguration(Configuration cn) {
+-    conf = cn;
+-    
++  public static void refreshSuperUserGroupsConfiguration() {
++    //load server side configuration;
++    refreshSuperUserGroupsConfiguration(new Configuration());
++  }
++
++  /**
++   * refresh configuration
++   * @param conf
++   */
++  public static synchronized void refreshSuperUserGroupsConfiguration(Configuration conf) {
+     // remove alle existing stuff
+     proxyGroups.clear();
+     proxyHosts.clear();
+-    
++
+     // get all the new keys for groups
+     String regex = CONF_HADOOP_PROXYUSER_RE+"[^.]*\\"+CONF_GROUPS;
+     Map<String,String> allMatchKeys = conf.getValByRegex(regex);
+@@ -66,6 +73,8 @@ public class ProxyUsers {
+       proxyHosts.put(entry.getKey(),
+           StringUtils.getStringCollection(entry.getValue()));
+     }
++    
++    init = true;
+   }
+ 
+   /**
+@@ -99,8 +108,8 @@ public class ProxyUsers {
+   public static synchronized void authorize(UserGroupInformation user, String remoteAddress,
+       Configuration newConf) throws AuthorizationException {
+     
+-    if(conf == null) {
+-      refreshSuperUserGroupsConfiguration(newConf); 
++    if(!init) {
++      refreshSuperUserGroupsConfiguration(); 
+     }
+ 
+     if (user.getRealUser() == null) {
+@@ -113,7 +122,7 @@ public class ProxyUsers {
+     Collection<String> allowedUserGroups = proxyGroups.get(
+         getProxySuperuserGroupConfKey(superUser.getShortUserName()));
+     
+-    if (!allowedUserGroups.isEmpty()) {
++    if (allowedUserGroups != null && !allowedUserGroups.isEmpty()) {
+       for (String group : user.getGroupNames()) {
+         if (allowedUserGroups.contains(group)) {
+           groupAuthorized = true;
+@@ -130,7 +139,7 @@ public class ProxyUsers {
+     Collection<String> ipList = proxyHosts.get(
+         getProxySuperuserIpConfKey(superUser.getShortUserName()));
+     
+-    if (!ipList.isEmpty()) {
++    if (ipList != null && !ipList.isEmpty()) {
+       for (String allowedHost : ipList) {
+         InetAddress hostAddr;
+         try {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 879f40a..d742ed9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -1069,17 +1069,17 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   }
+ 
+   @Override
+-  public void refreshUserToGroupsMappings(Configuration conf) throws IOException {
++  public void refreshUserToGroupsMappings() throws IOException {
+     LOG.info("Refreshing all user-to-groups mappings. Requested by user: " + 
+              UserGroupInformation.getCurrentUser().getShortUserName());
+-    Groups.getUserToGroupsMappingService(conf).refresh();
++    Groups.getUserToGroupsMappingService().refresh();
+   }
+   
+   @Override
+-  public void refreshSuperUserGroupsConfiguration(Configuration conf) {
++  public void refreshSuperUserGroupsConfiguration() {
+     LOG.info("Refreshing SuperUser proxy group mapping list ");
+     
+-    ProxyUsers.refreshSuperUserGroupsConfiguration(conf);
++    ProxyUsers.refreshSuperUserGroupsConfiguration();
+   }
+ 
+   private static void printUsage() {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
+index 2765a7f..c3bb164 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
+@@ -680,7 +680,7 @@ public class DFSAdmin extends FsShell {
+                                              RefreshUserMappingsProtocol.class));
+     
+     // Refresh the user-to-groups mappings
+-    refreshProtocol.refreshUserToGroupsMappings(conf);
++    refreshProtocol.refreshUserToGroupsMappings();
+     
+     return 0;
+   }
+@@ -710,7 +710,7 @@ public class DFSAdmin extends FsShell {
+                        RefreshUserMappingsProtocol.class));
+     
+     // Refresh the user-to-groups mappings
+-    refreshProtocol.refreshSuperUserGroupsConfiguration(conf);
++    refreshProtocol.refreshSuperUserGroupsConfiguration();
+     
+     return 0;
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index cbb4fb2..0f1816f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -4851,18 +4851,18 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   }
+ 
+   @Override
+-  public void refreshSuperUserGroupsConfiguration(Configuration conf) {
++  public void refreshSuperUserGroupsConfiguration() {
+     LOG.info("Refreshing superuser proxy groups mapping ");
+     
+-    ProxyUsers.refreshSuperUserGroupsConfiguration(conf);
++    ProxyUsers.refreshSuperUserGroupsConfiguration();
+   }
+     
+   @Override
+-  public void refreshUserToGroupsMappings(Configuration conf) throws IOException {
++  public void refreshUserToGroupsMappings() throws IOException {
+     LOG.info("Refreshing all user-to-groups mappings. Requested by user: " + 
+              UserGroupInformation.getCurrentUser().getShortUserName());
+     
+-    Groups.getUserToGroupsMappingService(conf).refresh();
++    Groups.getUserToGroupsMappingService().refresh();
+   }
+   
+   private boolean perTaskMemoryConfigurationSetOnJT() {
+diff --git a/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java b/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java
+index 8852f14..2db9180 100644
+--- a/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java
++++ b/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java
+@@ -236,7 +236,7 @@ public class MRAdmin extends Configured implements Tool {
+                        RefreshUserMappingsProtocol.class));
+     
+     // Refresh the user-to-groups mappings
+-    refreshProtocol.refreshSuperUserGroupsConfiguration(conf);
++    refreshProtocol.refreshSuperUserGroupsConfiguration();
+     
+     return 0;
+   }
+@@ -269,7 +269,7 @@ public class MRAdmin extends Configured implements Tool {
+                                              RefreshUserMappingsProtocol.class));
+ 
+     // Refresh the user-to-groups mappings
+-    refreshProtocol.refreshUserToGroupsMappings(conf);
++    refreshProtocol.refreshUserToGroupsMappings();
+ 
+     return 0;
+   }
+diff --git a/src/test/org/apache/hadoop/hdfs/security/TestDelegationTokenForProxyUser.java b/src/test/org/apache/hadoop/hdfs/security/TestDelegationTokenForProxyUser.java
+index 1e78641..1114a6c 100644
+--- a/src/test/org/apache/hadoop/hdfs/security/TestDelegationTokenForProxyUser.java
++++ b/src/test/org/apache/hadoop/hdfs/security/TestDelegationTokenForProxyUser.java
+@@ -99,6 +99,7 @@ public class TestDelegationTokenForProxyUser {
+         null, null);
+     cluster.waitActive();
+     cluster.getNameNode().getNamesystem().getDelegationTokenSecretManager().startThreads();
++    ProxyUsers.refreshSuperUserGroupsConfiguration(config);
+   }
+ 
+   @After
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/NNThroughputBenchmark.java b/src/test/org/apache/hadoop/hdfs/server/namenode/NNThroughputBenchmark.java
+index 9795467..f1207de 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/NNThroughputBenchmark.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/NNThroughputBenchmark.java
+@@ -388,7 +388,7 @@ public class NNThroughputBenchmark {
+     void benchmarkOne() throws IOException {
+       for(int idx = 0; idx < opsPerThread; idx++) {
+         if((localNumOpsExecuted+1) % statsOp.ugcRefreshCount == 0)
+-          nameNode.refreshUserToGroupsMappings(config);
++          nameNode.refreshUserToGroupsMappings();
+         long stat = statsOp.executeOp(daemonId, idx, arg1);
+         localNumOpsExecuted++;
+         localCumulativeTime += stat;
+diff --git a/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java b/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
+index 12f260d..7a5e7d4 100644
+--- a/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
++++ b/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
+@@ -148,6 +148,8 @@ public class TestDoAsEffectiveUser {
+     Server server = RPC.getServer(new TestImpl(), ADDRESS,
+         0, 5, true, conf, null);
+ 
++    refreshConf(conf);
++    
+     try {
+       server.start();
+ 
+@@ -188,6 +190,8 @@ public class TestDoAsEffectiveUser {
+     Server server = RPC.getServer(new TestImpl(), ADDRESS,
+         0, 2, false, conf, null);
+ 
++    refreshConf(conf);
++    
+     try {
+       server.start();
+ 
+@@ -274,6 +278,8 @@ public class TestDoAsEffectiveUser {
+     Server server = RPC.getServer(new TestImpl(), ADDRESS,
+         0, 2, false, conf, null);
+ 
++    refreshConf(conf);
++    
+     try {
+       server.start();
+ 
+@@ -312,6 +318,8 @@ public class TestDoAsEffectiveUser {
+     Server server = RPC.getServer(new TestImpl(), ADDRESS,
+         0, 2, false, conf, null);
+ 
++    refreshConf(conf);
++    
+     try {
+       server.start();
+ 
+@@ -352,6 +360,8 @@ public class TestDoAsEffectiveUser {
+     Server server = RPC.getServer(new TestImpl(), ADDRESS,
+         0, 2, false, conf, null);
+ 
++    refreshConf(conf);
++    
+     try {
+       server.start();
+ 
+diff --git a/src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java b/src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java
+index a1b4a66..80ecc2b 100644
+--- a/src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java
++++ b/src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java
+@@ -20,9 +20,17 @@ package org.apache.hadoop.security;
+ 
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.fail;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
+ 
++import java.io.File;
++import java.io.FileNotFoundException;
++import java.io.FileOutputStream;
+ import java.io.IOException;
++import java.io.PrintWriter;
+ import java.net.URI;
++import java.net.URL;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.List;
+@@ -31,10 +39,13 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.MiniMRCluster;
+ import org.apache.hadoop.mapred.tools.MRAdmin;
++import org.apache.hadoop.security.authorize.AuthorizationException;
++import org.apache.hadoop.security.authorize.ProxyUsers;
+ import org.junit.After;
+ import org.junit.Before;
+ import org.junit.Test;
+@@ -43,6 +54,7 @@ public class TestMapredGroupMappingServiceRefresh {
+   private MiniDFSCluster cluster;
+   JobConf config;
+   private static long groupRefreshTimeoutSec = 2;
++  private String tempResource = null;
+   private static final Log LOG = LogFactory
+       .getLog(TestMapredGroupMappingServiceRefresh.class);
+   
+@@ -89,6 +101,7 @@ public class TestMapredGroupMappingServiceRefresh {
+       3, null, null, config);
+     
+     config.set("mapred.job.tracker", "localhost:"+miniMRCluster.getJobTrackerPort());
++    ProxyUsers.refreshSuperUserGroupsConfiguration(config);
+   }
+ 
+   @After
+@@ -96,6 +109,10 @@ public class TestMapredGroupMappingServiceRefresh {
+     if(cluster!=null) {
+       cluster.shutdown();
+     }
++    if(tempResource!=null) {
++      File f = new File(tempResource);
++      f.delete();
++    }
+   }
+   
+   @Test
+@@ -140,4 +157,103 @@ public class TestMapredGroupMappingServiceRefresh {
+       assertFalse("Should be different group ", g3.get(i).equals(g4.get(i)));
+     }
+   }
++  
++  @Test
++  public void testRefreshSuperUserGroupsConfiguration() throws Exception {
++    final String SUPER_USER = "super_user";
++    final String [] GROUP_NAMES1 = new String [] {"gr1" , "gr2"};
++    final String [] GROUP_NAMES2 = new String [] {"gr3" , "gr4"};
++
++    //keys in conf
++    String userKeyGroups = ProxyUsers.getProxySuperuserGroupConfKey(SUPER_USER);
++    String userKeyHosts = ProxyUsers.getProxySuperuserIpConfKey (SUPER_USER);
++
++    config.set(userKeyGroups, "gr3,gr4,gr5"); // superuser can proxy for this group
++    config.set(userKeyHosts,"127.0.0.1");
++    ProxyUsers.refreshSuperUserGroupsConfiguration(config);
++
++    UserGroupInformation ugi1 = mock(UserGroupInformation.class);
++    UserGroupInformation ugi2 = mock(UserGroupInformation.class);
++    UserGroupInformation suUgi = mock(UserGroupInformation.class);
++    when(ugi1.getRealUser()).thenReturn(suUgi);
++    when(ugi2.getRealUser()).thenReturn(suUgi);
++
++    when(suUgi.getShortUserName()).thenReturn(SUPER_USER); // super user
++    when(suUgi.getUserName()).thenReturn(SUPER_USER+"L"); // super user
++
++    when(ugi1.getShortUserName()).thenReturn("user1");
++    when(ugi2.getShortUserName()).thenReturn("user2");
++
++    when(ugi1.getUserName()).thenReturn("userL1");
++    when(ugi2.getUserName()).thenReturn("userL2");
++
++    // set groups for users
++    when(ugi1.getGroupNames()).thenReturn(GROUP_NAMES1);
++    when(ugi2.getGroupNames()).thenReturn(GROUP_NAMES2);
++
++
++    // check before
++    try {
++      ProxyUsers.authorize(ugi1, "127.0.0.1", config);
++      fail("first auth for " + ugi1.getShortUserName() + " should've failed ");
++    } catch (AuthorizationException e) {
++      // expected
++      System.err.println("auth for " + ugi1.getUserName() + " failed");
++    }
++    try {
++      ProxyUsers.authorize(ugi2, "127.0.0.1", config);
++      System.err.println("auth for " + ugi2.getUserName() + " succeeded");
++      // expected
++    } catch (AuthorizationException e) {
++      fail("first auth for " + ugi2.getShortUserName() + " should've succeeded: " + e.getLocalizedMessage());
++    }
++
++    // refresh will look at configuration on the server side
++    // add additional resource with the new value
++    // so the server side will pick it up
++    String rsrc = "testRefreshSuperUserGroupsConfiguration_rsrc.xml";
++    addNewConfigResource(rsrc, userKeyGroups, "gr2", userKeyHosts, "127.0.0.1");  
++
++    MRAdmin admin = new MRAdmin(config);
++    String [] args = new String[]{"-refreshSuperUserGroupsConfiguration"};
++    admin.run(args);
++
++    try {
++      ProxyUsers.authorize(ugi2, "127.0.0.1", config);
++      fail("second auth for " + ugi2.getShortUserName() + " should've failed ");
++    } catch (AuthorizationException e) {
++      // expected
++      System.err.println("auth for " + ugi2.getUserName() + " failed");
++    }
++    try {
++      ProxyUsers.authorize(ugi1, "127.0.0.1", config);
++      System.err.println("auth for " + ugi1.getUserName() + " succeeded");
++      // expected
++    } catch (AuthorizationException e) {
++      fail("second auth for " + ugi1.getShortUserName() + " should've succeeded: " + e.getLocalizedMessage());
++    }    
++  }
++
++  private void addNewConfigResource(String rsrcName, String keyGroup,
++      String groups, String keyHosts, String hosts)  throws FileNotFoundException {
++    // location for temp resource should be in CLASSPATH
++    URL url = config.getResource("mapred-default.xml");
++    Path p = new Path(url.getPath());
++    Path dir = p.getParent();
++    tempResource = dir.toString() + "/" + rsrcName;
++
++
++    String newResource =
++      "<configuration>"+
++      "<property><name>" + keyGroup + "</name><value>"+groups+"</value></property>" +
++      "<property><name>" + keyHosts + "</name><value>"+hosts+"</value></property>" +
++      "</configuration>";
++    PrintWriter writer = new PrintWriter(new FileOutputStream(tempResource));
++    writer.println(newResource);
++    writer.close();
++
++    Configuration.addDefaultResource(rsrcName);
++  }                                                                                                                                                                     
++
++
+ }
+diff --git a/src/test/org/apache/hadoop/security/TestRefreshUserMappings.java b/src/test/org/apache/hadoop/security/TestRefreshUserMappings.java
+index 772ff46..39dcfc2 100644
+--- a/src/test/org/apache/hadoop/security/TestRefreshUserMappings.java
++++ b/src/test/org/apache/hadoop/security/TestRefreshUserMappings.java
+@@ -25,15 +25,20 @@ import static org.junit.Assert.fail;
+ import static org.mockito.Mockito.mock;
+ import static org.mockito.Mockito.when;
+ 
++import java.io.File;
++import java.io.FileNotFoundException;
++import java.io.FileOutputStream;
+ import java.io.IOException;
++import java.io.PrintWriter;
++import java.net.URL;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.List;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+-import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.hdfs.tools.DFSAdmin;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.ProxyUsers;
+@@ -45,6 +50,7 @@ public class TestRefreshUserMappings {
+   private MiniDFSCluster cluster;
+   Configuration config;
+   private static long groupRefreshTimeoutSec = 1;
++  private String tempResource = null;
+   
+   public static class MockUnixGroupsMapping implements GroupMappingServiceProvider {
+     private int i=0;
+@@ -81,6 +87,10 @@ public class TestRefreshUserMappings {
+     if(cluster!=null) {
+       cluster.shutdown();
+     }
++    if(tempResource!=null) {
++      File f = new File(tempResource);
++      f.delete();
++    }
+   }
+     
+   @Test
+@@ -135,6 +145,7 @@ public class TestRefreshUserMappings {
+     
+     config.set(userKeyGroups, "gr3,gr4,gr5"); // superuser can proxy for this group
+     config.set(userKeyHosts,"127.0.0.1");
++    ProxyUsers.refreshSuperUserGroupsConfiguration(config);
+     
+     UserGroupInformation ugi1 = mock(UserGroupInformation.class);
+     UserGroupInformation ugi2 = mock(UserGroupInformation.class);
+@@ -172,16 +183,21 @@ public class TestRefreshUserMappings {
+       fail("first auth for " + ugi2.getShortUserName() + " should've succeeded: " + e.getLocalizedMessage());
+     }
+     
++    // refresh will look at configuration on the server side
++    // add additional resource with the new value
++    // so the server side will pick it up
++    String rsrc = "testGroupMappingRefresh_rsrc.xml";
++    addNewConfigResource(rsrc, userKeyGroups, "gr2", userKeyHosts, "127.0.0.1");  
++
++    
+     DFSAdmin admin = new DFSAdmin(config);
+     String [] args = new String[]{"-refreshSuperUserGroupsConfiguration"};
+-    NameNode nn = cluster.getNameNode();
+-    Configuration conf = new Configuration(config);
+-    conf.set(userKeyGroups, "gr2"); // superuser can proxy for this group
+-    admin.setConf(conf);
++    //NameNode nn = cluster.getNameNode();
++    //Configuration conf = new Configuration(config);
++    //conf.set(userKeyGroups, "gr2"); // superuser can proxy for this group
++    //admin.setConf(conf);
+     admin.run(args);
+     
+-    //check after...
+-    
+     try {
+       ProxyUsers.authorize(ugi2, "127.0.0.1", config);
+       fail("second auth for " + ugi2.getShortUserName() + " should've failed ");
+@@ -197,5 +213,27 @@ public class TestRefreshUserMappings {
+       fail("second auth for " + ugi1.getShortUserName() + " should've succeeded: " + e.getLocalizedMessage());
+     }    
+   }
++  
++  // create a resource file with the new settings
++  private void addNewConfigResource(String rsrcName, String keyGroup,
++      String groups, String keyHosts, String hosts)  throws FileNotFoundException {
++    // location for temp resource should be in CLASSPATH
++    Configuration conf = new Configuration();
++    URL url = conf.getResource("hdfs-default.xml");
++    Path p = new Path(url.getPath());
++    Path dir = p.getParent();
++    tempResource = dir.toString() + "/" + rsrcName;
++
+ 
++    String newResource =
++      "<configuration>"+
++      "<property><name>" + keyGroup + "</name><value>"+groups+"</value></property>" +
++      "<property><name>" + keyHosts + "</name><value>"+hosts+"</value></property>" +
++      "</configuration>";
++    PrintWriter writer = new PrintWriter(new FileOutputStream(tempResource));
++    writer.println(newResource);
++    writer.close();
++
++    Configuration.addDefaultResource(rsrcName);
++  }
+ }
+-- 
+1.7.0.4
+

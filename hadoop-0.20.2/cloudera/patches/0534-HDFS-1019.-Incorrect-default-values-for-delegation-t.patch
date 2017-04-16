@@ -1,0 +1,51 @@
+From 522fd421225fbab7258a2977e4d40c0c13179376 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 3 Mar 2010 19:09:49 -0800
+Subject: [PATCH 0534/1179] HDFS-1019. Incorrect default values for delegation tokens in hdfs-default.xml
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437832/HDFS-1019-y20.1.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ src/hdfs/hdfs-default.xml |   15 ++++++++-------
+ 1 files changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/src/hdfs/hdfs-default.xml b/src/hdfs/hdfs-default.xml
+index b298685..e46bf25 100644
+--- a/src/hdfs/hdfs-default.xml
++++ b/src/hdfs/hdfs-default.xml
+@@ -431,23 +431,24 @@ creations/deletions), or "all".</description>
+ 
+ <property>
+   <name>dfs.namenode.delegation.key.update-interval</name>
+-  <value>86400</value>
+-  <description>The update frequency of master key for delegation tokens 
+-       in the namenode.
++  <value>86400000</value>
++  <description>The update interval for master key for delegation tokens 
++       in the namenode in milliseconds.
+   </description>
+ </property>
+ 
+ <property>
+   <name>dfs.namenode.delegation.token.max-lifetime</name>
+-  <value>604800</value>
+-  <description>The maximum lifetime for which a delegation token is valid.
++  <value>604800000</value>
++  <description>The maximum lifetime in milliseconds for which a delegation 
++      token is valid.
+   </description>
+ </property>
+ 
+ <property>
+   <name>dfs.namenode.delegation.token.renew-interval</name>
+-  <value>86400</value>
+-  <description>The frequency of renewal of delegation token.
++  <value>86400000</value>
++  <description>The renewal interval for delegation token in milliseconds.
+   </description>
+ </property>
+ 
+-- 
+1.7.0.4
+

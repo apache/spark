@@ -1,0 +1,268 @@
+From 62a9a1327165a1a363639c2f21b79be61616f7b3 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 14 Oct 2010 16:21:34 -0400
+Subject: [PATCH 0738/1179] HADOOP-6663. Fix decompression of empty compressed files
+
+Author: Kang Xiao
+Ref: CDH-2215
+---
+ .../io/compress/BlockDecompressorStream.java       |    6 +
+ .../io/compress/TestBlockDecompressorStream.java   |  229 ++++++++++++++++++++
+ 2 files changed, 235 insertions(+), 0 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/io/compress/TestBlockDecompressorStream.java
+
+diff --git a/src/core/org/apache/hadoop/io/compress/BlockDecompressorStream.java b/src/core/org/apache/hadoop/io/compress/BlockDecompressorStream.java
+index bcdeb37..3a7e1a0 100644
+--- a/src/core/org/apache/hadoop/io/compress/BlockDecompressorStream.java
++++ b/src/core/org/apache/hadoop/io/compress/BlockDecompressorStream.java
+@@ -70,6 +70,12 @@ public class BlockDecompressorStream extends DecompressorStream {
+         return -1;
+       }
+       noUncompressedBytes = 0;
++      // EOF if originalBlockSize is 0
++      // This will occur only when decompressing previous compressed empty file
++      if (originalBlockSize == 0) {
++        eof = true;
++        return -1;
++      }
+     }
+     
+     int n = 0;
+diff --git a/src/test/org/apache/hadoop/io/compress/TestBlockDecompressorStream.java b/src/test/org/apache/hadoop/io/compress/TestBlockDecompressorStream.java
+new file mode 100644
+index 0000000..d99ede3
+--- /dev/null
++++ b/src/test/org/apache/hadoop/io/compress/TestBlockDecompressorStream.java
+@@ -0,0 +1,229 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.io.compress;
++
++import java.io.ByteArrayInputStream;
++import java.io.ByteArrayOutputStream;
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++public class TestBlockDecompressorStream {
++  
++  private byte[] buf;
++  private ByteArrayInputStream bytesIn;
++  private ByteArrayOutputStream bytesOut;
++
++  @Test
++  public void testRead() throws IOException {
++    // compress empty stream
++    bytesOut = new ByteArrayOutputStream();
++    BlockCompressorStream blockCompressorStream = 
++      new BlockCompressorStream(bytesOut, 
++          new FakeCompressor(), 1024, 0);
++    // close without any write
++    blockCompressorStream.close();
++    
++    // check compressed output 
++    buf = bytesOut.toByteArray();
++    assertEquals("empty file compressed output size is not 4", 4, buf.length);
++    
++    // use compressed output as input for decompression
++    bytesIn = new ByteArrayInputStream(buf);
++    
++    // get decompression stream
++    BlockDecompressorStream blockDecompressorStream = 
++      new BlockDecompressorStream(bytesIn, new FakeDecompressor(), 1024);
++    try {
++      assertEquals("return value is not -1", 
++          -1 , blockDecompressorStream.read());
++    } catch (IOException e) {
++      fail("unexpected IOException : " + e);
++    }
++  }
++}
++
++/**
++ * A fake compressor
++ * Its input and output is the same.
++ */
++class FakeCompressor implements Compressor{
++
++  private boolean finish;
++  private boolean finished;
++  int nread;
++  int nwrite;
++  
++  byte [] userBuf;
++  int userBufOff;
++  int userBufLen;
++  
++  @Override
++  public int compress(byte[] b, int off, int len) throws IOException {
++    int n = Math.min(len, userBufLen);
++    if (userBuf != null && b != null)
++      System.arraycopy(userBuf, userBufOff, b, off, n);
++    userBufOff += n;
++    userBufLen -= n;
++    nwrite += n;
++    
++    if (finish && userBufLen <= 0)
++      finished = true;   
++        
++    return n;
++  }
++
++  @Override
++  public void end() {
++    // nop
++  }
++
++  @Override
++  public void finish() {
++    finish = true;
++  }
++
++  @Override
++  public boolean finished() {
++    return finished;
++  }
++
++  @Override
++  public long getBytesRead() {
++    return nread;
++  }
++
++  @Override
++  public long getBytesWritten() {
++    return nwrite;
++  }
++
++  @Override
++  public boolean needsInput() {
++    return userBufLen <= 0;
++  }
++
++  @Override
++  public void reset() {
++    finish = false;
++    finished = false;
++    nread = 0;
++    nwrite = 0;
++    userBuf = null;
++    userBufOff = 0;
++    userBufLen = 0;
++  }
++
++  @Override
++  public void setDictionary(byte[] b, int off, int len) {
++    // nop
++  }
++
++  @Override
++  public void setInput(byte[] b, int off, int len) {
++    nread += len;
++    userBuf = b;
++    userBufOff = off;
++    userBufLen = len;
++  }
++
++  @Override
++  public void reinit(Configuration conf) {
++    // nop
++  }
++  
++}
++
++/**
++ * A fake decompressor, just like FakeCompressor
++ * Its input and output is the same.
++ */
++class FakeDecompressor implements Decompressor {
++  
++  private boolean finish;
++  private boolean finished;
++  int nread;
++  int nwrite;
++  
++  byte [] userBuf;
++  int userBufOff;
++  int userBufLen;
++
++  @Override
++  public int decompress(byte[] b, int off, int len) throws IOException {
++    int n = Math.min(len, userBufLen);
++    if (userBuf != null && b != null)
++      System.arraycopy(userBuf, userBufOff, b, off, n);
++    userBufOff += n;
++    userBufLen -= n;
++    nwrite += n;
++    
++    if (finish && userBufLen <= 0)
++      finished = true;
++    
++    return n;
++  }
++
++  @Override
++  public void end() {
++    // nop
++  }
++
++  @Override
++  public boolean finished() {
++    return finished;
++  }
++
++  @Override
++  public boolean needsDictionary() {
++    return false;
++  }
++
++  @Override
++  public boolean needsInput() {
++    return userBufLen <= 0;
++  }
++
++  @Override
++  public void reset() {
++    finish = false;
++    finished = false;
++    nread = 0;
++    nwrite = 0;
++    userBuf = null;
++    userBufOff = 0;
++    userBufLen = 0;
++  }
++
++  @Override
++  public void setDictionary(byte[] b, int off, int len) {
++    // nop
++  }
++
++  @Override
++  public void setInput(byte[] b, int off, int len) {
++    nread += len;
++    userBuf = b;
++    userBufOff = off;
++    userBufLen = len;
++  }
++  
++}
+-- 
+1.7.0.4
+

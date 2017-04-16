@@ -1,0 +1,97 @@
+****************** FailMon Quick Start Guide ***********************
+
+This document is a guide to quickly setting up and running FailMon.
+For more information and details please see the FailMon User Manual.
+
+***** Building FailMon *****
+
+Normally, FailMon lies under <hadoop-dir>/src/contrib/failmon, where
+<hadoop-source-dir> is the Hadoop project root folder. To compile it,
+one can either run ant for the whole Hadoop project, i.e.:
+
+$ cd <hadoop-dir>
+$ ant
+
+or run ant only for FailMon:
+
+$ cd <hadoop-dir>/src/contrib/failmon
+$ ant
+
+The above will compile FailMon and place all class files under
+<hadoop-dir>/build/contrib/failmon/classes.
+
+By invoking:
+
+$ cd <hadoop-dir>/src/contrib/failmon
+$ ant tar
+
+FailMon is packaged as a standalone jar application in
+<hadoop-dir>/src/contrib/failmon/failmon.tar.gz.
+
+
+***** Deploying FailMon *****
+
+There are two ways FailMon can be deployed in a cluster:
+
+a) Within Hadoop, in which case the whole Hadoop package is uploaded
+to the cluster nodes. In that case, nothing else needs to be done on
+individual nodes.
+
+b) Independently of the Hadoop deployment, i.e., by uploading
+failmon.tar.gz to all nodes and uncompressing it. In that case, the
+bin/failmon.sh script needs to be edited; environment variable
+HADOOPDIR should point to the root directory of the Hadoop
+distribution. Also the location of the Hadoop configuration files
+should be pointed by the property 'hadoop.conf.path' in file
+conf/failmon.properties. Note that these files refer to the HDFS in
+which we want to store the FailMon data (which can potentially be
+different than the one on the cluster we are monitoring).
+
+We assume that either way FailMon is placed in the same directory on
+all nodes, which is typical for most clusters. If this is not
+feasible, one should create the same symbolic link on all nodes of the
+cluster, that points to the FailMon directory of each node.
+
+One should also edit the conf/failmon.properties file on each node to
+set his own property values. However, the default values are expected
+to serve most practical cases. Refer to the FailMon User Manual about
+the various properties and configuration parameters.
+
+
+***** Running FailMon *****
+
+In order to run FailMon using a node to do the ad-hoc scheduling of
+monitoring jobs, one needs edit the hosts.list file to specify the
+list of machine hostnames on which FailMon is to be run. Also, in file
+conf/global.config the username used to connect to the machines has to
+be specified (passwordless SSH is assumed) in property 'ssh.username'.
+In property 'failmon.dir', the path to the FailMon folder has to be
+specified as well (it is assumed to be the same on all machines in the
+cluster). Then one only needs to invoke the command:
+
+$ cd <hadoop-dir>
+$ bin/scheduler.py
+
+to start the system.
+
+
+***** Merging HDFS files *****
+
+For the purpose of merging the files created on HDFS by FailMon, the
+following command can be used:
+
+$ cd <hadoop-dir>
+$ bin/failmon.sh --mergeFiles
+
+This will concatenate all files in the HDFS folder (pointed to by the
+'hdfs.upload.dir' property in conf/failmon.properties file) into a
+single file, which will be placed in the same folder. Also the
+location of the Hadoop configuration files should be pointed by the
+property 'hadoop.conf.path' in file conf/failmon.properties. Note that
+these files refer to the HDFS in which have stored the FailMon data
+(which can potentially be different than the one on the cluster we are
+monitoring). Also, the scheduler.py script can be set up to merge the
+HDFS files when their number surpasses a configurable limit (see
+'conf/global.config' file).
+
+Please refer to the FailMon User Manual for more details.

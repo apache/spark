@@ -1,0 +1,634 @@
+From 08b60c48c049cc3e8965f6f8cf8bad55b2969e99 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Fri, 22 Apr 2011 18:02:26 -0700
+Subject: [PATCH 0950/1179] HDFS-1594. When the disk becomes full Namenode is getting shutdown and not able to recover
+
+Reason: Bug
+Author: Aaron T. Myers
+Ref: CDH-2895
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    5 +
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |  116 +++++++++++-
+ .../server/namenode/NameNodeResourceChecker.java   |  128 +++++++++++++
+ .../hdfs/server/namenode/TestEditLogRace.java      |    2 +-
+ .../namenode/TestNameNodeResourceChecker.java      |  192 ++++++++++++++++++++
+ 5 files changed, 431 insertions(+), 12 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeResourceChecker.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index 917d675..135750a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -203,6 +203,11 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final String  DFS_NAMENODE_KEYTAB_FILE_KEY = "dfs.namenode.keytab.file";
+   public static final String  DFS_NAMENODE_USER_NAME_KEY = "dfs.namenode.kerberos.principal";
+   public static final String  DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY = "dfs.namenode.kerberos.https.principal";
++  public static final String  DFS_NAMENODE_RESOURCE_CHECK_INTERVAL_KEY = "dfs.namenode.resource.check.interval";
++  public static final int     DFS_NAMENODE_RESOURCE_CHECK_INTERVAL_DEFAULT = 5000;
++  public static final String  DFS_NAMENODE_DU_RESERVED_KEY = "dfs.namenode.resource.du.reserved";
++  public static final long    DFS_NAMENODE_DU_RESERVED_DEFAULT = 1024 * 1024 * 100; // 100 MB
++  public static final String  DFS_NAMENODE_CHECKED_VOLUMES_KEY = "dfs.namenode.resource.checked.volumes";
+   
+   public static final String  DFS_SECONDARY_NAMENODE_KEYTAB_FILE_KEY = "dfs.secondary.namenode.keytab.file";
+   public static final String  DFS_SECONDARY_NAMENODE_USER_NAME_KEY = "dfs.secondary.namenode.kerberos.principal";
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index b269720..0a1ec02 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -250,7 +250,9 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+   public Daemon lmthread = null;   // LeaseMonitor thread
+   Daemon smmthread = null;  // SafeModeMonitor thread
+   public Daemon replthread = null;  // Replication thread
++  Daemon nnrmthread = null; // NamenodeResourceMonitor thread
+   
++  private volatile boolean hasResourcesAvailable = false;
+   private volatile boolean fsRunning = true;
+   long systemStart = 0;
+ 
+@@ -275,6 +277,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+   private long defaultBlockSize = 0;
+   // allow appending to hdfs files
+   private boolean supportAppends = true;
++  //resourceRecheckInterval is how often namenode checks for the disk space availability
++  private long resourceRecheckInterval;
++  // The actual resource checker instance.
++  private NameNodeResourceChecker nnResourceChecker;
+ 
+   /**
+    * Last block index used for replication work.
+@@ -336,6 +342,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+    * Initialize FSNamesystem.
+    */
+   private void initialize(NameNode nn, Configuration conf) throws IOException {
++    resourceRecheckInterval =
++        conf.getLong(DFSConfigKeys.DFS_NAMENODE_RESOURCE_CHECK_INTERVAL_KEY,
++        DFSConfigKeys.DFS_NAMENODE_RESOURCE_CHECK_INTERVAL_DEFAULT);
++    nnResourceChecker = new NameNodeResourceChecker(conf);
++    checkAvailableResources();
+     this.systemStart = now();
+     setConfigurationParameters(conf);
+     dtSecretManager = createDelegationTokenSecretManager(conf);
+@@ -366,6 +377,9 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     lmthread.start();
+     replthread.start();
+ 
++    this.nnrmthread = new Daemon(new NameNodeResourceMonitor());
++    nnrmthread.start();
++
+     this.hostsReader = new HostsFileReader(conf.get("dfs.hosts",""),
+                                            conf.get("dfs.hosts.exclude",""));
+     this.dnthread = new Daemon(new DecommissionManager(this).new Monitor(
+@@ -377,7 +391,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+         conf.getClass("topology.node.switch.mapping.impl", ScriptBasedMapping.class,
+             DNSToSwitchMapping.class), conf);
+     
+-    /* If the dns to swith mapping supports cache, resolve network 
++    /* If the dns to switch mapping supports cache, resolve network 
+      * locations of those hosts in the include list, 
+      * and store the mapping in the cache; so future calls to resolve
+      * will be fast.
+@@ -533,6 +547,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+       if (dnthread != null) dnthread.interrupt();
+       if (smmthread != null) smmthread.interrupt();
+       if (dtSecretManager != null) dtSecretManager.stopThreads();
++      if (nnrmthread != null) nnrmthread.interrupt();
+     } catch (Exception e) {
+       LOG.warn("Exception shutting down FSNamesystem", e);
+     } finally {
+@@ -2609,6 +2624,57 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+       }
+     }
+   }
++  
++  /**
++   * Returns whether or not there were available resources at the last check of
++   * resources.
++   *
++   * @return true if there were sufficient resources available, false otherwise.
++   */
++  private boolean nameNodeHasResourcesAvailable() {
++    return hasResourcesAvailable;
++  }
++
++  /**
++   * Perform resource checks and cache the results.
++   * @throws IOException
++   */
++  private void checkAvailableResources() throws IOException {
++    hasResourcesAvailable = nnResourceChecker.hasAvailableDiskSpace();
++  }
++
++  /**
++   * Periodically calls hasAvailableResources of NameNodeResourceChecker, and if
++   * there are found to be insufficient resources available, causes the NN to
++   * enter safe mode. If resources are later found to have returned to
++   * acceptable levels, this daemon will cause the NN to exit safe mode.
++   */
++  class NameNodeResourceMonitor implements Runnable  {
++    @Override
++    public void run () {
++      try {
++        while (fsRunning) {
++          checkAvailableResources();
++          if(!nameNodeHasResourcesAvailable()) {
++            String lowResourcesMsg = "NameNode low on available disk space. ";
++            if (!isInSafeMode()) {
++              FSNamesystem.LOG.warn(lowResourcesMsg + "Entering safe mode.");
++            } else {
++              FSNamesystem.LOG.warn(lowResourcesMsg + "Already in safe mode.");
++            }
++            enterSafeMode(true);
++          }
++          try {
++            Thread.sleep(resourceRecheckInterval);
++          } catch (InterruptedException ie) {
++            // Deliberately ignore
++          }
++        }
++      } catch (Exception e) {
++        FSNamesystem.LOG.error("Exception in NameNodeResourceMonitor: ", e);
++      }
++    }
++  }
+ 
+   /**
+    * Periodically calls computeReplicationWork().
+@@ -4443,6 +4509,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     private int blockThreshold;
+     /** time of the last status printout */
+     private long lastStatusReport = 0;
++    /** Was safemode entered automatically because available resources were low. */
++    private boolean resourcesLow = false;
+       
+     /**
+      * Creates SafeModeInfo when the name node enters
+@@ -4460,14 +4528,15 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     }
+ 
+     /**
+-     * Creates SafeModeInfo when safe mode is entered manually.
++     * Creates SafeModeInfo when safe mode is entered manually, or because
++     * available resources are low.
+      *
+      * The {@link #threshold} is set to 1.5 so that it could never be reached.
+      * {@link #blockTotal} is set to -1 to indicate that safe mode is manual.
+      * 
+      * @see SafeModeInfo
+      */
+-    private SafeModeInfo() {
++    private SafeModeInfo(boolean resourcesLow) {
+       this.threshold = 1.5f;  // this threshold can never be reached
+       this.datanodeThreshold = Integer.MAX_VALUE;
+       this.extension = Integer.MAX_VALUE;
+@@ -4475,6 +4544,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+       this.blockTotal = -1;
+       this.blockSafe = -1;
+       this.reached = -1;
++      this.resourcesLow = resourcesLow;
+       enter();
+       reportStatus("STATE* Safe mode is ON.", true);
+     }
+@@ -4518,7 +4588,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+         }
+         if(needUpgrade) {
+           // switch to manual safe mode
+-          safeMode = new SafeModeInfo();
++          safeMode = new SafeModeInfo(false);
+           return;
+         }
+       }
+@@ -4563,7 +4633,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+      */
+     boolean needEnter() {
+       return (threshold != 0 && blockSafe < blockThreshold) ||
+-        (numLiveDataNodes() < datanodeThreshold);
++        (numLiveDataNodes() < datanodeThreshold) ||
++        (!nameNodeHasResourcesAvailable());
+     }
+       
+     /**
+@@ -4624,10 +4695,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     }
+ 
+     /**
+-     * Check if safe mode was entered manually or at startup.
++     * Check if safe mode was entered manually or automatically (at startup, or
++     * when disk space is low).
+      */
+     boolean isManual() {
+-      return extension == Integer.MAX_VALUE;
++      return extension == Integer.MAX_VALUE && !resourcesLow;
+     }
+ 
+     /**
+@@ -4636,6 +4708,20 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     void setManual() {
+       extension = Integer.MAX_VALUE;
+     }
++    
++    /**
++     * Check if safe mode was entered due to resources being low.
++     */
++    boolean areResourcesLow() {
++      return resourcesLow;
++    }
++
++    /**
++     * Set that resources are low for this instance of safe mode.
++     */
++    void setResourcesLow() {
++      resourcesLow = true;
++    }
+ 
+     /**
+      * A tip on how safe mode is to be turned off: manually or automatically.
+@@ -4643,7 +4729,12 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     String getTurnOffTip() {
+       if(reached < 0)
+         return "Safe mode is OFF.";
+-      String leaveMsg = "Safe mode will be turned off automatically";
++      String leaveMsg = "";
++      if (areResourcesLow()) {
++        leaveMsg = "Resources are low on NN. Safe mode must be turned off manually";
++      } else {
++        leaveMsg = "Safe mode will be turned off automatically";
++      }
+       if(isManual()) {
+         if(getDistributedUpgradeState())
+           return leaveMsg + " upon completion of " + 
+@@ -4777,7 +4868,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+         leaveSafeMode(false);
+         break;
+       case SAFEMODE_ENTER: // enter safe mode
+-        enterSafeMode();
++        enterSafeMode(false);
+         break;
+       }
+     }
+@@ -4833,12 +4924,15 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+    * Enter safe mode manually.
+    * @throws IOException
+    */
+-  synchronized void enterSafeMode() throws IOException {
++  synchronized void enterSafeMode(boolean resourcesLow) throws IOException {
+     getEditLog().logSyncAll();
+     if (!isInSafeMode()) {
+-      safeMode = new SafeModeInfo();
++      safeMode = new SafeModeInfo(resourcesLow);
+       return;
+     }
++    if (resourcesLow) {
++      safeMode.setResourcesLow();
++    }
+     safeMode.setManual();
+     getEditLog().logSyncAll();
+     NameNode.stateChangeLog.info("STATE* Safe mode is ON. " 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
+new file mode 100644
+index 0000000..fd12883
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
+@@ -0,0 +1,128 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import java.io.File;
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.HashMap;
++import java.util.Map;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.DF;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
++
++/**
++ * 
++ * NameNodeResourceChecker provides a method -
++ * <code>hasAvailableDiskSpace</code> - which will return true if and only if
++ * the NameNode has disk space available on all volumes which are configured to
++ * be checked. Volumes containing file system name/edits dirs are added by
++ * default, and arbitrary extra volumes may be configured as well.
++ */
++public class NameNodeResourceChecker {
++  private static final Log LOG = LogFactory.getLog(NameNodeResourceChecker.class.getName());
++
++  // Space (in bytes) reserved per volume.
++  private long duReserved;
++
++  private final Configuration conf;
++  private Map<String, DF> volumes;
++
++  /**
++   * Create a NameNodeResourceChecker, which will check the name dirs and edits
++   * dirs set in <code>conf</code>.
++   * 
++   * @param conf
++   * @throws IOException
++   */
++  public NameNodeResourceChecker(Configuration conf) throws IOException {
++    this.conf = conf;
++    volumes = new HashMap<String, DF>();
++
++    duReserved = conf.getLong(DFSConfigKeys.DFS_NAMENODE_DU_RESERVED_KEY,
++        DFSConfigKeys.DFS_NAMENODE_DU_RESERVED_DEFAULT);
++
++    Collection<File> extraCheckedVolumes = new ArrayList<File>();
++    
++    for (String filePath : conf.getTrimmedStringCollection(
++        DFSConfigKeys.DFS_NAMENODE_CHECKED_VOLUMES_KEY)) {
++      extraCheckedVolumes.add(new File(filePath));
++    }
++
++    addDirsToCheck(FSNamesystem.getNamespaceDirs(conf));
++    addDirsToCheck(FSNamesystem.getNamespaceEditsDirs(conf));
++    addDirsToCheck(extraCheckedVolumes);
++  }
++
++  /**
++   * Add the passed-in directories to the list of volumes to check.
++   * 
++   * @param directoriesToCheck
++   *          The directories whose volumes will be checked for available space.
++   * @throws IOException
++   */
++  private void addDirsToCheck(Collection<File> directoriesToCheck)
++      throws IOException {
++    for (File directory : directoriesToCheck) {
++      DF df = new DF(directory, conf);
++      volumes.put(df.getFilesystem(), df);
++    }
++  }
++
++  /**
++   * Return true if disk space is available on all all the configured volumes.
++   * 
++   * @return True if the configured amount of disk space is available on all
++   *         volumes, false otherwise.
++   * @throws IOException
++   */
++  boolean hasAvailableDiskSpace()
++      throws IOException {
++    return getVolumesLowOnSpace().size() == 0;
++  }
++
++  /**
++   * Return the set of directories which are low on space.
++   * @return the set of directories whose free space is below the threshold.
++   * @throws IOException 
++   */
++  Collection<String> getVolumesLowOnSpace() throws IOException {
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Going to check the following volumes disk space: " + volumes);
++    }
++    Collection<String> lowVolumes = new ArrayList<String>();
++    for (DF volume : volumes.values()) {
++      long availableSpace = volume.getAvailable();
++      String fileSystem = volume.getFilesystem();
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("Space available on volume '" + fileSystem + "' is " + availableSpace);
++      }
++      if (availableSpace < duReserved) {
++        LOG.warn("Space available on volume '" + fileSystem + "' is "
++            + availableSpace +
++            ", which is below the configured reserved amount " + duReserved);
++        lowVolumes.add(volume.getFilesystem());
++      }
++    }
++    return lowVolumes;
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
+index d711bb1..8eac337 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
+@@ -262,7 +262,7 @@ public class TestEditLogRace extends TestCase {
+         } catch (InterruptedException e) {}
+ 
+         LOG.info("Save " + i + ": entering safe mode");
+-        namesystem.enterSafeMode();
++        namesystem.enterSafeMode(false);
+ 
+         // Verify edit logs before the save
+         verifyEditLogs(fsimage);
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeResourceChecker.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeResourceChecker.java
+new file mode 100644
+index 0000000..60c3bd9
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeResourceChecker.java
+@@ -0,0 +1,192 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import java.io.File;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.util.Set;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.DF;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
++import org.apache.hadoop.hdfs.server.namenode.FSNamesystem.NameNodeResourceMonitor;
++import org.junit.Before;
++import org.junit.Test;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++public class TestNameNodeResourceChecker {
++  private static final int BIG_TMP_FILE_SIZE = 1024 * 1024 * 20; // 20MB
++
++  private Configuration conf;
++  private byte[] bigBuffer = new byte[BIG_TMP_FILE_SIZE];
++  private File baseDir;
++  private File nameDir;
++
++  @Before
++  public void setUp () throws IOException {
++    conf = new Configuration();
++    baseDir = new File(conf.get("hadoop.tmp.dir"));
++    nameDir = new File(baseDir, "resource-check-name-dir");
++    nameDir.mkdirs();
++    conf.set("dfs.name.dir", nameDir.getAbsolutePath());
++    conf.set("dfs.name.edits.dir", nameDir.getAbsolutePath());
++
++    // Initialize bigBuffer to non-zero values so we don't make a sparse file.
++    for(int i = 0; i < bigBuffer.length; i++) {
++      bigBuffer[i] = 0x01;
++    }
++  }
++
++  /**
++   * Tests that hasAvailableDiskSpace returns true if disk usage is below
++   * threshold.
++   *
++   * @throws IOException in case of errors
++   */
++  @Test
++  public void testCheckAvailability()
++      throws IOException {
++    conf.setLong(DFSConfigKeys.DFS_NAMENODE_DU_RESERVED_KEY, 0);
++    NameNodeResourceChecker nb = new NameNodeResourceChecker(conf);
++    assertTrue(
++        "isResourceAvailable must return true if " +
++            "disk usage is lower than threshold",
++        nb.hasAvailableDiskSpace());
++  }
++
++  /**
++   * Tests that hasAvailableDiskSpace returns false if disk usage is above
++   * threshold.
++   * 
++   * @throws IOException in case of errors
++   */
++  @Test
++  public void testCheckAvailabilityNeg() throws IOException {
++    conf.setLong(DFSConfigKeys.DFS_NAMENODE_DU_RESERVED_KEY, Long.MAX_VALUE);
++    NameNodeResourceChecker nb = new NameNodeResourceChecker(conf);
++    assertFalse(
++        "isResourceAvailable must return false if " +
++            "disk usage is higher than threshold",
++        nb.hasAvailableDiskSpace());
++  }
++
++  /**
++   * Tests that NameNode resource monitor causes the NN to enter safe mode when
++   * resources are low.
++   * 
++   * @throws IOException in case of errors
++   * @throws InterruptedException 
++   */
++  @Test
++  public void testCheckThatNameNodeResourceMonitorIsRunning()
++      throws IOException, InterruptedException {
++    MiniDFSCluster cluster = null;
++    File bigTmpFile = File.createTempFile("nnrm-big-tmp-file", null, baseDir);
++    try {
++      conf.set("dfs.name.dir", nameDir.getAbsolutePath());
++      conf.setLong(DFSConfigKeys.DFS_NAMENODE_RESOURCE_CHECK_INTERVAL_KEY, 0);
++      DF df = new DF(nameDir, conf);
++      conf.setLong(DFSConfigKeys.DFS_NAMENODE_DU_RESERVED_KEY,
++          df.getAvailable() - (BIG_TMP_FILE_SIZE / 2));
++      
++      cluster = new MiniDFSCluster(conf, 1, true, null);
++      cluster.waitActive();
++
++      String name = NameNodeResourceMonitor.class.getName();
++
++      boolean isNameNodeMonitorRunning = false;
++      Set<Thread> runningThreads = Thread.getAllStackTraces().keySet();
++      for (Thread runningThread : runningThreads) {
++        if (runningThread.toString().startsWith("Thread[" + name)) {
++          isNameNodeMonitorRunning = true;
++        }
++      }
++      assertTrue("NN resource monitor should be running",
++          isNameNodeMonitorRunning);
++      assertFalse("NN should not presently be in safe mode",
++          cluster.getNameNode().isInSafeMode());
++      
++      new FileOutputStream(bigTmpFile).write(bigBuffer);
++
++      // Make sure the NNRM thread has a chance to run.
++      long startMillis = System.currentTimeMillis();
++      while (!cluster.getNameNode().isInSafeMode() &&
++          System.currentTimeMillis() < startMillis + (60 * 1000)) {
++        Thread.sleep(1000);
++      }
++
++      assertTrue("NN should be in safe mode after resources crossed threshold",
++          cluster.getNameNode().isInSafeMode());
++    } finally {
++      if (cluster != null)
++        cluster.shutdown();
++      if (bigTmpFile != null)
++        bigTmpFile.delete();
++    }
++  }
++
++  /**
++   * Tests that only a single space check is performed if two name dirs are
++   * supplied which are on the same volume.
++   * 
++   * @throws IOException
++   */
++  @Test
++  public void testChecking2NameDirsOnOneVolume() throws IOException {
++    Configuration conf = new Configuration();
++    File nameDir1 = new File(conf.get("hadoop.tmp.dir", "name-dir1"));
++    File nameDir2 = new File(conf.get("hadoop.tmp.dir", "name-dir2"));
++    nameDir1.mkdirs();
++    nameDir2.mkdirs();
++    conf.set("dfs.name.dir",
++        nameDir1.getAbsolutePath() + "," + nameDir2.getAbsolutePath());
++    conf.setLong(DFSConfigKeys.DFS_NAMENODE_DU_RESERVED_KEY, Long.MAX_VALUE);
++
++    NameNodeResourceChecker nb = new NameNodeResourceChecker(conf);
++
++    assertEquals("Should not check the same volume more than once.",
++        1, nb.getVolumesLowOnSpace().size());
++  }
++
++  /**
++   * Tests that only a single space check is performed if extra volumes are
++   * configured manually which also coincide with a volume the name dir is on.
++   * 
++   * @throws IOException
++   */
++  @Test
++  public void testCheckingExtraVolumes() throws IOException {
++    Configuration conf = new Configuration();
++    File nameDir = new File(conf.get("hadoop.tmp.dir", "name-dir"));
++    nameDir.mkdirs();
++    conf.set("dfs.name.dir", nameDir.getAbsolutePath());
++    conf.set(DFSConfigKeys.DFS_NAMENODE_CHECKED_VOLUMES_KEY, nameDir.getAbsolutePath());
++    conf.setLong(DFSConfigKeys.DFS_NAMENODE_DU_RESERVED_KEY, Long.MAX_VALUE);
++
++    NameNodeResourceChecker nb = new NameNodeResourceChecker(conf);
++
++    assertEquals("Should not check the same volume more than once.",
++        1, nb.getVolumesLowOnSpace().size());
++  }
++}
+-- 
+1.7.0.4
+

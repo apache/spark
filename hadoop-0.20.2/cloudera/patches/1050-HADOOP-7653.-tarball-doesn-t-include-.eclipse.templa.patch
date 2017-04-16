@@ -1,0 +1,52 @@
+From b5bf4322cc047c1f95b814b49bc872c1433dd235 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 21 Sep 2011 16:49:22 -0700
+Subject: [PATCH 1050/1179] HADOOP-7653. tarball doesn't include .eclipse.templates.
+
+The hadoop tarball doesn't include .eclipse.templates. This results in
+a failure to successfully run ant eclipse-files.
+
+Reason: Bug
+Author: Jonathan Natkins
+Ref: CDH-3266
+---
+ build.xml |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 7ef210d..e50a1b0 100644
+--- a/build.xml
++++ b/build.xml
+@@ -1547,6 +1547,10 @@
+       <fileset dir="bin"/>
+     </copy>
+ 
++    <copy todir="${dist.dir}/.eclipse.templates">
++      <fileset dir="${basedir}/.eclipse.templates"/>
++    </copy>
++
+     <copy todir="${dist.dir}/conf">
+       <fileset dir="${conf.dir}" excludes="**/*.template"/>
+     </copy>
+@@ -1585,6 +1589,10 @@
+     </copy>
+     <!-- END CLOUDERA HOOKS -->
+ 
++    <copy todir="${dist.dir}/.eclipse.templates">
++      <fileset dir="${basedir}/.eclipse.templates"/>
++    </copy>
++
+     <chmod perm="ugo+x" type="file" parallel="false">
+         <fileset dir="${dist.dir}/bin"/>
+     </chmod>
+@@ -1625,6 +1633,7 @@
+           <exclude name="${final.name}/src/**" />
+           <exclude name="${final.name}/docs/**" />
+           <include name="${final.name}/**" />
++          <include name="${final.name}/eclipse.templates/**" />
+         </tarfileset>
+         <tarfileset dir="${build.dir}" mode="755">
+           <include name="${final.name}/bin/*" />
+-- 
+1.7.0.4
+

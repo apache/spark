@@ -1,0 +1,26 @@
+From 8d34833e7e62ebd73a6ce4868a150172e46b9701 Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Thu, 3 Mar 2011 22:12:20 -0800
+Subject: [PATCH 0898/1179] CLOUDERA-BUILD. Cleanup.
+
+---
+ cloudera/do-release-build |    3 ---
+ 1 files changed, 0 insertions(+), 3 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index aa90701..fcf9712 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -47,9 +47,6 @@ fi
+ BIN_DIR=$(readlink -f $(dirname $0))
+ RELEASE_DIR=$BIN_DIR/..
+ 
+-cd $BIN_DIR/maven-packaging
+-mvn dependency:tree
+-
+ cd $RELEASE_DIR
+ 
+ if which aclocal-1.9 && which autoconf ; then
+-- 
+1.7.0.4
+

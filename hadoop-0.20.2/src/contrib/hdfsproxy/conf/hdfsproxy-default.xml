@@ -1,0 +1,98 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Put hdfsproxy specific properties in this file. -->
+
+<configuration>
+
+<property>
+  <name>hdfsproxy.https.address</name>
+  <value>0.0.0.0:8443</value>
+  <description>the SSL port that hdfsproxy listens on
+  </description>
+</property>
+
+<property>
+  <name>hdfsproxy.hosts</name>
+  <value>hdfsproxy-hosts</value>
+  <description>location of hdfsproxy-hosts file
+  </description>
+</property>
+
+<property>
+  <name>hdfsproxy.dfs.namenode.address</name>
+  <value>localhost:54321</value>
+  <description>namenode address of the HDFS cluster being proxied
+  </description>
+</property>
+
+<property>
+  <name>hdfsproxy.https.server.keystore.resource</name>
+  <value>ssl-server.xml</value>
+  <description>location of the resource from which ssl server keystore
+  information will be extracted
+  </description>
+</property>
+
+<property>
+  <name>hdfsproxy.user.permissions.file.location</name>
+  <value>user-permissions.xml</value>
+  <description>location of the user permissions file
+  </description>
+</property>
+
+<property>
+  <name>hdfsproxy.user.certs.file.location</name>
+  <value>user-certs.xml</value>
+  <description>location of the user certs file
+  </description>
+</property>
+
+<property>
+  <name>hdfsproxy.ugi.cache.ugi.lifetime</name>
+  <value>15</value>
+  <description> The lifetime (in minutes) of a cached ugi
+  </description>
+</property>
+
+<property>
+  <name>hdfsproxy.ldap.initial.context.factory</name>
+  <value>com.sun.jndi.ldap.LdapCtxFactory</value>
+  <description> ldap initial context factory
+  </description>
+</property>
+
+<property>
+  <name>hdfsproxy.ldap.provider.url</name>
+  <value>ldap://localhost:389</value>
+  <description> ldap server address
+  </description>
+</property>
+
+<property>
+  <name>hdfsproxy.ldap.role.base</name>
+  <value>ou=proxyroles,dc=mycompany,dc=com</value>
+  <description> ldap role base
+  </description>
+</property>
+
+<property>
+    <name>hdfsproxy.kerberos.principle</name>
+    <value>hdfsproxy@LOCALHOST</value>
+    <description> kerberos principle to be used by hdfsproxy </description>
+</property>
+
+<property>
+    <name>hdfsproxy.kerberos.keytab</name>
+    <value>hdfsproxy.keytab</value>
+    <description> kerberos keytab to be used by hdfsproxy </description>
+</property>
+
+<property>
+    <name>hdfsproxy.kerberos.default.realm</name>
+    <value>/component1/componentN@realm</value>
+    <description> kerberos default realm appended to non-qualified userIds </description>
+</property>
+
+</configuration>
+

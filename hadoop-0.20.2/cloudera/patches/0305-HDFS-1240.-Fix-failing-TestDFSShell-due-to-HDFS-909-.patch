@@ -1,0 +1,62 @@
+From b9259a145f516a01ba37a33b3803c88824fd55e5 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 17 Jun 2010 09:55:31 -0700
+Subject: [PATCH 0305/1179] HDFS-1240. Fix failing TestDFSShell due to HDFS-909 backport on branch-20
+
+Reason: Fix red build
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../org/apache/hadoop/hdfs/MiniDFSCluster.java     |   10 ++++++----
+ .../hdfs/server/namenode/TestEditLogRace.java      |    2 +-
+ 2 files changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+index c9d868f..4733159 100644
+--- a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
++++ b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+@@ -52,9 +52,6 @@ import org.apache.hadoop.util.ToolRunner;
+  */
+ public class MiniDFSCluster {
+ 
+-  public static final File BASE_DIR =
+-    new File(System.getProperty("test.build.data", "build/test/data"), "dfs/");
+-  
+   public class DataNodeProperties {
+     DataNode datanode;
+     Configuration conf;
+@@ -243,7 +240,7 @@ public class MiniDFSCluster {
+       ioe.initCause(e);
+       throw ioe;
+     }
+-    base_dir = BASE_DIR;
++    base_dir = getBaseDir();
+     data_dir = new File(base_dir, "data");
+     
+     // Setup the NameNode configuration
+@@ -907,4 +904,9 @@ public class MiniDFSCluster {
+   public String getDataDirectory() {
+     return data_dir.getAbsolutePath();
+   }
++
++  public static File getBaseDir() {
++    return new File(System.getProperty(
++      "test.build.data", "build/test/data"), "dfs/");
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
+index 480bdbe..84f7475 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
+@@ -287,7 +287,7 @@ public class TestEditLogRace extends TestCase {
+  
+   private Configuration getConf() {
+     Configuration conf = new Configuration();
+-    conf.set("dfs.name.dir", MiniDFSCluster.BASE_DIR + "/data");
++    conf.set("dfs.name.dir", MiniDFSCluster.getBaseDir() + "/data");
+     conf.setBoolean("dfs.permissions", false);
+     return conf;
+   }
+-- 
+1.7.0.4
+

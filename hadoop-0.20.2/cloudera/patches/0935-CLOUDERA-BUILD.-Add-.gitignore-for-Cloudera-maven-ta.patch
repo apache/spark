@@ -1,0 +1,38 @@
+From 7c3266e8072d54c2d18755c4b0c4d3fb153f5dc0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Mar 2011 14:22:34 -0700
+Subject: [PATCH 0935/1179] CLOUDERA-BUILD. Add .gitignore for Cloudera maven target directories
+
+---
+ .gitignore                          |    1 +
+ cloudera/maven-packaging/.gitignore |    6 ++++++
+ 2 files changed, 7 insertions(+), 0 deletions(-)
+ create mode 100644 cloudera/maven-packaging/.gitignore
+
+diff --git a/.gitignore b/.gitignore
+index 8748c9f..8bc57b8 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -21,6 +21,7 @@
+ build/
+ build.properties
+ build-fi/
++target/
+ conf/masters
+ conf/slaves
+ conf/hadoop-env.sh
+diff --git a/cloudera/maven-packaging/.gitignore b/cloudera/maven-packaging/.gitignore
+new file mode 100644
+index 0000000..3e242ca
+--- /dev/null
++++ b/cloudera/maven-packaging/.gitignore
+@@ -0,0 +1,6 @@
++hadoop-streaming/target
++hadoop-test/target
++hadoop-core/target
++hadoop-mrunit/target
++hadoop-tools/target
++hadoop-examples/target
+-- 
+1.7.0.4
+

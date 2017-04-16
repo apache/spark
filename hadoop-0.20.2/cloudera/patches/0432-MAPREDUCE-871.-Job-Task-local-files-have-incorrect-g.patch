@@ -1,0 +1,194 @@
+From c0826b2e0c43581aa90afff465ddd7401e12b1ee Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 20 Jan 2010 16:12:33 +0530
+Subject: [PATCH 0432/1179] MAPREDUCE-871. Job/Task local files have incorrect group ownership set by LinuxTaskController binary
+
+Patch: https://issues.apache.org/jira/secure/attachment/12430867/871.20S.patch
+Author: Vinod K V
+Ref: CDH-648
+---
+ src/c++/task-controller/task-controller.c          |   21 +++++++++++--------
+ .../TestLocalizationWithLinuxTaskController.java   |   20 ++++++++----------
+ .../hadoop/mapred/TestTaskTrackerLocalization.java |    2 +-
+ 3 files changed, 22 insertions(+), 21 deletions(-)
+
+diff --git a/src/c++/task-controller/task-controller.c b/src/c++/task-controller/task-controller.c
+index 4a3adde..3119118 100644
+--- a/src/c++/task-controller/task-controller.c
++++ b/src/c++/task-controller/task-controller.c
+@@ -333,7 +333,7 @@ static int secure_path(const char *path, uid_t uid, gid_t gid,
+       continue;
+     }
+ 
+-    if (check_ownership(getuid(), getgid(), entry->fts_path) != 0) {
++    if (check_ownership(entry->fts_path) != 0) {
+       fprintf(LOGFILE,
+           "Invalid file path. %s not user/group owned by the tasktracker.\n",
+           entry->fts_path);
+@@ -369,13 +369,13 @@ int prepare_attempt_directories(const char *job_id, const char *attempt_id,
+     return INVALID_ARGUMENT_NUMBER;
+   }
+ 
++  gid_t tasktracker_gid = getegid(); // the group permissions of the binary.
++
+   if (get_user_details(user) < 0) {
+     fprintf(LOGFILE, "Couldn't get the user details of %s.\n", user);
+     return INVALID_USER_NAME;
+   }
+ 
+-  int tasktracker_gid = getgid();
+-
+   char **local_dir = (char **) get_values(TT_SYS_DIR_KEY);
+ 
+   if (local_dir == NULL) {
+@@ -485,7 +485,7 @@ int prepare_task_logs(const char *log_dir, const char *task_id) {
+     }
+   }
+ 
+-  int tasktracker_gid = getgid();
++  gid_t tasktracker_gid = getegid(); // the group permissions of the binary.
+   if (secure_path(task_log_dir, user_detail->pw_uid, tasktracker_gid, S_IRWXU
+       | S_IRWXG, S_ISGID | S_IRWXU | S_IRWXG) != 0) {
+     // setgid on dirs but not files, 770. As of now, there are no files though
+@@ -509,15 +509,18 @@ int get_user_details(const char *user) {
+ }
+ 
+ /*
+- * Function to check if a user/group actually owns the file.
++ * Function to check if the TaskTracker actually owns the file.
+   */
+-int check_ownership(uid_t uid, gid_t gid, char *path) {
++int check_ownership(char *path) {
+   struct stat filestat;
+   if (stat(path, &filestat) != 0) {
+     return UNABLE_TO_STAT_FILE;
+   }
+-  // check user/group.
+-  if (uid != filestat.st_uid || gid != filestat.st_gid) {
++  // check user/group. User should be TaskTracker user, group can either be
++  // TaskTracker's primary group or the special group to which binary's
++  // permissions are set.
++  if (getuid() != filestat.st_uid || (getgid() != filestat.st_gid && getegid()
++      != filestat.st_gid)) {
+     return FILE_NOT_OWNED_BY_TASKTRACKER;
+   }
+   return 0;
+@@ -541,7 +544,7 @@ int initialize_job(const char *jobid, const char *user) {
+     return INVALID_USER_NAME;
+   }
+ 
+-  gid_t tasktracker_gid = getgid(); // TaskTracker's group-id
++  gid_t tasktracker_gid = getegid(); // the group permissions of the binary.
+ 
+   char **local_dir = (char **) get_values(TT_SYS_DIR_KEY);
+   if (local_dir == NULL) {
+diff --git a/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
+index 9e57137..a3e7f83 100644
+--- a/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
+@@ -30,7 +30,6 @@ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapred.TaskController.JobInitializationContext;
+ import org.apache.hadoop.mapred.TaskController.TaskControllerContext;
+ import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
+-import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.mapred.ClusterWithLinuxTaskController.MyLinuxTaskController;
+ import org.apache.hadoop.mapred.JvmManager.JvmEnv;
+ 
+@@ -48,6 +47,8 @@ public class TestLocalizationWithLinuxTaskController extends
+   private File configFile;
+   private MyLinuxTaskController taskController;
+ 
++  private static String taskTrackerSpecialGroup;
++
+   @Override
+   protected void setUp()
+       throws Exception {
+@@ -66,6 +67,7 @@ public class TestLocalizationWithLinuxTaskController extends
+             localDirs);
+     String execPath = path + "/task-controller";
+     taskController.setTaskControllerExe(execPath);
++    taskTrackerSpecialGroup = getFilePermissionAttrs(execPath)[2];
+     taskController.setConf(trackerFConf);
+     taskController.setup();
+   }
+@@ -120,14 +122,12 @@ public class TestLocalizationWithLinuxTaskController extends
+     taskController.initializeJob(context);
+     // ///////////
+ 
+-    UserGroupInformation taskTrackerugi =
+-        UserGroupInformation.login(localizedJobConf);
+     for (String localDir : trackerFConf.getStrings("mapred.local.dir")) {
+       File jobDir =
+           new File(localDir, TaskTracker.getLocalJobDir(jobId.toString()));
+       // check the private permissions on the job directory
+       checkFilePermissions(jobDir.getAbsolutePath(), "dr-xrws---",
+-          localizedJobConf.getUser(), taskTrackerugi.getGroupNames()[0]);
++          localizedJobConf.getUser(), taskTrackerSpecialGroup);
+     }
+ 
+     // check the private permissions of various directories
+@@ -139,7 +139,7 @@ public class TestLocalizationWithLinuxTaskController extends
+     dirs.add(new Path(jarsDir, "lib"));
+     for (Path dir : dirs) {
+       checkFilePermissions(dir.toUri().getPath(), "dr-xrws---",
+-          localizedJobConf.getUser(), taskTrackerugi.getGroupNames()[0]);
++          localizedJobConf.getUser(), taskTrackerSpecialGroup);
+     }
+ 
+     // job-work dir needs user writable permissions
+@@ -147,7 +147,7 @@ public class TestLocalizationWithLinuxTaskController extends
+         lDirAlloc.getLocalPathToRead(TaskTracker.getJobWorkDir(jobId
+             .toString()), trackerFConf);
+     checkFilePermissions(jobWorkDir.toUri().getPath(), "drwxrws---",
+-        localizedJobConf.getUser(), taskTrackerugi.getGroupNames()[0]);
++        localizedJobConf.getUser(), taskTrackerSpecialGroup);
+ 
+     // check the private permissions of various files
+     List<Path> files = new ArrayList<Path>();
+@@ -159,7 +159,7 @@ public class TestLocalizationWithLinuxTaskController extends
+     files.add(new Path(jarsDir, "lib" + Path.SEPARATOR + "lib2.jar"));
+     for (Path file : files) {
+       checkFilePermissions(file.toUri().getPath(), "-r-xrwx---",
+-          localizedJobConf.getUser(), taskTrackerugi.getGroupNames()[0]);
++          localizedJobConf.getUser(), taskTrackerSpecialGroup);
+     }
+   }
+ 
+@@ -223,11 +223,9 @@ public class TestLocalizationWithLinuxTaskController extends
+     dirs.add(workDir);
+     dirs.add(new Path(workDir, "tmp"));
+     dirs.add(new Path(logFiles[1].getParentFile().getAbsolutePath()));
+-    UserGroupInformation taskTrackerugi =
+-        UserGroupInformation.login(localizedJobConf);
+     for (Path dir : dirs) {
+       checkFilePermissions(dir.toUri().getPath(), "drwxrws---",
+-          localizedJobConf.getUser(), taskTrackerugi.getGroupNames()[0]);
++          localizedJobConf.getUser(), taskTrackerSpecialGroup);
+     }
+ 
+     // check the private permissions of various files
+@@ -237,7 +235,7 @@ public class TestLocalizationWithLinuxTaskController extends
+         .isTaskCleanupTask()), trackerFConf));
+     for (Path file : files) {
+       checkFilePermissions(file.toUri().getPath(), "-rwxrwx---",
+-          localizedJobConf.getUser(), taskTrackerugi.getGroupNames()[0]);
++          localizedJobConf.getUser(), taskTrackerSpecialGroup);
+     }
+   }
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+index 37e3803..7d993e8 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+@@ -130,7 +130,7 @@ public class TestTaskTrackerLocalization extends TestCase {
+     FileUtil.fullyDelete(TEST_ROOT_DIR);
+   }
+ 
+-  private static String[] getFilePermissionAttrs(String path)
++  protected static String[] getFilePermissionAttrs(String path)
+       throws IOException {
+     String output = Shell.execCommand("stat", path, "-c", "%A:%U:%G");
+     return output.split(":|\n");
+-- 
+1.7.0.4
+

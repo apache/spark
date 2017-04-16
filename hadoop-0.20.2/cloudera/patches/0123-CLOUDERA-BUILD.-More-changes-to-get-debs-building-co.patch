@@ -1,0 +1,41 @@
+From 6957626991875302f33bb73630f4f376412f9711 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:16:43 -0800
+Subject: [PATCH 0123/1179] CLOUDERA-BUILD. More changes to get debs building correctly
+
+Author: Chad Metcalf
+---
+ cloudera/do-release-build |   13 ++++---------
+ 1 files changed, 4 insertions(+), 9 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 173cfe8..4d268cd 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -57,6 +57,10 @@ if which libtoolize && libtoolize --version | grep --silent 2.2 ; then
+     (cd $dir && libtoolize --force)
+   done
+ fi
++  
++for dir in src/native src/examples/pipes src/c++/libhdfs/ src/c++/pipes src/c++/utils ; do
++    (cd $dir && rm -rf autom4te.cache) 
++done
+ 
+ 
+ JAVA_HOME=$JAVA32_HOME \
+@@ -89,12 +93,3 @@ JAVA_HOME=$JAVA64_HOME \
+   -Dforrest.home=$FORREST_HOME \
+   -propertyfile cloudera/build.properties \
+   compile-core-native compile-c++ compile-c++-examples tar
+-
+-cd $RELEASE_DIR/src/contrib/sqoop
+-
+-JAVA_HOME=$JAVA64_HOME \
+-  ant \
+-  -Djava5.home=$JAVA5_HOME \
+-  -Dforrest.home=$FORREST_HOME \
+-  -propertyfile cloudera/build.properties \
+-  doc
+-- 
+1.7.0.4
+

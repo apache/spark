@@ -1,0 +1,48 @@
+From 716d3598e5a4a18cdfcfcf0dc800e263ef7c7685 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:32:47 -0800
+Subject: [PATCH 0023/1179] HADOOP-5240. 'ant javadoc' does not check whether outputs are up to date and always rebuilds
+
+Description: Running 'ant javadoc' twice in a row calls the javadoc program both times; it doesn't check to see whether this is redundant work.
+Reason: Build system improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ build.xml |   14 +++++++++++++-
+ 1 files changed, 13 insertions(+), 1 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 37328d6..f4b91e6 100644
+--- a/build.xml
++++ b/build.xml
+@@ -80,6 +80,7 @@
+   <property name="build.docs" value="${build.dir}/docs"/>
+   <property name="build.docs.cn" value="${build.dir}/docs/cn"/>
+   <property name="build.javadoc" value="${build.docs}/api"/>
++  <property name="build.javadoc.timestamp" value="${build.javadoc}/index.html" />
+   <property name="build.javadoc.dev" value="${build.docs}/dev-api"/>
+   <property name="build.encoding" value="ISO-8859-1"/>
+   <property name="install.c++" value="${build.dir}/c++/${build.platform}"/>
+@@ -955,7 +956,18 @@
+     </javadoc>
+   </target>	
+ 
+-  <target name="javadoc" depends="compile, ivy-retrieve-javadoc" description="Generate javadoc">
++  <target name="javadoc-uptodate" depends="compile, ivy-retrieve-javadoc">
++    <uptodate property="javadoc.is.uptodate">
++      <srcfiles dir="${src.dir}">
++        <include name="**/*.java" />
++        <include name="**/*.html" />
++      </srcfiles>
++      <mapper type="merge" to="${build.javadoc.timestamp}" />
++    </uptodate>
++  </target>
++ 
++  <target name="javadoc" description="Generate javadoc" depends="javadoc-uptodate"
++       unless="javadoc.is.uptodate">
+     <mkdir dir="${build.javadoc}"/>
+     <javadoc
+       overview="${core.src.dir}/overview.html"
+-- 
+1.7.0.4
+

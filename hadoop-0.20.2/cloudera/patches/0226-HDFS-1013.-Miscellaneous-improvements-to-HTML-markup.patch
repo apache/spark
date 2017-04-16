@@ -1,0 +1,952 @@
+From ea83036b3838fa97c673e73145d52867b8ace6ac Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:55:30 -0800
+Subject: [PATCH 0226/1179] HDFS-1013. Miscellaneous improvements to HTML markup for web UIs
+
+Description: The Web UIs have various bits of bad markup (eg missing &lt;head&gt; sections, some pages missing CSS links, inconsistent td vs th for table headings). We should fix this up.
+<hr/>
+    Improve markup and add Cloudera styling to Web UIs
+
+    This adds a favicon and a number of HTML/CSS improvements to make the
+    pages more space-efficient and easy on the eyes.
+
+    This may be an incompatible change for users who are scraping the HTML
+    output of the web UIs. Those users are encouraged to access the data
+    programmatically rather than through scraping.
+
+    The non-Cloudera-specific improvements will be contributed upstream
+    as HDFS-1013 and MAPREDUCE-1544.
+Reason: User experience improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ src/core/org/apache/hadoop/util/ServletUtil.java   |    3 +-
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |   25 ++++------
+ src/mapred/org/apache/hadoop/mapred/JSPUtil.java   |   36 ++++++++------
+ src/webapps/datanode/browseBlock.jsp               |    2 +
+ src/webapps/datanode/browseDirectory.jsp           |   18 +++----
+ src/webapps/datanode/tail.jsp                      |    2 +
+ src/webapps/hdfs/dfshealth.jsp                     |    1 +
+ src/webapps/hdfs/dfsnodelist.jsp                   |    1 +
+ src/webapps/job/analysejobhistory.jsp              |   32 ++++++++++---
+ src/webapps/job/jobblacklistedtrackers.jsp         |    5 ++-
+ src/webapps/job/jobconf.jsp                        |    6 ++-
+ src/webapps/job/jobconf_history.jsp                |    6 ++-
+ src/webapps/job/jobdetails.jsp                     |    1 +
+ src/webapps/job/jobdetailshistory.jsp              |   23 ++++++---
+ src/webapps/job/jobfailures.jsp                    |    9 +++-
+ src/webapps/job/jobhistory.jsp                     |   13 +++--
+ src/webapps/job/jobqueue_details.jsp               |    1 +
+ src/webapps/job/jobtasks.jsp                       |   10 +++-
+ src/webapps/job/jobtaskshistory.jsp                |   13 ++++-
+ src/webapps/job/jobtracker.jsp                     |    1 +
+ src/webapps/job/machines.jsp                       |   24 +++++----
+ src/webapps/job/taskdetails.jsp                    |   15 ++++--
+ src/webapps/job/taskdetailshistory.jsp             |   17 +++++--
+ src/webapps/job/taskstats.jsp                      |    2 +
+ src/webapps/static/hadoop.css                      |   51 ++++++++++++++++++++
+ src/webapps/static/images/favicon.ico              |  Bin 0 -> 1150 bytes
+ src/webapps/static/jobconf.xsl                     |    6 ++-
+ src/webapps/task/tasktracker.jsp                   |    6 ++-
+ 28 files changed, 234 insertions(+), 95 deletions(-)
+ create mode 100644 src/webapps/static/images/favicon.ico
+
+diff --git a/src/core/org/apache/hadoop/util/ServletUtil.java b/src/core/org/apache/hadoop/util/ServletUtil.java
+index d755b8e..0a5eedf 100644
+--- a/src/core/org/apache/hadoop/util/ServletUtil.java
++++ b/src/core/org/apache/hadoop/util/ServletUtil.java
+@@ -52,7 +52,8 @@ public class ServletUtil {
+   }
+ 
+   public static final String HTML_TAIL = "<hr />\n"
+-    + "<a href='http://hadoop.apache.org/core'>Hadoop</a>, " 
++    + "<a href=\"http://www.cloudera.com/hadoop/\">Cloudera's Distribution"
++    + " of Hadoop</a>, " + 
+     + Calendar.getInstance().get(Calendar.YEAR) + ".\n"
+     + "</body></html>";
+   
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index 42b4f5b..11f989a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -161,32 +161,25 @@ public class JspHelper {
+       fsn.DFSNodesStatus(live, dead);
+   }
+   public void addTableHeader(JspWriter out) throws IOException {
+-    out.print("<table border=\"1\""+
+-              " cellpadding=\"2\" cellspacing=\"2\">");
+-    out.print("<tbody>");
++    out.print("<table class=\"nnbrowse datatable\">\n");
+   }
+-  public void addTableRow(JspWriter out, String[] columns) throws IOException {
++
++  public void addTableHeadingRow(JspWriter out, String[] columns) throws IOException {
+     out.print("<tr>");
+-    for (int i = 0; i < columns.length; i++) {
+-      out.print("<td style=\"vertical-align: top;\"><B>"+columns[i]+"</B><br></td>");
++    for (String col : columns) {
++      out.print("<th>" + col + "</th>\n");
+     }
+     out.print("</tr>");
+   }
+-  public void addTableRow(JspWriter out, String[] columns, int row) throws IOException {
++  public void addTableRow(JspWriter out, String[] columns) throws IOException {
+     out.print("<tr>");
+-      
+-    for (int i = 0; i < columns.length; i++) {
+-      if (row/2*2 == row) {//even
+-        out.print("<td style=\"vertical-align: top;background-color:LightGrey;\"><B>"+columns[i]+"</B><br></td>");
+-      } else {
+-        out.print("<td style=\"vertical-align: top;background-color:LightBlue;\"><B>"+columns[i]+"</B><br></td>");
+-          
+-      }
++    for (String col : columns) {
++      out.print("<td>" + col + "</td>\n");
+     }
+     out.print("</tr>");
+   }
+   public void addTableFooter(JspWriter out) throws IOException {
+-    out.print("</tbody></table>");
++    out.print("</table>");
+   }
+ 
+   public String getSafeModeText() {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+index 7a86ac4..f9ef98d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
++++ b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+@@ -88,11 +88,13 @@ class JSPUtil {
+                                       PRIVATE_ACTIONS_KEY, false);
+     StringBuffer sb = new StringBuffer();
+     
+-    sb.append("<table border=\"1\" cellpadding=\"5\" cellspacing=\"0\">\n");
+-
++    sb.append("<table class=\"datatable\">\n");
+     if (jobs.size() > 0) {
+       if (isModifiable) {
+         sb.append("<form action=\"/jobtracker.jsp\" onsubmit=\"return confirmAction();\" method=\"POST\">");
++      }
++      sb.append("<thead>");
++      if (isModifiable) {
+         sb.append("<tr>");
+         sb.append("<td><input type=\"Button\" onclick=\"selectAll()\" " +
+         		"value=\"Select All\" id=\"checkEm\"></td>");
+@@ -114,22 +116,25 @@ class JSPUtil {
+         sb.append("</nobr></td>");
+         sb.append("<td colspan=\"10\">&nbsp;</td>");
+         sb.append("</tr>");
+-        sb.append("<td>&nbsp;</td>");
+-      } else {
+-        sb.append("<tr>");
+       }
++      sb.append("<tr>");
+ 
+-      sb.append("<td><b>Jobid</b></td><td><b>Priority" +
+-      		"</b></td><td><b>User</b></td>");
+-      sb.append("<td><b>Name</b></td>");
+-      sb.append("<td><b>Map % Complete</b></td>");
+-      sb.append("<td><b>Map Total</b></td>");
+-      sb.append("<td><b>Maps Completed</b></td>");
+-      sb.append("<td><b>Reduce % Complete</b></td>");
+-      sb.append("<td><b>Reduce Total</b></td>");
+-      sb.append("<td><b>Reduces Completed</b></td>");
+-      sb.append("<td><b>Job Scheduling Information</b></td>");
++      if (isModifiable) {
++        sb.append("<td>&nbsp;</td>");
++      }
++      sb.append("<th>");
++      sb.append("<b>Jobid</b></th><th><b>Priority" +
++      		"</b></th><th><b>User</b></th>");
++      sb.append("<th><b>Name</b></th>");
++      sb.append("<th><b>Map % Complete</b></th>");
++      sb.append("<th><b>Map Total</b></th>");
++      sb.append("<th><b>Maps Completed</b></th>");
++      sb.append("<th><b>Reduce % Complete</b></th>");
++      sb.append("<th><b>Reduce Total</b></th>");
++      sb.append("<th><b>Reduces Completed</b></th>");
++      sb.append("<th><b>Job Scheduling Information</b></th>");
+       sb.append("</tr>\n");
++      sb.append("</thead><tbody>");
+       for (Iterator<JobInProgress> it = jobs.iterator(); it.hasNext(); ++rowId) {
+         JobInProgress job = it.next();
+         JobProfile profile = job.getProfile();
+@@ -169,6 +174,7 @@ class JSPUtil {
+             + "</td><td>" + schedulingInfo
+             + "</td></tr>\n");
+       }
++      sb.append("</tbody>");
+       if (isModifiable) {
+         sb.append("</form>\n");
+       }
+diff --git a/src/webapps/datanode/browseBlock.jsp b/src/webapps/datanode/browseBlock.jsp
+index 127b096..8ee469d 100644
+--- a/src/webapps/datanode/browseBlock.jsp
++++ b/src/webapps/datanode/browseBlock.jsp
+@@ -367,6 +367,8 @@
+ <html>
+ <head>
+ <%JspHelper.createTitle(out, request, request.getParameter("filename")); %>
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ </head>
+ <body onload="document.goto.dir.focus()">
+ <% 
+diff --git a/src/webapps/datanode/browseDirectory.jsp b/src/webapps/datanode/browseDirectory.jsp
+index e577dc5..0917149 100644
+--- a/src/webapps/datanode/browseDirectory.jsp
++++ b/src/webapps/datanode/browseDirectory.jsp
+@@ -99,8 +99,9 @@
+       }
+       else {
+         jspHelper.addTableHeader(out);
+-        int row=0;
+-        jspHelper.addTableRow(out, headings, row++);
++        out.print("<thead>\n");
++        jspHelper.addTableHeadingRow(out, headings);
++        out.print("</thead><tbody>\n");
+         String cols [] = new String[headings.length];
+         for (int i = 0; i < files.length; i++) {
+           //Get the location of the first block of the file
+@@ -125,8 +126,9 @@
+           cols[6] = files[i].getPermission().toString();
+           cols[7] = files[i].getOwner();
+           cols[8] = files[i].getGroup();
+-          jspHelper.addTableRow(out, cols, row++);
++          jspHelper.addTableRow(out, cols);
+         }
++        out.print("</tbody>\n");
+         jspHelper.addTableFooter(out);
+       }
+     } 
+@@ -141,14 +143,8 @@
+ 
+ <html>
+ <head>
+-<style type=text/css>
+-<!--
+-body 
+-  {
+-  font-face:sanserif;
+-  }
+--->
+-</style>
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ <%JspHelper.createTitle(out, request, request.getParameter("dir")); %>
+ </head>
+ 
+diff --git a/src/webapps/datanode/tail.jsp b/src/webapps/datanode/tail.jsp
+index 8d50b35..63d6a14 100644
+--- a/src/webapps/datanode/tail.jsp
++++ b/src/webapps/datanode/tail.jsp
+@@ -110,6 +110,8 @@
+ <html>
+ <head>
+ <%JspHelper.createTitle(out, request, request.getParameter("filename")); %>
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ </head>
+ <body>
+ <form action="/tail.jsp" method="GET">
+diff --git a/src/webapps/hdfs/dfshealth.jsp b/src/webapps/hdfs/dfshealth.jsp
+index 24cbda0..670cb01 100644
+--- a/src/webapps/hdfs/dfshealth.jsp
++++ b/src/webapps/hdfs/dfshealth.jsp
+@@ -234,6 +234,7 @@
+ <html>
+ 
+ <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ <title>Hadoop NameNode <%=namenodeLabel%></title>
+     
+ <body>
+diff --git a/src/webapps/hdfs/dfsnodelist.jsp b/src/webapps/hdfs/dfsnodelist.jsp
+index 60fa887..f9b62c5 100644
+--- a/src/webapps/hdfs/dfsnodelist.jsp
++++ b/src/webapps/hdfs/dfsnodelist.jsp
+@@ -239,6 +239,7 @@ String namenodeLabel = nn.getNameNodeAddress().getHostName() + ":" + nn.getNameN
+ <html>
+ 
+ <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ <title>Hadoop NameNode <%=namenodeLabel%></title>
+   
+ <body>
+diff --git a/src/webapps/job/analysejobhistory.jsp b/src/webapps/job/analysejobhistory.jsp
+index e8d9179..8b5db32 100644
+--- a/src/webapps/job/analysejobhistory.jsp
++++ b/src/webapps/job/analysejobhistory.jsp
+@@ -17,7 +17,7 @@
+ %>
+ <%!	private static final long serialVersionUID = 1L;
+ %>
+-<html><body>
++<html>
+ <%
+   String jobid = request.getParameter("jobid");
+   String logFile = request.getParameter("logFile");
+@@ -29,6 +29,13 @@
+   }
+   JobInfo job = (JobInfo)request.getSession().getAttribute("job");
+ %>
++<head>
++  <title>Analyze Job - Hadoop Job <%=jobid %></title>
++  <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++  <link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
++</head>
++
++<body>
+ <h2>Hadoop Job <a href="jobdetailshistory.jsp?jobid=<%=jobid%>&&logFile=<%=encodedLogFileName%>"><%=jobid %> </a></h2>
+ <b>User : </b> <%=job.get(Keys.USER) %><br/> 
+ <b>JobName : </b> <%=job.get(Keys.JOBNAME) %><br/> 
+@@ -108,8 +115,11 @@
+ <h3>Average time taken by Map tasks: 
+ <%=StringUtils.formatTimeDiff(avgMapTime, 0) %></h3>
+ <h3>Worse performing map tasks</h3>
+-<table border="2" cellpadding="5" cellspacing="2">
+-<tr><td>Task Id</td><td>Time taken</td></tr>
++<table class="jobtasks datatable">
++<thead>
++<tr><th>Task Id</th><th>Time taken</th></tr>
++</thead>
++<tbody>
+ <%
+   for (int i=0;i<showTasks && i<mapTasks.length; i++) {
+ %>
+@@ -121,6 +131,7 @@
+ <%
+   }
+ %>
++</tbody>
+ </table>
+ <%  
+   Comparator<JobHistory.Task> cFinishMapRed = 
+@@ -157,8 +168,10 @@ finished at (relative to the Job launch time):
+ <h3>Average time taken by Shuffle: 
+ <%=StringUtils.formatTimeDiff(avgShuffleTime, 0) %></h3>
+ <h3>Worse performing Shuffle(s)</h3>
+-<table border="2" cellpadding="5" cellspacing="2">
+-<tr><td>Task Id</td><td>Time taken</td></tr>
++<table class="jobtasks datatable">
++<thead>
++<tr><th>Task Id</th><th>Time taken</th></tr>
++</thead><tbody>
+ <%
+   for (int i=0;i<showTasks && i<reduceTasks.length; i++) {
+ %>
+@@ -175,6 +188,7 @@ finished at (relative to the Job launch time):
+ <%
+   }
+ %>
++</tbody>
+ </table>
+ <%  
+   Comparator<JobHistory.Task> cFinishShuffle = 
+@@ -220,8 +234,11 @@ finished at (relative to the Job launch time):
+ <h3>Average time taken by Reduce tasks: 
+ <%=StringUtils.formatTimeDiff(avgReduceTime, 0) %></h3>
+ <h3>Worse performing reduce tasks</h3>
+-<table border="2" cellpadding="5" cellspacing="2">
+-<tr><td>Task Id</td><td>Time taken</td></tr>
++<table class="jobtasks datatable">
++<thead>
++<tr><th>Task Id</th><th>Time taken</th></tr>
++</thead>
++<tbody>
+ <%
+   for (int i=0;i<showTasks && i<reduceTasks.length; i++) {
+ %>
+@@ -235,6 +252,7 @@ finished at (relative to the Job launch time):
+ <%
+   }
+ %>
++</tbody>
+ </table>
+ <%  
+   Arrays.sort(reduceTasks, cFinishMapRed);
+diff --git a/src/webapps/job/jobblacklistedtrackers.jsp b/src/webapps/job/jobblacklistedtrackers.jsp
+index 6774d1e..a50b0ab 100644
+--- a/src/webapps/job/jobblacklistedtrackers.jsp
++++ b/src/webapps/job/jobblacklistedtrackers.jsp
+@@ -46,8 +46,11 @@
+     }
+ %>
+ 
+-<html>
++<html><head>
+ <title>Hadoop <%=jobId%>'s black-listed tasktrackers</title>
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
++</head>
+ <body>
+ <h1>Hadoop <a href="jobdetails.jsp?jobid=<%=jobId%>"><%=jobId%></a> - 
+ Black-listed task-trackers</h1>
+diff --git a/src/webapps/job/jobconf.jsp b/src/webapps/job/jobconf.jsp
+index c2a14a9..02d6082 100644
+--- a/src/webapps/job/jobconf.jsp
++++ b/src/webapps/job/jobconf.jsp
+@@ -21,9 +21,11 @@
+ %>
+   
+ <html>
+-
++<head>
+ <title>Job Configuration: JobId - <%= jobId %></title>
+-
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
++</head>
+ <body>
+ <h2>Job Configuration: JobId - <%= jobId %></h2><br>
+ 
+diff --git a/src/webapps/job/jobconf_history.jsp b/src/webapps/job/jobconf_history.jsp
+index f203c37..2e5bf70 100644
+--- a/src/webapps/job/jobconf_history.jsp
++++ b/src/webapps/job/jobconf_history.jsp
+@@ -22,9 +22,11 @@
+ %>
+   
+ <html>
+-
++<head>
+ <title>Job Configuration: JobId - <%= jobId %></title>
+-
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
++</head>
+ <body>
+ <h2>Job Configuration: JobId - <%= jobId %></h2><br>
+ 
+diff --git a/src/webapps/job/jobdetails.jsp b/src/webapps/job/jobdetails.jsp
+index 30d427b..60ab0ac 100644
+--- a/src/webapps/job/jobdetails.jsp
++++ b/src/webapps/job/jobdetails.jsp
+@@ -194,6 +194,7 @@
+   %>
+ <title>Hadoop <%=jobId%> on <%=trackerName%></title>
+ <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ </head>
+ <body>
+ <h1>Hadoop <%=jobId%> on <a href="jobtracker.jsp"><%=trackerName%></a></h1>
+diff --git a/src/webapps/job/jobdetailshistory.jsp b/src/webapps/job/jobdetailshistory.jsp
+index e956be7..1062290 100644
+--- a/src/webapps/job/jobdetailshistory.jsp
++++ b/src/webapps/job/jobdetailshistory.jsp
+@@ -28,7 +28,16 @@
+     JobInfo job = (JobInfo)request.getSession().getAttribute("job");
+     FileSystem fs = (FileSystem)request.getSession().getAttribute("fs");
+ %>
+-<html><body>
++<html>
++<head>
++<title>
++Hadoop Job <%=jobid %> on History Viewer
++</title>
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
++</head>
++<body>
++
+ <h2>Hadoop Job <%=jobid %> on <a href="jobhistory.jsp">History Viewer</a></h2>
+ 
+ <b>User: </b> <%=job.get(Keys.USER) %><br/> 
+@@ -135,12 +144,12 @@
+ <b><a href="analysejobhistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>">Analyse This Job</a></b> 
+ <hr/>
+ <center>
+-<table border="2" cellpadding="5" cellspacing="2">
++<table>
+ <tr>
+-<td>Kind</td><td>Total Tasks(successful+failed+killed)</td><td>Successful tasks</td><td>Failed tasks</td><td>Killed tasks</td><td>Start Time</td><td>Finish Time</td>
++<th>Kind</th><th>Total Tasks(successful+failed+killed)</th><th>Successful tasks</th><th>Failed tasks</th><th>Killed tasks</th><th>Start Time</th><th>Finish Time</th>
+ </tr>
+ <tr>
+-<td>Setup</td>
++<th>Setup</th>
+     <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=all">
+         <%=totalSetups%></a></td>
+     <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=<%=Values.SUCCESS %>">
+@@ -153,7 +162,7 @@
+     <td><%=StringUtils.getFormattedTimeWithDiff(dateFormat, setupFinished, setupStarted) %></td>
+ </tr>
+ <tr>
+-<td>Map</td>
++<th>Map</th>
+     <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.MAP.name() %>&status=all">
+         <%=totalMaps %></a></td>
+     <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.MAP.name() %>&status=<%=Values.SUCCESS %>">
+@@ -166,7 +175,7 @@
+     <td><%=StringUtils.getFormattedTimeWithDiff(dateFormat, mapFinished, mapStarted) %></td>
+ </tr>
+ <tr>
+-<td>Reduce</td>
++<th>Reduce</th>
+     <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.REDUCE.name() %>&status=all">
+         <%=totalReduces%></a></td>
+     <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.REDUCE.name() %>&status=<%=Values.SUCCESS %>">
+@@ -179,7 +188,7 @@
+     <td><%=StringUtils.getFormattedTimeWithDiff(dateFormat, reduceFinished, reduceStarted) %></td>
+ </tr>
+ <tr>
+-<td>Cleanup</td>
++<th>Cleanup</th>
+     <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.CLEANUP.name() %>&status=all">
+         <%=totalCleanups%></a></td>
+     <td><a href="jobtaskshistory.jsp?jobid=<%=jobid %>&logFile=<%=encodedLogFileName%>&taskType=<%=Values.CLEANUP.name() %>&status=<%=Values.SUCCESS %>">
+diff --git a/src/webapps/job/jobfailures.jsp b/src/webapps/job/jobfailures.jsp
+index c0333b0..cebb1e9 100644
+--- a/src/webapps/job/jobfailures.jsp
++++ b/src/webapps/job/jobfailures.jsp
+@@ -124,9 +124,11 @@
+       return;
+     }
+     	
+-    out.print("<table border=2 cellpadding=\"5\" cellspacing=\"2\">");
++    out.print("<table class=\"jobtasks datatable\">");
++    out.print("<thead>");
+     out.print("<tr><th>Attempt</th><th>Task</th><th>Machine</th><th>State</th>" +
+               "<th>Error</th><th>Logs</th></tr>\n");
++    out.print("</thead><tbody>\n");
+     if (includeMap) {
+       TaskInProgress[] tips = job.getMapTasks();
+       for(int i=0; i < tips.length; ++i) {
+@@ -139,6 +141,7 @@
+         printFailedAttempts(out, tracker, jobId, tips[i], state);
+       }
+     }
++    out.print("</tbody>\n");
+     out.print("</table>\n");
+   }
+ %>
+@@ -155,7 +158,11 @@
+ %>
+ 
+ <html>
++<head>
+ <title>Hadoop <%=jobId%> failures on <%=trackerName%></title>
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
++</head>
+ <body>
+ <h1>Hadoop <a href="jobdetails.jsp?jobid=<%=jobId%>"><%=jobId%></a>
+ failures on <a href="jobtracker.jsp"><%=trackerName%></a></h1>
+diff --git a/src/webapps/job/jobhistory.jsp b/src/webapps/job/jobhistory.jsp
+index 63f2fd2..c48e31b 100644
+--- a/src/webapps/job/jobhistory.jsp
++++ b/src/webapps/job/jobhistory.jsp
+@@ -37,9 +37,9 @@ window.location.href = url;
+ }
+ //-->
+ </script>
+-<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
+ <title><%= trackerName %> Hadoop Map/Reduce History Viewer</title>
+ <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ </head>
+ <body>
+ <h1> <a href="jobtracker.jsp"><%= trackerName %></a> Hadoop Map/Reduce 
+@@ -201,12 +201,14 @@ window.location.href = url;
+     // print the navigation info (top)
+     printNavigation(pageno, size, maxPageNo, search, out);
+ 
+-    out.print("<table align=center border=2 cellpadding=\"5\" cellspacing=\"2\">");
++    out.print("<table class=\"datatable\">");
++    out.print("<thead>\n");
+     out.print("<tr>");
+-    out.print("<td>Job tracker Host Name</td>" +
+-              "<td>Job tracker Start time</td>" +
+-              "<td>Job Id</td><td>Name</td><td>User</td>") ; 
++    out.print("<th>Job tracker Host Name</th>" +
++              "<th>Job tracker Start time</th>" +
++              "<th>Job Id</th><th>Name</th><th>User</th>") ; 
+     out.print("</tr>"); 
++    out.print("</thead><tbody>\n");
+     
+     Set<String> displayedJobs = new HashSet<String>();
+     for (int i = start - 1; i < start + length - 1; ++i) {
+@@ -243,6 +245,7 @@ window.location.href = url;
+ </center> 
+ <%
+     } // end while trackers 
++    out.print("</tbody>");
+     out.print("</table>");
+ 
+     // show the navigation info (bottom)
+diff --git a/src/webapps/job/jobqueue_details.jsp b/src/webapps/job/jobqueue_details.jsp
+index 6f5e9b5..4ca3a14 100644
+--- a/src/webapps/job/jobqueue_details.jsp
++++ b/src/webapps/job/jobqueue_details.jsp
+@@ -26,6 +26,7 @@ private static final long serialVersionUID = 526456771152222127L;
+ <head>
+ <title>Queue details for <%=queueName!=null?queueName:""%> </title>
+ <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ <script type="text/javascript" src="/static/jobtracker.js"></script>
+ </head>
+ <body>
+diff --git a/src/webapps/job/jobtasks.jsp b/src/webapps/job/jobtasks.jsp
+index f97e90b..96e2500 100644
+--- a/src/webapps/job/jobtasks.jsp
++++ b/src/webapps/job/jobtasks.jsp
+@@ -51,6 +51,7 @@
+   <head>
+     <title>Hadoop <%=type%> task list for <%=jobid%> on <%=trackerName%></title>
+     <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++    <link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+   </head>
+ <body>
+ <h1>Hadoop <%=type%> task list for 
+@@ -85,9 +86,11 @@
+     out.print("<h2>" + Character.toUpperCase(state.charAt(0)) 
+               + state.substring(1).toLowerCase() + " Tasks</h2>");
+     out.print("<center>");
+-    out.print("<table border=2 cellpadding=\"5\" cellspacing=\"2\">");
+-    out.print("<tr><td align=\"center\">Task</td><td>Complete</td><td>Status</td>" +
+-              "<td>Start Time</td><td>Finish Time</td><td>Errors</td><td>Counters</td></tr>");
++    out.print("<table class=\"jobtasks datatable\">");
++    out.print("<thead>");
++    out.print("<tr><th align=\"center\">Task</th><th>Complete</th><th>Status</th>" +
++              "<th>Start Time</th><th>Finish Time</th><th>Errors</th><th>Counters</th></tr>");
++    out.print("</thead><tbody>");
+     if (end_index > report_len){
+         end_index = report_len;
+     }
+@@ -114,6 +117,7 @@
+              "\">" + report.getCounters().size() +
+              "</a></td></tr>");
+     }
++    out.print("</tbody>");
+     out.print("</table>");
+     out.print("</center>");
+   }
+diff --git a/src/webapps/job/jobtaskshistory.jsp b/src/webapps/job/jobtaskshistory.jsp
+index 90b78ef..11b68ad 100644
+--- a/src/webapps/job/jobtaskshistory.jsp
++++ b/src/webapps/job/jobtaskshistory.jsp
+@@ -31,11 +31,19 @@
+   Map<String, JobHistory.Task> tasks = job.getAllTasks(); 
+ %>
+ <html>
++<head>
++  <title><%=taskStatus%> <%=taskType %> task list for <%=jobid %></title>
++  <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++  <link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
++</head>
+ <body>
+ <h2><%=taskStatus%> <%=taskType %> task list for <a href="jobdetailshistory.jsp?jobid=<%=jobid%>&&logFile=<%=encodedLogFileName%>"><%=jobid %> </a></h2>
+ <center>
+-<table border="2" cellpadding="5" cellspacing="2">
+-<tr><td>Task Id</td><td>Start Time</td><td>Finish Time<br/></td><td>Error</td></tr>
++<table class="jobtasks datatable">
++<thead>
++<tr><th>Task Id</th><th>Start Time</th><th>Finish Time<br/></th><th>Error</th></tr>
++</thead>
++<tbody>
+ <%
+   for (JobHistory.Task task : tasks.values()) {
+     if (taskType.equals(task.get(Keys.TASK_TYPE))){
+@@ -49,6 +57,7 @@
+     }
+   }
+ %>
++</tbody>
+ </table>
+ <%!
+   private void printTask(String jobid, String logFile,
+diff --git a/src/webapps/job/jobtracker.jsp b/src/webapps/job/jobtracker.jsp
+index 407084b..4113407 100644
+--- a/src/webapps/job/jobtracker.jsp
++++ b/src/webapps/job/jobtracker.jsp
+@@ -65,6 +65,7 @@
+ <head>
+ <title><%= trackerName %> Hadoop Map/Reduce Administration</title>
+ <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ <script type="text/javascript" src="/static/jobtracker.js"></script>
+ </head>
+ <body>
+diff --git a/src/webapps/job/machines.jsp b/src/webapps/job/machines.jsp
+index 3291c01..3fc20a5 100644
+--- a/src/webapps/job/machines.jsp
++++ b/src/webapps/job/machines.jsp
+@@ -32,14 +32,15 @@
+       out.print("There are currently no known " + type + " Task Trackers.");
+     } else {
+       out.print("<center>\n");
+-      out.print("<table border=\"2\" cellpadding=\"5\" cellspacing=\"2\">\n");
+-      out.print("<tr><td align=\"center\" colspan=\"6\"><b>Task Trackers</b></td></tr>\n");
+-      out.print("<tr><td><b>Name</b></td><td><b>Host</b></td>" +
+-                "<td><b># running tasks</b></td>" +
+-                "<td><b>Max Map Tasks</b></td>" +
+-                "<td><b>Max Reduce Tasks</b></td>" +
+-                "<td><b>Failures</b></td>" +
+-                "<td><b>Seconds since heartbeat</b></td></tr>\n");
++      out.print("<table class=\"datatable\">\n");
++      out.print("<thead>\n");
++      out.print("<tr><th><b>Name</b></th><th><b>Host</b></th>" +
++                "<th><b># running tasks</b></th>" +
++                "<th><b>Max Map Tasks</b></th>" +
++                "<th><b>Max Reduce Tasks</b></th>" +
++                "<th><b>Failures</b></th>" +
++                "<th><b>Seconds since heartbeat</b></th></tr>\n");
++      out.print("</thead><tbody>");
+       int maxFailures = 0;
+       String failureKing = null;
+       for (Iterator it = c.iterator(); it.hasNext(); ) {
+@@ -67,6 +68,7 @@
+                   "</td><td>" + numFailures + 
+                   "</td><td>" + sinceHeartbeat + "</td></tr>\n");
+       }
++      out.print("</tbody>\n");
+       out.print("</table>\n");
+       out.print("</center>\n");
+       if (maxFailures > 0) {
+@@ -79,9 +81,11 @@
+ %>
+ 
+ <html>
+-
++<head>
+ <title><%=trackerName%> Hadoop Machine List</title>
+-
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
++</head>
+ <body>
+ <h1><a href="jobtracker.jsp"><%=trackerName%></a> Hadoop Machine List</h1>
+ 
+diff --git a/src/webapps/job/taskdetails.jsp b/src/webapps/job/taskdetails.jsp
+index c26b58f..067a553 100644
+--- a/src/webapps/job/taskdetails.jsp
++++ b/src/webapps/job/taskdetails.jsp
+@@ -90,6 +90,7 @@
+ <html>
+ <head>
+   <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++  <link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+   <title>Hadoop Task Details</title>
+ </head>
+ <body>
+@@ -106,16 +107,19 @@
+ <%
+     } else {
+ %>
+-<table border=2 cellpadding="5" cellspacing="2">
+-<tr><td align="center">Task Attempts</td><td>Machine</td><td>Status</td><td>Progress</td><td>Start Time</td> 
++<table class="jobtasks datatable">
++<thead>
++<tr><th align="center">Task Attempts</th><th>Machine</th><th>Status</th><th>Progress</th><th>Start Time</th> 
+   <%
+    if (!ts[0].getIsMap() && !isCleanupOrSetup) {
+    %>
+-<td>Shuffle Finished</td><td>Sort Finished</td>
++<th>Shuffle Finished</th><th>Sort Finished</th>
+   <%
+   }
+   %>
+-<td>Finish Time</td><td>Errors</td><td>Task Logs</td><td>Counters</td><td>Actions</td></tr>
++<th>Finish Time</th><th>Errors</th><th>Task Logs</th><th>Counters</th><th>Actions</th></tr>
++  </thead>
++  <tbody>
+   <%
+     for (int i = 0; i < ts.length; i++) {
+       TaskStatus status = ts[i];
+@@ -247,6 +251,7 @@
+         out.println("</td></tr>");
+       }
+   %>
++</tbody>
+ </table>
+ </center>
+ 
+@@ -254,7 +259,7 @@
+       if (ts[0].getIsMap() && !isCleanupOrSetup) {
+ %>
+ <h3>Input Split Locations</h3>
+-<table border=2 cellpadding="5" cellspacing="2">
++<table class="datatable">
+ <%
+         for (String split: StringUtils.split(tracker.getTip(
+                                          tipidObj).getSplitNodes())) {
+diff --git a/src/webapps/job/taskdetailshistory.jsp b/src/webapps/job/taskdetailshistory.jsp
+index e9eb7da..66df663 100644
+--- a/src/webapps/job/taskdetailshistory.jsp
++++ b/src/webapps/job/taskdetailshistory.jsp
+@@ -27,24 +27,33 @@
+   String type = task.get(Keys.TASK_TYPE);
+ %>
+ <html>
++<head>
++<title><%=taskid %> attempts for <%=jobid %></title>
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
++</head>
+ <body>
+ <h2><%=taskid %> attempts for <a href="jobdetailshistory.jsp?jobid=<%=jobid%>&&logFile=<%=encodedLogFileName%>"> <%=jobid %> </a></h2>
+ <center>
+-<table border="2" cellpadding="5" cellspacing="2">
+-<tr><td>Task Id</td><td>Start Time</td>
++<table class="jobtasks datatable">
++<thead>
++<tr><th>Task Id</th><th>Start Time</th>
+ <%	
+   if (Values.REDUCE.name().equals(type)) {
+ %>
+-    <td>Shuffle Finished</td><td>Sort Finished</td>
++    <th>Shuffle Finished</th><th>Sort Finished</th>
+ <%
+   }
+ %>
+-<td>Finish Time</td><td>Host</td><td>Error</td><td>Task Logs</td></tr>
++<th>Finish Time</th><th>Host</th><th>Error</th><th>Task Logs</th></tr>
++</thead>
++<tbody>
+ <%
+   for (JobHistory.TaskAttempt attempt : task.getTaskAttempts().values()) {
+     printTaskAttempt(attempt, type, out);
+   }
+ %>
++</tbody>
+ </table>
+ </center>
+ <%	
+diff --git a/src/webapps/job/taskstats.jsp b/src/webapps/job/taskstats.jsp
+index 8d7859f..2f555b8 100644
+--- a/src/webapps/job/taskstats.jsp
++++ b/src/webapps/job/taskstats.jsp
+@@ -40,6 +40,8 @@
+ <html>
+   <head>
+     <title>Counters for <%=taskid%></title>
++    <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++    <link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+   </head>
+ <body>
+ <h1>Counters for <%=taskid%></h1>
+diff --git a/src/webapps/static/hadoop.css b/src/webapps/static/hadoop.css
+index 0560cb3..ea2160d 100644
+--- a/src/webapps/static/hadoop.css
++++ b/src/webapps/static/hadoop.css
+@@ -132,3 +132,54 @@ line.taskgraphline {
+ #quicklinks ul a {
+ 	text-decoration: underline;
+ }
++
++/**
++ * Style additions by Cloudera
++ */
++
++body {
++  background-color : #fff;
++  font-family : sans-serif;
++  font-size:11px;
++  line-height:17px;
++}
++
++table td, table th {
++  font-size: 12px;
++}
++
++a { 
++  color: #04f !important; 
++  text-decoration:none !important;
++}
++
++a:hover {
++  text-decoration:underline;
++}
++
++hr {
++  border:1px solid #ddd;
++  border-top:0px;
++}
++
++table.datatable td, table.datatable th{
++  border: 1px solid #666;
++  padding: 5px;
++  margin: 2px;
++}
++
++table.nnbrowse td {
++  font-family: courier,sans-serif;
++}
++
++table.datatable tbody tr:nth-child(even) { background: #cacaff; }
++table.datatable {
++  font-size: 10px;
++}
++
++table {
++  border-collapse: collapse;
++}
++table td {
++  border: 1px;
++}
+diff --git a/src/webapps/static/images/favicon.ico b/src/webapps/static/images/favicon.ico
+new file mode 100644
+index 0000000000000000000000000000000000000000..dc926b2c8448fd52bec92102100865a609a3eb0f
+GIT binary patch
+literal 1150
+zcma)3O-NKx6h1~E)S@AwmC)N+1T6|&I&NG=;6@0_MU<$!+7zTRn-pah2~&%HgjUre
+zDU%AFl40H(W^!a4nwTeQI;G>hAMYFI-H~x{^muMIFuS?m<9p}u-S0d1UM@fbeI5_c
+zUxB`p0OtVU0+A$Aj&&;k&~zF=P!>EFx?albJ+l5<A6xKumHGM_;z4t*F4OO>PTz9Z
+zzartPjK9`X+Dcq<V!nMkw^pmm_QmB-Q8qt}MV1W6W~#nDQ*U)*BbZN&BexgcRCU?9
+z`zQV~JKcrOVgUJe@|SE*_{#Q@#|S^ork?|DOx;A5et*Eth$1_qWTo1j<OJGLAF{*~
+z;xjC)efG=d%Xz(bGdPCJuba_P`_cLN0*hv($c>29`&V{;-_J}vz(qeG3*AK)zK4a4
+z@8}xZxXc;$^DDPEXNNH|1o(Hd1Gne8k;TW5_OEb5y<Bfb+19T(iFb$U0APF+&<=K@
+z6}*8gHQ{jUN3?F<N;ekt*@x;N<id{tQvs-0GuP1k);;NNg+6dY>#sLMtW&l}qdRDW
+zFqi$<cE|kU9ThsaVy|37y(s#6p!{Q+(<yw`OvedP=?-VzoZ2G#D$uJahs26cQTFhd
+aJ5&WTq!CYLyi^6x|K}O<wNU1*q8tH_d=%aQ
+
+literal 0
+HcmV?d00001
+
+diff --git a/src/webapps/static/jobconf.xsl b/src/webapps/static/jobconf.xsl
+index f3c2e33..4e086ad 100644
+--- a/src/webapps/static/jobconf.xsl
++++ b/src/webapps/static/jobconf.xsl
+@@ -2,17 +2,21 @@
+ <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">
+ <xsl:output method="html"/>
+ <xsl:template match="configuration">
+-<table border="1" align="center" >
++<table border="1" align="center" class="datatable">
++<thead>
+ <tr>
+  <th>name</th>
+  <th>value</th>
+ </tr>
++</thead>
++<tbody>
+ <xsl:for-each select="property">
+ <tr>
+   <td width="35%"><b><xsl:value-of select="name"/></b></td>
+   <td width="65%"><xsl:value-of select="value"/></td>
+ </tr>
+ </xsl:for-each>
++</tbody>
+ </table>
+ </xsl:template>
+ </xsl:stylesheet>
+diff --git a/src/webapps/task/tasktracker.jsp b/src/webapps/task/tasktracker.jsp
+index e54b809..be5316c 100644
+--- a/src/webapps/task/tasktracker.jsp
++++ b/src/webapps/task/tasktracker.jsp
+@@ -16,9 +16,11 @@
+ %>
+ 
+ <html>
+-
++<head>
+ <title><%= trackerName %> Task Tracker Status</title>
+-
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
++</head>
+ <body>
+ <h1><%= trackerName %> Task Tracker Status</h1>
+ <img src="/static/hadoop-logo.jpg"/><br>
+-- 
+1.7.0.4
+

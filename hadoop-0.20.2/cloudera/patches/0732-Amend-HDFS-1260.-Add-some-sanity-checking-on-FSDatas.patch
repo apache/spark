@@ -1,0 +1,108 @@
+From 4904e0fbd60c5f043bb1451ca4e3be012be8cf59 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 7 Oct 2010 14:50:46 -0700
+Subject: [PATCH 0732/1179] Amend HDFS-1260. Add some sanity checking on FSDataset
+
+Reason: Help debug errors seen in the wild
+Author: Todd Lipcon
+Ref: CDH-913
+---
+ .../hadoop/hdfs/server/datanode/BlockReceiver.java |    8 ++++--
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |   24 ++++++++++++++++---
+ 2 files changed, 25 insertions(+), 7 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+index 3649f2f..9427e8c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+@@ -118,14 +118,16 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+       
+       // check if there is a disk error
+       IOException cause = FSDataset.getCauseIfDiskError(ioe);
+-      DataNode.LOG.warn("IOException in BlockReceiver constructor. Cause is ",
+-          cause);
+       
+       if (cause != null) { // possible disk error
++        DataNode.LOG.warn("Disk-related IOException in BlockReceiver constructor. Cause is ",
++          cause);
+         ioe = cause;
+         datanode.checkDiskError(ioe); // may throw an exception here
++      } else {
++        DataNode.LOG.warn("Non-disk IOException in BlockReceiver constructor. Cause is ",
++          ioe);
+       }
+-      
+       throw ioe;
+     }
+   }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index 8f62ee9..9204664 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -1044,12 +1044,14 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     return info.detachBlock(block, numLinks);
+   }
+ 
+-  static private <T> void updateBlockMap(Map<Block, T> blockmap,
++  static private <T> T updateBlockMap(Map<Block, T> blockmap,
+       Block oldblock, Block newblock) throws IOException {
+     if (blockmap.containsKey(oldblock)) {
+       T value = blockmap.remove(oldblock);
+       blockmap.put(newblock, value);
++      return value;
+     }
++    return null;
+   }
+ 
+   /** {@inheritDoc} */
+@@ -1193,8 +1195,15 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       throw new IOException("Cannot rename tmp meta file to " + newMetaFile);
+     }
+ 
+-    updateBlockMap(ongoingCreates, oldblockWildcardGS, newblock);
+-    updateBlockMap(volumeMap, oldblockWildcardGS, newblock);
++    ActiveFile newActive = updateBlockMap(ongoingCreates, oldblockWildcardGS, newblock);
++    if (newActive != null && !newActive.threads.isEmpty()) {
++      DataNode.LOG.error("Unexpected state updating block " + oldblockWildcardGS +
++        " -- there was an ongoing creator thread!");
++    }
++    if (updateBlockMap(volumeMap, oldblockWildcardGS, newblock) == null) {
++      DataNode.LOG.error("Unexpected state updating block " + oldblockWildcardGS +
++        " -- this block is not in the volume map");
++    }
+ 
+     // paranoia! verify that the contents of the stored block 
+     // matches the block file on disk.
+@@ -1319,6 +1328,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       //
+       ActiveFile activeFile = ongoingCreates.get(b);
+       if (activeFile != null) {
++        DataNode.LOG.debug("Interrupting current writers for ongoing create block: " + b);
+         f = activeFile.file;
+         threads = activeFile.threads;
+         
+@@ -1332,6 +1342,10 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+         }
+         ongoingCreates.remove(b);
+       }
++      if (ongoingCreates.containsKey(new Block(
++        b.getBlockId(), b.getNumBytes(), GenerationStamp.WILDCARD_STAMP))) {
++        DataNode.LOG.error("Unexpected: wildcard ongoingCreates exists for block " + b);
++      }
+       FSVolume v = null;
+       if (!isRecovery) {
+         v = volumes.getNextVolume(blockSize);
+@@ -1498,7 +1512,9 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     File dest = null;
+     dest = v.addBlock(b, f);
+     volumeMap.put(b, new DatanodeBlockInfo(v, dest));
+-    ongoingCreates.remove(b);
++    if (ongoingCreates.remove(b) == null) {
++      DataNode.LOG.warn("Unexpected finalizing block " + b + " -- it wasn't in ongoingCreates");
++    }
+   }
+ 
+   /**
+-- 
+1.7.0.4
+

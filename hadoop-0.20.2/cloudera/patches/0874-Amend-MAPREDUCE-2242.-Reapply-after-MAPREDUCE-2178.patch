@@ -1,0 +1,194 @@
+From 3f5313383362c86a2df8be55d2c524d82f9fac85 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 13 Feb 2011 20:14:09 -0800
+Subject: [PATCH 0874/1179] Amend MAPREDUCE-2242. Reapply after MAPREDUCE-2178.
+
+Reason: fix environment escaping
+Author: Todd Lipcon
+Ref: CDH-2572
+---
+ .../apache/hadoop/mapred/LinuxTaskController.java  |   21 --------
+ .../org/apache/hadoop/mapred/TaskRunner.java       |   31 +++++++++----
+ .../hadoop/mapred/TestLinuxTaskController.java     |   21 --------
+ .../org/apache/hadoop/mapred/TestTaskRunner.java   |   50 ++++++++++++++++++++
+ 4 files changed, 72 insertions(+), 51 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestTaskRunner.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+index f48ad98..50e8522 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+@@ -253,27 +253,6 @@ class LinuxTaskController extends TaskController {
+     return 0;
+   }
+ 
+-
+-  /**
+-   * Append lines of the form 'export FOO="bar"' to sb to export the given
+-   * environment map.
+-   * 
+-   * This should not be relied upon for security as the variable names are not
+-   * sanitized in any way.
+-   * @param sb StringBuilder to append to
+-   * @param env Environment to export
+-   */
+-  static void appendEnvExports(StringBuilder sb, Map<String, String> env) {
+-    for(Entry<String, String> entry : env.entrySet()) {
+-      sb.append("export ");
+-      sb.append(entry.getKey());
+-      sb.append("=\"");
+-      sb.append(StringUtils.escapeString(entry.getValue(), '\\', '"'));
+-      sb.append("\"\n");
+-    }
+-  }
+-  
+-
+   @Override
+   public void deleteAsUser(String user, String subDir) throws IOException {
+     String[] command = 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index fa3bcbb..09c0011 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -216,15 +216,7 @@ abstract class TaskRunner extends Thread {
+       
+       // flatten the env as a set of export commands
+       List <String> setupCmds = new ArrayList<String>();
+-      for(Entry<String, String> entry : env.entrySet()) {
+-        StringBuffer sb = new StringBuffer();
+-        sb.append("export ");
+-        sb.append(entry.getKey());
+-        sb.append("=\"");
+-        sb.append(entry.getValue());
+-        sb.append("\"");
+-        setupCmds.add(sb.toString());
+-      }
++      appendEnvExports(setupCmds, env);
+       setupCmds.add(setup);
+       
+       launchJvmAndWait(setupCmds, vargs, stdout, stderr, logSize, workDir);
+@@ -349,6 +341,27 @@ abstract class TaskRunner extends Thread {
+   }
+ 
+   /**
++   * Append lines of the form 'export FOO="bar"' to the list of setup commands
++   * to export the given environment map.
++   *
++   * This should not be relied upon for security as the variable names are not
++   * sanitized in any way.
++   * @param commands list of commands to add to
++   * @param env Environment to export
++   */
++  static void appendEnvExports(List<String> commands, Map<String, String> env) {
++    for(Entry<String, String> entry : env.entrySet()) {
++      StringBuilder sb = new StringBuilder();
++      sb.append("export ");
++      sb.append(entry.getKey());
++      sb.append("=\"");
++      sb.append(StringUtils.escapeString(entry.getValue(), '\\', '"'));
++      sb.append("\"");
++      commands.add(sb.toString());
++    }
++  }
++
++  /**
+    * @param taskid
+    * @param workDir
+    * @param classPaths
+diff --git a/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+index f33aa64..ab355a3 100644
+--- a/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+@@ -19,8 +19,6 @@ package org.apache.hadoop.mapred;
+ 
+ import java.io.File;
+ import java.io.IOException;
+-import java.util.Map;
+-import java.util.TreeMap;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileUtil;
+@@ -99,23 +97,4 @@ public class TestLinuxTaskController extends TestCase {
+         conf);
+     validateTaskControllerSetup(controller, false);
+   }
+-
+-  /**
+-   * Test that environment variables are properly escaped when exported from
+-   * taskjvm.sh
+-   */
+-  public void testEnvironmentEscaping() {
+-    Map<String,String> env = new TreeMap<String, String>();
+-    env.put("BAZ", "blah blah multiple words");
+-    env.put("FOO", "bar");
+-    env.put("QUOTED", "bad chars like \\ and \"");
+-    
+-    StringBuilder sb = new StringBuilder();
+-    LinuxTaskController.appendEnvExports(sb, env);
+-    assertEquals(
+-        "export BAZ=\"blah blah multiple words\"\n" +
+-        "export FOO=\"bar\"\n" +
+-        "export QUOTED=\"bad chars like \\\\ and \\\"\"\n",
+-        sb.toString());
+-  }
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskRunner.java b/src/test/org/apache/hadoop/mapred/TestTaskRunner.java
+new file mode 100644
+index 0000000..b712b46
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestTaskRunner.java
+@@ -0,0 +1,50 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Map;
++import java.util.TreeMap;
++
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++public class TestTaskRunner {
++  /**
++   * Test that environment variables are properly escaped when exported from
++   * taskjvm.sh
++   */
++  @Test
++  public void testEnvironmentEscaping() {
++    Map<String,String> env = new TreeMap<String, String>();
++    env.put("BAZ", "blah blah multiple words");
++    env.put("FOO", "bar");
++    env.put("QUOTED", "bad chars like \\ and \"");
++
++    List<String> exportCmds = new ArrayList<String>();
++    TaskRunner.appendEnvExports(exportCmds, env);
++    assertEquals(3, exportCmds.size());
++    assertEquals("export BAZ=\"blah blah multiple words\"",
++                 exportCmds.get(0));
++    assertEquals("export FOO=\"bar\"",
++                 exportCmds.get(1));
++    assertEquals("export QUOTED=\"bad chars like \\\\ and \\\"\"",
++                 exportCmds.get(2));
++  }
++}
+\ No newline at end of file
+-- 
+1.7.0.4
+

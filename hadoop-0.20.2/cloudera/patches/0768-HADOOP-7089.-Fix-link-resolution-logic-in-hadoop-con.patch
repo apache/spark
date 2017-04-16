@@ -1,0 +1,54 @@
+From 329ae61a7987d576c0d73a395f773fa820594ea4 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 7 Jan 2011 10:47:45 -0800
+Subject: [PATCH 0768/1179] HADOOP-7089. Fix link resolution logic in hadoop-config.sh.
+
+The link resolution logic in bin/hadoop-config.sh fails when when
+executed via a symlink, from the root directory. We can replace this
+logic with cd -P and pwd -P, which should be portable across Linux,
+Solaris, BSD, and OSX.
+
+Reason: Bug
+Author: Eli Collins
+Ref: DISTRO-9
+---
+ bin/hadoop-config.sh |   23 ++++++-----------------
+ 1 files changed, 6 insertions(+), 17 deletions(-)
+
+diff --git a/bin/hadoop-config.sh b/bin/hadoop-config.sh
+index 7d180e5..a76b8e9 100644
+--- a/bin/hadoop-config.sh
++++ b/bin/hadoop-config.sh
+@@ -17,23 +17,12 @@
+ # should not be executable directly
+ # also should not be passed any arguments, since we need original $*
+ 
+-# resolve links - $0 may be a softlink
+-
+-this="$0"
+-while [ -h "$this" ]; do
+-  ls=`ls -ld "$this"`
+-  link=`expr "$ls" : '.*-> \(.*\)$'`
+-  if expr "$link" : '.*/.*' > /dev/null; then
+-    this="$link"
+-  else
+-    this=`dirname "$this"`/"$link"
+-  fi
+-done
+-
+-# convert relative path to absolute path
+-bin=`dirname "$this"`
+-script=`basename "$this"`
+-bin=`cd "$bin"; pwd`
++# Resolve links ($0 may be a softlink) and convert a relative path
++# to an absolute path.  NB: The -P option requires bash built-ins
++# or POSIX:2001 compliant cd and pwd.
++this="${BASH_SOURCE-$0}"
++bin=$(cd -P -- "$(dirname -- "$this")" && pwd -P)
++script="$(basename -- "$this")"
+ this="$bin/$script"
+ 
+ # the root of the Hadoop installation
+-- 
+1.7.0.4
+

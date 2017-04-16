@@ -1,0 +1,72 @@
+From 4fd9e18fb751824c140d5b67645fc925a92a7c1f Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu00@gmail.com>
+Date: Tue, 28 Jun 2011 17:35:48 -0700
+Subject: [PATCH 0992/1179] HADOOP-7433. Snappy SO file/links are copied to the wrong directory
+
+    Reason: Bug, they must be copied to the $OS_ARCH directory
+    Author: Alejandro Abdelnur
+    Ref: CDH-3300
+---
+ build.xml                         |    6 ++++--
+ src/native/packageNativeHadoop.sh |   21 ++++++++++++---------
+ 2 files changed, 16 insertions(+), 11 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 2a83117..76d16bb 100644
+--- a/build.xml
++++ b/build.xml
+@@ -362,8 +362,10 @@
+ 	  <env key="BASE_NATIVE_LIB_DIR" value="${lib.dir}/native"/>
+ 	  <env key="BUILD_NATIVE_DIR" value="${build.dir}/native"/>
+ 	  <env key="DIST_LIB_DIR" value="${dist.dir}/lib/native"/>
+-          <env key="BUNDLE_SNAPPY_LIB" value="${bundle.snappy}"/>
+-          <env key="SNAPPY_LIB_DIR" value="${snappy.lib}"/>
++    <env key="BUNDLE_SNAPPY_LIB" value="${bundle.snappy}"/>
++    <env key="SNAPPY_LIB_DIR" value="${snappy.lib}"/>
++    <env key="BUILD_PLATFORM" value="${build.platform}"/>
++
+ 	  <arg line="${native.src.dir}/packageNativeHadoop.sh"/>
+       </exec>
+     </sequential>
+diff --git a/src/native/packageNativeHadoop.sh b/src/native/packageNativeHadoop.sh
+index ced4810..465eb30 100755
+--- a/src/native/packageNativeHadoop.sh
++++ b/src/native/packageNativeHadoop.sh
+@@ -24,6 +24,9 @@
+ #  * BASE_NATIVE_LIB_DIR
+ #  * BUILD_NATIVE_DIR
+ #  * DIST_LIB_DIR
++#  * BUNDLE_SNAPPY_LIB
++#  * SNAPPY_LIB_DIR
++#  * BUILD_PLATFORM
+ # All these are setup by build.xml.
+ #
+ 
+@@ -64,15 +67,15 @@ fi
+ 
+ if [ "${BUNDLE_SNAPPY_LIB}" = "true" ]
+ then
+- if [ -d ${SNAPPY_LIB_DIR} ]
+- then
+-    echo "Copying Snappy library in ${SNAPPY_LIB_DIR} to $DIST_LIB_DIR/"
+-   cd ${SNAPPY_LIB_DIR}
+-   $TAR . | (cd $DIST_LIB_DIR/; $UNTAR)
+- else
+-   echo "Snappy lib directory ${SNAPPY_LIB_DIR} does not exist"
+-   exit 1
+- fi
++  if [ -d ${SNAPPY_LIB_DIR} ]
++  then
++    echo "Copying Snappy library in ${SNAPPY_LIB_DIR} to $DIST_LIB_DIR/$BUILD_PLATFORM/"
++    cd ${SNAPPY_LIB_DIR}
++    $TAR . | (cd $DIST_LIB_DIR/$BUILD_PLATFORM/; $UNTAR)
++  else
++    echo "Snappy lib directory ${SNAPPY_LIB_DIR} does not exist"
++    exit 1
++  fi
+ fi
+ 
+ #vim: ts=2: sw=2: et
+-- 
+1.7.0.4
+

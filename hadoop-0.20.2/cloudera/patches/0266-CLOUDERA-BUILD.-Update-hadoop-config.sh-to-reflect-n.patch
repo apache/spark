@@ -1,0 +1,32 @@
+From e2a78f767d26b838bf67354a4b85235ddd731038 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 18 Jun 2010 14:41:14 -0700
+Subject: [PATCH 0266/1179] CLOUDERA-BUILD. Update hadoop-config.sh to reflect new jar version.
+
+---
+ bin/hadoop-config.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/bin/hadoop-config.sh b/bin/hadoop-config.sh
+index 31f0db3..087842c 100644
+--- a/bin/hadoop-config.sh
++++ b/bin/hadoop-config.sh
+@@ -44,13 +44,13 @@ fi
+ # double check that our HADOOP_HOME looks reasonable.
+ # cding to / here verifies that we have an absolute path, which is
+ # necessary for the daemons to function properly
+-if [ -z "$(cd / && ls $HADOOP_HOME/hadoop-*-core.jar $HADOOP_HOME/build 2>/dev/null)" ]; then
++if [ -z "$(cd / && ls $HADOOP_HOME/hadoop-core-*.jar $HADOOP_HOME/build 2>/dev/null)" ]; then
+   cat 1>&2 <<EOF
+ +================================================================+
+ |      Error: HADOOP_HOME is not set correctly                   |
+ +----------------------------------------------------------------+
+ | Please set your HADOOP_HOME variable to the absolute path of   |
+-| the directory that contains hadoop-VERSION-core.jar            |
++| the directory that contains hadoop-core-VERSION.jar            |
+ +================================================================+
+ EOF
+   exit 1
+-- 
+1.7.0.4
+

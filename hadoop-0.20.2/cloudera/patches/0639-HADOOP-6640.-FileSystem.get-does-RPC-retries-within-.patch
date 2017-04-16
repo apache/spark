@@ -1,0 +1,94 @@
+From 463557b922ac3579aa130d01f780ab3c2e32b70f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 5 May 2010 23:38:06 +0000
+Subject: [PATCH 0639/1179] HADOOP-6640. FileSystem.get() does RPC retries within a static synchronized block
+
+Patch: https://issues.apache.org/jira/secure/attachment/12443759/getFS_yahoo20s.patch
+Author: Hairong Kuang
+Reason: Fixes potential performance issue in multithreaded environment
+Ref: YDH
+---
+ .../apache/hadoop/fs/TestFileSystemCaching.java    |   71 ++++++++++++++++++++
+ 1 files changed, 71 insertions(+), 0 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/fs/TestFileSystemCaching.java
+
+diff --git a/src/test/org/apache/hadoop/fs/TestFileSystemCaching.java b/src/test/org/apache/hadoop/fs/TestFileSystemCaching.java
+new file mode 100644
+index 0000000..78d494d
+--- /dev/null
++++ b/src/test/org/apache/hadoop/fs/TestFileSystemCaching.java
+@@ -0,0 +1,71 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.fs;
++
++import java.io.IOException;
++import java.net.URI;
++import java.net.URISyntaxException;
++
++import org.apache.hadoop.conf.Configuration;
++import java.util.concurrent.Semaphore;
++
++import junit.framework.TestCase;
++
++public class TestFileSystemCaching extends TestCase {
++
++  public static class InitializeForeverFileSystem extends LocalFileSystem {
++    final static Semaphore sem = new Semaphore(0);
++    public void initialize(URI uri, Configuration conf) throws IOException {
++      // notify that InitializeForeverFileSystem started initialization
++      sem.release();
++      try {
++        while (true) {
++          Thread.sleep(1000);
++        }
++      } catch (InterruptedException e) {
++        return;
++      }
++    }
++  }
++  
++  public void testCacheEnabledWithInitializeForeverFS() throws Exception {
++    final Configuration conf = new Configuration();
++    Thread t = new Thread() {
++      public void run() {
++        conf.set("fs.localfs1.impl", "org.apache.hadoop.fs." +
++         "TestFileSystemCaching$InitializeForeverFileSystem");
++        try {
++          FileSystem.get(new URI("localfs1://a"), conf);
++        } catch (IOException e) {
++          e.printStackTrace();
++        } catch (URISyntaxException e) {
++          e.printStackTrace();
++        }
++      }
++    };
++    t.start();
++    // wait for InitializeForeverFileSystem to start initialization
++    InitializeForeverFileSystem.sem.acquire();
++    
++    conf.set("fs.cachedfile.impl", conf.get("fs.file.impl"));
++    FileSystem.get(new URI("cachedfile://a"), conf);
++    t.interrupt();
++    t.join();
++  }
++}
+-- 
+1.7.0.4
+

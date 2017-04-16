@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Run commands on master or specified node of a running Hadoop EC2 cluster.
+
+# if no args specified, show usage
+if [ $# = 0 ]; then
+  echo "Command required!"
+  exit 1
+fi
+
+# get arguments
+COMMAND="$1"
+shift
+# get group
+CLUSTER="$1"
+shift
+
+if [ -z $CLUSTER ]; then
+  echo "Cluster name or instance id required!"
+  exit -1
+fi
+
+# Import variables
+bin=`dirname "$0"`
+bin=`cd "$bin"; pwd`
+. "$bin"/hadoop-ec2-env.sh
+
+if [[ $CLUSTER == i-* ]]; then
+  HOST=`ec2-describe-instances $CLUSTER | grep running | awk '{print $4}'`
+  [ -z $HOST ] && echo "Instance still pending or no longer running: $CLUSTER" && exit -1
+else
+  [ ! -f $MASTER_IP_PATH ] && echo "Wrong group name, or cluster not launched! $CLUSTER" && exit -1
+  HOST=`cat $MASTER_IP_PATH`
+fi
+
+if [ "$COMMAND" = "login" ] ; then
+  echo "Logging in to host $HOST."
+  ssh $SSH_OPTS "root@$HOST"
+elif [ "$COMMAND" = "proxy" ] ; then
+  echo "Proxying to host $HOST via local port 6666"
+  echo "Gangia:     http://$HOST/ganglia"
+  echo "JobTracker: http://$HOST:50030/"
+  echo "NameNode:   http://$HOST:50070/"
+  ssh $SSH_OPTS -D 6666 -N "root@$HOST"
+elif [ "$COMMAND" = "push" ] ; then
+  echo "Pushing $1 to host $HOST."
+  scp $SSH_OPTS -r $1 "root@$HOST:"
+elif [ "$COMMAND" = "screen" ] ; then
+  echo "Logging in and attaching screen on host $HOST."
+  ssh $SSH_OPTS -t "root@$HOST" 'screen -D -R'
+else
+  echo "Executing command on host $HOST."
+  ssh $SSH_OPTS -t "root@$HOST" "$COMMAND"
+fi

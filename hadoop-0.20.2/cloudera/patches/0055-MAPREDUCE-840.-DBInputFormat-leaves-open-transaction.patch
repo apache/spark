@@ -1,0 +1,28 @@
+From 6f017db468a82e336a28f451c7d90bc225130094 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:47:33 -0800
+Subject: [PATCH 0055/1179] MAPREDUCE-840. DBInputFormat leaves open transaction
+
+Description: DBInputFormat.getSplits() does not call connection.commit() after the COUNT query. This can leave an open transaction against the database which interferes with other connections to the same table.
+Reason: bugfix
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../apache/hadoop/mapred/lib/db/DBInputFormat.java |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java b/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java
+index f74c16d..ce1469e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java
+@@ -393,6 +393,7 @@ public class DBInputFormat<T  extends DBWritable>
+         splits[i] = split;
+       }
+ 
++      connection.commit();
+       return splits;
+     } catch (SQLException e) {
+       throw new IOException(e.getMessage());
+-- 
+1.7.0.4
+

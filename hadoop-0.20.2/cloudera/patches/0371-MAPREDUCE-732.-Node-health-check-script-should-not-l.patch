@@ -1,0 +1,36 @@
+From 5b18d7b8a13873ca3b0cb3f5da074f3ee846e63c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 15 Oct 2009 16:05:41 +0530
+Subject: [PATCH 0371/1179] MAPREDUCE-732. Node health check script should not log "UNHEALTHY" status for every heartbeat in INFO mode
+
+Patch: http://issues.apache.org/jira/secure/attachment/12413001/MAPRED-732-ydist.patch
+Author: Sreekanth Ramakrishnan
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |   10 ++++++++--
+ 1 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 2567789..7549ea8 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -739,8 +739,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       FaultInfo fi = getFaultInfo(hostName, true);
+       boolean blackListed = fi.isBlacklisted();
+       if(blackListed) {
+-        LOG.info("Adding blacklisted reason for tracker : " + hostName 
+-            + " Reason for blacklisting is : " + rfb);
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("Adding blacklisted reason for tracker : " + hostName 
++              + " Reason for blacklisting is : " + rfb);
++        }
++        if (!fi.getReasonforblacklisting().contains(rfb)) {
++          LOG.info("Adding blacklisted reason for tracker : " + hostName
++              + " Reason for blacklisting is : " + rfb);
++        }
+         fi.addBlackListedReason(rfb, reason);
+       } else {
+         LOG.info("Blacklisting tracker : " + hostName 
+-- 
+1.7.0.4
+

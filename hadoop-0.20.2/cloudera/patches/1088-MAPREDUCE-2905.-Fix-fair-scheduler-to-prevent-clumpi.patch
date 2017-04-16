@@ -1,0 +1,256 @@
+From 898431eb9641a2932a09ff1373f478b0f77075d5 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 22 Nov 2011 11:44:28 -0800
+Subject: [PATCH 1088/1179] MAPREDUCE-2905. Fix fair scheduler to prevent clumping of tasks when assignmultiple is enabled.
+
+Reason: spread load more evenly on clusters with many slots
+Author: Todd Lipcon and Jeff Bean
+Ref: CDH-3509
+---
+ .../apache/hadoop/mapred/CapBasedLoadManager.java  |   13 ++--
+ .../org/apache/hadoop/mapred/FairScheduler.java    |    9 ++-
+ .../java/org/apache/hadoop/mapred/LoadManager.java |    8 ++-
+ .../hadoop/mapred/TestCapBasedLoadManager.java     |   68 +++++++++++--------
+ .../apache/hadoop/mapred/TestFairScheduler.java    |   10 +++-
+ 5 files changed, 67 insertions(+), 41 deletions(-)
+
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/CapBasedLoadManager.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/CapBasedLoadManager.java
+index 66accef..c43259a 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/CapBasedLoadManager.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/CapBasedLoadManager.java
+@@ -48,15 +48,16 @@ public class CapBasedLoadManager extends LoadManager {
+ 
+   @Override
+   public boolean canAssignMap(TaskTrackerStatus tracker,
+-      int totalRunnableMaps, int totalMapSlots) {
+-    return tracker.countMapTasks() < getCap(totalRunnableMaps,
+-        tracker.getMaxMapSlots(), totalMapSlots);
++      int totalRunnableMaps, int totalMapSlots, int alreadyAssigned) {
++    int cap = getCap(totalRunnableMaps, tracker.getMaxMapSlots(), totalMapSlots);
++    return tracker.countMapTasks() + alreadyAssigned < cap;
+   }
+ 
+   @Override
+   public boolean canAssignReduce(TaskTrackerStatus tracker,
+-      int totalRunnableReduces, int totalReduceSlots) {
+-    return tracker.countReduceTasks() < getCap(totalRunnableReduces,
+-        tracker.getMaxReduceSlots(), totalReduceSlots);
++      int totalRunnableReduces, int totalReduceSlots, int alreadyAssigned) {
++    int cap = getCap(totalRunnableReduces, tracker.getMaxReduceSlots(),
++        totalReduceSlots); 
++    return tracker.countReduceTasks() + alreadyAssigned < cap;
+   }
+ }
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+index 5c31d33..b7ed276 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+@@ -392,7 +392,8 @@ public class FairScheduler extends TaskScheduler {
+       if (!mapRejected) {
+         if (mapsAssigned == mapCapacity ||
+             runningMaps == runnableMaps ||
+-            !loadMgr.canAssignMap(tts, runnableMaps, totalMapSlots)) {
++            !loadMgr.canAssignMap(tts, runnableMaps,
++                totalMapSlots, mapsAssigned)) {
+           eventLog.log("INFO", "Can't assign another MAP to " + trackerName);
+           mapRejected = true;
+         }
+@@ -400,7 +401,8 @@ public class FairScheduler extends TaskScheduler {
+       if (!reduceRejected) {
+         if (reducesAssigned == reduceCapacity ||
+             runningReduces == runnableReduces ||
+-            !loadMgr.canAssignReduce(tts, runnableReduces, totalReduceSlots)) {
++            !loadMgr.canAssignReduce(tts, runnableReduces,
++                totalReduceSlots, reducesAssigned)) {
+           eventLog.log("INFO", "Can't assign another REDUCE to " + trackerName);
+           reduceRejected = true;
+         }
+@@ -423,7 +425,8 @@ public class FairScheduler extends TaskScheduler {
+       } else {
+         // If both types are available, choose the task type with fewer running
+         // tasks on the task tracker to prevent that task type from starving
+-        if (tts.countMapTasks() <= tts.countReduceTasks()) {
++        if (tts.countMapTasks() + mapsAssigned <=
++            tts.countReduceTasks() + reducesAssigned) {
+           taskType = TaskType.MAP;
+         } else {
+           taskType = TaskType.REDUCE;
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/LoadManager.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/LoadManager.java
+index 2e6f3aa..8b9d496 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/LoadManager.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/LoadManager.java
+@@ -69,18 +69,22 @@ public abstract class LoadManager implements Configurable {
+    * @param tracker The machine we wish to run a new map on
+    * @param totalRunnableMaps Set of running jobs in the cluster
+    * @param totalMapSlots The total number of map slots in the cluster
++   * @param alreadyAssigned the number of maps already assigned to
++   *        this tracker during this heartbeat
+    * @return true if another map can be launched on <code>tracker</code>
+    */
+   public abstract boolean canAssignMap(TaskTrackerStatus tracker,
+-      int totalRunnableMaps, int totalMapSlots);
++      int totalRunnableMaps, int totalMapSlots, int alreadyAssigned);
+ 
+   /**
+    * Can a given {@link TaskTracker} run another reduce task?
+    * @param tracker The machine we wish to run a new map on
+    * @param totalRunnableReduces Set of running jobs in the cluster
+    * @param totalReduceSlots The total number of reduce slots in the cluster
++   * @param alreadyAssigned the number of reduces already assigned to
++   *        this tracker during this heartbeat
+    * @return true if another reduce can be launched on <code>tracker</code>
+    */
+   public abstract boolean canAssignReduce(TaskTrackerStatus tracker,
+-      int totalRunnableReduces, int totalReduceSlots);
++      int totalRunnableReduces, int totalReduceSlots, int alreadyAssigned);
+ }
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestCapBasedLoadManager.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestCapBasedLoadManager.java
+index 6bc6a62..e3648f7 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestCapBasedLoadManager.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestCapBasedLoadManager.java
+@@ -75,7 +75,7 @@ public class TestCapBasedLoadManager extends TestCase {
+    * A single test of canAssignMap.
+    */
+   private void oneTestCanAssignMap(float maxDiff, int mapCap, int runningMap,
+-      int totalMapSlots, int totalRunnableMap, boolean expected) {
++      int totalMapSlots, int totalRunnableMap, int expectedAssigned) {
+     
+     CapBasedLoadManager manager = new CapBasedLoadManager();
+     Configuration conf = new Configuration();
+@@ -84,14 +84,16 @@ public class TestCapBasedLoadManager extends TestCase {
+     
+     TaskTrackerStatus ts = getTaskTrackerStatus(mapCap, 1, runningMap, 1);
+     
++    int numAssigned = 0;
++    while (manager.canAssignMap(ts, totalRunnableMap, totalMapSlots, numAssigned)) {
++      numAssigned++;
++    }
++      
+     assertEquals( "When maxDiff=" + maxDiff + ", with totalRunnableMap=" 
+         + totalRunnableMap + " and totalMapSlots=" + totalMapSlots
+         + ", a tracker with runningMap=" + runningMap + " and mapCap="
+-        + mapCap + " should " + (expected ? "" : "not ")
+-        + "be able to take more Maps.",
+-        expected,
+-        manager.canAssignMap(ts, totalRunnableMap, totalMapSlots)
+-        );
++        + mapCap + " should be able to assign " + expectedAssigned + " maps",
++        expectedAssigned, numAssigned);
+   }
+   
+   
+@@ -99,52 +101,60 @@ public class TestCapBasedLoadManager extends TestCase {
+    * Test canAssignMap method.
+    */
+   public void testCanAssignMap() {
+-    oneTestCanAssignMap(0.0f, 5, 0, 50, 1, true);
+-    oneTestCanAssignMap(0.0f, 5, 1, 50, 10, false);
+-    oneTestCanAssignMap(0.2f, 5, 1, 50, 10, true);
+-    oneTestCanAssignMap(0.0f, 5, 1, 50, 11, true);
+-    oneTestCanAssignMap(0.0f, 5, 2, 50, 11, false);
+-    oneTestCanAssignMap(0.3f, 5, 2, 50, 6, true);
+-    oneTestCanAssignMap(1.0f, 5, 5, 50, 50, false);
++    oneTestCanAssignMap(0.0f, 5, 0, 50, 1, 1);
++    oneTestCanAssignMap(0.0f, 5, 1, 50, 10, 0);
++    // 20% load + 20% diff = 40% of available slots, but rounds
++    // up with floating point error: so we get 3/5 slots on TT.
++    // 1 already taken, so assigns 2 more
++    oneTestCanAssignMap(0.2f, 5, 1, 50, 10, 2);
++    oneTestCanAssignMap(0.0f, 5, 1, 50, 11, 1);
++    oneTestCanAssignMap(0.0f, 5, 2, 50, 11, 0);
++    oneTestCanAssignMap(0.3f, 5, 2, 50, 6, 1);
++    oneTestCanAssignMap(1.0f, 5, 5, 50, 50, 0);
+   }
+   
+   
+   /**
+    * A single test of canAssignReduce.
+    */
+-  private void oneTestCanAssignReduce(float maxDiff, int ReduceCap,
++  private void oneTestCanAssignReduce(float maxDiff, int reduceCap,
+       int runningReduce, int totalReduceSlots, int totalRunnableReduce,
+-      boolean expected) {
++      int expectedAssigned) {
+     
+     CapBasedLoadManager manager = new CapBasedLoadManager();
+     Configuration conf = new Configuration();
+     conf.setFloat("mapred.fairscheduler.load.max.diff", maxDiff);
+     manager.setConf(conf);
+     
+-    TaskTrackerStatus ts = getTaskTrackerStatus(1, ReduceCap, 1,
++    TaskTrackerStatus ts = getTaskTrackerStatus(1, reduceCap, 1,
+         runningReduce);
+     
++    int numAssigned = 0;
++    while (manager.canAssignReduce(ts, totalRunnableReduce, totalReduceSlots, numAssigned)) {
++      numAssigned++;
++    }
++      
+     assertEquals( "When maxDiff=" + maxDiff + ", with totalRunnableReduce=" 
+         + totalRunnableReduce + " and totalReduceSlots=" + totalReduceSlots
+-        + ", a tracker with runningReduce=" + runningReduce
+-        + " and ReduceCap=" + ReduceCap + " should "
+-        + (expected ? "" : "not ") + "be able to take more Reduces.",
+-        expected,
+-        manager.canAssignReduce(ts, totalRunnableReduce, totalReduceSlots)
+-        );
++        + ", a tracker with runningReduce=" + runningReduce + " and reduceCap="
++        + reduceCap + " should be able to assign " + expectedAssigned + " reduces",
++        expectedAssigned, numAssigned);
+   }
+     
+   /** 
+    * Test canAssignReduce method.
+    */
+   public void testCanAssignReduce() {
+-    oneTestCanAssignReduce(0.0f, 5, 0, 50, 1, true);
+-    oneTestCanAssignReduce(0.0f, 5, 1, 50, 10, false);
+-    oneTestCanAssignReduce(0.2f, 5, 1, 50, 10, true);
+-    oneTestCanAssignReduce(0.0f, 5, 1, 50, 11, true);
+-    oneTestCanAssignReduce(0.0f, 5, 2, 50, 11, false);
+-    oneTestCanAssignReduce(0.3f, 5, 2, 50, 6, true);
+-    oneTestCanAssignReduce(1.0f, 5, 5, 50, 50, false);
++    oneTestCanAssignReduce(0.0f, 5, 0, 50, 1, 1);
++    oneTestCanAssignReduce(0.0f, 5, 1, 50, 10, 0);
++    // 20% load + 20% diff = 40% of available slots, but rounds
++    // up with floating point error: so we get 3/5 slots on TT.
++    // 1 already taken, so assigns 2 more
++    oneTestCanAssignReduce(0.2f, 5, 1, 50, 10, 2);
++    oneTestCanAssignReduce(0.0f, 5, 1, 50, 11, 1);
++    oneTestCanAssignReduce(0.0f, 5, 2, 50, 11, 0);
++    oneTestCanAssignReduce(0.3f, 5, 2, 50, 6, 1);
++    oneTestCanAssignReduce(1.0f, 5, 5, 50, 50, 0);
+   }
+   
+ }
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index cd5315f..30b8c66 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -460,7 +460,12 @@ public class TestFairScheduler extends TestCase {
+       statuses.put(attemptId, status);
+       trackerForTip.put(attemptId, trackerStatus);
+       status.setRunState(TaskStatus.State.RUNNING);
+-      trackerStatus.getTaskReports().add(status);
++    }
++    
++    public void reportTaskOnTracker(String trackerName, Task t) {
++      FakeTaskInProgress tip = tips.get(t.getTaskID().toString());
++      TaskTrackerStatus trackerStatus = trackers.get(trackerName).getStatus();
++      trackerStatus.getTaskReports().add(tip.getTaskStatus(t.getTaskID()));
+     }
+     
+     public void finishTask(String taskTrackerName, String attemptId) {
+@@ -2803,6 +2808,9 @@ public class TestFairScheduler extends TestCase {
+   protected void checkAssignment(String taskTrackerName,
+       String... expectedTasks) throws IOException {
+     List<Task> tasks = scheduler.assignTasks(tracker(taskTrackerName));
++    for (Task t : tasks) {
++      taskTrackerManager.reportTaskOnTracker(taskTrackerName, t);
++    }
+     System.out.println("Assigned tasks:");
+     for (int i = 0; i < tasks.size(); i++)
+       System.out.println("- " + tasks.get(i));
+-- 
+1.7.0.4
+

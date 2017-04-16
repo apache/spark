@@ -1,0 +1,887 @@
+From 877787c7557f3c2bb824f526d5b036c734bfc5e1 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 26 Feb 2010 21:43:27 -0800
+Subject: [PATCH 0512/1179] HADOOP-6580,HDFS-993,MR-1516. UGI should contain authentication method.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437317/HADOOP-6580-0_20.5.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Server.java         |   39 ++++--
+ .../org/apache/hadoop/security/SaslRpcServer.java  |   12 +-
+ src/core/org/apache/hadoop/security/User.java      |   18 +++-
+ .../hadoop/security/UserGroupInformation.java      |   34 +++++
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    6 +-
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   39 ++++++
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |    4 +
+ .../org/apache/hadoop/mapred/JobTracker.java       |   43 ++++++
+ .../security/TestDelegationTokenAuthMethod.java    |  139 ++++++++++++++++++++
+ src/test/org/apache/hadoop/ipc/TestSaslRPC.java    |   45 +++++++
+ .../org/apache/hadoop/mapred/MiniMRCluster.java    |    2 +-
+ .../delegation/TestDelegationTokenAuthMethod.java  |  131 ++++++++++++++++++
+ .../hadoop/security/TestUserGroupInformation.java  |   50 +++++++
+ 13 files changed, 541 insertions(+), 21 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/security/TestDelegationTokenAuthMethod.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationTokenAuthMethod.java
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 1cc887c..657c198 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -69,6 +69,7 @@ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
+ import org.apache.hadoop.security.SaslRpcServer.SaslDigestCallbackHandler;
+ import org.apache.hadoop.security.SaslRpcServer.SaslGssCallbackHandler;
++import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.ProxyUsers;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+@@ -1064,18 +1065,32 @@ public abstract class Server {
+       UserGroupInformation protocolUser = header.getUgi();
+       if (!useSasl) {
+         user = protocolUser;
+-      } else if ((protocolUser != null)
+-          && (!protocolUser.getUserName().equals(user.getUserName()))) {
+-        if (authMethod == AuthMethod.DIGEST) {
+-          // Not allowed to doAs if token authentication is used
+-          throw new AccessControlException("Authenticated user (" + user
+-              + ") doesn't match what the client claims to be (" + protocolUser
+-              + ")");
+-        } else {
+-          //Effective user can be different from authenticated user
+-          //for simple auth or kerberos auth
+-          user = UserGroupInformation.createProxyUser(protocolUser
+-              .getUserName(), user);
++        if (user != null) {
++          user.setAuthenticationMethod(AuthMethod.SIMPLE.authenticationMethod);
++        }
++      } else {
++        // user is authenticated
++        user.setAuthenticationMethod(authMethod.authenticationMethod);
++        //Now we check if this is a proxy user case. If the protocol user is
++        //different from the 'user', it is a proxy user scenario. However, 
++        //this is not allowed if user authenticated with DIGEST.
++        if ((protocolUser != null)
++            && (!protocolUser.getUserName().equals(user.getUserName()))) {
++          if (authMethod == AuthMethod.DIGEST) {
++            // Not allowed to doAs if token authentication is used
++            throw new AccessControlException("Authenticated user (" + user
++                + ") doesn't match what the client claims to be ("
++                + protocolUser + ")");
++          } else {
++            // Effective user can be different from authenticated user
++            // for simple auth or kerberos auth
++            // The user is the real user. Now we create a proxy user
++            UserGroupInformation realUser = user;
++            user = UserGroupInformation.createProxyUser(protocolUser
++                .getUserName(), realUser);
++            // Now the user is a proxy user, set Authentication method Proxy.
++            user.setAuthenticationMethod(AuthenticationMethod.PROXY);
++          }
+         }
+       }
+     }
+diff --git a/src/core/org/apache/hadoop/security/SaslRpcServer.java b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+index 4b8d8e0..8a7dde9 100644
+--- a/src/core/org/apache/hadoop/security/SaslRpcServer.java
++++ b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+@@ -41,6 +41,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.ipc.Server;
+ import org.apache.hadoop.security.token.SecretManager;
+ import org.apache.hadoop.security.token.TokenIdentifier;
++import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+ 
+ /**
+  * A utility class for dealing with SASL on RPC server
+@@ -86,17 +87,20 @@ public class SaslRpcServer {
+ 
+   /** Authentication method */
+   public static enum AuthMethod {
+-    SIMPLE((byte) 80, ""), // no authentication
+-    KERBEROS((byte) 81, "GSSAPI"), // SASL Kerberos authentication
+-    DIGEST((byte) 82, "DIGEST-MD5"); // SASL DIGEST-MD5 authentication
++    SIMPLE((byte) 80, "", AuthenticationMethod.SIMPLE),
++    KERBEROS((byte) 81, "GSSAPI", AuthenticationMethod.KERBEROS),
++    DIGEST((byte) 82, "DIGEST-MD5", AuthenticationMethod.TOKEN);
+ 
+     /** The code for this method. */
+     public final byte code;
+     public final String mechanismName;
++    public final AuthenticationMethod authenticationMethod;
+ 
+-    private AuthMethod(byte code, String mechanismName) {
++    private AuthMethod(byte code, String mechanismName, 
++                       AuthenticationMethod authMethod) {
+       this.code = code;
+       this.mechanismName = mechanismName;
++      this.authenticationMethod = authMethod;
+     }
+ 
+     private static final int FIRST_CODE = values()[0].code;
+diff --git a/src/core/org/apache/hadoop/security/User.java b/src/core/org/apache/hadoop/security/User.java
+index 6a54311..2918209 100644
+--- a/src/core/org/apache/hadoop/security/User.java
++++ b/src/core/org/apache/hadoop/security/User.java
+@@ -19,6 +19,8 @@ package org.apache.hadoop.security;
+ 
+ import java.security.Principal;
+ 
++import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
++
+ /**
+  * Save the full and short name of the user as a principal. This allows us to
+  * have a single type that we always look for when picking up user names.
+@@ -26,8 +28,13 @@ import java.security.Principal;
+ class User implements Principal {
+   private final String fullName;
+   private final String shortName;
++  private AuthenticationMethod authMethod = null;
+ 
+   public User(String name) {
++    this(name, null);
++  }
++  
++  public User(String name, AuthenticationMethod authMethod) {
+     fullName = name;
+     int atIdx = name.indexOf('@');
+     if (atIdx == -1) {
+@@ -40,6 +47,7 @@ class User implements Principal {
+         shortName = name.substring(0, slashIdx);
+       }
+     }
++    this.authMethod = authMethod;
+   }
+ 
+   /**
+@@ -65,7 +73,7 @@ class User implements Principal {
+     } else if (o == null || getClass() != o.getClass()) {
+       return false;
+     } else {
+-      return fullName.equals(((User) o).fullName);
++      return ((fullName.equals(((User) o).fullName)) && (authMethod == ((User) o).authMethod));
+     }
+   }
+   
+@@ -78,4 +86,12 @@ class User implements Principal {
+   public String toString() {
+     return fullName;
+   }
++
++  public void setAuthenticationMethod(AuthenticationMethod authMethod) {
++    this.authMethod = authMethod;
++  }
++
++  public AuthenticationMethod getAuthenticationMethod() {
++    return authMethod;
++  }
+ }
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index ecd061b..6d6fa54 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -48,6 +48,7 @@ import javax.security.auth.spi.LoginModule;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ 
+@@ -466,6 +467,15 @@ public class UserGroupInformation {
+     return new UserGroupInformation(subject);
+   }
+ 
++  public static enum AuthenticationMethod {
++    SIMPLE,
++    KERBEROS,
++    TOKEN,
++    CERTIFICATE,
++    KERBEROS_SSL,
++    PROXY;
++  }
++
+   /* Create a proxy user using username of the effective user and the ugi of the
+    * real user.
+    *
+@@ -644,6 +654,30 @@ public class UserGroupInformation {
+   }
+ 
+   /**
++   * Sets the authentication method in the subject
++   * 
++   * @param authMethod
++   */
++  public synchronized 
++  void setAuthenticationMethod(AuthenticationMethod authMethod) {
++    for (User p : subject.getPrincipals(User.class)) {
++      p.setAuthenticationMethod(authMethod);
++    }
++  }
++
++  /**
++   * Get the authentication method from the subject
++   * 
++   * @return AuthenticationMethod in the subject, null if not present.
++   */
++  public synchronized AuthenticationMethod getAuthenticationMethod() {
++    for (User p: subject.getPrincipals(User.class)) {
++      return p.getAuthenticationMethod();
++    }
++    return null;
++  }
++
++  /**
+    * Compare the subjects to see if they are equal to each other.
+    */
+   @Override
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index 3fc9a45..7a52d32 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -90,11 +90,11 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+ 
+   //Delegation token related keys
+   public static final String  DFS_NAMENODE_DELEGATION_KEY_UPDATE_INTERVAL_KEY = "dfs.namenode.delegation.key.update-interval";
+-  public static final long    DFS_NAMENODE_DELEGATION_KEY_UPDATE_INTERVAL_DEFAULT = 86400;
++  public static final long    DFS_NAMENODE_DELEGATION_KEY_UPDATE_INTERVAL_DEFAULT = 24*60*60*1000;
+   public static final String  DFS_NAMENODE_DELEGATION_TOKEN_RENEW_INTERVAL_KEY = "dfs.namenode.delegation.token.renew-interval";
+-  public static final long    DFS_NAMENODE_DELEGATION_TOKEN_RENEW_INTERVAL_DEFAULT = 86400;
++  public static final long    DFS_NAMENODE_DELEGATION_TOKEN_RENEW_INTERVAL_DEFAULT = 24*60*60*1000;
+   public static final String  DFS_NAMENODE_DELEGATION_TOKEN_MAX_LIFETIME_KEY = "dfs.namenode.delegation.token.max-lifetime";
+-  public static final long    DFS_NAMENODE_DELEGATION_TOKEN_MAX_LIFETIME_DEFAULT = 604800;
++  public static final long    DFS_NAMENODE_DELEGATION_TOKEN_MAX_LIFETIME_DEFAULT = 7*24*60*60*1000;
+ 
+   //Following keys have no defaults
+   public static final String  DFS_DATANODE_DATA_DIR_KEY = "dfs.datanode.data.dir";
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 039d716..e572896 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -34,6 +34,7 @@ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.hdfs.security.AccessTokenHandler;
+ import org.apache.hadoop.hdfs.security.ExportedAccessKeys;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+ import org.apache.hadoop.security.token.delegation.DelegationKey;
+@@ -5170,6 +5171,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     if (isInSafeMode()) {
+       throw new SafeModeException("Cannot issue delegation token", safeMode);
+     }
++    if (!isAllowedDelegationTokenOp()) {
++      throw new IOException(
++          "Delegation Token can be issued only with kerberos or web authentication");
++    }
+     UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+     String user = ugi.getUserName();
+     Text owner = new Text(user);
+@@ -5198,6 +5203,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     if (isInSafeMode()) {
+       throw new SafeModeException("Cannot renew delegation token", safeMode);
+     }
++    if (!isAllowedDelegationTokenOp()) {
++      throw new IOException(
++          "Delegation Token can be renewed only with kerberos or web authentication");
++    }
+     String renewer = UserGroupInformation.getCurrentUser().getShortUserName();
+     long expiryTime = dtSecretManager.renewToken(token, renewer);
+     DelegationTokenIdentifier id = new DelegationTokenIdentifier();
+@@ -5291,4 +5300,34 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     }
+     getEditLog().logSync();
+   }
++  
++  /**
++   * 
++   * @return true if delegation token operation is allowed
++   */
++  private boolean isAllowedDelegationTokenOp() throws IOException {
++    AuthenticationMethod authMethod = getConnectionAuthenticationMethod();
++    if (UserGroupInformation.isSecurityEnabled()
++        && (authMethod != AuthenticationMethod.KERBEROS)
++        && (authMethod != AuthenticationMethod.KERBEROS_SSL)
++        && (authMethod != AuthenticationMethod.CERTIFICATE)) {
++      return false;
++    }
++    return true;
++  }
++  
++  /**
++   * Returns authentication method used to establish the connection
++   * @return AuthenticationMethod used to establish connection
++   * @throws IOException
++   */
++  private AuthenticationMethod getConnectionAuthenticationMethod()
++      throws IOException {
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    AuthenticationMethod authMethod = ugi.getAuthenticationMethod();
++    if (authMethod == AuthenticationMethod.PROXY) {
++      authMethod = ugi.getRealUser().getAuthenticationMethod();
++    }
++    return authMethod;
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index 6f2ecd0..e27b440 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -50,6 +50,7 @@ import org.apache.hadoop.http.HtmlQuoting;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.net.NetUtils;
+@@ -428,12 +429,14 @@ public class JspHelper {
+         token.decodeFromUrlString(tokenString);
+         ugi = UserGroupInformation.createRemoteUser(user);
+         ugi.addToken(token);        
++        ugi.setAuthenticationMethod(AuthenticationMethod.TOKEN);
+       } else {
+         if(user == null) {
+           throw new IOException("Security enabled but user not " +
+                                 "authenticated by filter");
+         }
+         ugi = UserGroupInformation.createRemoteUser(user);
++        ugi.setAuthenticationMethod(AuthenticationMethod.KERBEROS_SSL);
+       }
+     } else { // Security's not on, pull from url
+       String user = request.getParameter("ugi");
+@@ -443,6 +446,7 @@ public class JspHelper {
+       } else {
+         ugi = UserGroupInformation.createRemoteUser(user);
+       }
++      ugi.setAuthenticationMethod(AuthenticationMethod.SIMPLE);
+     }
+     
+     if(LOG.isDebugEnabled())
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index f5296ab..cf060a8 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -91,6 +91,7 @@ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.Groups;
+ import org.apache.hadoop.security.RefreshUserToGroupMappingsProtocol;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+@@ -318,6 +319,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+   }
+   
++  public DelegationTokenSecretManager getDelegationTokenSecretManager() {
++    return secretManager;
++  }
++  
+   /**
+    * A thread to timeout tasks that have been assigned to task trackers,
+    * but that haven't reported back yet.
+@@ -3892,6 +3897,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   public Token<DelegationTokenIdentifier> 
+      getDelegationToken(Text renewer
+                         )throws IOException, InterruptedException {
++    if (!isAllowedDelegationTokenOp()) {
++      throw new IOException(
++          "Delegation Token can be issued only with kerberos authentication");
++    }
+     UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+     Text owner = new Text(ugi.getUserName());
+     Text realUser = null;
+@@ -3909,6 +3918,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   public long renewDelegationToken(Token<DelegationTokenIdentifier> token
+                                       ) throws IOException,
+                                                InterruptedException {
++    if (!isAllowedDelegationTokenOp()) {
++      throw new IOException(
++          "Delegation Token can be issued only with kerberos authentication");
++    }
+     String user = UserGroupInformation.getCurrentUser().getUserName();
+     return secretManager.renewToken(token, user);
+   }  
+@@ -4854,4 +4867,34 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   synchronized void incrementFaults(String hostName) {
+     faultyTrackers.incrementFaults(hostName);
+   }
++  
++  /**
++   * 
++   * @return true if delegation token operation is allowed
++   */
++  private boolean isAllowedDelegationTokenOp() throws IOException {
++    AuthenticationMethod authMethod = getConnectionAuthenticationMethod();
++    if (UserGroupInformation.isSecurityEnabled()
++        && (authMethod != AuthenticationMethod.KERBEROS)
++        && (authMethod != AuthenticationMethod.KERBEROS_SSL)
++        && (authMethod != AuthenticationMethod.CERTIFICATE)) {
++      return false;
++    }
++    return true;
++  }
++  
++  /**
++   * Returns authentication method used to establish the connection
++   * @return AuthenticationMethod used to establish connection
++   * @throws IOException
++   */
++  private AuthenticationMethod getConnectionAuthenticationMethod()
++      throws IOException {
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    AuthenticationMethod authMethod = ugi.getAuthenticationMethod();
++    if (authMethod == AuthenticationMethod.PROXY) {
++      authMethod = ugi.getRealUser().getAuthenticationMethod();
++    }
++    return authMethod;
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/security/TestDelegationTokenAuthMethod.java b/src/test/org/apache/hadoop/hdfs/security/TestDelegationTokenAuthMethod.java
+new file mode 100644
+index 0000000..1156762
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/security/TestDelegationTokenAuthMethod.java
+@@ -0,0 +1,139 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.security;
++
++import java.io.IOException;
++import java.security.PrivilegedExceptionAction;
++
++import junit.framework.Assert;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenSecretManager;
++import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestDelegationTokenAuthMethod {
++  private MiniDFSCluster cluster;
++  Configuration config;
++  
++  @Before
++  public void setUp() throws Exception {
++    config = new Configuration();
++    FileSystem.setDefaultUri(config, "hdfs://localhost:" + "0");
++    cluster = new MiniDFSCluster(0, config, 1, true, true, true,  null, null, null, null);
++    cluster.waitActive();
++    cluster.getNameNode().getNamesystem().getDelegationTokenSecretManager().startThreads();
++  }
++
++  @After
++  public void tearDown() throws Exception {
++    if(cluster!=null) {
++      cluster.shutdown();
++    }
++  }
++  
++  private Token<DelegationTokenIdentifier> generateDelegationToken(
++      String owner, String renewer) {
++    DelegationTokenSecretManager dtSecretManager = cluster.getNameNode().getNamesystem()
++        .getDelegationTokenSecretManager();
++    DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(new Text(
++        owner), new Text(renewer), null);
++    return new Token<DelegationTokenIdentifier>(dtId, dtSecretManager);
++  }
++  
++  @Test
++  public void testDelegationTokenNamesystemApi() throws Exception {
++    final FSNamesystem namesys = cluster.getNameNode().getNamesystem();
++    final UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    ugi.setAuthenticationMethod(AuthenticationMethod.KERBEROS);
++    config.set(DFSConfigKeys.HADOOP_SECURITY_AUTHENTICATION, "kerberos");
++    //Set conf again so that namesystem finds security enabled
++    UserGroupInformation.setConfiguration(config);
++    ugi.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws Exception {
++        try {
++          Token<DelegationTokenIdentifier> token = namesys
++              .getDelegationToken(new Text(ugi.getShortUserName()));
++          namesys.renewDelegationToken(token);
++          namesys.cancelDelegationToken(token);
++        } catch (IOException e) {
++          e.printStackTrace();
++          throw e;
++        }
++        return null;
++      }
++    });
++  }
++  
++  @Test
++  public void testGetDelegationTokenWithoutKerberos() throws Exception {
++    final FSNamesystem namesys = cluster.getNameNode().getNamesystem();
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    ugi.setAuthenticationMethod(AuthenticationMethod.TOKEN);
++    config.set(DFSConfigKeys.HADOOP_SECURITY_AUTHENTICATION, "kerberos");
++    //Set conf again so that namesystem finds security enabled
++    UserGroupInformation.setConfiguration(config);
++    ugi.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws Exception {
++        try {
++          namesys.getDelegationToken(new Text("arenewer"));
++          Assert
++              .fail("Delegation token should not be issued without Kerberos authentication");
++        } catch (IOException e) {
++          // success
++        }
++        return null;
++      }
++    });
++  }
++
++  @Test
++  public void testRenewDelegationTokenWithoutKerberos() throws Exception {
++    final FSNamesystem namesys = cluster.getNameNode().getNamesystem();
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    ugi.setAuthenticationMethod(AuthenticationMethod.TOKEN);
++    config.set(DFSConfigKeys.HADOOP_SECURITY_AUTHENTICATION, "kerberos");
++    //Set conf again so that namesystem finds security enabled
++    UserGroupInformation.setConfiguration(config);
++    final Token<DelegationTokenIdentifier> token = generateDelegationToken(
++        "owner", ugi.getShortUserName());
++    ugi.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws Exception {
++        try {
++          namesys.renewDelegationToken(token);
++          Assert
++              .fail("Delegation token should not be renewed without Kerberos authentication");
++        } catch (IOException e) {
++          // success
++        }
++        return null;
++      }
++    });
++  }
++}
+diff --git a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+index 3cfbe19..82ba6ad 100644
+--- a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+@@ -24,8 +24,11 @@ import java.io.DataInput;
+ import java.io.DataOutput;
+ import java.io.IOException;
+ import java.net.InetSocketAddress;
++import java.security.PrivilegedExceptionAction;
+ import java.util.Collection;
+ 
++import junit.framework.Assert;
++
+ import org.apache.commons.logging.*;
+ import org.apache.commons.logging.impl.Log4JLogger;
+ 
+@@ -42,6 +45,7 @@ import org.apache.hadoop.security.SaslInputStream;
+ import org.apache.hadoop.security.SaslRpcClient;
+ import org.apache.hadoop.security.SaslRpcServer;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+ 
+ import org.apache.log4j.Level;
+ import org.junit.Test;
+@@ -150,10 +154,14 @@ public class TestSaslRPC {
+   @KerberosInfo(SERVER_PRINCIPAL_KEY)
+   @TokenInfo(TestTokenSelector.class)
+   public interface TestSaslProtocol extends TestRPC.TestProtocol {
++    public AuthenticationMethod getAuthMethod() throws IOException;
+   }
+   
+   public static class TestSaslImpl extends TestRPC.TestImpl implements
+       TestSaslProtocol {
++    public AuthenticationMethod getAuthMethod() throws IOException {
++      return UserGroupInformation.getCurrentUser().getAuthenticationMethod();
++    }
+   }
+ 
+   @Test
+@@ -229,6 +237,43 @@ public class TestSaslRPC {
+     }
+   }
+   
++  @Test
++  public void testDigestAuthMethod() throws Exception {
++    TestTokenSecretManager sm = new TestTokenSecretManager();
++    Server server = RPC.getServer(
++        new TestSaslImpl(), ADDRESS, 0, 5, true, conf, sm);
++    server.start();
++
++    final UserGroupInformation current = UserGroupInformation.getCurrentUser();
++    final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++    TestTokenIdentifier tokenId = new TestTokenIdentifier(new Text(current
++        .getUserName()));
++    Token<TestTokenIdentifier> token = new Token<TestTokenIdentifier>(tokenId,
++        sm);
++    Text host = new Text(addr.getAddress().getHostAddress() + ":"
++        + addr.getPort());
++    token.setService(host);
++    LOG.info("Service IP address for token is " + host);
++    current.addToken(token);
++
++    current.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws IOException {
++        TestSaslProtocol proxy = null;
++        try {
++          proxy = (TestSaslProtocol) RPC.getProxy(TestSaslProtocol.class,
++              TestSaslProtocol.versionID, addr, conf);
++          Assert.assertEquals(AuthenticationMethod.TOKEN, proxy.getAuthMethod());
++        } finally {
++          if (proxy != null) {
++            RPC.stopProxy(proxy);
++          }
++        }
++        return null;
++      }
++    });
++    server.stop();
++  }
++  
+   public static void main(String[] args) throws Exception {
+     System.out.println("Testing Kerberos authentication over RPC");
+     if (args.length != 2) {
+diff --git a/src/test/org/apache/hadoop/mapred/MiniMRCluster.java b/src/test/org/apache/hadoop/mapred/MiniMRCluster.java
+index 6f9f044..bfc0c94 100644
+--- a/src/test/org/apache/hadoop/mapred/MiniMRCluster.java
++++ b/src/test/org/apache/hadoop/mapred/MiniMRCluster.java
+@@ -63,7 +63,7 @@ public class MiniMRCluster {
+   /**
+    * An inner class that runs a job tracker.
+    */
+-  class JobTrackerRunner implements Runnable {
++  public class JobTrackerRunner implements Runnable {
+     private JobTracker tracker = null;
+     private volatile boolean isActive = true;
+     
+diff --git a/src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationTokenAuthMethod.java b/src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationTokenAuthMethod.java
+new file mode 100644
+index 0000000..eedff3a
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationTokenAuthMethod.java
+@@ -0,0 +1,131 @@
++/** Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapreduce.security.token.delegation;
++
++import java.io.IOException;
++import java.security.PrivilegedExceptionAction;
++
++import org.apache.hadoop.fs.CommonConfigurationKeys;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.JobTracker;
++import org.apache.hadoop.mapred.MiniMRCluster;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
++import org.apache.hadoop.security.token.Token;
++import org.junit.Assert;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestDelegationTokenAuthMethod {
++  private MiniMRCluster cluster;
++  private JobConf config;
++
++  @Before
++  public void setup() throws Exception {
++    config = new JobConf();
++    cluster = new MiniMRCluster(0, 0, 1, "file:///", 1, null, null, null,
++        config);
++  }
++
++  private Token<DelegationTokenIdentifier> generateDelegationToken(
++      String owner, String renewer) {
++    DelegationTokenSecretManager dtSecretManager = cluster
++        .getJobTrackerRunner().getJobTracker()
++        .getDelegationTokenSecretManager();
++    DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(new Text(
++        owner), new Text(renewer), null);
++    return new Token<DelegationTokenIdentifier>(dtId, dtSecretManager);
++  }
++
++  @Test
++  public void testDelegationToken() throws Exception {
++    final JobTracker jt = cluster.getJobTrackerRunner().getJobTracker();
++    final UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    ugi.setAuthenticationMethod(AuthenticationMethod.KERBEROS);
++    config.set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION,
++        "kerberos");
++    // Set configuration again so that job tracker finds security enabled
++    UserGroupInformation.setConfiguration(config);
++    ugi.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws Exception {
++        try {
++          Token<DelegationTokenIdentifier> token = jt
++              .getDelegationToken(new Text(ugi.getShortUserName()));
++          jt.renewDelegationToken(token);
++          jt.cancelDelegationToken(token);
++        } catch (IOException e) {
++          e.printStackTrace();
++          throw e;
++        }
++        return null;
++      }
++    });
++  }
++  
++  @Test
++  public void testGetDelegationTokenWithoutKerberos() throws Exception {
++    final JobTracker jt = cluster.getJobTrackerRunner().getJobTracker();
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    ugi.setAuthenticationMethod(AuthenticationMethod.TOKEN);
++    config.set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION,
++        "kerberos");
++    // Set configuration again so that job tracker finds security enabled
++    UserGroupInformation.setConfiguration(config);
++    Assert.assertTrue(UserGroupInformation.isSecurityEnabled());
++    ugi.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws Exception {
++        try {
++          Token<DelegationTokenIdentifier> token = jt
++              .getDelegationToken(new Text("arenewer"));
++          Assert.assertTrue(token != null);
++          Assert
++              .fail("Delegation token should not be issued without Kerberos authentication");
++        } catch (IOException e) {
++          // success
++        }
++        return null;
++      }
++    });
++  }
++
++  @Test
++  public void testRenewDelegationTokenWithoutKerberos() throws Exception {
++    final JobTracker jt = cluster.getJobTrackerRunner().getJobTracker();
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    ugi.setAuthenticationMethod(AuthenticationMethod.TOKEN);
++    config.set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION,
++        "kerberos");
++    // Set configuration again so that job tracker finds security enabled
++    UserGroupInformation.setConfiguration(config);
++    Assert.assertTrue(UserGroupInformation.isSecurityEnabled());
++    final Token<DelegationTokenIdentifier> token = generateDelegationToken(
++        "owner", ugi.getShortUserName());
++    ugi.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws Exception {
++        try {
++          jt.renewDelegationToken(token);
++          Assert
++              .fail("Delegation token should not be renewed without Kerberos authentication");
++        } catch (IOException e) {
++          // success
++        }
++        return null;
++      }
++    });
++  }
++}
+diff --git a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+index 876b360..006663d 100644
+--- a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
++++ b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+@@ -31,7 +31,10 @@ import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.List;
++import junit.framework.Assert;
+ 
++import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
++import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.junit.Test;
+@@ -210,4 +213,51 @@ public class TestUserGroupInformation {
+     assertTrue(otherSet.contains(t1));
+     assertTrue(otherSet.contains(t2));
+   }
++  
++  @Test
++  public void testUGIAuthMethod() throws Exception {
++    final UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    final AuthenticationMethod am = AuthenticationMethod.KERBEROS;
++    ugi.setAuthenticationMethod(am);
++    Assert.assertEquals(am, ugi.getAuthenticationMethod());
++    ugi.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws IOException {
++        Assert.assertEquals(am, UserGroupInformation.getCurrentUser()
++            .getAuthenticationMethod());
++        return null;
++      }
++    });
++  }
++  
++  @Test
++  public void testUGIAuthMethodInRealUser() throws Exception {
++    final UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    UserGroupInformation proxyUgi = UserGroupInformation.createProxyUser(
++        "proxy", ugi);
++    final AuthenticationMethod am = AuthenticationMethod.KERBEROS;
++    ugi.setAuthenticationMethod(am);
++    Assert.assertEquals(am, ugi.getAuthenticationMethod());
++    Assert.assertEquals(null, proxyUgi.getAuthenticationMethod());
++    proxyUgi.setAuthenticationMethod(AuthenticationMethod.PROXY);
++    proxyUgi.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws IOException {
++        Assert.assertEquals(AuthenticationMethod.PROXY, UserGroupInformation
++            .getCurrentUser().getAuthenticationMethod());
++        Assert.assertEquals(am, UserGroupInformation.getCurrentUser()
++            .getRealUser().getAuthenticationMethod());
++        return null;
++      }
++    });
++    UserGroupInformation proxyUgi2 = UserGroupInformation.createProxyUser(
++        "proxy", ugi);
++    proxyUgi2.setAuthenticationMethod(AuthenticationMethod.PROXY);
++    Assert.assertEquals(proxyUgi, proxyUgi2);
++    // Equality should work if authMethod is null
++    UserGroupInformation realugi = UserGroupInformation.getCurrentUser();
++    UserGroupInformation proxyUgi3 = UserGroupInformation.createProxyUser(
++        "proxyAnother", realugi);
++    UserGroupInformation proxyUgi4 = UserGroupInformation.createProxyUser(
++        "proxyAnother", realugi);
++    Assert.assertEquals(proxyUgi3, proxyUgi4);
++  }
+ }
+-- 
+1.7.0.4
+

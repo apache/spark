@@ -1,0 +1,77 @@
+From 356e443236ce15100943cfeabc9001b1d26bc77c Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu@cloudera.com>
+Date: Fri, 9 Dec 2011 13:46:10 -0800
+Subject: [PATCH 1099/1179] HADOOP-7902 skipping name rules setting (if already set) should be done on UGI initialization only
+
+  Fixes regression introduced by HADOOP-7887
+
+  Author: Alejandro Abdelnur
+  Ref: CDH-3898
+---
+ .../org/apache/hadoop/security/KerberosName.java   |    6 ++----
+ .../hadoop/security/UserGroupInformation.java      |   11 +++++++----
+ 2 files changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/KerberosName.java b/src/core/org/apache/hadoop/security/KerberosName.java
+index 83e4840..3ceec29 100644
+--- a/src/core/org/apache/hadoop/security/KerberosName.java
++++ b/src/core/org/apache/hadoop/security/KerberosName.java
+@@ -344,10 +344,8 @@ public class KerberosName {
+    * @throws IOException
+    */
+   public static void setConfiguration(Configuration conf) throws IOException {
+-    if (!hasRulesBeenSet()) {
+-      String ruleString = conf.get("hadoop.security.auth_to_local", "DEFAULT");
+-      setRules(ruleString);
+-    }
++    String ruleString = conf.get("hadoop.security.auth_to_local", "DEFAULT");
++    setRules(ruleString);
+   }
+   
+   /**
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 8fc38fe..75a7c85 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -216,7 +216,7 @@ public class UserGroupInformation {
+    */
+   private static synchronized void ensureInitialized() {
+     if (!isInitialized) {
+-      initialize(new Configuration());
++      initialize(new Configuration(), KerberosName.hasRulesBeenSet());
+     }
+   }
+ 
+@@ -224,7 +224,8 @@ public class UserGroupInformation {
+    * Set the configuration values for UGI.
+    * @param conf the configuration to use
+    */
+-  private static synchronized void initialize(Configuration conf) {
++  private static synchronized void initialize(Configuration conf, boolean skipRulesSetting) {
++
+     String value = conf.get(HADOOP_SECURITY_AUTHENTICATION);
+     if (value == null || "simple".equals(value)) {
+       useKerberos = false;
+@@ -267,7 +268,9 @@ public class UserGroupInformation {
+ 
+     // give the configuration on how to translate Kerberos names
+     try {
+-      KerberosName.setConfiguration(conf);
++      if (!skipRulesSetting) {
++        KerberosName.setConfiguration(conf);
++      }
+     } catch (IOException ioe) {
+       throw new RuntimeException("Problem with Kerberos auth_to_local name " +
+                                  "configuration", ioe);
+@@ -281,7 +284,7 @@ public class UserGroupInformation {
+    * @param conf the configuration to use
+    */
+   public static void setConfiguration(Configuration conf) {
+-    initialize(conf);
++    initialize(conf, false);
+   }
+   
+   /**
+-- 
+1.7.0.4
+

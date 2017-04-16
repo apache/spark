@@ -1,0 +1,598 @@
+<?xml version="1.0"?>
+  <!--
+    Licensed to the Apache Software Foundation (ASF) under one or more
+    contributor license agreements. See the NOTICE file distributed with
+    this work for additional information regarding copyright ownership.
+    The ASF licenses this file to You under the Apache License, Version
+    2.0 (the "License"); you may not use this file except in compliance
+    with the License. You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0 Unless required by
+    applicable law or agreed to in writing, software distributed under
+    the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES
+    OR CONDITIONS OF ANY KIND, either express or implied. See the
+    License for the specific language governing permissions and
+    limitations under the License.
+  -->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN" "http://forrest.apache.org/dtd/document-v20.dtd">
+<document>
+  <header>
+    <title>Fair Scheduler Guide</title>
+  </header>
+  <body>
+
+    <section>
+      <title>Purpose</title>
+
+      <p>This document describes the Fair Scheduler, a pluggable
+        MapReduce scheduler for Hadoop which provides a way to share
+        large clusters.</p>
+    </section>
+
+    <section>
+      <title>Introduction</title>
+      <p>Fair scheduling is a method of assigning resources to jobs
+        such that all jobs get, on average, an equal share of resources
+        over time. When there is a single job running, that job uses the
+        entire cluster. When other jobs are submitted, tasks slots that
+        free up are assigned to the new jobs, so that each job gets
+        roughly the same amount of CPU time. Unlike the default Hadoop
+        scheduler, which forms a queue of jobs, this lets short jobs finish
+        in reasonable time while not starving long jobs. It is also an easy
+        way to share a cluster between multiple of users.
+        Fair sharing can also work with job priorities - the priorities are
+        used as weights to determine the fraction of total compute time that
+        each job gets.
+      </p>
+      <p>
+        The fair scheduler organizes jobs into <em>pools</em>, and 
+        divides resources fairly between these pools. By default, there is a 
+        separate pool for each user, so that each user gets an equal share 
+        of the cluster. It is also possible to set a job's pool based on the
+        user's Unix group or any jobconf property. 
+        Within each pool, jobs can be scheduled using either fair sharing or 
+        first-in-first-out (FIFO) scheduling.
+      </p>
+      <p>
+        In addition to providing fair sharing, the Fair Scheduler allows
+        assigning guaranteed <em>minimum shares</em> to pools, which is useful
+        for ensuring that certain users, groups or production applications
+        always get sufficient resources. When a pool contains jobs, it gets
+        at least its minimum share, but when the pool does not need its full
+        guaranteed share, the excess is split between other pools.
+      </p>
+      <p>
+        If a pool's minimum share is not met for some period of time, the
+        scheduler optionally supports <em>preemption</em> of jobs in other
+        pools. The pool will be allowed to kill tasks from other pools to make
+        room to run. Preemption can be used to guarantee
+        that "production" jobs are not starved while also allowing
+        the Hadoop cluster to also be used for experimental and research jobs.
+        In addition, a pool can also be allowed to preempt tasks if it is
+        below half of its fair share for a configurable timeout (generally
+        set larger than the minimum share preemption timeout).
+        When choosing tasks to kill, the fair scheduler picks the
+        most-recently-launched tasks from over-allocated jobs, 
+        to minimize wasted computation.
+        Preemption does not cause the preempted jobs to fail, because Hadoop
+        jobs tolerate losing tasks; it only makes them take longer to finish.
+      </p>
+      <p>
+        The Fair Scheduler can limit the number of concurrent
+        running jobs per user and per pool. This can be useful when a 
+        user must submit hundreds of jobs at once, or for ensuring that
+        intermediate data does not fill up disk space on a cluster when too many
+        concurrent jobs are running.
+        Setting job limits causes jobs submitted beyond the limit to wait
+        until some of the user/pool's earlier jobs finish.
+        Jobs to run from each user/pool are chosen in order of priority and then
+        submit time.
+      </p>
+      <p>
+        Finally, the Fair Scheduler can limit the number of concurrent
+        running tasks per pool. This can be useful when jobs have a
+        dependency on an external service like a database or web
+        service that could be overloaded if too many map or reduce
+        tasks are run at once.
+      </p>
+    </section>
+
+    <section>
+      <title>Installation</title>
+      <p>
+        To run the fair scheduler in your Hadoop installation, you need to put
+        it on the CLASSPATH. The easiest way is to copy the 
+        <em>hadoop-fairscheduler-*.jar</em> from
+        <em>HADOOP_HOME/build/contrib/fairscheduler</em> to <em>HADOOP_HOME/lib</em>.
+        Alternatively you can modify <em>HADOOP_CLASSPATH</em> to include this jar, in
+        <em>HADOOP_CONF_DIR/hadoop-env.sh</em>
+      </p>
+      <p>
+       You will also need to set the following property in the Hadoop config 
+       file  <em>HADOOP_CONF_DIR/mapred-site.xml</em> to have Hadoop use 
+       the fair scheduler: <br/><br/>
+       <code>&lt;property&gt;</code><br/> 
+       <code>&nbsp;&nbsp;&lt;name&gt;mapred.jobtracker.taskScheduler&lt;/name&gt;</code><br/>
+       <code>&nbsp;&nbsp;&lt;value&gt;org.apache.hadoop.mapred.FairScheduler&lt;/value&gt;</code><br/>
+       <code>&lt;/property&gt;</code>
+      </p>
+      <p>
+        Once you restart the cluster, you can check that the fair scheduler 
+        is running by going to <em>http://&lt;jobtracker URL&gt;/scheduler</em> 
+        on the JobTracker's web UI. A &quot;job scheduler administration&quot; page should 
+        be visible there. This page is described in the Administration section.
+      </p>
+      <p>
+        If you wish to compile the fair scheduler from source, run <em> ant 
+        package</em> in your HADOOP_HOME directory. This will build
+        <em>build/contrib/fair-scheduler/hadoop-fairscheduler-*.jar</em>.
+      </p>
+    </section>
+    
+    <section>
+      <title>Configuration</title>
+      <p>
+        The Fair Scheduler contains configuration in two places -- algorithm
+        parameters are set in <em>mapred-site.xml</em>, while a separate XML
+        file called the <em>allocation file</em> can be used to configure
+        pools, minimum shares, running job limits and preemption timeouts.
+        The allocation file is reloaded periodically at runtime, 
+        allowing you to change pool settings without restarting 
+        your Hadoop cluster.
+      </p>
+      <p>
+        For a minimal installation, to just get equal sharing between users,
+        you will not need to set up an allocation file. If you do set up an
+        allocation file, you will need to tell the scheduler where to
+        find it by setting the <em>mapred.fairscheduler.allocation.file</em>
+        parameter in <em>mapred-site.xml</em> as described below.
+      </p>
+      <section>
+      <title>Scheduler Parameters in mapred-site.xml</title>
+        <p>
+          The following parameters can be set in <em>mapred-site.xml</em>
+          to affect the behavior of the fair scheduler:
+        </p>
+        <p><strong>Basic Parameters:</strong></p>
+        <table>
+          <tr>
+          <th>Name</th><th>Description</th>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.allocation.file
+          </td>
+          <td>
+            Specifies an absolute path to an XML file which contains minimum
+            shares for each pool, per-pool and per-user limits on number of
+            running jobs, and preemption timeouts. If this property is not 
+            set, these features are not used.
+            The <a href="#Allocation+File+Format">allocation file
+            format</a> is described later.
+          </td>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.preemption
+          </td>
+          <td>
+            Boolean property for enabling preemption. Default: false.
+          </td>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.pool
+          </td>
+          <td>
+            Specify the pool that a job belongs in.  
+            If this is specified then mapred.fairscheduler.poolnameproperty is ignored.
+          </td>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.poolnameproperty
+          </td>
+          <td>
+            Specify which jobconf property is used to determine the pool that a
+            job belongs in. String, default: <em>user.name</em>
+            (i.e. one pool for each user). 
+            Another useful value is <em>mapred.job.queue.name</em> to use MapReduce's "queue"
+            system for access control lists (see below).
+            mapred.fairscheduler.poolnameproperty is used only for jobs in which
+            mapred.fairscheduler.pool is not explicitly set.
+          </td>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.allow.undeclared.pools
+          </td>
+          <td>
+            Boolean property for enabling job submission to pools not declared
+            in the allocation file. Default: true.
+          </td>
+          </tr>
+        </table>
+        <p><strong>Advanced Parameters:</strong></p>
+        <table>
+          <tr>
+          <th>Name</th><th>Description</th>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.sizebasedweight
+          </td>
+          <td>
+            Take into account job sizes in calculating their weights for fair 
+            sharing. By default, weights are only based on job priorities. 
+            Setting this flag to true will make them based on the size of the 
+            job (number of tasks needed) as well,though not linearly 
+            (the weight will be proportional to the log of the number of tasks 
+            needed). This lets larger jobs get larger fair shares while still 
+            providing enough of a share to small jobs to let them finish fast. 
+            Boolean value, default: false.
+          </td>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.preemption.only.log
+          </td>
+          <td>
+            This flag will cause the scheduler to run through the preemption
+            calculations but simply log when it wishes to preempt a task,
+            without actually preempting the task. 
+            Boolean property, default: false.
+            This property can be useful for
+            doing a "dry run" of preemption before enabling it to make sure
+            that you have not set timeouts too aggressively.
+            You will see preemption log messages in your JobTracker's output
+            log (<em>HADOOP_LOG_DIR/hadoop-jobtracker-*.log</em>).
+            The messages look as follows:<br/>
+            <code>Should preempt 2 tasks for job_20090101337_0001: tasksDueToMinShare = 2, tasksDueToFairShare = 0</code>
+          </td>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.update.interval
+          </td>
+          <td>
+            Interval at which to update fair share calculations. The default
+            of 500ms works well for clusters with fewer than 500 nodes, 
+            but larger values reduce load on the JobTracker for larger clusters.
+            Integer value in milliseconds, default: 500.
+          </td>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.preemption.interval
+          </td>
+          <td>
+            Interval at which to check for tasks to preempt. The default
+            of 15s works well for timeouts on the order of minutes.
+            It is not recommended to set timeouts much smaller than this
+            amount, but you can use this value to make preemption computations
+            run more often if you do set such timeouts. A value of less than
+            5s will probably be too small, however, as it becomes less than
+            the inter-heartbeat interval.
+            Integer value in milliseconds, default: 15000.
+          </td>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.weightadjuster
+          </td>
+          <td>
+          An extension point that lets you specify a class to adjust the 
+          weights of running jobs. This class should implement the 
+          <em>WeightAdjuster</em> interface. There is currently one example 
+          implementation - <em>NewJobWeightBooster</em>, which increases the 
+          weight of jobs for the first 5 minutes of their lifetime to let 
+          short jobs finish faster. To use it, set the weightadjuster 
+          property to the full class name, 
+          <code>org.apache.hadoop.mapred.NewJobWeightBooster</code>.
+          NewJobWeightBooster itself provides two parameters for setting the 
+          duration and boost factor.
+          <ul>
+          <li><em>mapred.newjobweightbooster.factor</em>
+            Factor by which new jobs weight should be boosted. 
+            Default is 3.</li>
+          <li><em>mapred.newjobweightbooster.duration</em>
+            Boost duration in milliseconds. Default is 300000 for 5 minutes.</li>
+          </ul>
+          </td>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.loadmanager
+          </td>
+          <td>
+            An extension point that lets you specify a class that determines 
+            how many maps and reduces can run on a given TaskTracker. This class 
+            should implement the LoadManager interface. By default the task caps 
+            in the Hadoop config file are used, but this option could be used to 
+            make the load based on available memory and CPU utilization for example.
+          </td>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.taskselector
+          </td>
+          <td>
+          An extension point that lets you specify a class that determines 
+          which task from within a job to launch on a given tracker. This can be 
+          used to change either the locality policy (e.g. keep some jobs within 
+          a particular rack) or the speculative execution algorithm (select 
+          when to launch speculative tasks). The default implementation uses 
+          Hadoop's default algorithms from JobInProgress.
+          </td>
+          </tr>
+          <!--
+          <tr>
+          <td>
+            mapred.fairscheduler.eventlog.enabled
+          </td>
+          <td>
+            Enable a detailed log of fair scheduler events, useful for
+            debugging.
+            This log is stored in <em>HADOOP_LOG_DIR/fairscheduler</em>.
+            Boolean value, default: false.
+          </td>
+          </tr>
+          <tr>
+          <td>
+            mapred.fairscheduler.dump.interval
+          </td>
+          <td>
+            If using the event log, this is the interval at which to dump
+            complete scheduler state (list of pools and jobs) to the log.
+            Integer value in milliseconds, default: 10000.
+          </td>
+          </tr>
+          -->
+        </table>
+      </section>  
+      <section>
+        <title>Allocation File Format</title>
+        <p>
+        The allocation file configures minimum shares, running job
+        limits, weights and preemption timeouts for each pool.
+        An example is provided in 
+        <em>HADOOP_HOME/conf/fair-scheduler.xml.template</em>.
+        The allocation file can contain the following types of elements:
+        </p>
+        <ul>
+        <li><em>pool</em> elements, which configure each pool.
+        These may contain the following sub-elements:
+          <ul>
+          <li><em>minMaps</em> and <em>minReduces</em>,
+            to set the pool's minimum share of task slots.</li>
+          <li><em>maxMaps</em> and <em>maxReduces</em>, to set the
+            pool's maximum concurrent task slots.</li>
+          <li><em>schedulingMode</em>, the pool's internal scheduling mode,
+          which can be <em>fair</em> for fair sharing or <em>fifo</em> for
+          first-in-first-out.</li>
+          <li><em>maxRunningJobs</em>, 
+          to limit the number of jobs from the 
+          pool to run at once (defaults to infinite).</li>
+          <li><em>weight</em>, to share the cluster 
+          non-proportionally with other pools (defaults to 1.0).</li>
+          <li><em>minSharePreemptionTimeout</em>, the
+            number of seconds the pool will wait before
+            killing other pools' tasks if it is below its minimum share
+            (defaults to infinite).</li>
+          </ul>
+        </li>
+        <li><em>user</em> elements, which may contain a 
+        <em>maxRunningJobs</em> element to limit 
+        jobs. Note that by default, there is a pool for each 
+        user, so per-user limits are not necessary.</li>
+        <li><em>poolMaxJobsDefault</em>, which sets the default running 
+        job limit for any pools whose limit is not specified.</li>
+        <li><em>userMaxJobsDefault</em>, which sets the default running 
+        job limit for any users whose limit is not specified.</li>
+        <li><em>defaultMinSharePreemptionTimeout</em>, 
+        which sets the default minimum share preemption timeout 
+        for any pools where it is not specified.</li>
+        <li><em>fairSharePreemptionTimeout</em>, 
+        which sets the preemption timeout used when jobs are below half
+        their fair share.</li>
+        <li><em>defaultPoolSchedulingMode</em>, which sets the default scheduling 
+        mode (<em>fair</em> or <em>fifo</em>) for pools whose mode is
+        not specified.</li>
+        </ul>
+        <p>
+        Pool and user elements only required if you are setting
+        non-default values for the pool/user. That is, you do not need to
+        declare all users and all pools in your config file before running
+        the fair scheduler. If a user or pool is not listed in the config file,
+        the default values for limits, preemption timeouts, etc will be used.
+        </p>
+        <p>
+        An example allocation file is given below : </p>
+        <p>
+        <code>&lt;?xml version="1.0"?&gt; </code> <br/>
+        <code>&lt;allocations&gt;</code> <br/> 
+        <code>&nbsp;&nbsp;&lt;pool name="sample_pool"&gt;</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;minMaps&gt;5&lt;/minMaps&gt;</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;minReduces&gt;5&lt;/minReduces&gt;</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;maxMaps&gt;25&lt;/maxMaps&gt;</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;maxReduces&gt;25&lt;/maxReduces&gt;</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;weight&gt;2.0&lt;/weight&gt;</code><br/>
+        <code>&nbsp;&nbsp;&lt;/pool&gt;</code><br/>
+        <code>&nbsp;&nbsp;&lt;user name="sample_user"&gt;</code><br/>
+        <code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;maxRunningJobs&gt;6&lt;/maxRunningJobs&gt;</code><br/>
+        <code>&nbsp;&nbsp;&lt;/user&gt;</code><br/>
+        <code>&nbsp;&nbsp;&lt;userMaxJobsDefault&gt;3&lt;/userMaxJobsDefault&gt;</code><br/>
+        <code>&lt;/allocations&gt;</code>
+        </p>
+        <p>
+        This example creates a pool sample_pool with a guarantee of 5 map 
+        slots and 5 reduce slots. The pool also has a weight of 2.0, meaning 
+        it has a 2x higher share of the cluster than other pools (the default 
+        weight is 1). The pool has a cap of 25 map and 25 reduce slots, which
+        means that once 25 tasks are running, no more will be scheduled even if
+        the pool's fair share is higher.
+        Finally, the example limits the number of running jobs 
+        per user to 3, except for sample_user, who can run 6 jobs concurrently. 
+        Any pool not defined in the allocation file will have no guaranteed 
+        capacity and a weight of 1.0. Also, any pool or user with no max 
+        running jobs set in the file will be allowed to run an unlimited 
+        number of jobs.
+        </p>
+        <p>
+        A more detailed example file, setting preemption timeouts as well,
+        is available in <em>HADOOP_HOME/conf/fair-scheduler.xml.template</em>.
+        </p>
+      </section>
+      <section>
+        <title>Access Control Lists (ACLs)</title>
+        <p>
+          The fair scheduler can be used in tandem with the "queue" based access
+          control system in MapReduce to restrict which pools each user can access.
+          To do this, first enable ACLs and set up some queues as described in the
+          <a href="mapred_tutorial.html#Job+Authorization">MapReduce usage guide</a>,
+          then set the fair scheduler to use one pool per queue by adding
+          the following property in <em>HADOOP_CONF_DIR/mapred-site.xml</em>:
+        </p>
+<source>
+&lt;property&gt;
+  &lt;name&gt;mapred.fairscheduler.poolnameproperty&lt;/name&gt;
+  &lt;value&gt;mapred.job.queue.name&lt;/value&gt;
+&lt;/property&gt;
+</source>
+        <p>
+          You can then set the minimum share, weight, and internal scheduling mode
+          for each pool as described earlier.
+          In addition, make sure that users submit jobs to the right queue by setting
+          the <em>mapred.job.queue.name</em> property in their jobs.
+        </p>
+      </section>
+    </section>
+    <section>
+    <title> Administration</title>
+    <p>
+      The fair scheduler provides support for administration at runtime 
+      through two mechanisms:
+    </p> 
+    <ol>
+    <li>
+      It is possible to modify minimum shares, limits, weights, preemption
+      timeouts and pool scheduling modes at runtime by editing the allocation
+      file. The scheduler will reload this file 10-15 seconds after it 
+      sees that it was modified.
+     </li>
+     <li>
+     Current jobs, pools, and fair shares  can be examined through the 
+     JobTracker's web interface, at
+     <em>http://&lt;JobTracker URL&gt;/scheduler</em>. 
+     On this interface, it is also possible to modify jobs' priorities or 
+     move jobs from one pool to another and see the effects on the fair 
+     shares (this requires JavaScript).
+     </li>
+    </ol>
+    <p>
+      The following fields can be seen for each job on the web interface:
+     </p>
+     <ul>
+     <li><em>Submitted</em> - Date and time job was submitted.</li>
+     <li><em>JobID, User, Name</em> - Job identifiers as on the standard 
+     web UI.</li>
+     <li><em>Pool</em> - Current pool of job. Select another value to move job to 
+     another pool.</li>
+     <li><em>Priority</em> - Current priority. Select another value to change the 
+     job's priority</li>
+     <li><em>Maps/Reduces Finished</em>: Number of tasks finished / total tasks.</li>
+     <li><em>Maps/Reduces Running</em>: Tasks currently running.</li>
+     <li><em>Map/Reduce Fair Share</em>: The average number of task slots that this 
+     job should have at any given time according to fair sharing. The actual
+     number of tasks will go up and down depending on how much compute time
+     the job has had, but on average it will get its fair share amount.</li>
+     </ul>
+     <p>
+     In addition, it is possible to view an "advanced" version of the web 
+     UI by going to <em>http://&lt;JobTracker URL&gt;/scheduler?advanced</em>. 
+     This view shows two more columns:
+     </p>
+     <ul>
+     <li><em>Maps/Reduce Weight</em>: Weight of the job in the fair sharing 
+     calculations. This depends on priority and potentially also on 
+     job size and job age if the <em>sizebasedweight</em> and 
+     <em>NewJobWeightBooster</em> are enabled.</li>
+     </ul>
+    </section>
+    <section>
+      <title>Metrics</title>
+      <p>
+        The fair scheduler can export metrics using the Hadoop metrics interface.
+        This can be enabled by adding an entry to <code>hadoop-metrics.properties</code>
+        to enable the <code>fairscheduler</code> metrics context. For example, to
+        simply retain the metrics in memory so they may be viewed in the <code>/metrics</code>
+        servlet:
+      </p>
+      <p>
+        <code>fairscheduler.class=org.apache.hadoop.metrics.spi.NoEmitMetricsContext</code>
+      </p>
+      <p>
+        Metrics are generated for each pool and job, and contain the same information that
+        is visible on the <code>/scheduler</code> web page.
+      </p>
+    </section>
+
+    <!--
+    <section>
+    <title>Implementation</title>
+    <p>There are two aspects to implementing fair scheduling: Calculating 
+    each job's fair share, and choosing which job to run when a task slot 
+    becomes available.</p>
+    <p>To select jobs to run, the scheduler then keeps track of a 
+    &quot;deficit&quot; for each job - the difference between the amount of
+     compute time it should have gotten on an ideal scheduler, and the amount 
+     of compute time it actually got. This is a measure of how 
+     &quot;unfair&quot; we've been to the job. Every few hundred 
+     milliseconds, the scheduler updates the deficit of each job by looking
+     at how many tasks each job had running during this interval vs. its 
+     fair share. Whenever a task slot becomes available, it is assigned to 
+     the job with the highest deficit. There is one exception - if there 
+     were one or more jobs who were not meeting their pool capacity 
+     guarantees, we only choose among these &quot;needy&quot; jobs (based 
+     again on their deficit), to ensure that the scheduler meets pool 
+     guarantees as soon as possible.</p>
+     <p>
+     The fair shares are calculated by dividing the capacity of the cluster 
+     among runnable jobs according to a &quot;weight&quot; for each job. By 
+     default the weight is based on priority, with each level of priority 
+     having 2x higher weight than the next (for example, VERY_HIGH has 4x the 
+     weight of NORMAL). However, weights can also be based on job sizes and ages, 
+     as described in the Configuring section. For jobs that are in a pool, 
+     fair shares also take into account the minimum guarantee for that pool. 
+     This capacity is divided among the jobs in that pool according again to 
+     their weights.
+     </p>
+     <p>When limits on a user's running jobs or a pool's running jobs 
+     are in place, we choose which jobs get to run by sorting all jobs in order 
+     of priority and then submit time, as in the standard Hadoop scheduler. Any 
+     jobs that fall after the user/pool's limit in this ordering are queued up 
+     and wait idle until they can be run. During this time, they are ignored 
+     from the fair sharing calculations and do not gain or lose deficit (their 
+     fair share is set to zero).</p>
+     <p>
+     Preemption is implemented by periodically checking whether jobs are
+     below their minimum share or below half their fair share. If a job has
+     been below its share for sufficiently long, it is allowed to kill
+     other jobs' tasks. The tasks chosen are the most-recently-launched
+     tasks from over-allocated jobs, to minimize the amount of wasted
+     computation.
+     </p>
+     <p>
+     Finally, the fair scheduler provides several extension points where
+     the basic functionality can be extended. For example, the weight
+     calculation can be modified to give a priority boost to new jobs,
+     implementing a "shortest job first" policy which reduces response
+     times for interactive jobs even further.
+     These extension points are listed in
+     <a href="#Advanced+Parameters">advanced mapred-site.xml properties</a>.
+     </p>
+    </section>
+    -->
+  </body>  
+</document>

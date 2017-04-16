@@ -1,0 +1,28 @@
+From b9577929b1d333a3c697d1965ac6e658a0199d1c Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 11 Mar 2012 20:13:26 -0700
+Subject: [PATCH 1139/1179] HDFS-1910. NameNode should not save fsimage twice.
+
+Reason: Bug
+Author: Konstantin Shvachko
+Ref: CDH-3867
+---
+ .../hadoop/hdfs/server/namenode/FSImage.java       |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index 56eeca9..d442c47 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -1139,6 +1139,8 @@ public class FSImage extends Storage {
+                                                               it.hasNext();) {
+       StorageDirectory sd = it.next();
+       try {
++        if (sd.getStorageDirType().isOfType(NameNodeDirType.IMAGE_AND_EDITS))
++          continue; // this has already been saved as IMAGE directory
+         saveCurrent(sd);
+       } catch(IOException ie) {
+         LOG.error("Unable to save edits for " + sd.getRoot(), ie);
+-- 
+1.7.0.4
+

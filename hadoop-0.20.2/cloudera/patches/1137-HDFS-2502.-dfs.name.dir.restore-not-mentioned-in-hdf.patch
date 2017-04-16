@@ -1,0 +1,33 @@
+From 45504ce5fc7edb030ef9b9c91bd6772d8c140bf2 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 11 Mar 2012 18:50:58 -0700
+Subject: [PATCH 1137/1179] HDFS-2502. dfs.name.dir.restore not mentioned in hdfs-default.xml.
+
+Reason: Bug
+Author: Harsh J
+Ref: CDH-2703
+---
+ src/hdfs/hdfs-default.xml |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/hdfs-default.xml b/src/hdfs/hdfs-default.xml
+index cfc9ca6..db0c03b 100644
+--- a/src/hdfs/hdfs-default.xml
++++ b/src/hdfs/hdfs-default.xml
+@@ -460,4 +460,13 @@ creations/deletions), or "all".</description>
+   </description>
+ </property>
+ 
++ <property>
++  <name>dfs.namenode.name.dir.restore</name>
++  <value>false</value>
++  <description>If true the NameNode will attempt to recover any failed
++    dfs.name.dir directories at the next checkpoint time (triggered by
++    the 2NN).
++  </description>
++</property>
++
+ </configuration>
+-- 
+1.7.0.4
+

@@ -1,0 +1,58 @@
+From bf655f10661132486cb40ee098fdedbbb5937892 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 19:30:24 -0800
+Subject: [PATCH 0811/1179] Partial MAPREDUCE-2055. Cache counters in retired job info
+
+Does not apply entirety of upstream JIRA as described. Simply caches
+Counters in the retired job info.
+
+Author: Krishna Ramachandran
+Ref: CDH-2622
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |   15 +++++++++++----
+ 1 files changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 2deedb3..bc5f2bd 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -520,9 +520,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     final JobStatus status;
+     final JobProfile profile;
+     final long finishTime;
++    final Counters counters;
+     private String historyFile;
+-    RetireJobInfo(JobStatus status, JobProfile profile, long finishTime, 
+-        String historyFile) {
++    RetireJobInfo(Counters counters, JobStatus status, JobProfile profile, 
++        long finishTime, String historyFile) {
++      this.counters = counters;
+       this.status = status;
+       this.profile = profile;
+       this.finishTime = finishTime;
+@@ -547,7 +549,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+ 
+     synchronized void addToCache(JobInProgress job) {
+-      RetireJobInfo info = new RetireJobInfo(job.getStatus(), 
++      RetireJobInfo info = new RetireJobInfo(job.getCounters(), job.getStatus(),
+           job.getProfile(), job.getFinishTime(), job.getHistoryFile());
+       jobRetireInfoQ.add(info);
+       jobIDStatusMap.put(info.status.getJobID(), info);
+@@ -4126,7 +4128,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         aclsManager.checkAccess(job, callerUGI, Operation.VIEW_JOB_COUNTERS);
+ 
+         return isJobInited(job) ? job.getCounters() : EMPTY_COUNTERS;
+-      } 
++      } else {
++        RetireJobInfo info = retireJobs.get(jobid);
++        if (info != null) {
++          return info.counters;
++        }
++      }
+     }
+ 
+     return completedJobStatusStore.readCounters(jobid);
+-- 
+1.7.0.4
+

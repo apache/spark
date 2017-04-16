@@ -1,0 +1,130 @@
+From 5792ec1c6229c000b34fd2cb1f3447ae71ad9949 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 22 Feb 2010 15:21:20 -0800
+Subject: [PATCH 0483/1179] HADOOP-6583. Capture metrics for authentication/authorization at the RPC layer
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436643/6583-bp20.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Server.java         |   16 ++++++++++++-
+ .../org/apache/hadoop/ipc/metrics/RpcMetrics.java  |   10 +++++++-
+ src/test/org/apache/hadoop/ipc/TestRPC.java        |   25 ++++++++++++++++++++
+ 3 files changed, 49 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 943dbff..3478e5d 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -224,6 +224,11 @@ public abstract class Server {
+       }
+     }
+   }
++  
++  /*Returns a handle to the rpcMetrics (required in tests)*/
++  public RpcMetrics getRpcMetrics() {
++    return rpcMetrics;
++  }
+ 
+   /** A call queued for handling. */
+   private static class Call {
+@@ -878,7 +883,13 @@ public abstract class Server {
+         if (LOG.isDebugEnabled())
+           LOG.debug("Have read input token of size " + saslToken.length
+               + " for processing by saslServer.evaluateResponse()");
+-        byte[] replyToken = saslServer.evaluateResponse(saslToken);
++        byte[] replyToken;
++        try {
++          replyToken = saslServer.evaluateResponse(saslToken);
++        } catch (SaslException se) {
++          rpcMetrics.authenticationFailures.inc();
++          throw se;
++        }
+         if (replyToken != null) {
+           if (LOG.isDebugEnabled())
+             LOG.debug("Will send token of size " + replyToken.length
+@@ -1079,6 +1090,7 @@ public abstract class Server {
+     
+     private void processOneRpc(byte[] buf) throws IOException,
+         InterruptedException {
++      rpcMetrics.authenticationSuccesses.inc();
+       if (headerRead) {
+         processData(buf);
+       } else {
+@@ -1122,7 +1134,9 @@ public abstract class Server {
+         if (LOG.isDebugEnabled()) {
+           LOG.debug("Successfully authorized " + header);
+         }
++        rpcMetrics.authorizationSuccesses.inc();
+       } catch (AuthorizationException ae) {
++        rpcMetrics.authorizationFailures.inc();
+         authFailedCall.connection = this;
+         setupResponse(authFailedResponse, authFailedCall, Status.FATAL, null,
+             ae.getClass().getName(), ae.getMessage());
+diff --git a/src/core/org/apache/hadoop/ipc/metrics/RpcMetrics.java b/src/core/org/apache/hadoop/ipc/metrics/RpcMetrics.java
+index a1fbccd..dd5d2af 100644
+--- a/src/core/org/apache/hadoop/ipc/metrics/RpcMetrics.java
++++ b/src/core/org/apache/hadoop/ipc/metrics/RpcMetrics.java
+@@ -27,6 +27,7 @@ import org.apache.hadoop.metrics.Updater;
+ import org.apache.hadoop.metrics.util.MetricsBase;
+ import org.apache.hadoop.metrics.util.MetricsIntValue;
+ import org.apache.hadoop.metrics.util.MetricsRegistry;
++import org.apache.hadoop.metrics.util.MetricsTimeVaryingInt;
+ import org.apache.hadoop.metrics.util.MetricsTimeVaryingRate;
+ 
+ /**
+@@ -79,7 +80,14 @@ public class RpcMetrics implements Updater {
+           new MetricsIntValue("NumOpenConnections", registry);
+   public MetricsIntValue callQueueLen = 
+           new MetricsIntValue("callQueueLen", registry);
+-  
++  public MetricsTimeVaryingInt authenticationFailures = 
++          new MetricsTimeVaryingInt("rpcAuthenticationFailures", registry);
++  public MetricsTimeVaryingInt authenticationSuccesses = 
++          new MetricsTimeVaryingInt("rpcAuthenticationSuccesses", registry);
++  public MetricsTimeVaryingInt authorizationFailures = 
++          new MetricsTimeVaryingInt("rpcAuthorizationFailures", registry);
++  public MetricsTimeVaryingInt authorizationSuccesses = 
++         new MetricsTimeVaryingInt("rpcAuthorizationSuccesses", registry);
+   /**
+    * Push the metrics to the monitoring subsystem on doUpdate() call.
+    */
+diff --git a/src/test/org/apache/hadoop/ipc/TestRPC.java b/src/test/org/apache/hadoop/ipc/TestRPC.java
+index 98ad33f..0baaef9 100644
+--- a/src/test/org/apache/hadoop/ipc/TestRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestRPC.java
+@@ -369,6 +369,31 @@ public class TestRPC extends TestCase {
+       if (proxy != null) {
+         RPC.stopProxy(proxy);
+       }
++      if (expectFailure) {
++        assertTrue("Expected 1 but got " + 
++            server.getRpcMetrics().authorizationFailures
++            .getCurrentIntervalValue(), 
++            server.getRpcMetrics().authorizationFailures
++            .getCurrentIntervalValue() == 1);
++      } else {
++        assertTrue("Expected 1 but got " + 
++            server.getRpcMetrics().authorizationSuccesses
++            .getCurrentIntervalValue(),
++            server.getRpcMetrics().authorizationSuccesses
++            .getCurrentIntervalValue() == 1);
++      }
++      //since we don't have authentication turned ON, we should see 
++      // >0 for the authentication successes and 0 for failure
++      assertTrue("Expected 0 but got " + 
++          server.getRpcMetrics().authenticationFailures
++          .getCurrentIntervalValue(),
++          server.getRpcMetrics().authenticationFailures
++          .getCurrentIntervalValue() == 0);
++      assertTrue("Expected greater than 0 but got " + 
++          server.getRpcMetrics().authenticationSuccesses
++          .getCurrentIntervalValue(),
++          server.getRpcMetrics().authenticationSuccesses
++          .getCurrentIntervalValue() > 0);
+     }
+   }
+   
+-- 
+1.7.0.4
+

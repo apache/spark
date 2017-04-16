@@ -1,0 +1,4275 @@
+From 77e1a32e46942124c1dcaa8ba731da7e499bd547 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Mon, 19 Sep 2011 00:10:39 -0700
+Subject: [PATCH 1049/1179] HADOOP-7119. add Kerberos HTTP SPNEGO authentication support to Hadoop JT/NN/DN/TT web-consoles
+
+Reason: New Feature
+Author: Alejandro Abdelnur
+Ref: CDH-3558
+---
+ .../security/AuthenticationFilterInitializer.java  |   75 +++
+ .../hadoop/security/authentication/README.txt      |   15 +
+ .../authentication/client/AuthenticatedURL.java    |  274 +++++++++
+ .../client/AuthenticationException.java            |   50 ++
+ .../authentication/client/Authenticator.java       |   39 ++
+ .../client/KerberosAuthenticator.java              |  270 +++++++++
+ .../authentication/client/PseudoAuthenticator.java |   74 +++
+ .../server/AuthenticationFilter.java               |  404 +++++++++++++
+ .../server/AuthenticationHandler.java              |   89 +++
+ .../authentication/server/AuthenticationToken.java |  226 ++++++++
+ .../server/KerberosAuthenticationHandler.java      |  310 ++++++++++
+ .../server/PseudoAuthenticationHandler.java        |  134 +++++
+ .../security/authentication/util/KerberosName.java |  395 +++++++++++++
+ .../security/authentication/util/Signer.java       |  100 ++++
+ .../authentication/util/SignerException.java       |   31 +
+ .../content/xdocs/HttpAuthentication.xml           |  124 ++++
+ src/docs/src/documentation/content/xdocs/site.xml  |    4 +
+ src/test/commit-tests                              |    5 +
+ .../security/authentication/KerberosTestUtils.java |  129 ++++
+ .../client/AuthenticatorTestCase.java              |  153 +++++
+ .../client/TestAuthenticatedURL.java               |  113 ++++
+ .../client/TestPseudoAuthenticator.java            |   83 +++
+ .../server/TestAuthenticationFilter.java           |  611 ++++++++++++++++++++
+ .../server/TestAuthenticationToken.java            |  124 ++++
+ .../server/TestPseudoAuthenticationHandler.java    |  113 ++++
+ .../security/authentication/util/TestSigner.java   |   93 +++
+ 26 files changed, 4038 insertions(+), 0 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/README.txt
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/client/AuthenticatedURL.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/client/AuthenticationException.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/client/Authenticator.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/client/PseudoAuthenticator.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/server/AuthenticationFilter.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/server/AuthenticationHandler.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/server/AuthenticationToken.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/server/KerberosAuthenticationHandler.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/server/PseudoAuthenticationHandler.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/util/KerberosName.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/util/Signer.java
+ create mode 100644 src/core/org/apache/hadoop/security/authentication/util/SignerException.java
+ create mode 100644 src/docs/src/documentation/content/xdocs/HttpAuthentication.xml
+ create mode 100644 src/test/org/apache/hadoop/security/authentication/KerberosTestUtils.java
+ create mode 100644 src/test/org/apache/hadoop/security/authentication/client/AuthenticatorTestCase.java
+ create mode 100644 src/test/org/apache/hadoop/security/authentication/client/TestAuthenticatedURL.java
+ create mode 100644 src/test/org/apache/hadoop/security/authentication/client/TestPseudoAuthenticator.java
+ create mode 100644 src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationFilter.java
+ create mode 100644 src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationToken.java
+ create mode 100644 src/test/org/apache/hadoop/security/authentication/server/TestPseudoAuthenticationHandler.java
+ create mode 100644 src/test/org/apache/hadoop/security/authentication/util/TestSigner.java
+
+diff --git a/src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java b/src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java
+new file mode 100644
+index 0000000..cd6ab7b
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java
+@@ -0,0 +1,75 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.security;
++
++import org.apache.hadoop.security.authentication.server.AuthenticationFilter;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.http.FilterContainer;
++import org.apache.hadoop.http.FilterInitializer;
++
++import java.util.HashMap;
++import java.util.Map;
++
++/**
++ * Initializes Alfredo AuthenticationFilter which provides support for
++ * Kerberos HTTP SPENGO authentication.
++ * <p/>
++ * It enables anonymous access, simple/speudo and Kerberos HTTP SPNEGO
++ * authentication  for Hadoop JobTracker, NameNode, DataNodes and
++ * TaskTrackers.
++ * <p/>
++ * Refer to the <code>core-default.xml</code> file, after the comment
++ * 'HTTP Authentication' for details on the configuration options.
++ * All related configuration properties have 'hadoop.http.authentication.'
++ * as prefix.
++ */
++public class AuthenticationFilterInitializer extends FilterInitializer {
++
++  private static final String PREFIX = "hadoop.http.authentication.";
++
++  /**
++   * Initializes Alfredo AuthenticationFilter.
++   * <p/>
++   * Propagates to Alfredo AuthenticationFilter configuration all Hadoop
++   * configuration properties prefixed with "hadoop.http.authentication."
++   *
++   * @param container The filter container
++   * @param conf Configuration for run-time parameters
++   */
++  @Override
++  public void initFilter(FilterContainer container, Configuration conf) {
++    Map<String, String> filterConfig = new HashMap<String, String>();
++
++    //setting the cookie path to root '/' so it is used for all resources.
++    filterConfig.put(AuthenticationFilter.COOKIE_PATH, "/");
++
++    for (Map.Entry<String, String> entry : conf) {
++      String name = entry.getKey();
++      if (name.startsWith(PREFIX)) {
++        String value = conf.get(name);
++        name = name.substring(PREFIX.length());
++        filterConfig.put(name, value);
++      }
++    }
++
++    container.addFilter("authentication",
++                        AuthenticationFilter.class.getName(),
++                        filterConfig);
++  }
++
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/README.txt b/src/core/org/apache/hadoop/security/authentication/README.txt
+new file mode 100644
+index 0000000..5069738
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/README.txt
+@@ -0,0 +1,15 @@
++Hadoop Auth, Java HTTP SPNEGO
++
++Hadoop Auth consists of a client and a server
++components to enable Kerberos SPNEGO authentication for HTTP.
++
++The client component is the AuthenticatedURL class.
++
++The server component is the AuthenticationFilter servlet filter class.
++
++Authentication mechanisms support is pluggable in both the client and
++the server components via interfaces.
++
++In addition to Kerberos SPNEGO, Hadoop Auth also supports Pseudo/Simple
++authentication (trusting the value of the query string parameter
++'user.name').
+diff --git a/src/core/org/apache/hadoop/security/authentication/client/AuthenticatedURL.java b/src/core/org/apache/hadoop/security/authentication/client/AuthenticatedURL.java
+new file mode 100644
+index 0000000..5a44660
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/client/AuthenticatedURL.java
+@@ -0,0 +1,274 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.client;
++
++import org.apache.hadoop.security.authentication.server.AuthenticationFilter;
++
++import java.io.IOException;
++import java.net.HttpURLConnection;
++import java.net.URL;
++import java.util.List;
++import java.util.Map;
++
++/**
++ * The {@link AuthenticatedURL} class enables the use of the JDK {@link URL} class
++ * against HTTP endpoints protected with the {@link AuthenticationFilter}.
++ * <p/>
++ * The authentication mechanisms supported by default are Hadoop Simple  authentication
++ * (also known as pseudo authentication) and Kerberos SPNEGO authentication.
++ * <p/>
++ * Additional authentication mechanisms can be supported via {@link Authenticator} implementations.
++ * <p/>
++ * The default {@link Authenticator} is the {@link KerberosAuthenticator} class which supports
++ * automatic fallback from Kerberos SPNEGO to Hadoop Simple authentication.
++ * <p/>
++ * <code>AuthenticatedURL</code> instances are not thread-safe.
++ * <p/>
++ * The usage pattern of the {@link AuthenticatedURL} is:
++ * <p/>
++ * <pre>
++ *
++ * // establishing an initial connection
++ *
++ * URL url = new URL("http://foo:8080/bar");
++ * AuthenticatedURL.Token token = new AuthenticatedURL.Token();
++ * AuthenticatedURL aUrl = new AuthenticatedURL();
++ * HttpURLConnection conn = new AuthenticatedURL(url, token).openConnection();
++ * ....
++ * // use the 'conn' instance
++ * ....
++ *
++ * // establishing a follow up connection using a token from the previous connection
++ *
++ * HttpURLConnection conn = new AuthenticatedURL(url, token).openConnection();
++ * ....
++ * // use the 'conn' instance
++ * ....
++ *
++ * </pre>
++ */
++public class AuthenticatedURL {
++
++  /**
++   * Name of the HTTP cookie used for the authentication token between the client and the server.
++   */
++  public static final String AUTH_COOKIE = "hadoop.auth";
++
++  private static final String AUTH_COOKIE_EQ = AUTH_COOKIE + "=";
++
++  /**
++   * Client side authentication token.
++   */
++  public static class Token {
++
++    private String token;
++
++    /**
++     * Creates a token.
++     */
++    public Token() {
++    }
++
++    /**
++     * Creates a token using an existing string representation of the token.
++     *
++     * @param tokenStr string representation of the tokenStr.
++     */
++    public Token(String tokenStr) {
++      if (tokenStr == null) {
++        throw new IllegalArgumentException("tokenStr cannot be null");
++      }
++      set(tokenStr);
++    }
++
++    /**
++     * Returns if a token from the server has been set.
++     *
++     * @return if a token from the server has been set.
++     */
++    public boolean isSet() {
++      return token != null;
++    }
++
++    /**
++     * Sets a token.
++     *
++     * @param tokenStr string representation of the tokenStr.
++     */
++    void set(String tokenStr) {
++      token = tokenStr;
++    }
++
++    /**
++     * Returns the string representation of the token.
++     *
++     * @return the string representation of the token.
++     */
++    @Override
++    public String toString() {
++      return token;
++    }
++
++    /**
++     * Return the hashcode for the token.
++     *
++     * @return the hashcode for the token.
++     */
++    @Override
++    public int hashCode() {
++      return (token != null) ? token.hashCode() : 0;
++    }
++
++    /**
++     * Return if two token instances are equal.
++     *
++     * @param o the other token instance.
++     *
++     * @return if this instance and the other instance are equal.
++     */
++    @Override
++    public boolean equals(Object o) {
++      boolean eq = false;
++      if (o instanceof Token) {
++        Token other = (Token) o;
++        eq = (token == null && other.token == null) || (token != null && this.token.equals(other.token));
++      }
++      return eq;
++    }
++  }
++
++  private static Class<? extends Authenticator> DEFAULT_AUTHENTICATOR = KerberosAuthenticator.class;
++
++  /**
++   * Sets the default {@link Authenticator} class to use when an {@link AuthenticatedURL} instance
++   * is created without specifying an authenticator.
++   *
++   * @param authenticator the authenticator class to use as default.
++   */
++  public static void setDefaultAuthenticator(Class<? extends Authenticator> authenticator) {
++    DEFAULT_AUTHENTICATOR = authenticator;
++  }
++
++  /**
++   * Returns the default {@link Authenticator} class to use when an {@link AuthenticatedURL} instance
++   * is created without specifying an authenticator.
++   *
++   * @return the authenticator class to use as default.
++   */
++  public static Class<? extends Authenticator> getDefaultAuthenticator() {
++    return DEFAULT_AUTHENTICATOR;
++  }
++
++  private Authenticator authenticator;
++
++  /**
++   * Creates an {@link AuthenticatedURL}.
++   */
++  public AuthenticatedURL() {
++    this(null);
++  }
++
++  /**
++   * Creates an <code>AuthenticatedURL</code>.
++   *
++   * @param authenticator the {@link Authenticator} instance to use, if <code>null</code> a {@link
++   * KerberosAuthenticator} is used.
++   */
++  public AuthenticatedURL(Authenticator authenticator) {
++    try {
++      this.authenticator = (authenticator != null) ? authenticator : DEFAULT_AUTHENTICATOR.newInstance();
++    } catch (Exception ex) {
++      throw new RuntimeException(ex);
++    }
++  }
++
++  /**
++   * Returns an authenticated {@link HttpURLConnection}.
++   *
++   * @param url the URL to connect to. Only HTTP/S URLs are supported.
++   * @param token the authentication token being used for the user.
++   *
++   * @return an authenticated {@link HttpURLConnection}.
++   *
++   * @throws IOException if an IO error occurred.
++   * @throws AuthenticationException if an authentication exception occurred.
++   */
++  public HttpURLConnection openConnection(URL url, Token token) throws IOException, AuthenticationException {
++    if (url == null) {
++      throw new IllegalArgumentException("url cannot be NULL");
++    }
++    if (!url.getProtocol().equalsIgnoreCase("http") && !url.getProtocol().equalsIgnoreCase("https")) {
++      throw new IllegalArgumentException("url must be for a HTTP or HTTPS resource");
++    }
++    if (token == null) {
++      throw new IllegalArgumentException("token cannot be NULL");
++    }
++    authenticator.authenticate(url, token);
++    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
++    injectToken(conn, token);
++    return conn;
++  }
++
++  /**
++   * Helper method that injects an authentication token to send with a connection.
++   *
++   * @param conn connection to inject the authentication token into.
++   * @param token authentication token to inject.
++   */
++  public static void injectToken(HttpURLConnection conn, Token token) {
++    String t = token.token;
++    if (t != null) {
++      if (!t.startsWith("\"")) {
++        t = "\"" + t + "\"";
++      }
++      conn.addRequestProperty("Cookie", AUTH_COOKIE_EQ + t);
++    }
++  }
++
++  /**
++   * Helper method that extracts an authentication token received from a connection.
++   * <p/>
++   * This method is used by {@link Authenticator} implementations.
++   *
++   * @param conn connection to extract the authentication token from.
++   * @param token the authentication token.
++   *
++   * @throws IOException if an IO error occurred.
++   * @throws AuthenticationException if an authentication exception occurred.
++   */
++  public static void extractToken(HttpURLConnection conn, Token token) throws IOException, AuthenticationException {
++    if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
++      Map<String, List<String>> headers = conn.getHeaderFields();
++      List<String> cookies = headers.get("Set-Cookie");
++      if (cookies != null) {
++        for (String cookie : cookies) {
++          if (cookie.startsWith(AUTH_COOKIE_EQ)) {
++            String value = cookie.substring(AUTH_COOKIE_EQ.length());
++            int separator = value.indexOf(";");
++            if (separator > -1) {
++              value = value.substring(0, separator);
++            }
++            if (value.length() > 0) {
++              token.set(value);
++            }
++          }
++        }
++      }
++    } else {
++      throw new AuthenticationException("Authentication failed, status: " + conn.getResponseCode() +
++                                        ", message: " + conn.getResponseMessage());
++    }
++  }
++
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/client/AuthenticationException.java b/src/core/org/apache/hadoop/security/authentication/client/AuthenticationException.java
+new file mode 100644
+index 0000000..13632fb
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/client/AuthenticationException.java
+@@ -0,0 +1,50 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.client;
++
++/**
++ * Exception thrown when an authentication error occurrs.
++ */
++public class AuthenticationException extends Exception {
++  
++  static final long serialVersionUID = 0;
++
++  /**
++   * Creates an {@link AuthenticationException}.
++   *
++   * @param cause original exception.
++   */
++  public AuthenticationException(Throwable cause) {
++    super(cause);
++  }
++
++  /**
++   * Creates an {@link AuthenticationException}.
++   *
++   * @param msg exception message.
++   */
++  public AuthenticationException(String msg) {
++    super(msg);
++  }
++
++  /**
++   * Creates an {@link AuthenticationException}.
++   *
++   * @param msg exception message.
++   * @param cause original exception.
++   */
++  public AuthenticationException(String msg, Throwable cause) {
++    super(msg, cause);
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/client/Authenticator.java b/src/core/org/apache/hadoop/security/authentication/client/Authenticator.java
+new file mode 100644
+index 0000000..7b23f20
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/client/Authenticator.java
+@@ -0,0 +1,39 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.client;
++
++
++import java.io.IOException;
++import java.net.URL;
++
++/**
++ * Interface for client authentication mechanisms.
++ * <p/>
++ * Implementations are use-once instances, they don't need to be thread safe.
++ */
++public interface Authenticator {
++
++  /**
++   * Authenticates against a URL and returns a {@link AuthenticatedURL.Token} to be
++   * used by subsequent requests.
++   *
++   * @param url the URl to authenticate against.
++   * @param token the authentication token being used for the user.
++   *
++   * @throws IOException if an IO error occurred.
++   * @throws AuthenticationException if an authentication error occurred.
++   */
++  public void authenticate(URL url, AuthenticatedURL.Token token) throws IOException, AuthenticationException;
++
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java b/src/core/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java
+new file mode 100644
+index 0000000..b3dc6fe
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java
+@@ -0,0 +1,270 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.client;
++
++import com.sun.security.auth.module.Krb5LoginModule;
++import org.apache.commons.codec.binary.Base64;
++import org.ietf.jgss.GSSContext;
++import org.ietf.jgss.GSSManager;
++import org.ietf.jgss.GSSName;
++import sun.security.jgss.GSSUtil;
++
++import javax.security.auth.Subject;
++import javax.security.auth.login.AppConfigurationEntry;
++import javax.security.auth.login.Configuration;
++import javax.security.auth.login.LoginContext;
++import javax.security.auth.login.LoginException;
++import java.io.IOException;
++import java.net.HttpURLConnection;
++import java.net.URL;
++import java.security.AccessControlContext;
++import java.security.AccessController;
++import java.security.PrivilegedActionException;
++import java.security.PrivilegedExceptionAction;
++import java.util.HashMap;
++import java.util.Map;
++
++/**
++ * The {@link KerberosAuthenticator} implements the Kerberos SPNEGO authentication sequence.
++ * <p/>
++ * It uses the default principal for the Kerberos cache (normally set via kinit).
++ * <p/>
++ * It falls back to the {@link PseudoAuthenticator} if the HTTP endpoint does not trigger an SPNEGO authentication
++ * sequence.
++ */
++public class KerberosAuthenticator implements Authenticator {
++
++  /**
++   * HTTP header used by the SPNEGO server endpoint during an authentication sequence.
++   */
++  public static final String WWW_AUTHENTICATE = "WWW-Authenticate";
++
++  /**
++   * HTTP header used by the SPNEGO client endpoint during an authentication sequence.
++   */
++  public static final String AUTHORIZATION = "Authorization";
++
++  /**
++   * HTTP header prefix used by the SPNEGO client/server endpoints during an authentication sequence.
++   */
++  public static final String NEGOTIATE = "Negotiate";
++
++  private static final String AUTH_HTTP_METHOD = "OPTIONS";
++
++  /*
++  * Defines the Kerberos configuration that will be used to obtain the Kerberos principal from the
++  * Kerberos cache.
++  */
++  private static class KerberosConfiguration extends Configuration {
++
++    private static final String OS_LOGIN_MODULE_NAME;
++    private static final boolean windows = System.getProperty("os.name").startsWith("Windows");
++
++    static {
++      if (windows) {
++        OS_LOGIN_MODULE_NAME = "com.sun.security.auth.module.NTLoginModule";
++      } else {
++        OS_LOGIN_MODULE_NAME = "com.sun.security.auth.module.UnixLoginModule";
++      }
++    }
++
++    private static final AppConfigurationEntry OS_SPECIFIC_LOGIN =
++      new AppConfigurationEntry(OS_LOGIN_MODULE_NAME,
++                                AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
++                                new HashMap<String, String>());
++
++    private static final Map<String, String> USER_KERBEROS_OPTIONS = new HashMap<String, String>();
++
++    static {
++      USER_KERBEROS_OPTIONS.put("doNotPrompt", "true");
++      USER_KERBEROS_OPTIONS.put("useTicketCache", "true");
++      USER_KERBEROS_OPTIONS.put("renewTGT", "true");
++      String ticketCache = System.getenv("KRB5CCNAME");
++      if (ticketCache != null) {
++        USER_KERBEROS_OPTIONS.put("ticketCache", ticketCache);
++      }
++    }
++
++    private static final AppConfigurationEntry USER_KERBEROS_LOGIN =
++      new AppConfigurationEntry(Krb5LoginModule.class.getName(),
++                                AppConfigurationEntry.LoginModuleControlFlag.OPTIONAL,
++                                USER_KERBEROS_OPTIONS);
++
++    private static final AppConfigurationEntry[] USER_KERBEROS_CONF =
++      new AppConfigurationEntry[]{OS_SPECIFIC_LOGIN, USER_KERBEROS_LOGIN};
++
++    @Override
++    public AppConfigurationEntry[] getAppConfigurationEntry(String appName) {
++      return USER_KERBEROS_CONF;
++    }
++  }
++
++  static {
++    javax.security.auth.login.Configuration.setConfiguration(new KerberosConfiguration());
++  }
++
++  private URL url;
++  private HttpURLConnection conn;
++  private Base64 base64;
++
++  /**
++   * Performs SPNEGO authentication against the specified URL.
++   * <p/>
++   * If a token is given it does a NOP and returns the given token.
++   * <p/>
++   * If no token is given, it will perform the SPNEGO authentication sequence using an
++   * HTTP <code>OPTIONS</code> request.
++   *
++   * @param url the URl to authenticate against.
++   * @param token the authentication token being used for the user.
++   *
++   * @throws IOException if an IO error occurred.
++   * @throws AuthenticationException if an authentication error occurred.
++   */
++  @Override
++  public void authenticate(URL url, AuthenticatedURL.Token token)
++    throws IOException, AuthenticationException {
++    if (!token.isSet()) {
++      this.url = url;
++      base64 = new Base64(0);
++      conn = (HttpURLConnection) url.openConnection();
++      conn.setRequestMethod(AUTH_HTTP_METHOD);
++      conn.connect();
++      if (isNegotiate()) {
++        doSpnegoSequence(token);
++      } else {
++        getFallBackAuthenticator().authenticate(url, token);
++      }
++    }
++  }
++
++  /**
++   * If the specified URL does not support SPNEGO authentication, a fallback {@link Authenticator} will be used.
++   * <p/>
++   * This implementation returns a {@link PseudoAuthenticator}.
++   *
++   * @return the fallback {@link Authenticator}.
++   */
++  protected Authenticator getFallBackAuthenticator() {
++    return new PseudoAuthenticator();
++  }
++
++  /*
++  * Indicates if the response is starting a SPNEGO negotiation.
++  */
++  private boolean isNegotiate() throws IOException {
++    boolean negotiate = false;
++    if (conn.getResponseCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
++      String authHeader = conn.getHeaderField(WWW_AUTHENTICATE);
++      negotiate = authHeader != null && authHeader.trim().startsWith(NEGOTIATE);
++    }
++    return negotiate;
++  }
++
++  /**
++   * Implements the SPNEGO authentication sequence interaction using the current default principal
++   * in the Kerberos cache (normally set via kinit).
++   *
++   * @param token the authentication token being used for the user.
++   *
++   * @throws IOException if an IO error occurred.
++   * @throws AuthenticationException if an authentication error occurred.
++   */
++  private void doSpnegoSequence(AuthenticatedURL.Token token) throws IOException, AuthenticationException {
++    try {
++      AccessControlContext context = AccessController.getContext();
++      Subject subject = Subject.getSubject(context);
++      if (subject == null) {
++        subject = new Subject();
++        LoginContext login = new LoginContext("", subject);
++        login.login();
++      }
++      Subject.doAs(subject, new PrivilegedExceptionAction<Void>() {
++
++        @Override
++        public Void run() throws Exception {
++          GSSContext gssContext = null;
++          try {
++            GSSManager gssManager = GSSManager.getInstance();
++            String servicePrincipal = "HTTP/" + KerberosAuthenticator.this.url.getHost();
++            GSSName serviceName = gssManager.createName(servicePrincipal,
++                                                        GSSUtil.NT_GSS_KRB5_PRINCIPAL);
++            gssContext = gssManager.createContext(serviceName, GSSUtil.GSS_KRB5_MECH_OID, null,
++                                                  GSSContext.DEFAULT_LIFETIME);
++            gssContext.requestCredDeleg(true);
++            gssContext.requestMutualAuth(true);
++
++            byte[] inToken = new byte[0];
++            byte[] outToken;
++            boolean established = false;
++
++            // Loop while the context is still not established
++            while (!established) {
++              outToken = gssContext.initSecContext(inToken, 0, inToken.length);
++              if (outToken != null) {
++                sendToken(outToken);
++              }
++
++              if (!gssContext.isEstablished()) {
++                inToken = readToken();
++              } else {
++                established = true;
++              }
++            }
++          } finally {
++            if (gssContext != null) {
++              gssContext.dispose();
++              gssContext = null;
++            }
++          }
++          return null;
++        }
++      });
++    } catch (PrivilegedActionException ex) {
++      throw new AuthenticationException(ex.getException());
++    } catch (LoginException ex) {
++      throw new AuthenticationException(ex);
++    }
++    AuthenticatedURL.extractToken(conn, token);
++  }
++
++  /*
++  * Sends the Kerberos token to the server.
++  */
++  private void sendToken(byte[] outToken) throws IOException, AuthenticationException {
++    String token = base64.encodeToString(outToken);
++    conn = (HttpURLConnection) url.openConnection();
++    conn.setRequestMethod(AUTH_HTTP_METHOD);
++    conn.setRequestProperty(AUTHORIZATION, NEGOTIATE + " " + token);
++    conn.connect();
++  }
++
++  /*
++  * Retrieves the Kerberos token returned by the server.
++  */
++  private byte[] readToken() throws IOException, AuthenticationException {
++    int status = conn.getResponseCode();
++    if (status == HttpURLConnection.HTTP_OK || status == HttpURLConnection.HTTP_UNAUTHORIZED) {
++      String authHeader = conn.getHeaderField(WWW_AUTHENTICATE);
++      if (authHeader == null || !authHeader.trim().startsWith(NEGOTIATE)) {
++        throw new AuthenticationException("Invalid SPNEGO sequence, '" + WWW_AUTHENTICATE +
++                                          "' header incorrect: " + authHeader);
++      }
++      String negotiation = authHeader.trim().substring((NEGOTIATE + " ").length()).trim();
++      return base64.decode(negotiation);
++    }
++    throw new AuthenticationException("Invalid SPNEGO sequence, status code: " + status);
++  }
++
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/client/PseudoAuthenticator.java b/src/core/org/apache/hadoop/security/authentication/client/PseudoAuthenticator.java
+new file mode 100644
+index 0000000..dff7a31
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/client/PseudoAuthenticator.java
+@@ -0,0 +1,74 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.client;
++
++import java.io.IOException;
++import java.net.HttpURLConnection;
++import java.net.URL;
++
++/**
++ * The {@link PseudoAuthenticator} implementation provides an authentication equivalent to Hadoop's
++ * Simple authentication, it trusts the value of the 'user.name' Java System property.
++ * <p/>
++ * The 'user.name' value is propagated using an additional query string parameter {@link #USER_NAME} ('user.name').
++ */
++public class PseudoAuthenticator implements Authenticator {
++
++  /**
++   * Name of the additional parameter that carries the 'user.name' value.
++   */
++  public static final String USER_NAME = "user.name";
++
++  private static final String USER_NAME_EQ = USER_NAME + "=";
++
++  /**
++   * Performs simple authentication against the specified URL.
++   * <p/>
++   * If a token is given it does a NOP and returns the given token.
++   * <p/>
++   * If no token is given, it will perform an HTTP <code>OPTIONS</code> request injecting an additional
++   * parameter {@link #USER_NAME} in the query string with the value returned by the {@link #getUserName()}
++   * method.
++   * <p/>
++   * If the response is successful it will update the authentication token.
++   *
++   * @param url the URl to authenticate against.
++   * @param token the authencation token being used for the user.
++   *
++   * @throws IOException if an IO error occurred.
++   * @throws AuthenticationException if an authentication error occurred.
++   */
++  @Override
++  public void authenticate(URL url, AuthenticatedURL.Token token) throws IOException, AuthenticationException {
++    String strUrl = url.toString();
++    String paramSeparator = (strUrl.contains("?")) ? "&" : "?";
++    strUrl += paramSeparator + USER_NAME_EQ + getUserName();
++    url = new URL(strUrl);
++    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
++    conn.setRequestMethod("OPTIONS");
++    conn.connect();
++    AuthenticatedURL.extractToken(conn, token);
++  }
++
++  /**
++   * Returns the current user name.
++   * <p/>
++   * This implementation returns the value of the Java system property 'user.name'
++   *
++   * @return the current user name.
++   */
++  protected String getUserName() {
++    return System.getProperty("user.name");
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/server/AuthenticationFilter.java b/src/core/org/apache/hadoop/security/authentication/server/AuthenticationFilter.java
+new file mode 100644
+index 0000000..f7305d0
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/server/AuthenticationFilter.java
+@@ -0,0 +1,404 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.server;
++
++import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
++import org.apache.hadoop.security.authentication.client.AuthenticationException;
++import org.apache.hadoop.security.authentication.util.Signer;
++import org.apache.hadoop.security.authentication.util.SignerException;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++
++import javax.servlet.Filter;
++import javax.servlet.FilterChain;
++import javax.servlet.FilterConfig;
++import javax.servlet.ServletException;
++import javax.servlet.ServletRequest;
++import javax.servlet.ServletResponse;
++import javax.servlet.http.Cookie;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletRequestWrapper;
++import javax.servlet.http.HttpServletResponse;
++import java.io.IOException;
++import java.security.Principal;
++import java.util.Enumeration;
++import java.util.Properties;
++import java.util.Random;
++
++/**
++ * The {@link AuthenticationFilter} enables protecting web application resources with different (pluggable)
++ * authentication mechanisms.
++ * <p/>
++ * Out of the box it provides 2 authentication mechanisms: Pseudo and Kerberos SPNEGO.
++ * <p/>
++ * Additional authentication mechanisms are supported via the {@link AuthenticationHandler} interface.
++ * <p/>
++ * This filter delegates to the configured authentication handler for authentication and once it obtains an
++ * {@link AuthenticationToken} from it, sets a signed HTTP cookie with the token. For client requests
++ * that provide the signed HTTP cookie, it verifies the validity of the cookie, extracts the user information
++ * and lets the request proceed to the target resource.
++ * <p/>
++ * The supported configuration properties are:
++ * <ul>
++ * <li>config.prefix: indicates the prefix to be used by all other configuration properties, the default value
++ * is no prefix. See below for details on how/why this prefix is used.</li>
++ * <li>[#PREFIX#.]type: simple|kerberos|#CLASS#, 'simple' is short for the
++ * {@link PseudoAuthenticationHandler}, 'kerberos' is short for {@link KerberosAuthenticationHandler}, otherwise
++ * the full class name of the {@link AuthenticationHandler} must be specified.</li>
++ * <li>[#PREFIX#.]signature.secret: the secret used to sign the HTTP cookie value. The default value is a random
++ * value. Unless multiple webapp instances need to share the secret the random value is adequate.</li>
++ * <li>[#PREFIX#.]token.validity: time -in seconds- that the generated token is valid before a
++ * new authentication is triggered, default value is <code>3600</code> seconds.</li>
++ * <li>[#PREFIX#.]cookie.domain: domain to use for the HTTP cookie that stores the authentication token.</li>
++ * <li>[#PREFIX#.]cookie.path: path to use for the HTTP cookie that stores the authentication token.</li>
++ * </ul>
++ * <p/>
++ * The rest of the configuration properties are specific to the {@link AuthenticationHandler} implementation and the
++ * {@link AuthenticationFilter} will take all the properties that start with the prefix #PREFIX#, it will remove
++ * the prefix from it and it will pass them to the the authentication handler for initialization. Properties that do
++ * not start with the prefix will not be passed to the authentication handler initialization.
++ */
++public class AuthenticationFilter implements Filter {
++
++  private static Logger LOG = LoggerFactory.getLogger(AuthenticationFilter.class);
++
++  /**
++   * Constant for the property that specifies the configuration prefix.
++   */
++  public static final String CONFIG_PREFIX = "config.prefix";
++
++  /**
++   * Constant for the property that specifies the authentication handler to use.
++   */
++  public static final String AUTH_TYPE = "type";
++
++  /**
++   * Constant for the property that specifies the secret to use for signing the HTTP Cookies.
++   */
++  public static final String SIGNATURE_SECRET = "signature.secret";
++
++  /**
++   * Constant for the configuration property that indicates the validity of the generated token.
++   */
++  public static final String AUTH_TOKEN_VALIDITY = "token.validity";
++
++  /**
++   * Constant for the configuration property that indicates the domain to use in the HTTP cookie.
++   */
++  public static final String COOKIE_DOMAIN = "cookie.domain";
++
++  /**
++   * Constant for the configuration property that indicates the path to use in the HTTP cookie.
++   */
++  public static final String COOKIE_PATH = "cookie.path";
++
++  private static final Random RAN = new Random();
++
++  private Signer signer;
++  private AuthenticationHandler authHandler;
++  private boolean randomSecret;
++  private long validity;
++  private String cookieDomain;
++  private String cookiePath;
++
++  /**
++   * Initializes the authentication filter.
++   * <p/>
++   * It instantiates and initializes the specified {@link AuthenticationHandler}.
++   * <p/>
++   *
++   * @param filterConfig filter configuration.
++   *
++   * @throws ServletException thrown if the filter or the authentication handler could not be initialized properly.
++   */
++  @Override
++  public void init(FilterConfig filterConfig) throws ServletException {
++    String configPrefix = filterConfig.getInitParameter(CONFIG_PREFIX);
++    configPrefix = (configPrefix != null) ? configPrefix + "." : "";
++    Properties config = getConfiguration(configPrefix, filterConfig);
++    String authHandlerName = config.getProperty(AUTH_TYPE, null);
++    String authHandlerClassName;
++    if (authHandlerName == null) {
++      throw new ServletException("Authentication type must be specified: simple|kerberos|<class>");
++    }
++    if (authHandlerName.equals("simple")) {
++      authHandlerClassName = PseudoAuthenticationHandler.class.getName();
++    } else if (authHandlerName.equals("kerberos")) {
++      authHandlerClassName = KerberosAuthenticationHandler.class.getName();
++    } else {
++      authHandlerClassName = authHandlerName;
++    }
++
++    try {
++      Class<?> klass = Thread.currentThread().getContextClassLoader().loadClass(authHandlerClassName);
++      authHandler = (AuthenticationHandler) klass.newInstance();
++      authHandler.init(config);
++    } catch (ClassNotFoundException ex) {
++      throw new ServletException(ex);
++    } catch (InstantiationException ex) {
++      throw new ServletException(ex);
++    } catch (IllegalAccessException ex) {
++      throw new ServletException(ex);
++    }
++    String signatureSecret = config.getProperty(configPrefix + SIGNATURE_SECRET);
++    if (signatureSecret == null) {
++      signatureSecret = Long.toString(RAN.nextLong());
++      randomSecret = true;
++      LOG.warn("'signature.secret' configuration not set, using a random value as secret");
++    }
++    signer = new Signer(signatureSecret.getBytes());
++    validity = Long.parseLong(config.getProperty(AUTH_TOKEN_VALIDITY, "36000")) * 1000; //10 hours
++
++    cookieDomain = config.getProperty(COOKIE_DOMAIN, null);
++    cookiePath = config.getProperty(COOKIE_PATH, null);
++  }
++
++  /**
++   * Returns the authentication handler being used.
++   *
++   * @return the authentication handler being used.
++   */
++  protected AuthenticationHandler getAuthenticationHandler() {
++    return authHandler;
++  }
++
++  /**
++   * Returns if a random secret is being used.
++   *
++   * @return if a random secret is being used.
++   */
++  protected boolean isRandomSecret() {
++    return randomSecret;
++  }
++
++  /**
++   * Returns the validity time of the generated tokens.
++   *
++   * @return the validity time of the generated tokens, in seconds.
++   */
++  protected long getValidity() {
++    return validity / 1000;
++  }
++
++  /**
++   * Returns the cookie domain to use for the HTTP cookie.
++   *
++   * @return the cookie domain to use for the HTTP cookie.
++   */
++  protected String getCookieDomain() {
++    return cookieDomain;
++  }
++
++  /**
++   * Returns the cookie path to use for the HTTP cookie.
++   *
++   * @return the cookie path to use for the HTTP cookie.
++   */
++  protected String getCookiePath() {
++    return cookiePath;
++  }
++
++  /**
++   * Destroys the filter.
++   * <p/>
++   * It invokes the {@link AuthenticationHandler#destroy()} method to release any resources it may hold.
++   */
++  @Override
++  public void destroy() {
++    if (authHandler != null) {
++      authHandler.destroy();
++      authHandler = null;
++    }
++  }
++
++  /**
++   * Returns the filtered configuration (only properties starting with the specified prefix). The property keys
++   * are also trimmed from the prefix. The returned {@link Properties} object is used to initialized the
++   * {@link AuthenticationHandler}.
++   * <p/>
++   * This method can be overriden by subclasses to obtain the configuration from other configuration source than
++   * the web.xml file.
++   *
++   * @param configPrefix configuration prefix to use for extracting configuration properties.
++   * @param filterConfig filter configuration object
++   *
++   * @return the configuration to be used with the {@link AuthenticationHandler} instance.
++   *
++   * @throws ServletException thrown if the configuration could not be created.
++   */
++  protected Properties getConfiguration(String configPrefix, FilterConfig filterConfig) throws ServletException {
++    Properties props = new Properties();
++    Enumeration<?> names = filterConfig.getInitParameterNames();
++    while (names.hasMoreElements()) {
++      String name = (String) names.nextElement();
++      if (name.startsWith(configPrefix)) {
++        String value = filterConfig.getInitParameter(name);
++        props.put(name.substring(configPrefix.length()), value);
++      }
++    }
++    return props;
++  }
++
++  /**
++   * Returns the full URL of the request including the query string.
++   * <p/>
++   * Used as a convenience method for logging purposes.
++   *
++   * @param request the request object.
++   *
++   * @return the full URL of the request including the query string.
++   */
++  protected String getRequestURL(HttpServletRequest request) {
++    StringBuffer sb = request.getRequestURL();
++    if (request.getQueryString() != null) {
++      sb.append("?").append(request.getQueryString());
++    }
++    return sb.toString();
++  }
++
++  /**
++   * Returns the {@link AuthenticationToken} for the request.
++   * <p/>
++   * It looks at the received HTTP cookies and extracts the value of the {@link AuthenticatedURL#AUTH_COOKIE}
++   * if present. It verifies the signature and if correct it creates the {@link AuthenticationToken} and returns
++   * it.
++   * <p/>
++   * If this method returns <code>null</code> the filter will invoke the configured {@link AuthenticationHandler}
++   * to perform user authentication.
++   *
++   * @param request request object.
++   *
++   * @return the Authentication token if the request is authenticated, <code>null</code> otherwise.
++   *
++   * @throws IOException thrown if an IO error occurred.
++   * @throws AuthenticationException thrown if the token is invalid or if it has expired.
++   */
++  protected AuthenticationToken getToken(HttpServletRequest request) throws IOException, AuthenticationException {
++    AuthenticationToken token = null;
++    String tokenStr = null;
++    Cookie[] cookies = request.getCookies();
++    if (cookies != null) {
++      for (Cookie cookie : cookies) {
++        if (cookie.getName().equals(AuthenticatedURL.AUTH_COOKIE)) {
++          tokenStr = cookie.getValue();
++          try {
++            tokenStr = signer.verifyAndExtract(tokenStr);
++          } catch (SignerException ex) {
++            throw new AuthenticationException(ex);
++          }
++          break;
++        }
++      }
++    }
++    if (tokenStr != null) {
++      token = AuthenticationToken.parse(tokenStr);
++      if (!token.getType().equals(authHandler.getType())) {
++        throw new AuthenticationException("Invalid AuthenticationToken type");
++      }
++      if (token.isExpired()) {
++        throw new AuthenticationException("AuthenticationToken expired");
++      }
++    }
++    return token;
++  }
++
++  /**
++   * If the request has a valid authentication token it allows the request to continue to the target resource,
++   * otherwise it triggers an authentication sequence using the configured {@link AuthenticationHandler}.
++   *
++   * @param request the request object.
++   * @param response the response object.
++   * @param filterChain the filter chain object.
++   *
++   * @throws IOException thrown if an IO error occurred.
++   * @throws ServletException thrown if a processing error occurred.
++   */
++  @Override
++  public void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain)
++      throws IOException, ServletException {
++    HttpServletRequest httpRequest = (HttpServletRequest) request;
++    HttpServletResponse httpResponse = (HttpServletResponse) response;
++    try {
++      boolean newToken = false;
++      AuthenticationToken token = getToken(httpRequest);
++      if (token == null) {
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("Request [{}] triggering authentication", getRequestURL(httpRequest));
++        }
++        token = authHandler.authenticate(httpRequest, httpResponse);
++        if (token != null && token != AuthenticationToken.ANONYMOUS) {
++          token.setExpires(System.currentTimeMillis() + getValidity() * 1000);
++        }
++        newToken = true;
++      }
++      if (token != null) {
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("Request [{}] user [{}] authenticated", getRequestURL(httpRequest), token.getUserName());
++        }
++        final AuthenticationToken authToken = token;
++        httpRequest = new HttpServletRequestWrapper(httpRequest) {
++
++          @Override
++          public String getAuthType() {
++            return authToken.getType();
++          }
++
++          @Override
++          public String getRemoteUser() {
++            return authToken.getUserName();
++          }
++
++          @Override
++          public Principal getUserPrincipal() {
++            return (authToken != AuthenticationToken.ANONYMOUS) ? authToken : null;
++          }
++        };
++        if (newToken && token != AuthenticationToken.ANONYMOUS) {
++          String signedToken = signer.sign(token.toString());
++          Cookie cookie = createCookie(signedToken);
++          httpResponse.addCookie(cookie);
++        }
++        filterChain.doFilter(httpRequest, httpResponse);
++      }
++    } catch (AuthenticationException ex) {
++      if (!httpResponse.isCommitted()) {
++        Cookie cookie = createCookie("");
++        cookie.setMaxAge(0);
++        httpResponse.addCookie(cookie);
++        httpResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED, ex.getMessage());
++      }
++      LOG.warn("Authentication exception: " + ex.getMessage(), ex);
++    }
++  }
++
++  /**
++   * Creates the Hadoop authentiation HTTP cookie.
++   * <p/>
++   * It sets the domain and path specified in the configuration.
++   *
++   * @param token authentication token for the cookie.
++   *
++   * @return the HTTP cookie.
++   */
++  protected Cookie createCookie(String token) {
++    Cookie cookie = new Cookie(AuthenticatedURL.AUTH_COOKIE, token);
++    if (getCookieDomain() != null) {
++      cookie.setDomain(getCookieDomain());
++    }
++    if (getCookiePath() != null) {
++      cookie.setPath(getCookiePath());
++    }
++    return cookie;
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/server/AuthenticationHandler.java b/src/core/org/apache/hadoop/security/authentication/server/AuthenticationHandler.java
+new file mode 100644
+index 0000000..958680f
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/server/AuthenticationHandler.java
+@@ -0,0 +1,89 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.server;
++
++import org.apache.hadoop.security.authentication.client.AuthenticationException;
++
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++import java.io.IOException;
++import java.util.Properties;
++
++/**
++ * Interface for server authentication mechanisms.
++ * <p/>
++ * The {@link AuthenticationFilter} manages the lifecycle of the authentication handler.
++ * <p/>
++ * Implementations must be thread-safe as one instance is initialized and used for all requests.
++ */
++public interface AuthenticationHandler {
++
++  /**
++   * Returns the authentication type of the authentication handler.
++   * <p/>
++   * This should be a name that uniquely identifies the authentication type.
++   * For example 'simple' or 'kerberos'.
++   *
++   * @return the authentication type of the authentication handler.
++   */
++  public String getType();
++
++  /**
++   * Initializes the authentication handler instance.
++   * <p/>
++   * This method is invoked by the {@link AuthenticationFilter#init} method.
++   *
++   * @param config configuration properties to initialize the handler.
++   *
++   * @throws ServletException thrown if the handler could not be initialized.
++   */
++  public void init(Properties config) throws ServletException;
++
++  /**
++   * Destroys the authentication handler instance.
++   * <p/>
++   * This method is invoked by the {@link AuthenticationFilter#destroy} method.
++   */
++  public void destroy();
++
++  /**
++   * Performs an authentication step for the given HTTP client request.
++   * <p/>
++   * This method is invoked by the {@link AuthenticationFilter} only if the HTTP client request is
++   * not yet authenticated.
++   * <p/>
++   * Depending upon the authentication mechanism being implemented, a particular HTTP client may
++   * end up making a sequence of invocations before authentication is successfully established (this is
++   * the case of Kerberos SPNEGO).
++   * <p/>
++   * This method must return an {@link AuthenticationToken} only if the the HTTP client request has
++   * been successfully and fully authenticated.
++   * <p/>
++   * If the HTTP client request has not been completely authenticated, this method must take over
++   * the corresponding HTTP response and it must return <code>null</code>.
++   *
++   * @param request the HTTP client request.
++   * @param response the HTTP client response.
++   *
++   * @return an {@link AuthenticationToken} if the HTTP client request has been authenticated,
++   *         <code>null</code> otherwise (in this case it must take care of the response).
++   *
++   * @throws IOException thrown if an IO error occurred.
++   * @throws AuthenticationException thrown if an Authentication error occurred.
++   */
++  public AuthenticationToken authenticate(HttpServletRequest request, HttpServletResponse response)
++    throws IOException, AuthenticationException;
++
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/server/AuthenticationToken.java b/src/core/org/apache/hadoop/security/authentication/server/AuthenticationToken.java
+new file mode 100644
+index 0000000..fd17249
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/server/AuthenticationToken.java
+@@ -0,0 +1,226 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.server;
++
++import org.apache.hadoop.security.authentication.client.AuthenticationException;
++
++import java.security.Principal;
++import java.util.Arrays;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.Map;
++import java.util.Set;
++import java.util.StringTokenizer;
++
++/**
++ * The {@link AuthenticationToken} contains information about an authenticated HTTP client and doubles
++ * as the {@link Principal} to be returned by authenticated {@link HttpServletRequest}s
++ * <p/>
++ * The token can be serialized/deserialized to and from a string as it is sent and received in HTTP client
++ * responses and requests as a HTTP cookie (this is done by the {@link AuthenticationFilter}).
++ */
++public class AuthenticationToken implements Principal {
++
++  /**
++   * Constant that identifies an anonymous request.
++   */
++  public static final AuthenticationToken ANONYMOUS = new AuthenticationToken();
++
++  private static final String ATTR_SEPARATOR = "&";
++  private static final String USER_NAME = "u";
++  private static final String PRINCIPAL = "p";
++  private static final String EXPIRES = "e";
++  private static final String TYPE = "t";
++
++  private final static Set<String> ATTRIBUTES =
++    new HashSet<String>(Arrays.asList(USER_NAME, PRINCIPAL, EXPIRES, TYPE));
++
++  private String userName;
++  private String principal;
++  private String type;
++  private long expires;
++  private String token;
++
++  private AuthenticationToken() {
++    userName = null;
++    principal = null;
++    type = null;
++    expires = -1;
++    token = "ANONYMOUS";
++    generateToken();
++  }
++
++  private static final String ILLEGAL_ARG_MSG = " is NULL, empty or contains a '" + ATTR_SEPARATOR + "'";
++
++  /**
++   * Creates an authentication token.
++   *
++   * @param userName user name.
++   * @param principal principal (commonly matches the user name, with Kerberos is the full/long principal
++   * name while the userName is the short name).
++   * @param type the authentication mechanism name.
++   * (<code>System.currentTimeMillis() + validityPeriod</code>).
++   */
++  public AuthenticationToken(String userName, String principal, String type) {
++    checkForIllegalArgument(userName, "userName");
++    checkForIllegalArgument(principal, "principal");
++    checkForIllegalArgument(type, "type");
++    this.userName = userName;
++    this.principal = principal;
++    this.type = type;
++    this.expires = -1;
++  }
++  
++  /**
++   * Check if the provided value is invalid. Throw an error if it is invalid, NOP otherwise.
++   * 
++   * @param value the value to check.
++   * @param name the parameter name to use in an error message if the value is invalid.
++   */
++  private static void checkForIllegalArgument(String value, String name) {
++    if (value == null || value.length() == 0 || value.contains(ATTR_SEPARATOR)) {
++      throw new IllegalArgumentException(name + ILLEGAL_ARG_MSG);
++    }
++  }
++
++  /**
++   * Sets the expiration of the token.
++   *
++   * @param expires expiration time of the token in milliseconds since the epoch.
++   */
++  public void setExpires(long expires) {
++    if (this != AuthenticationToken.ANONYMOUS) {
++      this.expires = expires;
++      generateToken();
++    }
++  }
++
++  /**
++   * Generates the token.
++   */
++  private void generateToken() {
++    StringBuffer sb = new StringBuffer();
++    sb.append(USER_NAME).append("=").append(userName).append(ATTR_SEPARATOR);
++    sb.append(PRINCIPAL).append("=").append(principal).append(ATTR_SEPARATOR);
++    sb.append(TYPE).append("=").append(type).append(ATTR_SEPARATOR);
++    sb.append(EXPIRES).append("=").append(expires);
++    token = sb.toString();
++  }
++
++  /**
++   * Returns the user name.
++   *
++   * @return the user name.
++   */
++  public String getUserName() {
++    return userName;
++  }
++
++  /**
++   * Returns the principal name (this method name comes from the JDK {@link Principal} interface).
++   *
++   * @return the principal name.
++   */
++  @Override
++  public String getName() {
++    return principal;
++  }
++
++  /**
++   * Returns the authentication mechanism of the token.
++   *
++   * @return the authentication mechanism of the token.
++   */
++  public String getType() {
++    return type;
++  }
++
++  /**
++   * Returns the expiration time of the token.
++   *
++   * @return the expiration time of the token, in milliseconds since Epoc.
++   */
++  public long getExpires() {
++    return expires;
++  }
++
++  /**
++   * Returns if the token has expired.
++   *
++   * @return if the token has expired.
++   */
++  public boolean isExpired() {
++    return expires != -1 && System.currentTimeMillis() > expires;
++  }
++
++  /**
++   * Returns the string representation of the token.
++   * <p/>
++   * This string representation is parseable by the {@link #parse} method.
++   *
++   * @return the string representation of the token.
++   */
++  @Override
++  public String toString() {
++    return token;
++  }
++
++  /**
++   * Parses a string into an authentication token.
++   *
++   * @param tokenStr string representation of a token.
++   *
++   * @return the parsed authentication token.
++   *
++   * @throws AuthenticationException thrown if the string representation could not be parsed into
++   * an authentication token.
++   */
++  public static AuthenticationToken parse(String tokenStr) throws AuthenticationException {
++    Map<String, String> map = split(tokenStr);
++    if (!map.keySet().equals(ATTRIBUTES)) {
++      throw new AuthenticationException("Invalid token string, missing attributes");
++    }
++    long expires = Long.parseLong(map.get(EXPIRES));
++    AuthenticationToken token = new AuthenticationToken(map.get(USER_NAME), map.get(PRINCIPAL), map.get(TYPE));
++    token.setExpires(expires);
++    return token;
++  }
++
++  /**
++   * Splits the string representation of a token into attributes pairs.
++   *
++   * @param tokenStr string representation of a token.
++   *
++   * @return a map with the attribute pairs of the token.
++   *
++   * @throws AuthenticationException thrown if the string representation of the token could not be broken into
++   * attribute pairs.
++   */
++  private static Map<String, String> split(String tokenStr) throws AuthenticationException {
++    Map<String, String> map = new HashMap<String, String>();
++    StringTokenizer st = new StringTokenizer(tokenStr, ATTR_SEPARATOR);
++    while (st.hasMoreTokens()) {
++      String part = st.nextToken();
++      int separator = part.indexOf('=');
++      if (separator == -1) {
++        throw new AuthenticationException("Invalid authentication token");
++      }
++      String key = part.substring(0, separator);
++      String value = part.substring(separator + 1);
++      map.put(key, value);
++    }
++    return map;
++  }
++
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/server/KerberosAuthenticationHandler.java b/src/core/org/apache/hadoop/security/authentication/server/KerberosAuthenticationHandler.java
+new file mode 100644
+index 0000000..121d966
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/server/KerberosAuthenticationHandler.java
+@@ -0,0 +1,310 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.server;
++
++import org.apache.hadoop.security.authentication.client.AuthenticationException;
++import org.apache.hadoop.security.authentication.client.KerberosAuthenticator;
++import com.sun.security.auth.module.Krb5LoginModule;
++import org.apache.commons.codec.binary.Base64;
++import org.apache.hadoop.security.authentication.util.KerberosName;
++import org.ietf.jgss.GSSContext;
++import org.ietf.jgss.GSSCredential;
++import org.ietf.jgss.GSSManager;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++
++import javax.security.auth.Subject;
++import javax.security.auth.kerberos.KerberosPrincipal;
++import javax.security.auth.login.AppConfigurationEntry;
++import javax.security.auth.login.Configuration;
++import javax.security.auth.login.LoginContext;
++import javax.security.auth.login.LoginException;
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++import java.io.File;
++import java.io.IOException;
++import java.security.Principal;
++import java.security.PrivilegedActionException;
++import java.security.PrivilegedExceptionAction;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.Map;
++import java.util.Properties;
++import java.util.Set;
++
++/**
++ * The {@link KerberosAuthenticationHandler} implements the Kerberos SPNEGO authentication mechanism for HTTP.
++ * <p/>
++ * The supported configuration properties are:
++ * <ul>
++ * <li>kerberos.principal: the Kerberos principal to used by the server. As stated by the Kerberos SPNEGO
++ * specification, it should be <code>HTTP/${HOSTNAME}@{REALM}</code>. The realm can be omitted from the
++ * principal as the JDK GSS libraries will use the realm name of the configured default realm.
++ * It does not have a default value.</li>
++ * <li>kerberos.keytab: the keytab file containing the credentials for the Kerberos principal.
++ * It does not have a default value.</li>
++ * </ul>
++ */
++public class KerberosAuthenticationHandler implements AuthenticationHandler {
++  private static Logger LOG = LoggerFactory.getLogger(KerberosAuthenticationHandler.class);
++
++  /**
++   * Kerberos context configuration for the JDK GSS library.
++   */
++  private static class KerberosConfiguration extends Configuration {
++    private String keytab;
++    private String principal;
++
++    public KerberosConfiguration(String keytab, String principal) {
++      this.keytab = keytab;
++      this.principal = principal;
++    }
++
++    @Override
++    public AppConfigurationEntry[] getAppConfigurationEntry(String name) {
++      Map<String, String> options = new HashMap<String, String>();
++      options.put("keyTab", keytab);
++      options.put("principal", principal);
++      options.put("useKeyTab", "true");
++      options.put("storeKey", "true");
++      options.put("doNotPrompt", "true");
++      options.put("useTicketCache", "true");
++      options.put("renewTGT", "true");
++      options.put("refreshKrb5Config", "true");
++      options.put("isInitiator", "false");
++      String ticketCache = System.getenv("KRB5CCNAME");
++      if (ticketCache != null) {
++        options.put("ticketCache", ticketCache);
++      }
++      if (LOG.isDebugEnabled()) {
++        options.put("debug", "true");
++      }
++
++      return new AppConfigurationEntry[]{
++        new AppConfigurationEntry(Krb5LoginModule.class.getName(),
++                                  AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
++                                  options),};
++    }
++  }
++
++  /**
++   * Constant that identifies the authentication mechanism.
++   */
++  public static final String TYPE = "kerberos";
++
++  /**
++   * Constant for the configuration property that indicates the kerberos principal.
++   */
++  public static final String PRINCIPAL = TYPE + ".principal";
++
++  /**
++   * Constant for the configuration property that indicates the keytab file path.
++   */
++  public static final String KEYTAB = TYPE + ".keytab";
++
++  /**
++   * Constant for the configuration property that indicates the Kerberos name
++   * rules for the Kerberos principals.
++   */
++  public static final String NAME_RULES = TYPE + ".name.rules";
++
++  private String principal;
++  private String keytab;
++  private GSSManager gssManager;
++  private LoginContext loginContext;
++
++  /**
++   * Initializes the authentication handler instance.
++   * <p/>
++   * It creates a Kerberos context using the principal and keytab specified in the configuration.
++   * <p/>
++   * This method is invoked by the {@link AuthenticationFilter#init} method.
++   *
++   * @param config configuration properties to initialize the handler.
++   *
++   * @throws ServletException thrown if the handler could not be initialized.
++   */
++  @Override
++  public void init(Properties config) throws ServletException {
++    try {
++      principal = config.getProperty(PRINCIPAL, principal);
++      if (principal == null || principal.trim().length() == 0) {
++        throw new ServletException("Principal not defined in configuration");
++      }
++      keytab = config.getProperty(KEYTAB, keytab);
++      if (keytab == null || keytab.trim().length() == 0) {
++        throw new ServletException("Keytab not defined in configuration");
++      }
++      if (!new File(keytab).exists()) {
++        throw new ServletException("Keytab does not exist: " + keytab);
++      }
++
++      String nameRules = config.getProperty(NAME_RULES, "DEFAULT");
++      KerberosName.setRules(nameRules);
++
++      Set<Principal> principals = new HashSet<Principal>();
++      principals.add(new KerberosPrincipal(principal));
++      Subject subject = new Subject(false, principals, new HashSet<Object>(), new HashSet<Object>());
++
++      KerberosConfiguration kerberosConfiguration = new KerberosConfiguration(keytab, principal);
++
++      loginContext = new LoginContext("", subject, null, kerberosConfiguration);
++      loginContext.login();
++
++      Subject serverSubject = loginContext.getSubject();
++      try {
++        gssManager = Subject.doAs(serverSubject, new PrivilegedExceptionAction<GSSManager>() {
++
++          @Override
++          public GSSManager run() throws Exception {
++            return GSSManager.getInstance();
++          }
++        });
++      } catch (PrivilegedActionException ex) {
++        throw ex.getException();
++      }
++      LOG.info("Initialized, principal [{}] from keytab [{}]", principal, keytab);
++    } catch (Exception ex) {
++      throw new ServletException(ex);
++    }
++  }
++
++  /**
++   * Releases any resources initialized by the authentication handler.
++   * <p/>
++   * It destroys the Kerberos context.
++   */
++  @Override
++  public void destroy() {
++    try {
++      if (loginContext != null) {
++        loginContext.logout();
++        loginContext = null;
++      }
++    } catch (LoginException ex) {
++      LOG.warn(ex.getMessage(), ex);
++    }
++  }
++
++  /**
++   * Returns the authentication type of the authentication handler, 'kerberos'.
++   * <p/>
++   *
++   * @return the authentication type of the authentication handler, 'kerberos'.
++   */
++  @Override
++  public String getType() {
++    return TYPE;
++  }
++
++  /**
++   * Returns the Kerberos principal used by the authentication handler.
++   *
++   * @return the Kerberos principal used by the authentication handler.
++   */
++  protected String getPrincipal() {
++    return principal;
++  }
++
++  /**
++   * Returns the keytab used by the authentication handler.
++   *
++   * @return the keytab used by the authentication handler.
++   */
++  protected String getKeytab() {
++    return keytab;
++  }
++
++  /**
++   * It enforces the the Kerberos SPNEGO authentication sequence returning an {@link AuthenticationToken} only
++   * after the Kerberos SPNEGO sequence has completed successfully.
++   * <p/>
++   *
++   * @param request the HTTP client request.
++   * @param response the HTTP client response.
++   *
++   * @return an authentication token if the Kerberos SPNEGO sequence is complete and valid,
++   *         <code>null</code> if it is in progress (in this case the handler handles the response to the client).
++   *
++   * @throws IOException thrown if an IO error occurred.
++   * @throws AuthenticationException thrown if Kerberos SPNEGO sequence failed.
++   */
++  @Override
++  public AuthenticationToken authenticate(HttpServletRequest request, final HttpServletResponse response)
++    throws IOException, AuthenticationException {
++    AuthenticationToken token = null;
++    String authorization = request.getHeader(KerberosAuthenticator.AUTHORIZATION);
++
++    if (authorization == null || !authorization.startsWith(KerberosAuthenticator.NEGOTIATE)) {
++      response.setHeader(KerberosAuthenticator.WWW_AUTHENTICATE, KerberosAuthenticator.NEGOTIATE);
++      response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
++      if (authorization == null) {
++        LOG.trace("SPNEGO starting");
++      } else {
++        LOG.warn("'" + KerberosAuthenticator.AUTHORIZATION + "' does not start with '" +
++            KerberosAuthenticator.NEGOTIATE + "' :  {}", authorization);
++      }
++    } else {
++      authorization = authorization.substring(KerberosAuthenticator.NEGOTIATE.length()).trim();
++      final Base64 base64 = new Base64(0);
++      final byte[] clientToken = base64.decode(authorization);
++      Subject serverSubject = loginContext.getSubject();
++      try {
++        token = Subject.doAs(serverSubject, new PrivilegedExceptionAction<AuthenticationToken>() {
++
++          @Override
++          public AuthenticationToken run() throws Exception {
++            AuthenticationToken token = null;
++            GSSContext gssContext = null;
++            try {
++              gssContext = gssManager.createContext((GSSCredential) null);
++              byte[] serverToken = gssContext.acceptSecContext(clientToken, 0, clientToken.length);
++              if (serverToken != null && serverToken.length > 0) {
++                String authenticate = base64.encodeToString(serverToken);
++                response.setHeader(KerberosAuthenticator.WWW_AUTHENTICATE,
++                                   KerberosAuthenticator.NEGOTIATE + " " + authenticate);
++              }
++              if (!gssContext.isEstablished()) {
++                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
++                LOG.trace("SPNEGO in progress");
++              } else {
++                String clientPrincipal = gssContext.getSrcName().toString();
++                KerberosName kerberosName = new KerberosName(clientPrincipal);
++                String userName = kerberosName.getShortName();
++                token = new AuthenticationToken(userName, clientPrincipal, TYPE);
++                response.setStatus(HttpServletResponse.SC_OK);
++                LOG.trace("SPNEGO completed for principal [{}]", clientPrincipal);
++              }
++            } finally {
++              if (gssContext != null) {
++                gssContext.dispose();
++              }
++            }
++            return token;
++          }
++        });
++      } catch (PrivilegedActionException ex) {
++        if (ex.getException() instanceof IOException) {
++          throw (IOException) ex.getException();
++        }
++        else {
++          throw new AuthenticationException(ex.getException());
++        }
++      }
++    }
++    return token;
++  }
++
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/server/PseudoAuthenticationHandler.java b/src/core/org/apache/hadoop/security/authentication/server/PseudoAuthenticationHandler.java
+new file mode 100644
+index 0000000..f23b2d0
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/server/PseudoAuthenticationHandler.java
+@@ -0,0 +1,134 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.server;
++
++import org.apache.hadoop.security.authentication.client.AuthenticationException;
++import org.apache.hadoop.security.authentication.client.PseudoAuthenticator;
++
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++import java.io.IOException;
++import java.util.Properties;
++
++/**
++ * The <code>PseudoAuthenticationHandler</code> provides a pseudo authentication mechanism that accepts
++ * the user name specified as a query string parameter.
++ * <p/>
++ * This mimics the model of Hadoop Simple authentication which trust the 'user.name' property provided in
++ * the configuration object.
++ * <p/>
++ * This handler can be configured to support anonymous users.
++ * <p/>
++ * The only supported configuration property is:
++ * <ul>
++ * <li>simple.anonymous.allowed: <code>true|false</code>, default value is <code>false</code></li>
++ * </ul>
++ */
++public class PseudoAuthenticationHandler implements AuthenticationHandler {
++
++  /**
++   * Constant that identifies the authentication mechanism.
++   */
++  public static final String TYPE = "simple";
++
++  /**
++   * Constant for the configuration property that indicates if anonymous users are allowed.
++   */
++  public static final String ANONYMOUS_ALLOWED = TYPE + ".anonymous.allowed";
++
++  private boolean acceptAnonymous;
++
++  /**
++   * Initializes the authentication handler instance.
++   * <p/>
++   * This method is invoked by the {@link AuthenticationFilter#init} method.
++   *
++   * @param config configuration properties to initialize the handler.
++   *
++   * @throws ServletException thrown if the handler could not be initialized.
++   */
++  @Override
++  public void init(Properties config) throws ServletException {
++    acceptAnonymous = Boolean.parseBoolean(config.getProperty(ANONYMOUS_ALLOWED, "false"));
++  }
++
++  /**
++   * Returns if the handler is configured to support anonymous users.
++   *
++   * @return if the handler is configured to support anonymous users.
++   */
++  protected boolean getAcceptAnonymous() {
++    return acceptAnonymous;
++  }
++
++  /**
++   * Releases any resources initialized by the authentication handler.
++   * <p/>
++   * This implementation does a NOP.
++   */
++  @Override
++  public void destroy() {
++  }
++
++  /**
++   * Returns the authentication type of the authentication handler, 'simple'.
++   * <p/>
++   *
++   * @return the authentication type of the authentication handler, 'simple'.
++   */
++  @Override
++  public String getType() {
++    return TYPE;
++  }
++
++  /**
++   * Authenticates an HTTP client request.
++   * <p/>
++   * It extracts the {@link PseudoAuthenticator#USER_NAME} parameter from the query string and creates
++   * an {@link AuthenticationToken} with it.
++   * <p/>
++   * If the HTTP client request does not contain the {@link PseudoAuthenticator#USER_NAME} parameter and
++   * the handler is configured to allow anonymous users it returns the {@link AuthenticationToken#ANONYMOUS}
++   * token.
++   * <p/>
++   * If the HTTP client request does not contain the {@link PseudoAuthenticator#USER_NAME} parameter and
++   * the handler is configured to disallow anonymous users it throws an {@link AuthenticationException}.
++   *
++   * @param request the HTTP client request.
++   * @param response the HTTP client response.
++   *
++   * @return an authentication token if the HTTP client request is accepted and credentials are valid.
++   *
++   * @throws IOException thrown if an IO error occurred.
++   * @throws AuthenticationException thrown if HTTP client request was not accepted as an authentication request.
++   */
++  @Override
++  public AuthenticationToken authenticate(HttpServletRequest request, HttpServletResponse response)
++    throws IOException, AuthenticationException {
++    AuthenticationToken token;
++    String userName = request.getParameter(PseudoAuthenticator.USER_NAME);
++    if (userName == null) {
++      if (getAcceptAnonymous()) {
++        token = AuthenticationToken.ANONYMOUS;
++      } else {
++        throw new AuthenticationException("Anonymous requests are disallowed");
++      }
++    } else {
++      token = new AuthenticationToken(userName, userName, TYPE);
++    }
++    return token;
++  }
++
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/util/KerberosName.java b/src/core/org/apache/hadoop/security/authentication/util/KerberosName.java
+new file mode 100644
+index 0000000..7278a4a
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/util/KerberosName.java
+@@ -0,0 +1,395 @@
++package org.apache.hadoop.security.authentication.util;
++
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++
++//import org.apache.hadoop.classification.InterfaceAudience;
++//import org.apache.hadoop.classification.InterfaceStability;
++
++import sun.security.krb5.Config;
++import sun.security.krb5.KrbException;
++
++/**
++ * This class implements parsing and handling of Kerberos principal names. In
++ * particular, it splits them apart and translates them down into local
++ * operating system names.
++ */
++@SuppressWarnings("all")
++//@InterfaceAudience.LimitedPrivate({"HDFS", "MapReduce"})
++//@InterfaceStability.Evolving
++public class KerberosName {
++  /** The first component of the name */
++  private final String serviceName;
++  /** The second component of the name. It may be null. */
++  private final String hostName;
++  /** The realm of the name. */
++  private final String realm;
++
++  /**
++   * A pattern that matches a Kerberos name with at most 2 components.
++   */
++  private static final Pattern nameParser =
++    Pattern.compile("([^/@]*)(/([^/@]*))?@([^/@]*)");
++
++  /**
++   * A pattern that matches a string with out '$' and then a single
++   * parameter with $n.
++   */
++  private static Pattern parameterPattern =
++    Pattern.compile("([^$]*)(\\$(\\d*))?");
++
++  /**
++   * A pattern for parsing a auth_to_local rule.
++   */
++  private static final Pattern ruleParser =
++    Pattern.compile("\\s*((DEFAULT)|(RULE:\\[(\\d*):([^\\]]*)](\\(([^)]*)\\))?"+
++                    "(s/([^/]*)/([^/]*)/(g)?)?))");
++
++  /**
++   * A pattern that recognizes simple/non-simple names.
++   */
++  private static final Pattern nonSimplePattern = Pattern.compile("[/@]");
++
++  /**
++   * The list of translation rules.
++   */
++  private static List<Rule> rules;
++
++  private static String defaultRealm;
++  private static Config kerbConf;
++
++  static {
++    try {
++      kerbConf = Config.getInstance();
++      defaultRealm = kerbConf.getDefaultRealm();
++    } catch (KrbException ke) {
++        defaultRealm="";
++    }
++  }
++
++  /**
++   * Create a name from the full Kerberos principal name.
++   * @param name
++   */
++  public KerberosName(String name) {
++    Matcher match = nameParser.matcher(name);
++    if (!match.matches()) {
++      if (name.contains("@")) {
++        throw new IllegalArgumentException("Malformed Kerberos name: " + name);
++      } else {
++        serviceName = name;
++        hostName = null;
++        realm = null;
++      }
++    } else {
++      serviceName = match.group(1);
++      hostName = match.group(3);
++      realm = match.group(4);
++    }
++  }
++
++  /**
++   * Get the configured default realm.
++   * @return the default realm from the krb5.conf
++   */
++  public String getDefaultRealm() {
++    return defaultRealm;
++  }
++
++  /**
++   * Put the name back together from the parts.
++   */
++  @Override
++  public String toString() {
++    StringBuilder result = new StringBuilder();
++    result.append(serviceName);
++    if (hostName != null) {
++      result.append('/');
++      result.append(hostName);
++    }
++    if (realm != null) {
++      result.append('@');
++      result.append(realm);
++    }
++    return result.toString();
++  }
++
++  /**
++   * Get the first component of the name.
++   * @return the first section of the Kerberos principal name
++   */
++  public String getServiceName() {
++    return serviceName;
++  }
++
++  /**
++   * Get the second component of the name.
++   * @return the second section of the Kerberos principal name, and may be null
++   */
++  public String getHostName() {
++    return hostName;
++  }
++
++  /**
++   * Get the realm of the name.
++   * @return the realm of the name, may be null
++   */
++  public String getRealm() {
++    return realm;
++  }
++
++  /**
++   * An encoding of a rule for translating kerberos names.
++   */
++  private static class Rule {
++    private final boolean isDefault;
++    private final int numOfComponents;
++    private final String format;
++    private final Pattern match;
++    private final Pattern fromPattern;
++    private final String toPattern;
++    private final boolean repeat;
++
++    Rule() {
++      isDefault = true;
++      numOfComponents = 0;
++      format = null;
++      match = null;
++      fromPattern = null;
++      toPattern = null;
++      repeat = false;
++    }
++
++    Rule(int numOfComponents, String format, String match, String fromPattern,
++         String toPattern, boolean repeat) {
++      isDefault = false;
++      this.numOfComponents = numOfComponents;
++      this.format = format;
++      this.match = match == null ? null : Pattern.compile(match);
++      this.fromPattern =
++        fromPattern == null ? null : Pattern.compile(fromPattern);
++      this.toPattern = toPattern;
++      this.repeat = repeat;
++    }
++
++    @Override
++    public String toString() {
++      StringBuilder buf = new StringBuilder();
++      if (isDefault) {
++        buf.append("DEFAULT");
++      } else {
++        buf.append("RULE:[");
++        buf.append(numOfComponents);
++        buf.append(':');
++        buf.append(format);
++        buf.append(']');
++        if (match != null) {
++          buf.append('(');
++          buf.append(match);
++          buf.append(')');
++        }
++        if (fromPattern != null) {
++          buf.append("s/");
++          buf.append(fromPattern);
++          buf.append('/');
++          buf.append(toPattern);
++          buf.append('/');
++          if (repeat) {
++            buf.append('g');
++          }
++        }
++      }
++      return buf.toString();
++    }
++
++    /**
++     * Replace the numbered parameters of the form $n where n is from 1 to
++     * the length of params. Normal text is copied directly and $n is replaced
++     * by the corresponding parameter.
++     * @param format the string to replace parameters again
++     * @param params the list of parameters
++     * @return the generated string with the parameter references replaced.
++     * @throws BadFormatString
++     */
++    static String replaceParameters(String format,
++                                    String[] params) throws BadFormatString {
++      Matcher match = parameterPattern.matcher(format);
++      int start = 0;
++      StringBuilder result = new StringBuilder();
++      while (start < format.length() && match.find(start)) {
++        result.append(match.group(1));
++        String paramNum = match.group(3);
++        if (paramNum != null) {
++          try {
++            int num = Integer.parseInt(paramNum);
++            if (num < 0 || num > params.length) {
++              throw new BadFormatString("index " + num + " from " + format +
++                                        " is outside of the valid range 0 to " +
++                                        (params.length - 1));
++            }
++            result.append(params[num]);
++          } catch (NumberFormatException nfe) {
++            throw new BadFormatString("bad format in username mapping in " +
++                                      paramNum, nfe);
++          }
++
++        }
++        start = match.end();
++      }
++      return result.toString();
++    }
++
++    /**
++     * Replace the matches of the from pattern in the base string with the value
++     * of the to string.
++     * @param base the string to transform
++     * @param from the pattern to look for in the base string
++     * @param to the string to replace matches of the pattern with
++     * @param repeat whether the substitution should be repeated
++     * @return
++     */
++    static String replaceSubstitution(String base, Pattern from, String to,
++                                      boolean repeat) {
++      Matcher match = from.matcher(base);
++      if (repeat) {
++        return match.replaceAll(to);
++      } else {
++        return match.replaceFirst(to);
++      }
++    }
++
++    /**
++     * Try to apply this rule to the given name represented as a parameter
++     * array.
++     * @param params first element is the realm, second and later elements are
++     *        are the components of the name "a/b@FOO" -> {"FOO", "a", "b"}
++     * @return the short name if this rule applies or null
++     * @throws IOException throws if something is wrong with the rules
++     */
++    String apply(String[] params) throws IOException {
++      String result = null;
++      if (isDefault) {
++        if (defaultRealm.equals(params[0])) {
++          result = params[1];
++        }
++      } else if (params.length - 1 == numOfComponents) {
++        String base = replaceParameters(format, params);
++        if (match == null || match.matcher(base).matches()) {
++          if (fromPattern == null) {
++            result = base;
++          } else {
++            result = replaceSubstitution(base, fromPattern, toPattern,  repeat);
++          }
++        }
++      }
++      if (result != null && nonSimplePattern.matcher(result).find()) {
++        throw new NoMatchingRule("Non-simple name " + result +
++                                 " after auth_to_local rule " + this);
++      }
++      return result;
++    }
++  }
++
++  static List<Rule> parseRules(String rules) {
++    List<Rule> result = new ArrayList<Rule>();
++    String remaining = rules.trim();
++    while (remaining.length() > 0) {
++      Matcher matcher = ruleParser.matcher(remaining);
++      if (!matcher.lookingAt()) {
++        throw new IllegalArgumentException("Invalid rule: " + remaining);
++      }
++      if (matcher.group(2) != null) {
++        result.add(new Rule());
++      } else {
++        result.add(new Rule(Integer.parseInt(matcher.group(4)),
++                            matcher.group(5),
++                            matcher.group(7),
++                            matcher.group(9),
++                            matcher.group(10),
++                            "g".equals(matcher.group(11))));
++      }
++      remaining = remaining.substring(matcher.end());
++    }
++    return result;
++  }
++
++  @SuppressWarnings("serial")
++  public static class BadFormatString extends IOException {
++    BadFormatString(String msg) {
++      super(msg);
++    }
++    BadFormatString(String msg, Throwable err) {
++      super(msg, err);
++    }
++  }
++
++  @SuppressWarnings("serial")
++  public static class NoMatchingRule extends IOException {
++    NoMatchingRule(String msg) {
++      super(msg);
++    }
++  }
++
++  /**
++   * Get the translation of the principal name into an operating system
++   * user name.
++   * @return the short name
++   * @throws IOException
++   */
++  public String getShortName() throws IOException {
++    String[] params;
++    if (hostName == null) {
++      // if it is already simple, just return it
++      if (realm == null) {
++        return serviceName;
++      }
++      params = new String[]{realm, serviceName};
++    } else {
++      params = new String[]{realm, serviceName, hostName};
++    }
++    for(Rule r: rules) {
++      String result = r.apply(params);
++      if (result != null) {
++        return result;
++      }
++    }
++    throw new NoMatchingRule("No rules applied to " + toString());
++  }
++
++  /**
++   * Set the rules.
++   * @param ruleString the rules string.
++   */
++  public static void setRules(String ruleString) {
++    rules = parseRules(ruleString);
++  }
++
++  static void printRules() throws IOException {
++    int i = 0;
++    for(Rule r: rules) {
++      System.out.println(++i + " " + r);
++    }
++  }
++
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/util/Signer.java b/src/core/org/apache/hadoop/security/authentication/util/Signer.java
+new file mode 100644
+index 0000000..10c9a8e
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/util/Signer.java
+@@ -0,0 +1,100 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.util;
++
++import org.apache.commons.codec.binary.Base64;
++
++import java.security.MessageDigest;
++import java.security.NoSuchAlgorithmException;
++
++/**
++ * Signs strings and verifies signed strings using a SHA digest.
++ */
++public class Signer {
++  private static final String SIGNATURE = "&s=";
++
++  private byte[] secret;
++
++  /**
++   * Creates a Signer instance using the specified secret.
++   *
++   * @param secret secret to use for creating the digest.
++   */
++  public Signer(byte[] secret) {
++    if (secret == null) {
++      throw new IllegalArgumentException("secret cannot be NULL");
++    }
++    this.secret = secret.clone();
++  }
++
++  /**
++   * Returns a signed string.
++   * <p/>
++   * The signature '&s=SIGNATURE' is appended at the end of the string.
++   *
++   * @param str string to sign.
++   *
++   * @return the signed string.
++   */
++  public String sign(String str) {
++    if (str == null || str.length() == 0) {
++      throw new IllegalArgumentException("NULL or empty string to sign");
++    }
++    String signature = computeSignature(str);
++    return str + SIGNATURE + signature;
++  }
++
++  /**
++   * Verifies a signed string and extracts the original string.
++   *
++   * @param signedStr the signed string to verify and extract.
++   *
++   * @return the extracted original string.
++   *
++   * @throws SignerException thrown if the given string is not a signed string or if the signature is invalid.
++   */
++  public String verifyAndExtract(String signedStr) throws SignerException {
++    int index = signedStr.lastIndexOf(SIGNATURE);
++    if (index == -1) {
++      throw new SignerException("Invalid signed text: " + signedStr);
++    }
++    String originalSignature = signedStr.substring(index + SIGNATURE.length());
++    String rawValue = signedStr.substring(0, index);
++    String currentSignature = computeSignature(rawValue);
++    if (!originalSignature.equals(currentSignature)) {
++      throw new SignerException("Invalid signature");
++    }
++    return rawValue;
++  }
++
++  /**
++   * Returns then signature of a string.
++   *
++   * @param str string to sign.
++   *
++   * @return the signature for the string.
++   */
++  protected String computeSignature(String str) {
++    try {
++      MessageDigest md = MessageDigest.getInstance("SHA");
++      md.update(str.getBytes());
++      md.update(secret);
++      byte[] digest = md.digest();
++      return new Base64(0).encodeToString(digest);
++    } catch (NoSuchAlgorithmException ex) {
++      throw new RuntimeException("It should not happen, " + ex.getMessage(), ex);
++    }
++  }
++
++}
+diff --git a/src/core/org/apache/hadoop/security/authentication/util/SignerException.java b/src/core/org/apache/hadoop/security/authentication/util/SignerException.java
+new file mode 100644
+index 0000000..faf2007
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authentication/util/SignerException.java
+@@ -0,0 +1,31 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.util;
++
++/**
++ * Exception thrown by {@link Signer} when a string signature is invalid.
++ */
++public class SignerException extends Exception {
++  
++  static final long serialVersionUID = 0;
++
++  /**
++   * Creates an exception instance.
++   *
++   * @param msg message for the exception.
++   */
++  public SignerException(String msg) {
++    super(msg);
++  }
++}
+diff --git a/src/docs/src/documentation/content/xdocs/HttpAuthentication.xml b/src/docs/src/documentation/content/xdocs/HttpAuthentication.xml
+new file mode 100644
+index 0000000..15abfbb
+--- /dev/null
++++ b/src/docs/src/documentation/content/xdocs/HttpAuthentication.xml
+@@ -0,0 +1,124 @@
++<?xml version="1.0"?>
++<!--
++  Copyright 2002-2004 The Apache Software Foundation
++
++  Licensed under the Apache License, Version 2.0 (the "License");
++  you may not use this file except in compliance with the License.
++  You may obtain a copy of the License at
++
++      http://www.apache.org/licenses/LICENSE-2.0
++
++  Unless required by applicable law or agreed to in writing, software
++  distributed under the License is distributed on an "AS IS" BASIS,
++  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  See the License for the specific language governing permissions and
++  limitations under the License.
++-->
++
++<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN"
++          "http://forrest.apache.org/dtd/document-v20.dtd">
++
++
++<document>
++
++  <header>
++    <title> 
++      Authentication for Hadoop HTTP web-consoles
++    </title>
++  </header>
++
++  <body>
++    <section>
++      <title> Introduction </title>
++      <p>
++        This document describes how to configure Hadoop HTTP web-consoles to require user
++        authentication. 
++      </p>
++      <p>
++        By default Hadoop HTTP web-consoles (JobTracker, NameNode, TaskTrackers and DataNodes) allow 
++        access without any form of authentication. 
++      </p>
++      <p>
++        Similarly to Hadoop RPC, Hadoop HTTP web-consoles can be configured to require Kerberos 
++        authentication using HTTP SPNEGO protocol (supported by browsers like Firefox and Internet
++        Explorer).        
++      </p>
++      <p>
++        In addition, Hadoop HTTP web-consoles support the equivalent of Hadoop's Pseudo/Simple
++        authentication. If this option is enabled, user must specify their user name in the first
++        browser interaction using the <code>user.name</code> query string parameter. For example:
++        <code>http://localhost:50030/jobtracker.jsp?user.name=babu</code>.
++      </p>
++      <p>
++        If a custom authentication mechanism is required for the HTTP web-consoles, it is possible 
++        to implement a plugin to support the alternate authentication mechanism (refer to 
++        Hadoop Alfredo for details on writing an <code>AuthenticatorHandler</code>).
++      </p>
++      <p>       
++        The next section describes how to configure Hadoop HTTP web-consoles to require user 
++        authentication.
++      </p>
++    </section>
++
++    <section> 
++      <title> Configuration </title>
++
++      <p>
++        The following properties should be in the <code>core-site.xml</code> of all the nodes
++        in the cluster.
++      </p>
++
++      <p><code>hadoop.http.filter.initializers</code>: add to this property the 
++      <code>org.apache.hadoop.security.AuthenticationFilterInitializer</code> initializer class.
++      </p>
++      
++      <p><code>hadoop.http.authentication.type</code>: Defines authentication used for the HTTP 
++      web-consoles. The supported values are: <code>simple | kerberos | 
++      #AUTHENTICATION_HANDLER_CLASSNAME#</code>. The dfeault value is <code>simple</code>.
++      </p>
++
++      <p><code>hadoop.http.authentication.token.validity</code>: Indicates how long (in seconds) 
++      an authentication token is valid before it has to be renewed. The default value is 
++      <code>36000</code>.
++      </p>
++
++      <p><code>hadoop.http.authentication.signature.secret</code>: The signature secret for  
++      signing the authentication tokens. If not set a random secret is generated at 
++      startup time. The same secret should be used for all nodes in the cluster, JobTracker, 
++      NameNode, DataNode and TastTracker. The default value is a <code>hadoop</code> value.
++      </p>
++        
++      <p><code>hadoop.http.authentication.cookie.domain</code>: The domain to use for the HTTP 
++      cookie that stores the authentication token. In order to authentiation to work 
++      correctly across all nodes in the cluster the domain must be correctly set.
++      There is no default value, the HTTP cookie will not have a domain working only
++      with the hostname issuing the HTTP cookie.
++      </p>
++
++      <p>
++      IMPORTANT: when using IP addresses, browsers ignore cookies with domain settings.
++      For this setting to work properly all nodes in the cluster must be configured
++      to generate URLs with hostname.domain names on it.
++      </p>
++
++      <p><code>hadoop.http.authentication.simple.anonymous.allowed</code>: Indicates if anonymous 
++      requests are allowed when using 'simple' authentication. The default value is 
++      <code>true</code>
++      </p>
++
++      <p><code>hadoop.http.authentication.kerberos.principal</code>: Indicates the Kerberos 
++      principal to be used for HTTP endpoint when using 'kerberos' authentication.
++      The principal short name must be <code>HTTP</code> per Kerberos HTTP SPENGO specification.
++      The default value is <code>HTTP/localhost@$LOCALHOST</code>.
++      </p>
++
++      <p><code>hadoop.http.authentication.kerberos.keytab</code>: Location of the keytab file 
++      with the credentials for the Kerberos principal used for the HTTP endpoint. 
++      The default value is <code>${user.home}/hadoop.keytab</code>.i
++      </p>
++
++    </section>
++
++  </body>
++</document>
++
+diff --git a/src/docs/src/documentation/content/xdocs/site.xml b/src/docs/src/documentation/content/xdocs/site.xml
+index 05f4250..070a233 100644
+--- a/src/docs/src/documentation/content/xdocs/site.xml
++++ b/src/docs/src/documentation/content/xdocs/site.xml
+@@ -36,6 +36,10 @@ See http://forrest.apache.org/docs/linking.html for more info.
+     <single   label="Single Node Setup"  href="single_node_setup.html" />
+     <cluster  label="Cluster Setup"  href="cluster_setup.html" />
+   </docs>  
++
++   <docs label="Guides">
++    <http_authentication label="Authentication for Hadoop HTTP web-consoles" href="HttpAuthentication.html"/>
++   </docs>
+        
+   <docs label="MapReduce">
+     <mapred     label="MapReduce Tutorial"   href="mapred_tutorial.html" />
+diff --git a/src/test/commit-tests b/src/test/commit-tests
+index 59329ae..1148c8b 100644
+--- a/src/test/commit-tests
++++ b/src/test/commit-tests
+@@ -2,6 +2,9 @@
+ **/TestAccessControlList.java
+ **/TestArrayFile.java
+ **/TestArrayWritable.java
++**/TestAuthenticationFilter.java
++**/TestAuthenticationToken.java
++**/TestAuthenticatedURL.java
+ **/TestBloomMapFile.java
+ **/TestBuffer.java
+ **/TestBytesWritable.java
+@@ -41,6 +44,8 @@
+ **/TestMapWritable.java
+ **/TestMD5Hash.java
+ **/TestPath.java
++**/TestPseudoAuthenticator.java
++**/TestPseudoAuthenticationHandler.java
+ **/TestRecordIO.java
+ **/TestRecordVersioning.java
+ **/TestReflectionUtils.java
+diff --git a/src/test/org/apache/hadoop/security/authentication/KerberosTestUtils.java b/src/test/org/apache/hadoop/security/authentication/KerberosTestUtils.java
+new file mode 100644
+index 0000000..92e1de5
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/authentication/KerberosTestUtils.java
+@@ -0,0 +1,129 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication;
++
++import com.sun.security.auth.module.Krb5LoginModule;
++
++import javax.security.auth.Subject;
++import javax.security.auth.kerberos.KerberosPrincipal;
++import javax.security.auth.login.AppConfigurationEntry;
++import javax.security.auth.login.Configuration;
++import javax.security.auth.login.LoginContext;
++import java.io.File;
++import java.security.Principal;
++import java.security.PrivilegedActionException;
++import java.security.PrivilegedExceptionAction;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.Map;
++import java.util.Set;
++import java.util.concurrent.Callable;
++
++/**
++ * Test helper class for Java Kerberos setup.
++ */
++public class KerberosTestUtils {
++  private static final String PREFIX = "hadoop-auth.test.";
++
++  public static final String REALM = PREFIX + "kerberos.realm";
++
++  public static final String CLIENT_PRINCIPAL = PREFIX + "kerberos.client.principal";
++
++  public static final String SERVER_PRINCIPAL = PREFIX + "kerberos.server.principal";
++
++  public static final String KEYTAB_FILE = PREFIX + "kerberos.keytab.file";
++
++  public static String getRealm() {
++    return System.getProperty(REALM, "LOCALHOST");
++  }
++
++  public static String getClientPrincipal() {
++    return System.getProperty(CLIENT_PRINCIPAL, "client") + "@" + getRealm();
++  }
++
++  public static String getServerPrincipal() {
++    return System.getProperty(SERVER_PRINCIPAL, "HTTP/localhost") + "@" + getRealm();
++  }
++
++  public static String getKeytabFile() {
++    String keytabFile =
++      new File(System.getProperty("user.home"), System.getProperty("user.name") + ".keytab").toString();
++    return System.getProperty(KEYTAB_FILE, keytabFile);
++  }
++
++  private static class KerberosConfiguration extends Configuration {
++    private String principal;
++
++    public KerberosConfiguration(String principal) {
++      this.principal = principal;
++    }
++
++    @Override
++    public AppConfigurationEntry[] getAppConfigurationEntry(String name) {
++      Map<String, String> options = new HashMap<String, String>();
++      options.put("keyTab", KerberosTestUtils.getKeytabFile());
++      options.put("principal", principal);
++      options.put("useKeyTab", "true");
++      options.put("storeKey", "true");
++      options.put("doNotPrompt", "true");
++      options.put("useTicketCache", "true");
++      options.put("renewTGT", "true");
++      options.put("refreshKrb5Config", "true");
++      options.put("isInitiator", "true");
++      String ticketCache = System.getenv("KRB5CCNAME");
++      if (ticketCache != null) {
++        options.put("ticketCache", ticketCache);
++      }
++      options.put("debug", "true");
++
++      return new AppConfigurationEntry[]{
++        new AppConfigurationEntry(Krb5LoginModule.class.getName(),
++                                  AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
++                                  options),};
++    }
++  }
++
++  public static <T> T doAs(String principal, final Callable<T> callable) throws Exception {
++    LoginContext loginContext = null;
++    try {
++      Set<Principal> principals = new HashSet<Principal>();
++      principals.add(new KerberosPrincipal(KerberosTestUtils.getClientPrincipal()));
++      Subject subject = new Subject(false, principals, new HashSet<Object>(), new HashSet<Object>());
++      loginContext = new LoginContext("", subject, null, new KerberosConfiguration(principal));
++      loginContext.login();
++      subject = loginContext.getSubject();
++      return Subject.doAs(subject, new PrivilegedExceptionAction<T>() {
++        @Override
++        public T run() throws Exception {
++          return callable.call();
++        }
++      });
++    } catch (PrivilegedActionException ex) {
++      throw ex.getException();
++    } finally {
++      if (loginContext != null) {
++        loginContext.logout();
++      }
++    }
++  }
++
++  public static <T> T doAsClient(Callable<T> callable) throws Exception {
++    return doAs(getClientPrincipal(), callable);
++  }
++
++  public static <T> T doAsServer(Callable<T> callable) throws Exception {
++    return doAs(getServerPrincipal(), callable);
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/security/authentication/client/AuthenticatorTestCase.java b/src/test/org/apache/hadoop/security/authentication/client/AuthenticatorTestCase.java
+new file mode 100644
+index 0000000..93c5198
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/authentication/client/AuthenticatorTestCase.java
+@@ -0,0 +1,153 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ * 
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * 
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.client;
++
++import org.apache.hadoop.security.authentication.server.AuthenticationFilter;
++import junit.framework.TestCase;
++import org.mortbay.jetty.Server;
++import org.mortbay.jetty.servlet.Context;
++import org.mortbay.jetty.servlet.FilterHolder;
++import org.mortbay.jetty.servlet.ServletHolder;
++
++import javax.servlet.FilterConfig;
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServlet;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++import java.io.BufferedReader;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.InputStreamReader;
++import java.io.OutputStream;
++import java.io.OutputStreamWriter;
++import java.io.Writer;
++import java.net.HttpURLConnection;
++import java.net.ServerSocket;
++import java.net.URL;
++import java.util.Properties;
++
++public abstract class AuthenticatorTestCase extends TestCase {
++  private Server server;
++  private String host = null;
++  private int port = -1;
++  Context context;
++
++  private static Properties authenticatorConfig;
++
++  protected static void setAuthenticationHandlerConfig(Properties config) {
++    authenticatorConfig = config;
++  }
++
++  public static class TestFilter extends AuthenticationFilter {
++
++    @Override
++    protected Properties getConfiguration(String configPrefix, FilterConfig filterConfig) throws ServletException {
++      return authenticatorConfig;
++    }
++  }
++
++  @SuppressWarnings("serial")
++  public static class TestServlet extends HttpServlet {
++
++    @Override
++    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
++      resp.setStatus(HttpServletResponse.SC_OK);
++    }
++
++    @Override
++    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
++      InputStream is = req.getInputStream();
++      OutputStream os = resp.getOutputStream();
++      int c = is.read();
++      while (c > -1) {
++        os.write(c);
++        c = is.read();
++      }
++      is.close();
++      os.close();
++      resp.setStatus(HttpServletResponse.SC_OK);
++    }
++  }
++
++  protected void start() throws Exception {
++    server = new Server(0);
++    context = new Context();
++    context.setContextPath("/foo");
++    server.setHandler(context);
++    context.addFilter(new FilterHolder(TestFilter.class), "/*", 0);
++    context.addServlet(new ServletHolder(TestServlet.class), "/bar");
++    host = "localhost";
++    ServerSocket ss = new ServerSocket(0);
++    port = ss.getLocalPort();
++    ss.close();
++    server.getConnectors()[0].setHost(host);
++    server.getConnectors()[0].setPort(port);
++    server.start();
++    System.out.println("Running embedded servlet container at: http://" + host + ":" + port);
++  }
++
++  protected void stop() throws Exception {
++    try {
++      server.stop();
++    } catch (Exception e) {
++    }
++
++    try {
++      server.destroy();
++    } catch (Exception e) {
++    }
++  }
++
++  protected String getBaseURL() {
++    return "http://" + host + ":" + port + "/foo/bar";
++  }
++
++  private String POST = "test";
++
++  protected void _testAuthentication(Authenticator authenticator, boolean doPost) throws Exception {
++    start();
++    try {
++      URL url = new URL(getBaseURL());
++      AuthenticatedURL.Token token = new AuthenticatedURL.Token();
++      AuthenticatedURL aUrl = new AuthenticatedURL(authenticator);
++      HttpURLConnection conn = aUrl.openConnection(url, token);
++      String tokenStr = token.toString();
++      if (doPost) {
++        conn.setRequestMethod("POST");
++        conn.setDoOutput(true);
++      }
++      conn.connect();
++      if (doPost) {
++        Writer writer = new OutputStreamWriter(conn.getOutputStream());
++        writer.write(POST);
++        writer.close();
++      }
++      assertEquals(HttpURLConnection.HTTP_OK, conn.getResponseCode());
++      if (doPost) {
++        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
++        String echo = reader.readLine();
++        assertEquals(POST, echo);
++        assertNull(reader.readLine());
++      }
++      aUrl = new AuthenticatedURL();
++      conn = aUrl.openConnection(url, token);
++      conn.connect();
++      assertEquals(HttpURLConnection.HTTP_OK, conn.getResponseCode());
++      assertEquals(tokenStr, token.toString());
++    } finally {
++      stop();
++    }
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/security/authentication/client/TestAuthenticatedURL.java b/src/test/org/apache/hadoop/security/authentication/client/TestAuthenticatedURL.java
+new file mode 100644
+index 0000000..525af62
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/authentication/client/TestAuthenticatedURL.java
+@@ -0,0 +1,113 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.client;
++
++import junit.framework.TestCase;
++import org.mockito.Mockito;
++
++import java.net.HttpURLConnection;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++
++public class TestAuthenticatedURL extends TestCase {
++
++  public void testToken() throws Exception {
++    AuthenticatedURL.Token token = new AuthenticatedURL.Token();
++    assertFalse(token.isSet());
++    token = new AuthenticatedURL.Token("foo");
++    assertTrue(token.isSet());
++    assertEquals("foo", token.toString());
++
++    AuthenticatedURL.Token token1 = new AuthenticatedURL.Token();
++    AuthenticatedURL.Token token2 = new AuthenticatedURL.Token();
++    assertEquals(token1.hashCode(), token2.hashCode());
++    assertTrue(token1.equals(token2));
++
++    token1 = new AuthenticatedURL.Token();
++    token2 = new AuthenticatedURL.Token("foo");
++    assertNotSame(token1.hashCode(), token2.hashCode());
++    assertFalse(token1.equals(token2));
++
++    token1 = new AuthenticatedURL.Token("foo");
++    token2 = new AuthenticatedURL.Token();
++    assertNotSame(token1.hashCode(), token2.hashCode());
++    assertFalse(token1.equals(token2));
++
++    token1 = new AuthenticatedURL.Token("foo");
++    token2 = new AuthenticatedURL.Token("foo");
++    assertEquals(token1.hashCode(), token2.hashCode());
++    assertTrue(token1.equals(token2));
++
++    token1 = new AuthenticatedURL.Token("bar");
++    token2 = new AuthenticatedURL.Token("foo");
++    assertNotSame(token1.hashCode(), token2.hashCode());
++    assertFalse(token1.equals(token2));
++
++    token1 = new AuthenticatedURL.Token("foo");
++    token2 = new AuthenticatedURL.Token("bar");
++    assertNotSame(token1.hashCode(), token2.hashCode());
++    assertFalse(token1.equals(token2));
++  }
++
++  public void testInjectToken() throws Exception {
++    HttpURLConnection conn = Mockito.mock(HttpURLConnection.class);
++    AuthenticatedURL.Token token = new AuthenticatedURL.Token();
++    token.set("foo");
++    AuthenticatedURL.injectToken(conn, token);
++    Mockito.verify(conn).addRequestProperty(Mockito.eq("Cookie"), Mockito.anyString());
++  }
++
++  public void testExtractTokenOK() throws Exception {
++    HttpURLConnection conn = Mockito.mock(HttpURLConnection.class);
++
++    Mockito.when(conn.getResponseCode()).thenReturn(HttpURLConnection.HTTP_OK);
++
++    String tokenStr = "foo";
++    Map<String, List<String>> headers = new HashMap<String, List<String>>();
++    List<String> cookies = new ArrayList<String>();
++    cookies.add(AuthenticatedURL.AUTH_COOKIE + "=" + tokenStr);
++    headers.put("Set-Cookie", cookies);
++    Mockito.when(conn.getHeaderFields()).thenReturn(headers);
++
++    AuthenticatedURL.Token token = new AuthenticatedURL.Token();
++    AuthenticatedURL.extractToken(conn, token);
++
++    assertEquals(tokenStr, token.toString());
++  }
++
++  public void testExtractTokenFail() throws Exception {
++    HttpURLConnection conn = Mockito.mock(HttpURLConnection.class);
++
++    Mockito.when(conn.getResponseCode()).thenReturn(HttpURLConnection.HTTP_UNAUTHORIZED);
++
++    String tokenStr = "foo";
++    Map<String, List<String>> headers = new HashMap<String, List<String>>();
++    List<String> cookies = new ArrayList<String>();
++    cookies.add(AuthenticatedURL.AUTH_COOKIE + "=" + tokenStr);
++    headers.put("Set-Cookie", cookies);
++    Mockito.when(conn.getHeaderFields()).thenReturn(headers);
++
++    try {
++      AuthenticatedURL.extractToken(conn, new AuthenticatedURL.Token());
++      fail();
++    } catch (AuthenticationException ex) {
++      // Expected
++    } catch (Exception ex) {
++      fail();
++    }
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/security/authentication/client/TestPseudoAuthenticator.java b/src/test/org/apache/hadoop/security/authentication/client/TestPseudoAuthenticator.java
+new file mode 100644
+index 0000000..807052e
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/authentication/client/TestPseudoAuthenticator.java
+@@ -0,0 +1,83 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.client;
++
++import org.apache.hadoop.security.authentication.server.AuthenticationFilter;
++import org.apache.hadoop.security.authentication.server.PseudoAuthenticationHandler;
++
++import java.net.HttpURLConnection;
++import java.net.URL;
++import java.util.Properties;
++
++public class TestPseudoAuthenticator extends AuthenticatorTestCase {
++
++  private Properties getAuthenticationHandlerConfiguration(boolean anonymousAllowed) {
++    Properties props = new Properties();
++    props.setProperty(AuthenticationFilter.AUTH_TYPE, "simple");
++    props.setProperty(PseudoAuthenticationHandler.ANONYMOUS_ALLOWED, Boolean.toString(anonymousAllowed));
++    return props;
++  }
++
++  public void testGetUserName() throws Exception {
++    PseudoAuthenticator authenticator = new PseudoAuthenticator();
++    assertEquals(System.getProperty("user.name"), authenticator.getUserName());
++  }
++
++  public void testAnonymousAllowed() throws Exception {
++    setAuthenticationHandlerConfig(getAuthenticationHandlerConfiguration(true));
++    start();
++    try {
++      URL url = new URL(getBaseURL());
++      HttpURLConnection conn = (HttpURLConnection) url.openConnection();
++      conn.connect();
++      assertEquals(HttpURLConnection.HTTP_OK, conn.getResponseCode());
++    } finally {
++      stop();
++    }
++  }
++
++  public void testAnonymousDisallowed() throws Exception {
++    setAuthenticationHandlerConfig(getAuthenticationHandlerConfiguration(false));
++    start();
++    try {
++      URL url = new URL(getBaseURL());
++      HttpURLConnection conn = (HttpURLConnection) url.openConnection();
++      conn.connect();
++      assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, conn.getResponseCode());
++    } finally {
++      stop();
++    }
++  }
++
++  public void testAuthenticationAnonymousAllowed() throws Exception {
++    setAuthenticationHandlerConfig(getAuthenticationHandlerConfiguration(true));
++    _testAuthentication(new PseudoAuthenticator(), false);
++  }
++
++  public void testAuthenticationAnonymousDisallowed() throws Exception {
++    setAuthenticationHandlerConfig(getAuthenticationHandlerConfiguration(false));
++    _testAuthentication(new PseudoAuthenticator(), false);
++  }
++
++  public void testAuthenticationAnonymousAllowedWithPost() throws Exception {
++    setAuthenticationHandlerConfig(getAuthenticationHandlerConfiguration(true));
++    _testAuthentication(new PseudoAuthenticator(), true);
++  }
++
++  public void testAuthenticationAnonymousDisallowedWithPost() throws Exception {
++    setAuthenticationHandlerConfig(getAuthenticationHandlerConfiguration(false));
++    _testAuthentication(new PseudoAuthenticator(), true);
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationFilter.java b/src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationFilter.java
+new file mode 100644
+index 0000000..415600e
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationFilter.java
+@@ -0,0 +1,611 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.server;
++
++import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
++import org.apache.hadoop.security.authentication.client.AuthenticationException;
++import org.apache.hadoop.security.authentication.util.Signer;
++import junit.framework.TestCase;
++import org.mockito.Mockito;
++import org.mockito.invocation.InvocationOnMock;
++import org.mockito.stubbing.Answer;
++
++import javax.servlet.FilterChain;
++import javax.servlet.FilterConfig;
++import javax.servlet.ServletException;
++import javax.servlet.ServletRequest;
++import javax.servlet.ServletResponse;
++import javax.servlet.http.Cookie;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.Properties;
++import java.util.Vector;
++
++public class TestAuthenticationFilter extends TestCase {
++
++  public void testGetConfiguration() throws Exception {
++    AuthenticationFilter filter = new AuthenticationFilter();
++    FilterConfig config = Mockito.mock(FilterConfig.class);
++    Mockito.when(config.getInitParameter(AuthenticationFilter.CONFIG_PREFIX)).thenReturn("");
++    Mockito.when(config.getInitParameter("a")).thenReturn("A");
++    Mockito.when(config.getInitParameterNames()).thenReturn(new Vector(Arrays.asList("a")).elements());
++    Properties props = filter.getConfiguration("", config);
++    assertEquals("A", props.getProperty("a"));
++
++    config = Mockito.mock(FilterConfig.class);
++    Mockito.when(config.getInitParameter(AuthenticationFilter.CONFIG_PREFIX)).thenReturn("foo");
++    Mockito.when(config.getInitParameter("foo.a")).thenReturn("A");
++    Mockito.when(config.getInitParameterNames()).thenReturn(new Vector(Arrays.asList("foo.a")).elements());
++    props = filter.getConfiguration("foo.", config);
++    assertEquals("A", props.getProperty("a"));
++  }
++
++  public void testInitEmpty() throws Exception {
++    AuthenticationFilter filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameterNames()).thenReturn(new Vector().elements());
++      filter.init(config);
++      fail();
++    } catch (ServletException ex) {
++      // Expected
++    } catch (Exception ex) {
++      fail();
++    } finally {
++      filter.destroy();
++    }
++  }
++
++  public static class DummyAuthenticationHandler implements AuthenticationHandler {
++    public static boolean init;
++    public static boolean destroy;
++
++    public static final String TYPE = "dummy";
++
++    public static void reset() {
++      init = false;
++      destroy = false;
++    }
++
++    @Override
++    public void init(Properties config) throws ServletException {
++      init = true;
++    }
++
++    @Override
++    public void destroy() {
++      destroy = true;
++    }
++
++    @Override
++    public String getType() {
++      return TYPE;
++    }
++
++    @Override
++    public AuthenticationToken authenticate(HttpServletRequest request, HttpServletResponse response)
++      throws IOException, AuthenticationException {
++      AuthenticationToken token = null;
++      String param = request.getParameter("authenticated");
++      if (param != null && param.equals("true")) {
++        token = new AuthenticationToken("u", "p", "t");
++        token.setExpires(System.currentTimeMillis() + 1000);
++      } else {
++        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
++      }
++      return token;
++    }
++  }
++
++  public void testInit() throws Exception {
++
++    // minimal configuration & simple auth handler (Pseudo)
++    AuthenticationFilter filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn("simple");
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TOKEN_VALIDITY)).thenReturn("1000");
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE,
++                                 AuthenticationFilter.AUTH_TOKEN_VALIDITY)).elements());
++      filter.init(config);
++      assertEquals(PseudoAuthenticationHandler.class, filter.getAuthenticationHandler().getClass());
++      assertTrue(filter.isRandomSecret());
++      assertNull(filter.getCookieDomain());
++      assertNull(filter.getCookiePath());
++      assertEquals(1000, filter.getValidity());
++    } finally {
++      filter.destroy();
++    }
++
++    // custom secret
++    filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn("simple");
++      Mockito.when(config.getInitParameter(AuthenticationFilter.SIGNATURE_SECRET)).thenReturn("secret");
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE,
++                                 AuthenticationFilter.SIGNATURE_SECRET)).elements());
++      filter.init(config);
++      assertFalse(filter.isRandomSecret());
++    } finally {
++      filter.destroy();
++    }
++
++    // custom cookie domain and cookie path
++    filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn("simple");
++      Mockito.when(config.getInitParameter(AuthenticationFilter.COOKIE_DOMAIN)).thenReturn(".foo.com");
++      Mockito.when(config.getInitParameter(AuthenticationFilter.COOKIE_PATH)).thenReturn("/bar");
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE,
++                                 AuthenticationFilter.COOKIE_DOMAIN,
++                                 AuthenticationFilter.COOKIE_PATH)).elements());
++      filter.init(config);
++      assertEquals(".foo.com", filter.getCookieDomain());
++      assertEquals("/bar", filter.getCookiePath());
++    } finally {
++      filter.destroy();
++    }
++
++
++    // authentication handler lifecycle, and custom impl
++    DummyAuthenticationHandler.reset();
++    filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn(
++        DummyAuthenticationHandler.class.getName());
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE)).elements());
++      filter.init(config);
++      assertTrue(DummyAuthenticationHandler.init);
++    } finally {
++      filter.destroy();
++      assertTrue(DummyAuthenticationHandler.destroy);
++    }
++
++    // kerberos auth handler
++    filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn("kerberos");
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE)).elements());
++      filter.init(config);
++    } catch (ServletException ex) {
++      // Expected
++    } finally {
++      assertEquals(KerberosAuthenticationHandler.class, filter.getAuthenticationHandler().getClass());
++      filter.destroy();
++    }
++  }
++
++  public void testGetRequestURL() throws Exception {
++    AuthenticationFilter filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn(
++        DummyAuthenticationHandler.class.getName());
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE)).elements());
++      filter.init(config);
++
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      Mockito.when(request.getRequestURL()).thenReturn(new StringBuffer("http://foo:8080/bar"));
++      Mockito.when(request.getQueryString()).thenReturn("a=A&b=B");
++
++      assertEquals("http://foo:8080/bar?a=A&b=B", filter.getRequestURL(request));
++    } finally {
++      filter.destroy();
++    }
++  }
++
++  public void testGetToken() throws Exception {
++    AuthenticationFilter filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn(
++        DummyAuthenticationHandler.class.getName());
++      Mockito.when(config.getInitParameter(AuthenticationFilter.SIGNATURE_SECRET)).thenReturn("secret");
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE,
++                                 AuthenticationFilter.SIGNATURE_SECRET)).elements());
++      filter.init(config);
++
++      AuthenticationToken token = new AuthenticationToken("u", "p", DummyAuthenticationHandler.TYPE);
++      token.setExpires(System.currentTimeMillis() + 1000);
++      Signer signer = new Signer("secret".getBytes());
++      String tokenSigned = signer.sign(token.toString());
++
++      Cookie cookie = new Cookie(AuthenticatedURL.AUTH_COOKIE, tokenSigned);
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      Mockito.when(request.getCookies()).thenReturn(new Cookie[]{cookie});
++
++      AuthenticationToken newToken = filter.getToken(request);
++
++      assertEquals(token.toString(), newToken.toString());
++    } finally {
++      filter.destroy();
++    }
++  }
++
++  public void testGetTokenExpired() throws Exception {
++    AuthenticationFilter filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn(
++        DummyAuthenticationHandler.class.getName());
++      Mockito.when(config.getInitParameter(AuthenticationFilter.SIGNATURE_SECRET)).thenReturn("secret");
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE,
++                                 AuthenticationFilter.SIGNATURE_SECRET)).elements());
++      filter.init(config);
++
++      AuthenticationToken token = new AuthenticationToken("u", "p", "invalidtype");
++      token.setExpires(System.currentTimeMillis() - 1000);
++      Signer signer = new Signer("secret".getBytes());
++      String tokenSigned = signer.sign(token.toString());
++
++      Cookie cookie = new Cookie(AuthenticatedURL.AUTH_COOKIE, tokenSigned);
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      Mockito.when(request.getCookies()).thenReturn(new Cookie[]{cookie});
++
++      try {
++        filter.getToken(request);
++        fail();
++      } catch (AuthenticationException ex) {
++        // Expected
++      } catch (Exception ex) {
++        fail();
++      }
++    } finally {
++      filter.destroy();
++    }
++  }
++
++  public void testGetTokenInvalidType() throws Exception {
++    AuthenticationFilter filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn(
++        DummyAuthenticationHandler.class.getName());
++      Mockito.when(config.getInitParameter(AuthenticationFilter.SIGNATURE_SECRET)).thenReturn("secret");
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE,
++                                 AuthenticationFilter.SIGNATURE_SECRET)).elements());
++      filter.init(config);
++
++      AuthenticationToken token = new AuthenticationToken("u", "p", "invalidtype");
++      token.setExpires(System.currentTimeMillis() + 1000);
++      Signer signer = new Signer("secret".getBytes());
++      String tokenSigned = signer.sign(token.toString());
++
++      Cookie cookie = new Cookie(AuthenticatedURL.AUTH_COOKIE, tokenSigned);
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      Mockito.when(request.getCookies()).thenReturn(new Cookie[]{cookie});
++
++      try {
++        filter.getToken(request);
++        fail();
++      } catch (AuthenticationException ex) {
++        // Expected
++      } catch (Exception ex) {
++        fail();
++      }
++    } finally {
++      filter.destroy();
++    }
++  }
++
++  public void testDoFilterNotAuthenticated() throws Exception {
++    AuthenticationFilter filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn(
++        DummyAuthenticationHandler.class.getName());
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE)).elements());
++      filter.init(config);
++
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      Mockito.when(request.getRequestURL()).thenReturn(new StringBuffer("http://foo:8080/bar"));
++
++      HttpServletResponse response = Mockito.mock(HttpServletResponse.class);
++
++      FilterChain chain = Mockito.mock(FilterChain.class);
++
++      Mockito.doAnswer(
++        new Answer() {
++          @Override
++          public Object answer(InvocationOnMock invocation) throws Throwable {
++            fail();
++            return null;
++          }
++        }
++      ).when(chain).doFilter(Mockito.<ServletRequest>anyObject(), Mockito.<ServletResponse>anyObject());
++
++      filter.doFilter(request, response, chain);
++
++      Mockito.verify(response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
++    } finally {
++      filter.destroy();
++    }
++  }
++
++  private void _testDoFilterAuthentication(boolean withDomainPath) throws Exception {
++    AuthenticationFilter filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn(
++        DummyAuthenticationHandler.class.getName());
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TOKEN_VALIDITY)).thenReturn("1000");
++      Mockito.when(config.getInitParameter(AuthenticationFilter.SIGNATURE_SECRET)).thenReturn("secret");
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE,
++                                 AuthenticationFilter.AUTH_TOKEN_VALIDITY,
++                                 AuthenticationFilter.SIGNATURE_SECRET)).elements());
++
++      if (withDomainPath) {
++        Mockito.when(config.getInitParameter(AuthenticationFilter.COOKIE_DOMAIN)).thenReturn(".foo.com");
++        Mockito.when(config.getInitParameter(AuthenticationFilter.COOKIE_PATH)).thenReturn("/bar");
++        Mockito.when(config.getInitParameterNames()).thenReturn(
++          new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE,
++                                   AuthenticationFilter.AUTH_TOKEN_VALIDITY,
++                                   AuthenticationFilter.SIGNATURE_SECRET,
++                                   AuthenticationFilter.COOKIE_DOMAIN,
++                                   AuthenticationFilter.COOKIE_PATH)).elements());
++      }
++
++      filter.init(config);
++
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      Mockito.when(request.getParameter("authenticated")).thenReturn("true");
++      Mockito.when(request.getRequestURL()).thenReturn(new StringBuffer("http://foo:8080/bar"));
++      Mockito.when(request.getQueryString()).thenReturn("authenticated=true");
++
++      HttpServletResponse response = Mockito.mock(HttpServletResponse.class);
++
++      FilterChain chain = Mockito.mock(FilterChain.class);
++
++      final boolean[] calledDoFilter = new boolean[1];
++
++      Mockito.doAnswer(
++        new Answer() {
++          @Override
++          public Object answer(InvocationOnMock invocation) throws Throwable {
++            calledDoFilter[0] = true;
++            return null;
++          }
++        }
++      ).when(chain).doFilter(Mockito.<ServletRequest>anyObject(), Mockito.<ServletResponse>anyObject());
++
++      final Cookie[] setCookie = new Cookie[1];
++      Mockito.doAnswer(
++        new Answer() {
++          @Override
++          public Object answer(InvocationOnMock invocation) throws Throwable {
++            Object[] args = invocation.getArguments();
++            setCookie[0] = (Cookie) args[0];
++            return null;
++          }
++        }
++      ).when(response).addCookie(Mockito.<Cookie>anyObject());
++
++      filter.doFilter(request, response, chain);
++
++      assertNotNull(setCookie[0]);
++      assertEquals(AuthenticatedURL.AUTH_COOKIE, setCookie[0].getName());
++      assertTrue(setCookie[0].getValue().contains("u="));
++      assertTrue(setCookie[0].getValue().contains("p="));
++      assertTrue(setCookie[0].getValue().contains("t="));
++      assertTrue(setCookie[0].getValue().contains("e="));
++      assertTrue(setCookie[0].getValue().contains("s="));
++      assertTrue(calledDoFilter[0]);
++
++      Signer signer = new Signer("secret".getBytes());
++      String value = signer.verifyAndExtract(setCookie[0].getValue());
++      AuthenticationToken token = AuthenticationToken.parse(value);
++      assertEquals(System.currentTimeMillis() + 1000 * 1000, token.getExpires(), 100);
++
++      if (withDomainPath) {
++        assertEquals(".foo.com", setCookie[0].getDomain());
++        assertEquals("/bar", setCookie[0].getPath());
++      } else {
++        assertNull(setCookie[0].getDomain());
++        assertNull(setCookie[0].getPath());
++      }
++    } finally {
++      filter.destroy();
++    }
++  }
++
++  public void testDoFilterAuthentication() throws Exception {
++    _testDoFilterAuthentication(false);
++  }
++
++  public void testDoFilterAuthenticationWithDomainPath() throws Exception {
++    _testDoFilterAuthentication(true);
++  }
++
++  public void testDoFilterAuthenticated() throws Exception {
++    AuthenticationFilter filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn(
++        DummyAuthenticationHandler.class.getName());
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE)).elements());
++      filter.init(config);
++
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      Mockito.when(request.getRequestURL()).thenReturn(new StringBuffer("http://foo:8080/bar"));
++
++      AuthenticationToken token = new AuthenticationToken("u", "p", "t");
++      token.setExpires(System.currentTimeMillis() + 1000);
++      Signer signer = new Signer("alfredo".getBytes());
++      String tokenSigned = signer.sign(token.toString());
++
++      Cookie cookie = new Cookie(AuthenticatedURL.AUTH_COOKIE, tokenSigned);
++      Mockito.when(request.getCookies()).thenReturn(new Cookie[]{cookie});
++
++      HttpServletResponse response = Mockito.mock(HttpServletResponse.class);
++
++      FilterChain chain = Mockito.mock(FilterChain.class);
++
++      Mockito.doAnswer(
++        new Answer() {
++          @Override
++          public Object answer(InvocationOnMock invocation) throws Throwable {
++            Object[] args = invocation.getArguments();
++            HttpServletRequest request = (HttpServletRequest) args[0];
++            assertEquals("u", request.getRemoteUser());
++            assertEquals("p", request.getUserPrincipal().getName());
++            return null;
++          }
++        }
++      ).when(chain).doFilter(Mockito.<ServletRequest>anyObject(), Mockito.<ServletResponse>anyObject());
++
++      filter.doFilter(request, response, chain);
++
++    } finally {
++      filter.destroy();
++    }
++  }
++
++  public void testDoFilterAuthenticatedExpired() throws Exception {
++    AuthenticationFilter filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn(
++        DummyAuthenticationHandler.class.getName());
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE)).elements());
++      filter.init(config);
++
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      Mockito.when(request.getRequestURL()).thenReturn(new StringBuffer("http://foo:8080/bar"));
++
++      AuthenticationToken token = new AuthenticationToken("u", "p", DummyAuthenticationHandler.TYPE);
++      token.setExpires(System.currentTimeMillis() - 1000);
++      Signer signer = new Signer("alfredo".getBytes());
++      String tokenSigned = signer.sign(token.toString());
++
++      Cookie cookie = new Cookie(AuthenticatedURL.AUTH_COOKIE, tokenSigned);
++      Mockito.when(request.getCookies()).thenReturn(new Cookie[]{cookie});
++
++      HttpServletResponse response = Mockito.mock(HttpServletResponse.class);
++
++      FilterChain chain = Mockito.mock(FilterChain.class);
++
++      Mockito.doAnswer(
++        new Answer() {
++          @Override
++          public Object answer(InvocationOnMock invocation) throws Throwable {
++            fail();
++            return null;
++          }
++        }
++      ).when(chain).doFilter(Mockito.<ServletRequest>anyObject(), Mockito.<ServletResponse>anyObject());
++
++      final Cookie[] setCookie = new Cookie[1];
++      Mockito.doAnswer(
++        new Answer() {
++          @Override
++          public Object answer(InvocationOnMock invocation) throws Throwable {
++            Object[] args = invocation.getArguments();
++            setCookie[0] = (Cookie) args[0];
++            return null;
++          }
++        }
++      ).when(response).addCookie(Mockito.<Cookie>anyObject());
++
++      filter.doFilter(request, response, chain);
++
++      Mockito.verify(response).sendError(Mockito.eq(HttpServletResponse.SC_UNAUTHORIZED), Mockito.anyString());
++
++      assertNotNull(setCookie[0]);
++      assertEquals(AuthenticatedURL.AUTH_COOKIE, setCookie[0].getName());
++      assertEquals("", setCookie[0].getValue());
++    } finally {
++      filter.destroy();
++    }
++  }
++
++
++  public void testDoFilterAuthenticatedInvalidType() throws Exception {
++    AuthenticationFilter filter = new AuthenticationFilter();
++    try {
++      FilterConfig config = Mockito.mock(FilterConfig.class);
++      Mockito.when(config.getInitParameter(AuthenticationFilter.AUTH_TYPE)).thenReturn(
++        DummyAuthenticationHandler.class.getName());
++      Mockito.when(config.getInitParameterNames()).thenReturn(
++        new Vector(Arrays.asList(AuthenticationFilter.AUTH_TYPE)).elements());
++      filter.init(config);
++
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      Mockito.when(request.getRequestURL()).thenReturn(new StringBuffer("http://foo:8080/bar"));
++
++      AuthenticationToken token = new AuthenticationToken("u", "p", "invalidtype");
++      token.setExpires(System.currentTimeMillis() + 1000);
++      Signer signer = new Signer("alfredo".getBytes());
++      String tokenSigned = signer.sign(token.toString());
++
++      Cookie cookie = new Cookie(AuthenticatedURL.AUTH_COOKIE, tokenSigned);
++      Mockito.when(request.getCookies()).thenReturn(new Cookie[]{cookie});
++
++      HttpServletResponse response = Mockito.mock(HttpServletResponse.class);
++
++      FilterChain chain = Mockito.mock(FilterChain.class);
++
++      Mockito.doAnswer(
++        new Answer() {
++          @Override
++          public Object answer(InvocationOnMock invocation) throws Throwable {
++            fail();
++            return null;
++          }
++        }
++      ).when(chain).doFilter(Mockito.<ServletRequest>anyObject(), Mockito.<ServletResponse>anyObject());
++
++      final Cookie[] setCookie = new Cookie[1];
++      Mockito.doAnswer(
++        new Answer() {
++          @Override
++          public Object answer(InvocationOnMock invocation) throws Throwable {
++            Object[] args = invocation.getArguments();
++            setCookie[0] = (Cookie) args[0];
++            return null;
++          }
++        }
++      ).when(response).addCookie(Mockito.<Cookie>anyObject());
++
++      filter.doFilter(request, response, chain);
++
++      Mockito.verify(response).sendError(Mockito.eq(HttpServletResponse.SC_UNAUTHORIZED), Mockito.anyString());
++
++      assertNotNull(setCookie[0]);
++      assertEquals(AuthenticatedURL.AUTH_COOKIE, setCookie[0].getName());
++      assertEquals("", setCookie[0].getValue());
++    } finally {
++      filter.destroy();
++    }
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationToken.java b/src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationToken.java
+new file mode 100644
+index 0000000..25f9100
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationToken.java
+@@ -0,0 +1,124 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.server;
++
++import org.apache.hadoop.security.authentication.client.AuthenticationException;
++import junit.framework.TestCase;
++
++public class TestAuthenticationToken extends TestCase {
++
++  public void testAnonymous() {
++    assertNotNull(AuthenticationToken.ANONYMOUS);
++    assertEquals(null, AuthenticationToken.ANONYMOUS.getUserName());
++    assertEquals(null, AuthenticationToken.ANONYMOUS.getName());
++    assertEquals(null, AuthenticationToken.ANONYMOUS.getType());
++    assertEquals(-1, AuthenticationToken.ANONYMOUS.getExpires());
++    assertFalse(AuthenticationToken.ANONYMOUS.isExpired());
++  }
++
++  public void testConstructor() throws Exception {
++    try {
++      new AuthenticationToken(null, "p", "t");
++      fail();
++    } catch (IllegalArgumentException ex) {
++      // Expected
++    } catch (Throwable ex) {
++      fail();
++    }
++    try {
++      new AuthenticationToken("", "p", "t");
++      fail();
++    } catch (IllegalArgumentException ex) {
++      // Expected
++    } catch (Throwable ex) {
++      fail();
++    }
++    try {
++      new AuthenticationToken("u", null, "t");
++      fail();
++    } catch (IllegalArgumentException ex) {
++      // Expected
++    } catch (Throwable ex) {
++      fail();
++    }
++    try {
++      new AuthenticationToken("u", "", "t");
++      fail();
++    } catch (IllegalArgumentException ex) {
++      // Expected
++    } catch (Throwable ex) {
++      fail();
++    }
++    try {
++      new AuthenticationToken("u", "p", null);
++      fail();
++    } catch (IllegalArgumentException ex) {
++      // Expected
++    } catch (Throwable ex) {
++      fail();
++    }
++    try {
++      new AuthenticationToken("u", "p", "");
++      fail();
++    } catch (IllegalArgumentException ex) {
++      // Expected
++    } catch (Throwable ex) {
++      fail();
++    }
++    new AuthenticationToken("u", "p", "t");
++  }
++
++  public void testGetters() throws Exception {
++    long expires = System.currentTimeMillis() + 50;
++    AuthenticationToken token = new AuthenticationToken("u", "p", "t");
++    token.setExpires(expires);
++    assertEquals("u", token.getUserName());
++    assertEquals("p", token.getName());
++    assertEquals("t", token.getType());
++    assertEquals(expires, token.getExpires());
++    assertFalse(token.isExpired());
++    Thread.sleep(51);
++    assertTrue(token.isExpired());
++  }
++
++  public void testToStringAndParse() throws Exception {
++    long expires = System.currentTimeMillis() + 50;
++    AuthenticationToken token = new AuthenticationToken("u", "p", "t");
++    token.setExpires(expires);
++    String str = token.toString();
++    token = AuthenticationToken.parse(str);
++    assertEquals("p", token.getName());
++    assertEquals("t", token.getType());
++    assertEquals(expires, token.getExpires());
++    assertFalse(token.isExpired());
++    Thread.sleep(51);
++    assertTrue(token.isExpired());
++  }
++
++  public void testParseInvalid() throws Exception {
++    long expires = System.currentTimeMillis() + 50;
++    AuthenticationToken token = new AuthenticationToken("u", "p", "t");
++    token.setExpires(expires);
++    String str = token.toString();
++    str = str.substring(0, str.indexOf("e="));
++    try {
++      AuthenticationToken.parse(str);
++      fail();
++    } catch (AuthenticationException ex) {
++      // Expected
++    } catch (Exception ex) {
++      fail();
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/security/authentication/server/TestPseudoAuthenticationHandler.java b/src/test/org/apache/hadoop/security/authentication/server/TestPseudoAuthenticationHandler.java
+new file mode 100644
+index 0000000..dbc2c36
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/authentication/server/TestPseudoAuthenticationHandler.java
+@@ -0,0 +1,113 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.server;
++
++import org.apache.hadoop.security.authentication.client.AuthenticationException;
++import junit.framework.TestCase;
++import org.apache.hadoop.security.authentication.client.PseudoAuthenticator;
++import org.mockito.Mockito;
++
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++import java.util.Properties;
++
++public class TestPseudoAuthenticationHandler extends TestCase {
++
++  public void testInit() throws Exception {
++    PseudoAuthenticationHandler handler = new PseudoAuthenticationHandler();
++    try {
++      Properties props = new Properties();
++      props.setProperty(PseudoAuthenticationHandler.ANONYMOUS_ALLOWED, "false");
++      handler.init(props);
++      assertEquals(false, handler.getAcceptAnonymous());
++    } finally {
++      handler.destroy();
++    }
++  }
++
++  public void testType() throws Exception {
++    PseudoAuthenticationHandler handler = new PseudoAuthenticationHandler();
++    assertEquals(PseudoAuthenticationHandler.TYPE, handler.getType());
++  }
++
++  public void testAnonymousOn() throws Exception {
++    PseudoAuthenticationHandler handler = new PseudoAuthenticationHandler();
++    try {
++      Properties props = new Properties();
++      props.setProperty(PseudoAuthenticationHandler.ANONYMOUS_ALLOWED, "true");
++      handler.init(props);
++
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      HttpServletResponse response = Mockito.mock(HttpServletResponse.class);
++
++      AuthenticationToken token = handler.authenticate(request, response);
++
++      assertEquals(AuthenticationToken.ANONYMOUS, token);
++    } finally {
++      handler.destroy();
++    }
++  }
++
++  public void testAnonymousOff() throws Exception {
++    PseudoAuthenticationHandler handler = new PseudoAuthenticationHandler();
++    try {
++      Properties props = new Properties();
++      props.setProperty(PseudoAuthenticationHandler.ANONYMOUS_ALLOWED, "false");
++      handler.init(props);
++
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      HttpServletResponse response = Mockito.mock(HttpServletResponse.class);
++
++      handler.authenticate(request, response);
++      fail();
++    } catch (AuthenticationException ex) {
++      // Expected
++    } catch (Exception ex) {
++      fail();
++    } finally {
++      handler.destroy();
++    }
++  }
++
++  private void _testUserName(boolean anonymous) throws Exception {
++    PseudoAuthenticationHandler handler = new PseudoAuthenticationHandler();
++    try {
++      Properties props = new Properties();
++      props.setProperty(PseudoAuthenticationHandler.ANONYMOUS_ALLOWED, Boolean.toString(anonymous));
++      handler.init(props);
++
++      HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++      HttpServletResponse response = Mockito.mock(HttpServletResponse.class);
++      Mockito.when(request.getParameter(PseudoAuthenticator.USER_NAME)).thenReturn("user");
++
++      AuthenticationToken token = handler.authenticate(request, response);
++
++      assertNotNull(token);
++      assertEquals("user", token.getUserName());
++      assertEquals("user", token.getName());
++      assertEquals(PseudoAuthenticationHandler.TYPE, token.getType());
++    } finally {
++      handler.destroy();
++    }
++  }
++
++  public void testUserNameAnonymousOff() throws Exception {
++    _testUserName(false);
++  }
++
++  public void testUserNameAnonymousOn() throws Exception {
++    _testUserName(true);
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/security/authentication/util/TestSigner.java b/src/test/org/apache/hadoop/security/authentication/util/TestSigner.java
+new file mode 100644
+index 0000000..9b3d1a2
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/authentication/util/TestSigner.java
+@@ -0,0 +1,93 @@
++/**
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License. See accompanying LICENSE file.
++ */
++package org.apache.hadoop.security.authentication.util;
++
++import junit.framework.TestCase;
++
++public class TestSigner extends TestCase {
++
++  public void testNoSecret() throws Exception {
++    try {
++      new Signer(null);
++      fail();
++    }
++    catch (IllegalArgumentException ex) {
++    }
++  }
++
++  public void testNullAndEmptyString() throws Exception {
++    Signer signer = new Signer("secret".getBytes());
++    try {
++      signer.sign(null);
++      fail();
++    } catch (IllegalArgumentException ex) {
++      // Expected
++    } catch (Throwable ex) {
++      fail();
++    }
++    try {
++      signer.sign("");
++      fail();
++    } catch (IllegalArgumentException ex) {
++      // Expected
++    } catch (Throwable ex) {
++      fail();
++    }
++  }
++
++  public void testSignature() throws Exception {
++    Signer signer = new Signer("secret".getBytes());
++    String s1 = signer.sign("ok");
++    String s2 = signer.sign("ok");
++    String s3 = signer.sign("wrong");
++    assertEquals(s1, s2);
++    assertNotSame(s1, s3);
++  }
++
++  public void testVerify() throws Exception {
++    Signer signer = new Signer("secret".getBytes());
++    String t = "test";
++    String s = signer.sign(t);
++    String e = signer.verifyAndExtract(s);
++    assertEquals(t, e);
++  }
++
++  public void testInvalidSignedText() throws Exception {
++    Signer signer = new Signer("secret".getBytes());
++    try {
++      signer.verifyAndExtract("test");
++      fail();
++    } catch (SignerException ex) {
++      // Expected
++    } catch (Throwable ex) {
++      fail();
++    }
++  }
++
++  public void testTampering() throws Exception {
++    Signer signer = new Signer("secret".getBytes());
++    String t = "test";
++    String s = signer.sign(t);
++    s += "x";
++    try {
++      signer.verifyAndExtract(s);
++      fail();
++    } catch (SignerException ex) {
++      // Expected
++    } catch (Throwable ex) {
++      fail();
++    }
++  }
++
++}
+-- 
+1.7.0.4
+

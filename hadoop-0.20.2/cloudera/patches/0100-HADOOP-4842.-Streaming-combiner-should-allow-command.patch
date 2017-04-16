@@ -1,0 +1,192 @@
+From dfac0482267aaf0fabac97c163e0015306ec5b16 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:05:16 -0800
+Subject: [PATCH 0100/1179] HADOOP-4842. Streaming combiner should allow command, not just JavaClass
+
+Description: Streaming jobs are way slower than Java jobs for many reasons, but certainly stopping the shell-only programmer from using the combiner feature won't help. Right now, the streaming usage says:
+
+<blockquote>
+<p>  -mapper   &lt;cmd|JavaClassName&gt;      The streaming command to run<br/>
+  -combiner &lt;JavaClassName&gt; Combiner has to be a Java class<br/>
+  -reducer  &lt;cmd|JavaClassName&gt;      The streaming command to run</p></blockquote>
+Reason: Usability improvement
+Author: Amareshwari Sriramadasu
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/streaming/PipeCombiner.java  |   42 ++++++++++++++
+ .../org/apache/hadoop/streaming/StreamJob.java     |    7 ++-
+ .../org/apache/hadoop/streaming/TestStreaming.java |    2 +-
+ .../hadoop/streaming/TestStreamingCombiner.java    |   60 ++++++++++++++++++++
+ .../src/documentation/content/xdocs/streaming.xml  |    2 +-
+ 5 files changed, 109 insertions(+), 4 deletions(-)
+ create mode 100644 src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeCombiner.java
+ create mode 100644 src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingCombiner.java
+
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeCombiner.java b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeCombiner.java
+new file mode 100644
+index 0000000..444042d
+--- /dev/null
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeCombiner.java
+@@ -0,0 +1,42 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.streaming;
++
++import java.io.UnsupportedEncodingException;
++import java.net.URLDecoder;
++
++import org.apache.hadoop.mapred.JobConf;
++
++public class PipeCombiner extends PipeReducer {
++  String getPipeCommand(JobConf job) {
++    String str = job.get("stream.combine.streamprocessor");
++    try {
++      if (str != null) {
++        return URLDecoder.decode(str, "UTF-8");
++      }
++    } catch (UnsupportedEncodingException e) {
++      System.err.println("stream.combine.streamprocessor" + 
++                         " in jobconf not found");
++    }
++    return null;
++  }
++  boolean getDoPipe() {
++    return (getPipeCommand(job_) != null);
++  }
++}
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/StreamJob.java b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/StreamJob.java
+index 6b6601f..567f667 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/StreamJob.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/StreamJob.java
+@@ -462,7 +462,8 @@ public class StreamJob implements Tool {
+     System.out.println("  -input    <path>     DFS input file(s) for the Map step");
+     System.out.println("  -output   <path>     DFS output directory for the Reduce step");
+     System.out.println("  -mapper   <cmd|JavaClassName>      The streaming command to run");
+-    System.out.println("  -combiner <JavaClassName> Combiner has to be a Java class");
++    System.out.println("  -combiner <cmd|JavaClassName>" + 
++                       " The streaming command to run");
+     System.out.println("  -reducer  <cmd|JavaClassName>      The streaming command to run");
+     System.out.println("  -file     <file>     File/dir to be shipped in the Job jar file");
+     System.out.println("  -inputformat TextInputFormat(default)|SequenceFileAsTextInputFormat|JavaClassName Optional.");
+@@ -749,7 +750,9 @@ public class StreamJob implements Tool {
+       if (c != null) {
+         jobConf_.setCombinerClass(c);
+       } else {
+-        fail("-combiner : class not found : " + comCmd_);
++        jobConf_.setCombinerClass(PipeCombiner.class);
++        jobConf_.set("stream.combine.streamprocessor", URLEncoder.encode(
++                comCmd_, "UTF-8"));
+       }
+     }
+ 
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreaming.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreaming.java
+index ba11323..d4a155f 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreaming.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreaming.java
+@@ -40,7 +40,7 @@ public class TestStreaming extends TestCase
+   protected String reduce = StreamUtil.makeJavaCommand(UniqApp.class, new String[]{"R"});
+   protected String outputExpect = "Rare\t\nRblue\t\nRbunnies\t\nRpink\t\nRred\t\nRroses\t\nRviolets\t\n";
+ 
+-  private StreamJob job;
++  protected StreamJob job;
+ 
+   public TestStreaming() throws IOException
+   {
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingCombiner.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingCombiner.java
+new file mode 100644
+index 0000000..80fd1e8
+--- /dev/null
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingCombiner.java
+@@ -0,0 +1,60 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.streaming;
++
++import java.io.IOException;
++
++import org.apache.hadoop.mapred.Counters;
++
++public class TestStreamingCombiner extends TestStreaming {
++
++  protected String combine = StreamUtil.makeJavaCommand(UniqApp.class, new String[]{""});
++  
++  public TestStreamingCombiner() throws IOException {
++    super();
++  }
++  
++  protected String[] genArgs() {
++    return new String[] {
++      "-input", INPUT_FILE.getAbsolutePath(),
++      "-output", OUTPUT_DIR.getAbsolutePath(),
++      "-mapper", map,
++      "-reducer", reduce,
++      "-combiner", combine,
++      "-jobconf", "stream.tmpdir="+System.getProperty("test.build.data","/tmp")
++    };
++  }
++
++  public void testCommandLine() throws IOException {
++    super.testCommandLine();
++    // validate combiner counters
++    String counterGrp = "org.apache.hadoop.mapred.Task$Counter";
++    Counters counters = job.running_.getCounters();
++    assertTrue(counters.findCounter(
++               counterGrp, "COMBINE_INPUT_RECORDS").getValue() != 0);
++    assertTrue(counters.findCounter(
++               counterGrp, "COMBINE_OUTPUT_RECORDS").getValue() != 0);
++  }
++
++  public static void main(String[]args) throws Exception
++  {
++    new TestStreamingCombiner().testCommandLine();
++  }
++
++}
+diff --git a/src/docs/src/documentation/content/xdocs/streaming.xml b/src/docs/src/documentation/content/xdocs/streaming.xml
+index 21bd520..d48acc1 100644
+--- a/src/docs/src/documentation/content/xdocs/streaming.xml
++++ b/src/docs/src/documentation/content/xdocs/streaming.xml
+@@ -124,7 +124,7 @@ Just as with a normal Map/Reduce job, you can specify other plugins for a stream
+    -inputformat JavaClassName
+    -outputformat JavaClassName
+    -partitioner JavaClassName
+-   -combiner JavaClassName
++   -combiner streamingCommand or JavaClassName
+ </source>
+ <p>
+ The class you supply for the input format should return key/value pairs of Text class. If you do not specify an input format class, the TextInputFormat is used as the default. Since the TextInputFormat returns keys of LongWritable class, which are actually not part of the input data, the keys will be discarded; only the values will be piped to the streaming mapper.
+-- 
+1.7.0.4
+

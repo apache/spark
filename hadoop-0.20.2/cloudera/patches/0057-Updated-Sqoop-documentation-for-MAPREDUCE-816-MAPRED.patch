@@ -1,0 +1,251 @@
+From e7430c8cbd2d182716ac7efb08cb2187c1edab95 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:48:08 -0800
+Subject: [PATCH 0057/1179] Updated Sqoop documentation for MAPREDUCE-816, MAPREDUCE-789.
+
+Reason: Documentation improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/contrib/sqoop/doc/SqoopUserGuide.html |  125 +++++++++++++++++++++++++---
+ src/contrib/sqoop/doc/sqoop.1             |   10 +-
+ 2 files changed, 116 insertions(+), 19 deletions(-)
+
+diff --git a/src/contrib/sqoop/doc/SqoopUserGuide.html b/src/contrib/sqoop/doc/SqoopUserGuide.html
+index 5e37a70..714f058 100644
+--- a/src/contrib/sqoop/doc/SqoopUserGuide.html
++++ b/src/contrib/sqoop/doc/SqoopUserGuide.html
+@@ -377,7 +377,8 @@ running <tt>apt-get update &amp;&amp; apt-get install hadoop0.20</tt>.</p></div>
+ <div class="title">Sqoop and Hadoop 0.18.3</div>A version of Sqoop compatible with Hadoop 0.18.3 was
+ included with Cloudera's Distribution for Hadoop 0.18.3. All
+ new Sqoop development, however, will focus on the 0.20 branch
+-of Hadoop.</td>
++of Hadoop. This document describes some features only present
++on the 0.20 branch of Sqoop.</td>
+ </tr></table>
+ </div>
+ </div>
+@@ -428,12 +429,15 @@ be used to supply a username and a password to the database. e.g.:</p></div>
+ be able to read your password from the command-line arguments via
+ the output of programs such as <tt>ps</tt>. The <strong><tt>-P</tt></strong> argument will read
+ a password from a console prompt, and is the preferred method of
+-entering credentials.</td>
++entering credentials. Credentials may still be transferred between
++nodes of the MapReduce cluster using insecure means.</td>
+ </tr></table>
+ </div>
+-<div class="para"><p>Sqoop automatically supports MySQL and HSQLDB. Connect strings beginning
+-with <tt>jdbc:mysql://</tt> and <tt>jdbc:hsqldb:*//</tt> are handled automatically by
+-JDBC drivers that are bundled with Sqoop. You can use Sqoop with any other
++<div class="para"><p>Sqoop automatically supports several databases, including MySQL. Connect strings beginning
++with <tt>jdbc:mysql://</tt> are handled automatically by
++JDBC drivers that are bundled with Sqoop. (A full list of databases with
++built-in support is provided in the "Supported Databases" section, below.</p></div>
++<div class="para"><p>You can use Sqoop with any other
+ JDBC-compliant database as well. First, download the appropriate JDBC
+ driver for the database you want to import from, and install the .jar
+ file in the <tt>/usr/hadoop/lib</tt> directory on all machines in your Hadoop
+@@ -444,7 +448,8 @@ a driver class of <tt>com.mysql.jdbc.Driver</tt>. Refer to your database
+ vendor-specific documentation to determine the main driver class.
+ This class must be provided as an argument to Sqoop with <tt>&#8212;driver</tt>.</p></div>
+ <div class="para"><p>For example, to connect to a postgres database, first download the driver from
+-link:http://jdbc.postgresql.org and install it in your Hadoop lib path.
++<a href="http://jdbc.postgresql.org">http://jdbc.postgresql.org</a> and
++install it in your Hadoop lib path.
+ Then run Sqoop with something like:</p></div>
+ <div class="listingblock">
+ <div class="content">
+@@ -458,13 +463,12 @@ Then run Sqoop with something like:</p></div>
+ </td>
+ <td class="content">Sqoop uses the JDBC specification to connect to databases; this
+ should provide a versatile client that interoperates with many different
+-databases. We have thoroughly tested this tool with HSQLDB and MySQL. If
++databases. We have thoroughly tested this tool with a few databases, such as MySQL.
++A complete list is provided in the "Supported Databases" section below. If
+ you try this tool with another database, please share your success (or
+ problems!) with us on our
+ <a href="http://getsatisfaction.com/cloudera/products/cloudera_sqoop">Sqoop
+-support and feedback</a> page. Sqoop is known to <strong>not</strong> work with Oracle at
+-the moment; we are <a href="http://issues.apache.org/jira/browse/MAPREDUCE-789">actively
+-working</a> on this problem.</td>
++support and feedback</a> page.</td>
+ </tr></table>
+ </div>
+ <h3 id="_listing_available_databases">Listing Available Databases</h3><div style="clear:left"></div>
+@@ -617,7 +621,7 @@ an escape sequence. Arguments of the form <tt>\0xhhh</tt> will be interpreted
+ as a hexidecimal representation of a character with hex number <em>hhh</em>.
+ Arguments of the form <tt>\0ooo</tt> will be treated as an octal representation
+ of a character represented by octal number <em>ooo</em>. The special escapes
+-<tt>\n</tt>, <tt>\r</tt>, <tt>\"</tt>, <tt>\b</tt>, and <tt>\\</tt> act as they do inside Java strings. <tt>\0</tt> will be
++<tt>\n</tt>, <tt>\r</tt>, <tt>\"</tt>, <tt>\b</tt>, <tt>\t</tt>, and <tt>\\</tt> act as they do inside Java strings. <tt>\0</tt> will be
+ treated as NUL. This will insert NUL characters between fields or lines
+ (if used for <tt>&#8212;fields-terminated-by</tt> or <tt>&#8212;lines-terminated-by</tt>), or will
+ disable enclosing/escaping if used for one of the <tt>&#8212;enclosed-by</tt>,
+@@ -789,14 +793,15 @@ is not the most high-performance method available. Sqoop can read from
+ a local MySQL database considerably faster by using the <tt>mysqldump</tt> tool
+ distributed with MySQL. If you run Sqoop on the same machine where a
+ MySQL database is present, you can take advantage of this faster
+-import method by running Sqoop with the <tt>&#8212;local</tt> argument. This
++import method by running Sqoop with the <tt>&#8212;direct</tt> argument. This
+ combined with a connect string that begins with <tt>jdbc:mysql://</tt> will
+ inform Sqoop that it should select the faster access method.</p></div>
+ <div class="para"><p>If your delimiters exactly match the delimiters used by <tt>mysqldump</tt>,
+ then Sqoop will use a fast-path that copies the data directly from
+ <tt>mysqldump</tt>'s output into HDFS. Otherwise, Sqoop will parse <tt>mysqldump</tt>'s
+ output into fields and transcode them into the user-specified delimiter set.
+-This is about 50% slower. For convenience, the <tt>&#8212;mysql-delimiters</tt>
++This incurs additional processing, so performance may suffer.
++For convenience, the <tt>&#8212;mysql-delimiters</tt>
+ argument will set all the output delimiters to be consistent with
+ <tt>mysqldump</tt>'s format.</p></div>
+ </div>
+@@ -839,6 +844,98 @@ direct mapping (e.g., <tt>DATE</tt>, <tt>TIME</tt>, and <tt>TIMESTAMP</tt>) will
+ <tt>DOUBLE</tt>. In these cases, Sqoop will emit a warning in its log messages
+ informing you of the loss of precision.</p></div>
+ </div>
++<h2 id="_supported_databases">Supported Databases</h2>
++<div class="sectionbody">
++<div class="para"><p>Sqoop uses JDBC to connect to databases. JDBC is a compatibility layer
++that allows a program to access many different databases through a common
++API. Slight differences in the SQL language spoken by each database, however,
++may mean that Sqoop can't use every database out of the box, or that some
++databases may be used in an inefficient manner.</p></div>
++<div class="para"><p>When you provide a connect string to Sqoop, it inspects the protocol scheme to
++determine appropriate vendor-specific logic to use. If Sqoop knows about
++a given database, it will work automatically. If not, you may need to
++specify the driver class to load via <tt>&#8212;driver</tt>. This will use a generic
++code path which will use standard SQL to access the database. Sqoop provides
++some databases with faster, non-JDBC-based access mechanisms. These can be
++enabled by specfying the <tt>&#8212;direct</tt> parameter.</p></div>
++<div class="para"><p>Sqoop includes vendor-specific code paths for the following databases:</p></div>
++<div class="tableblock">
++<table rules="all"
++frame="hsides"
++cellspacing="0" cellpadding="4">
++<col width="137" />
++<col width="102" />
++<col width="240" />
++<col width="251" />
++<thead>
++  <tr>
++    <th align="left">
++    Database
++    </th>
++    <th align="left">
++    version
++    </th>
++    <th align="left">
++    <tt>&#8212;direct</tt> support?
++    </th>
++    <th align="left">
++    connect string matches
++    </th>
++  </tr>
++</thead>
++<tbody valign="top">
++  <tr>
++    <td align="left">
++    HSQLDB
++    </td>
++    <td align="left">
++    1.8.0+
++    </td>
++    <td align="left">
++    No
++    </td>
++    <td align="left">
++    <tt>jdbc:hsqldb:*//</tt>
++    </td>
++  </tr>
++  <tr>
++    <td align="left">
++    MySQL
++    </td>
++    <td align="left">
++    5.0+
++    </td>
++    <td align="left">
++    Yes
++    </td>
++    <td align="left">
++    <tt>jdbc:mysql://</tt>
++    </td>
++  </tr>
++  <tr>
++    <td align="left">
++    Oracle
++    </td>
++    <td align="left">
++    10.2.0+
++    </td>
++    <td align="left">
++    No
++    </td>
++    <td align="left">
++    <tt>jdbc:oracle:*//</tt>
++    </td>
++  </tr>
++</tbody>
++</table>
++</div>
++<div class="para"><p>Sqoop may work with older versions of the databases listed, but we have
++only tested it with the versions specified above.</p></div>
++<div class="para"><p>Even if Sqoop supports a database internally, you may still need to
++install the database vendor's JDBC driver in your <tt>$HADOOP_HOME/lib</tt>
++path. Cloudera's Distribution for Hadoop includes JDBC drivers for
++HSQLDB and MySQL.</p></div>
++</div>
+ <h2 id="_troubleshooting_and_getting_help">Troubleshooting and Getting Help</h2>
+ <div class="sectionbody">
+ <div class="para"><p>Sqoop's output is emitted via log4j, a logging system for Java
+@@ -855,7 +952,7 @@ support portal</a> and we'll help you out.</p></div>
+ </div>
+ <div id="footer">
+ <div id="footer-text">
+-Last updated 2009-07-25 16:51:37 PDT
++Last updated 2009-08-13 16:20:31 PDT
+ </div>
+ </div>
+ </body>
+diff --git a/src/contrib/sqoop/doc/sqoop.1 b/src/contrib/sqoop/doc/sqoop.1
+index 2b28184..1ec6eb6 100644
+--- a/src/contrib/sqoop/doc/sqoop.1
++++ b/src/contrib/sqoop/doc/sqoop.1
+@@ -1,11 +1,11 @@
+ .\"     Title: sqoop
+ .\"    Author: 
+ .\" Generator: DocBook XSL Stylesheets v1.73.2 <http://docbook.sf.net/>
+-.\"      Date: 07/25/2009
++.\"      Date: 08/13/2009
+ .\"    Manual: 
+ .\"    Source: 
+ .\"
+-.TH "SQOOP" "1" "07/25/2009" "" ""
++.TH "SQOOP" "1" "08/13/2009" "" ""
+ .\" disable hyphenation
+ .nh
+ .\" disable justification (adjust text to left margin only)
+@@ -48,9 +48,9 @@ Set authentication password (Note: This is very insecure\&. You should use \-P i
+ Prompt for user password
+ .RE
+ .PP
+-\-\-local
++\-\-direct
+ .RS 4
+-Use local import fast path (mysql only)
++Use direct import fast path (mysql only)
+ .RE
+ .SS "Import control options"
+ .PP
+@@ -109,7 +109,7 @@ The table to import
+ .SS "Output line formatting options"
+ The delimiters used to separate fields and records can be specified on the command line, as can a quoting character and an escape character (for quoting delimiters inside a values)\&. Data imported with \-\-as\-textfile will be formatted according to these parameters\&. Classes generated by Sqoop will encode this information, so using toString() from a data record stored \-\-as\-sequencefile will reproduce your specified formatting\&.
+ .sp
+-The (char) argument for each argument in this section can be specified either as a normal character (e\&.g\&., \-\-fields\-terminated\-by ,) or via an escape sequence\&. Arguments of the form \e0xhhh will be interpreted as a hexidecimal representation of a character with hex number \fIhhh\fR\&. Arguments of the form \e0ooo will be treated as an octal representation of a character represented by octal number \fIooo\fR\&. The special escapes \en, \er, \e", \eb, and \e\e act as they do inside Java strings\&. \e0 will be treated as NUL\&. This will insert NUL characters between fields or lines (if used for \-\-fields\-terminated\-by or \-\-lines\-terminated\-by), or will disable enclosing/escaping if used for one of the \-\-enclosed\-by, \-\-optionally\-enclosed\-by, or \-\-escaped\-by arguments\&.
++The (char) argument for each argument in this section can be specified either as a normal character (e\&.g\&., \-\-fields\-terminated\-by ,) or via an escape sequence\&. Arguments of the form \e0xhhh will be interpreted as a hexidecimal representation of a character with hex number \fIhhh\fR\&. Arguments of the form \e0ooo will be treated as an octal representation of a character represented by octal number \fIooo\fR\&. The special escapes \en, \er, \e", \eb, \et, and \e\e act as they do inside Java strings\&. \e0 will be treated as NUL\&. This will insert NUL characters between fields or lines (if used for \-\-fields\-terminated\-by or \-\-lines\-terminated\-by), or will disable enclosing/escaping if used for one of the \-\-enclosed\-by, \-\-optionally\-enclosed\-by, or \-\-escaped\-by arguments\&.
+ .sp
+ The default delimiters are , for fields, \en for records, no quote character, and no escape character\&. Note that this can lead to ambiguous/unparsible records if you import database records containing commas or newlines in the field data\&. For unambiguous parsing, both must be enabled, e\&.g\&., via \-\-mysql\-delimiters\&.
+ .PP
+-- 
+1.7.0.4
+

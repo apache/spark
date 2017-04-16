@@ -1,0 +1,60 @@
+From ea5a944575665c464ac180a5a20f631ee03e1606 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 13 Feb 2012 23:27:11 -0800
+Subject: [PATCH 1123/1179] Ammend HDFS-854. Datanode should scan devices in parallel to generate block report.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-4455
+---
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |   13 +++++++------
+ 1 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index d97f0ab..beadd88 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -35,7 +35,7 @@ import java.util.Map;
+ import java.util.Random;
+ import java.util.Set;
+ import java.util.TreeSet;
+-import java.util.concurrent.ArrayBlockingQueue;
++import java.util.concurrent.LinkedBlockingQueue;
+ import java.util.concurrent.Callable;
+ import java.util.concurrent.ExecutionException;
+ import java.util.concurrent.Future;
+@@ -670,8 +670,9 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     FSVolumeSet(FSVolume[] volumes, int failedVols, int scannerThreads) {
+       this.volumes = volumes;
+       this.numFailedVolumes = failedVols;
+-      pool = new ThreadPoolExecutor(scannerThreads, scannerThreads, 0L,
+-          TimeUnit.SECONDS, new ArrayBlockingQueue<Runnable>(volumes.length));
++      int numThreads = Math.max(scannerThreads, volumes.length);
++      pool = new ThreadPoolExecutor(numThreads, numThreads, 0L,
++          TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+       pool.setThreadFactory(new ThreadFactoryBuilder()
+         .setDaemon(true)
+         .setNameFormat("Block Scanner Thread #%d")
+@@ -734,7 +735,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       return remaining;
+     }
+ 
+-    void scanBlockFilesInconsistent(Map<Block, File> seenOnDisk)
++    private void scanBlockFilesInconsistent(Map<Block, File> seenOnDisk)
+         throws InterruptedException {
+       // Make a local consistent copy of the volume list, since
+       // it might change due to a disk failure
+@@ -1803,8 +1804,8 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+   }
+ 
+   /**
+-   * Scan the blocks in the dataset on disk, without holding any
+-   * locks. This generates a "rough" block report, since there
++   * Scan the blocks in the dataset on disk, without holding the
++   * FSDataset lock. This generates a "rough" block report, since there
+    * may be concurrent modifications to the disk structure.
+    */
+   Map<Block, File> roughBlockScan() throws InterruptedException {
+-- 
+1.7.0.4
+

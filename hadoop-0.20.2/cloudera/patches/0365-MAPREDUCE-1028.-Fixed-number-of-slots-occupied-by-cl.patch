@@ -1,0 +1,41 @@
+From 48bfdd9b2a6eac72ac42b0defe5e86501001a7ab Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 28 Sep 2009 13:54:07 -0700
+Subject: [PATCH 0365/1179] MAPREDUCE-1028. Fixed number of slots occupied by cleanup tasks to one irrespective of slot size for the job.
+
+Patch: http://issues.apache.org/jira/secure/attachment/12420581/yhadoop-0.20-MR1028.patch
+Author: Ravi Gummadi
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/TaskInProgress.java   |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+index 78144c0..b5ed80d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+@@ -920,6 +920,8 @@ public class TaskInProgress {
+   public Task addRunningTask(TaskAttemptID taskid, 
+                              String taskTracker,
+                              boolean taskCleanup) {
++    // 1 slot is enough for taskCleanup task
++    int numSlotsNeeded = taskCleanup ? 1 : numSlotsRequired;
+     // create the task
+     Task t = null;
+     if (isMapTask()) {
+@@ -934,10 +936,10 @@ public class TaskInProgress {
+         split = new BytesWritable();
+       }
+       t = new MapTask(jobFile, taskid, partition, splitClass, split, 
+-                      numSlotsRequired, job.getUser());
++                      numSlotsNeeded, job.getUser());
+     } else {
+       t = new ReduceTask(jobFile, taskid, partition, numMaps, 
+-                         numSlotsRequired, job.getUser());
++                         numSlotsNeeded, job.getUser());
+     }
+     if (jobCleanup) {
+       t.setJobCleanupTask();
+-- 
+1.7.0.4
+

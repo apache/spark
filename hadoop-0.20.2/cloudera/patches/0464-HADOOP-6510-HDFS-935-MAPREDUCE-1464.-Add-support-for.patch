@@ -1,0 +1,1406 @@
+From ed87d9db29b9375d2c10047bbc3e7d136c76a581 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 8 Feb 2010 19:44:20 -0800
+Subject: [PATCH 0464/1179] HADOOP-6510, HDFS-935, MAPREDUCE-1464. Add support for a superuser authenticating on behalf of a proxy user.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435223/HADOOP-6510-0_20.4.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Client.java         |   14 +-
+ .../org/apache/hadoop/ipc/ConnectionHeader.java    |   41 ++-
+ src/core/org/apache/hadoop/ipc/Server.java         |   40 ++-
+ .../org/apache/hadoop/security/SaslRpcServer.java  |   26 +-
+ .../hadoop/security/UserGroupInformation.java      |   99 +++++-
+ .../hadoop/security/authorize/ProxyUsers.java      |  104 +++++
+ .../hadoop/security/token/TokenIdentifier.java     |   11 +-
+ .../security/token/DelegationTokenIdentifier.java  |   35 ++-
+ .../token/DelegationTokenSecretManager.java        |   18 +-
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   17 +-
+ .../security/token/JobTokenIdentifier.java         |    8 +-
+ .../TestClientProtocolWithDelegationToken.java     |    2 +-
+ src/test/org/apache/hadoop/ipc/TestSaslRPC.java    |   27 ++-
+ .../hadoop/security/TestDelegationToken.java       |   35 ++-
+ .../hadoop/security/TestDoAsEffectiveUser.java     |  445 ++++++++++++++++++++
+ .../hadoop/security/TestUserGroupInformation.java  |   15 +
+ 16 files changed, 877 insertions(+), 60 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/security/authorize/ProxyUsers.java
+ create mode 100644 src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index 46e9477..be8a683 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -241,8 +241,6 @@ public class Client {
+       
+       UserGroupInformation ticket = remoteId.getTicket();
+       Class<?> protocol = remoteId.getProtocol();
+-      header = 
+-        new ConnectionHeader(protocol == null ? null : protocol.getName(), ticket);
+       this.useSasl = UserGroupInformation.isSecurityEnabled();
+       if (useSasl && protocol != null) {
+         TokenInfo tokenInfo = protocol.getAnnotation(TokenInfo.class);
+@@ -276,6 +274,10 @@ public class Client {
+       } else {
+         authMethod = AuthMethod.KERBEROS;
+       }
++      
++      header = new ConnectionHeader(protocol == null ? null : protocol
++          .getName(), ticket, authMethod);
++      
+       if (LOG.isDebugEnabled())
+         LOG.debug("Use " + authMethod + " authentication for protocol "
+             + protocol.getSimpleName());
+@@ -407,7 +409,13 @@ public class Client {
+         if (useSasl) {
+           final InputStream in2 = inStream;
+           final OutputStream out2 = outStream;
+-          remoteId.getTicket().doAs(new PrivilegedExceptionAction<Object>() {
++          UserGroupInformation ticket = remoteId.getTicket();
++          if (authMethod == AuthMethod.KERBEROS) {
++            if (ticket.getRealUser() != null) {
++              ticket = ticket.getRealUser();
++            }
++          }
++          ticket.doAs(new PrivilegedExceptionAction<Object>() {
+             @Override
+             public Object run() throws IOException {
+               saslRpcClient = new SaslRpcClient(authMethod, token,
+diff --git a/src/core/org/apache/hadoop/ipc/ConnectionHeader.java b/src/core/org/apache/hadoop/ipc/ConnectionHeader.java
+index eb87f68..42de3f5 100644
+--- a/src/core/org/apache/hadoop/ipc/ConnectionHeader.java
++++ b/src/core/org/apache/hadoop/ipc/ConnectionHeader.java
+@@ -20,12 +20,16 @@ package org.apache.hadoop.ipc;
+ import java.io.DataInput;
+ import java.io.DataOutput;
+ import java.io.IOException;
++import java.util.Collection;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
+ 
+ /**
+  * The IPC connection header sent by the client to the server
+@@ -36,6 +40,7 @@ class ConnectionHeader implements Writable {
+   
+   private String protocol;
+   private UserGroupInformation ugi = null;
++  private AuthMethod authMethod;
+   
+   public ConnectionHeader() {}
+   
+@@ -47,9 +52,10 @@ class ConnectionHeader implements Writable {
+    * @param ugi {@link UserGroupInformation} of the client communicating with
+    *            the server
+    */
+-  public ConnectionHeader(String protocol, UserGroupInformation ugi) {
++  public ConnectionHeader(String protocol, UserGroupInformation ugi, AuthMethod authMethod) {
+     this.protocol = protocol;
+     this.ugi = ugi;
++    this.authMethod = authMethod;
+   }
+ 
+   @Override
+@@ -62,7 +68,15 @@ class ConnectionHeader implements Writable {
+     boolean ugiUsernamePresent = in.readBoolean();
+     if (ugiUsernamePresent) {
+       String username = in.readUTF();
+-      ugi = UserGroupInformation.createRemoteUser(username);
++      boolean realUserNamePresent = in.readBoolean();
++      if (realUserNamePresent) {
++        String realUserName = in.readUTF();
++        UserGroupInformation realUserUgi = UserGroupInformation
++            .createRemoteUser(realUserName);
++        ugi = UserGroupInformation.createProxyUser(username, realUserUgi);
++      } else {
++      	ugi = UserGroupInformation.createRemoteUser(username);
++      }
+     } else {
+       ugi = null;
+     }
+@@ -72,8 +86,27 @@ class ConnectionHeader implements Writable {
+   public void write(DataOutput out) throws IOException {
+     Text.writeString(out, (protocol == null) ? "" : protocol);
+     if (ugi != null) {
+-      out.writeBoolean(true);
+-      out.writeUTF(ugi.getUserName());
++      if (UserGroupInformation.isSecurityEnabled()) {
++        if (authMethod == AuthMethod.KERBEROS) {
++          //Send effective user for Kerberos auth
++          out.writeBoolean(true);
++          out.writeUTF(ugi.getUserName());
++          out.writeBoolean(false);
++        } else {
++          //Don't send user for token auth
++          out.writeBoolean(false);
++        }
++      } else {
++        //Send both effective user and real user for simple auth
++        out.writeBoolean(true);
++        out.writeUTF(ugi.getUserName());
++        if (ugi.getRealUser() != null) {
++          out.writeBoolean(true);
++          out.writeUTF(ugi.getRealUser().getUserName());
++        } else {
++          out.writeBoolean(false);
++        }
++      }
+     } else {
+       out.writeBoolean(false);
+     }
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 6841d63..3f9e4d0 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -68,6 +68,7 @@ import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
+ import org.apache.hadoop.security.SaslRpcServer.SaslDigestCallbackHandler;
+ import org.apache.hadoop.security.SaslRpcServer.SaslGssCallbackHandler;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.authorize.ProxyUsers;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+@@ -818,6 +819,17 @@ public abstract class Server {
+         return true;
+       return false;
+     }
++    
++    private UserGroupInformation getAuthorizedUgi(String authorizedId)
++        throws IOException {
++      if (authMethod == SaslRpcServer.AuthMethod.DIGEST) {
++        TokenIdentifier tokenId = SaslRpcServer.getIdentifier(authorizedId,
++            secretManager);
++        return tokenId.getUser();
++      } else {
++        return UserGroupInformation.createRemoteUser(authorizedId);
++      }
++    }
+ 
+     private void saslReadAndProcess(byte[] saslToken) throws IOException,
+         InterruptedException {
+@@ -881,8 +893,7 @@ public abstract class Server {
+             LOG.debug("SASL server context established. Negotiated QoP is "
+                 + saslServer.getNegotiatedProperty(Sasl.QOP));
+           }
+-          user = UserGroupInformation.createRemoteUser(saslServer
+-              .getAuthorizationID());
++          user = getAuthorizedUgi(saslServer.getAuthorizationID());
+           LOG.info("SASL server successfully authenticated client: " + user);
+           saslContextEstablished = true;
+         }
+@@ -1008,10 +1019,19 @@ public abstract class Server {
+       UserGroupInformation protocolUser = header.getUgi();
+       if (!useSasl) {
+         user = protocolUser;
+-      } else if (protocolUser != null && !protocolUser.equals(user)) {
+-        throw new AccessControlException("Authenticated user (" + user
+-            + ") doesn't match what the client claims to be (" + protocolUser
+-            + ")");
++      } else if ((protocolUser != null)
++          && (!protocolUser.getUserName().equals(user.getUserName()))) {
++        if (authMethod == AuthMethod.DIGEST) {
++          // Not allowed to doAs if token authentication is used
++          throw new AccessControlException("Authenticated user (" + user
++              + ") doesn't match what the client claims to be (" + protocolUser
++              + ")");
++        } else {
++          //Effective user can be different from authenticated user
++          //for simple auth or kerberos auth
++          user = UserGroupInformation.createProxyUser(protocolUser
++              .getUserName(), user);
++        }
+       }
+     }
+     
+@@ -1087,6 +1107,14 @@ public abstract class Server {
+ 
+     private boolean authorizeConnection() throws IOException {
+       try {
++        // If auth method is DIGEST, the token was obtained by the
++        // real user for the effective user, therefore not required to
++        // authorize real user. doAs is allowed only for simple or kerberos
++        // authentication
++        if (user != null && user.getRealUser() != null
++            && (authMethod != AuthMethod.DIGEST)) {
++          ProxyUsers.authorize(user, this.getHostAddress(), conf);
++        }
+         authorize(user, header);
+         if (LOG.isDebugEnabled()) {
+           LOG.debug("Successfully authorized " + header);
+diff --git a/src/core/org/apache/hadoop/security/SaslRpcServer.java b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+index 5226798..9aa0ce4 100644
+--- a/src/core/org/apache/hadoop/security/SaslRpcServer.java
++++ b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+@@ -64,6 +64,15 @@ public class SaslRpcServer {
+     return Base64.decodeBase64(identifier.getBytes());
+   }
+ 
++  public static TokenIdentifier getIdentifier(String id,
++      SecretManager<TokenIdentifier> secretManager) throws IOException {
++    byte[] tokenId = decodeIdentifier(id);
++    TokenIdentifier tokenIdentifier = secretManager.createIdentifier();
++    tokenIdentifier.readFields(new DataInputStream(new ByteArrayInputStream(
++        tokenId)));
++    return tokenIdentifier;
++  }
++
+   static char[] encodePassword(byte[] password) {
+     return new String(Base64.encodeBase64(password)).toCharArray();
+   }
+@@ -121,14 +130,6 @@ public class SaslRpcServer {
+       this.secretManager = secretManager;
+     }
+ 
+-    private TokenIdentifier getIdentifier(String id) throws IOException {
+-      byte[] tokenId = decodeIdentifier(id);
+-      TokenIdentifier tokenIdentifier = secretManager.createIdentifier();
+-      tokenIdentifier.readFields(new DataInputStream(new ByteArrayInputStream(
+-          tokenId)));
+-      return tokenIdentifier;
+-    }
+-
+     private char[] getPassword(TokenIdentifier tokenid) throws IOException {
+       return encodePassword(secretManager.retrievePassword(tokenid));
+     }
+@@ -155,11 +156,11 @@ public class SaslRpcServer {
+         }
+       }
+       if (pc != null) {
+-        TokenIdentifier tokenIdentifier = getIdentifier(nc.getDefaultName());
++        TokenIdentifier tokenIdentifier = getIdentifier(nc.getDefaultName(), secretManager);
+         char[] password = getPassword(tokenIdentifier);
+         if (LOG.isDebugEnabled()) {
+           LOG.debug("SASL server DIGEST-MD5 callback: setting password "
+-              + "for client: " + tokenIdentifier.getUsername());
++              + "for client: " + tokenIdentifier.getUser());
+         }
+         pc.setPassword(password);
+       }
+@@ -172,11 +173,12 @@ public class SaslRpcServer {
+           ac.setAuthorized(false);
+         }
+         if (ac.isAuthorized()) {
+-          String username = getIdentifier(authzid).getUsername().toString();
++          String username = getIdentifier(authzid, secretManager).getUser()
++              .getUserName().toString();
+           if (LOG.isDebugEnabled())
+             LOG.debug("SASL server DIGEST-MD5 callback: setting "
+                 + "canonicalized client ID: " + username);
+-          ac.setAuthorizedID(username);
++          ac.setAuthorizedID(authzid);
+         }
+       }
+     }
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 7a7aa8b..b51e540 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -212,6 +212,43 @@ public class UserGroupInformation {
+     }
+   }
+   
++  private static class RealUser implements Principal {
++    private final UserGroupInformation realUser;
++    
++    RealUser(UserGroupInformation realUser) {
++      this.realUser = realUser;
++    }
++    
++    public String getName() {
++      return realUser.getUserName();
++    }
++    
++    public UserGroupInformation getRealUser() {
++      return realUser;
++    }
++    
++    @Override
++    public boolean equals(Object o) {
++      if (this == o) {
++        return true;
++      } else if (o == null || getClass() != o.getClass()) {
++        return false;
++      } else {
++        return realUser.equals(((RealUser) o).realUser);
++      }
++    }
++    
++    @Override
++    public int hashCode() {
++      return realUser.hashCode();
++    }
++    
++    @Override
++    public String toString() {
++      return realUser.toString();
++    }
++  }
++  
+   /**
+    * A JAAS configuration that defines the login modules that we want
+    * to use for login.
+@@ -372,6 +409,36 @@ public class UserGroupInformation {
+     subject.getPrincipals().add(new User(user));
+     return new UserGroupInformation(subject);
+   }
++
++  /* Create a proxy user using username of the effective user and the ugi of the
++   * real user.
++   *
++   * @param effective
++   *          user, UGI for real user.
++   * @return
++   */
++  public static UserGroupInformation createProxyUser(String user,
++      UserGroupInformation realUser) {
++    if (user == null || "".equals(user)) {
++      throw new IllegalArgumentException("Null user");
++    }
++    if (realUser == null) {
++      throw new IllegalArgumentException("Null real user");
++    }
++    Subject subject = new Subject();
++    subject.getPrincipals().add(new User(user));
++    subject.getPrincipals().add(new RealUser(realUser));
++    return new UserGroupInformation(subject);
++  }
++
++  public UserGroupInformation getRealUser() {
++    for (RealUser p: subject.getPrincipals(RealUser.class)) {
++      return p.getRealUser();
++    }
++    return null;
++  }
++
++
+   
+   /**
+    * This class is used for storing the groups for testing. It stores a local
+@@ -418,6 +485,31 @@ public class UserGroupInformation {
+     return ugi;
+   }
+ 
++
++  /**
++   * Create a proxy user UGI for testing HDFS and MapReduce
++   * 
++   * @param user
++   *          the full user principal name for effective user
++   * @param realUser
++   *          UGI of the real user
++   * @param userGroups
++   *          the names of the groups that the user belongs to
++   * @return a fake user for running unit tests
++   */
++  public static UserGroupInformation createProxyUserForTesting(String user,
++      UserGroupInformation realUser, String[] userGroups) {
++    ensureInitialized();
++    UserGroupInformation ugi = createProxyUser(user, realUser);
++    // make sure that the testing object is setup
++    if (!(groups instanceof TestingGroups)) {
++      groups = new TestingGroups();
++    }
++    // add the user groups
++    ((TestingGroups) groups).setUserGroups(ugi.getShortUserName(), userGroups);
++    return ugi;
++  }
++  
+   /**
+    * Get the user's login name.
+    * @return the user's name up to the first '/' or '@'.
+@@ -488,7 +580,11 @@ public class UserGroupInformation {
+    */
+   @Override
+   public String toString() {
+-    return getUserName();
++    if (getRealUser() != null) {
++      return getUserName() + " via " +  getRealUser().toString();
++    } else {
++      return getUserName();
++    }
+   }
+ 
+   /**
+@@ -594,4 +690,5 @@ public class UserGroupInformation {
+       System.out.println("Keytab: " + ugi);
+     }
+   }
++
+ }
+diff --git a/src/core/org/apache/hadoop/security/authorize/ProxyUsers.java b/src/core/org/apache/hadoop/security/authorize/ProxyUsers.java
+new file mode 100644
+index 0000000..e8d24c5
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/authorize/ProxyUsers.java
+@@ -0,0 +1,104 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.authorize;
++
++import java.net.InetAddress;
++import java.net.UnknownHostException;
++import java.util.Collection;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.security.UserGroupInformation;
++
++public class ProxyUsers {
++
++  /*
++   * Returns configuration key for effective user groups allowed for a superuser
++   * 
++   * @param userName name of the superuser
++   * @return configuration key for superuser groups
++   */
++  public static String getProxySuperuserGroupConfKey(String userName) {
++    return "hadoop.proxyuser."+userName+".users";
++  }
++  
++  /*
++   * Return configuration key for superuser ip addresses
++   * 
++   * @param userName name of the superuser
++   * @return configuration key for superuser ip-addresses
++   */
++  public static String getProxySuperuserIpConfKey(String userName) {
++    return "hadoop.proxyuser."+userName+".ip-addresses";
++  }
++  
++  /*
++   * Authorize the superuser which is doing doAs
++   * 
++   * @param user ugi of the effective or proxy user which contains a real user
++   * @param remoteAddress the ip address of client
++   * @param conf configuration
++   * @throws AuthorizationException
++   */
++  public static void authorize(UserGroupInformation user, String remoteAddress,
++      Configuration conf) throws AuthorizationException {
++
++    if (user.getRealUser() == null) {
++      return;
++    }
++    boolean groupAuthorized = false;
++    UserGroupInformation superUser = user.getRealUser();
++
++    Collection<String> allowedUserGroups = conf
++        .getStringCollection(getProxySuperuserGroupConfKey(superUser
++            .getShortUserName()));
++    if (!allowedUserGroups.isEmpty()) {
++      for (String group : user.getGroupNames()) {
++        if (allowedUserGroups.contains(group)) {
++          groupAuthorized = true;
++          break;
++        }
++      }
++    }
++
++    if (!groupAuthorized) {
++      throw new AuthorizationException("User: " + superUser.getUserName()
++          + " is not allowed to impersonate " + user.getUserName());
++    }
++    
++    Collection<String> ipList = conf
++        .getStringCollection(getProxySuperuserIpConfKey(superUser
++            .getShortUserName()));
++    if (!ipList.isEmpty()) {
++      for (String allowedHost : ipList) {
++        InetAddress hostAddr;
++        try {
++          hostAddr = InetAddress.getByName(allowedHost);
++        } catch (UnknownHostException e) {
++          continue;
++        }
++        if (hostAddr.getHostAddress().equals(remoteAddress)) {
++          // Authorization is successful
++          return;
++        }
++      }
++    }
++    throw new AuthorizationException("Unauthorized connection for super-user: "
++        + superUser.getUserName() + " from IP " + remoteAddress);
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/token/TokenIdentifier.java b/src/core/org/apache/hadoop/security/token/TokenIdentifier.java
+index f3c8c59..431619c 100644
+--- a/src/core/org/apache/hadoop/security/token/TokenIdentifier.java
++++ b/src/core/org/apache/hadoop/security/token/TokenIdentifier.java
+@@ -24,6 +24,7 @@ import java.util.Arrays;
+ import org.apache.hadoop.io.DataOutputBuffer;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+  * An identifier that identifies a token, may contain public information 
+@@ -35,12 +36,14 @@ public abstract class TokenIdentifier implements Writable {
+    * @return the kind of the token
+    */
+   public abstract Text getKind();
+-  
++
+   /**
+-   * Get the username encoded in the token identifier
+-   * @return the username
++   * Get the Ugi with the username encoded in the token identifier
++   * 
++   * @return the username. null is returned if username in the identifier is
++   *         empty or null.
+    */
+-  public abstract Text getUsername();
++  public abstract UserGroupInformation getUser();
+ 
+   /**
+    * Get the bytes for the token identifier
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenIdentifier.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenIdentifier.java
+index 9e51101..fe0415d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenIdentifier.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenIdentifier.java
+@@ -23,10 +23,8 @@ import java.io.DataOutput;
+ import java.io.IOException;
+ 
+ import org.apache.hadoop.io.Text;
+-import org.apache.hadoop.io.Writable;
+-import org.apache.hadoop.io.WritableFactories;
+-import org.apache.hadoop.io.WritableFactory;
+ import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ 
+ public class DelegationTokenIdentifier extends TokenIdentifier {
+@@ -34,18 +32,24 @@ public class DelegationTokenIdentifier extends TokenIdentifier {
+ 
+   private Text owner;
+   private Text renewer;
++  private Text realUser;
+   private long issueDate;
+   private long maxDate;
+   private int sequenceNumber;
+   private int masterKeyId = 0;
+   
+   public DelegationTokenIdentifier() {
+-    this(new Text(), new Text());
++    this(new Text(), new Text(), new Text());
+   }
+   
+-  public DelegationTokenIdentifier(Text owner, Text renewer) {
++  public DelegationTokenIdentifier(Text owner, Text renewer, Text realUser) {
+     this.owner = owner;
+     this.renewer = renewer;
++    if (realUser == null) {
++      this.realUser = new Text();
++    } else {
++      this.realUser = realUser;
++    }
+     issueDate = 0;
+     maxDate = 0;
+   }
+@@ -60,10 +64,20 @@ public class DelegationTokenIdentifier extends TokenIdentifier {
+    * 
+    * @return the username or owner
+    */
+-  public Text getUsername() {
+-    return owner;
++  public UserGroupInformation getUser() {
++    if ( (owner == null) || ("".equals(owner.toString()))) {
++      return null;
++    }
++    if ((realUser == null) || ("".equals(realUser.toString()))
++        || realUser.equals(owner)) {
++      return UserGroupInformation.createRemoteUser(owner.toString());
++    } else {
++      UserGroupInformation realUgi = UserGroupInformation
++          .createRemoteUser(realUser.toString());
++      return UserGroupInformation.createProxyUser(owner.toString(), realUgi);
++    }
+   }
+-  
++
+   public Text getRenewer() {
+     return renewer;
+   }
+@@ -116,7 +130,8 @@ public class DelegationTokenIdentifier extends TokenIdentifier {
+           && this.maxDate == that.maxDate
+           && this.masterKeyId == that.masterKeyId
+           && isEqual(this.owner, that.owner) 
+-          && isEqual(this.renewer, that.renewer);
++          && isEqual(this.renewer, that.renewer)
++          && isEqual(this.realUser, that.realUser);
+     }
+     return false;
+   }
+@@ -129,6 +144,7 @@ public class DelegationTokenIdentifier extends TokenIdentifier {
+   public void readFields(DataInput in) throws IOException {
+     owner.readFields(in);
+     renewer.readFields(in);
++    realUser.readFields(in);
+     issueDate = WritableUtils.readVLong(in);
+     maxDate = WritableUtils.readVLong(in);
+     sequenceNumber = WritableUtils.readVInt(in);
+@@ -138,6 +154,7 @@ public class DelegationTokenIdentifier extends TokenIdentifier {
+   public void write(DataOutput out) throws IOException {
+     owner.write(out);
+     renewer.write(out);
++    realUser.write(out);
+     WritableUtils.writeVLong(out, issueDate);
+     WritableUtils.writeVLong(out, maxDate);
+     WritableUtils.writeVInt(out, sequenceNumber);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java
+index ed58c10..277c6c3 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java
+@@ -242,11 +242,11 @@ public class DelegationTokenSecretManager
+       LOG.warn("Renewer is null: Invalid Identifier");
+       return false;
+     }
+-    if (id.getUsername() == null) {
++    if (id.getUser() == null) {
+       LOG.warn("owner is null: Invalid Identifier");
+       return false;
+     }
+-    String owner = id.getUsername().toString();
++    String owner = id.getUser().getUserName();
+     String renewer = id.getRenewer().toString();
+     if (!canceller.equals(owner) && !canceller.equals(renewer)) {
+       LOG.warn(canceller + " is not authorized to cancel the token");
+@@ -315,10 +315,6 @@ public class DelegationTokenSecretManager
+       LOG.debug("Stopping expired delegation token remover thread");
+     running = false;
+     tokenRemoverThread.interrupt();
+-    try {
+-      tokenRemoverThread.join();
+-    } catch (InterruptedException e) {
+-    }
+   }
+   
+   private class ExpiredTokenRemover extends Thread {
+@@ -345,12 +341,14 @@ public class DelegationTokenSecretManager
+             removeExpiredToken();
+             lastTokenCacheCleanup = now;
+           }
+-          Thread.sleep(5000); // 5 seconds
+-        }
+-      } catch (InterruptedException ie) {
+-        LOG
++          try {
++            Thread.sleep(5000); // 5 seconds
++          } catch (InterruptedException ie) {
++            LOG
+             .error("InterruptedExcpetion recieved for ExpiredTokenRemover thread "
+                 + ie);
++          }
++        }
+       } catch (Throwable t) {
+         LOG.error("ExpiredTokenRemover thread received unexpected exception. "
+             + t);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 1db53a0..61ad3d5 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -506,6 +506,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       if (replthread != null) replthread.interrupt();
+       if (dnthread != null) dnthread.interrupt();
+       if (smmthread != null) smmthread.interrupt();
++      if (dtSecretManager != null) dtSecretManager.stopThreads();
+     } catch (Exception e) {
+       LOG.warn("Exception shutting down FSNamesystem", e);
+     } finally {
+@@ -5139,11 +5140,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   private DelegationTokenSecretManager createDelegationTokenSecretManager(
+       Configuration conf) {
+     return new DelegationTokenSecretManager(conf.getLong(
+-        "dfs.namenode.delegation.key.update-interval", 86400),
++        "dfs.namenode.delegation.key.update-interval", 24*60*60*1000),
+         conf.getLong(
+-            "dfs.namenode.delegation.token.max-lifetime", 604800),
++            "dfs.namenode.delegation.token.max-lifetime", 7*24*60*60*1000),
+         conf.getLong(
+-            "dfs.namenode.delegation.token.renew-interval", 86400),
++            "dfs.namenode.delegation.token.renew-interval", 24*60*60*1000),
+         DELEGATION_TOKEN_REMOVER_SCAN_INTERVAL);
+   }
+ 
+@@ -5153,9 +5154,15 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+ 
+   public Token<DelegationTokenIdentifier> getDelegationToken(Text renewer)
+       throws IOException {
+-    String user = UserGroupInformation.getCurrentUser().getShortUserName();
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    String user = ugi.getUserName();
+     Text owner = new Text(user);
+-    DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(owner, renewer);
++    Text realUser = null;
++    if (ugi.getRealUser() != null) {
++      realUser = new Text(ugi.getRealUser().getUserName());
++    }
++    DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(owner,
++        renewer, realUser);
+     return new Token<DelegationTokenIdentifier>(dtId, dtSecretManager);
+   }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenIdentifier.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenIdentifier.java
+index 8aa9646..92bf9e4 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenIdentifier.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenIdentifier.java
+@@ -24,6 +24,7 @@ import java.io.IOException;
+ 
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.security.token.TokenIdentifier;
++import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+  * The token identifier for job token
+@@ -55,8 +56,11 @@ public class JobTokenIdentifier extends TokenIdentifier {
+   
+   /** {@inheritDoc} */
+   @Override
+-  public Text getUsername() {
+-    return getJobId();
++  public UserGroupInformation getUser() {
++    if (jobid == null || "".equals(jobid.toString())) {
++      return null;
++    }
++    return UserGroupInformation.createRemoteUser(jobid.toString());
+   }
+ 
+   /**
+diff --git a/src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java b/src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java
+index 3bc650c..4370aed 100644
+--- a/src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java
++++ b/src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java
+@@ -92,7 +92,7 @@ public class TestClientProtocolWithDelegationToken {
+     final InetSocketAddress addr = NetUtils.getConnectAddress(server);
+     String user = current.getUserName();
+     Text owner = new Text(user);
+-    DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(owner, owner);
++    DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(owner, owner, null);
+     Token<DelegationTokenIdentifier> token = new Token<DelegationTokenIdentifier>(
+         dtId, sm);
+     Text host = new Text(addr.getAddress().getHostAddress() + ":"
+diff --git a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+index 968a28d..11d7a70 100644
+--- a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+@@ -71,29 +71,52 @@ public class TestSaslRPC {
+ 
+   public static class TestTokenIdentifier extends TokenIdentifier {
+     private Text tokenid;
++    private Text realUser;
+     final static Text KIND_NAME = new Text("test.token");
+     
+     public TestTokenIdentifier() {
+       this.tokenid = new Text();
++      this.realUser = new Text();
+     }
+     public TestTokenIdentifier(Text tokenid) {
+       this.tokenid = tokenid;
++      this.realUser = new Text();
++    }
++    public TestTokenIdentifier(Text tokenid, Text realUser) {
++      this.tokenid = tokenid;
++      if (realUser == null) {
++        this.realUser = new Text();
++      } else {
++        this.realUser = realUser;
++      }
+     }
+     @Override
+     public Text getKind() {
+       return KIND_NAME;
+     }
+     @Override
+-    public Text getUsername() {
+-      return tokenid;
++    public UserGroupInformation getUser() {
++      if ((realUser == null) || ("".equals(realUser.toString()))) {
++        return UserGroupInformation.createRemoteUser(tokenid.toString());
++      } else {
++        UserGroupInformation realUgi = UserGroupInformation
++            .createRemoteUser(realUser.toString());
++        return UserGroupInformation
++            .createProxyUser(tokenid.toString(), realUgi);
++      }
+     }
++
+     @Override
+     public void readFields(DataInput in) throws IOException {
+       tokenid.readFields(in);
++      realUser.readFields(in);
+     }
+     @Override
+     public void write(DataOutput out) throws IOException {
+       tokenid.write(out);
++      if (realUser != null) {
++        realUser.write(out);
++      }
+     }
+   }
+   
+diff --git a/src/test/org/apache/hadoop/security/TestDelegationToken.java b/src/test/org/apache/hadoop/security/TestDelegationToken.java
+index ae96fa5..b4e9cd9 100644
+--- a/src/test/org/apache/hadoop/security/TestDelegationToken.java
++++ b/src/test/org/apache/hadoop/security/TestDelegationToken.java
+@@ -22,6 +22,8 @@ package org.apache.hadoop.security;
+ 
+ import java.io.ByteArrayInputStream;
+ import java.io.DataInputStream;
++import java.io.IOException;
++import java.security.PrivilegedExceptionAction;
+ 
+ import junit.framework.Assert;
+ 
+@@ -44,6 +46,10 @@ public class TestDelegationToken {
+   private MiniDFSCluster cluster;
+   FSNamesystem nameSystem;
+   Configuration config;
++  final private static String GROUP1_NAME = "group1";
++  final private static String GROUP2_NAME = "group2";
++  final private static String[] GROUP_NAMES = new String[] { GROUP1_NAME,
++      GROUP2_NAME };
+   
+   @Before
+   public void setUp() throws Exception {
+@@ -68,7 +74,7 @@ public class TestDelegationToken {
+     DelegationTokenSecretManager dtSecretManager = 
+         nameSystem.getDelegationTokenSecretManager();
+     DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(new Text(
+-        owner), new Text(renewer));
++        owner), new Text(renewer), null);
+     return new Token<DelegationTokenIdentifier>(dtId, dtSecretManager);
+   }
+   
+@@ -127,5 +133,32 @@ public class TestDelegationToken {
+     Assert.assertTrue(null != dtSecretManager.retrievePassword(identifier));
+     Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
+   }
++ 
++  @Test
++  public void testDelegationTokenWithRealUser() throws IOException {
++    UserGroupInformation ugi = UserGroupInformation.createUserForTesting(
++        "RealUser", GROUP_NAMES);
++    final UserGroupInformation proxyUgi = UserGroupInformation.createProxyUser(
++        "proxyUser", ugi);
++    try {
++      Token<DelegationTokenIdentifier> token = proxyUgi
++          .doAs(new PrivilegedExceptionAction<Token<DelegationTokenIdentifier>>() {
++            public Token<DelegationTokenIdentifier> run() throws IOException {
++              DistributedFileSystem dfs = (DistributedFileSystem) cluster
++                  .getFileSystem();
++              return dfs.getDelegationToken(new Text("RenewerUser"));
++            }
++          });
++      DelegationTokenIdentifier identifier = new DelegationTokenIdentifier();
++      byte[] tokenId = token.getIdentifier();
++      identifier.readFields(new DataInputStream(new ByteArrayInputStream(
++          tokenId)));
++      Assert.assertEquals(identifier.getUser().getUserName(), "proxyUser");
++      Assert.assertEquals(identifier.getUser().getRealUser().getUserName(),
++          "RealUser");
++    } catch (InterruptedException e) {
++      //Do Nothing
++    }
++  }
+   
+ }
+diff --git a/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java b/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
+new file mode 100644
+index 0000000..101ad43
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
+@@ -0,0 +1,445 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++import java.net.InetSocketAddress;
++import java.security.PrivilegedExceptionAction;
++
++import junit.framework.Assert;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.ipc.RPC;
++import org.apache.hadoop.ipc.Server;
++import org.apache.hadoop.ipc.VersionedProtocol;
++import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.authorize.ProxyUsers;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenInfo;
++import org.junit.Test;
++import org.apache.hadoop.ipc.TestSaslRPC;
++import org.apache.hadoop.ipc.TestSaslRPC.TestTokenSecretManager;
++import org.apache.hadoop.ipc.TestSaslRPC.TestTokenIdentifier;
++import org.apache.hadoop.ipc.TestSaslRPC.TestTokenSelector;
++
++/**
++ *
++ */
++public class TestDoAsEffectiveUser {
++  final private static String REAL_USER_NAME = "realUser1@HADOOP.APACHE.ORG";
++  final private static String REAL_USER_SHORT_NAME = "realUser1";
++  final private static String PROXY_USER_NAME = "proxyUser";
++  final private static String GROUP1_NAME = "group1";
++  final private static String GROUP2_NAME = "group2";
++  final private static String[] GROUP_NAMES = new String[] { GROUP1_NAME,
++      GROUP2_NAME };
++  private static final String ADDRESS = "0.0.0.0";
++  private TestProtocol proxy;
++
++  /**
++   * Test method for
++   * {@link org.apache.hadoop.security.UserGroupInformation#createProxyUser(java.lang.String, org.apache.hadoop.security.UserGroupInformation)}
++   * .
++   */
++  @Test
++  public void testCreateProxyUser() throws Exception {
++    // ensure that doAs works correctly
++    UserGroupInformation realUserUgi = UserGroupInformation
++        .createRemoteUser(REAL_USER_NAME);
++    UserGroupInformation proxyUserUgi = UserGroupInformation.createProxyUser(
++        PROXY_USER_NAME, realUserUgi);
++    UserGroupInformation curUGI = proxyUserUgi
++        .doAs(new PrivilegedExceptionAction<UserGroupInformation>() {
++          public UserGroupInformation run() throws IOException {
++            return UserGroupInformation.getCurrentUser();
++          }
++        });
++    Assert.assertTrue(curUGI.toString().equals(
++        PROXY_USER_NAME + " via " + REAL_USER_NAME));
++  }
++
++  @TokenInfo(TestTokenSelector.class)
++  public interface TestProtocol extends VersionedProtocol {
++    public static final long versionID = 1L;
++
++    String aMethod() throws IOException;
++  }
++
++  public class TestImpl implements TestProtocol {
++
++    public String aMethod() throws IOException {
++      return UserGroupInformation.getCurrentUser().toString();
++    }
++
++    public long getProtocolVersion(String protocol, long clientVersion)
++        throws IOException {
++      // TODO Auto-generated method stub
++      return TestProtocol.versionID;
++    }
++  }
++
++  @Test
++  public void testRealUserSetup() throws IOException {
++    final Configuration conf = new Configuration();
++    conf.setStrings(ProxyUsers
++        .getProxySuperuserGroupConfKey(REAL_USER_SHORT_NAME), "group1");
++    conf.setStrings(ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_SHORT_NAME),
++        "127.0.0.1","127.0.1.1", "localhost");
++    Server server = RPC.getServer(new TestImpl(), ADDRESS,
++        0, 5, true, conf, null);
++
++    try {
++      server.start();
++
++      final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++
++      UserGroupInformation realUserUgi = UserGroupInformation
++          .createRemoteUser(REAL_USER_NAME);
++      UserGroupInformation proxyUserUgi = UserGroupInformation.createProxyUserForTesting(
++          PROXY_USER_NAME, realUserUgi, GROUP_NAMES);
++      String retVal = proxyUserUgi
++          .doAs(new PrivilegedExceptionAction<String>() {
++            public String run() throws IOException {
++              proxy = (TestProtocol) RPC.getProxy(TestProtocol.class,
++                  TestProtocol.versionID, addr, conf);
++              String ret = proxy.aMethod();
++              return ret;
++            }
++          });
++
++      Assert.assertEquals(PROXY_USER_NAME + " via " + REAL_USER_NAME, retVal);
++    } catch (Exception e) {
++      e.printStackTrace();
++      Assert.fail();
++    } finally {
++      server.stop();
++      if (proxy != null) {
++        RPC.stopProxy(proxy);
++      }
++    }
++  }
++
++  @Test
++  public void testRealUserAuthorizationSuccess() throws IOException {
++    final Configuration conf = new Configuration();
++    conf.setStrings(ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_SHORT_NAME),
++        "127.0.0.1","127.0.1.1", "localhost");
++    conf.setStrings(ProxyUsers.getProxySuperuserGroupConfKey(REAL_USER_SHORT_NAME),
++        "group1");
++    Server server = RPC.getServer(new TestImpl(), ADDRESS,
++        0, 2, false, conf, null);
++
++    try {
++      server.start();
++
++      final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++
++      UserGroupInformation realUserUgi = UserGroupInformation
++          .createRemoteUser(REAL_USER_NAME);
++
++      UserGroupInformation proxyUserUgi = UserGroupInformation
++          .createProxyUserForTesting(PROXY_USER_NAME, realUserUgi, GROUP_NAMES);
++      String retVal = proxyUserUgi
++          .doAs(new PrivilegedExceptionAction<String>() {
++            public String run() throws IOException {
++              proxy = (TestProtocol) RPC.getProxy(TestProtocol.class,
++                  TestProtocol.versionID, addr, conf);
++              String ret = proxy.aMethod();
++              return ret;
++            }
++          });
++
++      Assert.assertEquals(PROXY_USER_NAME + " via " + REAL_USER_NAME, retVal);
++    } catch (Exception e) {
++      e.printStackTrace();
++      Assert.fail();
++    } finally {
++      server.stop();
++      if (proxy != null) {
++        RPC.stopProxy(proxy);
++      }
++    }
++  }
++
++  /*
++   * Tests authorization of superuser's ip.
++   */
++  @Test
++  public void testRealUserIPAuthorizationFailure() throws IOException {
++    final Configuration conf = new Configuration();
++    conf.setStrings(ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_SHORT_NAME),
++        "20.20.20.20"); //Authorized IP address
++    conf.setStrings(ProxyUsers.getProxySuperuserGroupConfKey(REAL_USER_SHORT_NAME),
++        "group1");
++    Server server = RPC.getServer(new TestImpl(), ADDRESS,
++        0, 2, false, conf, null);
++
++    try {
++      server.start();
++
++      final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++
++      UserGroupInformation realUserUgi = UserGroupInformation
++          .createRemoteUser(REAL_USER_NAME);
++
++      UserGroupInformation proxyUserUgi = UserGroupInformation
++          .createProxyUserForTesting(PROXY_USER_NAME, realUserUgi, GROUP_NAMES);
++      String retVal = proxyUserUgi
++          .doAs(new PrivilegedExceptionAction<String>() {
++            public String run() throws IOException {
++              proxy = (TestProtocol) RPC.getProxy(TestProtocol.class,
++                  TestProtocol.versionID, addr, conf);
++              String ret = proxy.aMethod();
++              return ret;
++            }
++          });
++
++      Assert.fail("The RPC must have failed " + retVal);
++    } catch (Exception e) {
++      e.printStackTrace();
++    } finally {
++      server.stop();
++      if (proxy != null) {
++        RPC.stopProxy(proxy);
++      }
++    }
++  }
++  
++  @Test
++  public void testRealUserIPNotSpecified() throws IOException {
++    final Configuration conf = new Configuration();
++    conf.setStrings(ProxyUsers
++        .getProxySuperuserGroupConfKey(REAL_USER_SHORT_NAME), "group1");
++    Server server = RPC.getServer(new TestImpl(), ADDRESS,
++        0, 2, false, conf, null);
++
++    try {
++      server.start();
++
++      final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++
++      UserGroupInformation realUserUgi = UserGroupInformation
++          .createRemoteUser(REAL_USER_NAME);
++
++      UserGroupInformation proxyUserUgi = UserGroupInformation
++          .createProxyUserForTesting(PROXY_USER_NAME, realUserUgi, GROUP_NAMES);
++      String retVal = proxyUserUgi
++          .doAs(new PrivilegedExceptionAction<String>() {
++            public String run() throws IOException {
++              proxy = (TestProtocol) RPC.getProxy(TestProtocol.class,
++                  TestProtocol.versionID, addr, conf);
++              String ret = proxy.aMethod();
++              return ret;
++            }
++          });
++
++      Assert.fail("The RPC must have failed " + retVal);
++    } catch (Exception e) {
++      e.printStackTrace();
++    } finally {
++      server.stop();
++      if (proxy != null) {
++        RPC.stopProxy(proxy);
++      }
++    }
++  }
++
++  @Test
++  public void testRealUserGroupNotSpecified() throws IOException {
++    final Configuration conf = new Configuration();
++    conf.setStrings(ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_SHORT_NAME),
++        "127.0.0.1","127.0.1.1","localhost");
++    Server server = RPC.getServer(new TestImpl(), ADDRESS,
++        0, 2, false, conf, null);
++
++    try {
++      server.start();
++
++      final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++
++      UserGroupInformation realUserUgi = UserGroupInformation
++          .createRemoteUser(REAL_USER_NAME);
++
++      UserGroupInformation proxyUserUgi = UserGroupInformation
++          .createProxyUserForTesting(PROXY_USER_NAME, realUserUgi, GROUP_NAMES);
++      String retVal = proxyUserUgi
++          .doAs(new PrivilegedExceptionAction<String>() {
++            public String run() throws IOException {
++              proxy = (TestProtocol) RPC.getProxy(TestProtocol.class,
++                  TestProtocol.versionID, addr, conf);
++              String ret = proxy.aMethod();
++              return ret;
++            }
++          });
++
++      Assert.fail("The RPC must have failed " + retVal);
++    } catch (Exception e) {
++      e.printStackTrace();
++    } finally {
++      server.stop();
++      if (proxy != null) {
++        RPC.stopProxy(proxy);
++      }
++    }
++  }
++  
++  @Test
++  public void testRealUserGroupAuthorizationFailure() throws IOException {
++    final Configuration conf = new Configuration();
++    conf.setStrings(ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_SHORT_NAME),
++        "127.0.0.1","127.0.1.1","localhost");
++    conf.setStrings(ProxyUsers.getProxySuperuserGroupConfKey(REAL_USER_SHORT_NAME),
++        "group3");
++    Server server = RPC.getServer(new TestImpl(), ADDRESS,
++        0, 2, false, conf, null);
++
++    try {
++      server.start();
++
++      final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++
++      UserGroupInformation realUserUgi = UserGroupInformation
++          .createRemoteUser(REAL_USER_NAME);
++
++      UserGroupInformation proxyUserUgi = UserGroupInformation
++          .createProxyUserForTesting(PROXY_USER_NAME, realUserUgi, GROUP_NAMES);
++      String retVal = proxyUserUgi
++          .doAs(new PrivilegedExceptionAction<String>() {
++            public String run() throws IOException {
++              proxy = (TestProtocol) RPC.getProxy(TestProtocol.class,
++                  TestProtocol.versionID, addr, conf);
++              String ret = proxy.aMethod();
++              return ret;
++            }
++          });
++
++      Assert.fail("The RPC must have failed " + retVal);
++    } catch (Exception e) {
++      e.printStackTrace();
++    } finally {
++      server.stop();
++      if (proxy != null) {
++        RPC.stopProxy(proxy);
++      }
++    }
++  }
++
++  /*
++   *  Tests the scenario when token authorization is used.
++   *  The server sees only the the owner of the token as the
++   *  user.
++   */
++  @Test
++  public void testProxyWithToken() throws Exception {
++    final Configuration conf = new Configuration();
++    TestTokenSecretManager sm = new TestTokenSecretManager();
++    conf
++        .set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION, "kerberos");
++    UserGroupInformation.setConfiguration(conf);
++    final Server server = RPC.getServer(new TestImpl(),
++        ADDRESS, 0, 5, true, conf, sm);
++
++    server.start();
++
++    final UserGroupInformation current = UserGroupInformation
++        .createRemoteUser(REAL_USER_NAME);
++    final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++    TestTokenIdentifier tokenId = new TestTokenIdentifier(new Text(current
++        .getUserName()), new Text("SomeSuperUser"));
++    Token<TestTokenIdentifier> token = new Token<TestTokenIdentifier>(tokenId,
++        sm);
++    Text host = new Text(addr.getAddress().getHostAddress() + ":"
++        + addr.getPort());
++    token.setService(host);
++    UserGroupInformation proxyUserUgi = UserGroupInformation
++        .createProxyUserForTesting(PROXY_USER_NAME, current, GROUP_NAMES);
++    proxyUserUgi.addToken(token);
++    String retVal = proxyUserUgi.doAs(new PrivilegedExceptionAction<String>() {
++      @Override
++      public String run() throws Exception {
++        try {
++          proxy = (TestProtocol) RPC.getProxy(TestProtocol.class,
++              TestProtocol.versionID, addr, conf);
++          String ret = proxy.aMethod();
++          return ret;
++        } catch (Exception e) {
++          e.printStackTrace();
++          throw e;
++        } finally {
++          server.stop();
++          if (proxy != null) {
++            RPC.stopProxy(proxy);
++          }
++        }
++      }
++    });
++    //The user returned by server must be the one in the token.
++    Assert.assertEquals(REAL_USER_NAME + " via SomeSuperUser", retVal);
++  }
++
++  /*
++   * The user gets the token via a superuser. Server should authenticate
++   * this user. 
++   */
++  @Test
++  public void testTokenBySuperUser() throws Exception {
++    TestTokenSecretManager sm = new TestTokenSecretManager();
++    final Configuration newConf = new Configuration();
++    newConf.set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION,
++        "kerberos");
++    UserGroupInformation.setConfiguration(newConf);
++    final Server server = RPC.getServer(new TestImpl(),
++        ADDRESS, 0, 5, true, newConf, sm);
++
++    server.start();
++
++    final UserGroupInformation current = UserGroupInformation
++        .createUserForTesting(REAL_USER_NAME, GROUP_NAMES);
++    final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++    TestTokenIdentifier tokenId = new TestTokenIdentifier(new Text(current
++        .getUserName()), new Text("SomeSuperUser"));
++    Token<TestTokenIdentifier> token = new Token<TestTokenIdentifier>(tokenId,
++        sm);
++    Text host = new Text(addr.getAddress().getHostAddress() + ":"
++        + addr.getPort());
++    token.setService(host);
++    current.addToken(token);
++    String retVal = current.doAs(new PrivilegedExceptionAction<String>() {
++      @Override
++      public String run() throws Exception {
++        try {
++          proxy = (TestProtocol) RPC.getProxy(TestProtocol.class,
++              TestProtocol.versionID, addr, newConf);
++          String ret = proxy.aMethod();
++          return ret;
++        } catch (Exception e) {
++          e.printStackTrace();
++          throw e;
++        } finally {
++          server.stop();
++          if (proxy != null) {
++            RPC.stopProxy(proxy);
++          }
++        }
++      }
++    });
++    Assert.assertEquals(REAL_USER_NAME + " via SomeSuperUser", retVal);
++  }
++}
+diff --git a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+index ea67036..876b360 100644
+--- a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
++++ b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+@@ -153,6 +153,21 @@ public class TestUserGroupInformation {
+   }
+   
+   @Test
++  public void testEqualsWithRealUser() throws Exception {
++    UserGroupInformation realUgi1 = UserGroupInformation.createUserForTesting(
++        "RealUser", GROUP_NAMES);
++    UserGroupInformation realUgi2 = UserGroupInformation.createUserForTesting(
++        "RealUser", GROUP_NAMES);
++    UserGroupInformation proxyUgi1 = UserGroupInformation.createProxyUser(
++        USER_NAME, realUgi1);
++    UserGroupInformation proxyUgi2 = UserGroupInformation.createProxyUser(
++        USER_NAME, realUgi2);
++    UserGroupInformation remoteUgi = UserGroupInformation.createRemoteUser(USER_NAME);
++    assertEquals(proxyUgi1, proxyUgi2);
++    assertFalse(remoteUgi.equals(proxyUgi1));
++  }
++  
++  @Test
+   public void testGettingGroups() throws Exception {
+     UserGroupInformation uugi = 
+       UserGroupInformation.createUserForTesting(USER_NAME, GROUP_NAMES);
+-- 
+1.7.0.4
+

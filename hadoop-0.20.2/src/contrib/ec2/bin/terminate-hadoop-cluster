@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Terminate a cluster.
+
+if [ -z $1 ]; then
+  echo "Cluster name required!"
+  exit -1
+fi
+
+CLUSTER=$1
+
+# Import variables
+bin=`dirname "$0"`
+bin=`cd "$bin"; pwd`
+. "$bin"/hadoop-ec2-env.sh
+
+# Finding Hadoop image
+HADOOP_INSTANCES=`ec2-describe-instances | awk '"RESERVATION" == $1 && ("'$CLUSTER'" == $4 || "'$CLUSTER_MASTER'" == $4), "RESERVATION" == $1 && ("'$CLUSTER'" != $4 && "'$CLUSTER_MASTER'" != $4)'`
+HADOOP_INSTANCES=`echo "$HADOOP_INSTANCES" | grep INSTANCE | grep running`
+
+[ -z "$HADOOP_INSTANCES" ] && echo "No running instances in cluster $CLUSTER." && exit 0
+
+echo "Running Hadoop instances:"
+echo "$HADOOP_INSTANCES"
+read -p "Terminate all instances? [yes or no]: " answer
+
+if [ "$answer" != "yes" ]; then
+  exit 1
+fi
+
+ec2-terminate-instances `echo "$HADOOP_INSTANCES" | awk '{print $2}'`

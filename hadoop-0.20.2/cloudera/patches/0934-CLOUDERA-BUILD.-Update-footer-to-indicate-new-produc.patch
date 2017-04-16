@@ -1,0 +1,27 @@
+From d8f01d688916739125f3d321be75ed741b7b3a6f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 16 Mar 2011 13:43:06 -0700
+Subject: [PATCH 0934/1179] CLOUDERA-BUILD. Update footer to indicate new product naming
+
+Author: Todd Lipcon
+Ref: CDH-2831
+---
+ src/core/org/apache/hadoop/util/ServletUtil.java |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/util/ServletUtil.java b/src/core/org/apache/hadoop/util/ServletUtil.java
+index c3fef5f..e14b97c 100644
+--- a/src/core/org/apache/hadoop/util/ServletUtil.java
++++ b/src/core/org/apache/hadoop/util/ServletUtil.java
+@@ -53,7 +53,7 @@ public class ServletUtil {
+ 
+   public static final String HTML_TAIL = "<hr />\n"
+     + "<a href=\"http://www.cloudera.com/hadoop/\">Cloudera's Distribution"
+-    + " for Hadoop</a>, " + 
++    + " including Apache Hadoop</a>, " + 
+     + Calendar.getInstance().get(Calendar.YEAR) + ".\n"
+     + "</body></html>";
+   
+-- 
+1.7.0.4
+

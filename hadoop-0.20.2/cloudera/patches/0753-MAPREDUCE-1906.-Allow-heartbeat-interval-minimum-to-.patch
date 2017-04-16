@@ -1,0 +1,177 @@
+From 4882770efb2a9eb52ae51d5b35e6ba3a2737c44e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 19 Dec 2010 17:38:57 -0800
+Subject: [PATCH 0753/1179] MAPREDUCE-1906. Allow heartbeat interval minimum to be configured
+
+Author: Todd Lipcon
+Ref: CDH-2319
+---
+ .../hadoop/mapred/TestCapacityScheduler.java       |    2 +-
+ .../apache/hadoop/mapred/TestFairScheduler.java    |    2 +-
+ .../apache/hadoop/mapred/HeartbeatResponse.java    |    2 +-
+ .../org/apache/hadoop/mapred/JobTracker.java       |    9 ++++++++-
+ .../org/apache/hadoop/mapred/MRConstants.java      |    2 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    2 +-
+ .../hadoop/mapred/TestJobQueueTaskScheduler.java   |    2 +-
+ .../apache/hadoop/mapred/TestMapredHeartbeat.java  |    6 +++---
+ .../hadoop/mapred/TestParallelInitialization.java  |    2 +-
+ 9 files changed, 18 insertions(+), 11 deletions(-)
+
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+index da12363..e1e5d07 100644
+--- a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+@@ -471,7 +471,7 @@ public class TestCapacityScheduler extends TestCase {
+     }
+ 
+     public int getNextHeartbeatInterval() {
+-      return MRConstants.HEARTBEAT_INTERVAL_MIN;
++      return MRConstants.HEARTBEAT_INTERVAL_MIN_DEFAULT;
+     }
+ 
+     @Override
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index e4766e3..06709c8 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -411,7 +411,7 @@ public class TestFairScheduler extends TestCase {
+     
+     @Override
+     public int getNextHeartbeatInterval() {
+-      return MRConstants.HEARTBEAT_INTERVAL_MIN;
++      return MRConstants.HEARTBEAT_INTERVAL_MIN_DEFAULT;
+     }
+ 
+     @Override
+diff --git a/src/mapred/org/apache/hadoop/mapred/HeartbeatResponse.java b/src/mapred/org/apache/hadoop/mapred/HeartbeatResponse.java
+index a210b1f..0715295 100644
+--- a/src/mapred/org/apache/hadoop/mapred/HeartbeatResponse.java
++++ b/src/mapred/org/apache/hadoop/mapred/HeartbeatResponse.java
+@@ -48,7 +48,7 @@ class HeartbeatResponse implements Writable, Configurable {
+   HeartbeatResponse(short responseId, TaskTrackerAction[] actions) {
+     this.responseId = responseId;
+     this.actions = actions;
+-    this.heartbeatInterval = MRConstants.HEARTBEAT_INTERVAL_MIN;
++    this.heartbeatInterval = MRConstants.HEARTBEAT_INTERVAL_MIN_DEFAULT;
+   }
+   
+   public void setResponseId(short responseId) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index ebcd7e6..4b71d36 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -167,6 +167,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   static final String JT_HEARTBEATS_IN_SECOND = "mapred.heartbeats.in.second";
+   private int NUM_HEARTBEATS_IN_SECOND;
+   private static final int DEFAULT_NUM_HEARTBEATS_IN_SECOND = 100;
++  // Minimum time between heartbeats
++  static final String JT_HEARTBEAT_INTERVAL_MIN = "mapreduce.jobtracker.heartbeat.interval.min";
++  private int HEARTBEAT_INTERVAL_MIN;
++
+   private static final int MIN_NUM_HEARTBEATS_IN_SECOND = 1;
+   
+   // Scaling factor for heartbeats, used for testing only
+@@ -2069,6 +2073,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     if (NUM_HEARTBEATS_IN_SECOND < MIN_NUM_HEARTBEATS_IN_SECOND) {
+       NUM_HEARTBEATS_IN_SECOND = DEFAULT_NUM_HEARTBEATS_IN_SECOND;
+     }
++
++    HEARTBEAT_INTERVAL_MIN =
++      conf.getInt(JT_HEARTBEAT_INTERVAL_MIN, HEARTBEAT_INTERVAL_MIN_DEFAULT);
+     
+     HEARTBEATS_SCALING_FACTOR = 
+       conf.getFloat(JT_HEARTBEATS_SCALING_FACTOR, 
+@@ -3230,7 +3237,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     int clusterSize = getClusterStatus().getTaskTrackers();
+     int heartbeatInterval =  Math.max(
+                                 (int)(1000 * HEARTBEATS_SCALING_FACTOR *
+-                                      Math.ceil((double)clusterSize / 
++                                      ((double)clusterSize / 
+                                                 NUM_HEARTBEATS_IN_SECOND)),
+                                 HEARTBEAT_INTERVAL_MIN) ;
+     return heartbeatInterval;
+diff --git a/src/mapred/org/apache/hadoop/mapred/MRConstants.java b/src/mapred/org/apache/hadoop/mapred/MRConstants.java
+index fc60649..b81861e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MRConstants.java
++++ b/src/mapred/org/apache/hadoop/mapred/MRConstants.java
+@@ -25,7 +25,7 @@ interface MRConstants {
+   //
+   // Timeouts, constants
+   //
+-  public static final int HEARTBEAT_INTERVAL_MIN = 3 * 1000;
++  public static final int HEARTBEAT_INTERVAL_MIN_DEFAULT = 300;
+   
+   public static final long COUNTER_UPDATE_INTERVAL = 60 * 1000;
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index a4d4b86..673052d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -292,7 +292,7 @@ public class TaskTracker
+   /**
+    * the minimum interval between jobtracker polls
+    */
+-  private volatile int heartbeatInterval = HEARTBEAT_INTERVAL_MIN;
++  private volatile int heartbeatInterval = MRConstants.HEARTBEAT_INTERVAL_MIN_DEFAULT;
+   /**
+    * Number of maptask completion events locations to poll for at one time
+    */  
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+index 5550740..d7c7b01 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+@@ -184,7 +184,7 @@ public class TestJobQueueTaskScheduler extends TestCase {
+     
+     @Override
+     public int getNextHeartbeatInterval() {
+-      return MRConstants.HEARTBEAT_INTERVAL_MIN;
++      return MRConstants.HEARTBEAT_INTERVAL_MIN_DEFAULT;
+     }
+ 
+     @Override
+diff --git a/src/test/org/apache/hadoop/mapred/TestMapredHeartbeat.java b/src/test/org/apache/hadoop/mapred/TestMapredHeartbeat.java
+index 0697320..4d32554 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMapredHeartbeat.java
++++ b/src/test/org/apache/hadoop/mapred/TestMapredHeartbeat.java
+@@ -39,7 +39,7 @@ public class TestMapredHeartbeat extends TestCase {
+       while(jc.getClusterStatus().getTaskTrackers() != taskTrackers) {
+         UtilsForTests.waitFor(100);
+       }
+-      assertEquals(MRConstants.HEARTBEAT_INTERVAL_MIN, 
++      assertEquals(MRConstants.HEARTBEAT_INTERVAL_MIN_DEFAULT, 
+         mr.getJobTrackerRunner().getJobTracker().getNextHeartbeatInterval());
+       mr.shutdown(); 
+       
+@@ -58,14 +58,14 @@ public class TestMapredHeartbeat extends TestCase {
+       
+       // test configured heartbeat interval is capped with min value
+       taskTrackers = 5;
+-      conf.setInt(JobTracker.JT_HEARTBEATS_IN_SECOND, 10);
++      conf.setInt(JobTracker.JT_HEARTBEATS_IN_SECOND, 100);
+       mr = new MiniMRCluster(taskTrackers, "file:///", 3, 
+           null, null, conf);
+       jc = new JobClient(mr.createJobConf());
+       while(jc.getClusterStatus().getTaskTrackers() != taskTrackers) {
+         UtilsForTests.waitFor(100);
+       }
+-      assertEquals(MRConstants.HEARTBEAT_INTERVAL_MIN, 
++      assertEquals(MRConstants.HEARTBEAT_INTERVAL_MIN_DEFAULT, 
+         mr.getJobTrackerRunner().getJobTracker().getNextHeartbeatInterval());
+     } finally {
+       if (mr != null) { mr.shutdown(); }
+diff --git a/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java b/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
+index 675deb7..6571e7e 100644
+--- a/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
++++ b/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
+@@ -127,7 +127,7 @@ public class TestParallelInitialization extends TestCase {
+     }
+     
+     public int getNextHeartbeatInterval() {
+-      return MRConstants.HEARTBEAT_INTERVAL_MIN;
++      return MRConstants.HEARTBEAT_INTERVAL_MIN_DEFAULT;
+     }
+ 
+     public void killJob(JobID jobid) {
+-- 
+1.7.0.4
+

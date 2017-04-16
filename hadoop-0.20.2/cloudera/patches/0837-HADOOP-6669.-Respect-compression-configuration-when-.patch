@@ -1,0 +1,173 @@
+From 7a31be4853d46090c7bd7798bdb7cd41915b421c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 18:05:06 -0800
+Subject: [PATCH 0837/1179] HADOOP-6669. Respect compression configuration when creating DefaultCodec
+
+Author: Koji Noguchi
+Ref: CDH-2622
+---
+ .../io/compress/zlib/BuiltInZlibDeflater.java      |   16 +++++
+ .../hadoop/io/compress/zlib/ZlibFactory.java       |    3 +-
+ .../org/apache/hadoop/io/compress/TestCodec.java   |   64 +++++++++++++++++++-
+ 3 files changed, 80 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/compress/zlib/BuiltInZlibDeflater.java b/src/core/org/apache/hadoop/io/compress/zlib/BuiltInZlibDeflater.java
+index a017e1b..9605952 100644
+--- a/src/core/org/apache/hadoop/io/compress/zlib/BuiltInZlibDeflater.java
++++ b/src/core/org/apache/hadoop/io/compress/zlib/BuiltInZlibDeflater.java
+@@ -36,6 +36,22 @@ public class BuiltInZlibDeflater extends Deflater implements Compressor {
+     super(level, nowrap);
+   }
+ 
++  BuiltInZlibDeflater(Configuration conf) {
++    this(null == conf
++        ? DEFAULT_COMPRESSION
++        : ZlibFactory.getCompressionLevel(conf).compressionLevel());
++    if (conf != null) {
++      final ZlibCompressor.CompressionStrategy strategy =
++        ZlibFactory.getCompressionStrategy(conf);
++      try {
++        setStrategy(strategy.compressionStrategy());
++      } catch (IllegalArgumentException ill) {
++        Log.warn(strategy + " not supported by BuiltInZlibDeflater.");
++        setStrategy(DEFAULT_STRATEGY);
++      }
++    }
++  }
++
+   public BuiltInZlibDeflater(int level) {
+     super(level);
+   }
+diff --git a/src/core/org/apache/hadoop/io/compress/zlib/ZlibFactory.java b/src/core/org/apache/hadoop/io/compress/zlib/ZlibFactory.java
+index bf16262..9552282 100644
+--- a/src/core/org/apache/hadoop/io/compress/zlib/ZlibFactory.java
++++ b/src/core/org/apache/hadoop/io/compress/zlib/ZlibFactory.java
+@@ -83,7 +83,8 @@ public class ZlibFactory {
+    */
+   public static Compressor getZlibCompressor(Configuration conf) {
+     return (isNativeZlibLoaded(conf)) ? 
+-      new ZlibCompressor() : new BuiltInZlibDeflater(); 
++      new ZlibCompressor(conf) :
++      new BuiltInZlibDeflater(conf);
+   }
+ 
+   /**
+diff --git a/src/test/org/apache/hadoop/io/compress/TestCodec.java b/src/test/org/apache/hadoop/io/compress/TestCodec.java
+index 13d81e1..a6016f3 100644
+--- a/src/test/org/apache/hadoop/io/compress/TestCodec.java
++++ b/src/test/org/apache/hadoop/io/compress/TestCodec.java
+@@ -28,8 +28,8 @@ import java.io.DataOutputStream;
+ import java.io.File;
+ import java.io.FileInputStream;
+ import java.io.FileOutputStream;
+-import java.io.IOException;
+ import java.io.InputStream;
++import java.io.IOException;
+ import java.io.InputStreamReader;
+ import java.io.OutputStream;
+ import java.io.OutputStreamWriter;
+@@ -39,7 +39,6 @@ import java.util.zip.GZIPInputStream;
+ import java.util.zip.GZIPOutputStream;
+ 
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+@@ -95,6 +94,7 @@ public class TestCodec {
+     codecTest(conf, seed, count, "org.apache.hadoop.io.compress.BZip2Codec");
+   }
+ 
++  @Test
+   public void testGzipCodecWithParam() throws IOException {
+     Configuration conf = new Configuration(this.conf);
+     ZlibFactory.setCompressionLevel(conf, CompressionLevel.BEST_COMPRESSION);
+@@ -164,6 +164,8 @@ public class TestCodec {
+       RandomDatum v2 = new RandomDatum();
+       k2.readFields(inflateIn);
+       v2.readFields(inflateIn);
++      assertTrue("original and compressed-then-decompressed-output not equal",
++                 k1.equals(k2) && v1.equals(v2));
+     }
+ 
+     // De-compress data byte-at-a-time
+@@ -337,6 +339,62 @@ public class TestCodec {
+                outbytes.length >= b.length);
+   }
+ 
++  private static void codecTestWithNOCompression (Configuration conf,
++                      String codecClass) throws IOException {
++    // Create a compressor with NO_COMPRESSION and make sure that
++    // output is not compressed by comparing the size with the
++    // original input
++
++    CompressionCodec codec = null;
++    ZlibFactory.setCompressionLevel(conf, CompressionLevel.NO_COMPRESSION);
++    try {
++      codec = (CompressionCodec)
++        ReflectionUtils.newInstance(conf.getClassByName(codecClass), conf);
++    } catch (ClassNotFoundException cnfe) {
++      throw new IOException("Illegal codec!");
++    }
++    Compressor c = codec.createCompressor();
++    // ensure same compressor placed earlier
++    ByteArrayOutputStream bos = new ByteArrayOutputStream();
++    CompressionOutputStream cos = null;
++    // write trivially compressable data
++    byte[] b = new byte[1 << 15];
++    Arrays.fill(b, (byte) 43);
++    try {
++      cos = codec.createOutputStream(bos, c);
++      cos.write(b);
++    } finally {
++      if (cos != null) {
++        cos.close();
++      }
++    }
++    byte[] outbytes = bos.toByteArray();
++    // verify data were not compressed
++    assertTrue("Compressed bytes contrary to configuration(NO_COMPRESSION)",
++               outbytes.length >= b.length);
++  }
++
++  @Test
++  public void testCodecInitWithCompressionLevel() throws Exception {
++    Configuration conf = new Configuration();
++    conf.setBoolean("io.native.lib.available", true);
++    if (ZlibFactory.isNativeZlibLoaded(conf)) {
++      LOG.info("testCodecInitWithCompressionLevel with native");
++      codecTestWithNOCompression(conf,
++                            "org.apache.hadoop.io.compress.GzipCodec");
++      codecTestWithNOCompression(conf,
++                         "org.apache.hadoop.io.compress.DefaultCodec");
++    } else {
++      LOG.warn("testCodecInitWithCompressionLevel for native skipped"
++               + ": native libs not loaded");
++    }
++    conf = new Configuration();
++    conf.setBoolean("io.native.lib.available", false);
++    codecTestWithNOCompression( conf,
++                         "org.apache.hadoop.io.compress.DefaultCodec");
++  }
++
++
+   @Test
+   public void testCodecPoolCompressorReinit() throws Exception {
+     Configuration conf = new Configuration();
+@@ -447,6 +505,7 @@ public class TestCodec {
+     
+   }
+ 
++  @Test
+   public void testCodecPoolAndGzipDecompressor() {
+     // BuiltInZlibInflater should not be used as the GzipCodec decompressor.
+     // Assert that this is the case.
+@@ -594,4 +653,5 @@ public class TestCodec {
+ 
+     verifyGzipFile(fileName, msg);
+   }
++
+ }
+-- 
+1.7.0.4
+

@@ -1,0 +1,233 @@
+            Getting Started With Hadoop On Demand (HOD)
+            ===========================================
+
+1. Pre-requisites:
+==================
+
+Hardware:
+HOD requires a minimum of 3 nodes configured through a resource manager.
+
+Software:
+The following components are assumed to be installed before using HOD:
+* Torque:
+  (http://www.clusterresources.com/pages/products/torque-resource-manager.php)
+  Currently HOD supports Torque out of the box. We assume that you are
+  familiar with configuring Torque. You can get information about this
+  from the following link: 
+  http://www.clusterresources.com/wiki/doku.php?id=torque:torque_wiki
+* Python (http://www.python.org/)
+  We require version 2.5.1 of Python.
+    
+The following components can be optionally installed for getting better
+functionality from HOD:
+* Twisted Python: This can be used for improving the scalability of HOD
+  (http://twistedmatrix.com/trac/)
+* Hadoop: HOD can automatically distribute Hadoop to all nodes in the 
+  cluster. However, it can also use a pre-installed version of Hadoop,
+  if it is available on all nodes in the cluster.
+  (http://hadoop.apache.org/core)
+  HOD currently supports Hadoop 0.15 and above.
+
+NOTE: HOD configuration requires the location of installs of these 
+components to be the same on all nodes in the cluster. It will also 
+make the configuration simpler to have the same location on the submit
+nodes.
+
+2. Resource Manager Configuration Pre-requisites:
+=================================================
+
+For using HOD with Torque:
+* Install Torque components: pbs_server on a head node, pbs_moms on all
+  compute nodes, and PBS client tools on all compute nodes and submit 
+  nodes.
+* Create a queue for submitting jobs on the pbs_server.
+* Specify a name for all nodes in the cluster, by setting a 'node 
+  property' to all the nodes.
+  This can be done by using the 'qmgr' command. For example:
+  qmgr -c "set node node properties=cluster-name"
+* Ensure that jobs can be submitted to the nodes. This can be done by
+  using the 'qsub' command. For example:
+  echo "sleep 30" | qsub -l nodes=3
+* More information about setting up Torque can be found by referring
+  to the documentation under:
+http://www.clusterresources.com/pages/products/torque-resource-manager.php
+
+3. Setting up HOD:
+==================
+
+* HOD is available under the 'contrib' section of Hadoop under the root
+  directory 'hod'.
+* Distribute the files under this directory to all the nodes in the
+  cluster. Note that the location where the files are copied should be
+  the same on all the nodes.
+* On the node from where you want to run hod, edit the file hodrc 
+  which can be found in the <install dir>/conf directory. This file
+  contains the minimal set of values required for running hod.
+* Specify values suitable to your environment for the following 
+  variables defined in the configuration file. Note that some of these
+  variables are defined at more than one place in the file.
+
+  * ${JAVA_HOME}: Location of Java for Hadoop. Hadoop supports Sun JDK
+    1.5.x
+  * ${CLUSTER_NAME}: Name of the cluster which is specified in the 
+    'node property' as mentioned in resource manager configuration.
+  * ${HADOOP_HOME}: Location of Hadoop installation on the compute and
+    submit nodes.
+  * ${RM_QUEUE}: Queue configured for submiting jobs in the resource
+    manager configuration.
+  * ${RM_HOME}: Location of the resource manager installation on the
+    compute and submit nodes.
+
+* The following environment variables *may* need to be set depending on 
+  your environment. These variables must be defined where you run the 
+  HOD client, and also be specified in the HOD configuration file as the 
+  value of the key resource_manager.env-vars. Multiple variables can be
+  specified as a comma separated list of key=value pairs.
+
+  * HOD_PYTHON_HOME: If you install python to a non-default location 
+    of the compute nodes, or submit nodes, then, this variable must be 
+    defined to point to the python executable in the non-standard 
+    location.
+
+
+NOTE: 
+
+You can also review other configuration options in the file and
+modify them to suit your needs. Refer to the file config.txt for 
+information about the HOD configuration.
+
+
+4. Running HOD:
+===============
+
+4.1 Overview:
+-------------
+
+A typical session of HOD will involve atleast three steps: allocate, 
+run hadoop jobs, deallocate.
+
+4.1.1 Operation allocate
+------------------------
+
+The allocate operation is used to allocate a set of nodes and install and
+provision Hadoop on them. It has the following syntax:
+
+  hod -c config_file -t hadoop_tarball_location -o "allocate \
+                                                cluster_dir number_of_nodes"
+
+The hadoop_tarball_location must be a location on a shared file system
+accesible from all nodes in the cluster. Note, the cluster_dir must exist
+before running the command. If the command completes successfully then
+cluster_dir/hadoop-site.xml will be generated and will contain information
+about the allocated cluster's JobTracker and NameNode.
+
+For example, the following command uses a hodrc file in ~/hod-config/hodrc and
+allocates Hadoop (provided by the tarball ~/share/hadoop.tar.gz) on 10 nodes,
+storing the generated Hadoop configuration in a directory named
+~/hadoop-cluster:
+
+  $ hod -c ~/hod-config/hodrc -t ~/share/hadoop.tar.gz -o "allocate \
+                                                        ~/hadoop-cluster 10"
+
+HOD also supports an environment variable called HOD_CONF_DIR. If this is
+defined, HOD will look for a default hodrc file at $HOD_CONF_DIR/hodrc.
+Defining this allows the above command to also be run as follows:
+
+  $ export HOD_CONF_DIR=~/hod-config
+  $ hod -t ~/share/hadoop.tar.gz -o "allocate ~/hadoop-cluster 10" 
+
+4.1.2 Running Hadoop jobs using the allocated cluster
+-----------------------------------------------------
+
+Now, one can run Hadoop jobs using the allocated cluster in the usual manner:
+
+  hadoop --config cluster_dir hadoop_command hadoop_command_args
+
+Continuing our example, the following command will run a wordcount example on
+the allocated cluster:
+
+  $ hadoop --config ~/hadoop-cluster jar \
+       /path/to/hadoop/hadoop-examples.jar wordcount /path/to/input /path/to/output 
+
+4.1.3 Operation deallocate
+--------------------------
+
+The deallocate operation is used to release an allocated cluster. When
+finished with a cluster, deallocate must be run so that the nodes become free
+for others to use. The deallocate operation has the following syntax:
+
+  hod -o "deallocate cluster_dir"
+
+Continuing our example, the following command will deallocate the cluster:
+
+  $ hod -o "deallocate ~/hadoop-cluster" 
+
+4.2 Command Line Options
+------------------------
+
+This section covers the major command line options available via the hod
+command:
+
+--help
+Prints out the help message to see the basic options.
+
+--verbose-help
+All configuration options provided in the hodrc file can be passed on the
+command line, using the syntax --section_name.option_name[=value]. When
+provided this way, the value provided on command line overrides the option
+provided in hodrc. The verbose-help command lists all the available options in
+the hodrc file. This is also a nice way to see the meaning of the
+configuration options.
+
+-c config_file
+Provides the configuration file to use. Can be used with all other options of
+HOD. Alternatively, the HOD_CONF_DIR environment variable can be defined to
+specify a directory that contains a file named hodrc, alleviating the need to
+specify the configuration file in each HOD command.
+
+-b 1|2|3|4
+Enables the given debug level. Can be used with all other options of HOD. 4 is
+most verbose.
+
+-o "help"
+Lists the operations available in the operation mode.
+
+-o "allocate cluster_dir number_of_nodes"
+Allocates a cluster on the given number of cluster nodes, and store the
+allocation information in cluster_dir for use with subsequent hadoop commands.
+Note that the cluster_dir must exist before running the command.
+
+-o "list"
+Lists the clusters allocated by this user. Information provided includes the
+Torque job id corresponding to the cluster, the cluster directory where the
+allocation information is stored, and whether the Map/Reduce daemon is still
+active or not.
+
+-o "info cluster_dir"
+Lists information about the cluster whose allocation information is stored in
+the specified cluster directory.
+
+-o "deallocate cluster_dir"
+Deallocates the cluster whose allocation information is stored in the
+specified cluster directory.
+
+-t hadoop_tarball
+Provisions Hadoop from the given tar.gz file. This option is only applicable
+to the allocate operation. For better distribution performance it is
+recommended that the Hadoop tarball contain only the libraries and binaries,
+and not the source or documentation. 
+
+-Mkey1=value1 -Mkey2=value2
+Provides configuration parameters for the provisioned Map/Reduce daemons
+(JobTracker and TaskTrackers). A hadoop-site.xml is generated with these
+values on the cluster nodes
+
+-Hkey1=value1 -Hkey2=value2
+Provides configuration parameters for the provisioned HDFS daemons (NameNode
+and DataNodes). A hadoop-site.xml is generated with these values on the
+cluster nodes
+
+-Ckey1=value1 -Ckey2=value2
+Provides configuration parameters for the client from where jobs can be
+submitted. A hadoop-site.xml is generated with these values on the submit
+node.

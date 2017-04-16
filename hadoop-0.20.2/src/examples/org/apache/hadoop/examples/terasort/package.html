@@ -1,0 +1,113 @@
+<html>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<body>
+This package consists of 3 map/reduce applications for Hadoop to
+compete in the annual <a
+href="http://www.hpl.hp.com/hosted/sortbenchmark" target="_top">terabyte sort</a>
+competition.
+
+<ul>
+<li><b>TeraGen</b> is a map/reduce program to generate the data.
+<li><b>TeraSort</b> samples the input data and uses map/reduce to
+    sort the data into a total order.
+<li><b>TeraValidate</b> is a map/reduce program that validates the
+    output is sorted.
+</ul>
+
+<p>
+
+<b>TeraGen</b> generates output data that is byte for byte
+equivalent to the C version including the newlines and specific
+keys. It divides the desired number of rows by the desired number of
+tasks and assigns ranges of rows to each map. The map jumps the random
+number generator to the correct value for the first row and generates
+the following rows.
+
+<p>
+
+<b>TeraSort</b> is a standard map/reduce sort, except for a custom
+partitioner that uses a sorted list of <i>N-1</i> sampled keys that define
+the key range for each reduce. In particular, all keys such that
+<i>sample[i-1] &lt;= key &lt; sample[i]</i> are sent to reduce
+<i>i</i>. This guarantees that the output of reduce <i>i</i> are all
+less than the output of reduce <i>i+1</i>. To speed up the
+partitioning, the partitioner builds a two level trie that quickly
+indexes into the list of sample keys based on the first two bytes of
+the key. TeraSort generates the sample keys by sampling the input
+before the job is submitted and writing the list of keys into HDFS.
+The input and output format, which are used by all 3 applications,
+read and write the text files in the right format. The output of the
+reduce has replication set to 1, instead of the default 3, because the
+contest does not require the output data be replicated on to multiple
+nodes.  
+
+<p>
+
+<b>TeraValidate</b> ensures that the output is globally sorted. It
+creates one map per a file in the output directory and each map ensures that
+each key is less than or equal to the previous one. The map also generates
+records with the first and last keys of the file and the reduce
+ensures that the first key of file <i>i</i> is greater that the last key of
+file <i>i-1</i>. Any problems are reported as output of the reduce with the
+keys that are out of order.
+
+<p>
+
+In May 2008, Owen O'Malley ran this code on a 910 node cluster and
+sorted the 10 billion records (1 TB) in 209 seconds (3.48 minutes) to
+win the annual general purpose (daytona)
+<a href="http://www.hpl.hp.com/hosted/sortbenchmark/">terabyte sort
+benchmark</a>.
+
+<p>
+
+The cluster statistics were:
+<ul>
+<li> 910 nodes
+<li> 4 dual core Xeons @ 2.0ghz per a node
+<li> 4 SATA disks per a node
+<li> 8G RAM per a node
+<li> 1 gigabit ethernet on each node
+<li> 40 nodes per a rack
+<li> 8 gigabit ethernet uplinks from each rack to the core
+<li> Red Hat Enterprise Linux Server Release 5.1 (kernel 2.6.18)
+<li> Sun Java JDK 1.6.0_05-b13
+</ul>
+
+<p>
+
+The test was on Hadoop trunk (pre-0.18) patched with <a
+href="http://issues.apache.org/jira/browse/HADOOP-3443">HADOOP-3443</a>
+and <a
+href="http://issues.apache.org/jira/browse/HADOOP-3446">HADOOP-3446</a>,
+which were required to remove intermediate writes to disk.
+TeraGen used
+1800 tasks to generate a total of 10 billion rows in HDFS, with a
+block size of 1024 MB.
+TeraSort was configured with 1800 maps and 1800 reduces, and
+<i>io.sort.mb</i>,
+<i>io.sort.factor</i>, <i>fs.inmemory.size.mb</i>, and task heap size
+sufficient that transient data was never spilled to disk, other at the
+end of the map. The sampler looked at 100,000 keys to determine the
+reduce boundaries, which lead to imperfect balancing with reduce
+outputs ranging from 337 MB to 872 MB.
+
+</body>
+</html>

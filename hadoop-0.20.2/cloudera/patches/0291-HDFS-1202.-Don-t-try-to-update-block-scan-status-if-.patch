@@ -1,0 +1,75 @@
+From 18174a2abc5a91105ae1adc2bda026d90c41a60b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 12 May 2010 20:06:33 -0700
+Subject: [PATCH 0291/1179] HDFS-1202. Don't try to update block scan status if block scanner is not initialized yet
+
+Reason: Fixes NPE seen at DataNode startup
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../hdfs/server/datanode/DataBlockScanner.java     |   14 +++++++++-----
+ 1 files changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java
+index e87ff45..da8becc 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java
+@@ -145,7 +145,7 @@ class DataBlockScanner implements Runnable {
+     // initialized when the scanner thread is started.
+   }
+   
+-  private synchronized boolean isInitiliazed() {
++  private synchronized boolean isInitialized() {
+     return throttler != null;
+   }
+   
+@@ -254,7 +254,7 @@ class DataBlockScanner implements Runnable {
+ 
+   /** Adds block to list of blocks */
+   synchronized void addBlock(Block block) {
+-    if (!isInitiliazed()) {
++    if (!isInitialized()) {
+       return;
+     }
+     
+@@ -273,7 +273,7 @@ class DataBlockScanner implements Runnable {
+   
+   /** Deletes the block from internal structures */
+   synchronized void deleteBlock(Block block) {
+-    if (!isInitiliazed()) {
++    if (!isInitialized()) {
+       return;
+     }
+     BlockScanInfo info = blockMap.get(block);
+@@ -284,7 +284,7 @@ class DataBlockScanner implements Runnable {
+ 
+   /** @return the last scan time */
+   synchronized long getLastScanTime(Block block) {
+-    if (!isInitiliazed()) {
++    if (!isInitialized()) {
+       return 0;
+     }
+     BlockScanInfo info = blockMap.get(block);
+@@ -330,6 +330,10 @@ class DataBlockScanner implements Runnable {
+     boolean scanOk,
+     boolean updateOnly
+   ) {
++    if (!isInitialized()) {
++      return;
++    }
++
+     BlockScanInfo info = blockMap.get(block);
+     
+     if ( info != null ) {
+@@ -983,7 +987,7 @@ class DataBlockScanner implements Runnable {
+       if (blockScanner == null) {
+         buffer.append("Periodic block scanner is not running. " +
+                       "Please check the datanode log if this is unexpected.");
+-      } else if (blockScanner.isInitiliazed()) {
++      } else if (blockScanner.isInitialized()) {
+         blockScanner.printBlockReport(buffer, summary);
+       } else {
+         buffer.append("Periodic block scanner is not yet initialized. " +
+-- 
+1.7.0.4
+

@@ -1,0 +1,174 @@
+From 0f77b062de438f4d138da08d4028a7afe7a233bd Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 18 Mar 2010 15:23:21 -0700
+Subject: [PATCH 0570/1179] HADOOP-6638. Try to relogin in a case of  failed RPC connection (expired tgt) only in case the subject is loginUser or proxyUgi.realUser.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439080/HADOOP-6638-BP20.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Client.java         |   23 +++++++++-----
+ .../hadoop/security/UserGroupInformation.java      |   33 +++++++++++--------
+ .../org/apache/hadoop/mapred/JobTracker.java       |    2 +-
+ 3 files changed, 35 insertions(+), 23 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index e19b8a7..c61f00e 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -387,26 +387,33 @@ public class Client {
+             serverPrincipal);
+         return saslRpcClient.saslConnect(in2, out2);
+       } catch (javax.security.sasl.SaslException je) {
++        UserGroupInformation loginUser = UserGroupInformation.getLoginUser();
++        UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
++        UserGroupInformation realUser = currentUser.getRealUser();
+         if (authMethod == AuthMethod.KERBEROS && 
+-            UserGroupInformation.isLoginKeytabBased()) {
+-          //try re-login
+-          UserGroupInformation.getCurrentUser().reloginFromKeytab();
++            UserGroupInformation.isLoginKeytabBased() &&
++            // relogin only in case it is the login user (e.g. JT)
++            // or superuser (like oozie).
++            (currentUser.equals(loginUser) || realUser.equals(loginUser))) {
+           //try setting up the connection again
+           try {
++            //try re-login
++            loginUser.reloginFromKeytab();
+             disposeSasl();
+             saslRpcClient = new SaslRpcClient(authMethod, token,
+                 serverPrincipal);
+             return saslRpcClient.saslConnect(in2, out2);
+           } catch (javax.security.sasl.SaslException jee) {
+-            UserGroupInformation.
+-            setLastUnsuccessfulAuthenticationAttemptTime
+-            (System.currentTimeMillis());
+             LOG.warn("Couldn't setup connection for " + 
+-                UserGroupInformation.getCurrentUser().getUserName() +
++                loginUser.getUserName() +
+                 " to " + serverPrincipal + " even after relogin.");
+             throw jee;
++          } catch (IOException ie) {
++            ie.initCause(je);
++            throw ie;
+           }
+-        } else throw je;
++        } 
++        throw je;
+       }
+     }
+     /** Connect to the server and set up the I/O streams. It then sends
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 41f18dc..6a9c977 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -128,8 +128,6 @@ public class UserGroupInformation {
+   private static boolean useKerberos;
+   /** Server-side groups fetching service */
+   private static Groups groups;
+-  /** The last authentication time */
+-  private static long lastUnsuccessfulAuthenticationAttemptTime;
+   /** The configuration to use */
+   private static Configuration conf;
+   
+@@ -139,6 +137,9 @@ public class UserGroupInformation {
+   public static final String HADOOP_TOKEN_FILE_LOCATION = 
+     "HADOOP_TOKEN_FILE_LOCATION";
+   
++  /** The last relogin attempt */
++  private long lastReloginTime = 0;
++  
+   /** 
+    * A method to initialize the fields that depend on a configuration.
+    * Must be called before useKerberos or groups is used.
+@@ -214,7 +215,7 @@ public class UserGroupInformation {
+ 
+   private final Subject subject;
+   
+-  private static LoginContext login;
++  private LoginContext login;
+   
+   private static final String OS_LOGIN_MODULE_NAME;
+   private static final Class<? extends Principal> OS_PRINCIPAL_CLASS;
+@@ -368,12 +369,16 @@ public class UserGroupInformation {
+   static UserGroupInformation getLoginUser() throws IOException {
+     if (loginUser == null) {
+       try {
++        Subject subject = new Subject();
++        loginUser = new UserGroupInformation(subject);
++        LoginContext login;
+         if (isSecurityEnabled()) {
+-          login = new LoginContext(HadoopConfiguration.USER_KERBEROS_CONFIG_NAME);
++          login = new LoginContext(HadoopConfiguration.USER_KERBEROS_CONFIG_NAME, subject);
+         } else {
+-          login = new LoginContext(HadoopConfiguration.SIMPLE_CONFIG_NAME);
++          login = new LoginContext(HadoopConfiguration.SIMPLE_CONFIG_NAME, subject);
+         }
+         login.login();
++        loginUser.login = login;
+         loginUser = new UserGroupInformation(login.getSubject());
+         String fileLocation = System.getenv(HADOOP_TOKEN_FILE_LOCATION);
+         if (fileLocation != null && isSecurityEnabled()) {
+@@ -408,11 +413,14 @@ public class UserGroupInformation {
+ 
+     keytabFile = path;
+     keytabPrincipal = user;
++    Subject subject = new Subject();
++    LoginContext login;   
+     try {
+       login = 
+-        new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME);
++        new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, subject);
+       login.login();
+-      loginUser = new UserGroupInformation(login.getSubject());
++      loginUser = new UserGroupInformation(subject);
++      loginUser.login = login;
+     } catch (LoginException le) {
+       throw new IOException("Login failure for " + user + " from keytab " + 
+                             path, le);
+@@ -476,13 +484,15 @@ public class UserGroupInformation {
+     if (login == null || keytabFile == null) {
+       throw new IOException("loginUserFromKeyTab must be done first");
+     }
+-    if (System.currentTimeMillis() -lastUnsuccessfulAuthenticationAttemptTime <
+-          MIN_TIME_BEFORE_RELOGIN) {
++    long now = System.currentTimeMillis();
++    if (now - lastReloginTime < MIN_TIME_BEFORE_RELOGIN ) {
+       LOG.warn("Not attempting to re-login since the last re-login was " +
+           "attempted less than " + (MIN_TIME_BEFORE_RELOGIN/1000) + " seconds"+
+           " before.");
+       return;
+     }
++    // register most recent relogin
++    lastReloginTime = System.currentTimeMillis();
+     try {
+       LOG.info("Initiating logout for " + getUserName());
+       //clear up the kerberos state. But the tokens are not cleared! As per 
+@@ -502,11 +512,6 @@ public class UserGroupInformation {
+     } 
+   }
+ 
+-  public synchronized static void 
+-    setLastUnsuccessfulAuthenticationAttemptTime(long time) {
+-    lastUnsuccessfulAuthenticationAttemptTime = time;
+-  }
+-  
+   public synchronized static boolean isLoginKeytabBased() {
+     return keytabFile != null;
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 70bd9cf..d09549d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -2249,7 +2249,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+                  + ") because of permissions.");
+         LOG.warn("Manually delete the mapred.system.dir (" + systemDir 
+                  + ") and then start the JobTracker.");
+-        LOG.warn("Bailing out ... ");
++        LOG.warn("Bailing out ... ", ace);
+         throw ace;
+       } catch (IOException ie) {
+         LOG.info("problem cleaning system directory: " + systemDir, ie);
+-- 
+1.7.0.4
+

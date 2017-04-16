@@ -1,0 +1,23 @@
+From f7a7a032b7f4300084951720331cf6732756b5b2 Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Mon, 7 Mar 2011 13:51:21 -0800
+Subject: [PATCH 0903/1179] CLOUDERA-BUILD. Removing source:jar from do-release-build
+
+---
+ cloudera/do-release-build |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index fcf9712..b7d6189 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -107,5 +107,5 @@ if [ -z "$SKIP_MVN_EXPLICIT" ]; then
+ # Change to cloudera/maven directory, and install
+ # (and if called from CDH nightly build, deploy) artifacts into Maven repository
+ cd $BIN_DIR/maven-packaging
+-mvn -Dnot.cdh.release.build=false source:jar install $DO_MAVEN_DEPLOY
++mvn -Dnot.cdh.release.build=false install $DO_MAVEN_DEPLOY
+ fi
+-- 
+1.7.0.4
+

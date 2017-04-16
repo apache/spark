@@ -1,0 +1,50 @@
+From d1f946ae7bfd5e619e8167ebad228be72668b0a9 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 5 Feb 2010 15:29:26 -0800
+Subject: [PATCH 0458/1179] HADOOP-6538. Set hadoop.security.authentication to "simple" by default
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435031/6538-bp20.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ src/core/core-default.xml                          |    7 +++++++
+ .../hadoop/security/UserGroupInformation.java      |    4 ++--
+ 2 files changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index c8e7c39..43e54dc 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -37,6 +37,13 @@
+   <description>Is service-level authorization enabled?</description>
+ </property>
+ 
++<property>
++  <name>hadoop.security.authentication</name>
++  <value>simple</value>
++  <description>Possible values are simple (no authentication), and kerberos
++  </description>
++</property>
++
+ <!--- logging properties -->
+ 
+ <property>
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 0e4f54d..a311288 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -146,9 +146,9 @@ public class UserGroupInformation {
+    */
+   private static synchronized void initialize(Configuration conf) {
+     String value = conf.get(HADOOP_SECURITY_AUTHENTICATION);
+-    if ("simple".equals(value)) {
++    if (value == null || "simple".equals(value)) {
+       useKerberos = false;
+-    } else if (value == null || "kerberos".equals(value)) {
++    } else if ("kerberos".equals(value)) {
+       useKerberos = true;
+     } else {
+       throw new IllegalArgumentException("Invalid attribute value for " +
+-- 
+1.7.0.4
+

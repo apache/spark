@@ -1,0 +1,77 @@
+From 7171eabfad501d635b1da9e0287f50e025b4a83f Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:13:39 -0800
+Subject: [PATCH 0116/1179] CLOUDERA-BUILD. Revert "Package sqoop docs."
+
+Description: This reverts packaging of sqoop documentation in preparation
+for including MAPREDUCE-906 properly after it has been committed
+to Apache.
+Author: Chad Metcalf
+Ref: UNKNOWN
+---
+ cloudera/install_hadoop.sh  |   12 +++---------
+ src/contrib/sqoop/build.xml |   18 ------------------
+ 2 files changed, 3 insertions(+), 27 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 687b606..e8981cc 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -151,11 +151,8 @@ mkdir -p $DOC_DIR
+ cp -r ${BUILD_DIR}/../../docs/* $DOC_DIR
+ 
+ mkdir -p $DOC_DIR/sqoop
+-# TODO(csm): This .. is a hack because for some odd reason the sqoop docs
+-# get built in build/contrib vs build/hadoop-.../contrib. We'll need to
+-# fix this
+-cp ${BUILD_DIR}/../contrib/sqoop/doc/SqoopUserGuide.html $DOC_DIR/sqoop
+-               
++cp ${HADOOP_SRC_DIR}/contrib/sqoop/doc/SqoopUserGuide.html $DOC_DIR/sqoop
++
+ # Install source
+ mkdir -p $SRC_DIR
+ cp -a ${HADOOP_SRC_DIR}/* $SRC_DIR/
+@@ -183,10 +180,7 @@ done
+ # man pages
+ mkdir -p $MAN_DIR/man1
+ cp ${CLOUDERA_SOURCE_DIR}/hadoop-$APACHE_BRANCH.1.gz $MAN_DIR/man1/
+-# TODO(csm): This .. is a hack because for some odd reason the sqoop docs
+-# get built in build/contrib vs build/hadoop-.../contrib. We'll need to
+-# fix this
+-cp ${BUILD_DIR}/../contrib/sqoop/doc/sqoop.1.gz $MAN_DIR/man1/sqoop-$APACHE_BRANCH.1.gz
++gzip -c ${HADOOP_SRC_DIR}/contrib/sqoop/doc/sqoop.1 > $MAN_DIR/man1/sqoop-$APACHE_BRANCH.1.gz
+ 
+ ############################################################
+ # ARCH DEPENDENT STUFF
+diff --git a/src/contrib/sqoop/build.xml b/src/contrib/sqoop/build.xml
+index fd7b3aa..b3a736d 100644
+--- a/src/contrib/sqoop/build.xml
++++ b/src/contrib/sqoop/build.xml
+@@ -29,24 +29,6 @@ to call at top-level: ant deploy-contrib compile-core-test
+   <property name="mrunit.class.dir" value="${build.dir}/../mrunit/classes" />
+ 
+   <!-- ================================================================== -->
+-  <!-- Compile                                                            -->
+-  <!-- Override with our own version so we can enforce build dependencies -->
+-  <!-- on doc                                                             -->
+-  <!-- ================================================================== -->
+-  <target name="compile" depends="init, ivy-retrieve-common, doc" unless="skip.contrib">
+-    <echo message="contrib: ${name}"/>
+-    <javac
+-     encoding="${build.encoding}"
+-     srcdir="${src.dir}"
+-     includes="**/*.java"
+-     destdir="${build.classes}"
+-     debug="${javac.debug}"
+-     deprecation="${javac.deprecation}">
+-     <classpath refid="contrib-classpath"/>
+-    </javac>
+-  </target>
+-
+-  <!-- ================================================================== -->
+   <!-- Compile test code                                                  -->
+   <!-- Override with our own version so we can enforce build dependencies -->
+   <!-- on compile-core-test for MiniMRCluster, and MRUnit.                -->
+-- 
+1.7.0.4
+

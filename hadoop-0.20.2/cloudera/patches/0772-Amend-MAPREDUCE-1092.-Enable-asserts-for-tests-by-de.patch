@@ -1,0 +1,27 @@
+From 390cedb3ba0ec9bf7e4859f89c3e10dd40be2763 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 14 Jan 2011 17:39:21 -0800
+Subject: [PATCH 0772/1179] Amend MAPREDUCE-1092. Enable asserts for tests by default
+
+Reason: reapply patch accidentally reverted by Herriot merge
+Author: Todd Lipcon
+Ref: CDH-520
+---
+ build.xml |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index d206ef4..6608cdf 100644
+--- a/build.xml
++++ b/build.xml
+@@ -933,6 +933,7 @@
+              timeout="${test.timeout}"
+              errorProperty="tests.failed"
+              failureProperty="tests.failed">
++        <assertions><enable/></assertions>
+         <sysproperty key="test.build.data" value="${test.build.data}" />
+         <sysproperty key="test.tools.input.dir"
+                      value="${test.tools.input.dir}" />
+-- 
+1.7.0.4
+

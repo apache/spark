@@ -1,0 +1,58 @@
+From 46d2b6d6b27887375c44d691d776f70e89e4b81b Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:31:58 -0800
+Subject: [PATCH 0172/1179] HDFS-859. fuse-dfs utime behavior causes issues with tar
+
+Description: When trying to untar files onto fuse-dfs, tar will try to set the utime on all the files and directories.  However, setting the utime on a directory in libhdfs causes an error.
+
+<p>We should silently ignore the failure of setting a utime on a directory; this will allow tar to complete successfully.</p>
+Reason: bugfix (tool compatibility)
+Author: Brian Bockelman
+Ref: UNKNOWN
+---
+ src/contrib/fuse-dfs/src/fuse_impls_utimens.c |   18 +++++++++++++-----
+ 1 files changed, 13 insertions(+), 5 deletions(-)
+
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_utimens.c b/src/contrib/fuse-dfs/src/fuse_impls_utimens.c
+index 85b8603..d199e46 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_utimens.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_utimens.c
+@@ -20,7 +20,7 @@
+ #include "fuse_impls.h"
+ #include "fuse_connect.h"
+ 
+- int dfs_utimens(const char *path, const struct timespec ts[2])
++int dfs_utimens(const char *path, const struct timespec ts[2])
+ {
+   TRACE1("utimens", path)
+ #if PERMS
+@@ -38,14 +38,22 @@
+   hdfsFS userFS;
+   // if not connected, try to connect and fail out if we can't.
+   if ((userFS = doConnectAsUser(dfs->nn_hostname,dfs->nn_port))== NULL) {
+-    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n", __FILE__, __LINE__);
++    syslog(LOG_ERR, "ERROR: could not connect to dfs %s:%d\n",
++           __FILE__, __LINE__);
+     return -EIO;
+   }
+ 
+   if (hdfsUtime(userFS, path, mTime, aTime)) {
+-    syslog(LOG_ERR,"ERROR: hdfs trying to utime %s to %ld/%ld",path, (long)mTime, (long)aTime);
+-    fprintf(stderr,"ERROR: could not set utime for path %s\n",path);
+-    return -EIO;
++    hdfsFileInfo *info = hdfsGetPathInfo(dfs->fs,path);
++    if (info == NULL) {
++      return -EIO;
++    }
++    // Silently ignore utimens failure for directories, otherwise 
++    // some programs like tar will fail.
++    if (info->mKind == kObjectKindDirectory) {
++      return 0;
++    }
++    return -errno;
+   }
+ #endif  
+   return 0;
+-- 
+1.7.0.4
+

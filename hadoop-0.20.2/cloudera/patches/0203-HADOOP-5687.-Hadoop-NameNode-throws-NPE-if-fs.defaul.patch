@@ -1,0 +1,111 @@
+From d190a8067827ce09cdcb7741d588cce0e0e7aa02 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:45:23 -0800
+Subject: [PATCH 0203/1179] HADOOP-5687. Hadoop NameNode throws NPE if fs.default.name is the default value
+
+Description: Throwing NPE is confusing; instead, an exception with a useful string description could be thrown instead.
+Reason: Logging improvement
+Author: Philip Zeyliger
+Ref: UNKNOWN
+---
+ src/core/org/apache/hadoop/fs/FileSystem.java      |    2 +-
+ src/core/org/apache/hadoop/net/NetUtils.java       |    3 +++
+ .../apache/hadoop/hdfs/protocol/FSConstants.java   |    5 +++++
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   19 +++++++++++++++++--
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    2 +-
+ 5 files changed, 27 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FileSystem.java b/src/core/org/apache/hadoop/fs/FileSystem.java
+index 0efc4e0..6841f4d 100644
+--- a/src/core/org/apache/hadoop/fs/FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/FileSystem.java
+@@ -65,7 +65,7 @@ import org.apache.hadoop.security.UserGroupInformation;
+  * implementation is DistributedFileSystem.
+  *****************************************************************/
+ public abstract class FileSystem extends Configured implements Closeable {
+-  private static final String FS_DEFAULT_NAME_KEY = "fs.default.name";
++  public static final String FS_DEFAULT_NAME_KEY = "fs.default.name";
+ 
+   public static final Log LOG = LogFactory.getLog(FileSystem.class);
+ 
+diff --git a/src/core/org/apache/hadoop/net/NetUtils.java b/src/core/org/apache/hadoop/net/NetUtils.java
+index 798ce59..854a00a 100644
+--- a/src/core/org/apache/hadoop/net/NetUtils.java
++++ b/src/core/org/apache/hadoop/net/NetUtils.java
+@@ -131,6 +131,9 @@ public class NetUtils {
+    */
+   public static InetSocketAddress createSocketAddr(String target,
+                                                    int defaultPort) {
++    if (target == null) {
++      throw new IllegalArgumentException("Target address cannot be null.");
++    }
+     int colonIndex = target.indexOf(':');
+     if (colonIndex < 0 && defaultPort == -1) {
+       throw new RuntimeException("Not a host:port pair: " + target);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
+index 5d826bf..044dc44 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
+@@ -76,6 +76,11 @@ public interface FSConstants {
+     FORCE_PROCEED;
+   }
+ 
++  /**
++   * URI Scheme for hdfs://namenode/ URIs.
++   */
++  public static final String HDFS_URI_SCHEME = "hdfs";
++
+   // Version is reflected in the dfs image and edit log files.
+   // Version is reflected in the data storage file.
+   // Versions are negative.
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index f80412f..e281c7b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -165,13 +165,28 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   }
+ 
+   public static InetSocketAddress getAddress(Configuration conf) {
+-    return getAddress(FileSystem.getDefaultUri(conf).getAuthority());
++    URI filesystemURI = FileSystem.getDefaultUri(conf);
++    String authority = filesystemURI.getAuthority();
++    if (authority == null) {
++      throw new IllegalArgumentException(String.format(
++          "Invalid URI for NameNode address (check %s): %s has no authority.",
++          FileSystem.FS_DEFAULT_NAME_KEY, filesystemURI.toString()));
++    }
++    if (!FSConstants.HDFS_URI_SCHEME.equalsIgnoreCase(
++        filesystemURI.getScheme())) {
++      throw new IllegalArgumentException(String.format(
++          "Invalid URI for NameNode address (check %s): %s is not of scheme '%s'.",
++          FileSystem.FS_DEFAULT_NAME_KEY, filesystemURI.toString(),
++          FSConstants.HDFS_URI_SCHEME));
++    }
++    return getAddress(authority);
+   }
+ 
+   public static URI getUri(InetSocketAddress namenode) {
+     int port = namenode.getPort();
+     String portString = port == DEFAULT_PORT ? "" : (":"+port);
+-    return URI.create("hdfs://"+ namenode.getHostName()+portString);
++    return URI.create(FSConstants.HDFS_URI_SCHEME + "://" 
++        + namenode.getHostName()+portString);
+   }
+ 
+   /**
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index f42f13a..def1c68 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -285,7 +285,7 @@ public class SecondaryNameNode implements Runnable {
+    */
+   private String getInfoServer() throws IOException {
+     URI fsName = FileSystem.getDefaultUri(conf);
+-    if (!"hdfs".equals(fsName.getScheme())) {
++    if (!FSConstants.HDFS_URI_SCHEME.equalsIgnoreCase(fsName.getScheme())) {
+       throw new IOException("This is not a DFS");
+     }
+ 
+-- 
+1.7.0.4
+

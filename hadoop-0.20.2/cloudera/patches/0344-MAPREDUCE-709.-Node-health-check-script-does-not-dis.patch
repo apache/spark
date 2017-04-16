@@ -1,0 +1,75 @@
+From 45605c6b29c206b9ed3ec2324f4f709c914ca1e3 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:42 -0700
+Subject: [PATCH 0344/1179] MAPREDUCE-709. Node health check script does not display the correct message on timeout
+
+Author: Sreekanth Ramakrishnan
+Reason: Improve usefulness of health check feature
+Ref: YDH
+---
+ .../hadoop/mapred/NodeHealthCheckerService.java    |   11 +++++++++--
+ .../hadoop/mapred/TestNodeHealthService.java       |    5 +++--
+ 2 files changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/NodeHealthCheckerService.java b/src/mapred/org/apache/hadoop/mapred/NodeHealthCheckerService.java
+index d6eb9c8..25f0679 100644
+--- a/src/mapred/org/apache/hadoop/mapred/NodeHealthCheckerService.java
++++ b/src/mapred/org/apache/hadoop/mapred/NodeHealthCheckerService.java
+@@ -70,6 +70,8 @@ class NodeHealthCheckerService {
+ 
+   static final String HEALTH_CHECK_SCRIPT_ARGUMENTS_PROPERTY = "mapred.healthChecker.script.args";
+   /* end of configuration keys */
++  /** Time out error message */
++  static final String NODE_HEALTH_SCRIPT_TIMED_OUT_MSG = "Node health script timed out";
+ 
+   /** Default frequency of running node health script */
+   private static final long DEFAULT_HEALTH_CHECK_INTERVAL = 10 * 60 * 1000;
+@@ -84,6 +86,7 @@ class NodeHealthCheckerService {
+ 
+   private TimerTask timer;
+   
++  
+   private enum HealthCheckerExitStatus {
+     SUCCESS,
+     TIMED_OUT,
+@@ -122,7 +125,11 @@ class NodeHealthCheckerService {
+         status = HealthCheckerExitStatus.FAILED_WITH_EXIT_CODE;
+       } catch (Exception e) {
+         LOG.warn("Caught exception : " + e.getMessage());
+-        status = HealthCheckerExitStatus.FAILED_WITH_EXCEPTION;
++        if (!shexec.isTimedOut()) {
++          status = HealthCheckerExitStatus.FAILED_WITH_EXCEPTION;
++        } else {
++          status = HealthCheckerExitStatus.TIMED_OUT;
++        }
+         exceptionStackTrace = StringUtils.stringifyException(e);
+       } finally {
+         if (status == HealthCheckerExitStatus.SUCCESS) {
+@@ -160,7 +167,7 @@ class NodeHealthCheckerService {
+         setHealthStatus(true, "", now);
+         break;
+       case TIMED_OUT:
+-        setHealthStatus(false, "Node health script timed out");
++        setHealthStatus(false, NODE_HEALTH_SCRIPT_TIMED_OUT_MSG);
+         break;
+       case FAILED_WITH_EXCEPTION:
+         setHealthStatus(false, exceptionStackTrace);
+diff --git a/src/test/org/apache/hadoop/mapred/TestNodeHealthService.java b/src/test/org/apache/hadoop/mapred/TestNodeHealthService.java
+index 051192f..3044909 100644
+--- a/src/test/org/apache/hadoop/mapred/TestNodeHealthService.java
++++ b/src/test/org/apache/hadoop/mapred/TestNodeHealthService.java
+@@ -152,8 +152,9 @@ public class TestNodeHealthService extends TestCase {
+     LOG.info("Checking Healthy--->timeout");
+     assertFalse("Node health status reported healthy even after timeout",
+         healthStatus.isNodeHealthy());
+-    assertFalse("Node health status reported healthy even after timeout",
+-        healthStatus.getHealthReport().isEmpty());
++    assertEquals("Node time out message not propogated", healthStatus
++        .getHealthReport(),
++        NodeHealthCheckerService.NODE_HEALTH_SCRIPT_TIMED_OUT_MSG);
+   }
+ 
+ }
+-- 
+1.7.0.4
+

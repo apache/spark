@@ -1,0 +1,45 @@
+From 717544d462bc56188d165008bc1d841bc1c03904 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Feb 2011 12:16:08 -0800
+Subject: [PATCH 0858/1179] Amend MAPREDUCE-2178. Check argc *after* checks for perms, etc
+
+Reason: Fix error messages during taskcontroller setup
+Author: Todd Lipcon
+Ref: CDH-2623
+---
+ src/c++/task-controller/impl/main.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/c++/task-controller/impl/main.c b/src/c++/task-controller/impl/main.c
+index 1312fd0..256705b 100644
+--- a/src/c++/task-controller/impl/main.c
++++ b/src/c++/task-controller/impl/main.c
+@@ -52,12 +52,6 @@ void display_usage(FILE *stream) {
+ }
+ 
+ int main(int argc, char **argv) {
+-  //Minimum number of arguments required to run the task-controller
+-  if (argc < 4) {
+-    display_usage(stdout);
+-    return INVALID_ARGUMENT_NUMBER;
+-  }
+-
+   LOGFILE = stdout;
+   int command;
+   const char * job_id = NULL;
+@@ -110,6 +104,12 @@ int main(int argc, char **argv) {
+     return INVALID_TASKCONTROLLER_PERMISSIONS;
+   }
+ 
++  //Minimum number of arguments required to run the task-controller
++  if (argc < 4) {
++    display_usage(stdout);
++    return INVALID_ARGUMENT_NUMBER;
++  }
++
+   //checks done for user name
+   if (argv[optind] == NULL) {
+     fprintf(LOGFILE, "Invalid user name \n");
+-- 
+1.7.0.4
+

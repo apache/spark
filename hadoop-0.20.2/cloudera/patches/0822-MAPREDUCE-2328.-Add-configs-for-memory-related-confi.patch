@@ -1,0 +1,101 @@
+From f1b4799fad93b4f02ee29ce5ef5fc217ff72e377 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 9 Feb 2011 14:53:16 -0800
+Subject: [PATCH 0822/1179] MAPREDUCE-2328. Add configs for memory-related configurations to mapred-default.xml
+
+Author: Yahoo Eng
+Ref: CDH-2622
+---
+ src/mapred/mapred-default.xml |   76 +++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 76 insertions(+), 0 deletions(-)
+
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index cd701fb..800926c 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -441,6 +441,82 @@
+ </property>
+ 
+ <property>
++  <name>mapred.cluster.map.memory.mb</name>
++  <value>-1</value>
++  <description>The size, in terms of virtual memory, of a single map slot 
++  in the Map-Reduce framework, used by the scheduler. 
++  A job can ask for multiple slots for a single map task via 
++  mapred.job.map.memory.mb, upto the limit specified by 
++  mapred.cluster.max.map.memory.mb, if the scheduler supports the feature. 
++  The value of -1 indicates that this feature is turned off.
++  </description>
++</property>
++
++<property>
++  <name>mapred.cluster.reduce.memory.mb</name>
++  <value>-1</value>
++  <description>The size, in terms of virtual memory, of a single reduce slot 
++  in the Map-Reduce framework, used by the scheduler. 
++  A job can ask for multiple slots for a single reduce task via 
++  mapred.job.reduce.memory.mb, upto the limit specified by 
++  mapred.cluster.max.reduce.memory.mb, if the scheduler supports the feature. 
++  The value of -1 indicates that this feature is turned off.
++  </description>
++</property>
++
++<property>
++  <name>mapred.cluster.max.map.memory.mb</name>
++  <value>-1</value>
++  <description>The maximum size, in terms of virtual memory, of a single map 
++  task launched by the Map-Reduce framework, used by the scheduler. 
++  A job can ask for multiple slots for a single map task via 
++  mapred.job.map.memory.mb, upto the limit specified by 
++  mapred.cluster.max.map.memory.mb, if the scheduler supports the feature. 
++  The value of -1 indicates that this feature is turned off.
++  </description>
++</property>
++
++<property>
++  <name>mapred.cluster.max.reduce.memory.mb</name>
++  <value>-1</value>
++  <description>The maximum size, in terms of virtual memory, of a single reduce 
++  task launched by the Map-Reduce framework, used by the scheduler. 
++  A job can ask for multiple slots for a single reduce task via 
++  mapred.job.reduce.memory.mb, upto the limit specified by 
++  mapred.cluster.max.reduce.memory.mb, if the scheduler supports the feature. 
++  The value of -1 indicates that this feature is turned off.
++  </description>
++</property>
++
++<property>
++  <name>mapred.job.map.memory.mb</name>
++  <value>-1</value>
++  <description>The size, in terms of virtual memory, of a single map task 
++  for the job.
++  A job can ask for multiple slots for a single map task, rounded up to the 
++  next multiple of mapred.cluster.map.memory.mb and upto the limit 
++  specified by mapred.cluster.max.map.memory.mb, if the scheduler supports 
++  the feature. 
++  The value of -1 indicates that this feature is turned off iff 
++  mapred.cluster.map.memory.mb is also turned off (-1).
++  </description>
++</property>
++
++<property>
++  <name>mapred.job.reduce.memory.mb</name>
++  <value>-1</value>
++  <description>The size, in terms of virtual memory, of a single reduce task 
++  for the job.
++  A job can ask for multiple slots for a single map task, rounded up to the 
++  next multiple of mapred.cluster.reduce.memory.mb and upto the limit 
++  specified by mapred.cluster.max.reduce.memory.mb, if the scheduler supports 
++  the feature. 
++  The value of -1 indicates that this feature is turned off iff
++  mapred.cluster.reduce.memory.mb is also turned off (-1).  
++  </description>
++</property>
++
++<property>
+   <name>mapred.child.tmp</name>
+   <value>./tmp</value>
+   <description> To set the value of tmp directory for map and reduce tasks.
+-- 
+1.7.0.4
+

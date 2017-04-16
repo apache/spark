@@ -1,0 +1,136 @@
+### "Gridmix" Benchmark ###
+
+Contents:
+
+0 Overview
+1 Getting Started
+  1.0 Build
+  1.1 Configure
+  1.2 Generate test data
+2 Running
+  2.0 General
+  2.1 Non-Hod cluster
+  2.2 Hod
+    2.2.0 Static cluster
+    2.2.1 Hod cluster
+
+
+* 0 Overview
+
+The scripts in this package model a cluster workload. The workload is
+simulated by generating random data and submitting map/reduce jobs that
+mimic observed data-access patterns in user jobs. The full benchmark
+generates approximately 2.5TB of (often compressed) input data operated on
+by the following simulated jobs:
+
+1) Three stage map/reduce job
+	   Input:      500GB compressed (2TB uncompressed) SequenceFile
+                 (k,v) = (5 words, 100 words)
+                 hadoop-env: FIXCOMPSEQ
+     Compute1:   keep 10% map, 40% reduce
+	   Compute2:   keep 100% map, 77% reduce
+                 Input from Compute1
+     Compute3:   keep 116% map, 91% reduce
+                 Input from Compute2
+     Motivation: Many user workloads are implemented as pipelined map/reduce
+                 jobs, including Pig workloads
+
+2) Large sort of variable key/value size
+     Input:      500GB compressed (2TB uncompressed) SequenceFile
+                 (k,v) = (5-10 words, 100-10000 words)
+                 hadoop-env: VARCOMPSEQ
+     Compute:    keep 100% map, 100% reduce
+     Motivation: Processing large, compressed datsets is common.
+
+3) Reference select
+     Input:      500GB compressed (2TB uncompressed) SequenceFile
+                 (k,v) = (5-10 words, 100-10000 words)
+                 hadoop-env: VARCOMPSEQ
+     Compute:    keep 0.2% map, 5% reduce
+                 1 Reducer
+     Motivation: Sampling from a large, reference dataset is common.
+
+4) API text sort (java, streaming)
+     Input:      500GB uncompressed Text
+                 (k,v) = (1-10 words, 0-200 words)
+                 hadoop-env: VARINFLTEXT
+     Compute:    keep 100% map, 100% reduce
+     Motivation: This benchmark should exercise each of the APIs to
+                 map/reduce
+
+5) Jobs with combiner (word count jobs)
+
+A benchmark load is a mix of different numbers of small, medium, and large jobs of the above types.
+The exact mix is specified in an xml file (gridmix_config.xml). We have a Java program to 
+construct those jobs based on the xml file and put them under the control of a JobControl object.
+The JobControl object then submitts the jobs to the cluster and monitors their progress until all jobs complete.
+
+
+Notes(1-3): Since input data are compressed, this means that each mapper
+outputs a lot more bytes than it reads in, typically causing map output
+spills.
+
+
+
+* 1 Getting Started
+
+1.0 Build
+
+In the src/benchmarks/gridmix dir, type "ant".
+gridmix.jar will be created in the build subdir.
+copy gridmix.jar to gridmix dir.
+
+1.1 Configure environment variables
+
+One must modify gridmix-env-2 to set the following variables:
+
+HADOOP_HOME     The hadoop install location
+HADOOP_VERSION  The exact hadoop version to be used. e.g. hadoop-0.18.2-dev
+HADOOP_CONF_DIR The dir containing the hadoop-site.xml for teh cluster to be used.
+USE_REAL_DATA   A large data-set will be created and used by the benchmark if it is set to true.
+
+
+1.2 Configure the job mixture
+
+A default gridmix_conf.xml file is provided.
+One may make appropriate changes as necessary on the number of jobs of various types
+and sizes. One can also change the number of reducers of each jobs, and specify whether 
+to compress the output data of a map/reduce job.
+Note that one can specify multiple numbers of in the 
+numOfJobs field and numOfReduces field, like:
+<property>
+  <name>javaSort.smallJobs.numOfJobs</name>
+  <value>8,2</value>
+  <description></description>
+</property>
+
+
+<property>
+  <name>javaSort.smallJobs.numOfReduces</name>
+  <value>15,70</value>
+  <description></description>
+</property>
+
+The above spec means that we will have 8 small java sort jobs with 15 reducers and 2 small java sort 
+jobs with 17 reducers.
+
+1.3 Generate test data
+
+Test data is generated using the generateGridmix2Data.sh script. 
+        ./generateGridmix2Data.sh
+One may modify the structure and size of the data generated here. 
+
+It is sufficient to run the script without modification, though it may
+require up to 4TB of free space in the default filesystem. Changing the size
+of the input data (COMPRESSED_DATA_BYTES, UNCOMPRESSED_DATA_BYTES,
+INDIRECT_DATA_BYTES) is safe. A 4x compression ratio for generated, block
+compressed data is typical.
+
+* 2 Running
+
+You need to set HADOOP_CONF_DIR to the right directory where hadoop-site.xml exists.
+Then you just need to type 
+	./rungridmix_2
+It will create start.out to record the start time, and at the end, it will create end.out to record the 
+endi time.
+

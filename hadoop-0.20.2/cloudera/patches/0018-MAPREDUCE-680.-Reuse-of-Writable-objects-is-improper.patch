@@ -1,0 +1,231 @@
+From 4ee0ecf4760d7adb3e1a81e018a3b5cd6d2e9775 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:27:44 -0800
+Subject: [PATCH 0018/1179] MAPREDUCE-680. Reuse of Writable objects is improperly handled by MRUnit
+
+Description: As written, MRUnit's MockOutputCollector simply stores references to the objects passed in to its collect() method. Thus if the same Text (or other Writable) object is reused as an output containiner multiple times with different values, these separate values will not all be collected. MockOutputCollector needs to properly use io.serializations to deep copy the objects sent in.
+Reason: Bugfix; see description.
+Author: Aaron Kimball
+Ref: UNKNOWN
+
+commit 51bdfdcf947bc8447aa36d68ae802f154516b0b6
+Author: Aaron Kimball <aaron@cloudera.com>
+Date:   Wed Jul 15 10:40:47 2009 -0700
+
+    MAPREDUCE-680. Reuse of Writable objects is improperly handled by MRUnit.
+---
+ .../hadoop/mrunit/mock/MockOutputCollector.java    |   78 +++++++++++++++++---
+ .../test/org/apache/hadoop/mrunit/AllTests.java    |    2 +
+ .../mrunit/mock/TestMockOutputCollector.java       |   71 ++++++++++++++++++
+ 3 files changed, 139 insertions(+), 12 deletions(-)
+ create mode 100644 src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mock/TestMockOutputCollector.java
+
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mock/MockOutputCollector.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mock/MockOutputCollector.java
+index e041a42..34368fb 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mock/MockOutputCollector.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mock/MockOutputCollector.java
+@@ -22,38 +22,92 @@ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.List;
+ 
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.DataInputBuffer;
++import org.apache.hadoop.io.DataOutputBuffer;
++import org.apache.hadoop.io.serializer.Deserializer;
++import org.apache.hadoop.io.serializer.SerializationFactory;
++import org.apache.hadoop.io.serializer.Serializer;
+ import org.apache.hadoop.mapred.OutputCollector;
+ import org.apache.hadoop.mrunit.types.Pair;
++import org.apache.hadoop.util.ReflectionUtils;
++
+ 
+ /**
+  * OutputCollector to use in the test framework for Mapper and Reducer
+  * classes. Accepts a set of output (k, v) pairs and returns them to the
+  * framework for validation.
+- *
+- * BUG: Currently, this does not make deep copies of values passed to collect().
+- * So emitting the same Text object (for instance) repeatedly, with different
+- * internal string data each time, is not tested in the same way that Hadoop's
+- * OutputCollector works.
+- *
+  */
+ public class MockOutputCollector<K, V> implements OutputCollector<K, V> {
+ 
+   private ArrayList<Pair<K, V>> collectedOutputs;
++  private SerializationFactory serializationFactory;
++  private DataOutputBuffer outBuffer;
++  private DataInputBuffer inBuffer;
++  private Configuration conf;
++
+ 
+   public MockOutputCollector() {
+     collectedOutputs = new ArrayList<Pair<K, V>>();
++
++    outBuffer = new DataOutputBuffer();
++    inBuffer = new DataInputBuffer();
++
++    conf = new Configuration();
++    serializationFactory = new SerializationFactory(conf);
++  }
++
++
++  private Object getInstance(Class klazz) {
++    return ReflectionUtils.newInstance(klazz, conf);
++  }
++
++
++  private Object deepCopy(Object obj) throws IOException {
++
++    if (null == obj) {
++      return null;
++    }
++
++    Class klazz = obj.getClass();
++    Object out = getInstance(klazz); // the output object to return.
++    Serializer s = serializationFactory.getSerializer(klazz);
++    Deserializer ds = serializationFactory.getDeserializer(klazz);
++
++    try {
++      s.open(outBuffer);
++      ds.open(inBuffer);
++
++      outBuffer.reset();
++      s.serialize(obj);
++
++      byte [] data = outBuffer.getData();
++      int len = outBuffer.getLength();
++      inBuffer.reset(data, len);
++
++      out = ds.deserialize(out);
++
++      return out;
++    } finally {
++      try {
++        s.close();
++      } catch (IOException ioe) {
++        // ignore this; we're closing.
++      }
++
++      try {
++        ds.close();
++      } catch (IOException ioe) {
++        // ignore this; we're closing.
++      }
++    }
+   }
+ 
+   /**
+    * Accepts another (key, value) pair as an output of this mapper/reducer.
+-   *
+-   * BUG: Currently, this does not make deep copies of values passed to collect().
+-   * So emitting the same Text object (for instance) repeatedly, with different
+-   * internal string data each time, is not tested in the same way that Hadoop's
+-   * OutputCollector works.
+    */
+   public void collect(K key, V value) throws IOException {
+-    collectedOutputs.add(new Pair<K, V>(key, value));
++    collectedOutputs.add(new Pair<K, V>((K) deepCopy(key), (V) deepCopy(value)));
+   }
+ 
+   /**
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java
+index 0ece314..7612f6f 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java
+@@ -18,6 +18,7 @@
+ package org.apache.hadoop.mrunit;
+ 
+ import org.apache.hadoop.mrunit.mock.TestMockReporter;
++import org.apache.hadoop.mrunit.mock.TestMockOutputCollector;
+ 
+ import junit.framework.Test;
+ import junit.framework.TestSuite;
+@@ -36,6 +37,7 @@ public final class AllTests  {
+     suite.addTestSuite(TestMapDriver.class);
+     suite.addTestSuite(TestMapReduceDriver.class);
+     suite.addTestSuite(TestMockReporter.class);
++    suite.addTestSuite(TestMockOutputCollector.class);
+     suite.addTestSuite(TestReduceDriver.class);
+     suite.addTestSuite(TestTestDriver.class);
+     suite.addTestSuite(TestExample.class);
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mock/TestMockOutputCollector.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mock/TestMockOutputCollector.java
+new file mode 100644
+index 0000000..1a2ad57
+--- /dev/null
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mock/TestMockOutputCollector.java
+@@ -0,0 +1,71 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mrunit.mock;
++
++import junit.framework.TestCase;
++
++import java.io.IOException;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.Mapper;
++import org.apache.hadoop.mapred.MapReduceBase;
++import org.apache.hadoop.mapred.OutputCollector;
++import org.apache.hadoop.mapred.Reporter;
++import org.apache.hadoop.mrunit.MapDriver;
++
++import org.junit.Test;
++
++
++public class TestMockOutputCollector extends TestCase {
++
++  /**
++   * A mapper that reuses the same key and val objects to emit multiple values
++   */
++  class RepeatMapper extends MapReduceBase implements Mapper<Text, Text, Text, Text> {
++    public void map(Text k, Text v, OutputCollector<Text, Text> out, Reporter r)
++        throws IOException {
++      Text outKey = new Text();
++      Text outVal = new Text();
++
++      outKey.set("1");
++      outVal.set("a");
++      out.collect(outKey, outVal);
++
++      outKey.set("2");
++      outVal.set("b");
++      out.collect(outKey, outVal);
++
++      outKey.set("3");
++      outVal.set("c");
++      out.collect(outKey, outVal);
++    }
++  }
++
++  @Test
++  public void testRepeatedObjectUse() {
++    Mapper<Text, Text, Text, Text> mapper = new RepeatMapper();
++    MapDriver<Text, Text, Text, Text> driver = new MapDriver(mapper);
++
++    driver.withInput(new Text("inK"), new Text("inV"))
++          .withOutput(new Text("1"), new Text("a"))
++          .withOutput(new Text("2"), new Text("b"))
++          .withOutput(new Text("3"), new Text("c"))
++          .runTest();
++  }
++}
++
+-- 
+1.7.0.4
+

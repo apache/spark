@@ -1,0 +1,37 @@
+From b94821f874983e64c78fc93d95539a4f262dca78 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 3 Sep 2010 15:56:19 -0700
+Subject: [PATCH 0683/1179] HADOOP-6939. Fix inconsistent lock ordering in AbstractDelegationTokenSecretManager
+
+Reason: Fix potential deadlock
+Author: Todd Lipcon
+Ref: CDH-648
+---
+ .../AbstractDelegationTokenSecretManager.java      |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
+index 4aea9ec..fbe92fc 100644
+--- a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
++++ b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
+@@ -95,11 +95,13 @@ extends AbstractDelegationTokenIdentifier>
+   }
+ 
+   /** should be called before this object is used */
+-  public synchronized void startThreads() throws IOException {
++  public void startThreads() throws IOException {
+     updateCurrentKey();
+-    running = true;
+-    tokenRemoverThread = new Daemon(new ExpiredTokenRemover());
+-    tokenRemoverThread.start();
++    synchronized (this) {
++      running = true;
++      tokenRemoverThread = new Daemon(new ExpiredTokenRemover());
++      tokenRemoverThread.start();
++    }
+   }
+   
+   /**
+-- 
+1.7.0.4
+

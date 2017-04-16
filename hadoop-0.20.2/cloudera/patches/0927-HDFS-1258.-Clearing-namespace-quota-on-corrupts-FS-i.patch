@@ -1,0 +1,51 @@
+From 6b6df88107a98b899aaac7dc20f061bc9f60735f Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 15 Mar 2011 10:12:26 -0700
+Subject: [PATCH 0927/1179] HDFS-1258. Clearing namespace quota on "/" corrupts FS image.
+
+Reason: Bug
+Author: Aaron T. Myers
+Ref: CDH-2788
+---
+ .../hadoop/hdfs/server/namenode/FSDirectory.java   |    2 ++
+ src/test/org/apache/hadoop/hdfs/TestQuota.java     |    8 +++++++-
+ 2 files changed, 9 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+index 7bd5481..d0057d6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+@@ -1256,6 +1256,8 @@ class FSDirectory implements FSConstants, Closeable {
+       throw new FileNotFoundException("Directory does not exist: " + srcs);
+     } else if (!targetNode.isDirectory()) {
+       throw new FileNotFoundException("Cannot set quota on a file: " + srcs);  
++    } else if (targetNode.isRoot() && nsQuota == FSConstants.QUOTA_RESET) {
++      throw new IllegalArgumentException("Cannot clear namespace quota on root.");
+     } else { // a directory inode
+       INodeDirectory dirNode = (INodeDirectory)targetNode;
+       long oldNsQuota = dirNode.getNsQuota();
+diff --git a/src/test/org/apache/hadoop/hdfs/TestQuota.java b/src/test/org/apache/hadoop/hdfs/TestQuota.java
+index 3d88759..243a9a3 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestQuota.java
++++ b/src/test/org/apache/hadoop/hdfs/TestQuota.java
+@@ -263,10 +263,16 @@ public class TestQuota extends TestCase {
+           String[] args3 = new String[] {"-clrQuota", parent.toString()};
+           runCommand(userAdmin, args3, true);
+           runCommand(userAdmin, true, "-clrSpaceQuota",  args3[1]); 
+-          
++
+           return null;
+         }
+       });
++
++      // 19: clrQuota on the root directory ("/") should fail
++      runCommand(admin, true, "-clrQuota", "/");
++
++      // 20: setQuota on the root directory ("/") should succeed
++      runCommand(admin, false, "-setQuota", "1000000", "/");
+     } finally {
+       cluster.shutdown();
+     }
+-- 
+1.7.0.4
+

@@ -1,0 +1,57 @@
+From 02d4404d39e60322ea13a2ce0160635df4ef3155 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 17 Mar 2010 10:30:20 -0700
+Subject: [PATCH 0562/1179] MAPREDUCE-1606. TestJobACLs may timeout as there are no slots for launching JOB_CLEANUP task
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439054/MR1606.20S.1.patch
+Author: Ravi Gummadi
+Ref: CDH-648
+---
+ src/test/org/apache/hadoop/mapred/TestJobACLs.java |   17 ++++++++++++++---
+ 1 files changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobACLs.java b/src/test/org/apache/hadoop/mapred/TestJobACLs.java
+index 2c8e0c3..3c4d3cc 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobACLs.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobACLs.java
+@@ -83,8 +83,11 @@ public class TestJobACLs {
+     conf.setBoolean("mapred.job.tracker.persist.jobstatus.active", true);
+     conf.set("mapred.job.tracker.persist.jobstatus.hours", "1");
+ 
+-    mr =
+-        new MiniMRCluster(0, 0, 0, "file:///", 1, null, null, MR_UGI, conf);
++    // Let us have enough slots sothat there won't be contention for slots
++    // for launching JOB_CLEANUP tasks
++    conf.set("mapred.tasktracker.map.tasks.maximum", "4");
++
++    mr = new MiniMRCluster(0, 0, 2, "file:///", 1, null, null, MR_UGI, conf);
+   }
+ 
+   /**
+@@ -140,6 +143,14 @@ public class TestJobACLs {
+     job.killJob();
+   }
+ 
++  /**
++   * Submits a sleep job with 1 map task that runs for a long time(2000 sec)
++   * @param clusterConf
++   * @param user the jobOwner
++   * @return RunningJob that is started
++   * @throws IOException
++   * @throws InterruptedException
++   */
+   private RunningJob submitJobAsUser(final JobConf clusterConf, String user)
+       throws IOException, InterruptedException {
+     UserGroupInformation ugi =
+@@ -150,7 +161,7 @@ public class TestJobACLs {
+         JobClient jobClient = new JobClient(clusterConf);
+         SleepJob sleepJob = new SleepJob();
+         sleepJob.setConf(clusterConf);
+-        JobConf jobConf = sleepJob.setupJobConf(0, 0, 1000, 1000, 1000, 1000);
++        JobConf jobConf = sleepJob.setupJobConf(1, 0, 2000, 1000, 1000, 1000);
+         RunningJob runningJob = jobClient.submitJob(jobConf);
+         return runningJob;
+       }
+-- 
+1.7.0.4
+

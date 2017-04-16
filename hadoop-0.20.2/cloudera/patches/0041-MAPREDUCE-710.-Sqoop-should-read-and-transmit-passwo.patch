@@ -1,0 +1,468 @@
+From 58e23056af0e99ef611ac258719207cc9459a849 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:41:47 -0800
+Subject: [PATCH 0041/1179] MAPREDUCE-710. Sqoop should read and transmit passwords in a more secure manner
+
+Description: Sqoop's current support for passwords involves reading passwords from the command line "--password foo", which makes the password visible to other users via 'ps'. An invisible-console approach should be taken.
+
+<p>Related, Sqoop transmits passwords to mysqldump in the same fashion, which is also insecure.</p>
+Reason: Security improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/sqoop/ImportOptions.java     |   16 ++
+ .../hadoop/sqoop/manager/LocalMySQLManager.java    |  110 ++++++++---
+ .../src/test/org/apache/hadoop/sqoop/AllTests.java |    2 +
+ .../hadoop/sqoop/manager/LocalMySQLTest.java       |    8 +-
+ .../apache/hadoop/sqoop/manager/MySQLAuthTest.java |  190 ++++++++++++++++++++
+ 5 files changed, 291 insertions(+), 35 deletions(-)
+ create mode 100644 src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java
+index aa038d3..65eaebf 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java
+@@ -203,6 +203,14 @@ public class ImportOptions {
+   }
+ 
+   /**
++   * Allow the user to enter his password on the console without printing characters.
++   * @return the password as a string
++   */
++  private String securePasswordEntry() {
++    return new String(System.console().readPassword("Enter password: "));
++  }
++
++  /**
+    * Print usage strings for the program's arguments.
+    */
+   public static void printUsage() {
+@@ -213,6 +221,7 @@ public class ImportOptions {
+     System.out.println("--driver (class-name)        Manually specify JDBC driver class to use");
+     System.out.println("--username (username)        Set authentication username");
+     System.out.println("--password (password)        Set authentication password");
++    System.out.println("-P                           Read password from console");
+     System.out.println("--local                      Use local import fast path (mysql only)");
+     System.out.println("");
+     System.out.println("Import control options:");
+@@ -294,7 +303,10 @@ public class ImportOptions {
+             this.password = "";
+           }
+         } else if (args[i].equals("--password")) {
++          LOG.warn("Setting your password on the command-line is insecure. Consider using -P instead.");
+           this.password = args[++i];
++        } else if (args[i].equals("-P")) {
++          this.password = securePasswordEntry();
+         } else if (args[i].equals("--hadoop-home")) {
+           this.hadoopHome = args[++i];
+         } else if (args[i].equals("--hive-home")) {
+@@ -506,4 +518,8 @@ public class ImportOptions {
+   public void setUsername(String name) {
+     this.username = name;
+   }
++
++  public void setPassword(String pass) {
++    this.password = pass;
++  }
+ }
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java
+index 16ee134..10195ef 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/LocalMySQLManager.java
+@@ -20,6 +20,8 @@ package org.apache.hadoop.sqoop.manager;
+ 
+ import java.io.BufferedReader;
+ import java.io.BufferedWriter;
++import java.io.File;
++import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.InputStreamReader;
+@@ -37,6 +39,7 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.sqoop.ImportOptions;
+ import org.apache.hadoop.sqoop.util.ImportError;
++import org.apache.hadoop.util.Shell;
+ 
+ /**
+  * Manages local connections to MySQL databases
+@@ -54,6 +57,43 @@ public class LocalMySQLManager extends MySQLManager {
+   private static final String MYSQL_DUMP_CMD = "mysqldump";
+   
+   /**
++   * Writes the user's password to a tmp file with 0600 permissions.
++   * @return the filename used.
++   */
++  private String writePasswordFile() throws IOException {
++    // Create the temp file to hold the user's password.
++    String tmpDir = options.getTempDir();
++    File tempFile = File.createTempFile("mysql-cnf",".cnf", new File(tmpDir));
++
++    // Set this file to be 0600. Java doesn't have a built-in mechanism for this
++    // so we need to go out to the shell to execute chmod.
++    ArrayList<String> chmodArgs = new ArrayList<String>();
++    chmodArgs.add("chmod");
++    chmodArgs.add("0600");
++    chmodArgs.add(tempFile.toString());
++    try {
++      Shell.execCommand("chmod", "0600", tempFile.toString());
++    } catch (IOException ioe) {
++      // Shell.execCommand will throw IOException on exit code != 0.
++      LOG.error("Could not chmod 0600 " + tempFile.toString());
++      throw new IOException("Could not ensure password file security.", ioe);
++    }
++
++    // If we're here, the password file is believed to be ours alone.
++    // The inability to set chmod 0600 inside Java is troublesome. We have to trust
++    // that the external 'chmod' program in the path does the right thing, and returns
++    // the correct exit status. But given our inability to re-read the permissions
++    // associated with a file, we'll have to make do with this.
++    String password = options.getPassword();
++    BufferedWriter w = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(tempFile)));
++    w.write("[client]\n");
++    w.write("password=" + password + "\n");
++    w.close();
++
++    return tempFile.toString();
++  }
++
++  /**
+    * Import the table into HDFS by using mysqldump to pull out the data from
+    * the database and upload the files directly to HDFS.
+    */
+@@ -105,41 +145,43 @@ public class LocalMySQLManager extends MySQLManager {
+     }
+ 
+     LOG.info("Performing import of table " + tableName + " from database " + databaseName);
+-
++    Process p = null;
+     args.add(MYSQL_DUMP_CMD); // requires that this is on the path.
+-    args.add("--skip-opt");
+-    args.add("--compact");
+-    args.add("--no-create-db");
+-    args.add("--no-create-info");
+-
+-    String username = options.getUsername();
+-    if (null != username) {
+-      args.add("--user=" + username);
+-    }
+ 
+     String password = options.getPassword();
+-    if (null != password) {
+-      // TODO(aaron): This is really insecure.
+-      args.add("--password=" + password);
+-    }
+-    
+-    String whereClause = options.getWhereClause();
+-    if (null != whereClause) {
+-      // Don't use the --where="<whereClause>" version because spaces in it can confuse
+-      // Java, and adding in surrounding quotes confuses Java as well.
+-      args.add("-w");
+-      args.add(whereClause);
+-    }
+-
+-    args.add("--quick"); // no buffering
+-    // TODO(aaron): Add a flag to allow --lock-tables instead for MyISAM data
+-    args.add("--single-transaction"); 
++    String passwordFile = null;
+ 
+-    args.add(databaseName);
+-    args.add(tableName);
+-    
+-    Process p = null;
+     try {
++      // --defaults-file must be the first argument.
++      if (null != password && password.length() > 0) {
++        passwordFile = writePasswordFile();
++        args.add("--defaults-file=" + passwordFile);
++      }
++
++      String whereClause = options.getWhereClause();
++      if (null != whereClause) {
++        // Don't use the --where="<whereClause>" version because spaces in it can confuse
++        // Java, and adding in surrounding quotes confuses Java as well.
++        args.add("-w");
++        args.add(whereClause);
++      }
++
++      args.add("--skip-opt");
++      args.add("--compact");
++      args.add("--no-create-db");
++      args.add("--no-create-info");
++      args.add("--quick"); // no buffering
++      // TODO(aaron): Add a flag to allow --lock-tables instead for MyISAM data
++      args.add("--single-transaction"); 
++
++      String username = options.getUsername();
++      if (null != username) {
++        args.add("--user=" + username);
++      }
++
++      args.add(databaseName);
++      args.add(tableName);
++
+       // begin the import in an external process.
+       LOG.debug("Starting mysqldump with arguments:");
+       for (String arg : args) {
+@@ -236,6 +278,14 @@ public class LocalMySQLManager extends MySQLManager {
+         }
+       }
+ 
++      // Remove the password file.
++      if (null != passwordFile) {
++        if (!new File(passwordFile).delete()) {
++          LOG.error("Could not remove mysql password file " + passwordFile);
++          LOG.error("You should remove this file to protect your credentials.");
++        }
++      }
++
+       if (0 != result) {
+         throw new IOException("mysqldump terminated with status "
+             + Integer.toString(result));
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java
+index ad0121b..e782cb8 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.sqoop;
+ 
+ import org.apache.hadoop.sqoop.hive.TestHiveImport;
+ import org.apache.hadoop.sqoop.manager.LocalMySQLTest;
++import org.apache.hadoop.sqoop.manager.MySQLAuthTest;
+ import org.apache.hadoop.sqoop.manager.TestHsqldbManager;
+ import org.apache.hadoop.sqoop.manager.TestSqlManager;
+ import org.apache.hadoop.sqoop.orm.TestClassWriter;
+@@ -48,6 +49,7 @@ public final class AllTests  {
+     suite.addTestSuite(TestOrderBy.class);
+     suite.addTestSuite(TestWhere.class);
+     suite.addTestSuite(LocalMySQLTest.class);
++    suite.addTestSuite(MySQLAuthTest.class);
+     suite.addTestSuite(TestHiveImport.class);
+ 
+     return suite;
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
+index 7a71a5d..13ad1cb 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/LocalMySQLTest.java
+@@ -58,20 +58,18 @@ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+  * CREATE DATABASE sqooptestdb;
+  * use mysql;
+  * GRANT ALL PRIVILEGES ON sqooptestdb.* TO 'yourusername'@'localhost';
+- * GRANT FILE ON *.* TO 'yourusername'@'localhost';
+  * flush privileges;
+  *
+- * The above will authorize you to use file-level access to the database.
+- * This privilege is global and cannot be applied on a per-schema basis
+- * (e.g., just to sqooptestdb).
+  */
+ public class LocalMySQLTest extends ImportJobTestCase {
+ 
+   public static final Log LOG = LogFactory.getLog(LocalMySQLTest.class.getName());
+ 
++  static final String HOST_URL = "jdbc:mysql://localhost/";
++
+   static final String MYSQL_DATABASE_NAME = "sqooptestdb";
+   static final String TABLE_NAME = "EMPLOYEES";
+-  static final String CONNECT_STRING = "jdbc:mysql://localhost/" + MYSQL_DATABASE_NAME;
++  static final String CONNECT_STRING = HOST_URL + MYSQL_DATABASE_NAME;
+ 
+   // instance variables populated during setUp, used during tests
+   private LocalMySQLManager manager;
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
+new file mode 100644
+index 0000000..9d38416
+--- /dev/null
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/manager/MySQLAuthTest.java
+@@ -0,0 +1,190 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.sqoop.manager;
++
++import java.io.BufferedReader;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.InputStreamReader;
++import java.io.FileInputStream;
++import java.io.File;
++import java.sql.Connection;
++import java.sql.SQLException;
++import java.sql.Statement;
++import java.util.ArrayList;
++
++import junit.framework.TestCase;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.sqoop.ImportOptions;
++import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
++
++/**
++ * Test authentication and remote access to direct mysqldump-based imports.
++ *
++ * Since this requires a MySQL installation on your local machine to use, this
++ * class is named in such a way that Hadoop's default QA process does not run
++ * it. You need to run this manually with -Dtestcase=MySQLAuthTest
++ *
++ * You need to put MySQL's Connector/J JDBC driver library into a location
++ * where Hadoop will be able to access it (since this library cannot be checked
++ * into Apache's tree for licensing reasons).
++ *
++ * You need to create a database used by Sqoop for password tests:
++ *
++ * CREATE DATABASE sqooppasstest;
++ * use mysql;
++ * GRANT ALL PRIVILEGES on sqooppasstest.* TO 'sqooptest'@'localhost' IDENTIFIED BY '12345';
++ * flush privileges;
++ *
++ */
++public class MySQLAuthTest extends ImportJobTestCase {
++
++  public static final Log LOG = LogFactory.getLog(MySQLAuthTest.class.getName());
++
++  static final String HOST_URL = "jdbc:mysql://localhost/";
++
++  static final String AUTH_TEST_DATABASE = "sqooppasstest";
++  static final String AUTH_TEST_USER = "sqooptest";
++  static final String AUTH_TEST_PASS = "12345";
++  static final String AUTH_TABLE_NAME = "authtest";
++  static final String AUTH_CONNECT_STRING = HOST_URL + AUTH_TEST_DATABASE;
++
++  // instance variables populated during setUp, used during tests
++  private LocalMySQLManager manager;
++
++  @Before
++  public void setUp() {
++    ImportOptions options = new ImportOptions(AUTH_CONNECT_STRING, AUTH_TABLE_NAME);
++    options.setUsername(AUTH_TEST_USER);
++    options.setPassword(AUTH_TEST_PASS);
++
++    manager = new LocalMySQLManager(options);
++
++    Connection connection = null;
++    Statement st = null;
++
++    try {
++      connection = manager.getConnection();
++      connection.setAutoCommit(false);
++      st = connection.createStatement();
++
++      // create the database table and populate it with data. 
++      st.executeUpdate("DROP TABLE IF EXISTS " + AUTH_TABLE_NAME);
++      st.executeUpdate("CREATE TABLE " + AUTH_TABLE_NAME + " ("
++          + "id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, "
++          + "name VARCHAR(24) NOT NULL)");
++
++      st.executeUpdate("INSERT INTO " + AUTH_TABLE_NAME + " VALUES("
++          + "NULL,'Aaron')");
++      connection.commit();
++    } catch (SQLException sqlE) {
++      LOG.error("Encountered SQL Exception: " + sqlE);
++      sqlE.printStackTrace();
++      fail("SQLException when running test setUp(): " + sqlE);
++    } finally {
++      try {
++        if (null != st) {
++          st.close();
++        }
++
++        if (null != connection) {
++          connection.close();
++        }
++      } catch (SQLException sqlE) {
++        LOG.warn("Got SQLException when closing connection: " + sqlE);
++      }
++    }
++  }
++
++  @After
++  public void tearDown() {
++    try {
++      manager.close();
++    } catch (SQLException sqlE) {
++      LOG.error("Got SQLException: " + sqlE.toString());
++      fail("Got SQLException: " + sqlE.toString());
++    }
++  }
++
++  private String [] getArgv(boolean includeHadoopFlags) {
++    ArrayList<String> args = new ArrayList<String>();
++
++    if (includeHadoopFlags) {
++      args.add("-D");
++      args.add("fs.default.name=file:///");
++    }
++
++    args.add("--table");
++    args.add(AUTH_TABLE_NAME);
++    args.add("--warehouse-dir");
++    args.add(getWarehouseDir());
++    args.add("--connect");
++    args.add(AUTH_CONNECT_STRING);
++    args.add("--local");
++    args.add("--username");
++    args.add(AUTH_TEST_USER);
++    args.add("--password");
++    args.add(AUTH_TEST_PASS);
++
++    return args.toArray(new String[0]);
++  }
++
++  /**
++   * Connect to a db and ensure that password-based authentication
++   * succeeds.
++   */
++  @Test
++  public void testAuthAccess() {
++    String [] argv = getArgv(true);
++    try {
++      runImport(argv);
++    } catch (IOException ioe) {
++      LOG.error("Got IOException during import: " + ioe.toString());
++      ioe.printStackTrace();
++      fail(ioe.toString());
++    }
++
++    Path warehousePath = new Path(this.getWarehouseDir());
++    Path tablePath = new Path(warehousePath, AUTH_TABLE_NAME);
++    Path filePath = new Path(tablePath, "data-00000");
++
++    File f = new File(filePath.toString());
++    assertTrue("Could not find imported data file", f.exists());
++    BufferedReader r = null;
++    try {
++      // Read through the file and make sure it's all there.
++      r = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
++      assertEquals("1,'Aaron'", r.readLine());
++    } catch (IOException ioe) {
++      LOG.error("Got IOException verifying results: " + ioe.toString());
++      ioe.printStackTrace();
++      fail(ioe.toString());
++    } finally {
++      IOUtils.closeStream(r);
++    }
++  }
++}
+-- 
+1.7.0.4
+

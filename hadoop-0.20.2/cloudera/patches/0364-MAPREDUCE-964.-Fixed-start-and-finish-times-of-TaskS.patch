@@ -1,0 +1,197 @@
+From 3ce342baafd3774e4d920a7fcb49a7e091a0cad1 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 28 Sep 2009 13:36:31 -0700
+Subject: [PATCH 0364/1179] MAPREDUCE-964. Fixed start and finish times of TaskStatus to be consistent, thereby fixing inconsistencies in metering tasks.
+
+Patch: http://issues.apache.org/jira/secure/attachment/12420539/mapreduce-964-ydist.patch
+Patch: http://issues.apache.org/jira/secure/attachment/12420893/mapreduce-964-ydist-1.patch
+Author: Sreekanth Ramakrishnan
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/TaskStatus.java       |   40 +++++++++---
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    1 +
+ .../org/apache/hadoop/mapred/TestTaskStatus.java   |   71 ++++++++++++++++++++
+ 3 files changed, 103 insertions(+), 9 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestTaskStatus.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskStatus.java b/src/mapred/org/apache/hadoop/mapred/TaskStatus.java
+index fec2a18..2cbdf7a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskStatus.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskStatus.java
+@@ -27,6 +27,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.util.StringUtils;
+ /**************************************************
+  * Describes the current status of a task.  This is
+  * not intended to be a comprehensive piece of data.
+@@ -130,12 +131,23 @@ public abstract class TaskStatus implements Writable, Cloneable {
+   }
+ 
+   /**
+-   * Sets finishTime. 
++   * Sets finishTime for the task status if and only if the
++   * start time is set and passed finish time is greater than
++   * zero.
++   * 
+    * @param finishTime finish time of task.
+    */
+   void setFinishTime(long finishTime) {
+-    this.finishTime = finishTime;
++    if(this.getStartTime() > 0 && finishTime > 0) {
++      this.finishTime = finishTime;
++    } else {
++      //Using String utils to get the stack trace.
++      LOG.error("Trying to set finish time for task " + taskid + 
++          " when no start time is set, stackTrace is : " + 
++          StringUtils.stringifyException(new Exception()));
++    }
+   }
++  
+   /**
+    * Get shuffle finish time for the task. If shuffle finish time was 
+    * not set due to shuffle/sort/finish phases ending within same
+@@ -181,12 +193,22 @@ public abstract class TaskStatus implements Writable, Cloneable {
+   }
+ 
+   /**
+-   * Set startTime of the task.
++   * Set startTime of the task if start time is greater than zero.
+    * @param startTime start time
+    */
+   void setStartTime(long startTime) {
+-    this.startTime = startTime;
++    //Making the assumption of passed startTime to be a positive
++    //long value explicit.
++    if (startTime > 0) {
++      this.startTime = startTime;
++    } else {
++      //Using String utils to get the stack trace.
++      LOG.error("Trying to set illegal startTime for task : " + taskid +
++          ".Stack trace is : " +
++          StringUtils.stringifyException(new Exception()));
++    }
+   }
++  
+   /**
+    * Get current phase of this task. Phase.Map in case of map tasks, 
+    * for reduce one of Phase.SHUFFLE, Phase.SORT or Phase.REDUCE. 
+@@ -301,11 +323,11 @@ public abstract class TaskStatus implements Writable, Cloneable {
+ 
+     setDiagnosticInfo(status.getDiagnosticInfo());
+     
+-    if (status.getStartTime() != 0) {
++    if (status.getStartTime() > 0) {
+       this.startTime = status.getStartTime(); 
+     }
+-    if (status.getFinishTime() != 0) {
+-      this.finishTime = status.getFinishTime(); 
++    if (status.getFinishTime() > 0) {
++      setFinishTime(status.getFinishTime()); 
+     }
+     
+     this.phase = status.getPhase();
+@@ -334,8 +356,8 @@ public abstract class TaskStatus implements Writable, Cloneable {
+     setProgress(progress);
+     setStateString(state);
+     setPhase(phase);
+-    if (finishTime != 0) {
+-      this.finishTime = finishTime; 
++    if (finishTime > 0) {
++      setFinishTime(finishTime); 
+     }
+   }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 4211040..82fb08c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -2433,6 +2433,7 @@ public class TaskTracker
+           taskStatus.setRunState(TaskStatus.State.KILLED);
+         }
+       }
++      taskStatus.setFinishTime(System.currentTimeMillis());
+       removeFromMemoryManager(task.getTaskID());
+       releaseSlot();
+     }
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskStatus.java b/src/test/org/apache/hadoop/mapred/TestTaskStatus.java
+new file mode 100644
+index 0000000..03eef21
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestTaskStatus.java
+@@ -0,0 +1,71 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import junit.framework.TestCase;
++
++public class TestTaskStatus extends TestCase {
++
++  public void testMapTaskStatusStartAndFinishTimes() {
++    checkTaskStatues(true);
++  }
++
++  public void testReduceTaskStatusStartAndFinishTimes() {
++    checkTaskStatues(false);
++  }
++
++  /**
++   * Private utility method which ensures uniform testing of newly created
++   * TaskStatus object.
++   * 
++   * @param isMap
++   *          true to test map task status, false for reduce.
++   */
++  private void checkTaskStatues(boolean isMap) {
++
++    TaskStatus status = null;
++    if (isMap) {
++      status = new MapTaskStatus();
++    } else {
++      status = new ReduceTaskStatus();
++    }
++    long currentTime = System.currentTimeMillis();
++    // first try to set the finish time before
++    // start time is set.
++    status.setFinishTime(currentTime);
++    assertEquals("Finish time of the task status set without start time", 0,
++        status.getFinishTime());
++    // Now set the start time to right time.
++    status.setStartTime(currentTime);
++    assertEquals("Start time of the task status not set correctly.",
++        currentTime, status.getStartTime());
++    // try setting wrong start time to task status.
++    long wrongTime = -1;
++    status.setStartTime(wrongTime);
++    assertEquals(
++        "Start time of the task status is set to wrong negative value",
++        currentTime, status.getStartTime());
++    // finally try setting wrong finish time i.e. negative value.
++    status.setFinishTime(wrongTime);
++    assertEquals("Finish time of task status is set to wrong negative value",
++        0, status.getFinishTime());
++    status.setFinishTime(currentTime);
++    assertEquals("Finish time of the task status not set correctly.",
++        currentTime, status.getFinishTime());
++  }
++}
+-- 
+1.7.0.4
+

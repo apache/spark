@@ -1,0 +1,98 @@
+From c5c9b8bf0bf83637589a809b3c376cf74a2fb464 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:45:54 -0800
+Subject: [PATCH 0205/1179] MAPREDUCE-1313. NPE in FieldFormatter if escape character is set and field is null
+
+Description: Performing an import with the <tt>&#45;&#45;escaped-by</tt> character set on a table with a null field will cause a NullPointerException in FieldFormatter
+Reason: bugfix
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../apache/hadoop/sqoop/lib/FieldFormatter.java    |    4 ++++
+ .../org/apache/hadoop/sqoop/TestAllTables.java     |   17 +++++++++++++++--
+ .../hadoop/sqoop/lib/TestFieldFormatter.java       |    4 ++++
+ 3 files changed, 23 insertions(+), 2 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/lib/FieldFormatter.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/lib/FieldFormatter.java
+index 95d4010..a1b6742 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/lib/FieldFormatter.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/lib/FieldFormatter.java
+@@ -57,6 +57,10 @@ public final class FieldFormatter {
+     boolean escapingLegal = (null != escape && escape.length() > 0 && !escape.equals("\000"));
+     String withEscapes;
+ 
++    if (null == str) {
++      return null;
++    }
++
+     if (escapingLegal) {
+       // escaping is legal. Escape any instances of the escape char itself
+       withEscapes = str.replace(escape, escape + escape);
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestAllTables.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestAllTables.java
+index 8e31a54..31c5167 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestAllTables.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestAllTables.java
+@@ -58,6 +58,8 @@ public class TestAllTables extends ImportJobTestCase {
+     args.add(HsqldbTestServer.getUrl());
+     args.add("--num-mappers");
+     args.add("1");
++    args.add("--escaped-by");
++    args.add("\\");
+ 
+     return args.toArray(new String[0]);
+   }
+@@ -86,9 +88,18 @@ public class TestAllTables extends ImportJobTestCase {
+     // create two tables.
+     this.expectedStrings.add("A winner");
+     this.expectedStrings.add("is you!");
++    this.expectedStrings.add(null);
+ 
++    int i = 0;
+     for (String expectedStr: this.expectedStrings) {
+-      this.createTableForColType("VARCHAR(32) PRIMARY KEY", "'" + expectedStr + "'");
++      String wrappedStr = null;
++      if (expectedStr != null) {
++        wrappedStr = "'" + expectedStr + "'";
++      }
++
++      String [] types = { "INT NOT NULL PRIMARY KEY", "VARCHAR(32)" };
++      String [] vals = { Integer.toString(i++) , wrappedStr };
++      this.createTableWithColTypes(types, vals);
+       this.tableNames.add(this.getTableName());
+       this.removeTableDir();
+       incrementTableNum();
+@@ -100,13 +111,15 @@ public class TestAllTables extends ImportJobTestCase {
+     runImport(argv);
+ 
+     Path warehousePath = new Path(this.getWarehouseDir());
++    int i = 0;
+     for (String tableName : this.tableNames) {
+       Path tablePath = new Path(warehousePath, tableName);
+       Path filePath = new Path(tablePath, "part-m-00000");
+ 
+       // dequeue the expected value for this table. This
+       // list has the same order as the tableNames list.
+-      String expectedVal = this.expectedStrings.get(0);
++      String expectedVal = Integer.toString(i++) + ","
++          + this.expectedStrings.get(0);
+       this.expectedStrings.remove(0);
+ 
+       BufferedReader reader = new BufferedReader(
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/lib/TestFieldFormatter.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/lib/TestFieldFormatter.java
+index c29e80f..661a9ac 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/lib/TestFieldFormatter.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/lib/TestFieldFormatter.java
+@@ -37,6 +37,10 @@ public class TestFieldFormatter extends TestCase {
+   public void testNullArgs() {
+     String result = FieldFormatter.escapeAndEnclose("", null, null, null, false);
+     assertEquals("", result);
++
++    char [] encloseFor = { '\"' };
++    assertNull(FieldFormatter.escapeAndEnclose(null, "\\", "\"", encloseFor,
++        false));
+   }
+ 
+   public void testBasicStr() {
+-- 
+1.7.0.4
+

@@ -1,0 +1,79 @@
+From 2e9c10c247d5be1ea9b9b20983ada0e898d7e3ab Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 4 Jul 2011 14:44:06 -0700
+Subject: [PATCH 1000/1179] HADOOP-7440. HttpServer.getParameterValues throws NPE for missing parameters
+
+Reason: fix user-visible NPE
+Author: Todd Lipcon
+Ref: CDH-3083
+---
+ src/core/org/apache/hadoop/http/HttpServer.java    |    3 ++
+ .../org/apache/hadoop/http/TestHtmlQuoting.java    |   31 ++++++++++++++++++--
+ 2 files changed, 31 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index 89e5c1a..d0a52a5 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -749,6 +749,9 @@ public class HttpServer implements FilterContainer {
+       public String[] getParameterValues(String name) {
+         String unquoteName = HtmlQuoting.unquoteHtmlChars(name);
+         String[] unquoteValue = rawRequest.getParameterValues(unquoteName);
++        if (unquoteValue == null) {
++          return null;
++        }
+         String[] result = new String[unquoteValue.length];
+         for(int i=0; i < result.length; ++i) {
+           result[i] = HtmlQuoting.quoteHtmlChars(unquoteValue[i]);
+diff --git a/src/test/org/apache/hadoop/http/TestHtmlQuoting.java b/src/test/org/apache/hadoop/http/TestHtmlQuoting.java
+index 1c3663a..d201884 100644
+--- a/src/test/org/apache/hadoop/http/TestHtmlQuoting.java
++++ b/src/test/org/apache/hadoop/http/TestHtmlQuoting.java
+@@ -17,11 +17,13 @@
+  */
+ package org.apache.hadoop.http;
+ 
+-import static org.junit.Assert.assertEquals;
+-import static org.junit.Assert.assertFalse;
+-import static org.junit.Assert.assertTrue;
++import static org.junit.Assert.*;
++
++import javax.servlet.http.HttpServletRequest;
+ 
+ import org.junit.Test;
++import org.mockito.Mockito;
++
+ 
+ public class TestHtmlQuoting {
+ 
+@@ -62,4 +64,27 @@ public class TestHtmlQuoting {
+     }
+     runRoundTrip(buffer.toString());
+   }
++
++  @Test
++  public void testRequestQuoting() throws Exception {
++    HttpServletRequest mockReq = Mockito.mock(HttpServletRequest.class);
++    HttpServer.QuotingInputFilter.RequestQuoter quoter =
++      new HttpServer.QuotingInputFilter.RequestQuoter(mockReq);
++    
++    Mockito.doReturn("a<b").when(mockReq).getParameter("x");
++    assertEquals("Test simple param quoting",
++        "a&lt;b", quoter.getParameter("x"));
++    
++    Mockito.doReturn(null).when(mockReq).getParameter("x");
++    assertEquals("Test that missing parameters dont cause NPE",
++        null, quoter.getParameter("x"));
++
++    Mockito.doReturn(new String[]{"a<b", "b"}).when(mockReq).getParameterValues("x");
++    assertArrayEquals("Test escaping of an array",
++        new String[]{"a&lt;b", "b"}, quoter.getParameterValues("x"));
++
++    Mockito.doReturn(null).when(mockReq).getParameterValues("x");
++    assertArrayEquals("Test that missing parameters dont cause NPE for array",
++        null, quoter.getParameterValues("x"));
++  }
+ }
+-- 
+1.7.0.4
+

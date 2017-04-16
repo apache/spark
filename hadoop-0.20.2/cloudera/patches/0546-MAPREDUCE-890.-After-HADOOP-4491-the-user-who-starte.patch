@@ -1,0 +1,543 @@
+From 543dcb4cdef6028146e5f8104123c8ac84e11e6b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 10 Mar 2010 11:20:33 +0530
+Subject: [PATCH 0546/1179] MAPREDUCE-890. After HADOOP-4491, the user who started mapred system is not able to run job.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12438369/MR890.20S.patch
+Author: Ravi Gummadi
+Ref: CDH-648
+---
+ src/c++/task-controller/task-controller.c          |   86 ++++++++++----------
+ .../streaming/TestStreamingAsDifferentUser.java    |    9 +-
+ .../mapred/ClusterWithLinuxTaskController.java     |   35 +++++---
+ .../mapred/TestJobExecutionAsDifferentUser.java    |    4 +-
+ ...estKillSubProcessesWithLinuxTaskController.java |    2 +-
+ .../TestLocalizationWithLinuxTaskController.java   |   40 ++++++++--
+ .../hadoop/mapred/TestTaskTrackerLocalization.java |    4 +-
+ ...ributedCacheManagerWithLinuxTaskController.java |   10 ++-
+ .../mapred/pipes/TestPipesAsDifferentUser.java     |    2 +-
+ 9 files changed, 120 insertions(+), 72 deletions(-)
+
+diff --git a/src/c++/task-controller/task-controller.c b/src/c++/task-controller/task-controller.c
+index ecabc9b..942dcf8 100644
+--- a/src/c++/task-controller/task-controller.c
++++ b/src/c++/task-controller/task-controller.c
+@@ -378,18 +378,6 @@ static int secure_path(const char *path, uid_t uid, gid_t gid,
+     if (!process_path) {
+       continue;
+     }
+-    if (should_check_ownership &&
+-          (compare_ownership(uid, gid, entry->fts_path) == 0)) {
+-      // already set proper permissions.
+-      // This might happen with distributed cache.
+-#ifdef DEBUG
+-      fprintf(
+-          LOGFILE,
+-          "already has private permissions. Not trying to change again for %s",
+-          entry->fts_path);
+-#endif
+-      continue;
+-    }
+ 
+     if (should_check_ownership && (check_ownership(entry->fts_path) != 0)) {
+       fprintf(LOGFILE,
+@@ -567,20 +555,6 @@ int get_user_details(const char *user) {
+   return 0;
+ }
+ 
+-/**
+- * Compare ownership of a file with the given ids.
+- */
+-int compare_ownership(uid_t uid, gid_t gid, char *path) {
+-  struct stat filestat;
+-  if (stat(path, &filestat) != 0) {
+-    return UNABLE_TO_STAT_FILE;
+-  }
+-  if (uid == filestat.st_uid && gid == filestat.st_gid) {
+-    return 0;
+-  }
+-  return 1;
+-}
+-
+ /*
+  * Function to check if the TaskTracker actually owns the file.
+   */
+@@ -603,7 +577,10 @@ int check_ownership(char *path) {
+  * Function to initialize the user directories of a user.
+  * It does the following:
+  *     *  sudo chown user:mapred -R taskTracker/$user
+- *     *  sudo chmod 2570 -R taskTracker/$user
++ *     *  if user is not $tt_user,
++ *     *    sudo chmod 2570 -R taskTracker/$user
++ *     *  else // user is tt_user
++ *     *    sudo chmod 2770 -R taskTracker/$user
+  * This is done once per every user on the TaskTracker.
+  */
+ int initialize_user(const char *user) {
+@@ -633,6 +610,11 @@ int initialize_user(const char *user) {
+       full_local_dir_str);
+ #endif
+ 
++  int is_tt_user = (user_detail->pw_uid == getuid());
++  
++  // for tt_user, set 770 permissions; otherwise set 570
++  mode_t permissions = is_tt_user ? (S_IRWXU | S_IRWXG)
++                                  : (S_IRUSR | S_IXUSR | S_IRWXG);
+   char *user_dir;
+   char **local_dir_ptr = local_dir;
+   int failed = 0;
+@@ -660,11 +642,11 @@ int initialize_user(const char *user) {
+         break;
+       }
+     } else if (secure_path(user_dir, user_detail->pw_uid,
+-        tasktracker_gid, S_IRUSR | S_IXUSR | S_IRWXG, S_ISGID | S_IRUSR |
+-                         S_IXUSR | S_IRWXG, 1) != 0) {
+-      // No setgid on files and setgid on dirs, 570
++        tasktracker_gid, permissions, S_ISGID | permissions, 1) != 0) {
++      // No setgid on files and setgid on dirs,
++      // 770 for tt_user and 570 for any other user
+       fprintf(LOGFILE, "Failed to secure the user_dir %s\n",
+-          user_dir);
++              user_dir);
+       failed = 1;
+       free(user_dir);
+       break;
+@@ -685,9 +667,13 @@ int initialize_user(const char *user) {
+ /**
+  * Function to prepare the job directories for the task JVM.
+  * We do the following:
+- *     *  sudo chown user:mapred -R taskTracker/jobcache/$jobid
+- *     *  sudo chmod 2570 -R taskTracker/jobcache/$jobid
+- *     *  sudo chmod 2770 taskTracker/jobcache/$jobid/work
++ *     *  sudo chown user:mapred -R taskTracker/$user/jobcache/$jobid
++ *     *  if user is not $tt_user,
++ *     *    sudo chmod 2570 -R taskTracker/$user/jobcache/$jobid
++ *     *  else // user is tt_user
++ *     *    sudo chmod 2770 -R taskTracker/$user/jobcache/$jobid
++ *     *
++ *     *  For any user, sudo chmod 2770 taskTracker/$user/jobcache/$jobid/work
+  */
+ int initialize_job(const char *jobid, const char *user) {
+   if (jobid == NULL || user == NULL) {
+@@ -715,6 +701,11 @@ int initialize_job(const char *jobid, const char *user) {
+       full_local_dir_str);
+ #endif
+ 
++  int is_tt_user = (user_detail->pw_uid == getuid());
++  
++  // for tt_user, set 770 permissions; for any other user, set 570 for job-dir
++  mode_t permissions = is_tt_user ? (S_IRWXU | S_IRWXG)
++                                  : (S_IRUSR | S_IXUSR | S_IRWXG);
+   char *job_dir, *job_work_dir;
+   char **local_dir_ptr = local_dir;
+   int failed = 0;
+@@ -741,14 +732,16 @@ int initialize_job(const char *jobid, const char *user) {
+         break;
+       }
+     } else if (secure_path(job_dir, user_detail->pw_uid, tasktracker_gid,
+-        S_IRUSR | S_IXUSR | S_IRWXG, S_ISGID | S_IRUSR | S_IXUSR | S_IRWXG, 1)
+-        != 0) {
+-      // No setgid on files and setgid on dirs, 570
++               permissions, S_ISGID | permissions, 1) != 0) {
++      // No setgid on files and setgid on dirs,
++      // 770 for tt_user and 570 for any other user
+       fprintf(LOGFILE, "Failed to secure the job_dir %s\n", job_dir);
+       failed = 1;
+       free(job_dir);
+       break;
+-    } else {
++    } else if (!is_tt_user) {
++      // For tt_user, we don't need this as we already set 2770 for
++      // job-work-dir because of "chmod -R" done above
+       job_work_dir = get_job_work_directory(job_dir);
+       if (job_work_dir == NULL) {
+         fprintf(LOGFILE, "Couldn't get job-work directory for %s.\n", jobid);
+@@ -801,7 +794,10 @@ int initialize_job(const char *jobid, const char *user) {
+  * Function to initialize the distributed cache file for a user.
+  * It does the following:
+  *     *  sudo chown user:mapred -R taskTracker/$user/distcache/<randomdir>
+- *     *  sudo chmod 2570 -R taskTracker/$user/distcache/<randomdir>
++ *     *  if user is not $tt_user,
++ *     *    sudo chmod 2570 -R taskTracker/$user/distcache/<randomdir>
++ *     *  else // user is tt_user
++ *     *    sudo chmod 2770 -R taskTracker/$user/distcache/<randomdir>
+  * This is done once per localization. Tasks reusing JVMs just create
+  * symbolic links themselves and so there isn't anything specific to do in
+  * that case.
+@@ -843,6 +839,12 @@ int initialize_distributed_cache_file(const char *tt_root,
+   }
+ 
+   gid_t binary_gid = getegid(); // the group permissions of the binary.
++  
++  int is_tt_user = (user_detail->pw_uid == getuid());
++  
++  // for tt_user, set 770 permissions; for any other user, set 570
++  mode_t permissions = is_tt_user ? (S_IRWXU | S_IRWXG)
++                                  : (S_IRUSR | S_IXUSR | S_IRWXG);
+   int failed = 0;
+   struct stat filestat;
+   if (stat(localized_unique_dir, &filestat) != 0) {
+@@ -851,9 +853,9 @@ int initialize_distributed_cache_file(const char *tt_root,
+         localized_unique_dir);
+     failed = INITIALIZE_DISTCACHEFILE_FAILED;
+   } else if (secure_path(localized_unique_dir, user_detail->pw_uid,
+-        binary_gid, S_IRUSR | S_IXUSR | S_IRWXG, S_ISGID | S_IRUSR
+-            | S_IXUSR | S_IRWXG, 1) != 0) {
+-    // No setgid on files and setgid on dirs, 570
++        binary_gid, permissions, S_ISGID | permissions, 1) != 0) {
++    // No setgid on files and setgid on dirs,
++    // 770 for tt_user and 570 for any other user
+     fprintf(LOGFILE, "Failed to secure the localized_unique_dir %s\n",
+         localized_unique_dir);
+     failed = INITIALIZE_DISTCACHEFILE_FAILED;
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingAsDifferentUser.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingAsDifferentUser.java
+index 486ca36..7e94355 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingAsDifferentUser.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingAsDifferentUser.java
+@@ -57,7 +57,7 @@ public class TestStreamingAsDifferentUser extends
+     startCluster();
+     final JobConf myConf = getClusterConf();
+     myConf.set("hadoop.job.history.user.location","none");
+-    taskControllerUser.doAs(new PrivilegedExceptionAction<Void>() {
++    jobOwner.doAs(new PrivilegedExceptionAction<Void>() {
+       public Void run() throws IOException{
+ 
+         FileSystem inFs = inputPath.getFileSystem(myConf);
+@@ -118,7 +118,7 @@ public class TestStreamingAsDifferentUser extends
+     final String taskTrackerUser 
+       = UserGroupInformation.getCurrentUser().getShortUserName();
+     
+-    taskControllerUser.doAs(new PrivilegedExceptionAction<Void>() {
++    jobOwner.doAs(new PrivilegedExceptionAction<Void>() {
+       public Void run() throws Exception{
+ 
+         FileSystem inFs = inputPath.getFileSystem(myConf);
+@@ -156,13 +156,14 @@ public class TestStreamingAsDifferentUser extends
+ 
+         // validate private cache files' permissions
+         checkPermissionsOnPrivateDistCache(localDirs,
+-            taskControllerUser.getShortUserName(), taskTrackerSpecialGroup);
++            jobOwner.getShortUserName(), taskTrackerUser,
++            taskTrackerSpecialGroup);
+         
+         // check the file is present even after the job is over.
+         // work directory symlink cleanup should not have removed the target 
+         // files.
+         checkPresenceOfPrivateDistCacheFiles(localDirs, 
+-            taskControllerUser.getShortUserName(), new String[] {"test.sh"});
++            jobOwner.getShortUserName(), new String[] {"test.sh"});
+ 
+         // validate private cache files' permissions
+         checkPermissionsOnPublicDistCache(FileSystem.getLocal(myConf),
+diff --git a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+index 2324791..c63e789 100644
+--- a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+@@ -113,7 +113,7 @@ public class ClusterWithLinuxTaskController extends TestCase {
+ 
+   private static File configurationFile = null;
+ 
+-  protected UserGroupInformation taskControllerUser;
++  protected UserGroupInformation jobOwner;
+   
+   protected static String taskTrackerSpecialGroup = null;
+   /**
+@@ -159,7 +159,7 @@ public class ClusterWithLinuxTaskController extends TestCase {
+     String ugi = System.getProperty(TASKCONTROLLER_UGI);
+     clusterConf = mrCluster.createJobConf();
+     String[] splits = ugi.split(",");
+-    taskControllerUser = UserGroupInformation.createUserForTesting(splits[0],
++    jobOwner = UserGroupInformation.createUserForTesting(splits[0],
+         new String[]{splits[1]});
+     createHomeAndStagingDirectory(clusterConf);
+   }
+@@ -167,7 +167,7 @@ public class ClusterWithLinuxTaskController extends TestCase {
+   private void createHomeAndStagingDirectory(JobConf conf)
+       throws IOException {
+     FileSystem fs = dfsCluster.getFileSystem();
+-    String path = "/user/" + taskControllerUser.getUserName();
++    String path = "/user/" + jobOwner.getUserName();
+     homeDirectory = new Path(path);
+     LOG.info("Creating Home directory : " + homeDirectory);
+     fs.mkdirs(homeDirectory);
+@@ -182,8 +182,8 @@ public class ClusterWithLinuxTaskController extends TestCase {
+ 
+   private void changePermission(FileSystem fs)
+       throws IOException {
+-    fs.setOwner(homeDirectory, taskControllerUser.getUserName(),
+-        taskControllerUser.getGroupNames()[0]);
++    fs.setOwner(homeDirectory, jobOwner.getUserName(),
++        jobOwner.getGroupNames()[0]);
+   }
+ 
+   static File getTaskControllerConfFile(String path) {
+@@ -309,11 +309,11 @@ public class ClusterWithLinuxTaskController extends TestCase {
+       LOG.info("Ownership of the file is " + status.getPath() + " is " + owner
+           + "," + group);
+       assertTrue("Output part-file's owner is not correct. Expected : "
+-          + taskControllerUser.getUserName() + " Found : " + owner, owner
+-          .equals(taskControllerUser.getUserName()));
++          + jobOwner.getUserName() + " Found : " + owner, owner
++          .equals(jobOwner.getUserName()));
+       assertTrue("Output part-file's group is not correct. Expected : "
+-          + taskControllerUser.getGroupNames()[0] + " Found : " + group, group
+-          .equals(taskControllerUser.getGroupNames()[0]));
++          + jobOwner.getGroupNames()[0] + " Found : " + group, group
++          .equals(jobOwner.getGroupNames()[0]));
+     }
+   }
+   
+@@ -321,13 +321,24 @@ public class ClusterWithLinuxTaskController extends TestCase {
+    * Validates permissions of private distcache dir and its contents fully
+    */
+   public static void checkPermissionsOnPrivateDistCache(String[] localDirs,
+-      String user, String groupOwner) throws IOException {
++      String user, String taskTrackerUser, String groupOwner)
++      throws IOException {
++    // user-dir, jobcache and distcache will have
++    //     2770 permissions if jobOwner is same as tt_user
++    //     2570 permissions for any other user
++    String expectedDirPerms  = taskTrackerUser.equals(user)
++                               ? "drwxrws---"
++                               : "dr-xrws---";
++    String expectedFilePerms = taskTrackerUser.equals(user)
++                               ? "-rwxrwx---"
++                               : "-r-xrwx---";
++
+     for (String localDir : localDirs) {
+       File distCacheDir = new File(localDir,
+           TaskTracker.getPrivateDistributedCacheDir(user));
+       if (distCacheDir.exists()) {
+-        checkPermissionsOnDir(distCacheDir, user, groupOwner, "dr-xrws---",
+-            "-r-xrwx---");
++        checkPermissionsOnDir(distCacheDir, user, groupOwner, expectedDirPerms,
++            expectedFilePerms);
+       }
+     }
+   }
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java b/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
+index 68f2482..066f797 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
+@@ -41,7 +41,7 @@ public class TestJobExecutionAsDifferentUser extends
+       return;
+     }
+     startCluster();
+-    taskControllerUser.doAs(new PrivilegedExceptionAction<Object>() {
++    jobOwner.doAs(new PrivilegedExceptionAction<Object>() {
+       public Object run() throws Exception {
+         Path inDir = new Path("input");
+         Path outDir = new Path("output");
+@@ -81,7 +81,7 @@ public class TestJobExecutionAsDifferentUser extends
+       return;
+     }
+     startCluster();
+-    taskControllerUser.doAs(new PrivilegedExceptionAction<Object>() {
++    jobOwner.doAs(new PrivilegedExceptionAction<Object>() {
+       public Object run() throws Exception {
+ 
+         TestMiniMRChildTask childTask = new TestMiniMRChildTask();
+diff --git a/src/test/org/apache/hadoop/mapred/TestKillSubProcessesWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestKillSubProcessesWithLinuxTaskController.java
+index ba8e22b..ce32aa8 100644
+--- a/src/test/org/apache/hadoop/mapred/TestKillSubProcessesWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestKillSubProcessesWithLinuxTaskController.java
+@@ -34,7 +34,7 @@ public class TestKillSubProcessesWithLinuxTaskController extends
+       return;
+     }
+     startCluster();
+-    taskControllerUser.doAs(new PrivilegedExceptionAction<Object>() {
++    jobOwner.doAs(new PrivilegedExceptionAction<Object>() {
+       public Object run() throws Exception {
+         JobConf myConf = getClusterConf();
+         JobTracker jt = mrCluster.getJobTrackerRunner().getJobTracker();
+diff --git a/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
+index a20faa9..fbc6bb7 100644
+--- a/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
+@@ -27,6 +27,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapred.ClusterWithLinuxTaskController.MyLinuxTaskController;
+ import org.apache.hadoop.mapreduce.server.tasktracker.Localizer;
++import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+  * Test to verify localization of a job and localization of a task on a
+@@ -40,6 +41,7 @@ public class TestLocalizationWithLinuxTaskController extends
+       LogFactory.getLog(TestLocalizationWithLinuxTaskController.class);
+ 
+   private File configFile;
++  private static String taskTrackerUserName;
+ 
+   @Override
+   protected boolean canRun() {
+@@ -80,6 +82,8 @@ public class TestLocalizationWithLinuxTaskController extends
+       new MapTask(jobConfFile.toURI().toString(), taskId, 1, null, 1);
+     task.setConf(jobConf);
+     task.setUser(user);
++    taskTrackerUserName = UserGroupInformation.getLoginUser()
++                          .getShortUserName();
+   }
+ 
+   @Override
+@@ -114,16 +118,25 @@ public class TestLocalizationWithLinuxTaskController extends
+       assertTrue("taskTracker sub-dir in the local-dir " + localDir
+           + "is not created!", taskTrackerSubDir.exists());
+ 
++      // user-dir, jobcache and distcache will have
++      //     2770 permissions if jobOwner is same as tt_user
++      //     2570 permissions for any other user
++      String expectedDirPerms = taskTrackerUserName.equals(task.getUser())
++                                ? "drwxrws---"
++                                : "dr-xrws---";
++
+       File userDir = new File(taskTrackerSubDir, task.getUser());
+       assertTrue("user-dir in taskTrackerSubdir " + taskTrackerSubDir
+           + "is not created!", userDir.exists());
+-      checkFilePermissions(userDir.getAbsolutePath(), "dr-xrws---", task
++
++      checkFilePermissions(userDir.getAbsolutePath(), expectedDirPerms, task
+           .getUser(), ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+ 
+       File jobCache = new File(userDir, TaskTracker.JOBCACHE);
+       assertTrue("jobcache in the userDir " + userDir + " isn't created!",
+           jobCache.exists());
+-      checkFilePermissions(jobCache.getAbsolutePath(), "dr-xrws---", task
++
++      checkFilePermissions(jobCache.getAbsolutePath(), expectedDirPerms, task
+           .getUser(), ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+ 
+       // Verify the distributed cache dir.
+@@ -133,7 +146,7 @@ public class TestLocalizationWithLinuxTaskController extends
+       assertTrue("distributed cache dir " + distributedCacheDir
+           + " doesn't exists!", distributedCacheDir.exists());
+       checkFilePermissions(distributedCacheDir.getAbsolutePath(),
+-          "dr-xrws---", task.getUser(),
++          expectedDirPerms, task.getUser(),
+           ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+     }
+   }
+@@ -141,12 +154,25 @@ public class TestLocalizationWithLinuxTaskController extends
+   @Override
+   protected void checkJobLocalization()
+       throws IOException {
++    // job-dir, jars-dir and subdirectories in them will have
++    //     2770 permissions if jobOwner is same as tt_user
++    //     2570 permissions for any other user
++    // Files under these dirs will have
++    //      770 permissions if jobOwner is same as tt_user
++    //      570 permissions for any other user
++    String expectedDirPerms = taskTrackerUserName.equals(task.getUser())
++                              ? "drwxrws---"
++                              : "dr-xrws---";
++    String expectedFilePerms = taskTrackerUserName.equals(task.getUser())
++                               ? "-rwxrwx---"
++                               : "-r-xrwx---";
++
+     for (String localDir : trackerFConf.getStrings("mapred.local.dir")) {
+       File jobDir =
+           new File(localDir, TaskTracker.getLocalJobDir(task.getUser(), jobId
+               .toString()));
+       // check the private permissions on the job directory
+-      checkFilePermissions(jobDir.getAbsolutePath(), "dr-xrws---", task
++      checkFilePermissions(jobDir.getAbsolutePath(), expectedDirPerms, task
+           .getUser(), ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+     }
+ 
+@@ -158,12 +184,12 @@ public class TestLocalizationWithLinuxTaskController extends
+     dirs.add(jarsDir);
+     dirs.add(new Path(jarsDir, "lib"));
+     for (Path dir : dirs) {
+-      checkFilePermissions(dir.toUri().getPath(), "dr-xrws---",
++      checkFilePermissions(dir.toUri().getPath(), expectedDirPerms,
+           task.getUser(),
+           ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+     }
+ 
+-    // job-work dir needs user writable permissions
++    // job-work dir needs user writable permissions i.e. 2770 for any user
+     Path jobWorkDir =
+         lDirAlloc.getLocalPathToRead(TaskTracker.getJobWorkDir(task.getUser(),
+             jobId.toString()), trackerFConf);
+@@ -179,7 +205,7 @@ public class TestLocalizationWithLinuxTaskController extends
+     files.add(new Path(jarsDir, "lib" + Path.SEPARATOR + "lib1.jar"));
+     files.add(new Path(jarsDir, "lib" + Path.SEPARATOR + "lib2.jar"));
+     for (Path file : files) {
+-      checkFilePermissions(file.toUri().getPath(), "-r-xrwx---", task
++      checkFilePermissions(file.toUri().getPath(), expectedFilePerms, task
+           .getUser(), ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+     }
+   }
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+index d325f2d..9d7f25f 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+@@ -293,7 +293,9 @@ public class TestTaskTrackerLocalization extends TestCase {
+     // don't create directories any more.
+     for (String dir : localDirs) {
+       File userDir = new File(dir, TaskTracker.getUserDir(task.getUser()));
+-      FileUtil.fullyDelete(userDir);
++      if (!FileUtil.fullyDelete(userDir)) {
++        throw new IOException("Uanble to delete " + userDir);
++      }
+     }
+ 
+     // Now call the method again.
+diff --git a/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
+index b49c846..5932707 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
+@@ -27,6 +27,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapred.ClusterWithLinuxTaskController.MyLinuxTaskController;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.filecache.TestTrackerDistributedCacheManager;
+ 
+ /**
+@@ -105,11 +106,13 @@ public class TestTrackerDistributedCacheManagerWithLinuxTaskController extends
+   protected void checkFilePermissions(Path[] localCacheFiles)
+       throws IOException {
+     String userName = getJobOwnerName();
++    String filePermissions = UserGroupInformation.getLoginUser()
++        .getShortUserName().equals(userName) ? "-rwxrwx---" : "-r-xrwx---";
+ 
+     for (Path p : localCacheFiles) {
+       // First make sure that the cache file has proper permissions.
+       TestTaskTrackerLocalization.checkFilePermissions(p.toUri().getPath(),
+-          "-r-xrwx---", userName,
++          filePermissions, userName,
+           ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+       // Now. make sure that all the path components also have proper
+       // permissions.
+@@ -141,11 +144,14 @@ public class TestTrackerDistributedCacheManagerWithLinuxTaskController extends
+     LOG.info("Leading path for cacheFirstFile is : "
+         + leadingStringForFirstFile);
+ 
++    String dirPermissions = UserGroupInformation.getLoginUser()
++        .getShortUserName().equals(userName) ? "drwxrws---" : "dr-xrws---";
++
+     // Now check path permissions, starting with cache file's parent dir.
+     File path = new File(cachedFilePath).getParentFile();
+     while (!path.getAbsolutePath().equals(leadingStringForFirstFile)) {
+       TestTaskTrackerLocalization.checkFilePermissions(path.getAbsolutePath(),
+-          "dr-xrws---", userName, 
++          dirPermissions, userName, 
+           ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+       path = path.getParentFile();
+     }
+diff --git a/src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java b/src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java
+index dcc3cd1..d514bf8 100644
+--- a/src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java
++++ b/src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java
+@@ -48,7 +48,7 @@ public class TestPipesAsDifferentUser extends ClusterWithLinuxTaskController {
+     }
+ 
+     super.startCluster();
+-    taskControllerUser.doAs(new PrivilegedExceptionAction<Object>() {
++    jobOwner.doAs(new PrivilegedExceptionAction<Object>() {
+       public Object run() throws Exception {
+         JobConf clusterConf = getClusterConf();
+         Path inputPath = new Path(homeDirectory, "in");
+-- 
+1.7.0.4
+

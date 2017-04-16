@@ -1,0 +1,87 @@
+From 5699f5483e2a9ee9debd0f0154c6506ee5dc87e2 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:28:03 -0800
+Subject: [PATCH 0154/1179] MAPREDUCE-1285. DistCp cannot handle -delete if destination is local filesystem
+
+Description: The following exception is thrown:
+<div class="code panel" style="border-width: 1px;"><div class="codeContent panelContent">
+<pre class="code-java">Copy failed: java.io.IOException: wrong value class: org.apache.hadoop.fs.RawLocalFileSystem$RawLocalFileStatus is not class org.apache.hadoop.fs.FileStatus
+	at org.apache.hadoop.io.SequenceFile$Writer.append(SequenceFile.java:988)
+	at org.apache.hadoop.io.SequenceFile$Writer.append(SequenceFile.java:977)
+	at org.apache.hadoop.tools.DistCp.deleteNonexisting(DistCp.java:1226)
+	at org.apache.hadoop.tools.DistCp.setup(DistCp.java:1134)
+	at org.apache.hadoop.tools.DistCp.copy(DistCp.java:650)
+	at org.apache.hadoop.tools.DistCp.run(DistCp.java:857)
+	at org.apache.hadoop.util.ToolRunner.run(ToolRunner.java:65)
+	at org.apache.hadoop.util.ToolRunner.run(ToolRunner.java:79)</pre>
+</div></div>
+Reason: bugfix
+Author: Peter Romianowski
+Ref: UNKNOWN
+---
+ src/test/org/apache/hadoop/fs/TestCopyFiles.java |   35 ++++++++++++++++++++++
+ src/tools/org/apache/hadoop/tools/DistCp.java    |    2 +-
+ 2 files changed, 36 insertions(+), 1 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/fs/TestCopyFiles.java b/src/test/org/apache/hadoop/fs/TestCopyFiles.java
+index a64d24d..a4451cc 100644
+--- a/src/test/org/apache/hadoop/fs/TestCopyFiles.java
++++ b/src/test/org/apache/hadoop/fs/TestCopyFiles.java
+@@ -353,6 +353,41 @@ public class TestCopyFiles extends TestCase {
+     }
+   }
+ 
++  /**
++   * verify that -delete option works for other {@link FileSystem}
++   * implementations. See MAPREDUCE-1285 */
++  public void testDeleteLocal() throws Exception {
++    MiniDFSCluster cluster = null;
++    try {
++      Configuration conf = new Configuration();
++      final FileSystem localfs = FileSystem.get(LOCAL_FS, conf);
++      cluster = new MiniDFSCluster(conf, 1, true, null);
++      final FileSystem hdfs = cluster.getFileSystem();
++      final String namenode = FileSystem.getDefaultUri(conf).toString();
++      if (namenode.startsWith("hdfs://")) {
++        MyFile[] files = createFiles(URI.create(namenode), "/srcdat");
++        String destdir = TEST_ROOT_DIR + "/destdat";
++        MyFile[] localFiles = createFiles(localfs, destdir);
++        ToolRunner.run(new DistCp(conf), new String[] {
++                                         "-delete",
++                                         "-update",
++                                         "-log",
++                                         "/logs",
++                                         namenode+"/srcdat",
++                                         "file:///"+TEST_ROOT_DIR+"/destdat"});
++        assertTrue("Source and destination directories do not match.",
++                   checkFiles(localfs, destdir, files));
++        assertTrue("Log directory does not exist.",
++                    hdfs.exists(new Path("/logs")));
++        deldir(localfs, destdir);
++        deldir(hdfs, "/logs");
++        deldir(hdfs, "/srcdat");
++      }
++    } finally {
++      if (cluster != null) { cluster.shutdown(); }
++    }
++  }
++
+   public void testCopyDfsToDfsUpdateOverwrite() throws Exception {
+     MiniDFSCluster cluster = null;
+     try {
+diff --git a/src/tools/org/apache/hadoop/tools/DistCp.java b/src/tools/org/apache/hadoop/tools/DistCp.java
+index 3b7ab94..8a4e415 100644
+--- a/src/tools/org/apache/hadoop/tools/DistCp.java
++++ b/src/tools/org/apache/hadoop/tools/DistCp.java
+@@ -1229,7 +1229,7 @@ public class DistCp implements Tool {
+     //write dst lsr results
+     final Path dstlsr = new Path(jobdir, "_distcp_dst_lsr");
+     final SequenceFile.Writer writer = SequenceFile.createWriter(jobfs, jobconf,
+-        dstlsr, Text.class, FileStatus.class,
++        dstlsr, Text.class, dstroot.getClass(),
+         SequenceFile.CompressionType.NONE);
+     try {
+       //do lsr to get all file statuses in dstroot
+-- 
+1.7.0.4
+

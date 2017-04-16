@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- 
+
+This file defines the mappings from username to comma seperated list
+of certificate serial numbers that the user is allowed to use. One mapping
+per user. Wildcard characters, such as "*" and "?", are not recognized. 
+Any leading or trailing whitespaces are stripped/ignored.
+
+-->
+
+<configuration>
+<property>
+  <name> nobody </name>
+  <value> ,6  ,,  3 , 9a2cf0be9ddf8280
+
+
+
+         </value>
+</property>
+
+<property>
+  <name> Admin </name>
+  <value>, 6,  ,,  3 , 9a2cf0be9ddf8280
+
+
+
+         </value>
+</property>
+
+</configuration>

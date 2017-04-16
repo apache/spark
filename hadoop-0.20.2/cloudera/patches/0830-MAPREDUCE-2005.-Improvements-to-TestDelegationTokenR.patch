@@ -1,0 +1,95 @@
+From 4cbfcd923d102ce6bcccb5dcddc1ed124f42bb8f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 9 Feb 2011 17:20:29 -0800
+Subject: [PATCH 0830/1179] MAPREDUCE-2005. Improvements to TestDelegationTokenRenewal
+
+Reason: improve test printouts
+Author: Boris Shkolnik
+Ref: CDH-2622
+---
+ .../security/token/DelegationTokenRenewal.java     |    6 +++---
+ .../security/token/TestDelegationTokenRenewal.java |   13 +++++++------
+ 2 files changed, 10 insertions(+), 9 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+index 2397c82..b849dee 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+@@ -233,7 +233,7 @@ public class DelegationTokenRenewal {
+   }
+   
+   /**
+-   * find the soonest expiring token and set it for renew
++   * set task to renew the token
+    */
+   private static void setTimerForTokenRenewal(
+       DelegationTokenToRenew token, boolean firstTime) {
+@@ -245,11 +245,11 @@ public class DelegationTokenRenewal {
+       renewIn = now;
+     } else {
+       long expiresIn = (token.expirationDate - now); 
+-      renewIn = now + expiresIn - expiresIn/10; // little before expiration
++      renewIn = now + expiresIn - expiresIn/10; // little bit before the expiration
+     }
+     
+     try {
+-      // need to create new timer every time
++      // need to create new task every time
+       TimerTask tTask = new RenewalTimerTask(token);
+       token.setTimerTask(tTask); // keep reference to the timer
+ 
+diff --git a/src/test/org/apache/hadoop/mapreduce/security/token/TestDelegationTokenRenewal.java b/src/test/org/apache/hadoop/mapreduce/security/token/TestDelegationTokenRenewal.java
+index f5adbd2..ec689d1 100644
+--- a/src/test/org/apache/hadoop/mapreduce/security/token/TestDelegationTokenRenewal.java
++++ b/src/test/org/apache/hadoop/mapreduce/security/token/TestDelegationTokenRenewal.java
+@@ -149,7 +149,8 @@ public class TestDelegationTokenRenewal {
+       }
+       counter ++;
+       this.token = (MyToken)token;
+-      System.out.println("Called MYDFS.renewdelegationtoken " + token);
++      System.out.println("Called MYDFS.renewdelegationtoken " + token + 
++          ";this dfs=" + this.hashCode() + ";c=" + counter);
+       if(tokenToRenewIn2Sec == token) { 
+         // this token first renewal in 2 seconds
+         System.out.println("RENEW in 2 seconds");
+@@ -178,7 +179,7 @@ public class TestDelegationTokenRenewal {
+   }
+   
+   /**
+-   * auxilary - create token
++   * Auxiliary - create token
+    * @param renewer
+    * @return
+    * @throws IOException
+@@ -224,7 +225,7 @@ public class TestDelegationTokenRenewal {
+   @Test
+   public void testDTRenewal () throws IOException, URISyntaxException {
+     MyFS dfs = (MyFS)FileSystem.get(conf);
+-    System.out.println("dfs="+(Object)dfs);
++    System.out.println("dfs="+(Object)dfs.hashCode() + ";conf="+conf.hashCode());
+     // Test 1. - add three tokens - make sure exactly one get's renewed
+     
+     // get the delegation tokens
+@@ -237,7 +238,7 @@ public class TestDelegationTokenRenewal {
+     dfs.setTokenToRenewIn2Sec(token1); 
+     System.out.println("token="+token1+" should be renewed for 2 secs");
+     
+-    // two distinct Namenodes
++    // three distinct Namenodes
+     String nn1 = DelegationTokenRenewal.SCHEME + "://host1:0";
+     String nn2 = DelegationTokenRenewal.SCHEME + "://host2:0";
+     String nn3 = DelegationTokenRenewal.SCHEME + "://host3:0";
+@@ -266,8 +267,8 @@ public class TestDelegationTokenRenewal {
+         break;
+     }
+     
+-    System.out.println("Counter = " + dfs.getCounter() + ";t="+
+-        dfs.getToken());
++    System.out.println("dfs=" + dfs.hashCode() + 
++        ";Counter = " + dfs.getCounter() + ";t="+  dfs.getToken());
+     assertEquals("renew wasn't called as many times as expected(4):",
+         numberOfExpectedRenewals, dfs.getCounter());
+     assertEquals("most recently renewed token mismatch", dfs.getToken(), 
+-- 
+1.7.0.4
+

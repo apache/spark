@@ -1,0 +1,105 @@
+<HTML>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<BODY>
+
+<p>Given a set of sorted datasets keyed with the same class and yielding equal
+partitions, it is possible to effect a join of those datasets prior to the map.
+This could save costs in re-partitioning, sorting, shuffling, and writing out
+data required in the general case.</p>
+
+<h3><a name="Interface"></a>Interface</h3>
+
+<p>The attached code offers the following interface to users of these
+classes.</p>
+
+<table>
+<tr><th>property</th><th>required</th><th>value</th></tr>
+<tr><td>mapred.join.expr</td><td>yes</td>
+    <td>Join expression to effect over input data</td></tr>
+<tr><td>mapred.join.keycomparator</td><td>no</td>
+    <td><tt>WritableComparator</tt> class to use for comparing keys</td></tr>
+<tr><td>mapred.join.define.&lt;ident&gt;</td><td>no</td>
+    <td>Class mapped to identifier in join expression</td></tr>
+</table>
+
+<p>The join expression understands the following grammar:</p>
+
+<pre>func ::= &lt;ident&gt;([&lt;func&gt;,]*&lt;func&gt;)
+func ::= tbl(&lt;class&gt;,"&lt;path&gt;");
+
+</pre>
+
+<p>Operations included in this patch are partitioned into one of two types:
+join operations emitting tuples and "multi-filter" operations emitting a
+single value from (but not necessarily included in) a set of input values.
+For a given key, each operation will consider the cross product of all
+values for all sources at that node.</p>
+
+<p>Identifiers supported by default:</p>
+
+<table>
+<tr><th>identifier</th><th>type</th><th>description</th></tr>
+<tr><td>inner</td><td>Join</td><td>Full inner join</td></tr>
+<tr><td>outer</td><td>Join</td><td>Full outer join</td></tr>
+<tr><td>override</td><td>MultiFilter</td>
+    <td>For a given key, prefer values from the rightmost source</td></tr>
+</table>
+
+<p>A user of this class must set the <tt>InputFormat</tt> for the job to
+<tt>CompositeInputFormat</tt> and define a join expression accepted by the
+preceding grammar. For example, both of the following are acceptable:</p>
+
+<pre>inner(tbl(org.apache.hadoop.mapred.SequenceFileInputFormat.class,
+          "hdfs://host:8020/foo/bar"),
+      tbl(org.apache.hadoop.mapred.SequenceFileInputFormat.class,
+          "hdfs://host:8020/foo/baz"))
+
+outer(override(tbl(org.apache.hadoop.mapred.SequenceFileInputFormat.class,
+                   "hdfs://host:8020/foo/bar"),
+               tbl(org.apache.hadoop.mapred.SequenceFileInputFormat.class,
+                   "hdfs://host:8020/foo/baz")),
+      tbl(org.apache.hadoop.mapred/SequenceFileInputFormat.class,
+          "hdfs://host:8020/foo/rab"))
+</pre>
+
+<p><tt>CompositeInputFormat</tt> includes a handful of convenience methods to
+aid construction of these verbose statements.</p>
+
+<p>As in the second example, joins may be nested. Users may provide a
+comparator class in the <tt>mapred.join.keycomparator</tt> property to specify
+the ordering of their keys, or accept the default comparator as returned by
+<tt>WritableComparator.get(keyclass)</tt>.</p>
+
+<p>Users can specify their own join operations, typically by overriding
+<tt>JoinRecordReader</tt> or <tt>MultiFilterRecordReader</tt> and mapping that
+class to an identifier in the join expression using the
+<tt>mapred.join.define.<em>ident</em></tt> property, where <em>ident</em> is
+the identifier appearing in the join expression. Users may elect to emit- or
+modify- values passing through their join operation. Consulting the existing
+operations for guidance is recommended. Adding arguments is considerably more
+complex (and only partially supported), as one must also add a <tt>Node</tt>
+type to the parse tree. One is probably better off extending
+<tt>RecordReader</tt> in most cases.</p>
+
+<a href="http://issues.apache.org/jira/browse/HADOOP-2085">JIRA</a>
+
+</BODY>
+
+</HTML>

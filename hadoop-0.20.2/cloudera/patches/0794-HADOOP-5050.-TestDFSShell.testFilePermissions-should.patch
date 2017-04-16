@@ -1,0 +1,80 @@
+From 8bc90cb06955b191c5d4370ca75b3b14aabc9657 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 28 Jan 2011 14:33:31 -0800
+Subject: [PATCH 0794/1179] HADOOP-5050. TestDFSShell.testFilePermissions should not assume umask setting.
+
+Reason: test failure on machines with different umask
+Author: Jakob Homan
+Ref: CDH-2574
+---
+ src/test/org/apache/hadoop/hdfs/TestDFSShell.java |   23 +++++++++++++++-----
+ 1 files changed, 17 insertions(+), 6 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSShell.java b/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
+index cc682da..1bd5f03 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSShell.java
+@@ -35,6 +35,8 @@ import java.util.zip.GZIPOutputStream;
+ 
+ import junit.framework.TestCase;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FSInputChecker;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -54,6 +56,8 @@ import org.apache.hadoop.util.ToolRunner;
+  * This class tests commands from DFSShell.
+  */
+ public class TestDFSShell extends TestCase {
++  private static final Log LOG = LogFactory.getLog(TestDFSShell.class);
++  
+   static final String TEST_ROOT_DIR =
+     new Path(System.getProperty("test.build.data","/tmp"))
+     .toString().replace(' ', '+');
+@@ -782,9 +786,11 @@ public class TestDFSShell extends TestCase {
+      // test sticky bit on directories
+      Path dir2 = new Path(dir, "stickybit" );
+      fs.mkdirs(dir2 );
++     LOG.info("Testing sticky bit on: " + dir2);
++     LOG.info("Sticky bit directory initial mode: " + 
++                   fs.getFileStatus(dir2).getPermission());
+      
+-     assertEquals("rwxr-xr-x", fs.getFileStatus(dir2).getPermission()
+-         .toString());
++     confirmPermissionChange("u=rwx,g=rx,o=rx", "rwxr-xr-x", fs, shell, dir2);
+      
+      confirmPermissionChange("+t", "rwxr-xr-t", fs, shell, dir2);
+ 
+@@ -797,9 +803,10 @@ public class TestDFSShell extends TestCase {
+      confirmPermissionChange("1666", "rw-rw-rwT", fs, shell, dir2);
+ 
+      confirmPermissionChange("777", "rwxrwxrwt", fs, shell, dir2);
+-
+-     fs.delete(dir, true);
++     
+      fs.delete(dir2, true);
++     fs.delete(dir, true);
++     
+     } finally {
+       try {
+         fs.close();
+@@ -812,9 +819,13 @@ public class TestDFSShell extends TestCase {
+   // is the one you were expecting
+   private void confirmPermissionChange(String toApply, String expected,
+       FileSystem fs, FsShell shell, Path dir2) throws IOException {
++    LOG.info("Confirming permission change of " + toApply + " to " + expected);
+     runCmd(shell, "-chmod", toApply, dir2.toString());
+-    
+-    assertEquals(expected, fs.getFileStatus(dir2).getPermission().toString());
++
++    String result = fs.getFileStatus(dir2).getPermission().toString();
++
++    LOG.info("Permission change result: " + result);
++    assertEquals(expected, result);
+   }
+    
+   private void confirmOwner(String owner, String group, 
+-- 
+1.7.0.4
+

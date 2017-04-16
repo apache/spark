@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+sleep 1
+for ((java_process=$((`ps -ef|grep java|wc -l`-1)); \
+      java_process > 70; \
+      java_process=$((`ps -ef|grep java|wc -l`-1))))
+do
+    sleep 10
+    echo $java_process
+done

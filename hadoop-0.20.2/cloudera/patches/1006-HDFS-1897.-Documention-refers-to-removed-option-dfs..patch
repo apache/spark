@@ -1,0 +1,33 @@
+From 72cefcf1c9848ccb08a391a22830b403cd70a9a9 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 5 Jul 2011 12:18:57 -0700
+Subject: [PATCH 1006/1179] HDFS-1897. Documention refers to removed option dfs.network.script.
+
+The HDFS user guide tells users to use dfs.network.script for rack
+awareness. In fact, this option has been removed and using it will
+trigger a fatal error on DataNode startup. Documentation should
+describe the current rack awareness configuration system.
+
+Reason: Bug
+Author: Andrew Whang
+Ref: CDH-3153
+---
+ .../content/xdocs/hdfs_user_guide.xml              |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml b/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
+index 0e45185..9458ac2 100644
+--- a/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
++++ b/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
+@@ -348,7 +348,7 @@
+       addition NameNode tries to place replicas of block on
+       multiple racks for improved fault tolerance. Hadoop lets the
+       cluster administrators decide which rack a node belongs to
+-      through configuration variable <code>dfs.network.script</code>. When this
++      through configuration variable <code>topology.script.file.name</code>. When this
+       script is configured, each node runs the script to determine its
+       rack id. A default installation assumes all the nodes belong to
+       the same rack. This feature and configuration is further described
+-- 
+1.7.0.4
+

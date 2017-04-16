@@ -1,0 +1,37 @@
+From 50cee77a34b3d7b7c8a7a710fb3f4e8e1448288c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 5 Jul 2011 16:55:57 -0700
+Subject: [PATCH 1012/1179] MAPREDUCE-2443. Fix TaskAspect for TaskUmbilicalProtocol.ping.
+
+Author: Siddharth Seth
+Reason: fix test-system compile after MR-2429
+Ref: CDH-3132
+---
+ .../aop/org/apache/hadoop/mapred/TaskAspect.aj     |   10 +++++-----
+ 1 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/test/system/aop/org/apache/hadoop/mapred/TaskAspect.aj b/src/test/system/aop/org/apache/hadoop/mapred/TaskAspect.aj
+index 8c3326b..f2f2e6c 100644
+--- a/src/test/system/aop/org/apache/hadoop/mapred/TaskAspect.aj
++++ b/src/test/system/aop/org/apache/hadoop/mapred/TaskAspect.aj
+@@ -65,12 +65,12 @@ public privileged aspect TaskAspect {
+     return;
+   }
+   
+-  pointcut taskStatusUpdate(TaskReporter reporter, TaskAttemptID id) : 
+-    call(public boolean TaskUmbilicalProtocol.ping(TaskAttemptID))
+-          && this(reporter) && args(id);
++  pointcut taskStatusUpdate(TaskReporter reporter, TaskAttemptID id, JvmContext context) : 
++    call(public boolean TaskUmbilicalProtocol.ping(TaskAttemptID, JvmContext))
++          && this(reporter) && args(id, context);
+   
+-  after(TaskReporter reporter, TaskAttemptID id) throws IOException : 
+-    taskStatusUpdate(reporter, id)  {
++  after(TaskReporter reporter, TaskAttemptID id, JvmContext context) throws IOException : 
++    taskStatusUpdate(reporter, id, context)  {
+     synchronized (waitObject) {
+       if(isWaitingForSignal.get()) {
+         ControlAction[] actions = daemonProxy.getActions(
+-- 
+1.7.0.4
+

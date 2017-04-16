@@ -1,0 +1,289 @@
+From 562d6a6d79943f4c132e9db773898db533b4dbfd Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:51 -0800
+Subject: [PATCH 0832/1179] MAPREDUCE-1545. Add 'first-task-launched' to job-summary
+
+Author: Luke Lu
+Ref: CDH-2622
+---
+ src/core/org/apache/hadoop/util/StringUtils.java   |   28 +++++
+ .../org/apache/hadoop/mapred/JobInProgress.java    |  115 ++++++++++++++------
+ .../org/apache/hadoop/mapred/TaskInProgress.java   |    5 +
+ .../org/apache/hadoop/util/TestStringUtils.java    |   35 ++++++
+ 4 files changed, 152 insertions(+), 31 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/util/StringUtils.java b/src/core/org/apache/hadoop/util/StringUtils.java
+index 9b5d288..8e574f4 100644
+--- a/src/core/org/apache/hadoop/util/StringUtils.java
++++ b/src/core/org/apache/hadoop/util/StringUtils.java
+@@ -755,4 +755,32 @@ public class StringUtils {
+     return sb.toString();
+   }  
+ 
++  /**
++   * Capitalize a word
++   *
++   * @param s the input string
++   * @return capitalized string
++   */
++  public static String capitalize(String s) {
++    int len = s.length();
++    if (len == 0) return s;
++    return new StringBuilder(len).append(Character.toTitleCase(s.charAt(0)))
++                                 .append(s.substring(1)).toString();
++  }
++
++  /**
++   * Convert SOME_STUFF to SomeStuff
++   *
++   * @param s input string
++   * @return camelized string
++   */
++  public static String camelize(String s) {
++    StringBuilder sb = new StringBuilder();
++    String[] words = split(s.toLowerCase(Locale.US), ESCAPE_CHAR, '_');
++
++    for (String word : words)
++      sb.append(capitalize(word));
++
++    return sb.toString();
++  }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 559e450..c4809ed 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -21,6 +21,8 @@ import java.io.IOException;
+ import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collection;
++import java.util.Comparator;
++import java.util.EnumMap;
+ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.IdentityHashMap;
+@@ -234,6 +236,10 @@ public class JobInProgress {
+   long startTime;
+   long launchTime;
+   long finishTime;
++
++  // First *task launch time
++  final Map<TaskType, Long> firstTaskLaunchTimes =
++      new EnumMap<TaskType, Long>(TaskType.class);
+   
+   // Indicates how many times the job got restarted
+   private final int restartCount;
+@@ -815,6 +821,9 @@ public class JobInProgress {
+   public synchronized long getLaunchTime() {
+     return launchTime;
+   }
++  Map<TaskType, Long> getFirstTaskLaunchTimes() {
++    return firstTaskLaunchTimes;
++  }
+   public long getStartTime() {
+     return startTime;
+   }
+@@ -1689,6 +1698,7 @@ public class JobInProgress {
+     if (tip.isFirstAttempt(id)) {
+       JobHistory.Task.logStarted(tip.getTIPId(), name,
+                                  tip.getExecStartTime(), splits);
++      setFirstTaskLaunchTime(tip);
+     }
+     if (!tip.isJobSetupTask() && !tip.isJobCleanupTask()) {
+       jobCounters.incrCounter(counter, 1);
+@@ -1727,7 +1737,18 @@ public class JobInProgress {
+       }
+     }
+   }
+-    
++
++  void setFirstTaskLaunchTime(TaskInProgress tip) {
++    TaskType key = tip.getFirstTaskType();
++
++    synchronized(firstTaskLaunchTimes) {
++      // Could be optimized to do only one lookup with a little more code
++      if (!firstTaskLaunchTimes.containsKey(key)) {
++        firstTaskLaunchTimes.put(key, tip.getExecStartTime());
++      }
++    }
++  }
++
+   static String convertTrackerNameToHostName(String trackerName) {
+     // Ugly!
+     // Convert the trackerName to it's host name
+@@ -3289,6 +3310,49 @@ public class JobInProgress {
+     static final char[] charsToEscape = 
+       {StringUtils.COMMA, EQUALS, StringUtils.ESCAPE_CHAR};
+     
++    static class SummaryBuilder {
++      final StringBuilder buffer = new StringBuilder();
++
++      // A little optimization for a very common case
++      SummaryBuilder add(String key, long value) {
++        return _add(key, Long.toString(value));
++      }
++
++      <T> SummaryBuilder add(String key, T value) {
++        return _add(key, StringUtils.escapeString(String.valueOf(value),
++                    StringUtils.ESCAPE_CHAR, charsToEscape));
++      }
++
++      SummaryBuilder add(SummaryBuilder summary) {
++        if (buffer.length() > 0) buffer.append(StringUtils.COMMA);
++        buffer.append(summary.buffer);
++        return this;
++      }
++
++      SummaryBuilder _add(String key, String value) {
++        if (buffer.length() > 0) buffer.append(StringUtils.COMMA);
++        buffer.append(key).append(EQUALS).append(value);
++        return this;
++      }
++
++      @Override public String toString() {
++        return buffer.toString();
++      }
++    }
++
++    static SummaryBuilder getTaskLaunchTimesSummary(JobInProgress job) {
++      SummaryBuilder summary = new SummaryBuilder();
++      Map<TaskType, Long> timeMap = job.getFirstTaskLaunchTimes();
++
++      synchronized(timeMap) {
++        for (Map.Entry<TaskType, Long> e : timeMap.entrySet()) {
++          summary.add("first"+ StringUtils.camelize(e.getKey().name()) +
++                      "TaskLaunchTime", e.getValue().longValue());
++        }
++      }
++      return summary;
++    }
++
+     /**
+      * Log a summary of the job's runtime.
+      * 
+@@ -3300,12 +3364,6 @@ public class JobInProgress {
+     public static void logJobSummary(JobInProgress job, ClusterStatus cluster) {
+       JobStatus status = job.getStatus();
+       JobProfile profile = job.getProfile();
+-      String user = StringUtils.escapeString(profile.getUser(), 
+-                                             StringUtils.ESCAPE_CHAR, 
+-                                             charsToEscape);
+-      String queue = StringUtils.escapeString(profile.getQueueName(), 
+-                                              StringUtils.ESCAPE_CHAR, 
+-                                              charsToEscape);
+       Counters jobCounters = job.getJobCounters();
+       long mapSlotSeconds = 
+         (jobCounters.getCounter(Counter.SLOTS_MILLIS_MAPS) +
+@@ -3314,30 +3372,25 @@ public class JobInProgress {
+         (jobCounters.getCounter(Counter.SLOTS_MILLIS_REDUCES) +
+          jobCounters.getCounter(Counter.FALLOW_SLOTS_MILLIS_REDUCES)) / 1000;
+ 
+-      LOG.info("jobId=" + job.getJobID() + StringUtils.COMMA +
+-               "submitTime" + EQUALS + job.getStartTime() + StringUtils.COMMA +
+-               "launchTime" + EQUALS + job.getLaunchTime() + StringUtils.COMMA +
+-               "finishTime" + EQUALS + job.getFinishTime() + StringUtils.COMMA +
+-               "numMaps" + EQUALS + job.getTasks(TaskType.MAP).length + 
+-                           StringUtils.COMMA +
+-               "numSlotsPerMap" + EQUALS + job.getNumSlotsPerMap() + 
+-                                  StringUtils.COMMA +
+-               "numReduces" + EQUALS + job.getTasks(TaskType.REDUCE).length + 
+-                              StringUtils.COMMA +
+-               "numSlotsPerReduce" + EQUALS + job.getNumSlotsPerReduce() + 
+-                                     StringUtils.COMMA +
+-               "user" + EQUALS + user + StringUtils.COMMA +
+-               "queue" + EQUALS + queue + StringUtils.COMMA +
+-               "status" + EQUALS + 
+-                          JobStatus.getJobRunState(status.getRunState()) + 
+-                          StringUtils.COMMA + 
+-               "mapSlotSeconds" + EQUALS + mapSlotSeconds + StringUtils.COMMA +
+-               "reduceSlotsSeconds" + EQUALS + reduceSlotSeconds  + 
+-                                      StringUtils.COMMA +
+-               "clusterMapCapacity" + EQUALS + cluster.getMaxMapTasks() + 
+-                                      StringUtils.COMMA +
+-               "clusterReduceCapacity" + EQUALS + cluster.getMaxReduceTasks()
+-      );
++      SummaryBuilder summary = new SummaryBuilder()
++          .add("jobId", job.getJobID())
++          .add("submitTime", job.getStartTime())
++          .add("launchTime", job.getLaunchTime())
++          .add(getTaskLaunchTimesSummary(job))
++          .add("finishTime", job.getFinishTime())
++          .add("numMaps", job.getTasks(TaskType.MAP).length)
++          .add("numSlotsPerMap", job.getNumSlotsPerMap())
++          .add("numReduces", job.getTasks(TaskType.REDUCE).length)
++          .add("numSlotsPerReduce", job.getNumSlotsPerReduce())
++          .add("user", profile.getUser())
++          .add("queue", profile.getQueueName())
++          .add("status", JobStatus.getJobRunState(status.getRunState()))
++          .add("mapSlotSeconds", mapSlotSeconds)
++          .add("reduceSlotsSeconds", reduceSlotSeconds)
++          .add("clusterMapCapacity", cluster.getMaxMapTasks())
++          .add("clusterReduceCapacity", cluster.getMaxReduceTasks());
++
++      LOG.info(summary);
+     }
+   }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+index 3610aab..43e3b98 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+@@ -316,6 +316,11 @@ public class TaskInProgress {
+       return TaskType.REDUCE;
+     }
+   }
++
++  TaskType getFirstTaskType() {
++    assert firstTaskId != null : "got first task";
++    return getAttemptType(firstTaskId);
++  }
+   
+   /**
+    * Is the Task associated with taskid is the first attempt of the tip? 
+diff --git a/src/test/org/apache/hadoop/util/TestStringUtils.java b/src/test/org/apache/hadoop/util/TestStringUtils.java
+index ed4226b..83fa68a 100644
+--- a/src/test/org/apache/hadoop/util/TestStringUtils.java
++++ b/src/test/org/apache/hadoop/util/TestStringUtils.java
+@@ -153,4 +153,39 @@ public class TestStringUtils extends TestCase {
+     assertEquals("a:b", StringUtils.join(":", s.subList(0, 2)));
+     assertEquals("a:b:c", StringUtils.join(":", s.subList(0, 3)));
+   }
++
++  public void testCamelize() {
++    // common use cases
++    assertEquals("Map", StringUtils.camelize("MAP"));
++    assertEquals("JobSetup", StringUtils.camelize("JOB_SETUP"));
++    assertEquals("SomeStuff", StringUtils.camelize("some_stuff"));
++
++    // sanity checks for ascii alphabet against unexpected locale issues.
++    assertEquals("Aa", StringUtils.camelize("aA"));
++    assertEquals("Bb", StringUtils.camelize("bB"));
++    assertEquals("Cc", StringUtils.camelize("cC"));
++    assertEquals("Dd", StringUtils.camelize("dD"));
++    assertEquals("Ee", StringUtils.camelize("eE"));
++    assertEquals("Ff", StringUtils.camelize("fF"));
++    assertEquals("Gg", StringUtils.camelize("gG"));
++    assertEquals("Hh", StringUtils.camelize("hH"));
++    assertEquals("Ii", StringUtils.camelize("iI"));
++    assertEquals("Jj", StringUtils.camelize("jJ"));
++    assertEquals("Kk", StringUtils.camelize("kK"));
++    assertEquals("Ll", StringUtils.camelize("lL"));
++    assertEquals("Mm", StringUtils.camelize("mM"));
++    assertEquals("Nn", StringUtils.camelize("nN"));
++    assertEquals("Oo", StringUtils.camelize("oO"));
++    assertEquals("Pp", StringUtils.camelize("pP"));
++    assertEquals("Qq", StringUtils.camelize("qQ"));
++    assertEquals("Rr", StringUtils.camelize("rR"));
++    assertEquals("Ss", StringUtils.camelize("sS"));
++    assertEquals("Tt", StringUtils.camelize("tT"));
++    assertEquals("Uu", StringUtils.camelize("uU"));
++    assertEquals("Vv", StringUtils.camelize("vV"));
++    assertEquals("Ww", StringUtils.camelize("wW"));
++    assertEquals("Xx", StringUtils.camelize("xX"));
++    assertEquals("Yy", StringUtils.camelize("yY"));
++    assertEquals("Zz", StringUtils.camelize("zZ"));
++  }
+ }
+-- 
+1.7.0.4
+

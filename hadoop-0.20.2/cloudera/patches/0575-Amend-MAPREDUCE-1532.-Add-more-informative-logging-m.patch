@@ -1,0 +1,46 @@
+From aa3c9671cd7cfa6818c913f293d2605b87431e60 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 19 Mar 2010 01:10:57 -0700
+Subject: [PATCH 0575/1179] Amend MAPREDUCE-1532. Add more informative logging messages for configuration-authentication mismatch
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439248/1532-bp20.4.2.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    5 +++--
+ .../org/apache/hadoop/mapreduce/JobContext.java    |    3 +++
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 5c90cc9..01e936f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -369,8 +369,9 @@ public class JobInProgress {
+       this.conf.setUser(user);
+     }
+     if (!conf.getUser().equals(user)) {
+-      String desc = "The username obtained from the conf doesn't " +
+-                      "match the username the user authenticated as";
++      String desc = "The username " + conf.getUser() + " obtained from the " +
++      		"conf doesn't match the username " + user + " the user " +
++      				"authenticated as";
+       AuditLogger.logFailure(user, 
+           QueueManager.QueueOperation.SUBMIT_JOB.name(), conf.getUser(), 
+           jobId.toString(), desc);
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+index 8af80b9..b9eff0c 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+@@ -68,6 +68,9 @@ public class JobContext {
+   public static final String USER_LOG_RETAIN_HOURS = 
+     "mapred.userlog.retain.hours";
+   
++  /**
++   * The UserGroupInformation object that has a reference to the current user
++   */
+   protected UserGroupInformation ugi;
+   
+   public JobContext(Configuration conf, JobID jobId) {
+-- 
+1.7.0.4
+

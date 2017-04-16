@@ -1,0 +1,50 @@
+From 1ee8f38881d450a818754c889038ef2ea8de865d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 22 Feb 2010 23:47:58 +0000
+Subject: [PATCH 0484/1179] HADOOP-6558. archive does not work with distcp -update
+
+Patch: http://issues.apache.org/jira/secure/attachment/12436264/c6558_20100216b_y0.20.patch
+Author: Tsz Wo (Nicholas), SZE
+Ref: YDH
+---
+ src/core/org/apache/hadoop/fs/HarFileSystem.java   |    7 +++++++
+ .../org/apache/hadoop/fs/TestHarFileSystem.java    |    7 +++++++
+ 2 files changed, 14 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/HarFileSystem.java b/src/core/org/apache/hadoop/fs/HarFileSystem.java
+index a445ab9..6c00eea 100644
+--- a/src/core/org/apache/hadoop/fs/HarFileSystem.java
++++ b/src/core/org/apache/hadoop/fs/HarFileSystem.java
+@@ -539,6 +539,13 @@ public class HarFileSystem extends FilterFileSystem {
+   }
+ 
+   /**
++   * @return null since no checksum algorithm is implemented.
++   */
++  public FileChecksum getFileChecksum(Path f) {
++    return null;
++  }
++
++  /**
+    * Returns a har input stream which fakes end of 
+    * file. It reads the index files to get the part 
+    * file name and the size and start of the file.
+diff --git a/src/test/org/apache/hadoop/fs/TestHarFileSystem.java b/src/test/org/apache/hadoop/fs/TestHarFileSystem.java
+index 11697a0..7a3a812 100644
+--- a/src/test/org/apache/hadoop/fs/TestHarFileSystem.java
++++ b/src/test/org/apache/hadoop/fs/TestHarFileSystem.java
+@@ -303,4 +303,11 @@ public class TestHarFileSystem extends TestCase {
+       e.printStackTrace(System.out);
+     }
+   }
++
++
++  public void testFileChecksum() {
++    final Path p = new Path("har://file-localhost/foo.har/file1");
++    final HarFileSystem harfs = new HarFileSystem();
++    assertEquals(null, harfs.getFileChecksum(p));
++  }
+ }
+-- 
+1.7.0.4
+

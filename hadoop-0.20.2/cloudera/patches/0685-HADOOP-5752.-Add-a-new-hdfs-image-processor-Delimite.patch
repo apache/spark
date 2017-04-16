@@ -1,0 +1,577 @@
+From dc0e28f08c2df37a6b99614a5c764fc4037032a0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 3 Sep 2010 17:03:28 -0700
+Subject: [PATCH 0685/1179] HADOOP-5752. Add a new hdfs image processor, Delimited, to oiv.
+
+Author: Jakob Homan
+Reason: Hue Headlamp app
+Ref: CDH-2106
+---
+ .../content/xdocs/hdfs_imageviewer.xml             |  174 +++++++++++++++++++-
+ .../offlineImageViewer/DelimitedImageVisitor.java  |  172 +++++++++++++++++++
+ .../offlineImageViewer/OfflineImageViewer.java     |   28 +++-
+ .../TestDelimitedImageVisitor.java                 |   96 +++++++++++
+ 4 files changed, 463 insertions(+), 7 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/DelimitedImageVisitor.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestDelimitedImageVisitor.java
+
+diff --git a/src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml b/src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml
+index 4b088ff..2924a01 100644
+--- a/src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml
++++ b/src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml
+@@ -56,6 +56,15 @@
+           version, generation stamp and inode- and block-specific listings. This
+           processor uses indentation to organize the output into a hierarchal manner.
+           The <code>lsr </code> format is suitable for easy human comprehension.</li>
++        <li><strong>Delimited</strong> provides one file per line consisting of the path,
++        replication, modification time, access time, block size, number of blocks, file size,
++        namespace quota, diskspace quota, permissions, username and group name. If run against
++        an fsimage that does not contain any of these fields, the field's column will be included,
++        but no data recorded. The default record delimiter is a tab, but this may be changed
++        via the <code>-delimiter</code> command line argument. This processor is designed to
++        create output that is easily analyzed by other tools, such as <a href="http://hadoop.apache.org/pig/">Pig</a>. 
++        See the <a href="#analysis">Analysis</a> section
++        for further information on using this processor to analyze the contents of fsimage files.</li>
+         <li><strong>XML</strong> creates an XML document of the fsimage and includes all of the
+           information within the fsimage, similar to the <code>lsr </code> processor. The output
+           of this processor is amenable to automated processing and analysis with XML tools.
+@@ -152,7 +161,7 @@
+ 
+     </section>
+ 
+-      <section id="options">
++    <section id="options">
+         <title>Options</title>
+ 
+         <section>
+@@ -176,11 +185,174 @@
+           <tr><td><code>-printToScreen</code></td>
+               <td>Pipe output of processor to console as well as specified file. On extremely 
+               large namespaces, this may increase processing time by an order of magnitude.</td></tr>
++           <tr><td><code>-delimiter &lt;arg&gt;</code></td>
++                  <td>When used in conjunction with the Delimited processor, replaces the default
++	                    tab delimiter with the string specified by <code>arg</code>.</td></tr>
+           <tr><td><code>[-h|--help]</code></td>
+               <td>Display the tool usage and help information and exit.</td></tr>
+             </table>
+           </section> <!-- options -->
+     </section>
++   
++    <section id="analysis">
++      <title>Analyzing results of Offline Image Viewer</title>
++      <p>The Offline Image Viewer makes it easy to gather large amounts of data about the hdfs namespace.
++         This information can then be used to explore file system usage patterns or find
++        specific files that match arbitrary criteria, along with other types of namespace analysis. The Delimited 
++         image processor in particular creates
++        output that is amenable to further processing by tools such as <a href="http://hadoop.apache.org/pig/">Apache Pig</a>. Pig provides a particularly
++        good choice for analyzing these data as it is able to deal with the output generated from a small fsimage
++        but also scales up to consume data from extremely large file systems.</p>
++      <p>The Delimited image processor generates lines of text separated, by default, by tabs and includes
++        all of the fields that are common between constructed files and files that were still under constructed
++        when the fsimage was generated. Examples scripts are provided demonstrating how to use this output to 
++        accomplish three tasks: determine the number of files each user has created on the file system,
++        find files were created but have not accessed, and find probable duplicates of large files by comparing
++        the size of each file.</p>
++      <p>Each of the following scripts assumes you have generated an output file using the Delimited processor named
++        <code>foo</code> and will be storing the results of the Pig analysis in a file named <code>results</code>.</p>
++      <section>
++      <title>Total number of files for each user</title>
++      <p>This script processes each path within the namespace, groups them by the file owner and determines the total
++      number of files each user owns.</p>
++      <p><strong>numFilesOfEachUser.pig:</strong></p>
++        <source>
++-- This script determines the total number of files each user has in
++-- the namespace. Its output is of the form:
++--   username, totalNumFiles
++
++-- Load all of the fields from the file
++A = LOAD '$inputFile' USING PigStorage('\t') AS (path:chararray,
++                                                 replication:int,
++                                                 modTime:chararray,
++                                                 accessTime:chararray,
++                                                 blockSize:long,
++                                                 numBlocks:int,
++                                                 fileSize:long,
++                                                 NamespaceQuota:int,
++                                                 DiskspaceQuota:int,
++                                                 perms:chararray,
++                                                 username:chararray,
++                                                 groupname:chararray);
++
++
++-- Grab just the path and username
++B = FOREACH A GENERATE path, username;
++
++-- Generate the sum of the number of paths for each user
++C = FOREACH (GROUP B BY username) GENERATE group, COUNT(B.path);
++
++-- Save results
++STORE C INTO '$outputFile';
++        </source>
++      <p>This script can be run against pig with the following command:</p>
++      <p><code>bin/pig -x local -param inputFile=../foo -param outputFile=../results ../numFilesOfEachUser.pig</code><br/></p>
++      <p>The output file's content will be similar to that below:</p>
++      <p>
++        <code>bart  1</code><br/>
++        <code>lisa  16</code><br/>
++        <code>homer 28</code><br/>
++        <code>marge 2456</code><br/>
++      </p>
++      </section>
++      <section><title>Files that have never been accessed</title>
++      <p>This script finds files that were created but whose access times were never changed, meaning they were never opened or viewed.</p>
++            <p><strong>neverAccessed.pig:</strong></p>
++      <source>
++-- This script generates a list of files that were created but never
++-- accessed, based on their AccessTime
++
++-- Load all of the fields from the file
++A = LOAD '$inputFile' USING PigStorage('\t') AS (path:chararray,
++                                                 replication:int,
++                                                 modTime:chararray,
++                                                 accessTime:chararray,
++                                                 blockSize:long,
++                                                 numBlocks:int,
++                                                 fileSize:long,
++                                                 NamespaceQuota:int,
++                                                 DiskspaceQuota:int,
++                                                 perms:chararray,
++                                                 username:chararray,
++                                                 groupname:chararray);
++
++-- Grab just the path and last time the file was accessed
++B = FOREACH A GENERATE path, accessTime;
++
++-- Drop all the paths that don't have the default assigned last-access time
++C = FILTER B BY accessTime == '1969-12-31 16:00';
++
++-- Drop the accessTimes, since they're all the same
++D = FOREACH C GENERATE path;
++
++-- Save results
++STORE D INTO '$outputFile';
++      </source>
++      <p>This script can be run against pig with the following command and its output file's content will be a list of files that were created but never viewed afterwards.</p>
++      <p><code>bin/pig -x local -param inputFile=../foo -param outputFile=../results ../neverAccessed.pig</code><br/></p>
++      </section>
++      <section><title>Probable duplicated files based on file size</title>
++      <p>This script groups files together based on their size, drops any that are of less than 100mb and returns a list of the file size, number of files found and a tuple of the file paths.  This can be used to find likely duplicates within the filesystem namespace.</p>
++      
++            <p><strong>probableDuplicates.pig:</strong></p>
++      <source>
++-- This script finds probable duplicate files greater than 100 MB by
++-- grouping together files based on their byte size. Files of this size
++-- with exactly the same number of bytes can be considered probable
++-- duplicates, but should be checked further, either by comparing the
++-- contents directly or by another proxy, such as a hash of the contents.
++-- The scripts output is of the type:
++--    fileSize numProbableDuplicates {(probableDup1), (probableDup2)}
++
++-- Load all of the fields from the file
++A = LOAD '$inputFile' USING PigStorage('\t') AS (path:chararray,
++                                                 replication:int,
++                                                 modTime:chararray,
++                                                 accessTime:chararray,
++                                                 blockSize:long,
++                                                 numBlocks:int,
++                                                 fileSize:long,
++                                                 NamespaceQuota:int,
++                                                 DiskspaceQuota:int,
++                                                 perms:chararray,
++                                                 username:chararray,
++                                                 groupname:chararray);
++
++-- Grab the pathname and filesize
++B = FOREACH A generate path, fileSize;
++
++-- Drop files smaller than 100 MB
++C = FILTER B by fileSize > 100L  * 1024L * 1024L;
++
++-- Gather all the files of the same byte size
++D = GROUP C by fileSize;
++
++-- Generate path, num of duplicates, list of duplicates
++E = FOREACH D generate group AS fileSize, COUNT(C) as numDupes, C.path AS files;
++
++-- Drop all the files where there are only one of them
++F = FILTER E by numDupes > 1L;
++
++-- Sort by the size of the files
++G = ORDER F by fileSize;
++
++-- Save results
++STORE G INTO '$outputFile';
++      </source>
++      <p>This script can be run against pig with the following command:</p>
++      <p><code>bin/pig -x local -param inputFile=../foo -param outputFile=../results ../probableDuplicates.pig</code><br/></p>
++      <p> The output file's content will be similar to that below:</p>
++      <p>
++        <code>1077288632  2 {(/user/tennant/work1/part-00501),(/user/tennant/work1/part-00993)}</code><br/>
++        <code>1077288664  4 {(/user/tennant/work0/part-00567),(/user/tennant/work0/part-03980),(/user/tennant/work1/part-00725),(/user/eccelston/output/part-03395)}</code><br/>
++        <code>1077288668  3 {(/user/tennant/work0/part-03705),(/user/tennant/work0/part-04242),(/user/tennant/work1/part-03839)}</code><br/>
++        <code>1077288698  2 {(/user/tennant/work0/part-00435),(/user/eccelston/output/part-01382)}</code><br/>
++        <code>1077288702  2 {(/user/tennant/work0/part-03864),(/user/eccelston/output/part-03234)}</code><br/>
++      </p>
++      <p>Each line includes the file size in bytes that was found to be duplicated, the number of duplicates found, and a list of the duplicated paths. Files less than 100MB are ignored, providing a reasonable likelihood that files of these exact sizes may be duplicates.</p>
++      </section>
++    </section>
++
+ 
+   </body>
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/DelimitedImageVisitor.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/DelimitedImageVisitor.java
+new file mode 100644
+index 0000000..fea9cd6
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/DelimitedImageVisitor.java
+@@ -0,0 +1,172 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.IOException;
++import java.util.AbstractMap;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.Collections;
++import java.util.HashMap;
++import java.util.Iterator;
++import java.util.LinkedList;
++
++/**
++ * A DelimitedImageVisitor generates a text representation of the fsimage,
++ * with each element separated by a delimiter string.  All of the elements
++ * common to both inodes and inodes-under-construction are included. When 
++ * processing an fsimage with a layout version that did not include an 
++ * element, such as AccessTime, the output file will include a column
++ * for the value, but no value will be included.
++ * 
++ * Individual block information for each file is not currently included.
++ * 
++ * The default delimiter is tab, as this is an unlikely value to be included
++ * an inode path or other text metadata.  The delimiter value can be via the
++ * constructor.
++ */
++class DelimitedImageVisitor extends TextWriterImageVisitor {
++  private static final String defaultDelimiter = "\t"; 
++  
++  final private LinkedList<ImageElement> elemQ = new LinkedList<ImageElement>();
++  private long fileSize = 0l;
++  // Elements of fsimage we're interested in tracking
++  private final Collection<ImageElement> elementsToTrack;
++  // Values for each of the elements in elementsToTrack
++  private final AbstractMap<ImageElement, String> elements = 
++                                            new HashMap<ImageElement, String>();
++  private final String delimiter;
++
++  {
++    elementsToTrack = new ArrayList<ImageElement>();
++    
++    // This collection determines what elements are tracked and the order
++    // in which they are output
++    Collections.addAll(elementsToTrack,  ImageElement.INodePath,
++                                         ImageElement.Replication,
++                                         ImageElement.ModificationTime,
++                                         ImageElement.AccessTime,
++                                         ImageElement.BlockSize,
++                                         ImageElement.NumBlocks,
++                                         ImageElement.NumBytes,
++                                         ImageElement.NSQuota,
++                                         ImageElement.DSQuota,
++                                         ImageElement.PermString,
++                                         ImageElement.Username,
++                                         ImageElement.GroupName);
++  }
++  
++  public DelimitedImageVisitor(String filename) throws IOException {
++    this(filename, false);
++  }
++
++  public DelimitedImageVisitor(String outputFile, boolean printToScreen) 
++                                                           throws IOException {
++    this(outputFile, printToScreen, defaultDelimiter);
++  }
++  
++  public DelimitedImageVisitor(String outputFile, boolean printToScreen, 
++                               String delimiter) throws IOException {
++    super(outputFile, printToScreen);
++    this.delimiter = delimiter;
++    reset();
++  }
++
++  /**
++   * Reset the values of the elements we're tracking in order to handle
++   * the next file
++   */
++  private void reset() {
++    elements.clear();
++    for(ImageElement e : elementsToTrack) 
++      elements.put(e, null);
++    
++    fileSize = 0l;
++  }
++  
++  @Override
++  void leaveEnclosingElement() throws IOException {
++    ImageElement elem = elemQ.pop();
++
++    // If we're done with an inode, write out our results and start over
++    if(elem == ImageElement.Inode || 
++       elem == ImageElement.INodeUnderConstruction) {
++      writeLine();
++      write("\n");
++      reset();
++    }
++  }
++
++  /**
++   * Iterate through all the elements we're tracking and, if a value was
++   * recorded for it, write it out.
++   */
++  private void writeLine() throws IOException {
++    Iterator<ImageElement> it = elementsToTrack.iterator();
++    
++    while(it.hasNext()) {
++      ImageElement e = it.next();
++      
++      String v = null;
++      if(e == ImageElement.NumBytes)
++        v = String.valueOf(fileSize);
++      else
++        v = elements.get(e);
++      
++      if(v != null)
++        write(v);
++      
++      if(it.hasNext())
++        write(delimiter);
++    }
++  }
++
++  @Override
++  void visit(ImageElement element, String value) throws IOException {
++    // Explicitly label the root path
++    if(element == ImageElement.INodePath && value.equals(""))
++      value = "/";
++    
++    // Special case of file size, which is sum of the num bytes in each block
++    if(element == ImageElement.NumBytes)
++      fileSize += Long.valueOf(value);
++    
++    if(elements.containsKey(element) && element != ImageElement.NumBytes)
++      elements.put(element, value);
++    
++  }
++
++  @Override
++  void visitEnclosingElement(ImageElement element) throws IOException {
++    elemQ.push(element);
++  }
++
++  @Override
++  void visitEnclosingElement(ImageElement element, ImageElement key,
++      String value) throws IOException {
++    // Special case as numBlocks is an attribute of the blocks element
++    if(key == ImageElement.NumBlocks 
++        && elements.containsKey(ImageElement.NumBlocks))
++      elements.put(key, value);
++    
++    elemQ.push(element);
++  }
++  
++  @Override
++  void start() throws IOException { /* Nothing to do */ }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java
+index 68926a9..ce2680d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java
+@@ -59,6 +59,11 @@ public class OfflineImageViewer {
+     "  * Indented: This processor enumerates over all of the elements in\n" +
+     "    the fsimage file, using levels of indentation to delineate\n" +
+     "    sections within the file.\n" +
++    "  * Delimited: Generate a text file with all of the elements common\n" +
++    "    to both inodes and inodes-under-construction, separated by a\n" +
++    "    delimiter. The default delimiter is \u0001, though this may be\n" +
++    "    changed via the -delimiter argument. This processor also overrides\n" +
++    "    the -skipBlocks option for the same reason as the Ls processor\n" +
+     "  * XML: This processor creates an XML document with all elements of\n" +
+     "    the fsimage enumerated, suitable for further analysis by XML\n" +
+     "    tools.\n" +
+@@ -70,14 +75,15 @@ public class OfflineImageViewer {
+     "\n" + 
+     "Optional command line arguments:\n" +
+     "-p,--processor <arg>   Select which type of processor to apply\n" +
+-    "                       against image file. (Ls|XML|Indented).\n" +
++    "                       against image file. (Ls|XML|Delimited|Indented).\n" +
+     "-h,--help              Display usage information and exit\n" +
+     "-printToScreen         For processors that write to a file, also\n" +
+     "                       output to screen. On large image files this\n" +
+     "                       will dramatically increase processing time.\n" +
+     "-skipBlocks            Skip inodes' blocks information. May\n" +
+     "                       significantly decrease output.\n" +
+-    "                       (default = false).\n";
++    "                       (default = false).\n" +
++    "-delimiter <arg>       Delimiting string to use with Delimited processor\n";
+ 
+   private final boolean skipBlocks;
+   private final String inputFile;
+@@ -157,6 +163,7 @@ public class OfflineImageViewer {
+     options.addOption("h", "help", false, "");
+     options.addOption("skipBlocks", false, "");
+     options.addOption("printToScreen", false, "");
++    options.addOption("delimiter", true, "");
+ 
+     return options;
+   }
+@@ -197,17 +204,26 @@ public class OfflineImageViewer {
+     boolean printToScreen = cmd.hasOption("printToScreen");
+     String inputFile = cmd.getOptionValue("i");
+     String processor = cmd.getOptionValue("p", "Ls");
+-    String outputFile;
++    String outputFile = cmd.getOptionValue("o");
++    String delimiter = cmd.getOptionValue("delimiter");
++    
++    if( !(delimiter == null || processor.equals("Delimited")) ) {
++      System.out.println("Can only specify -delimiter with Delimited processor");
++      printUsage();
++      return;
++    }
+     
+     ImageVisitor v;
+     if(processor.equals("Indented")) {
+-      outputFile = cmd.getOptionValue("o");
+       v = new IndentedImageVisitor(outputFile, printToScreen);
+     } else if (processor.equals("XML")) {
+-      outputFile = cmd.getOptionValue("o");
+       v = new XmlImageVisitor(outputFile, printToScreen);
++    } else if (processor.equals("Delimited")) {
++      v = delimiter == null ?  
++                 new DelimitedImageVisitor(outputFile, printToScreen) :
++                 new DelimitedImageVisitor(outputFile, printToScreen, delimiter);
++      skipBlocks = false;
+     } else {
+-      outputFile = cmd.getOptionValue("o");
+       v = new LsImageVisitor(outputFile, printToScreen);
+       skipBlocks = false;
+     }
+diff --git a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestDelimitedImageVisitor.java b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestDelimitedImageVisitor.java
+new file mode 100644
+index 0000000..ff2bcd0
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestDelimitedImageVisitor.java
+@@ -0,0 +1,96 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.BufferedReader;
++import java.io.File;
++import java.io.FileReader;
++import java.io.IOException;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.hdfs.tools.offlineImageViewer.ImageVisitor.ImageElement;
++
++/**
++ * Test that the DelimitedImageVisistor gives the expected output based
++ * on predetermined inputs
++ */
++public class TestDelimitedImageVisitor extends TestCase {
++  private static String ROOT = System.getProperty("test.build.data","/tmp");
++  private static final String delim = "--";
++  
++  // Record an element in the visitor and build the expected line in the output
++  private void build(DelimitedImageVisitor div, ImageElement elem, String val, 
++                     StringBuilder sb, boolean includeDelim) throws IOException {
++    div.visit(elem, val);
++    sb.append(val);
++    
++    if(includeDelim)
++      sb.append(delim);
++  }
++  
++  public void testDelimitedImageVisistor() {
++    String filename = ROOT + "/testDIV";
++    File f = new File(filename);
++    BufferedReader br = null;
++    StringBuilder sb = new StringBuilder();
++    
++    try {
++      DelimitedImageVisitor div = new DelimitedImageVisitor(filename, true, delim);
++
++      div.visit(ImageElement.FSImage, "Not in ouput");
++      div.visitEnclosingElement(ImageElement.Inode);
++      div.visit(ImageElement.LayoutVersion, "not in");
++      div.visit(ImageElement.LayoutVersion, "the output");
++      
++      build(div, ImageElement.INodePath,        "hartnell", sb, true);
++      build(div, ImageElement.Replication,      "99", sb, true);
++      build(div, ImageElement.ModificationTime, "troughton", sb, true);
++      build(div, ImageElement.AccessTime,       "pertwee", sb, true);
++      build(div, ImageElement.BlockSize,        "baker", sb, true);
++      build(div, ImageElement.NumBlocks,        "davison", sb, true);
++      build(div, ImageElement.NumBytes,         "55", sb, true);
++      build(div, ImageElement.NSQuota,          "baker2", sb, true);
++      build(div, ImageElement.DSQuota,          "mccoy", sb, true);
++      build(div, ImageElement.PermString,       "eccleston", sb, true);
++      build(div, ImageElement.Username,         "tennant", sb, true);
++      build(div, ImageElement.GroupName,        "smith", sb, false);
++      
++      div.leaveEnclosingElement(); // INode
++      div.finish();
++      
++      br = new BufferedReader(new FileReader(f));
++      String actual = br.readLine();
++      
++      // Should only get one line
++      assertNull(br.readLine());
++      br.close();
++      
++      String exepcted = sb.toString();
++      System.out.println("Expect to get: " + exepcted);
++      System.out.println("Actually got:  " + actual);
++      assertEquals(exepcted, actual);
++      
++    } catch (IOException e) {
++      fail("Error while testing delmitedImageVisitor" + e.getMessage());
++    } finally {
++      if(f.exists())
++        f.delete();
++    }
++  }
++}
+-- 
+1.7.0.4
+

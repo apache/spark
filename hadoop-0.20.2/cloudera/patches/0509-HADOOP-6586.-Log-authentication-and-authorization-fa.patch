@@ -1,0 +1,260 @@
+From c697b870f3d87e17438115a037e9fd831e757e3f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 26 Feb 2010 18:27:28 -0800
+Subject: [PATCH 0509/1179] HADOOP-6586. Log authentication and authorization failures and successes
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437302/HADOOP-6586-8-BP20-1.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ conf/log4j.properties                              |   12 +++++++++
+ src/core/org/apache/hadoop/ipc/Server.java         |   21 +++++++++++----
+ .../org/apache/hadoop/security/SaslRpcServer.java  |   11 +++++++-
+ .../authorize/ServiceAuthorizationManager.java     |   12 ++++++++-
+ src/test/org/apache/hadoop/ipc/TestRPC.java        |   26 +++++++-------------
+ 5 files changed, 56 insertions(+), 26 deletions(-)
+
+diff --git a/conf/log4j.properties b/conf/log4j.properties
+index fd2c44a..7c3ecf0 100644
+--- a/conf/log4j.properties
++++ b/conf/log4j.properties
+@@ -68,6 +68,18 @@ log4j.appender.TLA.layout=org.apache.log4j.PatternLayout
+ log4j.appender.TLA.layout.ConversionPattern=%d{ISO8601} %p %c: %m%n
+ 
+ #
++#Security audit appender
++#
++hadoop.security.log.file=SecurityAuth.audit
++log4j.appender.DRFAS=org.apache.log4j.DailyRollingFileAppender 
++log4j.appender.DRFAS.File=${hadoop.log.dir}/${hadoop.security.log.file}
++
++log4j.appender.DRFAS.layout=org.apache.log4j.PatternLayout
++log4j.appender.DRFAS.layout.ConversionPattern=%d{ISO8601} %p %c: %m%n
++#new logger
++log4j.category.SecurityLogger=INFO,DRFAS
++
++#
+ # Rolling File Appender
+ #
+ 
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 92f9513..1cc887c 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -65,15 +65,15 @@ import org.apache.hadoop.ipc.metrics.RpcDetailedMetrics;
+ import org.apache.hadoop.ipc.metrics.RpcMetrics;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.SaslRpcServer;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
+ import org.apache.hadoop.security.SaslRpcServer.SaslDigestCallbackHandler;
+ import org.apache.hadoop.security.SaslRpcServer.SaslGssCallbackHandler;
+-import org.apache.hadoop.security.UserGroupInformation;
+-import org.apache.hadoop.security.authorize.ProxyUsers;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
++import org.apache.hadoop.security.authorize.ProxyUsers;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+-import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.security.token.SecretManager;
++import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ 
+@@ -113,6 +113,10 @@ public abstract class Server {
+   static final int IPC_SERVER_RPC_MAX_RESPONSE_SIZE_DEFAULT = 1024*1024;
+   
+   public static final Log LOG = LogFactory.getLog(Server.class);
++  public static final Log auditLOG = 
++    LogFactory.getLog("SecurityLogger."+Server.class.getName());
++  private static final String AUTH_FAILED_FOR = "Auth failed for ";
++  private static final String AUTH_SUCCESSFULL_FOR = "Auth successfull for "; 
+ 
+   private static final ThreadLocal<Server> SERVER = new ThreadLocal<Server>();
+ 
+@@ -726,7 +730,7 @@ public abstract class Server {
+   }
+ 
+   /** Reads calls from a connection and queues them for handling. */
+-  private class Connection {
++  public class Connection {
+     private boolean rpcHeaderRead = false; // if initial rpc header is read
+     private boolean headerRead = false;  //if the connection header that
+                                          //follows version is read.
+@@ -756,6 +760,7 @@ public abstract class Server {
+     private ByteBuffer unwrappedDataLengthBuffer;
+     
+     UserGroupInformation user = null;
++    public UserGroupInformation attemptingUser = null; // user name before auth
+ 
+     // Fake 'call' for failed authorization response
+     private final int AUTHROIZATION_FAILED_CALLID = -1;
+@@ -852,7 +857,7 @@ public abstract class Server {
+             saslServer = Sasl.createSaslServer(AuthMethod.DIGEST
+                 .getMechanismName(), null, SaslRpcServer.SASL_DEFAULT_REALM,
+                 SaslRpcServer.SASL_PROPS, new SaslDigestCallbackHandler(
+-                    secretManager));
++                    secretManager, this));
+             break;
+           default:
+             UserGroupInformation current = UserGroupInformation
+@@ -892,6 +897,9 @@ public abstract class Server {
+           replyToken = saslServer.evaluateResponse(saslToken);
+         } catch (SaslException se) {
+           rpcMetrics.authenticationFailures.inc();
++          String clientIP = this.toString();
++          // attempting user could be null
++          auditLOG.warn(AUTH_FAILED_FOR + clientIP + ":" + attemptingUser, se);
+           throw se;
+         }
+         if (replyToken != null) {
+@@ -913,6 +921,8 @@ public abstract class Server {
+           }
+           user = getAuthorizedUgi(saslServer.getAuthorizationID());
+           LOG.info("SASL server successfully authenticated client: " + user);
++          rpcMetrics.authenticationSuccesses.inc();
++          auditLOG.info(AUTH_SUCCESSFULL_FOR + user);
+           saslContextEstablished = true;
+         }
+       } else {
+@@ -1111,7 +1121,6 @@ public abstract class Server {
+     
+     private void processOneRpc(byte[] buf) throws IOException,
+         InterruptedException {
+-      rpcMetrics.authenticationSuccesses.inc();
+       if (headerRead) {
+         processData(buf);
+       } else {
+diff --git a/src/core/org/apache/hadoop/security/SaslRpcServer.java b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+index e8ed9d7..4b8d8e0 100644
+--- a/src/core/org/apache/hadoop/security/SaslRpcServer.java
++++ b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+@@ -23,8 +23,8 @@ import java.io.DataInput;
+ import java.io.DataInputStream;
+ import java.io.DataOutput;
+ import java.io.IOException;
+-import java.util.TreeMap;
+ import java.util.Map;
++import java.util.TreeMap;
+ 
+ import javax.security.auth.callback.Callback;
+ import javax.security.auth.callback.CallbackHandler;
+@@ -38,6 +38,7 @@ import javax.security.sasl.Sasl;
+ import org.apache.commons.codec.binary.Base64;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.ipc.Server;
+ import org.apache.hadoop.security.token.SecretManager;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ 
+@@ -125,10 +126,13 @@ public class SaslRpcServer {
+   /** CallbackHandler for SASL DIGEST-MD5 mechanism */
+   public static class SaslDigestCallbackHandler implements CallbackHandler {
+     private SecretManager<TokenIdentifier> secretManager;
++    private Server.Connection connection;
+ 
+     public SaslDigestCallbackHandler(
+-        SecretManager<TokenIdentifier> secretManager) {
++        SecretManager<TokenIdentifier> secretManager,
++        Server.Connection connection) {
+       this.secretManager = secretManager;
++      this.connection = connection;
+     }
+ 
+     private char[] getPassword(TokenIdentifier tokenid) throws IOException {
+@@ -159,6 +163,9 @@ public class SaslRpcServer {
+       if (pc != null) {
+         TokenIdentifier tokenIdentifier = getIdentifier(nc.getDefaultName(), secretManager);
+         char[] password = getPassword(tokenIdentifier);
++        UserGroupInformation user = null;
++        user = tokenIdentifier.getUser(); // may throw exception
++        connection.attemptingUser = user;
+         if (LOG.isDebugEnabled()) {
+           LOG.debug("SASL server DIGEST-MD5 callback: setting password "
+               + "for client: " + tokenIdentifier.getUser());
+diff --git a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+index b8d1488..69b7488 100644
+--- a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
++++ b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+@@ -20,6 +20,8 @@ package org.apache.hadoop.security.authorize;
+ import java.util.IdentityHashMap;
+ import java.util.Map;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+@@ -39,6 +41,12 @@ public class ServiceAuthorizationManager {
+   public static final String SERVICE_AUTHORIZATION_CONFIG = 
+     "hadoop.security.authorization";
+   
++  public static final Log auditLOG =
++    LogFactory.getLog("SecurityLogger."+ServiceAuthorizationManager.class.getName());
++
++  private static final String AUTHZ_SUCCESSFULL_FOR = "Authorization successfull for ";
++  private static final String AUTHZ_FAILED_FOR = "Authorization failed for ";
++
+   /**
+    * Authorize the user to access the protocol being used.
+    * 
+@@ -55,10 +63,12 @@ public class ServiceAuthorizationManager {
+                                        " is not known.");
+     }
+     if (!acl.isUserAllowed(user)) {
+-      throw new AuthorizationException("User " + user.toString() + 
++      auditLOG.warn(AUTHZ_FAILED_FOR + user + " for protocol="+protocol);
++      throw new AuthorizationException("User " + user + 
+                                        " is not authorized for protocol " + 
+                                        protocol);
+     }
++    auditLOG.info(AUTHZ_SUCCESSFULL_FOR + user + " for protocol="+protocol);
+   }
+ 
+   public static synchronized void refresh(Configuration conf,
+diff --git a/src/test/org/apache/hadoop/ipc/TestRPC.java b/src/test/org/apache/hadoop/ipc/TestRPC.java
+index e859d58..47bd655 100644
+--- a/src/test/org/apache/hadoop/ipc/TestRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestRPC.java
+@@ -392,30 +392,22 @@ public class TestRPC extends TestCase {
+         RPC.stopProxy(proxy);
+       }
+       if (expectFailure) {
+-        assertTrue("Expected 1 but got " + 
++        assertEquals("Wrong number of authorizationFailures ", 1,  
+             server.getRpcMetrics().authorizationFailures
+-            .getCurrentIntervalValue(), 
+-            server.getRpcMetrics().authorizationFailures
+-            .getCurrentIntervalValue() == 1);
++            .getCurrentIntervalValue());
+       } else {
+-        assertTrue("Expected 1 but got " + 
+-            server.getRpcMetrics().authorizationSuccesses
+-            .getCurrentIntervalValue(),
++        assertEquals("Wrong number of authorizationSuccesses ", 1, 
+             server.getRpcMetrics().authorizationSuccesses
+-            .getCurrentIntervalValue() == 1);
++            .getCurrentIntervalValue());
+       }
+       //since we don't have authentication turned ON, we should see 
+-      // >0 for the authentication successes and 0 for failure
+-      assertTrue("Expected 0 but got " + 
++      // 0 for the authentication successes and 0 for failure
++      assertEquals("Wrong number of authenticationFailures ", 0, 
+           server.getRpcMetrics().authenticationFailures
+-          .getCurrentIntervalValue(),
+-          server.getRpcMetrics().authenticationFailures
+-          .getCurrentIntervalValue() == 0);
+-      assertTrue("Expected greater than 0 but got " + 
+-          server.getRpcMetrics().authenticationSuccesses
+-          .getCurrentIntervalValue(),
++          .getCurrentIntervalValue());
++      assertEquals("Wrong number of authenticationSuccesses ", 0, 
+           server.getRpcMetrics().authenticationSuccesses
+-          .getCurrentIntervalValue() > 0);
++          .getCurrentIntervalValue());
+     }
+   }
+   
+-- 
+1.7.0.4
+

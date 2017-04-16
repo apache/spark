@@ -1,0 +1,15 @@
+{
+  "minimum" : 1,
+  "rankings" : [ {
+    "relativeRanking" : 0.25,
+    "datum" : 1
+  }, {
+    "relativeRanking" : 0.5,
+    "datum" : 1
+  }, {
+    "relativeRanking" : 0.75,
+    "datum" : 23456789012
+  } ],
+  "maximum" : 234567890123,
+  "numberValues" : 3
+}

@@ -1,0 +1,44 @@
+From d8a920cc5c603c98428bc2b41bc8f3c2b4eff794 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@apache.org>
+Date: Wed, 7 Mar 2012 18:16:29 +0000
+Subject: [PATCH 1146/1179] HDFS-2872. Add sanity checks during edits loading that generation stamps are non-decreasing.
+
+Author: Colin McCabe
+Reason: Improvement
+Ref: CDH-4355
+---
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index 24abd8b..f18ed8d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -552,7 +552,7 @@ public class FSEditLog {
+         numOpTimes = 0, numOpGetDelegationToken = 0,
+         numOpRenewDelegationToken = 0, numOpCancelDelegationToken = 0,
+         numOpUpdateMasterKey = 0, numOpOther = 0;
+-
++    long highestGenStamp = -1;
+     long startTime = FSNamesystem.now();
+ 
+     // Keep track of the file offsets of the last several opcodes.
+@@ -772,9 +772,14 @@ public class FSEditLog {
+         case OP_SET_GENSTAMP: {
+           numOpSetGenStamp++;
+           long lw = in.readLong();
++          if ((highestGenStamp != -1) && (highestGenStamp + 1 != lw)) {
++            throw new IOException("OP_SET_GENSTAMP tried to set a genstamp of " + lw + 
++              " but the previous highest genstamp was " + highestGenStamp);
++          }
++          highestGenStamp = lw;
+           fsDir.namesystem.setGenerationStamp(lw);
+           break;
+-        } 
++        }
+         case OP_DATANODE_ADD: {
+           numOpOther++;
+           FSImage.DatanodeImage nodeimage = new FSImage.DatanodeImage();
+-- 
+1.7.0.4
+

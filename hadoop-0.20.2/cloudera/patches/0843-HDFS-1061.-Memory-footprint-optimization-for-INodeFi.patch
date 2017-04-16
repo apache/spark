@@ -1,0 +1,247 @@
+From f148732a5c983877fb62ecfe5815eb445a192573 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:52 -0800
+Subject: [PATCH 0843/1179] HDFS-1061. Memory footprint optimization for INodeFile object.
+
+Author: Bharath Mundlapudi
+Ref: CDH-2622
+---
+ .../hadoop/hdfs/server/namenode/INodeFile.java     |   55 ++++++---
+ .../hadoop/hdfs/server/namenode/TestINodeFile.java |  123 ++++++++++++++++++++
+ 2 files changed, 158 insertions(+), 20 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestINodeFile.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java
+index 330dbed..14d710b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java
+@@ -29,9 +29,16 @@ import org.apache.hadoop.hdfs.server.namenode.BlocksMap.BlockInfo;
+ class INodeFile extends INode {
+   static final FsPermission UMASK = FsPermission.createImmutable((short)0111);
+ 
++  //Number of bits for Block size
++  static final short BLOCKBITS = 48;
++
++  //Header mask 64-bit representation
++  //Format: [16 bits for replication][48 bits for PreferredBlockSize]
++  static final long HEADERMASK = 0xffffL << BLOCKBITS;
++
++  protected long header;
++
+   protected BlockInfo blocks[] = null;
+-  protected short blockReplication;
+-  protected long preferredBlockSize;
+ 
+   INodeFile(PermissionStatus permissions,
+             int nrBlocks, short replication, long modificationTime,
+@@ -42,16 +49,15 @@ class INodeFile extends INode {
+ 
+   protected INodeFile() {
+     blocks = null;
+-    blockReplication = 0;
+-    preferredBlockSize = 0;
++    header = 0;
+   }
+ 
+   protected INodeFile(PermissionStatus permissions, BlockInfo[] blklist,
+                       short replication, long modificationTime,
+                       long atime, long preferredBlockSize) {
+     super(permissions, modificationTime, atime);
+-    this.blockReplication = replication;
+-    this.preferredBlockSize = preferredBlockSize;
++    this.setReplication(replication);
++    this.setPreferredBlockSize(preferredBlockSize);
+     blocks = blklist;
+   }
+ 
+@@ -70,14 +76,31 @@ class INodeFile extends INode {
+ 
+   /**
+    * Get block replication for the file 
+-   * @return block replication
++   * @return block replication value
+    */
+   public short getReplication() {
+-    return this.blockReplication;
++    return (short) ((header & HEADERMASK) >> BLOCKBITS);
+   }
+ 
+-  void setReplication(short replication) {
+-    this.blockReplication = replication;
++  public void setReplication(short replication) {
++    if(replication <= 0)
++       throw new IllegalArgumentException("Unexpected value for the replication");
++    header = ((long)replication << BLOCKBITS) | (header & ~HEADERMASK);
++  }
++
++  /**
++   * Get preferred block size for the file
++   * @return preferred block size in bytes
++   */
++  public long getPreferredBlockSize() {
++        return header & ~HEADERMASK;
++  }
++
++  public void setPreferredBlockSize(long preferredBlkSize)
++  {
++    if((preferredBlkSize < 0) || (preferredBlkSize > ~HEADERMASK ))
++       throw new IllegalArgumentException("Unexpected value for the block size");
++    header = (header & HEADERMASK) | (preferredBlkSize & ~HEADERMASK);
+   }
+ 
+   /**
+@@ -168,20 +191,12 @@ class INodeFile extends INode {
+      */
+     if (blkArr.length > 0 && blkArr[blkArr.length-1] != null && 
+         isUnderConstruction()) {
+-      size += preferredBlockSize - blocks[blocks.length-1].getNumBytes();
++      size += getPreferredBlockSize() - blocks[blocks.length-1].getNumBytes();
+     }
+-    return size * blockReplication;
++    return size * getReplication();
+   }
+   
+   /**
+-   * Get the preferred block size of the file.
+-   * @return the number of bytes
+-   */
+-  public long getPreferredBlockSize() {
+-    return preferredBlockSize;
+-  }
+-
+-  /**
+    * Return the penultimate allocated block for this file.
+    */
+   Block getPenultimateBlock() {
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestINodeFile.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestINodeFile.java
+new file mode 100644
+index 0000000..82485ae
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestINodeFile.java
+@@ -0,0 +1,123 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.server.namenode;
++
++import static org.junit.Assert.*;
++
++import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.fs.permission.PermissionStatus;
++
++import org.junit.Test;
++
++public class TestINodeFile {
++
++  static final short BLOCKBITS = 48;
++  static final long BLKSIZE_MAXVALUE = ~(0xffffL << BLOCKBITS);
++
++  private String userName = "Test";
++  private short replication;
++  private long preferredBlockSize;
++
++  /**
++   * Test for the Replication value. Sets a value and checks if it was set
++   * correct.
++   */
++  @Test
++  public void testReplication () {
++    replication = 3;
++    preferredBlockSize = 128*1024*1024;
++    INodeFile inf = new INodeFile(new PermissionStatus(userName, null, 
++                                  FsPermission.getDefault()), null, replication,
++                                  0L, 0L, preferredBlockSize);
++    assertEquals("True has to be returned in this case", replication,
++                 inf.getReplication());
++  }
++
++  /**
++   * IllegalArgumentException is expected for setting below lower bound
++   * for Replication.
++   * @throws IllegalArgumentException as the result
++   */
++  @Test(expected=IllegalArgumentException.class)
++  public void testReplicationBelowLowerBound ()
++              throws IllegalArgumentException {
++    replication = -1;
++    preferredBlockSize = 128*1024*1024;
++    INodeFile inf = new INodeFile(new PermissionStatus(userName, null,
++                                  FsPermission.getDefault()), null, replication,
++                                  0L, 0L, preferredBlockSize);
++  }
++
++  /**
++   * Test for the PreferredBlockSize value. Sets a value and checks if it was
++   * set correct.
++   */
++  @Test
++  public void testPreferredBlockSize () {
++    replication = 3;
++    preferredBlockSize = 128*1024*1024;
++    INodeFile inf = new INodeFile(new PermissionStatus(userName, null,
++                                  FsPermission.getDefault()), null, replication,
++                                  0L, 0L, preferredBlockSize);
++    assertEquals("True has to be returned in this case", preferredBlockSize,
++           inf.getPreferredBlockSize());
++  }
++
++  @Test
++  public void testPreferredBlockSizeUpperBound () {
++    replication = 3;
++    preferredBlockSize = BLKSIZE_MAXVALUE;
++    INodeFile inf = new INodeFile(new PermissionStatus(userName, null, 
++                                  FsPermission.getDefault()), null, replication,
++                                  0L, 0L, preferredBlockSize);
++    assertEquals("True has to be returned in this case", BLKSIZE_MAXVALUE,
++                 inf.getPreferredBlockSize());
++  }
++
++  /**
++   * IllegalArgumentException is expected for setting below lower bound
++   * for PreferredBlockSize.
++   * @throws IllegalArgumentException as the result
++   */
++  @Test(expected=IllegalArgumentException.class)
++  public void testPreferredBlockSizeBelowLowerBound ()
++              throws IllegalArgumentException {
++    replication = 3;
++    preferredBlockSize = -1;
++    INodeFile inf = new INodeFile(new PermissionStatus(userName, null, 
++                                  FsPermission.getDefault()), null, replication,
++                                  0L, 0L, preferredBlockSize);
++  } 
++
++  /**
++   * IllegalArgumentException is expected for setting above upper bound
++   * for PreferredBlockSize.
++   * @throws IllegalArgumentException as the result
++   */
++  @Test(expected=IllegalArgumentException.class)
++  public void testPreferredBlockSizeAboveUpperBound ()
++              throws IllegalArgumentException {
++    replication = 3;
++    preferredBlockSize = BLKSIZE_MAXVALUE+1;
++    INodeFile inf = new INodeFile(new PermissionStatus(userName, null, 
++                                  FsPermission.getDefault()), null, replication,
++                                  0L, 0L, preferredBlockSize);
++  }
++
++}
+-- 
+1.7.0.4
+

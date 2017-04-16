@@ -1,0 +1,45 @@
+From d0a46bc2c278a9f6c19365ac712c2945269f8ee1 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 5 Jul 2011 11:26:08 -0700
+Subject: [PATCH 1003/1179] HADOOP-5464. DFSClient does not treat write timeout of 0 properly.
+
+dfs.datanode.socket.write.timeout is used for sockets to and from
+datanodes. It is 8 minutes by default. Some users set this to 0,
+effectively disabling the write timeout (for some specific reasons).
+
+When this is set to 0, DFSClient sets the timeout to 5 seconds by
+mistake while writing to DataNodes. This is exactly the opposite of
+real intention of setting it to 0 since 5 seconds is too short.
+
+Reason: Bug
+Author: Raghu Angadi
+Ref: CDH-3101
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 20bc161..ca70841 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -3102,13 +3102,14 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         LOG.debug("Connecting to " + nodes[0].getName());
+         InetSocketAddress target = NetUtils.createSocketAddr(nodes[0].getName());
+         s = socketFactory.createSocket();
+-        int timeoutValue = 3000 * nodes.length + socketTimeout;
++        int timeoutValue =
++          (socketTimeout > 0) ? (3000 * nodes.length + socketTimeout) : 0;
+         NetUtils.connect(s, target, timeoutValue);
+         s.setSoTimeout(timeoutValue);
+         s.setSendBufferSize(DEFAULT_DATA_SOCKET_SIZE);
+         LOG.debug("Send buf size " + s.getSendBufferSize());
+-        long writeTimeout = HdfsConstants.WRITE_TIMEOUT_EXTENSION * nodes.length +
+-                            datanodeWriteTimeout;
++        long writeTimeout = (datanodeWriteTimeout > 0) ?
++              (HdfsConstants.WRITE_TIMEOUT_EXTENSION * nodes.length + datanodeWriteTimeout) : 0;
+ 
+         //
+         // Xmit header info to datanode
+-- 
+1.7.0.4
+

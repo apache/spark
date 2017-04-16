@@ -1,0 +1,28 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: MapReduce Tools for Eclipse
+Bundle-SymbolicName: org.apache.hadoop.eclipse;singleton:=true
+Bundle-Version: 0.18
+Bundle-Activator: org.apache.hadoop.eclipse.Activator
+Bundle-Localization: plugin
+Require-Bundle: org.eclipse.ui,
+ org.eclipse.core.runtime,
+ org.eclipse.jdt.launching,
+ org.eclipse.debug.core,
+ org.eclipse.jdt,
+ org.eclipse.jdt.core,
+ org.eclipse.core.resources,
+ org.eclipse.ui.ide,
+ org.eclipse.jdt.ui,
+ org.eclipse.debug.ui,
+ org.eclipse.jdt.debug.ui,
+ org.eclipse.core.expressions,
+ org.eclipse.ui.cheatsheets,
+ org.eclipse.ui.console,
+ org.eclipse.ui.navigator,
+ org.eclipse.core.filesystem,
+ org.apache.commons.logging
+Eclipse-LazyStart: true
+Bundle-ClassPath: classes/,
+ lib/hadoop-core.jar
+Bundle-Vendor: Apache Hadoop

@@ -1,0 +1,93 @@
+From 6129c87f5dd1fdb7375c80285534b8b91fbcd392 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:43:25 -0800
+Subject: [PATCH 0199/1179] HDFS-412. Hadoop JMX usage makes Nagios monitoring impossible
+
+Description: When Hadoop reports Datanode information to JMX, the bean uses the name "DataNode-" + storageid.  The storage ID incorporates a random number and is unpredictable.
+
+<p>This prevents me from monitoring DFS datanodes through Hadoop using the JMX interface; in order to do that, you must be able to specify the bean name on the command line.</p>
+
+<p>The fix is simple, patch will be coming momentarily.  However, there was probably a reason for making the datanodes all unique names which I'm unaware of, so it'd be nice to hear from the metrics maintainer.</p>
+Reason: Monitoring improvement
+Author: Brian Bockelman
+Ref: UNKNOWN
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    2 +-
+ .../datanode/metrics/DataNodeActivityMBean.java    |   16 +++++++++-------
+ .../server/datanode/metrics/DataNodeMetrics.java   |    4 ++--
+ 3 files changed, 12 insertions(+), 10 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index b3bff8d..4c50a51 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -384,7 +384,7 @@ public class DataNode extends Configured
+     this.infoServer.start();
+     // adjust info port
+     this.dnRegistration.setInfoPort(this.infoServer.getPort());
+-    myMetrics = new DataNodeMetrics(conf, dnRegistration.getStorageID());
++    myMetrics = new DataNodeMetrics(conf, dnRegistration.getName());
+     
+     // set service-level authorization security policy
+     if (conf.getBoolean(
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeActivityMBean.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeActivityMBean.java
+index b555c90..db4b8b6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeActivityMBean.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeActivityMBean.java
+@@ -28,7 +28,7 @@ import org.apache.hadoop.metrics.util.MetricsRegistry;
+  * 
+  * This is the JMX MBean for reporting the DataNode Activity.
+  * The MBean is register using the name
+- *        "hadoop:service=DataNode,name=DataNodeActivity-<storageid>"
++ *        "hadoop:service=DataNode,name=DataNodeActivity-<hostname>-<portNumber>"
+  * 
+  * Many of the activity metrics are sampled and averaged on an interval 
+  * which can be specified in the metrics config file.
+@@ -57,15 +57,17 @@ public class DataNodeActivityMBean extends MetricsDynamicMBeanBase {
+   final private ObjectName mbeanName;
+   private Random rand = new Random(); 
+ 
+-  public DataNodeActivityMBean(final MetricsRegistry mr, final String storageId) {
++  public DataNodeActivityMBean(final MetricsRegistry mr,
++      final String datanodeName) {
+     super(mr, "Activity statistics at the DataNode");
+-    String storageName;
+-    if (storageId.equals("")) {// Temp fix for the uninitialized storage
+-      storageName = "UndefinedStorageId" + rand.nextInt();
++    String name;
++    if (datanodeName.equals("")) {// Temp fix for the uninitialized name
++      name = "UndefinedDataNodeName" + rand.nextInt();
+     } else {
+-      storageName = storageId;
++      name = datanodeName.replace(":", "-");
+     }
+-    mbeanName = MBeanUtil.registerMBean("DataNode", "DataNodeActivity-" + storageName, this);
++    mbeanName = MBeanUtil.registerMBean("DataNode",
++	"DataNodeActivity-" + name, this);
+   }
+   
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeMetrics.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeMetrics.java
+index d60ae64..eaffef4 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeMetrics.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeMetrics.java
+@@ -92,14 +92,14 @@ public class DataNodeMetrics implements Updater {
+                     new MetricsTimeVaryingRate("blockReports", registry);
+ 
+     
+-  public DataNodeMetrics(Configuration conf, String storageId) {
++  public DataNodeMetrics(Configuration conf, String datanodeName) {
+     String sessionId = conf.get("session.id"); 
+     // Initiate reporting of Java VM metrics
+     JvmMetrics.init("DataNode", sessionId);
+     
+ 
+     // Now the MBean for the data node
+-    datanodeActivityMBean = new DataNodeActivityMBean(registry, storageId);
++    datanodeActivityMBean = new DataNodeActivityMBean(registry, datanodeName);
+     
+     // Create record for DataNode metrics
+     MetricsContext context = MetricsUtil.getContext("dfs");
+-- 
+1.7.0.4
+

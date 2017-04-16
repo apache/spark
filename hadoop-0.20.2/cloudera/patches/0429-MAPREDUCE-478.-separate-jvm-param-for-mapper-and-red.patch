@@ -1,0 +1,1160 @@
+From be2df477d6dc267f4a4b7c6602c8108ece1cb783 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 19 Jan 2010 13:30:55 +0530
+Subject: [PATCH 0429/1179] MAPREDUCE-478. separate jvm param for mapper and reducer
+
+Patch: https://issues.apache.org/jira/secure/attachment/12430705/478.20S-1.patch
+Author: Arun C Murthy
+Ref: YDH
+---
+ .../hadoop/streaming/TestMultipleCachefiles.java   |   15 ++-
+ .../org/apache/hadoop/streaming/TestSymLink.java   |   15 ++-
+ .../org/apache/hadoop/streaming/TestUlimit.java    |    3 +-
+ src/core/org/apache/hadoop/util/Shell.java         |   31 +++-
+ .../documentation/content/xdocs/cluster_setup.xml  |   24 ++-
+ .../content/xdocs/mapred_tutorial.xml              |   47 +++--
+ src/mapred/org/apache/hadoop/mapred/JobConf.java   |  147 ++++++++++++++
+ .../org/apache/hadoop/mapred/MapTaskRunner.java    |   21 ++-
+ .../org/apache/hadoop/mapred/ReduceTaskRunner.java |   22 ++-
+ .../org/apache/hadoop/mapred/TaskRunner.java       |   68 ++++++-
+ .../mapred/TestJobExecutionAsDifferentUser.java    |    2 +-
+ .../apache/hadoop/mapred/TestKillSubProcesses.java |   10 +-
+ .../apache/hadoop/mapred/TestMiniMRChildTask.java  |  209 +++++++++++++++-----
+ .../org/apache/hadoop/mapred/TestReduceFetch.java  |    1 +
+ .../apache/hadoop/mapreduce/MapReduceTestUtil.java |    1 +
+ .../org/apache/hadoop/mapreduce/TestChild.java     |  142 +++++++++++++
+ 16 files changed, 664 insertions(+), 94 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/TestChild.java
+
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestMultipleCachefiles.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestMultipleCachefiles.java
+index 8fb4c33..9836d95 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestMultipleCachefiles.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestMultipleCachefiles.java
+@@ -83,9 +83,18 @@ public class TestMultipleCachefiles extends TestCase
+         "-jobconf", strNamenode,
+         "-jobconf", strJobtracker,
+         "-jobconf", "stream.tmpdir="+System.getProperty("test.build.data","/tmp"),
+-        "-jobconf", "mapred.child.java.opts=-Dcontrib.name=" + System.getProperty("contrib.name") + " " +
+-                    "-Dbuild.test=" + System.getProperty("build.test") + " " +
+-                    conf.get("mapred.child.java.opts",""),
++        "-jobconf", 
++          JobConf.MAPRED_MAP_TASK_JAVA_OPTS + "=" +
++            "-Dcontrib.name=" + System.getProperty("contrib.name") + " " +
++            "-Dbuild.test=" + System.getProperty("build.test") + " " +
++            conf.get(JobConf.MAPRED_MAP_TASK_JAVA_OPTS, 
++                     conf.get(JobConf.MAPRED_TASK_JAVA_OPTS, "")),
++        "-jobconf", 
++          JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS + "=" +
++            "-Dcontrib.name=" + System.getProperty("contrib.name") + " " +
++            "-Dbuild.test=" + System.getProperty("build.test") + " " +
++            conf.get(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS, 
++                     conf.get(JobConf.MAPRED_TASK_JAVA_OPTS, "")),
+         "-cacheFile", "hdfs://"+fileSys.getName()+CACHE_FILE + "#" + mapString,
+         "-cacheFile", "hdfs://"+fileSys.getName()+CACHE_FILE_2 + "#" + mapString2
+       };
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestSymLink.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestSymLink.java
+index db393ef..52b815c 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestSymLink.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestSymLink.java
+@@ -80,9 +80,18 @@ public class TestSymLink extends TestCase
+         "-jobconf", strNamenode,
+         "-jobconf", strJobtracker,
+         "-jobconf", "stream.tmpdir="+System.getProperty("test.build.data","/tmp"),
+-        "-jobconf", "mapred.child.java.opts=-Dcontrib.name=" + System.getProperty("contrib.name") + " " +
+-                    "-Dbuild.test=" + System.getProperty("build.test") + " " +
+-                    conf.get("mapred.child.java.opts",""),
++        "-jobconf", 
++          JobConf.MAPRED_MAP_TASK_JAVA_OPTS + "=" +
++            "-Dcontrib.name=" + System.getProperty("contrib.name") + " " +
++            "-Dbuild.test=" + System.getProperty("build.test") + " " +
++            conf.get(JobConf.MAPRED_MAP_TASK_JAVA_OPTS, 
++                     conf.get(JobConf.MAPRED_TASK_JAVA_OPTS, "")),
++        "-jobconf", 
++          JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS + "=" +
++            "-Dcontrib.name=" + System.getProperty("contrib.name") + " " +
++            "-Dbuild.test=" + System.getProperty("build.test") + " " +
++            conf.get(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS, 
++                     conf.get(JobConf.MAPRED_TASK_JAVA_OPTS, "")),
+         "-cacheFile", "hdfs://"+fileSys.getName()+CACHE_FILE + "#testlink"
+       };
+ 
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestUlimit.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestUlimit.java
+index 58c81ee..14d8508 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestUlimit.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestUlimit.java
+@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.MiniMRCluster;
+ import org.apache.hadoop.mapred.TestMiniMRWithDFS;
+ import org.apache.hadoop.util.StringUtils;
+@@ -55,7 +56,7 @@ public class TestUlimit extends TestCase {
+       "-reducer", "org.apache.hadoop.mapred.lib.IdentityReducer",
+       "-numReduceTasks", "0",
+       "-jobconf", "mapred.map.tasks=1",
+-      "-jobconf", "mapred.child.ulimit=" + memLimit,
++      "-jobconf", JobConf.MAPRED_MAP_TASK_ULIMIT + "=" + memLimit,
+       "-jobconf", "mapred.job.tracker=" + "localhost:" +
+                                            mr.getJobTrackerPort(),
+       "-jobconf", "fs.default.name=" + "hdfs://localhost:" 
+diff --git a/src/core/org/apache/hadoop/util/Shell.java b/src/core/org/apache/hadoop/util/Shell.java
+index 8fdf178..997a629 100644
+--- a/src/core/org/apache/hadoop/util/Shell.java
++++ b/src/core/org/apache/hadoop/util/Shell.java
+@@ -68,6 +68,31 @@ abstract public class Shell {
+   /** If or not script timed out*/
+   private AtomicBoolean timedOut;
+ 
++  /** a Unix command to get ulimit of a process. */
++  public static final String ULIMIT_COMMAND = "ulimit";
++  
++  /** 
++   * Get the Unix command for setting the maximum virtual memory available
++   * to a given child process. This is only relevant when we are forking a
++   * process from within the Mapper or the Reducer implementations.
++   * Also see Hadoop Pipes and Hadoop Streaming.
++   * 
++   * It also checks to ensure that we are running on a *nix platform else 
++   * (e.g. in Cygwin/Windows) it returns <code>null</code>.
++   * @param memoryLimit virtual memory limit
++   * @return a <code>String[]</code> with the ulimit command arguments or 
++   *         <code>null</code> if we are running on a non *nix platform or
++   *         if the limit is unspecified.
++   */
++  public static String[] getUlimitMemoryCommand(int memoryLimit) {
++    // ulimit isn't supported on Windows
++    if (WINDOWS) {
++      return null;
++    }
++    
++    return new String[] {ULIMIT_COMMAND, "-v", String.valueOf(memoryLimit)};
++  }
++  
+   /** 
+    * Get the Unix command for setting the maximum virtual memory available
+    * to a given child process. This is only relevant when we are forking a
+@@ -82,7 +107,9 @@ abstract public class Shell {
+    * @return a <code>String[]</code> with the ulimit command arguments or 
+    *         <code>null</code> if we are running on a non *nix platform or
+    *         if the limit is unspecified.
++   * @deprecated Use {@link #getUlimitMemoryCommand(int)}
+    */
++  @Deprecated
+   public static String[] getUlimitMemoryCommand(Configuration conf) {
+     // ulimit isn't supported on Windows
+     if (WINDOWS) {
+@@ -97,8 +124,8 @@ abstract public class Shell {
+     
+     // Parse it to ensure it is legal/sane
+     int memoryLimit = Integer.valueOf(ulimit);
+-
+-    return new String[] {"ulimit", "-v", String.valueOf(memoryLimit)};
++    
++    return getUlimitMemoryCommand(memoryLimit);
+   }
+   
+   /** Set to true on Windows platforms */
+diff --git a/src/docs/src/documentation/content/xdocs/cluster_setup.xml b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+index 5a9796d..3ee8ba3 100644
+--- a/src/docs/src/documentation/content/xdocs/cluster_setup.xml
++++ b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+@@ -392,10 +392,18 @@
+                   </tr>
+                   <tr>
+                     <td>conf/mapred-site.xml</td>
+-                    <td>mapred.child.java.opts</td>
++                    <td>mapred.map.child.java.opts</td>
+                     <td>-Xmx512M</td>
+                     <td>
+-                      Larger heap-size for child jvms of maps/reduces. 
++                      Larger heap-size for child jvms of maps. 
++                    </td>
++                  </tr>
++                  <tr>
++                    <td>conf/mapred-site.xml</td>
++                    <td>mapred.reduce.child.java.opts</td>
++                    <td>-Xmx512M</td>
++                    <td>
++                      Larger heap-size for child jvms of reduces. 
+                     </td>
+                   </tr>
+                   <tr>
+@@ -465,9 +473,17 @@
+                   </tr>
+                   <tr>
+                     <td>conf/mapred-site.xml</td>
+-                    <td>mapred.child.java.opts</td>
++                    <td>mapred.map.child.java.opts</td>
++                    <td>-Xmx512M</td>
++                    <td>
++                      Larger heap-size for child jvms of maps. 
++                    </td>
++                  </tr>
++                  <tr>
++                    <td>conf/mapred-site.xml</td>
++                    <td>mapred.reduce.child.java.opts</td>
+                     <td>-Xmx1024M</td>
+-                    <td>Larger heap-size for child jvms of maps/reduces.</td>
++                    <td>Larger heap-size for child jvms of reduces.</td>
+                   </tr>
+                 </table>
+               </li>
+diff --git a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+index c38ef5f..032a66d 100644
+--- a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
++++ b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+@@ -1051,24 +1051,25 @@
+         
+         <p>The child-task inherits the environment of the parent 
+         <code>TaskTracker</code>. The user can specify additional options to the
+-        child-jvm via the <code>mapred.child.java.opts</code> configuration
+-        parameter in the <code>JobConf</code> such as non-standard paths for the 
+-        run-time linker to search shared libraries via 
++        child-jvm via the <code>mapred.{map|reduce}.child.java.opts</code> 
++        configuration parameter in the <code>JobConf</code> such as non-standard 
++         paths for the run-time linker to search shared libraries via 
+         <code>-Djava.library.path=&lt;&gt;</code> etc. If the 
+-        <code>mapred.child.java.opts</code> contains the symbol <em>@taskid@</em> 
+-        it is interpolated with value of <code>taskid</code> of the map/reduce
+-        task.</p>
++        <code>mapred.{map|reduce}.child.java.opts</code> parameters contains the 
++        symbol <em>@taskid@</em> it is interpolated with value of 
++        <code>taskid</code> of the map/reduce task.</p>
+         
+         <p>Here is an example with multiple arguments and substitutions, 
+         showing jvm GC logging, and start of a passwordless JVM JMX agent so that
+         it can connect with jconsole and the likes to watch child memory, 
+         threads and get thread dumps. It also sets the maximum heap-size of the 
+-        child jvm to 512MB and adds an additional path to the 
+-        <code>java.library.path</code> of the child-jvm.</p>
++        map and reduce child jvm to 512MB &amp; 1024MB respectively. It also 
++        adds an additional path to the <code>java.library.path</code> of the 
++        child-jvm.</p>
+ 
+         <p>
+           <code>&lt;property&gt;</code><br/>
+-          &nbsp;&nbsp;<code>&lt;name&gt;mapred.child.java.opts&lt;/name&gt;</code><br/>
++          &nbsp;&nbsp;<code>&lt;name&gt;mapred.map.child.java.opts&lt;/name&gt;</code><br/>
+           &nbsp;&nbsp;<code>&lt;value&gt;</code><br/>
+           &nbsp;&nbsp;&nbsp;&nbsp;<code>
+                     -Xmx512M -Djava.library.path=/home/mycompany/lib
+@@ -1080,19 +1081,33 @@
+           <code>&lt;/property&gt;</code>
+         </p>
+         
++        <p>
++          <code>&lt;property&gt;</code><br/>
++          &nbsp;&nbsp;<code>&lt;name&gt;mapred.reduce.child.java.opts&lt;/name&gt;</code><br/>
++          &nbsp;&nbsp;<code>&lt;value&gt;</code><br/>
++          &nbsp;&nbsp;&nbsp;&nbsp;<code>
++                    -Xmx1024M -Djava.library.path=/home/mycompany/lib
++                    -verbose:gc -Xloggc:/tmp/@taskid@.gc</code><br/>
++          &nbsp;&nbsp;&nbsp;&nbsp;<code>
++                    -Dcom.sun.management.jmxremote.authenticate=false 
++                    -Dcom.sun.management.jmxremote.ssl=false</code><br/>
++          &nbsp;&nbsp;<code>&lt;/value&gt;</code><br/>
++          <code>&lt;/property&gt;</code>
++        </p>
++        
+         <section>
+         <title> Memory management</title>
+         <p>Users/admins can also specify the maximum virtual memory 
+         of the launched child-task, and any sub-process it launches 
+-        recursively, using <code>mapred.child.ulimit</code>. Note that
+-        the value set here is a per process limit.
+-        The value for <code>mapred.child.ulimit</code> should be specified 
+-        in kilo bytes (KB). And also the value must be greater than
++        recursively, using <code>mapred.{map|reduce}.child.ulimit</code>. Note 
++        that the value set here is a per process limit.
++        The value for <code>mapred.{map|reduce}.child.ulimit</code> should be 
++        specified in kilo bytes (KB). And also the value must be greater than
+         or equal to the -Xmx passed to JavaVM, else the VM might not start. 
+         </p>
+         
+-        <p>Note: <code>mapred.child.java.opts</code> are used only for 
+-        configuring the launched child tasks from task tracker. Configuring 
++        <p>Note: <code>mapred.{map|reduce}.child.java.opts</code> are used only 
++        for configuring the launched child tasks from task tracker. Configuring 
+         the memory options for daemons is documented in 
+         <a href="cluster_setup.html#Configuring+the+Environment+of+the+Hadoop+Daemons">
+         cluster_setup.html </a></p>
+@@ -1229,7 +1244,7 @@
+                 shuffle.</td></tr>
+             <tr><td>mapred.job.shuffle.input.buffer.percent</td><td>float</td>
+                 <td>The percentage of memory- relative to the maximum heapsize
+-                as typically specified in <code>mapred.child.java.opts</code>-
++                as typically specified in <code>mapred.reduce.child.java.opts</code>-
+                 that can be allocated to storing map outputs during the
+                 shuffle. Though some memory should be set aside for the
+                 framework, in general it is advantageous to set this high
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobConf.java b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+index fead07f..84f67bb 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobConf.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+@@ -164,6 +164,153 @@ public class JobConf extends Configuration {
+     Pattern.compile("(?:classes/|lib/).*");
+ 
+   /**
++   * Configuration key to set the java command line options for the child
++   * map and reduce tasks.
++   * 
++   * Java opts for the task tracker child processes.
++   * The following symbol, if present, will be interpolated: @taskid@. 
++   * It is replaced by current TaskID. Any other occurrences of '@' will go 
++   * unchanged.
++   * For example, to enable verbose gc logging to a file named for the taskid in
++   * /tmp and to set the heap maximum to be a gigabyte, pass a 'value' of:
++   *          -Xmx1024m -verbose:gc -Xloggc:/tmp/@taskid@.gc
++   * 
++   * The configuration variable {@link #MAPRED_TASK_ULIMIT} can be used to 
++   * control the maximum virtual memory of the child processes.
++   * 
++   * The configuration variable {@link #MAPRED_TASK_ENV} can be used to pass 
++   * other environment variables to the child processes.
++   * 
++   * @deprecated Use {@link #MAPRED_MAP_TASK_JAVA_OPTS} or 
++   *                 {@link #MAPRED_REDUCE_TASK_JAVA_OPTS}
++   */
++  @Deprecated
++  public static final String MAPRED_TASK_JAVA_OPTS = "mapred.child.java.opts";
++  
++  /**
++   * Configuration key to set the java command line options for the map tasks.
++   * 
++   * Java opts for the task tracker child map processes.
++   * The following symbol, if present, will be interpolated: @taskid@. 
++   * It is replaced by current TaskID. Any other occurrences of '@' will go 
++   * unchanged.
++   * For example, to enable verbose gc logging to a file named for the taskid in
++   * /tmp and to set the heap maximum to be a gigabyte, pass a 'value' of:
++   *          -Xmx1024m -verbose:gc -Xloggc:/tmp/@taskid@.gc
++   * 
++   * The configuration variable {@link #MAPRED_MAP_TASK_ULIMIT} can be used to 
++   * control the maximum virtual memory of the map processes.
++   * 
++   * The configuration variable {@link #MAPRED_MAP_TASK_ENV} can be used to pass 
++   * other environment variables to the map processes.
++   */
++  public static final String MAPRED_MAP_TASK_JAVA_OPTS = 
++    "mapred.map.child.java.opts";
++  
++  /**
++   * Configuration key to set the java command line options for the reduce tasks.
++   * 
++   * Java opts for the task tracker child reduce processes.
++   * The following symbol, if present, will be interpolated: @taskid@. 
++   * It is replaced by current TaskID. Any other occurrences of '@' will go 
++   * unchanged.
++   * For example, to enable verbose gc logging to a file named for the taskid in
++   * /tmp and to set the heap maximum to be a gigabyte, pass a 'value' of:
++   *          -Xmx1024m -verbose:gc -Xloggc:/tmp/@taskid@.gc
++   * 
++   * The configuration variable {@link #MAPRED_REDUCE_TASK_ULIMIT} can be used  
++   * to control the maximum virtual memory of the reduce processes.
++   * 
++   * The configuration variable {@link #MAPRED_REDUCE_TASK_ENV} can be used to 
++   * pass process environment variables to the reduce processes.
++   */
++  public static final String MAPRED_REDUCE_TASK_JAVA_OPTS = 
++    "mapred.reduce.child.java.opts";
++  
++  public static final String DEFAULT_MAPRED_TASK_JAVA_OPTS = "-Xmx200m";
++  
++  /**
++   * Configuration key to set the maximum virutal memory available to the child
++   * map and reduce tasks (in kilo-bytes).
++   * 
++   * Note: This must be greater than or equal to the -Xmx passed to the JavaVM
++   *       via {@link #MAPRED_TASK_JAVA_OPTS}, else the VM might not start.
++   * 
++   * @deprecated Use {@link #MAPRED_MAP_TASK_ULIMIT} or 
++   *                 {@link #MAPRED_REDUCE_TASK_ULIMIT}
++   */
++  @Deprecated
++  public static final String MAPRED_TASK_ULIMIT = "mapred.child.ulimit";
++
++  /**
++   * Configuration key to set the maximum virutal memory available to the
++   * map tasks (in kilo-bytes).
++   * 
++   * Note: This must be greater than or equal to the -Xmx passed to the JavaVM
++   *       via {@link #MAPRED_MAP_TASK_JAVA_OPTS}, else the VM might not start.
++   */
++  public static final String MAPRED_MAP_TASK_ULIMIT = "mapred.map.child.ulimit";
++  
++  /**
++   * Configuration key to set the maximum virutal memory available to the
++   * reduce tasks (in kilo-bytes).
++   * 
++   * Note: This must be greater than or equal to the -Xmx passed to the JavaVM
++   *       via {@link #MAPRED_REDUCE_TASK_JAVA_OPTS}, else the VM might not start.
++   */
++  public static final String MAPRED_REDUCE_TASK_ULIMIT =
++    "mapred.reduce.child.ulimit";
++
++  /**
++   * Configuration key to set the environment of the child map/reduce tasks.
++   * 
++   * The format of the value is <code>k1=v1,k2=v2</code>. Further it can 
++   * reference existing environment variables via <code>$key</code>.
++   * 
++   * Example:
++   * <ul>
++   *   <li> A=foo - This will set the env variable A to foo. </li>
++   *   <li> B=$X:c This is inherit tasktracker's X env variable. </li>
++   * </ul>
++   * 
++   * @deprecated Use {@link #MAPRED_MAP_TASK_ENV} or 
++   *                 {@link #MAPRED_REDUCE_TASK_ENV}
++   */
++  @Deprecated
++  public static final String MAPRED_TASK_ENV = "mapred.child.env";
++
++  /**
++   * Configuration key to set the maximum virutal memory available to the
++   * map tasks.
++   * 
++   * The format of the value is <code>k1=v1,k2=v2</code>. Further it can 
++   * reference existing environment variables via <code>$key</code>.
++   * 
++   * Example:
++   * <ul>
++   *   <li> A=foo - This will set the env variable A to foo. </li>
++   *   <li> B=$X:c This is inherit tasktracker's X env variable. </li>
++   * </ul>
++   */
++  public static final String MAPRED_MAP_TASK_ENV = "mapred.map.child.env";
++  
++  /**
++   * Configuration key to set the maximum virutal memory available to the
++   * reduce tasks.
++   * 
++   * The format of the value is <code>k1=v1,k2=v2</code>. Further it can 
++   * reference existing environment variables via <code>$key</code>.
++   * 
++   * Example:
++   * <ul>
++   *   <li> A=foo - This will set the env variable A to foo. </li>
++   *   <li> B=$X:c This is inherit tasktracker's X env variable. </li>
++   * </ul>
++   */
++  public static final String MAPRED_REDUCE_TASK_ENV =
++    "mapred.reduce.child.env";
++
++  /**
+    * Construct a map/reduce job configuration.
+    */
+   public JobConf() {
+diff --git a/src/mapred/org/apache/hadoop/mapred/MapTaskRunner.java b/src/mapred/org/apache/hadoop/mapred/MapTaskRunner.java
+index 94750d0..8d7787a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MapTaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/MapTaskRunner.java
+@@ -23,7 +23,7 @@ import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
+ 
+ /** Runs a map task. */
+ class MapTaskRunner extends TaskRunner {
+-
++  
+   public MapTaskRunner(TaskInProgress task, TaskTracker tracker, JobConf conf) {
+     super(task, tracker, conf);
+   }
+@@ -43,4 +43,23 @@ class MapTaskRunner extends TaskRunner {
+     LOG.info(getTask()+" done; removing files.");
+     mapOutputFile.removeAll();
+   }
++
++  @Override
++  public String getChildJavaOpts(JobConf jobConf, String defaultValue) {
++    return jobConf.get(JobConf.MAPRED_MAP_TASK_JAVA_OPTS, 
++                       super.getChildJavaOpts(jobConf, 
++                           JobConf.DEFAULT_MAPRED_TASK_JAVA_OPTS));
++  }
++  
++  @Override
++  public int getChildUlimit(JobConf jobConf) {
++    return jobConf.getInt(JobConf.MAPRED_MAP_TASK_ULIMIT, 
++                          super.getChildUlimit(jobConf));
++  }
++
++  @Override
++  public String getChildEnv(JobConf jobConf) {
++    return jobConf.get(JobConf.MAPRED_MAP_TASK_ENV, super.getChildEnv(jobConf));
++  }
++
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/ReduceTaskRunner.java b/src/mapred/org/apache/hadoop/mapred/ReduceTaskRunner.java
+index fc6d1ae..e6fdd62 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ReduceTaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/ReduceTaskRunner.java
+@@ -23,7 +23,7 @@ import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
+ 
+ /** Runs a reduce task. */
+ class ReduceTaskRunner extends TaskRunner {
+-  
++
+   public ReduceTaskRunner(TaskInProgress task, TaskTracker tracker, 
+                           JobConf conf) throws IOException {
+     
+@@ -48,4 +48,24 @@ class ReduceTaskRunner extends TaskRunner {
+     getTask().getProgress().setStatus("closed");
+     mapOutputFile.removeAll();
+   }
++
++  @Override
++  public String getChildJavaOpts(JobConf jobConf, String defaultValue) {
++    return jobConf.get(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS, 
++                       super.getChildJavaOpts(jobConf, 
++                           JobConf.DEFAULT_MAPRED_TASK_JAVA_OPTS));
++  }
++ 
++  @Override
++  public int getChildUlimit(JobConf jobConf) {
++    return jobConf.getInt(JobConf.MAPRED_REDUCE_TASK_ULIMIT, 
++                          super.getChildUlimit(jobConf));
++  }
++
++  @Override
++  public String getChildEnv(JobConf jobConf) {
++    return jobConf.get(JobConf.MAPRED_REDUCE_TASK_ENV, 
++                       super.getChildEnv(jobConf));
++  }
++
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index d56dc3c..378f00b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -113,6 +113,47 @@ abstract class TaskRunner extends Thread {
+     return str.toString();
+   }
+   
++  /**
++   * Get the java command line options for the child map/reduce tasks.
++   * @param jobConf job configuration
++   * @param defaultValue default value
++   * @return the java command line options for child map/reduce tasks
++   * @deprecated Use command line options specific to map or reduce tasks set 
++   *             via {@link JobConf#MAPRED_MAP_TASK_JAVA_OPTS} or 
++   *             {@link JobConf#MAPRED_REDUCE_TASK_JAVA_OPTS}
++   */
++  @Deprecated
++  public String getChildJavaOpts(JobConf jobConf, String defaultValue) {
++    return jobConf.get(JobConf.MAPRED_TASK_JAVA_OPTS, defaultValue);
++  }
++  
++  /**
++   * Get the maximum virtual memory of the child map/reduce tasks.
++   * @param jobConf job configuration
++   * @return the maximum virtual memory of the child task or <code>-1</code> if
++   *         none is specified
++   * @deprecated Use limits specific to the map or reduce tasks set via
++   *             {@link JobConf#MAPRED_MAP_TASK_ULIMIT} or
++   *             {@link JobConf#MAPRED_REDUCE_TASK_ULIMIT} 
++   */
++  @Deprecated
++  public int getChildUlimit(JobConf jobConf) {
++    return jobConf.getInt(JobConf.MAPRED_TASK_ULIMIT, -1);
++  }
++  
++  /**
++   * Get the environment variables for the child map/reduce tasks.
++   * @param jobConf job configuration
++   * @return the environment variables for the child map/reduce tasks or
++   *         <code>null</code> if unspecified
++   * @deprecated Use environment variables specific to the map or reduce tasks
++   *             set via {@link JobConf#MAPRED_MAP_TASK_ENV} or
++   *             {@link JobConf#MAPRED_REDUCE_TASK_ENV}
++   */
++  public String getChildEnv(JobConf jobConf) {
++    return jobConf.get(JobConf.MAPRED_TASK_ENV);
++  }
++  
+   @Override
+   public final void run() {
+     String errorInfo = "Child Error";
+@@ -271,7 +312,7 @@ abstract class TaskRunner extends Thread {
+    * @return
+    */
+   private List<String> getVMSetupCmd() {
+-    String[] ulimitCmd = Shell.getUlimitMemoryCommand(conf);
++    String[] ulimitCmd = Shell.getUlimitMemoryCommand(getChildUlimit(conf));
+     List<String> setup = null;
+     if (ulimitCmd != null) {
+       setup = new ArrayList<String>();
+@@ -301,8 +342,8 @@ abstract class TaskRunner extends Thread {
+ 
+     // Add child (task) java-vm options.
+     //
+-    // The following symbols if present in mapred.child.java.opts value are
+-    // replaced:
++    // The following symbols if present in mapred.{map|reduce}.child.java.opts 
++    // value are replaced:
+     // + @taskid@ is interpolated with value of TaskID.
+     // Other occurrences of @ will not be altered.
+     //
+@@ -312,14 +353,23 @@ abstract class TaskRunner extends Thread {
+     // and get thread dumps.
+     //
+     //  <property>
+-    //    <name>mapred.child.java.opts</name>
+-    //    <value>-verbose:gc -Xloggc:/tmp/@taskid@.gc \
++    //    <name>mapred.map.child.java.opts</name>
++    //    <value>-Xmx 512M -verbose:gc -Xloggc:/tmp/@taskid@.gc \
++    //           -Dcom.sun.management.jmxremote.authenticate=false \
++    //           -Dcom.sun.management.jmxremote.ssl=false \
++    //    </value>
++    //  </property>
++    //
++    //  <property>
++    //    <name>mapred.reduce.child.java.opts</name>
++    //    <value>-Xmx 1024M -verbose:gc -Xloggc:/tmp/@taskid@.gc \
+     //           -Dcom.sun.management.jmxremote.authenticate=false \
+     //           -Dcom.sun.management.jmxremote.ssl=false \
+     //    </value>
+     //  </property>
+     //
+-    String javaOpts = conf.get("mapred.child.java.opts", "-Xmx200m");
++    String javaOpts = getChildJavaOpts(conf, 
++                                       JobConf.DEFAULT_MAPRED_TASK_JAVA_OPTS);
+     javaOpts = javaOpts.replace("@taskid@", taskid.toString());
+     String [] javaOptsSplit = javaOpts.split(" ");
+     
+@@ -330,7 +380,7 @@ abstract class TaskRunner extends Thread {
+     // 2. We also add the 'cwd' of the task to it's java.library.path to help 
+     //    users distribute native libraries via the DistributedCache.
+     // 3. The user can also specify extra paths to be added to the 
+-    //    java.library.path via mapred.child.java.opts.
++    //    java.library.path via mapred.{map|reduce}.child.java.opts.
+     //
+     String libraryPath = System.getProperty("java.library.path");
+     if (libraryPath == null) {
+@@ -441,7 +491,7 @@ abstract class TaskRunner extends Thread {
+    * @return
+    * @throws Throwable
+    */
+-  private static String getVMEnvironment(String errorInfo, File workDir, JobConf conf,
++  private String getVMEnvironment(String errorInfo, File workDir, JobConf conf,
+       Map<String, String> env, TaskAttemptID taskid, long logSize)
+       throws Throwable {
+     StringBuffer ldLibraryPath = new StringBuffer();
+@@ -471,7 +521,7 @@ abstract class TaskRunner extends Thread {
+     env.put("HADOOP_CLIENT_OPTS", "\"" + hadoopClientOpts + "\"");
+ 
+     // add the env variables passed by the user
+-    String mapredChildEnv = conf.get("mapred.child.env");
++    String mapredChildEnv = getChildEnv(conf);
+     if (mapredChildEnv != null && mapredChildEnv.length() > 0) {
+       String childEnvs[] = mapredChildEnv.split(",");
+       for (String cEnv : childEnvs) {
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java b/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
+index 687fca5..5bb1086 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
+@@ -79,7 +79,7 @@ public class TestJobExecutionAsDifferentUser extends
+     Path inDir = new Path("input1");
+     Path outDir = new Path("output1");
+     try {
+-      childTask.runTestTaskEnv(getClusterConf(), inDir, outDir);
++      childTask.runTestTaskEnv(getClusterConf(), inDir, outDir, false);
+     } catch (IOException e) {
+       fail("IOException thrown while running enviroment test."
+           + e.getMessage());
+diff --git a/src/test/org/apache/hadoop/mapred/TestKillSubProcesses.java b/src/test/org/apache/hadoop/mapred/TestKillSubProcesses.java
+index 49a6ed7..12ccd8c 100644
+--- a/src/test/org/apache/hadoop/mapred/TestKillSubProcesses.java
++++ b/src/test/org/apache/hadoop/mapred/TestKillSubProcesses.java
+@@ -290,8 +290,14 @@ public class TestKillSubProcesses extends TestCase {
+     conf.setNumMapTasks(1);
+     conf.setNumReduceTasks(0);
+ 
+-    conf.set("mapred.child.java.opts", conf.get("mapred.child.java.opts") +
+-                                  " -Dtest.build.data=" + BASE_TEST_ROOT_DIR);
++    conf.set(JobConf.MAPRED_MAP_TASK_JAVA_OPTS, 
++             conf.get(JobConf.MAPRED_MAP_TASK_JAVA_OPTS, 
++                      conf.get(JobConf.MAPRED_TASK_JAVA_OPTS)) +
++             " -Dtest.build.data=" + BASE_TEST_ROOT_DIR);
++    conf.set(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS, 
++             conf.get(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS, 
++                      conf.get(JobConf.MAPRED_TASK_JAVA_OPTS)) +
++             " -Dtest.build.data=" + BASE_TEST_ROOT_DIR);
+ 
+     return UtilsForTests.runJob(conf, inDir, outDir);
+   }
+diff --git a/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java b/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java
+index 0859960..61bf4b1 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java
++++ b/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java
+@@ -18,6 +18,8 @@
+ package org.apache.hadoop.mapred;
+ 
+ import java.io.*;
++import java.util.Iterator;
++
+ import junit.framework.TestCase;
+ 
+ import org.apache.commons.logging.Log;
+@@ -42,6 +44,11 @@ public class TestMiniMRChildTask extends TestCase {
+   private static final Log LOG =
+     LogFactory.getLog(TestMiniMRChildTask.class.getName());
+ 
++  private final static String OLD_CONFIGS = "test.old.configs";
++  private final static String TASK_OPTS_VAL = "-Xmx200m";
++  private final static String MAP_OPTS_VAL = "-Xmx200m";
++  private final static String REDUCE_OPTS_VAL = "-Xmx300m";
++
+   private MiniMRCluster mr;
+   private MiniDFSCluster dfs;
+   private FileSystem fileSys;
+@@ -85,7 +92,8 @@ public class TestMiniMRChildTask extends TestCase {
+ 
+   // configure a job
+   private void configure(JobConf conf, Path inDir, Path outDir, String input,
+-                         Class<? extends Mapper> map) 
++                         Class<? extends Mapper> map, 
++                         Class<? extends Reducer> reduce) 
+   throws IOException {
+     // set up the input file system and write input text.
+     FileSystem inFs = inDir.getFileSystem(conf);
+@@ -104,7 +112,7 @@ public class TestMiniMRChildTask extends TestCase {
+     // configure the mapred Job which creates a tempfile in map.
+     conf.setJobName("testmap");
+     conf.setMapperClass(map);
+-    conf.setReducerClass(IdentityReducer.class);
++    conf.setReducerClass(reduce);
+     conf.setNumMapTasks(1);
+     conf.setNumReduceTasks(0);
+     FileInputFormat.setInputPaths(conf, inDir);
+@@ -127,7 +135,8 @@ public class TestMiniMRChildTask extends TestCase {
+                          Path outDir,
+                          String input)
+   throws IOException {
+-    configure(conf, inDir, outDir, input, MapClass.class);
++    configure(conf, inDir, outDir, input, 
++              MapClass.class, IdentityReducer.class);
+ 
+     FileSystem outFs = outDir.getFileSystem(conf);
+     
+@@ -147,16 +156,52 @@ public class TestMiniMRChildTask extends TestCase {
+     outFs.delete(outDir, true);
+   }
+ 
++  private static void checkEnv(String envName, String expValue, String mode) {
++    String envValue = System.getenv(envName).trim();
++    if ("append".equals(mode)) {
++      if (envValue == null || !envValue.contains(":")) {
++        throw new RuntimeException("Missing env variable");
++      } else {
++        String parts[] = envValue.split(":");
++        // check if the value is appended
++        if (!parts[parts.length - 1].equals(expValue)) {
++          throw new RuntimeException("Wrong env variable in append mode");
++        }
++      }
++    } else {
++      if (envValue == null || !envValue.equals(expValue)) {
++        throw new RuntimeException("Wrong env variable in noappend mode");
++      }
++    }
++  }
++
+   // Mappers that simply checks if the desired user env are present or not
+   static class EnvCheckMapper extends MapReduceBase implements
+       Mapper<WritableComparable, Writable, WritableComparable, Writable> {
+-    private static String PATH;
+     
+-    public void map(WritableComparable key, Writable value,
+-        OutputCollector<WritableComparable, Writable> out, Reporter reporter)
+-        throws IOException {
++    public void configure(JobConf job) {
++      boolean oldConfigs = job.getBoolean(OLD_CONFIGS, false);
++      if (oldConfigs) {
++        String javaOpts = job.get(JobConf.MAPRED_TASK_JAVA_OPTS);
++        assertNotNull(JobConf.MAPRED_TASK_JAVA_OPTS + " is null!", 
++                      javaOpts);
++        assertEquals(JobConf.MAPRED_TASK_JAVA_OPTS + " has value of: " + 
++                     javaOpts, 
++                     javaOpts, TASK_OPTS_VAL);
++      } else {
++        String mapJavaOpts = job.get(JobConf.MAPRED_MAP_TASK_JAVA_OPTS);
++        assertNotNull(JobConf.MAPRED_MAP_TASK_JAVA_OPTS + " is null!", 
++                      mapJavaOpts);
++        assertEquals(JobConf.MAPRED_MAP_TASK_JAVA_OPTS + " has value of: " + 
++                     mapJavaOpts, 
++                     mapJavaOpts, MAP_OPTS_VAL);
++      }
++
++      String path = job.get("path");
++      
+       // check if the pwd is there in LD_LIBRARY_PATH
+       String pwd = System.getenv("PWD");
++      
+       assertTrue("LD doesnt contain pwd", 
+                  System.getenv("LD_LIBRARY_PATH").contains(pwd));
+       
+@@ -170,34 +215,69 @@ public class TestMiniMRChildTask extends TestCase {
+       checkEnv("NEW_PATH", ":/tmp", "noappend");
+       // check if X=$(tt's X var):/tmp for an old env variable inherited from 
+       // the tt
+-      checkEnv("PATH",  PATH + ":/tmp", "noappend");
++      checkEnv("PATH",  path + ":/tmp", "noappend");
+     }
+ 
+-    private void checkEnv(String envName, String expValue, String mode) 
+-    throws IOException {
+-      String envValue = System.getenv(envName).trim();
+-      if ("append".equals(mode)) {
+-        if (envValue == null || !envValue.contains(":")) {
+-          throw new  IOException("Missing env variable");
+-        } else {
+-          String parts[] = envValue.split(":");
+-          // check if the value is appended
+-          if (!parts[parts.length - 1].equals(expValue)) {
+-            throw new  IOException("Wrong env variable in append mode");
+-          }
+-        }
++    public void map(WritableComparable key, Writable value,
++                    OutputCollector<WritableComparable, Writable> out, 
++                    Reporter reporter)
++        throws IOException {
++    }
++  }
++
++  static class EnvCheckReducer extends MapReduceBase 
++  implements Reducer<WritableComparable, Writable, WritableComparable, Writable> {
++    
++    @Override
++    public void configure(JobConf job) {
++      boolean oldConfigs = job.getBoolean(OLD_CONFIGS, false);
++      if (oldConfigs) {
++        String javaOpts = job.get(JobConf.MAPRED_TASK_JAVA_OPTS);
++        assertNotNull(JobConf.MAPRED_TASK_JAVA_OPTS + " is null!", 
++                      javaOpts);
++        assertEquals(JobConf.MAPRED_TASK_JAVA_OPTS + " has value of: " + 
++                     javaOpts, 
++                     javaOpts, TASK_OPTS_VAL);
+       } else {
+-        if (envValue == null || !envValue.equals(expValue)) {
+-          throw new  IOException("Wrong env variable in noappend mode");
+-        }
++        String reduceJavaOpts = job.get(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS);
++        assertNotNull(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS + " is null!", 
++                      reduceJavaOpts);
++        assertEquals(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS + " has value of: " + 
++                     reduceJavaOpts, 
++                     reduceJavaOpts, REDUCE_OPTS_VAL);
+       }
++
++      String path = job.get("path");
++      
++      // check if the pwd is there in LD_LIBRARY_PATH
++      String pwd = System.getenv("PWD");
++      
++      assertTrue("LD doesnt contain pwd", 
++                 System.getenv("LD_LIBRARY_PATH").contains(pwd));
++      
++      // check if X=$X:/abc works for LD_LIBRARY_PATH
++      checkEnv("LD_LIBRARY_PATH", "/tmp", "append");
++      // check if X=/tmp works for an already existing parameter
++      checkEnv("HOME", "/tmp", "noappend");
++      // check if X=/tmp for a new env variable
++      checkEnv("MY_PATH", "/tmp", "noappend");
++      // check if X=$X:/tmp works for a new env var and results into :/tmp
++      checkEnv("NEW_PATH", ":/tmp", "noappend");
++      // check if X=$(tt's X var):/tmp for an old env variable inherited from 
++      // the tt
++      checkEnv("PATH",  path + ":/tmp", "noappend");
++
+     }
+-    
+-    public void configure(JobConf conf) {
+-      PATH = conf.get("path");
++
++    @Override
++    public void reduce(WritableComparable key, Iterator<Writable> values,
++                       OutputCollector<WritableComparable, Writable> output, 
++                       Reporter reporter)
++        throws IOException {
+     }
++    
+   }
+-
++  
+   @Override
+   public void setUp() {
+     try {
+@@ -265,28 +345,11 @@ public class TestMiniMRChildTask extends TestCase {
+   public void testTaskEnv(){
+     try {
+       JobConf conf = mr.createJobConf();
+-      
+       // initialize input, output directories
+       Path inDir = new Path("testing/wc/input1");
+       Path outDir = new Path("testing/wc/output1");
+-      String input = "The input";
+-      
+-      configure(conf, inDir, outDir, input, EnvCheckMapper.class);
+-
+       FileSystem outFs = outDir.getFileSystem(conf);
+-      
+-      // test 
+-      //  - new SET of new var (MY_PATH)
+-      //  - set of old var (HOME)
+-      //  - append to an old var from modified env (LD_LIBRARY_PATH)
+-      //  - append to an old var from tt's env (PATH)
+-      //  - append to a new var (NEW_PATH)
+-      conf.set("mapred.child.env", 
+-               "MY_PATH=/tmp,HOME=/tmp,LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp,"
+-               + "PATH=$PATH:/tmp,NEW_PATH=$NEW_PATH:/tmp");
+-      conf.set("path", System.getenv("PATH"));
+-
+-      JobClient.runJob(conf);
++      runTestTaskEnv(conf, inDir, outDir, false);
+       outFs.delete(outDir, true);
+     } catch(Exception e) {
+       e.printStackTrace();
+@@ -295,19 +358,63 @@ public class TestMiniMRChildTask extends TestCase {
+     }
+   }
+   
+-  void runTestTaskEnv(JobConf conf, Path inDir, Path outDir) throws IOException {
++  /**
++   * Test to test if the user set *old* env variables reflect in the child
++   * processes. Mainly
++   *   - x=y (x can be a already existing env variable or a new variable)
++   *   - x=$x:y (replace $x with the current value of x)
++   */
++  public void testTaskOldEnv(){
++    try {
++      JobConf conf = mr.createJobConf();
++      // initialize input, output directories
++      Path inDir = new Path("testing/wc/input1");
++      Path outDir = new Path("testing/wc/output1");
++      FileSystem outFs = outDir.getFileSystem(conf);
++      runTestTaskEnv(conf, inDir, outDir, true);
++      outFs.delete(outDir, true);
++    } catch(Exception e) {
++      e.printStackTrace();
++      fail("Exception in testing child env");
++      tearDown();
++    }
++  }
++  
++  void runTestTaskEnv(JobConf conf, Path inDir, Path outDir, boolean oldConfigs)
++      throws IOException {
+     String input = "The input";
+-    configure(conf, inDir, outDir, input, EnvCheckMapper.class);
++    configure(conf, inDir, outDir, input, EnvCheckMapper.class, 
++              EnvCheckReducer.class);
+     // test 
+     //  - new SET of new var (MY_PATH)
+     //  - set of old var (HOME)
+     //  - append to an old var from modified env (LD_LIBRARY_PATH)
+     //  - append to an old var from tt's env (PATH)
+     //  - append to a new var (NEW_PATH)
+-    conf.set("mapred.child.env", 
+-             "MY_PATH=/tmp,HOME=/tmp,LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp,"
+-             + "PATH=$PATH:/tmp,NEW_PATH=$NEW_PATH:/tmp");
++    String mapTaskEnvKey = JobConf.MAPRED_MAP_TASK_ENV;
++    String reduceTaskEnvKey = JobConf.MAPRED_MAP_TASK_ENV;
++    String mapTaskJavaOptsKey = JobConf.MAPRED_MAP_TASK_JAVA_OPTS;
++    String reduceTaskJavaOptsKey = JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS;
++    String mapTaskJavaOpts = MAP_OPTS_VAL;
++    String reduceTaskJavaOpts = REDUCE_OPTS_VAL;
++    conf.setBoolean(OLD_CONFIGS, oldConfigs);
++    if (oldConfigs) {
++      mapTaskEnvKey = reduceTaskEnvKey = JobConf.MAPRED_TASK_ENV;
++      mapTaskJavaOptsKey = reduceTaskJavaOptsKey = JobConf.MAPRED_TASK_JAVA_OPTS;
++      mapTaskJavaOpts = reduceTaskJavaOpts = TASK_OPTS_VAL;
++    }
++    conf.set(mapTaskEnvKey,
++             "MY_PATH=/tmp,HOME=/tmp,LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp," +
++             "PATH=$PATH:/tmp,NEW_PATH=$NEW_PATH:/tmp");
++    conf.set(reduceTaskEnvKey,
++             "MY_PATH=/tmp,HOME=/tmp,LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp," +
++             "PATH=$PATH:/tmp,NEW_PATH=$NEW_PATH:/tmp");
++
+     conf.set("path", System.getenv("PATH"));
++
++    conf.set(mapTaskJavaOptsKey, mapTaskJavaOpts);
++    conf.set(reduceTaskJavaOptsKey, reduceTaskJavaOpts);
++
+     RunningJob job = JobClient.runJob(conf);
+     assertTrue("The environment checker job failed.", job.isSuccessful());
+   }
+diff --git a/src/test/org/apache/hadoop/mapred/TestReduceFetch.java b/src/test/org/apache/hadoop/mapred/TestReduceFetch.java
+index e0ff338..c2ac131 100644
+--- a/src/test/org/apache/hadoop/mapred/TestReduceFetch.java
++++ b/src/test/org/apache/hadoop/mapred/TestReduceFetch.java
+@@ -127,6 +127,7 @@ public class TestReduceFetch extends TestCase {
+     job.setInt("mapred.reduce.parallel.copies", 1);
+     job.setInt("io.sort.mb", 10);
+     job.setInt("mapred.job.reduce.total.mem.bytes", 128 << 20);
++    job.set(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS, "-Xmx128m");
+     job.set("mapred.job.shuffle.input.buffer.percent", "0.14");
+     job.setNumTasksToExecutePerJvm(1);
+     job.set("mapred.job.shuffle.merge.percent", "1.0");
+diff --git a/src/test/org/apache/hadoop/mapreduce/MapReduceTestUtil.java b/src/test/org/apache/hadoop/mapreduce/MapReduceTestUtil.java
+index 669d84e..f348756 100644
+--- a/src/test/org/apache/hadoop/mapreduce/MapReduceTestUtil.java
++++ b/src/test/org/apache/hadoop/mapreduce/MapReduceTestUtil.java
+@@ -43,6 +43,7 @@ import org.apache.hadoop.io.NullWritable;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.mapred.OutputLogFilter;
+ import org.apache.hadoop.mapred.Utils;
+ import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.mapreduce.Mapper;
+diff --git a/src/test/org/apache/hadoop/mapreduce/TestChild.java b/src/test/org/apache/hadoop/mapreduce/TestChild.java
+new file mode 100644
+index 0000000..49387ae
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/TestChild.java
+@@ -0,0 +1,142 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapreduce;
++
++import java.io.File;
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.PathFilter;
++import org.apache.hadoop.io.LongWritable;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.HadoopTestCase;
++import org.apache.hadoop.mapred.JobConf;
++
++public class TestChild extends HadoopTestCase {
++  private static String TEST_ROOT_DIR =
++    new File(System.getProperty("test.build.data","/tmp"))
++    .toURI().toString().replace(' ', '+');
++  private final Path inDir = new Path(TEST_ROOT_DIR, "./wc/input");
++  private final Path outDir = new Path(TEST_ROOT_DIR, "./wc/output");
++  
++  private final static String OLD_CONFIGS = "test.old.configs";
++  private final static String TASK_OPTS_VAL = "-Xmx200m";
++  private final static String MAP_OPTS_VAL = "-Xmx200m";
++  private final static String REDUCE_OPTS_VAL = "-Xmx300m";
++  
++  public TestChild() throws IOException {
++    super(HadoopTestCase.CLUSTER_MR , HadoopTestCase.LOCAL_FS, 2, 2);
++  }
++
++  static class MyMapper extends Mapper<LongWritable, Text, LongWritable, Text> {
++
++    @Override
++    protected void setup(Context context) throws IOException,
++        InterruptedException {
++      Configuration conf = context.getConfiguration();
++      boolean oldConfigs = conf.getBoolean(OLD_CONFIGS, false);
++      if (oldConfigs) {
++        String javaOpts = conf.get(JobConf.MAPRED_TASK_JAVA_OPTS);
++        assertNotNull(JobConf.MAPRED_TASK_JAVA_OPTS + " is null!", 
++                      javaOpts);
++        assertEquals(JobConf.MAPRED_TASK_JAVA_OPTS + " has value of: " + 
++                     javaOpts, 
++                     javaOpts, TASK_OPTS_VAL);
++      } else {
++        String mapJavaOpts = conf.get(JobConf.MAPRED_MAP_TASK_JAVA_OPTS);
++        assertNotNull(JobConf.MAPRED_MAP_TASK_JAVA_OPTS + " is null!", 
++                      mapJavaOpts);
++        assertEquals(JobConf.MAPRED_MAP_TASK_JAVA_OPTS + " has value of: " + 
++                     mapJavaOpts, 
++                     mapJavaOpts, MAP_OPTS_VAL);
++      }
++    }
++  }
++  
++  static class MyReducer 
++  extends Reducer<LongWritable, Text, LongWritable, Text> {
++
++    @Override
++    protected void setup(Context context)
++        throws IOException, InterruptedException {
++      Configuration conf = context.getConfiguration();
++      boolean oldConfigs = conf.getBoolean(OLD_CONFIGS, false);
++      if (oldConfigs) {
++        String javaOpts = conf.get(JobConf.MAPRED_TASK_JAVA_OPTS);
++        assertNotNull(JobConf.MAPRED_TASK_JAVA_OPTS + " is null!", 
++                      javaOpts);
++        assertEquals(JobConf.MAPRED_TASK_JAVA_OPTS + " has value of: " + 
++                     javaOpts, 
++                     javaOpts, TASK_OPTS_VAL);
++      } else {
++        String reduceJavaOpts = conf.get(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS);
++        assertNotNull(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS + " is null!", 
++                      reduceJavaOpts);
++        assertEquals(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS + " has value of: " + 
++                     reduceJavaOpts, 
++                     reduceJavaOpts, REDUCE_OPTS_VAL);
++      }
++    }
++  }
++  
++  private Job submitAndValidateJob(JobConf conf, int numMaps, int numReds, 
++                                   boolean oldConfigs) 
++      throws IOException, InterruptedException, ClassNotFoundException {
++    conf.setBoolean(OLD_CONFIGS, oldConfigs);
++    if (oldConfigs) {
++      conf.set(JobConf.MAPRED_TASK_JAVA_OPTS, TASK_OPTS_VAL);
++    } else {
++      conf.set(JobConf.MAPRED_MAP_TASK_JAVA_OPTS, MAP_OPTS_VAL);
++      conf.set(JobConf.MAPRED_REDUCE_TASK_JAVA_OPTS, REDUCE_OPTS_VAL);
++    }
++    
++    Job job = MapReduceTestUtil.createJob(conf, inDir, outDir, 
++                numMaps, numReds);
++    job.setMapperClass(MyMapper.class);
++    job.setReducerClass(MyReducer.class);
++    job.waitForCompletion(true);
++    assertTrue(job.isSuccessful());
++
++    // Check output directory
++    FileSystem fs = FileSystem.get(conf);
++    assertTrue("Job output directory doesn't exit!", fs.exists(outDir));
++    FileStatus[] list = fs.listStatus(outDir, new OutputFilter());
++    int numPartFiles = numReds == 0 ? numMaps : numReds;
++    assertTrue("Number of part-files is " + list.length + " and not "
++        + numPartFiles, list.length == numPartFiles);
++    return job;
++  }
++  
++  public void testChild() throws Exception {
++    try {
++      submitAndValidateJob(createJobConf(), 1, 1, true);
++      submitAndValidateJob(createJobConf(), 1, 1, false);
++    } finally {
++      tearDown();
++    }
++  }
++  
++  private static class OutputFilter implements PathFilter {
++    public boolean accept(Path path) {
++      return !(path.getName().startsWith("_"));
++    }
++  }
++}
+-- 
+1.7.0.4
+

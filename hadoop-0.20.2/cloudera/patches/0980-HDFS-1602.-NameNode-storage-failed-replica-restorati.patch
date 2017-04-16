@@ -1,0 +1,68 @@
+From 871f34b3bdb7d323cfc91f0538ccb848deebc7f3 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Mon, 20 Jun 2011 17:13:22 -0700
+Subject: [PATCH 0980/1179] HDFS-1602. NameNode storage failed replica restoration is broken
+
+Reason: Bug
+Author: Boris Shkolnik
+Ref: CDH-3208
+---
+ .../hadoop/hdfs/server/namenode/FSImage.java       |   28 +++++++++++++++-----
+ 1 files changed, 21 insertions(+), 7 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index 4ea49d8..a56dcb0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -1577,11 +1577,15 @@ public class FSImage extends Storage {
+    * Return the name of the image file.
+    */
+   File getFsImageName() {
+-  StorageDirectory sd = null;
+-  for (Iterator<StorageDirectory> it = 
+-              dirIterator(NameNodeDirType.IMAGE); it.hasNext();)
+-    sd = it.next();
+-  return getImageFile(sd, NameNodeFile.IMAGE); 
++    StorageDirectory sd = null;
++    for (Iterator<StorageDirectory> it = 
++        dirIterator(NameNodeDirType.IMAGE); it.hasNext();) {
++      sd = it.next();
++      File fsImage = getImageFile(sd, NameNodeFile.IMAGE);
++      if (sd.getRoot().canRead() && fsImage.exists())
++        return fsImage;
++    }
++    return null;
+   }
+ 
+   /**
+@@ -1603,7 +1607,9 @@ public class FSImage extends Storage {
+       try {
+         
+         if(root.exists() && root.canWrite()) { 
+-          format(sd);
++          // when we try to restore we just need to remove all the data
++          // without saving current in-memory state (which could've changed).
++          sd.clearDirectory();
+           LOG.info("restoring dir " + sd.getRoot().getAbsolutePath());
+           this.addStorageDir(sd); // restore
+           it.remove();
+@@ -1615,7 +1621,15 @@ public class FSImage extends Storage {
+   }
+   
+   public File getFsEditName() throws IOException {
+-    return getEditLog().getFsEditName();
++    StorageDirectory sd = null;
++    for (Iterator<StorageDirectory> it = 
++        dirIterator(NameNodeDirType.EDITS); it.hasNext();) {
++      sd = it.next();
++      File fsEdits = getImageFile(sd, NameNodeFile.EDITS);
++      if (sd.getRoot().canRead())
++        return fsEdits;
++    }
++    return null;
+   }
+ 
+   File getFsTimeName() {
+-- 
+1.7.0.4
+

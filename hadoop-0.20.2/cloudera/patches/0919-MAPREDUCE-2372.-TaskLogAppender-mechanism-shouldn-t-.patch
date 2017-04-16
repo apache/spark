@@ -1,0 +1,158 @@
+From 50194947583182a237e14c08a968de770cd3f969 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 9 Mar 2011 14:20:28 -0800
+Subject: [PATCH 0919/1179] MAPREDUCE-2372. TaskLogAppender mechanism shouldn't be set in log4j.properties
+
+Reason: fixes cleanup tasks to log to proper directory even if using a CDH2
+        log4j.properties
+Author: Todd Lipcon
+Ref: CDH-2793
+---
+ conf/log4j.properties                              |   12 -----
+ .../org/apache/hadoop/mapred/TaskLogAppender.java  |   43 ++++++++++++++++----
+ .../org/apache/hadoop/mapred/TaskRunner.java       |    7 ++-
+ 3 files changed, 39 insertions(+), 23 deletions(-)
+
+diff --git a/conf/log4j.properties b/conf/log4j.properties
+index cf97232..b341527 100644
+--- a/conf/log4j.properties
++++ b/conf/log4j.properties
+@@ -53,19 +53,7 @@ log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{2}:
+ #
+ # TaskLog Appender
+ #
+-
+-#Default values
+-hadoop.tasklog.taskid=null
+-hadoop.tasklog.iscleanup=false
+-hadoop.tasklog.noKeepSplits=4
+-hadoop.tasklog.totalLogFileSize=100
+-hadoop.tasklog.purgeLogSplits=true
+-hadoop.tasklog.logsRetainHours=12
+-
+ log4j.appender.TLA=org.apache.hadoop.mapred.TaskLogAppender
+-log4j.appender.TLA.taskId=${hadoop.tasklog.taskid}
+-log4j.appender.TLA.isCleanup=${hadoop.tasklog.iscleanup}
+-log4j.appender.TLA.totalLogFileSize=${hadoop.tasklog.totalLogFileSize}
+ 
+ log4j.appender.TLA.layout=org.apache.log4j.PatternLayout
+ log4j.appender.TLA.layout.ConversionPattern=%d{ISO8601} %p %c: %m%n
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskLogAppender.java b/src/mapred/org/apache/hadoop/mapred/TaskLogAppender.java
+index 3e39142..482da91 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskLogAppender.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskLogAppender.java
+@@ -32,13 +32,20 @@ import org.apache.log4j.spi.LoggingEvent;
+ public class TaskLogAppender extends FileAppender {
+   private String taskId; //taskId should be managed as String rather than TaskID object
+   //so that log4j can configure it from the configuration(log4j.properties). 
+-  private int maxEvents;
++  private Integer maxEvents;
+   private Queue<LoggingEvent> tail = null;
+-  private boolean isCleanup;
++  private Boolean isCleanup;
++
++  // System properties passed in from JVM runner
++  static final String ISCLEANUP_PROPERTY = "hadoop.tasklog.iscleanup";
++  static final String LOGSIZE_PROPERTY = "hadoop.tasklog.totalLogFileSize";
++  static final String TASKID_PROPERTY = "hadoop.tasklog.taskid";
+ 
+   @Override
+   public void activateOptions() {
+     synchronized (this) {
++      setOptionsFromSystemProperties();
++
+       if (maxEvents > 0) {
+         tail = new LinkedList<LoggingEvent>();
+       }
+@@ -48,6 +55,26 @@ public class TaskLogAppender extends FileAppender {
+       super.activateOptions();
+     }
+   }
++
++  /**
++   * The Task Runner passes in the options as system properties. Set
++   * the options if the setters haven't already been called.
++   */
++  private synchronized void setOptionsFromSystemProperties() {
++    if (isCleanup == null) {
++      String propValue = System.getProperty(ISCLEANUP_PROPERTY, "false");
++      isCleanup = Boolean.valueOf(propValue);
++    }
++
++    if (taskId == null) {
++      taskId = System.getProperty(TASKID_PROPERTY);
++    }
++
++    if (maxEvents == null) {
++      String propValue = System.getProperty(LOGSIZE_PROPERTY, "100");
++      setTotalLogFileSize(Long.valueOf(propValue));
++    }
++  }
+   
+   @Override
+   public void append(LoggingEvent event) {
+@@ -81,21 +108,21 @@ public class TaskLogAppender extends FileAppender {
+    * Getter/Setter methods for log4j.
+    */
+   
+-  public String getTaskId() {
++  public synchronized String getTaskId() {
+     return taskId;
+   }
+ 
+-  public void setTaskId(String taskId) {
++  public synchronized void setTaskId(String taskId) {
+     this.taskId = taskId;
+   }
+ 
+   private static final int EVENT_SIZE = 100;
+   
+-  public long getTotalLogFileSize() {
++  public synchronized long getTotalLogFileSize() {
+     return maxEvents * EVENT_SIZE;
+   }
+ 
+-  public void setTotalLogFileSize(long logSize) {
++  public synchronized void setTotalLogFileSize(long logSize) {
+     maxEvents = (int) logSize / EVENT_SIZE;
+   }
+ 
+@@ -105,7 +132,7 @@ public class TaskLogAppender extends FileAppender {
+    * @param isCleanup
+    *          true if the task is cleanup attempt, false otherwise.
+    */
+-  public void setIsCleanup(boolean isCleanup) {
++  public synchronized void setIsCleanup(boolean isCleanup) {
+     this.isCleanup = isCleanup;
+   }
+ 
+@@ -114,7 +141,7 @@ public class TaskLogAppender extends FileAppender {
+    * 
+    * @return true if the task is cleanup attempt, false otherwise.
+    */
+-  public boolean getIsCleanup() {
++  public synchronized boolean getIsCleanup() {
+     return isCleanup;
+   }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index 37e494f..46b9a26 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -478,9 +478,10 @@ abstract class TaskRunner extends Thread {
+     vargs.add("-Dhadoop.log.dir=" + 
+         new File(System.getProperty("hadoop.log.dir")).getAbsolutePath());
+     vargs.add("-Dhadoop.root.logger=INFO,TLA");
+-    vargs.add("-Dhadoop.tasklog.taskid=" + taskid);
+-    vargs.add("-Dhadoop.tasklog.iscleanup=" + t.isTaskCleanupTask());
+-    vargs.add("-Dhadoop.tasklog.totalLogFileSize=" + logSize);
++    vargs.add("-D" + TaskLogAppender.TASKID_PROPERTY +  "=" + taskid);
++    vargs.add("-D" + TaskLogAppender.ISCLEANUP_PROPERTY +
++              "=" + t.isTaskCleanupTask());
++    vargs.add("-D" + TaskLogAppender.LOGSIZE_PROPERTY + "=" + logSize);
+   }
+ 
+   /**
+-- 
+1.7.0.4
+

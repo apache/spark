@@ -1,0 +1,83 @@
+From 21868a0d245c73742c90d23a82a7536c198a5a3f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Feb 2011 10:53:23 -0800
+Subject: [PATCH 0973/1179] HADOOP-7145. Configuration.getLocalPath should trim strings
+
+Reason: fix potential bug with local dirs
+Author: Todd Lipcon
+Ref: CDH-2662
+---
+ src/core/org/apache/hadoop/conf/Configuration.java |    4 +-
+ .../org/apache/hadoop/conf/TestConfiguration.java  |   27 +++++++++++++++++++-
+ 2 files changed, 28 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index b54730f..d9fa0b7 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -1083,7 +1083,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    */
+   public Path getLocalPath(String dirsProp, String path)
+     throws IOException {
+-    String[] dirs = getStrings(dirsProp);
++    String[] dirs = getTrimmedStrings(dirsProp);
+     int hashCode = path.hashCode();
+     FileSystem fs = FileSystem.getLocal(this);
+     for (int i = 0; i < dirs.length; i++) {  // try each local dir
+@@ -1115,7 +1115,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    */
+   public File getFile(String dirsProp, String path)
+     throws IOException {
+-    String[] dirs = getStrings(dirsProp);
++    String[] dirs = getTrimmedStrings(dirsProp);
+     int hashCode = path.hashCode();
+     for (int i = 0; i < dirs.length; i++) {  // try each local dir
+       int index = (hashCode+i & Integer.MAX_VALUE) % dirs.length;
+diff --git a/src/test/org/apache/hadoop/conf/TestConfiguration.java b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+index a73f23a..107e69a 100644
+--- a/src/test/org/apache/hadoop/conf/TestConfiguration.java
++++ b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+@@ -247,6 +247,30 @@ public class TestConfiguration extends TestCase {
+     }
+   }
+ 
++  public void testGetLocalPath() throws IOException {
++    Configuration conf = new Configuration();
++    conf.set("dirs", "a, b, c ");
++    for (int i = 0; i < 1000; i++) {
++      String localPath = conf.getLocalPath("dirs", "dir" + i).toString();
++      assertTrue("Path doesn't end in specified dir: " + localPath,
++        localPath.endsWith("dir" + i));
++      assertFalse("Path has internal whitespace: " + localPath,
++        localPath.contains(" "));
++    }
++  }
++
++  public void testGetFile() throws IOException {
++    Configuration conf = new Configuration();
++    conf.set("dirs", "a, b, c ");
++    for (int i = 0; i < 1000; i++) {
++      String localPath = conf.getFile("dirs", "dir" + i).toString();
++      assertTrue("Path doesn't end in specified dir: " + localPath,
++        localPath.endsWith("dir" + i));
++      assertFalse("Path has internal whitespace: " + localPath,
++        localPath.contains(" "));
++    }
++  }
++
+   public void testToString() throws IOException {
+     out=new BufferedWriter(new FileWriter(CONFIG));
+     startConfig();
+@@ -255,7 +279,8 @@ public class TestConfiguration extends TestCase {
+     conf.addResource(fileResource);
+     
+     String expectedOutput = 
+-      "Configuration: core-default.xml, core-site.xml, " + 
++      "Configuration: core-default.xml, core-site.xml," +
++      " mapred-default.xml, mapred-site.xml, " + 
+       fileResource.toString();
+     assertEquals(expectedOutput, conf.toString());
+   }
+-- 
+1.7.0.4
+

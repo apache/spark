@@ -1,0 +1,344 @@
+From 7bc77f6677512242d19b75c643f21a457087d29a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 23 Feb 2010 16:18:31 -0800
+Subject: [PATCH 0489/1179] HDFS-786. Implement getContentSummary(..) in HftpFileSystem
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436792/h786_20100223_0.20.patch
+Author: Tsz Wo (Nicholas), SZE
+Ref: YDH
+---
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |   98 ++++++++++++++++++++
+ .../server/namenode/ContentSummaryServlet.java     |   80 ++++++++++++++++
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    2 +
+ .../org/apache/hadoop/hdfs/MiniDFSCluster.java     |   14 +++
+ .../org/apache/hadoop/hdfs/TestFileStatus.java     |   26 ++++-
+ 5 files changed, 214 insertions(+), 6 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index 6d75e3e..c861c75 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -45,6 +45,7 @@ import org.xml.sax.helpers.XMLReaderFactory;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.fs.ContentSummary;
+ import org.apache.hadoop.fs.FileChecksum;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -345,4 +346,101 @@ public class HftpFileSystem extends FileSystem {
+     throw new IOException("Not supported");
+   }
+ 
++  /**
++   * A parser for parsing {@link ContentSummary} xml.
++   */
++  private class ContentSummaryParser extends DefaultHandler {
++    private ContentSummary contentsummary;
++
++    /** {@inheritDoc} */
++    public void startElement(String ns, String localname, String qname,
++                Attributes attrs) throws SAXException {
++      if (!ContentSummary.class.getName().equals(qname)) {
++        if (RemoteException.class.getSimpleName().equals(qname)) {
++          throw new SAXException(RemoteException.valueOf(attrs));
++        }
++        throw new SAXException("Unrecognized entry: " + qname);
++      }
++
++      contentsummary = toContentSummary(attrs);
++    }
++
++    /**
++     * Connect to the name node and get content summary.  
++     * @param path The path
++     * @return The content summary for the path.
++     * @throws IOException
++     */
++    private ContentSummary getContentSummary(String path) throws IOException {
++      final HttpURLConnection connection = openConnection(
++          "/contentSummary" + path, "ugi=" + ugi);
++      InputStream in = null;
++      try {
++        in = connection.getInputStream();        
++
++        final XMLReader xr = XMLReaderFactory.createXMLReader();
++        xr.setContentHandler(this);
++        xr.parse(new InputSource(in));
++      } catch(FileNotFoundException fnfe) {
++        //the server may not support getContentSummary
++        return null;
++      } catch(SAXException saxe) {
++        final Exception embedded = saxe.getException();
++        if (embedded != null && embedded instanceof IOException) {
++          throw (IOException)embedded;
++        }
++        throw new IOException("Invalid xml format", saxe);
++      } finally {
++        if (in != null) {
++          in.close();
++        }
++        connection.disconnect();
++      }
++      return contentsummary;
++    }
++  }
++
++  /** Return the object represented in the attributes. */
++  private static ContentSummary toContentSummary(Attributes attrs
++      ) throws SAXException {
++    final String length = attrs.getValue("length");
++    final String fileCount = attrs.getValue("fileCount");
++    final String directoryCount = attrs.getValue("directoryCount");
++    final String quota = attrs.getValue("quota");
++    final String spaceConsumed = attrs.getValue("spaceConsumed");
++    final String spaceQuota = attrs.getValue("spaceQuota");
++
++    if (length == null
++        || fileCount == null
++        || directoryCount == null
++        || quota == null
++        || spaceConsumed == null
++        || spaceQuota == null) {
++      return null;
++    }
++
++    try {
++      return new ContentSummary(
++          Long.parseLong(length),
++          Long.parseLong(fileCount),
++          Long.parseLong(directoryCount),
++          Long.parseLong(quota),
++          Long.parseLong(spaceConsumed),
++          Long.parseLong(spaceQuota));
++    } catch(Exception e) {
++      throw new SAXException("Invalid attributes: length=" + length
++          + ", fileCount=" + fileCount
++          + ", directoryCount=" + directoryCount
++          + ", quota=" + quota
++          + ", spaceConsumed=" + spaceConsumed
++          + ", spaceQuota=" + spaceQuota, e);
++    }
++  }
++
++  /** {@inheritDoc} */
++  public ContentSummary getContentSummary(Path f) throws IOException {
++    final String s = makeQualified(f).toUri().getPath();
++    final ContentSummary cs = new ContentSummaryParser().getContentSummary(s);
++    return cs != null? cs: super.getContentSummary(f);
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+new file mode 100644
+index 0000000..5ab2857
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+@@ -0,0 +1,80 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import java.io.IOException;
++import java.io.PrintWriter;
++import java.security.PrivilegedExceptionAction;
++
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++
++import org.apache.hadoop.fs.ContentSummary;
++import org.apache.hadoop.hdfs.protocol.ClientProtocol;
++import org.apache.hadoop.ipc.RemoteException;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.znerd.xmlenc.XMLOutputter;
++
++/** Servlets for file checksum */
++public class ContentSummaryServlet extends DfsServlet {
++  /** For java.io.Serializable */
++  private static final long serialVersionUID = 1L;
++  
++  /** {@inheritDoc} */
++  public void doGet(final HttpServletRequest request,
++      final HttpServletResponse response) throws ServletException, IOException {
++    final UserGroupInformation ugi = getUGI(request);
++    try {
++      ugi.doAs(new PrivilegedExceptionAction<Object>() {
++        @Override
++        public Object run() throws Exception {
++          final String path = request.getPathInfo();
++
++          final PrintWriter out = response.getWriter();
++          final XMLOutputter xml = new XMLOutputter(out, "UTF-8");
++          xml.declaration();
++          try {
++            //get content summary
++            final ClientProtocol nnproxy = createNameNodeProxy();
++            final ContentSummary cs = nnproxy.getContentSummary(path);
++
++            //write xml
++            xml.startTag(ContentSummary.class.getName());
++            if (cs != null) {
++              xml.attribute("length"        , "" + cs.getLength());
++              xml.attribute("fileCount"     , "" + cs.getFileCount());
++              xml.attribute("directoryCount", "" + cs.getDirectoryCount());
++              xml.attribute("quota"         , "" + cs.getQuota());
++              xml.attribute("spaceConsumed" , "" + cs.getSpaceConsumed());
++              xml.attribute("spaceQuota"    , "" + cs.getSpaceQuota());
++            }
++            xml.endTag();
++          } catch(IOException ioe) {
++            new RemoteException(ioe.getClass().getName(), ioe.getMessage()
++                ).writeXml(path, xml);
++          }
++          xml.endDocument();
++          return null;
++        }
++      });
++    } catch (InterruptedException e) {
++      throw new IOException(e);
++    }
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 7373706..d0d286a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -278,6 +278,8 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     this.httpServer.addInternalServlet("data", "/data/*", FileDataServlet.class);
+     this.httpServer.addInternalServlet("checksum", "/fileChecksum/*",
+         FileChecksumServlets.RedirectServlet.class);
++    this.httpServer.addInternalServlet("contentSummary", "/contentSummary/*",
++        ContentSummaryServlet.class);
+     this.httpServer.start();
+ 
+     // The web-server port can be ephemeral... ensure we have the correct info
+diff --git a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+index 6b2cf29..7a0b811 100644
+--- a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
++++ b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+@@ -20,6 +20,8 @@ package org.apache.hadoop.hdfs;
+ import java.io.File;
+ import java.io.IOException;
+ import java.net.InetSocketAddress;
++import java.net.URI;
++import java.net.URISyntaxException;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.nio.channels.FileChannel;
+@@ -773,6 +775,18 @@ public class MiniDFSCluster {
+   }
+ 
+   /**
++   * @return a {@link HftpFileSystem} object.
++   */
++  public HftpFileSystem getHftpFileSystem() throws IOException {
++    final String str = "hftp://" + conf.get("dfs.http.address");
++    try {
++      return (HftpFileSystem)FileSystem.get(new URI(str), conf); 
++    } catch (URISyntaxException e) {
++      throw new IOException(e);
++    }
++  }
++
++  /**
+    * Get the directories where the namenode stores its image.
+    */
+   public Collection<File> getNameDirs() {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileStatus.java b/src/test/org/apache/hadoop/hdfs/TestFileStatus.java
+index 81be0ce..ed8f341 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileStatus.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileStatus.java
+@@ -18,21 +18,29 @@
+ package org.apache.hadoop.hdfs;
+ 
+ import junit.framework.TestCase;
+-import java.io.*;
++import java.io.IOException;
+ import java.util.Random;
+ 
++import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
++import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
++import org.apache.log4j.Level;
+ 
+ /**
+  * This class tests the FileStatus API.
+  */
+ public class TestFileStatus extends TestCase {
++  {
++    ((Log4JLogger)FSNamesystem.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger)FileSystem.LOG).getLogger().setLevel(Level.ALL);
++  }
++
+   static final long seed = 0xDEADBEEFL;
+   static final int blockSize = 8192;
+   static final int fileSize = 16384;
+@@ -68,6 +76,7 @@ public class TestFileStatus extends TestCase {
+     Configuration conf = new Configuration();
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, 1, true, null);
+     FileSystem fs = cluster.getFileSystem();
++    final HftpFileSystem hftpfs = cluster.getHftpFileSystem();
+     final DFSClient dfsClient = new DFSClient(NameNode.getAddress(conf), conf);
+     try {
+ 
+@@ -101,7 +110,7 @@ public class TestFileStatus extends TestCase {
+       assertTrue(status.getBlockSize() == blockSize);
+       assertTrue(status.getReplication() == 1);
+       assertTrue(status.getLen() == fileSize);
+-      assertEquals(fs.makeQualified(file1), 
++      assertEquals(fs.makeQualified(file1).toString(), 
+           status.getPath().toString());
+ 
+       // test listStatus on a file
+@@ -134,8 +143,10 @@ public class TestFileStatus extends TestCase {
+       // test listStatus on an empty directory
+       stats = fs.listStatus(dir);
+       assertEquals(dir + " should be empty", 0, stats.length);
+-      assertTrue(dir + " should be zero size ",
+-                 fs.getContentSummary(dir).getLength() == 0);
++      assertEquals(dir + " should be zero size ",
++          0, fs.getContentSummary(dir).getLength());
++      assertEquals(dir + " should be zero size using hftp",
++          0, hftpfs.getContentSummary(dir).getLength());
+       assertTrue(dir + " should be zero size ",
+                  fs.getFileStatus(dir).getLen() == 0);
+       System.out.println("Dir : \"" + dir + "\"");
+@@ -165,8 +176,11 @@ public class TestFileStatus extends TestCase {
+ 
+       // verify that the size of the directory increased by the size 
+       // of the two files
+-      assertTrue(dir + " size should be " + (blockSize/2), 
+-                 blockSize/2 == fs.getContentSummary(dir).getLength());
++      final int expected = blockSize/2;  
++      assertEquals(dir + " size should be " + expected, 
++          expected, fs.getContentSummary(dir).getLength());
++      assertEquals(dir + " size should be " + expected + " using hftp", 
++          expected, hftpfs.getContentSummary(dir).getLength());
+        
+        // test listStatus on a non-empty directory
+        stats = fs.listStatus(dir);
+-- 
+1.7.0.4
+

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+for ((i=0; i < $NUM_OF_SMALL_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/monster_query.small.$i
+    mkdir $CLUSTER_DIR
+
+    hod script -d $CLUSTER_DIR $SMALL_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/monsterQuery/monster_query.small  2>&1 > monster_query.small.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+    
+for ((i=0; i < $NUM_OF_MEDIUM_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/monster_query.medium.$i
+    mkdir $CLUSTER_DIR
+    hod script -d $CLUSTER_DIR $MEDIUM_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/monsterQuery/monster_query.medium  2>&1 > monster_query.medium.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+
+for ((i=0; i < $NUM_OF_LARGE_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/monster_query.large.$i
+    mkdir $CLUSTER_DIR
+    hod script -d  $CLUSTER_DIR $LARGE_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/monsterQuery/monster_query.large  2>&1 > monster_query.large.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done

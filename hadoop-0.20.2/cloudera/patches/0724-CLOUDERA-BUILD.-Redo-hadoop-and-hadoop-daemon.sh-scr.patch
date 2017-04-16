@@ -1,0 +1,323 @@
+From c7f9a8ece8b63fa571420b0c1e40044177b8e42d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 4 Oct 2010 16:11:04 -0700
+Subject: [PATCH 0724/1179] CLOUDERA-BUILD. Redo hadoop and hadoop-daemon.sh scripts to be more compatible with packaging
+
+Author: Todd Lipcon
+---
+ bin/hadoop           |  161 ++++++++++++++++++++++++++++++++++++++++----------
+ bin/hadoop-daemon.sh |   40 +++++--------
+ 2 files changed, 146 insertions(+), 55 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 0679a9a..9ea13b4 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -1,5 +1,4 @@
+ #!/usr/bin/env bash
+-
+ # Licensed to the Apache Software Foundation (ASF) under one or more
+ # contributor license agreements.  See the NOTICE file distributed with
+ # this work for additional information regarding copyright ownership.
+@@ -46,6 +45,8 @@ bin=`cd "$bin"; pwd`
+ 
+ . "$bin"/hadoop-config.sh
+ 
++HADOOP_IDENT_STRING=${HADOOP_IDENT_STRING:-$USER}
++
+ cygwin=false
+ case "`uname`" in
+ CYGWIN*) cygwin=true;;
+@@ -92,14 +93,6 @@ if [ -f "${HADOOP_CONF_DIR}/hadoop-env.sh" ]; then
+   . "${HADOOP_CONF_DIR}/hadoop-env.sh"
+ fi
+ 
+-# Determine if we're starting a secure datanode, and if so, redefine appropriate variables
+-if [ "$COMMAND" == "datanode" ] && [ "$EUID" -eq 0 ] && [ -n "$HADOOP_SECURE_DN_USER" ]; then
+-  HADOOP_PID_DIR=$HADOOP_SECURE_DN_PID_DIR
+-  HADOOP_LOG_DIR=$HADOOP_SECURE_DN_LOG_DIR
+-  HADOOP_IDENT_STRING=$HADOOP_SECURE_DN_USER
+-  starting_secure_dn="true"
+-fi
+-
+ # some Java parameters
+ if [ "$JAVA_HOME" != "" ]; then
+   #echo "run java in $JAVA_HOME"
+@@ -208,11 +201,7 @@ elif [ "$COMMAND" = "secondarynamenode" ] ; then
+   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_SECONDARYNAMENODE_OPTS"
+ elif [ "$COMMAND" = "datanode" ] ; then
+   CLASS='org.apache.hadoop.hdfs.server.datanode.DataNode'
+-  if [[ $EUID -eq 0 ]]; then
+-    HADOOP_OPTS="$HADOOP_OPTS -jvm server $HADOOP_DATANODE_OPTS"
+-  else
+-    HADOOP_OPTS="$HADOOP_OPTS -server $HADOOP_DATANODE_OPTS"
+-  fi
++  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_DATANODE_OPTS"
+ elif [ "$COMMAND" = "fs" ] ; then
+   CLASS=org.apache.hadoop.fs.FsShell
+   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+@@ -286,7 +275,7 @@ if $cygwin; then
+ fi
+ 
+ # setup 'java.library.path' for native-hadoop code if necessary
+-if [ -d "${HADOOP_HOME}/build/native" -o -d "${HADOOP_HOME}/lib/native" ]; then
++if [ -d "${HADOOP_HOME}/build/native" -o -d "${HADOOP_HOME}/lib/native" -o -d "${HADOOP_HOME}/sbin" ]; then
+   JAVA_PLATFORM=`CLASSPATH=${CLASSPATH} ${JAVA} -Xmx32m ${HADOOP_JAVA_PLATFORM_OPTS} org.apache.hadoop.util.PlatformName | sed -e "s/ /_/g"`
+   
+   if [ -d "$HADOOP_HOME/build/native" ]; then
+@@ -304,6 +293,8 @@ if [ -d "${HADOOP_HOME}/build/native" -o -d "${HADOOP_HOME}/lib/native" ]; then
+       JAVA_LIBRARY_PATH=${HADOOP_HOME}/lib/native/${JAVA_PLATFORM}
+     fi
+   fi
++
++  _JSVC_PATH=${HADOOP_HOME}/sbin/${JAVA_PLATFORM}/jsvc
+ fi
+ 
+ # cygwin path translation
+@@ -321,23 +312,131 @@ if [ "x$JAVA_LIBRARY_PATH" != "x" ]; then
+ fi  
+ HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.policy.file=$HADOOP_POLICYFILE"
+ 
+-# Check to see if we should start a secure datanode
+-if [ "$starting_secure_dn" = "true" ]; then
+-  if [ "$HADOOP_PID_DIR" = "" ]; then
+-    HADOOP_SECURE_DN_PID="/tmp/hadoop_secure_dn.pid"
+-  else
+-   HADOOP_SECURE_DN_PID="$HADOOP_PID_DIR/hadoop_secure_dn.pid"
++
++###########################################################################
++# DAEMON SETTINGS
++###########################################################################
++# For any command that ends in 'node', we are starting one of the daemons.
++# In this case, we do some special processing in order to automatically
++# setuid to the correct user.
++#
++# The user itself is determined as one of the following, in descending
++# precedence:
++#  HADOOP_<node>NODE_USER variable
++#  HADOOP_IDENT_STRING variable
++#  the current userid, so long as that userid is not root
++#
++# After the above is determined, it is stored into the local variable
++# _HADOOP_DAEMON_USER
++#
++# We also need to determine the "run mode". This can be one of the following:
++#
++#  "jsvc" - only supported for the datanode - we use the jsvc wrapper in
++#           the sbin/<platform> directory in order to setuid to the target
++#           user. Requires that this script is running as root.
++#  "sudo" - supported only when running as root and /usr/bin/sudo exists.
++#           Uses sudo in order to assume the identity of the daemon user.
++#  "normal" - supported only when already running as the target user.
++###########################################################################
++if [[ "$COMMAND" == *node ]]; then
++  command_uc=$(echo $COMMAND| tr a-z A-Z)
++  user_var="HADOOP_${command_uc}_USER"
++  _HADOOP_DAEMON_USER=$(eval "echo \$$user_var")
++  _HADOOP_DAEMON_USER=${_HADOOP_DAEMON_USER:-$HADOOP_IDENT_STRING}
++
++  if [ -z "$_HADOOP_DAEMON_USER" ]; then
++    echo Please specify a user to run the $COMMAND by setting $user_var
++    exit 1
++  elif  [ "$_HADOOP_DAEMON_USER" == "root" ]; then
++    echo May not run daemons as root. Please specify $user_var
++    exit 1
+   fi
+ 
+-  exec "$HADOOP_HOME/sbin/$JAVA_PLATFORM/jsvc" -Dproc_$COMMAND -outfile "$HADOOP_LOG_DIR/jsvc.out" \
+-                                               -errfile "$HADOOP_LOG_DIR/jsvc.err" \
+-                                               -pidfile "$HADOOP_SECURE_DN_PID" \
+-                                               -nodetach \
+-                                               -user "$HADOOP_SECURE_DN_USER" \
+-                                               -cp "$CLASSPATH" \
+-                                               $JAVA_HEAP_MAX $HADOOP_OPTS \
+-                                               org.apache.hadoop.hdfs.server.datanode.SecureDataNodeStarter "$@"
++  if [ "$EUID" = "0" ] ; then
++    if [ "$COMMAND" == "datanode" ] && [ -x "$_JSVC_PATH" ]; then
++      _HADOOP_RUN_MODE="jsvc"
++    elif [ -x /usr/bin/sudo ]; then
++      _HADOOP_RUN_MODE="sudo"
++    else
++      echo "Daemon wants to run as $_HADOOP_DAEMON_USER but script is running as root"
++      echo "and sudo is not available."
++      exit 1
++    fi
++  else
++    # We must be running as the user we want to run as, if we can't use jsvc or sudo
++    # to drop privileges
++    if [ "$_HADOOP_DAEMON_USER" != "$(whoami)" ]; then
++      echo Daemon wants to run as $_HADOOP_DAEMON_USER but not running as that user or root.
++      exit 1
++    fi
++    _HADOOP_RUN_MODE="normal"
++  fi
+ else
+-  # run it
+-  exec "$JAVA" -Dproc_$COMMAND $JAVA_HEAP_MAX $HADOOP_OPTS -classpath "$CLASSPATH" $CLASS "$@"
++  # Normal client command
++  _HADOOP_RUN_MODE="normal"
+ fi
++
++###########################################################################
++# Actually run the JVM
++###########################################################################
++case "$_HADOOP_RUN_MODE" in
++  jsvc)
++    case "$COMMAND" in
++      datanode)
++        _JSVC_STARTER_CLASS=org.apache.hadoop.hdfs.server.datanode.SecureDataNodeStarter
++      ;;
++      *)
++        echo "Cannot start $COMMAND with jsvc"
++        exit 1
++      ;;
++    esac
++
++    if [ "$_HADOOP_DAEMON_DETACHED" = "true" ]; then
++      _JSVC_FLAGS="-pidfile $_HADOOP_DAEMON_PIDFILE
++                  -errfile &1
++                  -outfile $_HADOOP_DAEMON_OUT"
++    else
++      # Even though we are trying to run a non-detached datanode,
++      # jsvc will not write to stdout/stderr, so we have to pipe
++      # it and tail the logfile.
++      log_path=/tmp/jsvc_${COMMAND}.$$
++      _JSVC_FLAGS="-nodetach
++                   -errfile &1
++                   -outfile $log_path"
++      echo Non-detached jsvc output piping to: $log_path
++      touch $log_path
++      tail -f $log_path &
++    fi
++
++    exec "$_JSVC_PATH" -Dproc_$COMMAND \
++                       $_JSVC_FLAGS \
++                       -user "$_HADOOP_DAEMON_USER" \
++                       -cp "$CLASSPATH" \
++                       $JAVA_HEAP_MAX $HADOOP_OPTS \
++                       $_JSVC_STARTER_CLASS "$@"
++  ;;
++
++  normal | sudo)
++    # If we need to sudo, tack the command into a local variable
++    if [ $_HADOOP_RUN_MODE = "sudo" ]; then
++      _MAYBE_SUDO="sudo -u $_HADOOP_DAEMON_USER"
++    else
++      _MAYBE_SUDO=""
++    fi
++
++    if [ "$_HADOOP_DAEMON_DETACHED" = "true" ]; then
++      nohup $_MAYBE_SUDO "$JAVA" -Dproc_$COMMAND $JAVA_HEAP_MAX $HADOOP_OPTS -classpath "$CLASSPATH" $CLASS "$@" > "$_HADOOP_DAEMON_OUT" 2>&1 < /dev/null &
++      echo $! > "$_HADOOP_DAEMON_PIDFILE"
++      sleep 1
++      head "$_HADOOP_DAEMON_OUT"
++    else
++      # For normal operation, just run the command
++      exec $_MAYBE_SUDO "$JAVA" -Dproc_$COMMAND $JAVA_HEAP_MAX $HADOOP_OPTS -classpath "$CLASSPATH" $CLASS "$@"
++    fi
++  ;;
++
++  *)
++    echo Bad run mode: $_HADOOP_RUN_MODE
++    exit 1
++  ;;
++esac
+diff --git a/bin/hadoop-daemon.sh b/bin/hadoop-daemon.sh
+index e04ba1f..5ad930f 100755
+--- a/bin/hadoop-daemon.sh
++++ b/bin/hadoop-daemon.sh
+@@ -54,13 +54,13 @@ hadoop_rotate_log ()
+     if [ -n "$2" ]; then
+ 	num=$2
+     fi
+-    if [ -f "$log" ]; then # rotate logs
++    if [ -f "$_HADOOP_DAEMON_OUT" ]; then # rotate logs
+ 	while [ $num -gt 1 ]; do
+ 	    prev=`expr $num - 1`
+-	    [ -f "$log.$prev" ] && mv "$log.$prev" "$log.$num"
++	    [ -f "$_HADOOP_DAEMON_OUT.$prev" ] && mv "$_HADOOP_DAEMON_OUT.$prev" "$_HADOOP_DAEMON_OUT.$num"
+ 	    num=$prev
+ 	done
+-	mv "$log" "$log.$num";
++	mv "$_HADOOP_DAEMON_OUT" "$_HADOOP_DAEMON_OUT.$num";
+     fi
+ }
+ 
+@@ -68,13 +68,6 @@ if [ -f "${HADOOP_CONF_DIR}/hadoop-env.sh" ]; then
+   . "${HADOOP_CONF_DIR}/hadoop-env.sh"
+ fi
+ 
+-# Determine if we're starting a secure datanode, and if so, redefine appropriate variables
+-if [ "$command" == "datanode" ] && [ "$EUID" -eq 0 ] && [ -n "$HADOOP_SECURE_DN_USER" ]; then
+-  export HADOOP_PID_DIR=$HADOOP_SECURE_DN_PID_DIR
+-  export HADOOP_LOG_DIR=$HADOOP_SECURE_DN_LOG_DIR
+-  export HADOOP_IDENT_STRING=$HADOOP_SECURE_DN_USER   
+-fi
+-
+ if [ "$HADOOP_IDENT_STRING" = "" ]; then
+   export HADOOP_IDENT_STRING="$USER"
+ fi
+@@ -84,7 +77,6 @@ if [ "$HADOOP_LOG_DIR" = "" ]; then
+   export HADOOP_LOG_DIR="$HADOOP_HOME/logs"
+ fi
+ mkdir -p "$HADOOP_LOG_DIR"
+-chown $HADOOP_IDENT_STRING $HADOOP_LOG_DIR 
+ 
+ if [ "$HADOOP_PID_DIR" = "" ]; then
+   HADOOP_PID_DIR=/tmp
+@@ -93,8 +85,9 @@ fi
+ # some variables
+ export HADOOP_LOGFILE=hadoop-$HADOOP_IDENT_STRING-$command-$HOSTNAME.log
+ export HADOOP_ROOT_LOGGER="INFO,DRFA"
+-log=$HADOOP_LOG_DIR/hadoop-$HADOOP_IDENT_STRING-$command-$HOSTNAME.out
+-pid=$HADOOP_PID_DIR/hadoop-$HADOOP_IDENT_STRING-$command.pid
++export _HADOOP_DAEMON_OUT=$HADOOP_LOG_DIR/hadoop-$HADOOP_IDENT_STRING-$command-$HOSTNAME.out
++export _HADOOP_DAEMON_PIDFILE=$HADOOP_PID_DIR/hadoop-$HADOOP_IDENT_STRING-$command.pid
++export _HADOOP_DAEMON_DETACHED="true"
+ 
+ # Set default scheduling priority
+ if [ "$HADOOP_NICENESS" = "" ]; then
+@@ -107,9 +100,9 @@ case $startStop in
+ 
+     mkdir -p "$HADOOP_PID_DIR"
+ 
+-    if [ -f $pid ]; then
+-      if kill -0 `cat $pid` > /dev/null 2>&1; then
+-        echo $command running as process `cat $pid`.  Stop it first.
++    if [ -f $_HADOOP_DAEMON_PIDFILE ]; then
++      if kill -0 `cat $_HADOOP_DAEMON_PIDFILE` > /dev/null 2>&1; then
++        echo $command running as process `cat $_HADOOP_DAEMON_PIDFILE`.  Stop it first.
+         exit 1
+       fi
+     fi
+@@ -119,20 +112,19 @@ case $startStop in
+       rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' $HADOOP_MASTER/ "$HADOOP_HOME"
+     fi
+ 
+-    hadoop_rotate_log $log
+-    echo starting $command, logging to $log
++    hadoop_rotate_log $_HADOOP_DAEMON_OUT
++    echo starting $command, logging to $_HADOOP_DAEMON_OUT
+     cd "$HADOOP_HOME"
+-    nohup nice -n $HADOOP_NICENESS "$HADOOP_HOME"/bin/hadoop --config $HADOOP_CONF_DIR $command "$@" > "$log" 2>&1 < /dev/null &
+-    echo $! > $pid
+-    sleep 1; head "$log"
++
++    nice -n $HADOOP_NICENESS "$HADOOP_HOME"/bin/hadoop --config $HADOOP_CONF_DIR $command "$@" < /dev/null
+     ;;
+           
+   (stop)
+ 
+-    if [ -f $pid ]; then
+-      if kill -0 `cat $pid` > /dev/null 2>&1; then
++    if [ -f $_HADOOP_DAEMON_PIDFILE ]; then
++      if kill -0 `cat $_HADOOP_DAEMON_PIDFILE` > /dev/null 2>&1; then
+         echo stopping $command
+-        kill `cat $pid`
++        kill `cat $_HADOOP_DAEMON_PIDFILE`
+       else
+         echo no $command to stop
+       fi
+-- 
+1.7.0.4
+

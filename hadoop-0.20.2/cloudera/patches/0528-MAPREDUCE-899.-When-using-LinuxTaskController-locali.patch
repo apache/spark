@@ -1,0 +1,643 @@
+From 5802343b91fc15ee719c2cffabf6a3f9f01f4007 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 3 Mar 2010 09:45:14 +0530
+Subject: [PATCH 0528/1179] MAPREDUCE-899. When using LinuxTaskController, localized files may become accessible to unintended users if permissions are misconfigured.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437670/mr-899-20.patch
+Author: Amareshwari Sriramadasu
+Ref: CDH-648
+---
+ conf/taskcontroller.cfg                            |    1 +
+ src/c++/task-controller/configuration.c            |    4 +-
+ src/c++/task-controller/main.c                     |  101 ++++++++++++++++--
+ src/c++/task-controller/task-controller.h          |    5 +-
+ .../documentation/content/xdocs/cluster_setup.xml  |   43 ++++++---
+ src/mapred/mapred-default.xml                      |    9 ++
+ .../apache/hadoop/mapred/LinuxTaskController.java  |   24 +++++
+ .../org/apache/hadoop/mapred/TaskController.java   |    2 +-
+ .../mapred/ClusterWithLinuxTaskController.java     |   62 +++++++-----
+ .../hadoop/mapred/TestLinuxTaskController.java     |  109 ++++++++++++++++++++
+ .../TestLocalizationWithLinuxTaskController.java   |    3 -
+ ...ributedCacheManagerWithLinuxTaskController.java |    6 +-
+ 12 files changed, 310 insertions(+), 59 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+
+diff --git a/conf/taskcontroller.cfg b/conf/taskcontroller.cfg
+index 06559a2..a13aeb9 100644
+--- a/conf/taskcontroller.cfg
++++ b/conf/taskcontroller.cfg
+@@ -1,3 +1,4 @@
+ mapred.local.dir=#configured value of mapred.local.dir. It can be a list of comma separated paths.
+ hadoop.log.dir=#configured value of hadoop.log.dir.
+ mapred.tasktracker.tasks.sleeptime-before-sigkill=#sleep time before sig kill is to be sent to process group after sigterm is sent. Should be in seconds
++mapreduce.tasktracker.group=#configured value of mapreduce.tasktracker.group.
+diff --git a/src/c++/task-controller/configuration.c b/src/c++/task-controller/configuration.c
+index d6c2459..8dfa50c 100644
+--- a/src/c++/task-controller/configuration.c
++++ b/src/c++/task-controller/configuration.c
+@@ -232,7 +232,9 @@ const char ** get_values(const char * key) {
+       tempTok = strtok_r(NULL, ",", &tempstr);
+     }
+   }
+-  toPass[size] = NULL;
++  if (size > 0) {
++    toPass[size] = NULL;
++  }
+   return toPass;
+ }
+ 
+diff --git a/src/c++/task-controller/main.c b/src/c++/task-controller/main.c
+index 9cdf716..1ac18d5 100644
+--- a/src/c++/task-controller/main.c
++++ b/src/c++/task-controller/main.c
+@@ -44,6 +44,80 @@ void display_usage(FILE *stream) {
+       "Usage: task-controller [-l logfile] user command command-args\n");
+ }
+ 
++/**
++ * Check the permissions on taskcontroller to make sure that security is
++ * promisable. For this, we need task-controller binary to
++ *    * be user-owned by root
++ *    * be group-owned by a configured special group.
++ *    * others do not have any permissions
++ *    * be setuid/setgid
++ */
++int check_taskcontroller_permissions(char *executable_file) {
++
++  errno = 0;
++  char * resolved_path = (char *) canonicalize_file_name(executable_file);
++  if (resolved_path == NULL) {
++    fprintf(LOGFILE,
++        "Error resolving the canonical name for the executable : %s!",
++        strerror(errno));
++    return -1;
++  }
++
++  struct stat filestat;
++  errno = 0;
++  if (stat(resolved_path, &filestat) != 0) {
++    fprintf(LOGFILE, "Could not stat the executable : %s!.\n", strerror(errno));
++    return -1;
++  }
++
++  uid_t binary_euid = filestat.st_uid; // Binary's user owner
++  gid_t binary_egid = filestat.st_gid; // Binary's group owner
++
++  // Effective uid should be root
++  if (binary_euid != 0) {
++    fprintf(LOGFILE,
++        "The task-controller binary should be user-owned by root.\n");
++    return -1;
++  }
++
++  // Get the group entry for the special_group
++  errno = 0;
++  struct group *special_group_entry = getgrgid(binary_egid);
++  if (special_group_entry == NULL) {
++    fprintf(LOGFILE,
++      "Unable to get information for effective group of the binary : %s\n",
++      strerror(errno));
++    return -1;
++  }
++
++  char * binary_group = special_group_entry->gr_name;
++  // verify that the group name of the special group
++  // is same as the one in configuration
++  if (check_variable_against_config(TT_GROUP_KEY, binary_group) != 0) {
++    fprintf(LOGFILE,
++      "Group of the binary does not match with that in configuration\n");
++    return -1;
++  }
++
++  // check others do not have read/write/execute permissions
++  if ((filestat.st_mode & S_IROTH) == S_IROTH || (filestat.st_mode & S_IWOTH)
++      == S_IWOTH || (filestat.st_mode & S_IXOTH) == S_IXOTH) {
++    fprintf(LOGFILE,
++      "The task-controller binary should not have read or write or execute for others.\n");
++    return -1;
++  }
++
++  // Binary should be setuid/setgid executable
++  if ((filestat.st_mode & S_ISUID) != S_ISUID || (filestat.st_mode & S_ISGID)
++      != S_ISGID) {
++    fprintf(LOGFILE,
++        "The task-controller binary should be set setuid and setgid bits.\n");
++    return -1;
++  }
++
++  return 0;
++}
++
+ int main(int argc, char **argv) {
+   int command;
+   int next_option = 0;
+@@ -61,18 +135,13 @@ int main(int argc, char **argv) {
+   const char* log_file = NULL;
+   char * dir_to_be_deleted = NULL;
+ 
+-  //Minimum number of arguments required to run the task-controller
+-  //command-name user command tt-root
+-  if (argc < 3) {
+-    display_usage(stdout);
+-    return INVALID_ARGUMENT_NUMBER;
+-  }
+-
++  char *executable_file = argv[0];
+ #ifndef HADOOP_CONF_DIR
+   hadoop_conf_dir = (char *) malloc (sizeof(char) *
+-      (strlen(argv[0]) - strlen(EXEC_PATTERN)) + 1);
+-  strncpy(hadoop_conf_dir,argv[0],(strlen(argv[0]) - strlen(EXEC_PATTERN)));
+-  hadoop_conf_dir[(strlen(argv[0]) - strlen(EXEC_PATTERN))] = '\0';
++      (strlen(executable_file) - strlen(EXEC_PATTERN)) + 1);
++  strncpy(hadoop_conf_dir,executable_file,
++    (strlen(executable_file) - strlen(EXEC_PATTERN)));
++  hadoop_conf_dir[(strlen(executable_file) - strlen(EXEC_PATTERN))] = '\0';
+ #endif
+   do {
+     next_option = getopt_long(argc, argv, short_options, long_options, NULL);
+@@ -86,6 +155,18 @@ int main(int argc, char **argv) {
+ 
+   open_log_file(log_file);
+ 
++  if (check_taskcontroller_permissions(executable_file) != 0) {
++    fprintf(LOGFILE, "Invalid permissions on task-controller binary.\n");
++    return INVALID_TASKCONTROLLER_PERMISSIONS;
++  }
++
++  //Minimum number of arguments required to run the task-controller
++  //command-name user command tt-root
++  if (argc < 3) {
++    display_usage(stdout);
++    return INVALID_ARGUMENT_NUMBER;
++  }
++
+   //checks done for user name
+   //checks done if the user is root or not.
+   if (argv[optind] == NULL) {
+diff --git a/src/c++/task-controller/task-controller.h b/src/c++/task-controller/task-controller.h
+index 41a31d6..f8f3e4b 100644
+--- a/src/c++/task-controller/task-controller.h
++++ b/src/c++/task-controller/task-controller.h
+@@ -68,7 +68,8 @@ enum errorcodes {
+   OUT_OF_MEMORY, //18
+   INITIALIZE_DISTCACHEFILE_FAILED, //19
+   INITIALIZE_USER_FAILED, //20
+-  UNABLE_TO_BUILD_PATH //21
++  UNABLE_TO_BUILD_PATH, //21
++  INVALID_TASKCONTROLLER_PERMISSIONS //22
+ };
+ 
+ #define USER_DIR_PATTERN "%s/taskTracker/%s"
+@@ -91,6 +92,8 @@ enum errorcodes {
+ 
+ #define TT_LOG_DIR_KEY "hadoop.log.dir"
+ 
++#define TT_GROUP_KEY "mapreduce.tasktracker.group"
++
+ #ifndef HADOOP_CONF_DIR
+   #define EXEC_PATTERN "/bin/task-controller"
+   extern char * hadoop_conf_dir;
+diff --git a/src/docs/src/documentation/content/xdocs/cluster_setup.xml b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+index ab3436a..cb3a6f0 100644
+--- a/src/docs/src/documentation/content/xdocs/cluster_setup.xml
++++ b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+@@ -576,21 +576,35 @@
+             <p>
+             The executable must have specific permissions as follows. The
+             executable should have <em>6050 or --Sr-s---</em> permissions
+-            user-owned by root(super-user) and group-owned by a group 
+-            of which only the TaskTracker's user is the sole group member. 
++            user-owned by root(super-user) and group-owned by a special group
++            of which the TaskTracker's user is the group member and no job
++            submitter is. If any job submitter belongs to this special group,
++            security will be compromised. This special group name should be
++            specified for the configuration property
++            <em>"mapreduce.tasktracker.group"</em> in both mapred-site.xml and
++            <a href="#task-controller.cfg">task-controller.cfg</a>.
+             For example, let's say that the TaskTracker is run as user
+             <em>mapred</em> who is part of the groups <em>users</em> and
+-            <em>mapredGroup</em> any of them being the primary group.
++            <em>specialGroup</em> any of them being the primary group.
+             Let also be that <em>users</em> has both <em>mapred</em> and
+-            another user <em>X</em> as its members, while <em>mapredGroup</em>
+-            has only <em>mapred</em> as its member. Going by the above
++            another user (job submitter) <em>X</em> as its members, and X does
++            not belong to <em>specialGroup</em>. Going by the above
+             description, the setuid/setgid executable should be set
+             <em>6050 or --Sr-s---</em> with user-owner as <em>mapred</em> and
+-            group-owner as <em>mapredGroup</em> which has
+-            only <em>mapred</em> as its member(and not <em>users</em> which has
++            group-owner as <em>specialGroup</em> which has
++            <em>mapred</em> as its member(and not <em>users</em> which has
+             <em>X</em> also as its member besides <em>mapred</em>).
+             </p>
++
++            <p>
++            The LinuxTaskController requires that paths including and leading up
++            to the directories specified in
++            <em>mapreduce.cluster.local.dir</em> and <em>hadoop.log.dir</em> to
++            be set 755 permissions.
++            </p>
+             
++            <section>
++            <title>task-controller.cfg</title>
+             <p>The executable requires a configuration file called 
+             <em>taskcontroller.cfg</em> to be
+             present in the configuration directory passed to the ant target 
+@@ -621,14 +635,17 @@
+             permissions on the log files so that they can be written to by the user's
+             tasks and read by the TaskTracker for serving on the web UI.</td>
+             </tr>
++            <tr>
++            <td>mapreduce.tasktracker.group</td>
++            <td>Group to which the TaskTracker belongs. The group owner of the
++            taskcontroller binary should be this group. Should be same as
++            the value with which the TaskTracker is configured. This
++            configuration is required for validating the secure access of the
++            task-controller binary.</td>
++            </tr>
+             </table>
+ 
+-            <p>
+-            The LinuxTaskController requires that paths including and leading up to
+-            the directories specified in
+-            <em>mapred.local.dir</em> and <em>hadoop.log.dir</em> to be set 755
+-            permissions.
+-            </p>
++            </section>
+             </section>
+             
+           </section>
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index 1791078..9e8597d 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -1068,6 +1068,15 @@
+   </description>
+ </property>
+ 
++<property>
++  <name>mapreduce.tasktracker.group</name>
++  <value></value>
++  <description>Expert: Group to which TaskTracker belongs. If
++   LinuxTaskController is configured via mapreduce.tasktracker.taskcontroller,
++   the group owner of the task-controller binary should be same as this group.
++  </description>
++</property>
++
+ <!--  Node health script variables -->
+ 
+ <property>
+diff --git a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+index 5ebf9f2..6e5ee6e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+@@ -34,6 +34,7 @@ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
+ import org.apache.hadoop.mapred.JvmManager.JvmEnv;
+ import org.apache.hadoop.util.StringUtils;
++import org.apache.hadoop.util.Shell.ExitCodeException;
+ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+ 
+ /**
+@@ -93,6 +94,29 @@ class LinuxTaskController extends TaskController {
+     ENABLE_TASK_FOR_CLEANUP
+   }
+ 
++  @Override
++  public void setup() throws IOException {
++    super.setup();
++
++    // Check the permissions of the task-controller binary by running it plainly.
++    // If permissions are correct, it returns an error code 1, else it returns
++    // 24 or something else if some other bugs are also present.
++    String[] taskControllerCmd =
++        new String[] { getTaskControllerExecutablePath() };
++    ShellCommandExecutor shExec = new ShellCommandExecutor(taskControllerCmd);
++    try {
++      shExec.execute();
++    } catch (ExitCodeException e) {
++      int exitCode = shExec.getExitCode();
++      if (exitCode != 1) {
++        LOG.warn("Exit code from checking binary permissions is : " + exitCode);
++        logOutput(shExec.getOutput());
++        throw new IOException("Task controller setup failed because of invalid"
++          + "permissions/ownership with exit code " + exitCode, e);
++      }
++    }
++  }
++
+   /**
+    * Launch a task JVM that will run as the owner of the job.
+    * 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskController.java b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+index 693ab73..2cacf8a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+@@ -73,7 +73,7 @@ public abstract class TaskController implements Configurable {
+    * <li>Hadoop log directories</li>
+    * </ul>
+    */
+-  public void setup() {
++  public void setup() throws IOException {
+     for (String localDir : this.mapredLocalDirs) {
+       // Set up the mapred-local directories.
+       File mapredlocalDir = new File(localDir);
+diff --git a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+index 54365a0..a6f9413 100644
+--- a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+@@ -25,11 +25,13 @@ import java.io.PrintWriter;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.security.Groups;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+ import junit.framework.TestCase;
+@@ -53,6 +55,7 @@ import junit.framework.TestCase;
+ public class ClusterWithLinuxTaskController extends TestCase {
+   private static final Log LOG =
+       LogFactory.getLog(ClusterWithLinuxTaskController.class);
++  static String TT_GROUP = "mapreduce.tasktracker.group";
+ 
+   /**
+    * The wrapper class around LinuxTaskController which allows modification of
+@@ -60,7 +63,22 @@ public class ClusterWithLinuxTaskController extends TestCase {
+    * 
+    **/
+   public static class MyLinuxTaskController extends LinuxTaskController {
+-    String taskControllerExePath;
++    String taskControllerExePath = System.getProperty(TASKCONTROLLER_PATH)
++        + "/task-controller";
++
++    @Override
++    public void setup() throws IOException {
++      // get the current ugi and set the task controller group owner
++      Groups groups = new Groups(new Configuration());
++      String ttGroup = groups.getGroups(
++          UserGroupInformation.getCurrentUser().getUserName()).get(0);
++      getConf().set(TT_GROUP, ttGroup);
++
++      // write configuration file
++      configurationFile = createTaskControllerConf(System
++          .getProperty(TASKCONTROLLER_PATH), getConf());
++      super.setup();
++    }
+ 
+     @Override
+     protected String getTaskControllerExecutablePath() {
+@@ -79,12 +97,17 @@ public class ClusterWithLinuxTaskController extends TestCase {
+   private JobConf clusterConf = null;
+   protected Path homeDirectory;
+ 
++  /** changing this to a larger number needs more work for creating
++   *  taskcontroller.cfg.
++   *  see {@link #startCluster()} and
++   *  {@link #createTaskControllerConf(String, Configuration)}
++   */
+   private static final int NUMBER_OF_NODES = 1;
+ 
+   static final String TASKCONTROLLER_PATH = "taskcontroller-path";
+   static final String TASKCONTROLLER_UGI = "taskcontroller-ugi";
+ 
+-  private File configurationFile = null;
++  private static File configurationFile = null;
+ 
+   protected UserGroupInformation taskControllerUser;
+ 
+@@ -102,17 +125,6 @@ public class ClusterWithLinuxTaskController extends TestCase {
+         new MiniMRCluster(NUMBER_OF_NODES, dfsCluster.getFileSystem().getUri()
+             .toString(), 4, null, null, conf);
+ 
+-    // Get the configured taskcontroller-path
+-    String path = System.getProperty(TASKCONTROLLER_PATH);
+-    configurationFile =
+-        createTaskControllerConf(path, mrCluster.getTaskTrackerRunner(0)
+-            .getLocalDirs());
+-    String execPath = path + "/task-controller";
+-    TaskTracker tracker = mrCluster.getTaskTrackerRunner(0).tt;
+-    // TypeCasting the parent to our TaskController instance as we
+-    // know that that would be instance which should be present in TT.
+-    ((MyLinuxTaskController) tracker.getTaskController())
+-        .setTaskControllerExe(execPath);
+     String ugi = System.getProperty(TASKCONTROLLER_UGI);
+     clusterConf = mrCluster.createJobConf();
+     String[] splits = ugi.split(",");
+@@ -143,16 +155,21 @@ public class ClusterWithLinuxTaskController extends TestCase {
+         taskControllerUser.getGroupNames()[0]);
+   }
+ 
++  static File getTaskControllerConfFile(String path) {
++    File confDirectory = new File(path, "../conf");
++    return new File(confDirectory, "taskcontroller.cfg");
++  }
++
+   /**
+    * Create taskcontroller.cfg.
+    * 
+    * @param path Path to the taskcontroller binary.
+-   * @param localDirs
++   * @param conf TaskTracker's configuration
+    * @return the created conf file
+    * @throws IOException
+    */
+-  static File createTaskControllerConf(String path, String[] localDirs)
+-      throws IOException {
++  static File createTaskControllerConf(String path,
++      Configuration conf) throws IOException {
+     File confDirectory = new File(path, "../conf");
+     if (!confDirectory.exists()) {
+       confDirectory.mkdirs();
+@@ -161,17 +178,12 @@ public class ClusterWithLinuxTaskController extends TestCase {
+     PrintWriter writer =
+         new PrintWriter(new FileOutputStream(configurationFile));
+ 
+-    StringBuffer sb = new StringBuffer();
+-    for (int i = 0; i < localDirs.length; i++) {
+-      sb.append(localDirs[i]);
+-      if ((i + 1) != localDirs.length) {
+-        sb.append(",");
+-      }
+-    }
+-    writer.println(String.format("mapred.local.dir=%s", sb.toString()));
++    writer.println(String.format("mapred.local.dir=%s", conf.
++        get(JobConf.MAPRED_LOCAL_DIR_PROPERTY)));
+ 
+     writer
+         .println(String.format("hadoop.log.dir=%s", TaskLog.getBaseLogDir()));
++    writer.println(String.format(TT_GROUP + "=%s", conf.get(TT_GROUP)));
+ 
+     writer.flush();
+     writer.close();
+@@ -191,7 +203,7 @@ public class ClusterWithLinuxTaskController extends TestCase {
+     return true;
+   }
+ 
+-  private static boolean isTaskExecPathPassed() {
++  static boolean isTaskExecPathPassed() {
+     String path = System.getProperty(TASKCONTROLLER_PATH);
+     if (path == null || path.isEmpty()
+         || path.equals("${" + TASKCONTROLLER_PATH + "}")) {
+diff --git a/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+new file mode 100644
+index 0000000..9773e8d
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+@@ -0,0 +1,109 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import java.io.File;
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.security.Groups;
++import org.apache.hadoop.security.UserGroupInformation;
++
++import junit.framework.TestCase;
++
++public class TestLinuxTaskController extends TestCase {
++  private static int INVALID_TASKCONTROLLER_PERMISSIONS = 22;
++  private static File testDir = new File(System.getProperty("test.build.data",
++      "/tmp"), TestLinuxTaskController.class.getName());
++  private static String taskControllerPath = System
++      .getProperty(ClusterWithLinuxTaskController.TASKCONTROLLER_PATH);
++
++  protected void setUp() throws Exception {
++    testDir.mkdirs();
++  }
++
++  protected void tearDown() throws Exception {
++    FileUtil.fullyDelete(testDir);
++  }
++
++  public static class MyLinuxTaskController extends LinuxTaskController {
++    String taskControllerExePath = taskControllerPath + "/task-controller";
++
++    @Override
++    protected String getTaskControllerExecutablePath() {
++      return taskControllerExePath;
++    }
++  }
++
++  private void validateTaskControllerSetup(TaskController controller,
++      boolean shouldFail) throws IOException {
++    if (shouldFail) {
++      // task controller setup should fail validating permissions.
++      Throwable th = null;
++      try {
++        controller.setup();
++      } catch (IOException ie) {
++        th = ie;
++      }
++      assertNotNull("No exception during setup", th);
++      assertTrue("Exception message does not contain exit code"
++          + INVALID_TASKCONTROLLER_PERMISSIONS, th.getMessage().contains(
++          "with exit code " + INVALID_TASKCONTROLLER_PERMISSIONS));
++    } else {
++      controller.setup();
++    }
++
++  }
++
++  public void testTaskControllerGroup() throws Exception {
++    if (!ClusterWithLinuxTaskController.isTaskExecPathPassed()) {
++      return;
++    }
++    // cleanup configuration file.
++    ClusterWithLinuxTaskController
++        .getTaskControllerConfFile(taskControllerPath).delete();
++    Configuration conf = new Configuration();
++    // create local dirs and set in the conf.
++    File mapredLocal = new File(testDir, "mapred/local");
++    mapredLocal.mkdirs();
++    conf.set(JobConf.MAPRED_LOCAL_DIR_PROPERTY, mapredLocal.toString());
++
++    // setup task-controller without setting any group name
++    TaskController controller = new MyLinuxTaskController();
++    controller.setConf(conf);
++    validateTaskControllerSetup(controller, true);
++
++    // set an invalid group name for the task controller group
++    conf.set(ClusterWithLinuxTaskController.TT_GROUP, "invalid");
++    // write the task-controller's conf file
++    ClusterWithLinuxTaskController.createTaskControllerConf(taskControllerPath,
++        conf);
++    validateTaskControllerSetup(controller, true);
++
++    // get the current ugi and set the task controller group owner in conf
++    Groups groups = new Groups(new Configuration());
++    String ttGroup = groups.getGroups(
++        UserGroupInformation.getCurrentUser().getUserName()).get(0);
++    conf.set(ClusterWithLinuxTaskController.TT_GROUP, ttGroup);
++    // write the task-controller's conf file
++    ClusterWithLinuxTaskController.createTaskControllerConf(taskControllerPath,
++        conf);
++    validateTaskControllerSetup(controller, false);
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
+index e73eefc..438b945 100644
+--- a/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
+@@ -61,9 +61,6 @@ public class TestLocalizationWithLinuxTaskController extends
+     taskController = new MyLinuxTaskController();
+     String path =
+         System.getProperty(ClusterWithLinuxTaskController.TASKCONTROLLER_PATH);
+-    configFile =
+-        ClusterWithLinuxTaskController.createTaskControllerConf(path,
+-            localDirs);
+     String execPath = path + "/task-controller";
+     ((MyLinuxTaskController) taskController).setTaskControllerExe(execPath);
+     taskTrackerSpecialGroup = getFilePermissionAttrs(execPath)[2];
+diff --git a/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
+index 81afdd9..4ecf827 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
+@@ -61,9 +61,6 @@ public class TestTrackerDistributedCacheManagerWithLinuxTaskController extends
+     taskController = new MyLinuxTaskController();
+     String path =
+         System.getProperty(ClusterWithLinuxTaskController.TASKCONTROLLER_PATH);
+-    configFile =
+-        ClusterWithLinuxTaskController.createTaskControllerConf(path, conf
+-            .getStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY));
+     String execPath = path + "/task-controller";
+     ((MyLinuxTaskController)taskController).setTaskControllerExe(execPath);
+     taskController.setConf(conf);
+@@ -79,8 +76,7 @@ public class TestTrackerDistributedCacheManagerWithLinuxTaskController extends
+     String path =
+       System.getProperty(ClusterWithLinuxTaskController.TASKCONTROLLER_PATH);
+     configFile =
+-      ClusterWithLinuxTaskController.createTaskControllerConf(path, conf
+-          .getStrings(JobConf.MAPRED_LOCAL_DIR_PROPERTY));
++      ClusterWithLinuxTaskController.createTaskControllerConf(path, conf);
+    
+   }
+ 
+-- 
+1.7.0.4
+

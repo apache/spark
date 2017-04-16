@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# The HdfsProxy command script
+#
+# Environment Variables
+#
+#   JAVA_HOME        The java implementation to use.  Overrides JAVA_HOME.
+#
+#   HDFSPROXY_CLASSPATH Extra Java CLASSPATH entries.
+#
+#   HDFSPROXY_HEAPSIZE  The maximum amount of heap to use, in MB. 
+#                    Default is 1000.
+#
+#   HDFSPROXY_OPTS      Extra Java runtime options.
+#   
+#   HDFSPROXY_NAMENODE_OPTS       These options are added to HDFSPROXY_OPTS 
+#   HDFSPROXY_CLIENT_OPTS         when the respective command is run.
+#   HDFSPROXY_{COMMAND}_OPTS etc  HDFSPROXY_JT_OPTS applies to JobTracker 
+#                              for e.g.  HDFSPROXY_CLIENT_OPTS applies to 
+#                              more than one command (fs, dfs, fsck, 
+#                              dfsadmin etc)  
+#
+#   HDFSPROXY_CONF_DIR  Alternate conf dir. Default is ${HDFSPROXY_HOME}/conf.
+#
+#   HDFSPROXY_ROOT_LOGGER The root appender. Default is INFO,console
+#
+
+bin=`dirname "$0"`
+bin=`cd "$bin"; pwd`
+
+. "$bin"/hdfsproxy-config.sh
+
+cygwin=false
+case "`uname`" in
+CYGWIN*) cygwin=true;;
+esac
+
+if [ -f "${HDFSPROXY_CONF_DIR}/hdfsproxy-env.sh" ]; then
+  . "${HDFSPROXY_CONF_DIR}/hdfsproxy-env.sh"
+fi
+
+# some Java parameters
+if [ "$JAVA_HOME" != "" ]; then
+  #echo "run java in $JAVA_HOME"
+  JAVA_HOME=$JAVA_HOME
+fi
+  
+if [ "$JAVA_HOME" = "" ]; then
+  echo "Error: JAVA_HOME is not set."
+  exit 1
+fi
+
+JAVA=$JAVA_HOME/bin/java
+JAVA_HEAP_MAX=-Xmx1000m 
+
+# check envvars which might override default args
+if [ "$HDFSPROXY_HEAPSIZE" != "" ]; then
+  #echo "run with heapsize $HDFSPROXY_HEAPSIZE"
+  JAVA_HEAP_MAX="-Xmx""$HDFSPROXY_HEAPSIZE""m"
+  #echo $JAVA_HEAP_MAX
+fi
+
+# CLASSPATH initially contains $HDFSPROXY_CONF_DIR
+CLASSPATH="${HDFSPROXY_CONF_DIR}"
+CLASSPATH=${CLASSPATH}:$JAVA_HOME/lib/tools.jar
+
+# for developers, add HdfsProxy classes to CLASSPATH
+if [ -d "$HDFSPROXY_HOME/build/classes" ]; then
+  CLASSPATH=${CLASSPATH}:$HDFSPROXY_HOME/build/classes
+fi
+if [ -d "$HDFSPROXY_HOME/build/webapps" ]; then
+  CLASSPATH=${CLASSPATH}:$HDFSPROXY_HOME/build
+fi
+if [ -d "$HDFSPROXY_HOME/build/test/classes" ]; then
+  CLASSPATH=${CLASSPATH}:$HDFSPROXY_HOME/build/test/classes
+fi
+
+# so that filenames w/ spaces are handled correctly in loops below
+IFS=
+
+# for releases, add hdfsproxy jar & webapps to CLASSPATH
+if [ -d "$HDFSPROXY_HOME/webapps" ]; then
+  CLASSPATH=${CLASSPATH}:$HDFSPROXY_HOME
+fi
+for f in $HDFSPROXY_HOME/hdfsproxy-*.jar; do
+  CLASSPATH=${CLASSPATH}:$f;
+done
+
+# add libs to CLASSPATH
+if [ -d "$HDFSPROXY_HOME/lib" ]; then
+	for f in $HDFSPROXY_HOME/lib/*.jar; do
+	  CLASSPATH=${CLASSPATH}:$f;
+	done
+fi
+
+if [ -d "$HDFSPROXY_HOME/../../" ]; then
+	for f in $HDFSPROXY_HOME/../../*.jar; do
+    CLASSPATH=${CLASSPATH}:$f;
+  done
+fi
+if [ -d "$HDFSPROXY_HOME/../../lib" ]; then
+	for f in $HDFSPROXY_HOME/../../lib/*.jar; do
+    CLASSPATH=${CLASSPATH}:$f;
+  done
+fi
+if [ -d "$HDFSPROXY_HOME/../../lib/jsp-2.1" ]; then
+	for f in $HDFSPROXY_HOME/../../lib/jsp-2.1/*.jar; do
+    CLASSPATH=${CLASSPATH}:$f;
+  done
+fi
+
+
+# add user-specified CLASSPATH last
+if [ "$HDFSPROXY_CLASSPATH" != "" ]; then
+  CLASSPATH=${CLASSPATH}:${HDFSPROXY_CLASSPATH}
+fi
+
+# default log directory & file
+if [ "$HDFSPROXY_LOG_DIR" = "" ]; then
+  HDFSPROXY_LOG_DIR="$HDFSPROXY_HOME/logs"
+fi
+if [ "$HDFSPROXY_LOGFILE" = "" ]; then
+  HDFSPROXY_LOGFILE='hdfsproxy.log'
+fi
+
+# restore ordinary behaviour
+unset IFS
+
+# figure out which class to run
+CLASS='org.apache.hadoop.hdfsproxy.HdfsProxy'
+
+# cygwin path translation
+if $cygwin; then
+  CLASSPATH=`cygpath -p -w "$CLASSPATH"`
+  HDFSPROXY_HOME=`cygpath -d "$HDFSPROXY_HOME"`
+  HDFSPROXY_LOG_DIR=`cygpath -d "$HDFSPROXY_LOG_DIR"`
+fi
+
+# cygwin path translation
+if $cygwin; then
+  JAVA_LIBRARY_PATH=`cygpath -p "$JAVA_LIBRARY_PATH"`
+fi
+
+HDFSPROXY_OPTS="$HDFSPROXY_OPTS -Dhdfsproxy.log.dir=$HDFSPROXY_LOG_DIR"
+HDFSPROXY_OPTS="$HDFSPROXY_OPTS -Dhdfsproxy.log.file=$HDFSPROXY_LOGFILE"
+HDFSPROXY_OPTS="$HDFSPROXY_OPTS -Dhdfsproxy.home.dir=$HDFSPROXY_HOME"
+HDFSPROXY_OPTS="$HDFSPROXY_OPTS -Dhdfsproxy.id.str=$HDFSPROXY_IDENT_STRING"
+HDFSPROXY_OPTS="$HDFSPROXY_OPTS -Dhdfsproxy.root.logger=${HDFSPROXY_ROOT_LOGGER:-INFO,console}"
+if [ "x$JAVA_LIBRARY_PATH" != "x" ]; then
+  HDFSPROXY_OPTS="$HDFSPROXY_OPTS -Djava.library.path=$JAVA_LIBRARY_PATH"
+fi  
+
+# run it
+exec "$JAVA" $JAVA_HEAP_MAX $HDFSPROXY_OPTS -classpath "$CLASSPATH" $CLASS "$@"

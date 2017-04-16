@@ -1,0 +1,144 @@
+From 780248004ecc4796f8eab4ce2b5bee4914465aed Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew@cloudera.com>
+Date: Mon, 30 Jan 2012 11:49:54 -0800
+Subject: [PATCH 1118/1179] Updating for CDH3u4 development.
+
+---
+ cloudera-pom.xml                                  |    2 +-
+ cloudera/maven-packaging/hadoop-core/pom.xml      |    2 +-
+ cloudera/maven-packaging/hadoop-examples/pom.xml  |    2 +-
+ cloudera/maven-packaging/hadoop-mrunit/pom.xml    |    2 +-
+ cloudera/maven-packaging/hadoop-streaming/pom.xml |    2 +-
+ cloudera/maven-packaging/hadoop-tarball/pom.xml   |    2 +-
+ cloudera/maven-packaging/hadoop-test/pom.xml      |    2 +-
+ cloudera/maven-packaging/hadoop-tools/pom.xml     |    2 +-
+ cloudera/maven-packaging/pom.xml                  |    4 ++--
+ 9 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/cloudera-pom.xml b/cloudera-pom.xml
+index d3dc7a7..39737f8 100644
+--- a/cloudera-pom.xml
++++ b/cloudera-pom.xml
+@@ -26,7 +26,7 @@ NOTE - This POM is used for Cloudera's build and packaging process.
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hadoop-root</artifactId>
+-    <version>3.0-u3</version>
++    <version>0.20.2-cdh3u4-SNAPSHOT</version>
+     <relativePath>cloudera/maven-packaging/pom.xml</relativePath>
+   </parent>
+   
+diff --git a/cloudera/maven-packaging/hadoop-core/pom.xml b/cloudera/maven-packaging/hadoop-core/pom.xml
+index 80e6790..3f65711 100644
+--- a/cloudera/maven-packaging/hadoop-core/pom.xml
++++ b/cloudera/maven-packaging/hadoop-core/pom.xml
+@@ -23,7 +23,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hadoop-root</artifactId>
+-    <version>3.0-u3</version>
++    <version>0.20.2-cdh3u4-SNAPSHOT</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+   
+diff --git a/cloudera/maven-packaging/hadoop-examples/pom.xml b/cloudera/maven-packaging/hadoop-examples/pom.xml
+index b28e9b4..8056687 100644
+--- a/cloudera/maven-packaging/hadoop-examples/pom.xml
++++ b/cloudera/maven-packaging/hadoop-examples/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hadoop-root</artifactId>
+-    <version>3.0-u3</version>
++    <version>0.20.2-cdh3u4-SNAPSHOT</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+   
+diff --git a/cloudera/maven-packaging/hadoop-mrunit/pom.xml b/cloudera/maven-packaging/hadoop-mrunit/pom.xml
+index 5e42431..afd7b87 100644
+--- a/cloudera/maven-packaging/hadoop-mrunit/pom.xml
++++ b/cloudera/maven-packaging/hadoop-mrunit/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hadoop-root</artifactId>
+-    <version>3.0-u3</version>
++    <version>0.20.2-cdh3u4-SNAPSHOT</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+   
+diff --git a/cloudera/maven-packaging/hadoop-streaming/pom.xml b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+index 3604be0..556db57 100644
+--- a/cloudera/maven-packaging/hadoop-streaming/pom.xml
++++ b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hadoop-root</artifactId>
+-    <version>3.0-u3</version>
++    <version>0.20.2-cdh3u4-SNAPSHOT</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+   
+diff --git a/cloudera/maven-packaging/hadoop-tarball/pom.xml b/cloudera/maven-packaging/hadoop-tarball/pom.xml
+index 2d34c33..7e78026 100644
+--- a/cloudera/maven-packaging/hadoop-tarball/pom.xml
++++ b/cloudera/maven-packaging/hadoop-tarball/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hadoop-root</artifactId>
+-    <version>3.0-u3</version>
++    <version>0.20.2-cdh3u4-SNAPSHOT</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+   
+diff --git a/cloudera/maven-packaging/hadoop-test/pom.xml b/cloudera/maven-packaging/hadoop-test/pom.xml
+index 3c27477..35edacf 100644
+--- a/cloudera/maven-packaging/hadoop-test/pom.xml
++++ b/cloudera/maven-packaging/hadoop-test/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hadoop-root</artifactId>
+-    <version>3.0-u3</version>
++    <version>0.20.2-cdh3u4-SNAPSHOT</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+   
+diff --git a/cloudera/maven-packaging/hadoop-tools/pom.xml b/cloudera/maven-packaging/hadoop-tools/pom.xml
+index 4e744e5..f7223c3 100644
+--- a/cloudera/maven-packaging/hadoop-tools/pom.xml
++++ b/cloudera/maven-packaging/hadoop-tools/pom.xml
+@@ -24,7 +24,7 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>hadoop-root</artifactId>
+-    <version>3.0-u3</version>
++    <version>0.20.2-cdh3u4-SNAPSHOT</version>
+     <relativePath>../pom.xml</relativePath>
+   </parent>
+   
+diff --git a/cloudera/maven-packaging/pom.xml b/cloudera/maven-packaging/pom.xml
+index 7f4f49c..17ee37c 100644
+--- a/cloudera/maven-packaging/pom.xml
++++ b/cloudera/maven-packaging/pom.xml
+@@ -21,13 +21,13 @@
+   <parent>
+     <groupId>com.cloudera.cdh</groupId>
+     <artifactId>cdh-root</artifactId>
+-    <version>3.0-u3</version>
++    <version>3.0-u4-SNAPSHOT</version>
+     <relativePath>../../../../../pom.xml</relativePath>
+   </parent>
+   
+   <groupId>com.cloudera.cdh</groupId>
+   <artifactId>hadoop-root</artifactId>
+-  <version>${cdh.parent.version}</version>
++  <version>0.20.2-cdh3u4-SNAPSHOT</version>
+   <packaging>pom</packaging>
+   
+   <description>Hadoop root</description>
+-- 
+1.7.0.4
+

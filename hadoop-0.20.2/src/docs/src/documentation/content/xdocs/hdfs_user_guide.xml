@@ -1,0 +1,552 @@
+<?xml version="1.0"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN"
+          "http://forrest.apache.org/dtd/document-v20.dtd">
+
+
+<document>
+
+  <header>
+    <title>
+      HDFS Users Guide
+    </title>
+  </header>
+
+  <body>
+    <section> <title>Purpose</title>
+      <p>
+ This document is a starting point for users working with
+ Hadoop Distributed File System (HDFS) either as a part of a Hadoop cluster  
+ or as a stand-alone general purpose distributed file system.
+ While HDFS is designed to "just work" in many environments, a working
+ knowledge of HDFS helps greatly with configuration improvements and
+ diagnostics on a specific cluster.
+      </p>
+    </section>
+
+    <section> <title> Overview </title>
+      <p>
+ HDFS is the primary distributed storage used by Hadoop applications. A
+ HDFS cluster primarily consists of a NameNode that manages the
+ file system metadata and DataNodes that store the actual data. The
+ <a href="hdfs_design.html">HDFS Architecture Guide</a> describes HDFS in detail. This user guide primarily deals with 
+ the interaction of users and administrators with HDFS clusters. 
+ The <a href="images/hdfsarchitecture.gif">HDFS architecture diagram</a> depicts 
+ basic interactions among NameNode, the DataNodes, and the clients. 
+ Clients contact NameNode for file metadata or file modifications and perform 
+ actual file I/O directly with the DataNodes.
+      </p>
+      <p>
+ The following are some of the salient features that could be of
+ interest to many users.
+      </p> 
+    <ul>
+    <li>
+    	Hadoop, including HDFS, is well suited for distributed storage
+    	and distributed processing using commodity hardware. It is fault
+    	tolerant, scalable, and extremely simple to expand. MapReduce, 
+    	well known for its simplicity and applicability for large set of
+    	distributed applications, is an integral part of Hadoop.
+    </li>
+    <li>
+    	HDFS is highly configurable with a default configuration well
+    	suited for many installations. Most of the time, configuration
+    	needs to be tuned only for very large clusters.
+    </li>
+    <li>
+    	Hadoop is written in Java and is supported on all major platforms.
+    </li>
+    <li>
+    	Hadoop supports shell-like commands to interact with HDFS directly.
+    </li>
+    <li>
+    	The NameNode and Datanodes have built in web servers that makes it
+    	easy to check current status of the cluster.
+    </li>
+    <li>
+    	New features and improvements are regularly implemented in HDFS.
+    	The following is a subset of useful features in HDFS:
+      <ul>
+    	<li>
+    		File permissions and authentication.
+    	</li>
+    	<li>
+    		<em>Rack awareness</em>: to take a node's physical location into
+    		account while scheduling tasks and allocating storage.
+    	</li>
+    	<li>
+    		Safemode: an administrative mode for maintenance.
+    	</li>
+    	<li>
+    		<code>fsck</code>: a utility to diagnose health of the file system, to
+    		find missing files or blocks.
+    	</li>
+    	<li>
+            <code>fetchdt</code>: a utility to fetch DelegationToken and store it 
+            in a file on the local system. 
+        </li>
+    	<li>
+    		Rebalancer: tool to balance the cluster when the data is
+    		unevenly distributed among DataNodes.
+    	</li>
+    	<li>
+    		Upgrade and rollback: after a software upgrade, 
+            it is possible to
+    		rollback to HDFS' state before the upgrade in case of unexpected
+    		problems.
+    	</li>
+    	<li>
+    		Secondary NameNode performs periodic checkpoints of the 
+    		namespace and helps keep the size of file containing log of HDFS 
+    		modifications within certain limits at the NameNode.
+    	</li>
+      </ul>
+    </li>
+    </ul>
+    
+    </section> <section> <title> Prerequisites </title>
+    <p>
+ 	The following documents describe how to install and set up a Hadoop cluster: 
+    </p>
+ 	<ul>
+ 	<li>
+ 		<a href="single_node_setup.html">Single Node Setup</a>
+ 		for first-time users.
+ 	</li>
+ 	<li>
+ 		<a href="cluster_setup.html">Cluster Setup</a>
+ 		for large, distributed clusters.
+ 	</li>
+    </ul>
+    <p>
+ 	The rest of this document assumes the user is able to set up and run a
+ 	HDFS with at least one DataNode. For the purpose of this document,
+ 	both the NameNode and DataNode could be running on the same physical
+ 	machine.	
+    </p>
+     
+    </section> <section> <title> Web Interface </title>
+ <p>
+ 	NameNode and DataNode each run an internal web server in order to
+ 	display basic information about the current status of the cluster.
+ 	With the default configuration, the NameNode front page is at
+ 	<code>http://namenode-name:50070/</code>.
+ 	It lists the DataNodes in the cluster and basic statistics of the
+ 	cluster. The web interface can also be used to browse the file
+ 	system (using "Browse the file system" link on the NameNode front
+ 	page).
+ </p> 
+ 	
+    </section> <section> <title>Shell Commands</title>
+ 	<p>
+      Hadoop includes various shell-like commands that directly
+      interact with HDFS and other file systems that Hadoop supports.
+      The command
+      <code>bin/hdfs dfs -help</code>
+      lists the commands supported by Hadoop
+      shell. Furthermore, the command
+      <code>bin/hdfs dfs -help command-name</code>
+      displays more detailed help for a command. These commands support
+      most of the normal files system operations like copying files,
+      changing file permissions, etc. It also supports a few HDFS
+      specific operations like changing replication of files. 
+      For more information see <a href="file_system_shell.html">File System Shell Guide</a>.
+     </p>
+
+   <section> <title> DFSAdmin Command </title>
+   <p>
+   	The <code>bin/hadoop dfsadmin</code>
+   	command supports a few HDFS administration related operations.
+   	The <code>bin/hadoop dfsadmin -help</code> command
+   	lists all the commands currently supported. For e.g.:
+   </p>  
+   	<ul>
+   	<li>
+   	    <code>-report</code>
+   	    : reports basic statistics of HDFS. Some of this information is
+   	    also available on the NameNode front page.
+   	</li>
+   	<li>
+   		<code>-safemode</code>
+   		: though usually not required, an administrator can manually enter
+   		or leave Safemode.
+   	</li>
+   	<li>
+   		<code>-finalizeUpgrade</code>
+   		: removes previous backup of the cluster made during last upgrade.
+   	</li>
+    <li>
+      <code>-refreshNodes</code>
+      : Updates the set of hosts allowed to connect to namenode.
+      Re-reads the config file to update values defined by dfs.hosts and 
+      dfs.host.exclude and reads the entires (hostnames) in those files. 
+      Each entry not defined in dfs.hosts but in dfs.hosts.exclude 
+      is decommissioned. Each entry defined in dfs.hosts and also in 
+      dfs.host.exclude is stopped from decommissioning if it has aleady 
+      been marked for decommission. Entires not present in both the lists 
+      are decommissioned. 
+    </li>
+    <li>
+      <code>-printTopology</code>
+      : Print the topology of the cluster. Display a tree of racks and
+      datanodes attached to the tracks as viewed by the NameNode.
+    </li>
+   	</ul>
+   	<p>
+   	  For command usage, see  
+   	  <a href="commands_manual.html#dfsadmin">dfsadmin</a>.
+   	</p>  
+   </section>
+   
+   </section> 
+	<section> <title>Secondary NameNode</title>
+   <p>	
+     The NameNode stores modifications to the file system as a log
+     appended to a native file system file, <code>edits</code>. 
+   	When a NameNode starts up, it reads HDFS state from an image
+   	file, <code>fsimage</code>, and then applies edits from the
+    edits log file. It then writes new HDFS state to the <code>fsimage</code>
+    and starts normal
+   	operation with an empty edits file. Since NameNode merges
+   	<code>fsimage</code> and <code>edits</code> files only during start up, 
+    the edits log file could get very large over time on a busy cluster. 
+    Another side effect of a larger edits file is that next 
+    restart of NameNode takes longer.
+   </p>
+   <p>
+     The secondary NameNode merges the fsimage and the edits log files periodically
+     and keeps edits log size within a limit. It is usually run on a
+     different machine than the primary NameNode since its memory requirements
+     are on the same order as the primary NameNode. The secondary
+     NameNode is started by <code>bin/start-dfs.sh</code> on the nodes 
+     specified in <code>conf/masters</code> file.
+   </p>
+   <p>
+     The start of the checkpoint process on the secondary NameNode is 
+     controlled by two configuration parameters.
+   </p>
+   <ul>
+      <li>
+        <code>fs.checkpoint.period</code>, set to 1 hour by default, specifies
+        the maximum delay between two consecutive checkpoints, and 
+      </li>
+      <li>
+        <code>fs.checkpoint.size</code>, set to 64MB by default, defines the
+        size of the edits log file that forces an urgent checkpoint even if 
+        the maximum checkpoint delay is not reached.
+      </li>
+   </ul>
+   <p>
+     The secondary NameNode stores the latest checkpoint in a  
+     directory which is structured the same way as the primary NameNode's
+     directory. So that the check pointed image is always ready to be
+     read by the primary NameNode if necessary.
+   </p>
+   <p>
+     For command usage, see  
+     <a href="commands_manual.html#secondarynamenode">secondarynamenode</a>.
+   </p>
+   </section>
+
+   <section> <title> Import Checkpoint </title>
+   <p>
+     The latest checkpoint can be imported to the NameNode if
+     all other copies of the image and the edits files are lost.
+     In order to do that one should:
+   </p>
+   <ul>
+      <li>
+        Create an empty directory specified in the 
+        <code>dfs.name.dir</code> configuration variable;
+      </li>
+      <li>
+        Specify the location of the checkpoint directory in the 
+        configuration variable <code>fs.checkpoint.dir</code>;
+      </li>
+      <li>
+        and start the NameNode with <code>-importCheckpoint</code> option.
+      </li>
+   </ul>
+   <p>
+     The NameNode will upload the checkpoint from the 
+     <code>fs.checkpoint.dir</code> directory and then save it to the NameNode
+     directory(s) set in <code>dfs.name.dir</code>.
+     The NameNode will fail if a legal image is contained in 
+     <code>dfs.name.dir</code>.
+     The NameNode verifies that the image in <code>fs.checkpoint.dir</code> is
+     consistent, but does not modify it in any way.
+   </p>
+   <p>
+     For command usage, see  
+      <a href="commands_manual.html#namenode">namenode</a>.
+   </p>
+   </section>
+
+   <section> <title> Rebalancer </title>
+    <p>
+      HDFS data might not always be be placed uniformly across the
+      DataNode. One common reason is addition of new DataNodes to an
+      existing cluster. While placing new blocks (data for a file is
+      stored as a series of blocks), NameNode considers various
+      parameters before choosing the DataNodes to receive these blocks.
+      Some of the considerations are: 
+    </p>
+      <ul>
+      <li>
+        Policy to keep one of the replicas of a block on the same node
+        as the node that is writing the block.
+      </li>
+      <li>
+        Need to spread different replicas of a block across the racks so
+        that cluster can survive loss of whole rack.
+      </li>
+      <li>
+        One of the replicas is usually placed on the same rack as the
+        node writing to the file so that cross-rack network I/O is
+        reduced.
+      </li>
+      <li>
+        Spread HDFS data uniformly across the DataNodes in the cluster.
+      </li>
+      </ul>
+    <p>
+      Due to multiple competing considerations, data might not be
+      uniformly placed across the DataNodes.
+      HDFS provides a tool for administrators that analyzes block
+      placement and rebalanaces data across the DataNode. A brief
+      administrator's guide for rebalancer as a
+      <a href="http://issues.apache.org/jira/secure/attachment/12368261/RebalanceDesign6.pdf">PDF</a>
+      is attached to
+      <a href="http://issues.apache.org/jira/browse/HADOOP-1652">HADOOP-1652</a>.
+    </p>
+    <p>
+     For command usage, see  
+     <a href="commands_manual.html#balancer">balancer</a>.
+   </p>
+    
+   </section> <section> <title> Rack Awareness </title>
+    <p>
+      Typically large Hadoop clusters are arranged in racks and
+      network traffic between different nodes with in the same rack is
+      much more desirable than network traffic across the racks. In
+      addition NameNode tries to place replicas of block on
+      multiple racks for improved fault tolerance. Hadoop lets the
+      cluster administrators decide which rack a node belongs to
+      through configuration variable <code>topology.script.file.name</code>. When this
+      script is configured, each node runs the script to determine its
+      rack id. A default installation assumes all the nodes belong to
+      the same rack. This feature and configuration is further described
+      in <a href="http://issues.apache.org/jira/secure/attachment/12345251/Rack_aware_HDFS_proposal.pdf">PDF</a>
+      attached to 
+      <a href="http://issues.apache.org/jira/browse/HADOOP-692">HADOOP-692</a>.
+    </p>
+
+   </section> <section> <title> Safemode </title>
+    <p>
+      During start up the NameNode loads the file system state from the
+      fsimage  and the edits log file. It then waits for DataNodes
+      to report their blocks so that it does not prematurely start
+      replicating the blocks though enough replicas already exist in the
+      cluster. During this time NameNode stays in Safemode. 
+      Safemode
+      for the NameNode is essentially a read-only mode for the HDFS cluster,
+      where it does not allow any modifications to file system or blocks.
+      Normally the NameNode leaves Safemode automatically after the DataNodes
+      have reported that most file system blocks are available. 
+      If required, HDFS could be placed in Safemode explicitly
+      using <code>'bin/hadoop dfsadmin -safemode'</code> command. NameNode front
+      page shows whether Safemode is on or off. A more detailed
+      description and configuration is maintained as JavaDoc for
+      <code>NameNode.setSafeMode()</code>.
+    </p>
+    
+   </section> <section> <title> fsck </title>
+     <p>    
+      HDFS supports the <code>fsck</code> command to check for various 
+      inconsistencies.
+      It it is designed for reporting problems with various
+      files, for example, missing blocks for a file or under-replicated
+      blocks. Unlike a traditional <code>fsck</code> utility for native file systems,
+      this command does not correct the errors it detects. Normally NameNode
+      automatically corrects most of the recoverable failures. By default
+      <code>fsck</code> ignores open files but provides an option to select all files during reporting.
+      The HDFS <code>fsck</code> command is not a
+      Hadoop shell command. It can be run as '<code>bin/hadoop fsck</code>'.
+      For command usage, see  
+      <a href="commands_manual.html#fsck">fsck</a>.
+      <code>fsck</code> can be run on the whole file system or on a subset of files.
+     </p>
+   
+   </section> <section> <title> fetchdt </title>
+     <p>    
+      HDFS supports the <code>fetchdt</code> command to fetch Delegation Token 
+      and store it in a file on the local system. This token can be later used to 
+      access secure server (NameNode for example) from a non secure client.
+      Utility uses either RPC or HTTPS (over Kerberos) to get the token, and thus
+      requires kerberos tickets to be present before the run (run kinit to get 
+      the tickets). 
+      The HDFS <code>fetchdt</code> command is not a
+      Hadoop shell command. It can be run as '<code>bin/hadoop fetchdt DTfile </code>'.
+      After you got the token you can run an HDFS command without having Kerberos
+      tickets, by pointing HADOOP_TOKEN_FILE_LOCATION environmental variable to 
+      the delegation token file. 
+      For command usage, see <a href="commands_manual.html#fetchdt"><code>fetchdt</code> command</a>. 
+     </p>
+     </section>
+     <section> <title>Recovery Mode</title>
+       <p>Typically, you will configure multiple metadata storage locations.
+       Then, if one storage location is corrupt, you can read the
+       metadata from one of the other storage locations.</p>
+
+       <p>However, what can you do if the only storage locations available are
+       corrupt?  In this case, there is a special NameNode startup mode called
+       Recovery mode that may allow you to recover most of your data.</p>
+
+       <p>You can start the NameNode in recovery mode like so:
+        <code>namenode -recover</code></p>
+
+        <p>When in recovery mode, the NameNode will interactively prompt you at
+       the command line about possible courses of action you can take to
+       recover your data.</p>
+
+       <p>If you don't want to be prompted, you can give the
+       <code>-force</code> option.  This option will force
+       recovery mode to always select the first choice.  Normally, this
+       will be the most reasonable choice.</p>
+
+       <p>Because Recovery mode can cause you to lose data, you should always
+       back up your edit log and fsimage before using it.</p>
+     </section>
+     <section> <title> Upgrade and Rollback </title>
+     <p>
+      When Hadoop is upgraded on an existing cluster, as with any
+      software upgrade, it is possible there are new bugs or
+      incompatible changes that affect existing applications and were
+      not discovered earlier. In any non-trivial HDFS installation, it
+      is not an option to loose any data, let alone to restart HDFS from
+      scratch. HDFS allows administrators to go back to earlier version
+      of Hadoop and rollback the cluster to the state it was in 
+      before
+      the upgrade. HDFS upgrade is described in more detail in 
+      <a href="http://wiki.apache.org/hadoop/Hadoop_Upgrade">Hadoop Upgrade</a> Wiki page.
+      HDFS can have one such backup at a time. Before upgrading,
+      administrators need to remove existing backup using <code>bin/hadoop
+      dfsadmin -finalizeUpgrade</code> command. The following
+      briefly describes the typical upgrade procedure: 
+     </p>
+      <ul>
+      <li>
+        Before upgrading Hadoop software,
+        <em>finalize</em> if there an existing backup.
+        <code>dfsadmin -upgradeProgress status</code>
+        can tell if the cluster needs to be <em>finalized</em>.
+      </li>
+      <li>Stop the cluster and distribute new version of Hadoop.</li>
+      <li>
+        Run the new version with <code>-upgrade</code> option 
+        (<code>bin/start-dfs.sh -upgrade</code>).
+      </li>
+      <li>
+        Most of the time, cluster works just fine. Once the new HDFS is
+        considered working well (may be after a few days of operation),
+        finalize the upgrade. Note that until the cluster is finalized,
+        deleting the files that existed before the upgrade does not free
+        up real disk space on the DataNodes.
+      </li>
+      <li>
+        If there is a need to move back to the old version,
+        <ul>
+          <li> stop the cluster and distribute earlier version of Hadoop. </li>
+          <li> start the cluster with rollback option. 
+            (<code>bin/start-dfs.h -rollback</code>). 
+          </li>
+        </ul>
+      </li>
+      </ul>
+    
+   </section> <section> <title> File Permissions and Security </title>
+     <p>           
+      The file permissions are designed to be similar to file permissions on
+      other familiar platforms like Linux. Currently, security is limited
+      to simple file permissions. The user that starts NameNode is
+      treated as the superuser for HDFS. Future versions of HDFS will
+      support network authentication protocols like Kerberos for user
+      authentication and encryption of data transfers. The details are discussed in the 
+      <a href="hdfs_permissions_guide.html">Permissions Guide</a>.
+     </p>
+     
+   </section> <section> <title> Scalability </title>
+     <p>
+      Hadoop currently runs on clusters with thousands of nodes. The  
+      <a href="http://wiki.apache.org/hadoop/PoweredBy">PoweredBy</a> Wiki page 
+      lists some of the organizations that deploy Hadoop on large
+      clusters. HDFS has one NameNode for each cluster. Currently
+      the total memory available on NameNode is the primary scalability
+      limitation. On very large clusters, increasing average size of
+      files stored in HDFS helps with increasing cluster size without
+      increasing memory requirements on NameNode.
+   
+      The default configuration may not suite very large clustes. The 
+      <a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a> Wiki page lists
+      suggested configuration improvements for large Hadoop clusters.
+     </p>
+     
+   </section> <section> <title> Related Documentation </title>          
+      <p>
+      This user guide is a good starting point for
+      working with HDFS. While the user guide continues to improve,
+      there is a large wealth of documentation about Hadoop and HDFS.
+      The following list is a starting point for further exploration:
+      </p>
+      <ul>
+      <li>
+        <a href="http://hadoop.apache.org/">Hadoop Site</a>: The home page for the Apache Hadoop site.
+      </li>
+      <li>
+        <a href="http://wiki.apache.org/hadoop/FrontPage">Hadoop Wiki</a>:
+        The home page (FrontPage) for the Hadoop Wiki. Unlike the released documentation, 
+        which is part of Hadoop source tree, Hadoop Wiki is
+        regularly edited by Hadoop Community.
+      </li>
+      <li> <a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>: 
+      The FAQ Wiki page.
+      </li>
+      <li>
+        Hadoop <a href="http://hadoop.apache.org/core/docs/current/api/">
+          JavaDoc API</a>.
+      </li>
+      <li>
+        Hadoop User Mailing List : 
+        <a href="mailto:core-user@hadoop.apache.org">core-user[at]hadoop.apache.org</a>.
+      </li>
+      <li>
+         Explore <code>src/hdfs/hdfs-default.xml</code>. 
+         It includes brief 
+         description of most of the configuration variables available.
+      </li>
+      <li>
+        <a href="commands_manual.html">Hadoop Commands Guide</a>: Hadoop commands usage.
+      </li>
+      </ul>
+     </section>
+     
+  </body>
+</document>
+ 	
+

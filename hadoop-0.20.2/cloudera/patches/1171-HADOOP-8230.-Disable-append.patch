@@ -1,0 +1,505 @@
+From cdbbf432dd714be3b33e9f1e2d9042951ab78e1d Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 23 Apr 2012 21:30:13 -0700
+Subject: [PATCH 1171/1179] HADOOP-8230. Disable append.
+
+The dfs.support.append configuration option enables both sync and
+append, and has been used thus far to enable sync for HBase support.
+This change enables sync unconditionally, which has been enabled by
+default in CDH3, and removes the ability to enable append since append
+has known data loss bugs.
+
+Author: Eli Collins
+Reason: Prevent data loss by disabling HDFS append
+Ref: CDH-4506
+---
+ src/c++/libhdfs/tests/conf/hdfs-site.xml           |    7 ----
+ src/hdfs/hdfs-default.xml                          |    7 +++-
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    2 -
+ .../hadoop/hdfs/protocol/ClientProtocol.java       |    2 +-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   14 ++++-----
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |    7 +----
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   25 ++++++++-------
+ src/test/org/apache/hadoop/fs/TestDFSIO.java       |    5 +--
+ .../apache/hadoop/fs/permission/TestStickyBit.java |    1 +
+ .../org/apache/hadoop/hdfs/TestFileAppend2.java    |    4 +-
+ .../org/apache/hadoop/hdfs/TestFileAppend3.java    |    2 +-
+ .../org/apache/hadoop/hdfs/TestFileAppend4.java    |    2 +-
+ .../hadoop/hdfs/TestFileConcurrentReader.java      |    2 +-
+ .../apache/hadoop/hdfs/TestFileCreationDelete.java |    1 -
+ .../org/apache/hadoop/hdfs/TestLeaseRecovery.java  |    2 +-
+ src/test/org/apache/hadoop/hdfs/TestQuota.java     |    4 +-
+ .../apache/hadoop/hdfs/TestRenameWhileOpen.java    |    4 --
+ .../hadoop/hdfs/TestSyncingWriterInterrupted.java  |    2 +-
+ .../hdfs/server/namenode/TestBBWBlockReport.java   |   32 +-------------------
+ .../server/namenode/TestBlockTokenWithDFS.java     |    2 +-
+ .../namenode/TestDFSConcurrentFileOperations.java  |    3 +-
+ 21 files changed, 43 insertions(+), 87 deletions(-)
+
+diff --git a/src/c++/libhdfs/tests/conf/hdfs-site.xml b/src/c++/libhdfs/tests/conf/hdfs-site.xml
+index 768882b..21a75d0 100644
+--- a/src/c++/libhdfs/tests/conf/hdfs-site.xml
++++ b/src/c++/libhdfs/tests/conf/hdfs-site.xml
+@@ -15,13 +15,6 @@
+ </property>
+ 
+ <property>
+-  <name>dfs.support.append</name>
+-  <value>true</value>
+-  <description>Allow appends to files.
+-  </description>
+-</property>
+-
+-<property>
+   <name>dfs.datanode.address</name>
+   <value>0.0.0.0:50012</value>
+   <description>
+diff --git a/src/hdfs/hdfs-default.xml b/src/hdfs/hdfs-default.xml
+index c0e9c6a..f56bc80 100644
+--- a/src/hdfs/hdfs-default.xml
++++ b/src/hdfs/hdfs-default.xml
+@@ -410,8 +410,11 @@ creations/deletions), or "all".</description>
+ 
+ <property>
+   <name>dfs.support.append</name>
+-  <value>true</value>
+-  <description>Does HDFS allow appends to files?</description>
++  <description>
++    This option is no longer supported. HBase no longer requires that
++    this option be enabled as sync is now enabled by default. See
++    HADOOP-8230 for additional information.
++  </description>
+ </property>
+ 
+ <property>
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index d402bfa..9ce62ce 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -180,8 +180,6 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final int     DFS_NAMENODE_HANDLER_COUNT_DEFAULT = 10;
+   public static final String  DFS_NAMENODE_SERVICE_HANDLER_COUNT_KEY = "dfs.namenode.service.handler.count";
+   public static final int     DFS_NAMENODE_SERVICE_HANDLER_COUNT_DEFAULT = 10;
+-  public static final String  DFS_SUPPORT_APPEND_KEY = "dfs.support.append";
+-  public static final boolean DFS_SUPPORT_APPEND_DEFAULT = false;
+   public static final String  DFS_HTTPS_ENABLE_KEY = "dfs.https.enable";
+   public static final boolean DFS_HTTPS_ENABLE_DEFAULT = false;
+   public static final String  DFS_DEFAULT_CHUNK_VIEW_SIZE_KEY = "dfs.default.chunk.view.size";
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+index c0705d0..909ff28 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+@@ -140,7 +140,7 @@ public interface ClientProtocol extends VersionedProtocol {
+    * denied by the system. As usually on the client side the exception will 
+    * be wrapped into {@link org.apache.hadoop.ipc.RemoteException}.
+    * Allows appending to an existing file if the server is
+-   * configured with the parameter dfs.support.append set to true, otherwise
++   * configured with the parameter dfs.support.broken.append set to true, otherwise
+    * throws an IOException.
+    * @throws IOException if other errors occur.
+    */
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 3e3cd33..ce6adff 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -225,7 +225,6 @@ public class DataNode extends Configured
+   private long readaheadLength = 0;
+ 
+   int writePacketSize = 0;
+-  private boolean supportAppends;
+   private boolean connectToDnViaHostname;
+   private boolean relaxedVersionCheck;
+   
+@@ -297,7 +296,6 @@ public class DataNode extends Configured
+         DFSConfigKeys.DFS_DATANODE_USER_NAME_KEY);
+ 
+     datanodeObject = this;
+-    supportAppends = conf.getBoolean("dfs.support.append", true);
+     userWithLocalPathAccess = conf.get(
+         DFSConfigKeys.DFS_BLOCK_LOCAL_PATH_ACCESS_USER_KEY);
+ 
+@@ -777,12 +775,12 @@ public class DataNode extends Configured
+       dnRegistration.exportedKeys = ExportedBlockKeys.DUMMY_KEYS;
+     }
+ 
+-    if (supportAppends) {
+-      Block[] bbwReport = data.getBlocksBeingWrittenReport();
+-      long[] blocksBeingWritten = BlockListAsLongs
+-          .convertToArrayLongs(bbwReport);
+-      namenode.blocksBeingWrittenReport(dnRegistration, blocksBeingWritten);
+-    }
++
++    Block[] bbwReport = data.getBlocksBeingWrittenReport();
++    long[] blocksBeingWritten =
++      BlockListAsLongs.convertToArrayLongs(bbwReport);
++    namenode.blocksBeingWrittenReport(dnRegistration, blocksBeingWritten);
++
+     // random short delay - helps scatter the BR from all DNs
+     // - but we can start generating the block report immediately
+     data.requestAsyncBlockReport();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index beadd88..185fb38 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -356,7 +356,6 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       this.reserved = conf.getLong("dfs.datanode.du.reserved", 0);
+       this.dataDir = new FSDir(currentDir);
+       this.currentDir = currentDir;
+-      boolean supportAppends = conf.getBoolean("dfs.support.append", false);
+       File parent = currentDir.getParentFile();
+ 
+       this.detachDir = new File(parent, "detach");
+@@ -376,11 +375,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       // should not be deleted.
+       blocksBeingWritten = new File(parent, "blocksBeingWritten");
+       if (blocksBeingWritten.exists()) {
+-        if (supportAppends) {  
+-          recoverBlocksBeingWritten(blocksBeingWritten);
+-        } else {
+-          FileUtil.fullyDelete(blocksBeingWritten);
+-        }
++        recoverBlocksBeingWritten(blocksBeingWritten);
+       }
+       
+       if (!blocksBeingWritten.mkdirs()) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 632a5fc..79dab6b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -283,8 +283,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+   private long replicationRecheckInterval;
+   // default block size of a file
+   private long defaultBlockSize = 0;
+-  // allow appending to hdfs files
+-  private boolean supportAppends = true;
++  // allow file appending (for test coverage)
++  private boolean allowBrokenAppend = false;
+   //resourceRecheckInterval is how often namenode checks for the disk space availability
+   private long resourceRecheckInterval;
+   // The actual resource checker instance.
+@@ -511,7 +511,12 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     LOG.info(DFSConfigKeys.DFS_BLOCK_INVALIDATE_LIMIT_KEY + "=" + this.blockInvalidateLimit);
+ 
+     this.accessTimePrecision = conf.getLong("dfs.access.time.precision", 0);
+-    this.supportAppends = conf.getBoolean("dfs.support.append", false);
++    this.allowBrokenAppend = conf.getBoolean("dfs.support.broken.append", false);
++    if (conf.getBoolean("dfs.support.append", false)) {
++      LOG.warn("The dfs.support.append option is in your configuration, " +
++               "however append is not supported. This configuration option " +
++               "is no longer required to enable sync.");
++    }
+     this.isAccessTokenEnabled = conf.getBoolean(
+         DFSConfigKeys.DFS_BLOCK_ACCESS_TOKEN_ENABLE_KEY, false);
+     if (isAccessTokenEnabled) {
+@@ -1388,9 +1393,9 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+    */
+   LocatedBlock appendFile(String src, String holder, String clientMachine
+       ) throws IOException {
+-    if (supportAppends == false) {
+-      throw new IOException("Append to hdfs not supported." +
+-                            " Please refer to dfs.support.append configuration parameter.");
++    if (!allowBrokenAppend) {
++      throw new IOException("Append is not supported. " +
++          "Please see the dfs.support.append configuration parameter.");
+     }
+     startFileInternal(src, null, holder, clientMachine, false, true, 
+                       false, (short)maxReplication, (long)0);
+@@ -2264,13 +2269,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     }
+ 
+     // If this commit does not want to close the file, persist
+-    // blocks only if append is supported and return
++    // blocks and return
+     src = leaseManager.findPath(pendingFile);
+     if (!closeFile) {
+-      if (supportAppends) {
+-        dir.persistBlocks(src, pendingFile);
+-        getEditLog().logSync();
+-      }
++      dir.persistBlocks(src, pendingFile);
++      getEditLog().logSync();
+       LOG.info("commitBlockSynchronization(" + lastblock + ") successful");
+       return;
+     }
+diff --git a/src/test/org/apache/hadoop/fs/TestDFSIO.java b/src/test/org/apache/hadoop/fs/TestDFSIO.java
+index de7baec..23779de 100644
+--- a/src/test/org/apache/hadoop/fs/TestDFSIO.java
++++ b/src/test/org/apache/hadoop/fs/TestDFSIO.java
+@@ -32,7 +32,6 @@ import java.util.StringTokenizer;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.conf.Configured;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.io.LongWritable;
+@@ -180,7 +179,7 @@ public class TestDFSIO extends Configured implements Tool {
+ 
+   public void testIOs(int fileSize, int nrFiles)
+     throws IOException {
+-    config.setBoolean(DFSConfigKeys.DFS_SUPPORT_APPEND_KEY, true);
++    config.setBoolean("dfs.support.broken.append", true);
+     MiniDFSCluster cluster = null;
+     try {
+       cluster = new MiniDFSCluster(config, 2, true, null);
+@@ -577,7 +576,7 @@ public class TestDFSIO extends Configured implements Tool {
+     LOG.info("baseDir = " + getBaseDir(config));
+ 
+     config.setInt("test.io.file.buffer.size", bufferSize);
+-    config.setBoolean(DFSConfigKeys.DFS_SUPPORT_APPEND_KEY, true);
++    config.setBoolean("dfs.support.broken.append", true);
+     FileSystem fs = FileSystem.get(config);
+ 
+     if (isSequential) {
+diff --git a/src/test/org/apache/hadoop/fs/permission/TestStickyBit.java b/src/test/org/apache/hadoop/fs/permission/TestStickyBit.java
+index c7da251..23c8174 100644
+--- a/src/test/org/apache/hadoop/fs/permission/TestStickyBit.java
++++ b/src/test/org/apache/hadoop/fs/permission/TestStickyBit.java
+@@ -162,6 +162,7 @@ public class TestStickyBit extends TestCase {
+     try {
+       Configuration conf = new Configuration();
+       conf.setBoolean("dfs.permissions", true);
++      conf.setBoolean("dfs.support.broken.append", true);
+       cluster = new MiniDFSCluster(conf, 4, true, null);
+ 
+       FileSystem hdfs = cluster.getFileSystem();
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
+index 44d0ae0..1ec4e84 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
+@@ -140,7 +140,7 @@ public class TestFileAppend2 {
+       conf.setBoolean(SimulatedFSDataset.CONFIG_PROPERTY_SIMULATED, true);
+     }
+     conf.setInt("dfs.datanode.handler.count", 50);
+-    conf.setBoolean("dfs.support.append", true);
++    conf.setBoolean("dfs.support.broken.append", true);
+     initBuffer(fileSize);
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, 1, true, null);
+     FileSystem fs = cluster.getFileSystem();
+@@ -391,7 +391,7 @@ public class TestFileAppend2 {
+     conf.setInt("dfs.datanode.handler.count", 50);
+     conf.setInt("dfs.datanode.artificialBlockReceivedDelay",
+                 artificialBlockReceivedDelay);
+-    conf.setBoolean("dfs.support.append", true);
++    conf.setBoolean("dfs.support.broken.append", true);
+ 
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, numDatanodes, 
+                                                 true, null);
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend3.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend3.java
+index 25fd656..7d5d603 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend3.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend3.java
+@@ -52,7 +52,7 @@ public class TestFileAppend3 extends junit.framework.TestCase {
+         AppendTestUtil.LOG.info("setUp()");
+         conf = new Configuration();
+         conf.setInt("io.bytes.per.checksum", 512);
+-        conf.setBoolean("dfs.support.append", true);
++        conf.setBoolean("dfs.support.broken.append", true);
+         buffersize = conf.getInt("io.file.buffer.size", 4096);
+         cluster = new MiniDFSCluster(conf, DATANODE_NUM, true, null);
+         fs = (DistributedFileSystem)cluster.getFileSystem();
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+index 033e8bb..8a2645f 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+@@ -104,7 +104,7 @@ public class TestFileAppend4 extends TestCase {
+     if (simulatedStorage) {
+       conf.setBoolean(SimulatedFSDataset.CONFIG_PROPERTY_SIMULATED, true);
+     }
+-    conf.setBoolean("dfs.support.append", true);
++    conf.setBoolean("dfs.support.broken.append", true);
+ 
+     // lower heartbeat interval for fast recognition of DN death
+     conf.setInt("heartbeat.recheck.interval", 1000);
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileConcurrentReader.java b/src/test/org/apache/hadoop/hdfs/TestFileConcurrentReader.java
+index 653ce8d..e882e3a 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileConcurrentReader.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileConcurrentReader.java
+@@ -253,7 +253,7 @@ public class TestFileConcurrentReader extends junit.framework.TestCase {
+     Configuration conf
+   ) throws IOException {
+     try {
+-      conf.setBoolean("dfs.support.append", syncType == SyncType.APPEND);
++      conf.setBoolean("dfs.support.broken.append", syncType == SyncType.APPEND);
+       conf.setBoolean("dfs.datanode.transferTo.allowed", transferToAllowed);
+       init(conf);
+ 
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileCreationDelete.java b/src/test/org/apache/hadoop/hdfs/TestFileCreationDelete.java
+index ba1c96a..33dd7ca 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileCreationDelete.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileCreationDelete.java
+@@ -42,7 +42,6 @@ public class TestFileCreationDelete extends junit.framework.TestCase {
+     conf.setInt("ipc.client.connection.maxidletime", MAX_IDLE_TIME);
+     conf.setInt("heartbeat.recheck.interval", 1000);
+     conf.setInt("dfs.heartbeat.interval", 1);
+-    conf.setBoolean("dfs.support.append", true);
+ 
+     // create cluster
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, 1, true, null);
+diff --git a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
+index 116c7e4..4a9aca7 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
++++ b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
+@@ -70,7 +70,7 @@ public class TestLeaseRecovery extends junit.framework.TestCase {
+     final int ORG_FILE_SIZE = 3000; 
+     Configuration conf = new Configuration();
+     conf.setLong("dfs.block.size", BLOCK_SIZE);
+-    conf.setBoolean("dfs.support.append", true);
++    conf.setBoolean("dfs.support.broken.append", true);
+     MiniDFSCluster cluster = null;
+ 
+     try {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestQuota.java b/src/test/org/apache/hadoop/hdfs/TestQuota.java
+index 6283d63..4924eb9 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestQuota.java
++++ b/src/test/org/apache/hadoop/hdfs/TestQuota.java
+@@ -61,7 +61,7 @@ public class TestQuota extends TestCase {
+     // Space quotas
+     final int DEFAULT_BLOCK_SIZE = 512;
+     conf.setLong("dfs.block.size", DEFAULT_BLOCK_SIZE);
+-    conf.setBoolean("dfs.support.append", true);
++    conf.setBoolean("dfs.support.broken.append", true);
+     final MiniDFSCluster cluster = new MiniDFSCluster(conf, 2, true, null);
+     final FileSystem fs = cluster.getFileSystem();
+     assertTrue("Not a HDFS: "+fs.getUri(),
+@@ -508,7 +508,7 @@ public class TestQuota extends TestCase {
+     // set a smaller block size so that we can test with smaller 
+     // diskspace quotas
+     conf.set("dfs.block.size", "512");
+-    conf.setBoolean("dfs.support.append", true);
++    conf.setBoolean("dfs.support.broken.append", true);
+     final MiniDFSCluster cluster = new MiniDFSCluster(conf, 2, true, null);
+     final FileSystem fs = cluster.getFileSystem();
+     assertTrue("Not a HDFS: "+fs.getUri(),
+diff --git a/src/test/org/apache/hadoop/hdfs/TestRenameWhileOpen.java b/src/test/org/apache/hadoop/hdfs/TestRenameWhileOpen.java
+index 82a3a6a..aa83d52 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestRenameWhileOpen.java
++++ b/src/test/org/apache/hadoop/hdfs/TestRenameWhileOpen.java
+@@ -48,7 +48,6 @@ public class TestRenameWhileOpen extends junit.framework.TestCase {
+     conf.setInt("heartbeat.recheck.interval", 1000);
+     conf.setInt("dfs.heartbeat.interval", 1);
+     conf.setInt("dfs.safemode.threshold.pct", 1);
+-    conf.setBoolean("dfs.support.append", true);
+ 
+     // create cluster
+     System.out.println("Test 1*****************************");
+@@ -132,7 +131,6 @@ public class TestRenameWhileOpen extends junit.framework.TestCase {
+     conf.setInt("heartbeat.recheck.interval", 1000);
+     conf.setInt("dfs.heartbeat.interval", 1);
+     conf.setInt("dfs.safemode.threshold.pct", 1);
+-    conf.setBoolean("dfs.support.append", true);
+     System.out.println("Test 2************************************");
+ 
+     // create cluster
+@@ -205,7 +203,6 @@ public class TestRenameWhileOpen extends junit.framework.TestCase {
+     conf.setInt("heartbeat.recheck.interval", 1000);
+     conf.setInt("dfs.heartbeat.interval", 1);
+     conf.setInt("dfs.safemode.threshold.pct", 1);
+-    conf.setBoolean("dfs.support.append", true);
+     System.out.println("Test 3************************************");
+ 
+     // create cluster
+@@ -268,7 +265,6 @@ public class TestRenameWhileOpen extends junit.framework.TestCase {
+     conf.setInt("heartbeat.recheck.interval", 1000);
+     conf.setInt("dfs.heartbeat.interval", 1);
+     conf.setInt("dfs.safemode.threshold.pct", 1);
+-    conf.setBoolean("dfs.support.append", true);
+     System.out.println("Test 4************************************");
+ 
+     // create cluster
+diff --git a/src/test/org/apache/hadoop/hdfs/TestSyncingWriterInterrupted.java b/src/test/org/apache/hadoop/hdfs/TestSyncingWriterInterrupted.java
+index 8df0def..d869ba8 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestSyncingWriterInterrupted.java
++++ b/src/test/org/apache/hadoop/hdfs/TestSyncingWriterInterrupted.java
+@@ -41,8 +41,8 @@ public class TestSyncingWriterInterrupted {
+   @Before
+   public void setUp() throws Exception {
+     conf = new Configuration();
+-    conf.setBoolean("dfs.support.append", true);
+     conf.setInt("dfs.client.block.recovery.retries", 1);
++    conf.setBoolean("dfs.support.broken.append", true);
+   }
+   
+   @Test(timeout=90000)
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestBBWBlockReport.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestBBWBlockReport.java
+index b29ec70..dc494d4 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestBBWBlockReport.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestBBWBlockReport.java
+@@ -49,10 +49,9 @@ public class TestBBWBlockReport {
+ 
+   @Test(timeout = 60000)
+   // timeout is mainly for safe mode
+-  public void testDNShouldSendBBWReportIfAppendOn() throws Exception {
++  public void testDNShouldSendBBWReport() throws Exception {
+     FileSystem fileSystem = null;
+     FSDataOutputStream outStream = null;
+-    conf.setBoolean("dfs.support.append", true);
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, 1, true, null);
+     cluster.waitActive();
+     try {
+@@ -73,35 +72,6 @@ public class TestBBWBlockReport {
+     }
+   }
+ 
+-  @Test
+-  public void testDNShouldNotSendBBWReportIfAppendOff() throws Exception {
+-    FileSystem fileSystem = null;
+-    FSDataOutputStream outStream = null;
+-    // disable the append support
+-    conf.setBoolean("dfs.support.append", false);
+-    MiniDFSCluster cluster = new MiniDFSCluster(conf, 1, true, null);
+-    cluster.waitActive();
+-    try {
+-      fileSystem = cluster.getFileSystem();
+-      // Keep open stream
+-      outStream = writeFileAndSync(fileSystem, src, fileContent);
+-      cluster.restartNameNode(false);
+-      Thread.sleep(2000);
+-      assertEquals(
+-          "Able to read the synced block content after NameNode restart (without append support",
+-          0, getFileContentFromDFS(fileSystem).length());
+-    } finally {
+-      // NN will not come out of safe mode. So exited the safemode forcibly to
+-      // clean the resources.
+-      cluster.getNameNode().setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+-      if (null != fileSystem)
+-        fileSystem.close();
+-      if (null != outStream)
+-        outStream.close();
+-      cluster.shutdown();
+-    }
+-  }
+-
+   private String getFileContentFromDFS(FileSystem fs) throws IOException {
+     ByteArrayOutputStream bio = new ByteArrayOutputStream();
+     IOUtils.copyBytes(fs.open(src), bio, conf, true);
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockTokenWithDFS.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockTokenWithDFS.java
+index 95382c3..45ddc84 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockTokenWithDFS.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockTokenWithDFS.java
+@@ -170,7 +170,7 @@ public class TestBlockTokenWithDFS extends TestCase {
+     conf.setInt("dfs.heartbeat.interval", 1);
+     conf.setInt("dfs.replication", numDataNodes);
+     conf.setInt("ipc.client.connect.max.retries", 0);
+-    conf.setBoolean("dfs.support.append", true);
++    conf.setBoolean("dfs.support.broken.append", true);
+     return conf;
+   }
+ 
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestDFSConcurrentFileOperations.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestDFSConcurrentFileOperations.java
+index 29e1b59..c6e2115 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestDFSConcurrentFileOperations.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestDFSConcurrentFileOperations.java
+@@ -73,7 +73,8 @@ public class TestDFSConcurrentFileOperations extends TestCase {
+     Configuration conf = new Configuration();
+     
+     conf.setLong("dfs.block.size", blockSize);
+-    
++    conf.setBoolean("dfs.support.broken.append", true);
++
+     init(conf);
+     
+     String src = "/file-1";
+-- 
+1.7.0.4
+

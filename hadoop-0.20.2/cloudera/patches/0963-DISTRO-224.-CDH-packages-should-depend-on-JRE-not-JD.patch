@@ -1,0 +1,24 @@
+From 6a658661998bfec440c181e01cefb3dbee7f525a Mon Sep 17 00:00:00 2001
+From: Roman Shaposhnik <rvs@cloudera.com>
+Date: Fri, 13 May 2011 18:23:00 -0700
+Subject: [PATCH 0963/1179] DISTRO-224. CDH packages should depend on JRE, not JDK
+
+---
+ bin/hadoop-config.sh |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/bin/hadoop-config.sh b/bin/hadoop-config.sh
+index 57f942c..96addf0 100644
+--- a/bin/hadoop-config.sh
++++ b/bin/hadoop-config.sh
+@@ -68,6 +68,7 @@ fi
+ if [ -z "$JAVA_HOME" ]; then
+   for candidate in \
+     /usr/lib/jvm/java-6-sun \
++    /usr/lib/jvm/java-1.6.0-sun-1.6.0.*/jre/ \
+     /usr/lib/jvm/java-1.6.0-sun-1.6.0.* \
+     /usr/lib/j2sdk1.6-sun \
+     /usr/java/jdk1.6* \
+-- 
+1.7.0.4
+

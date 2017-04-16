@@ -1,0 +1,221 @@
+From e34d5e43768d0f91c0eb847071de7f9b8ec5b323 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 22 Feb 2010 14:24:21 +0530
+Subject: [PATCH 0631/1179] MAPREDUCE-670 and HDFS-1022. Add a fast "commit test" target
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436553/mapreduce-670-y20.patch
+Author: Jothi Padmanabhan
+Ref: YDH
+---
+ build.xml             |   24 +++++++--
+ src/test/all-tests    |    1 +
+ src/test/commit-tests |  136 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 157 insertions(+), 4 deletions(-)
+ create mode 100644 src/test/all-tests
+ create mode 100644 src/test/commit-tests
+
+diff --git a/build.xml b/build.xml
+index 050a065..45abfb8 100644
+--- a/build.xml
++++ b/build.xml
+@@ -122,6 +122,9 @@
+   <property name="test.junit.haltonfailure" value="no" />
+   <property name="test.junit.maxmemory" value="512m" />
+   <property name="test.tools.input.dir" value="${basedir}/src/test/tools/data"/>
++  
++  <property name="test.commit.tests.file" value="${test.src.dir}/commit-tests" />
++  <property name="test.all.tests.file" value="${test.src.dir}/all-tests" />
+ 
+   <property name="test.libhdfs.conf.dir" value="${c++.libhdfs.src}/tests/conf"/>
+   <property name="test.libhdfs.dir" value="${test.build.dir}/libhdfs"/>
+@@ -874,12 +877,22 @@
+     <macro-test-runner classpath="${test.classpath.id}"
+                        test.dir="${test.build.dir}"
+                        fileset.dir="${test.src.dir}"
++                       test.file="${test.all.tests.file}"
+                        test.krb5.conf="java.security.krb5.conf"
+-                       test.krb5.conf.filename="${test.src.dir}/krb5.conf">
+-    </macro-test-runner>
++                       test.krb5.conf.filename="${test.src.dir}/krb5.conf" />
++  </target>   
++  
++  <target name="test-commit" depends="jar-test" description="Run core unit tests">
++    <macro-test-runner classpath="${test.classpath.id}"
++                       test.dir="${test.build.dir}"
++                       fileset.dir="${test.src.dir}"
++                       test.file="${test.commit.tests.file}"
++                       test.krb5.conf="java.security.krb5.conf"
++                       test.krb5.conf.filename="${test.src.dir}/krb5.conf" />
+   </target>   
+ 
+   <macrodef name="macro-test-runner">
++    <attribute name="test.file" />
+     <attribute name="classpath" />
+     <attribute name="test.dir" />
+     <attribute name="fileset.dir" />
+@@ -948,8 +961,11 @@
+         <formatter type="${test.junit.output.format}" />
+         <batchtest todir="@{test.dir}" if="tests.notestcase">
+           <fileset dir="@{fileset.dir}"
+-                   includes="**/${test.include}.java"
+-                   excludes="**/${test.exclude}.java aop/** system/**" />
++                   excludes="**/${test.exclude}.java aop/** system/**">
++            <patternset>
++              <includesfile name="@{test.file}"/>
++            </patternset>
++          </fileset>
+         </batchtest>
+         <batchtest todir="${test.build.dir}" if="tests.notestcase.fi">
+           <fileset dir="${test.src.dir}/aop"
+diff --git a/src/test/all-tests b/src/test/all-tests
+new file mode 100644
+index 0000000..a945de6
+--- /dev/null
++++ b/src/test/all-tests
+@@ -0,0 +1 @@
++**/Test*.java
+diff --git a/src/test/commit-tests b/src/test/commit-tests
+new file mode 100644
+index 0000000..59329ae
+--- /dev/null
++++ b/src/test/commit-tests
+@@ -0,0 +1,136 @@
++# -------------------------- common --------------------------
++**/TestAccessControlList.java
++**/TestArrayFile.java
++**/TestArrayWritable.java
++**/TestBloomMapFile.java
++**/TestBuffer.java
++**/TestBytesWritable.java
++**/TestChecksumFileSystem.java
++**/TestCLI.java
++**/TestCodecFactory.java
++**/TestCodec.java
++**/TestConfiguration.java
++**/TestCyclicIteration.java
++**/TestDefaultStringifier.java
++**/TestDelegationToken.java
++**/TestDoAsEffectiveUser.java
++**/TestDU.java
++**/TestFileUtil.java
++**/TestFsPermission.java
++**/TestGenericOptionsParser.java
++**/TestGenericsUtil.java
++**/TestGenericWritable.java
++**/TestGetFileBlockLocations.java
++**/TestGlobalFilter.java
++**/TestGlobExpander.java
++**/TestHarFileSystem.java
++**/TestHtmlQuoting.java
++**/TestHttpServer.java
++**/TestIndexedSort.java
++**/TestInMemoryNativeS3FileSystemContract.java
++**/TestInMemoryS3FileSystemContract.java
++**/TestINode.java
++**/TestIPC.java
++**/TestIPCServerResponder.java
++**/TestKosmosFileSystem.java
++**/TestLocalDirAllocator.java
++**/TestLocalFileSystem.java
++**/TestLocalFileSystemPermission.java
++**/TestLogLevel.java
++**/TestMapFile.java
++**/TestMapWritable.java
++**/TestMD5Hash.java
++**/TestPath.java
++**/TestRecordIO.java
++**/TestRecordVersioning.java
++**/TestReflectionUtils.java
++**/TestRetryProxy.java
++**/TestRPC.java
++**/TestS3Credentials.java
++**/TestS3FileSystem.java
++**/TestSaslRPC.java
++**/TestScriptBasedMapping.java
++**/TestSequenceFileSerialization.java
++**/TestServletFilter.java
++**/TestSetFile.java
++**/TestShell.java
++**/TestSocketIOWithTimeout.java
++**/TestSortedMapWritable.java
++**/TestStringUtils.java
++**/TestText.java
++**/TestTextNonUTF8.java
++**/TestTFileByteArrays.java
++**/TestTFileComparators.java
++**/TestTFile.java
++**/TestTFileJClassComparatorByteArrays.java
++**/TestTFileLzoCodecsByteArrays.java
++**/TestTFileLzoCodecsStreams.java
++**/TestTFileNoneCodecsByteArrays.java
++**/TestTFileNoneCodecsJClassComparatorByteArrays.java
++**/TestTFileNoneCodecsStreams.java
++**/TestTFileSeek.java
++**/TestTFileSeqFileComparison.java
++**/TestTFileSplit.java
++**/TestTFileStreams.java
++**/TestTFileUnsortedByteArrays.java
++**/TestToken.java
++**/TestTokenStorage.java
++**/TestTrash.java
++**/TestTruncatedInputBug.java
++**/TestUserGroupInformation.java
++**/TestUTF8.java
++**/TestVersionedWritable.java
++**/TestVLong.java
++**/TestWritable.java
++**/TestWritableName.java
++**/TestWritableSerialization.java
++**/TestWritableUtils.java
++# -------------------------- hdfs --------------------------
++**/TestAbandonBlock.java
++**/TestBlockReplacement.java
++**/TestBlocksScheduledCounter.java
++**/TestCheckpoint.java
++**/TestDatanodeDescriptor.java
++**/TestDatanodeReport.java
++**/TestDataTransferProtocol.java
++**/TestDefaultNameNodePort.java
++**/TestDFSShellGenericOptions.java
++**/TestDFSShell.java
++**/TestDFSUpgradeFromImage.java
++**/TestDiskError.java
++**/TestDistributedFileSystem.java
++**/TestEditLog.java
++**/TestFileAppend2.java
++**/TestFileAppend3.java
++**/TestFileAppend.java
++**/TestFileCorruption.java
++**/TestFileLimit.java
++**/TestFileStatus.java
++**/TestFSInputChecker.java
++**/TestFSOutputSummer.java
++**/TestGetBlocks.java
++**/TestHDFSServerPorts.java
++**/TestHDFSTrash.java
++**/TestHeartbeatHandling.java
++**/TestHost2NodesMap.java
++**/TestInterDatanodeProtocol.java
++**/TestLease.java
++**/TestLeaseRecovery.java
++**/TestLocalDFS.java
++**/TestMissingBlocksAlert.java
++**/TestNamenodeCapacityReport.java
++**/TestNetworkTopology.java
++**/TestOverReplicatedBlocks.java
++**/TestPendingReplication.java
++**/TestPermission.java
++**/TestPread.java
++**/TestQuota.java
++**/TestReplicationPolicy.java
++**/TestRestartDFS.java
++**/TestSafeMode.java
++**/TestSimulatedFSDataset.java
++**/TestStartup.java
++**/TestUrlStreamHandler.java
++# -------------------------- mapred --------------------------
++**/TestCommandLineJobSubmission.java
++# -------------------------- eof --------------------------
+-- 
+1.7.0.4
+

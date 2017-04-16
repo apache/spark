@@ -1,0 +1,44 @@
+From 648e30e074a16de837fb4c604a198bc780c2e6c5 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:10:34 -0800
+Subject: [PATCH 0111/1179] MAPREDUCE-968. NPE in distcp encountered when placing _logs directory on S3FileSystem
+
+Description: If distcp is pointed to an empty S3 bucket as the destination for an s3:// filesystem transfer, it will fail with the following exception
+
+<p>Copy failed: java.lang.NullPointerException<br/>
+at org.apache.hadoop.fs.s3.S3FileSystem.makeAbsolute(S3FileSystem.java:121)<br/>
+at org.apache.hadoop.fs.s3.S3FileSystem.getFileStatus(S3FileSystem.java:332)<br/>
+at org.apache.hadoop.fs.FileSystem.exists(FileSystem.java:633)<br/>
+at org.apache.hadoop.tools.DistCp.setup(DistCp.java:1005)<br/>
+at org.apache.hadoop.tools.DistCp.copy(DistCp.java:650)<br/>
+at org.apache.hadoop.tools.DistCp.run(DistCp.java:857)<br/>
+at org.apache.hadoop.util.ToolRunner.run(ToolRunner.java:65)<br/>
+at org.apache.hadoop.util.ToolRunner.run(ToolRunner.java:79)<br/>
+at org.apache.hadoop.tools.DistCp.main(DistCp.java:884) </p>
+Reason: Bugfix
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/tools/org/apache/hadoop/tools/DistCp.java |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
+
+diff --git a/src/tools/org/apache/hadoop/tools/DistCp.java b/src/tools/org/apache/hadoop/tools/DistCp.java
+index b0eb2d1..04b4d06 100644
+--- a/src/tools/org/apache/hadoop/tools/DistCp.java
++++ b/src/tools/org/apache/hadoop/tools/DistCp.java
+@@ -1005,6 +1005,12 @@ public class DistCp implements Tool {
+       String filename = "_distcp_logs_" + randomId;
+       if (!dstExists || !dstIsDir) {
+         Path parent = args.dst.getParent();
++        if (null == parent) {
++          // If dst is '/' on S3, it might not exist yet, but dst.getParent()
++          // will return null. In this case, use '/' as its own parent to prevent
++          // NPE errors below.
++          parent = args.dst;
++        }
+         if (!dstfs.exists(parent)) {
+           dstfs.mkdirs(parent);
+         }
+-- 
+1.7.0.4
+

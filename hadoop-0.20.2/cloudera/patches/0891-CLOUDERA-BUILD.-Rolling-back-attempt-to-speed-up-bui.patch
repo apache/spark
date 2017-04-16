@@ -1,0 +1,24 @@
+From bc52432d9832d82bc4f60166c7c718e65fe63359 Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Fri, 25 Feb 2011 15:31:32 -0800
+Subject: [PATCH 0891/1179] CLOUDERA-BUILD. Rolling back attempt to speed up build by pre-caching artifacts in Maven repo - ended up breaking in non-Maven context.
+
+---
+ ivy/ivysettings.xml |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
+
+diff --git a/ivy/ivysettings.xml b/ivy/ivysettings.xml
+index 81bc7ca..7871d40 100644
+--- a/ivy/ivysettings.xml
++++ b/ivy/ivysettings.xml
+@@ -59,7 +59,6 @@
+       m2compatible="true"
+       />
+     <chain name="default" dual="true">
+-      <resolver ref="reactor-repo" />
+       <resolver ref="local"/>
+       <resolver ref="maven2"/>
+     </chain>
+-- 
+1.7.0.4
+

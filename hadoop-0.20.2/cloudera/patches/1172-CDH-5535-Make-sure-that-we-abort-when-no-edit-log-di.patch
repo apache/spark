@@ -1,0 +1,165 @@
+From 86067db46e4e4c2a5a0fa026907e02d2b755c9be Mon Sep 17 00:00:00 2001
+From: Colin Patrick Mccabe <cmccabe@cloudera.com>
+Date: Thu, 26 Apr 2012 16:21:57 -0700
+Subject: [PATCH 1172/1179] CDH-5535: Make sure that we abort when no edit log directories are left
+
+We should make sure to abort when there are no edit log directories left
+to write to.
+---
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |   26 +++++++++++++------
+ .../hadoop/hdfs/server/namenode/FSImage.java       |   11 +++++++-
+ .../namenode/TestStorageDirectoryFailure.java      |   19 ++++++++++++++
+ 3 files changed, 46 insertions(+), 10 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index 442175b..4614a0f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -32,6 +32,7 @@ import java.io.RandomAccessFile;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Iterator;
++import java.util.LinkedList;
+ import java.lang.Math;
+ import java.nio.channels.FileChannel;
+ import java.nio.ByteBuffer;
+@@ -478,6 +479,7 @@ public class FSEditLog {
+ 
+     File dir = getStorageDirForStream(idx);
+     editStreams.remove(idx);
++    exitIfNoStreams();
+     fsimage.removeStorageDir(dir);
+   }
+   
+@@ -499,6 +501,7 @@ public class FSEditLog {
+         editStreams.remove(idx);
+       }
+     }
++    exitIfNoStreams();
+   }
+   
+   /**
+@@ -1100,9 +1103,9 @@ public class FSEditLog {
+         return;
+       }
+ 
++      exitIfNoStreams();
+       numEditStreams = editStreams.size();
+-      assert numEditStreams > 0 : "no editlog streams";
+-   
++
+       // now, this thread will do the sync
+       syncStart = txid;
+       isSyncRunning = true;   
+@@ -1380,8 +1383,9 @@ public class FSEditLog {
+     //
+     // Open edits.new
+     //
+-    boolean failedSd = false;
+     Iterator<StorageDirectory> it = fsimage.dirIterator(NameNodeDirType.EDITS);
++    LinkedList<StorageDirectory> toRemove =
++        new LinkedList<StorageDirectory>();
+     while (it.hasNext()) {
+       StorageDirectory sd = it.next();
+       try {
+@@ -1390,14 +1394,20 @@ public class FSEditLog {
+         eStream.create();
+         editStreams.add(eStream);
+       } catch (IOException ioe) {
+-        failedSd = true;
+-        sd.unlock();
+-        removeEditsForStorageDir(sd);
+-        fsimage.updateRemovedDirs(sd, ioe);
++        FSImage.LOG.error("error retrying to reopen storage directory '" +
++            sd.getRoot().getAbsolutePath() + "'", ioe);
++        toRemove.add(sd);
+         it.remove();
+       }
+     }
+-    if (failedSd) {
++    // updateRemovedDirs will abort the NameNode if it removes the last
++    // valid edit log directory.
++    for (StorageDirectory sd : toRemove) {
++      sd.unlock();
++      removeEditsForStorageDir(sd);
++      fsimage.updateRemovedDirs(sd);
++    }
++    if (!toRemove.isEmpty()) {
+       fsimage.incrementCheckpointTime();  // update time for the valid ones
+     }
+     exitIfNoStreams();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index 241bd2e..65dc94d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -225,6 +225,11 @@ public class FSImage extends Storage {
+     removedStorageDirs.add(sd);
+   }
+ 
++  void updateRemovedDirs(StorageDirectory sd) {
++    LOG.warn("Removing storage dir " + sd.getRoot().getPath());
++    removedStorageDirs.add(sd);
++  }
++
+   File getEditFile(StorageDirectory sd) {
+     return getImageFile(sd, NameNodeFile.EDITS);
+   }
+@@ -638,6 +643,7 @@ public class FSImage extends Storage {
+         editLog.removeEditsForStorageDir(sd);
+         updateRemovedDirs(sd, ioe);
+         it.remove();
++        editLog.removeEditsForStorageDir(sd);
+       }
+     }
+     editLog.exitIfNoStreams();
+@@ -656,8 +662,9 @@ public class FSImage extends Storage {
+         } catch (Exception e) {
+           // Ignore
+         }
+-        updateRemovedDirs(sd, null);
++        updateRemovedDirs(sd);
+         it.remove();
++        editLog.removeEditsForStorageDir(sd);
+       }
+     }
+   }
+@@ -1490,7 +1497,7 @@ public class FSImage extends Storage {
+         curFile.delete();
+         if (!ckpt.renameTo(curFile)) {
+           editLog.removeEditsForStorageDir(sd);
+-          updateRemovedDirs(sd, null);
++          updateRemovedDirs(sd);
+           it.remove();
+         }
+       }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageDirectoryFailure.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageDirectoryFailure.java
+index 7ee15ae..505005a 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageDirectoryFailure.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageDirectoryFailure.java
+@@ -198,4 +198,23 @@ public class TestStorageDirectoryFailure {
+     checkFileContents("file0");
+     checkFileContents("file1");
+   }
++
++  @Test
++  /** Test that we abort when there are no valid edit log directories
++   * remaining. */
++  public void testAbortOnNoValidEditDirs() throws IOException {
++    cluster.restartNameNode();
++    assertEquals(0, numRemovedDirs());
++    checkFileCreation("file9");
++    cluster.getNameNode().getFSImage().
++      removeStorageDir(new File(nameDirs.get(0)));
++    cluster.getNameNode().getFSImage().
++      removeStorageDir(new File(nameDirs.get(1)));
++    FSEditLog spyLog = spy(cluster.getNameNode().getFSImage().getEditLog());
++    doNothing().when(spyLog).fatalExit(anyString());
++    cluster.getNameNode().getFSImage().setEditLog(spyLog);
++    cluster.getNameNode().getFSImage().
++      removeStorageDir(new File(nameDirs.get(2)));
++    verify(spyLog, atLeastOnce()).fatalExit(anyString());
++  }
+ }
+-- 
+1.7.0.4
+

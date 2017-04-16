@@ -1,0 +1,257 @@
+From eac5f2a5d51414c8fea6ea9792e21cf85433d017 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 24 Sep 2009 16:06:26 -0700
+Subject: [PATCH 0361/1179] MAPREDUCE-945. Modifies MRBench and TestMapRed to use ToolRunner so that options such as queue name can be passed via command line.
+
+Patch: http://issues.apache.org/jira/secure/attachment/12418910/mapreduce-945-internal-3.8.patch.txt
+Author: Sreekanth Ramakrishnan
+Ref: YDH
+---
+ src/test/org/apache/hadoop/mapred/MRBench.java    |   26 +++++---
+ src/test/org/apache/hadoop/mapred/TestMapRed.java |   71 ++++++++++++++++-----
+ 2 files changed, 72 insertions(+), 25 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/mapred/MRBench.java b/src/test/org/apache/hadoop/mapred/MRBench.java
+index f9d9e98..9800bc5 100644
+--- a/src/test/org/apache/hadoop/mapred/MRBench.java
++++ b/src/test/org/apache/hadoop/mapred/MRBench.java
+@@ -26,16 +26,19 @@ import java.util.Random;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configured;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.UTF8;
+ import org.apache.hadoop.io.WritableComparable;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.util.Tool;
++import org.apache.hadoop.util.ToolRunner;
+ 
+ /**
+  * Runs a job multiple times and takes average of all runs.
+  */
+-public class MRBench {
++public class MRBench extends Configured implements Tool{
+   
+   private static final Log LOG = LogFactory.getLog(MRBench.class);
+   private static Path BASE_DIR =
+@@ -87,7 +90,7 @@ public class MRBench {
+    * an appropriate number of leading '0' (zero) characters.  The order of
+    * generated data is one of ascending, descending, or random.
+    */
+-  public static void generateTextFile(FileSystem fs, Path inputFile, 
++  public void generateTextFile(FileSystem fs, Path inputFile, 
+                                       long numLines, Order sortOrder) throws IOException 
+   {
+     LOG.info("creating control file: "+numLines+" numLines, "+sortOrder+" sortOrder");
+@@ -137,8 +140,9 @@ public class MRBench {
+   /**
+    * Create the job configuration.
+    */
+-  private static JobConf setupJob(int numMaps, int numReduces, String jarFile) {
+-    JobConf jobConf = new JobConf(MRBench.class);
++  private JobConf setupJob(int numMaps, int numReduces, String jarFile) {
++    JobConf jobConf = new JobConf(getConf());
++    jobConf.setJarByClass(MRBench.class);
+     FileInputFormat.addInputPath(jobConf, INPUT_DIR);
+     
+     jobConf.setInputFormat(TextInputFormat.class);
+@@ -165,8 +169,7 @@ public class MRBench {
+    * Runs a MapReduce task, given number of times. The input to each run
+    * is the same file.
+    */
+-  private static ArrayList<Long> runJobInSequence(JobConf masterJobConf, int numRuns) throws IOException {
+-    Path intrimData = null; 
++  private ArrayList<Long> runJobInSequence(JobConf masterJobConf, int numRuns) throws IOException {
+     Random rand = new Random();
+     ArrayList<Long> execTimes = new ArrayList<Long>(); 
+     
+@@ -204,7 +207,13 @@ public class MRBench {
+    *    [-verbose]
+    * </pre>
+    */
+-  public static void main (String[] args) throws IOException {
++  public static void main (String[] args) throws Exception {
++    int res = ToolRunner.run(new MRBench(), args);
++    System.exit(res);
++  }
++
++  @Override
++  public int run(String[] args) throws Exception {
+     String version = "MRBenchmark.0.0.2";
+     System.out.println(version);
+ 
+@@ -265,7 +274,7 @@ public class MRBench {
+         inputSortOrder == null)
+       {
+         System.err.println(usage);
+-        System.exit(-1);
++        return -1;
+       }
+ 
+     JobConf jobConf = setupJob(numMaps, numReduces, jarFile);
+@@ -303,6 +312,7 @@ public class MRBench {
+     System.out.println("DataLines\tMaps\tReduces\tAvgTime (milliseconds)");
+     System.out.println(inputLines + "\t\t" + numMaps + "\t" + 
+                        numReduces + "\t" + avgTime);
++    return 0;
+   }
+   
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/TestMapRed.java b/src/test/org/apache/hadoop/mapred/TestMapRed.java
+index 665dc33..839446d 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMapRed.java
++++ b/src/test/org/apache/hadoop/mapred/TestMapRed.java
+@@ -31,6 +31,7 @@ import java.util.Random;
+ import junit.framework.TestCase;
+ 
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.conf.Configured;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+@@ -43,6 +44,9 @@ import org.apache.hadoop.io.WritableComparable;
+ import org.apache.hadoop.io.SequenceFile.CompressionType;
+ import org.apache.hadoop.mapred.lib.IdentityMapper;
+ import org.apache.hadoop.mapred.lib.IdentityReducer;
++import org.apache.hadoop.util.Tool;
++import org.apache.hadoop.util.ToolRunner;
++
+ 
+ /**********************************************************
+  * MapredLoadTest generates a bunch of work that exercises
+@@ -77,7 +81,7 @@ import org.apache.hadoop.mapred.lib.IdentityReducer;
+  * 7) A mapred job integrates all the count files into a single one.
+  *
+  **********************************************************/
+-public class TestMapRed extends TestCase {
++public class TestMapRed extends TestCase implements Tool {
+   /**
+    * Modified to make it a junit test.
+    * The RandomGen Job does the actual work of creating
+@@ -248,6 +252,7 @@ public class TestMapRed extends TestCase {
+      }
+   **/
+ 
++  
+   public void testMapred() throws Exception {
+     launch();
+   }
+@@ -314,6 +319,7 @@ public class TestMapRed extends TestCase {
+     }
+   }
+ 
++  
+   public void testPartitioner() throws Exception {
+     JobConf conf = new JobConf(TestMapRed.class);
+     conf.setPartitionerClass(BadPartitioner.class);
+@@ -363,6 +369,7 @@ public class TestMapRed extends TestCase {
+     public void close() { }
+   }
+ 
++  
+   public void testNullKeys() throws Exception {
+     JobConf conf = new JobConf(TestMapRed.class);
+     FileSystem fs = FileSystem.getLocal(conf);
+@@ -454,7 +461,8 @@ public class TestMapRed extends TestCase {
+       fs.delete(testdir, true);
+     }
+   }
+-    
++  
++   
+   public void testCompression() throws Exception {
+     EnumSet<SequenceFile.CompressionType> seq =
+       EnumSet.allOf(SequenceFile.CompressionType.class);
+@@ -470,11 +478,19 @@ public class TestMapRed extends TestCase {
+   /**
+    * 
+    */
+-  public static void launch() throws Exception {
++  public void launch() throws Exception {
+     //
+     // Generate distribution of ints.  This is the answer key.
+     //
+-    JobConf conf = new JobConf(TestMapRed.class);
++    JobConf conf = null;
++    //Check to get configuration and check if it is configured thro' Configured
++    //interface. This would happen when running testcase thro' command line.
++    if(getConf() == null) {
++      conf = new JobConf();
++    } else {
++      conf = new JobConf(getConf());
++    }
++    conf.setJarByClass(TestMapRed.class);
+     int countsToGo = counts;
+     int dist[] = new int[range];
+     for (int i = 0; i < range; i++) {
+@@ -736,23 +752,15 @@ public class TestMapRed extends TestCase {
+    * Launches all the tasks in order.
+    */
+   public static void main(String[] argv) throws Exception {
+-    if (argv.length < 2) {
+-      System.err.println("Usage: TestMapRed <range> <counts>");
+-      System.err.println();
+-      System.err.println("Note: a good test will have a <counts> value that is substantially larger than the <range>");
+-      return;
+-    }
+-
+-    int i = 0;
+-    range = Integer.parseInt(argv[i++]);
+-    counts = Integer.parseInt(argv[i++]);
+-    launch();
++    int res = ToolRunner.run(new TestMapRed(), argv);
++    System.exit(res);
+   }
+     
+   public void testSmallInput(){
+     runJob(100);
+   }
+-
++  
++  
+   public void testBiggerInput(){
+     runJob(1000);
+   }
+@@ -799,7 +807,36 @@ public class TestMapRed extends TestCase {
+ 
+       JobClient.runJob(conf);
+     } catch (Exception e) {
+-      fail("Threw exception:" + e);
++      assertTrue("Threw exception:" + e,false);
++    }
++  }
++
++  @Override
++  public int run(String[] argv) throws Exception {
++    if (argv.length < 2) {
++      System.err.println("Usage: TestMapRed <range> <counts>");
++      System.err.println();
++      System.err.println("Note: a good test will have a " +
++      		"<counts> value that is substantially larger than the <range>");
++      return -1;
+     }
++
++    int i = 0;
++    range = Integer.parseInt(argv[i++]);
++    counts = Integer.parseInt(argv[i++]);
++    launch();
++    return 0;
++  }
++
++  Configuration myConf = null;
++  
++  @Override
++  public Configuration getConf() {
++    return myConf;
++  }
++
++  @Override
++  public void setConf(Configuration conf) {
++    myConf = conf;
+   }
+ }
+-- 
+1.7.0.4
+

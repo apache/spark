@@ -1,0 +1,176 @@
+From e0934a30d7f6a3adb2b9b2f534eefda9a4ece41d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 14 Feb 2011 23:31:13 -0800
+Subject: [PATCH 0876/1179] HADOOP-7140. IPC Reader threads should stop when server stops
+
+Reason: bug preventing TT from shutting down when build version is incompatible
+Author: Todd Lipcon
+Ref: CDH-2634
+---
+ src/core/org/apache/hadoop/ipc/Server.java  |   28 ++++++++++----
+ src/test/org/apache/hadoop/ipc/TestRPC.java |   52 +++++++++++++++++++++++++++
+ 2 files changed, 72 insertions(+), 8 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 438e9df..c0d5582 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -308,7 +308,6 @@ public abstract class Server {
+     private long cleanupInterval = 10000; //the minimum interval between 
+                                           //two cleanup runs
+     private int backlogLength = conf.getInt("ipc.server.listen.queue.size", 128);
+-    private ExecutorService readPool; 
+    
+     public Listener() throws IOException {
+       address = new InetSocketAddress(bindAddress, port);
+@@ -322,12 +321,12 @@ public abstract class Server {
+       // create a selector;
+       selector= Selector.open();
+       readers = new Reader[readThreads];
+-      readPool = Executors.newFixedThreadPool(readThreads);
+       for (int i = 0; i < readThreads; i++) {
+         Selector readSelector = Selector.open();
+-        Reader reader = new Reader(readSelector);
++        Reader reader = new Reader("Socket Reader #" + (i + 1) + " for port " + port,
++                                   readSelector);
+         readers[i] = reader;
+-        readPool.execute(reader);
++        reader.start();
+       }
+ 
+       // Register accepts on the server socket with the selector.
+@@ -336,15 +335,16 @@ public abstract class Server {
+       this.setDaemon(true);
+     }
+     
+-    private class Reader implements Runnable {
++    private class Reader extends Thread {
+       private volatile boolean adding = false;
+       private Selector readSelector = null;
+ 
+-      Reader(Selector readSelector) {
++      Reader(String name, Selector readSelector) {
++        super(name);
+         this.readSelector = readSelector;
+       }
+       public void run() {
+-        LOG.info("Starting SocketReader");
++        LOG.info("Starting " + getName());
+         synchronized (this) {
+           while (running) {
+             SelectionKey key = null;
+@@ -398,6 +398,16 @@ public abstract class Server {
+         adding = false;
+         this.notify();        
+       }
++
++      void shutdown() {
++        assert !running;
++        readSelector.wakeup();
++        try {
++          join();
++        } catch (InterruptedException ie) {
++          Thread.currentThread().interrupt();
++        }
++      }
+     }
+ 
+     /** cleanup connections from connectionList. Choose a random range
+@@ -586,7 +596,9 @@ public abstract class Server {
+           LOG.info(getName() + ":Exception in closing listener socket. " + e);
+         }
+       }
+-      readPool.shutdown();
++      for (Reader r : readers) {
++        r.shutdown();
++      }
+     }
+ 
+     // The method that will return the next reader to work with
+diff --git a/src/test/org/apache/hadoop/ipc/TestRPC.java b/src/test/org/apache/hadoop/ipc/TestRPC.java
+index a3035c3..95e8921 100644
+--- a/src/test/org/apache/hadoop/ipc/TestRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestRPC.java
+@@ -21,6 +21,9 @@ package org.apache.hadoop.ipc;
+ import java.io.IOException;
+ import java.net.ConnectException;
+ import java.net.InetSocketAddress;
++import java.lang.management.ManagementFactory;
++import java.lang.management.ThreadInfo;
++import java.lang.management.ThreadMXBean;
+ import java.lang.reflect.Method;
+ 
+ import junit.framework.TestCase;
+@@ -432,6 +435,8 @@ public class TestRPC extends TestCase {
+ 
+     server.start();
+ 
++    try {
++
+     int numConcurrentRPC = 200;
+     InetSocketAddress addr = NetUtils.getConnectAddress(server);
+     final CyclicBarrier barrier = new CyclicBarrier(numConcurrentRPC);
+@@ -485,6 +490,10 @@ public class TestRPC extends TestCase {
+     
+     // should not cause any other thread to get an error
+     assertNull("rpc got ClosedChannelException", error.get());
++
++    } finally {
++      server.stop();
++    }
+   }
+ 
+   public void testNoPings() throws Exception {
+@@ -496,6 +505,49 @@ public class TestRPC extends TestCase {
+     conf.setInt(CommonConfigurationKeys.IPC_SERVER_RPC_READ_THREADS_KEY, 2);
+     new TestRPC("testnoPings").testCalls(conf);
+   }
++
++  /**
++   * Count the number of threads that have a stack frame containing
++   * the given string
++   */
++  private static int countThreads(String search) {
++    ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
++
++    int count = 0;
++    ThreadInfo[] infos = threadBean.getThreadInfo(threadBean.getAllThreadIds(), 20);
++    for (ThreadInfo info : infos) {
++      if (info == null) continue;
++      for (StackTraceElement elem : info.getStackTrace()) {
++        if (elem.getClassName().contains(search)) {
++          count++;
++          break;
++        }
++      }
++    }
++    return count;
++  }
++
++
++  /**
++   * Test that server.stop() properly stops all threads
++   */
++  public void testStopsAllThreads() throws Exception {
++    int threadsBefore = countThreads("Server$Listener$Reader");
++    assertEquals("Expect no Reader threads running before test",
++      0, threadsBefore);
++
++    final Server server = RPC.getServer(new TestImpl(), ADDRESS, 0, 2, false, conf);
++    server.start();
++    try {
++      int threadsRunning = countThreads("Server$Listener$Reader");
++      assertTrue(threadsRunning > 0);
++    } finally {
++      server.stop();
++    }
++    int threadsAfter = countThreads("Server$Listener$Reader");
++    assertEquals("Expect no Reader threads left running after test",
++      0, threadsAfter);
++  }
+   
+   public void testErrorMsgForInsecureClient() throws Exception {
+     final Server server = RPC.getServer(
+-- 
+1.7.0.4
+

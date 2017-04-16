@@ -1,0 +1,371 @@
+From 936a67ba3b34dc8c8efd3df92d9e50309fafb8f6 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Mon, 29 Mar 2010 23:50:14 -0700
+Subject: [PATCH 0236/1179] MAPREDUCE-1460. Oracle support in DataDrivenDBInputFormat
+
+Description: DataDrivenDBInputFormat does not work with Oracle due to various SQL syntax issues.
+Reason: Required for Sqoop/Oracle integration
+Author: Aaron Kimball
+Ref: CDH-888
+---
+ .../mapreduce/lib/db/DataDrivenDBInputFormat.java  |   11 ++-
+ .../mapreduce/lib/db/DataDrivenDBRecordReader.java |   13 +++-
+ .../hadoop/mapreduce/lib/db/DateSplitter.java      |   23 ++++--
+ .../lib/db/MySQLDataDrivenDBRecordReader.java      |    2 +-
+ .../mapreduce/lib/db/OracleDBRecordReader.java     |    7 +-
+ .../lib/db/OracleDataDrivenDBInputFormat.java      |   89 ++++++++++++++++++++
+ .../lib/db/OracleDataDrivenDBRecordReader.java     |   45 ++++++++++
+ .../mapreduce/lib/db/OracleDateSplitter.java       |   37 ++++++++
+ 8 files changed, 211 insertions(+), 16 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDataDrivenDBInputFormat.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDataDrivenDBRecordReader.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDateSplitter.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java
+index 7e3ca4f..836cb99 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java
+@@ -264,18 +264,21 @@ public class DataDrivenDBInputFormat<T extends DBWritable>
+     Class<T> inputClass = (Class<T>) (dbConf.getInputClass());
+     String dbProductName = getDBProductName();
+ 
++    LOG.debug("Creating db record reader for db product: " + dbProductName);
++
+     try {
+       // use database product name to determine appropriate record reader.
+       if (dbProductName.startsWith("MYSQL")) {
+         // use MySQL-specific db reader.
+         return new MySQLDataDrivenDBRecordReader<T>(split, inputClass,
+-            conf, getConnection(), dbConf, dbConf.getInputConditions(), dbConf.getInputFieldNames(),
+-            dbConf.getInputTableName());
++            conf, getConnection(), dbConf, dbConf.getInputConditions(),
++            dbConf.getInputFieldNames(), dbConf.getInputTableName());
+       } else {
+         // Generic reader.
+         return new DataDrivenDBRecordReader<T>(split, inputClass,
+-            conf, getConnection(), dbConf, dbConf.getInputConditions(), dbConf.getInputFieldNames(),
+-            dbConf.getInputTableName());
++            conf, getConnection(), dbConf, dbConf.getInputConditions(),
++            dbConf.getInputFieldNames(), dbConf.getInputTableName(),
++            dbProductName);
+       }
+     } catch (SQLException ex) {
+       throw new IOException(ex.getMessage());
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBRecordReader.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBRecordReader.java
+index 0533e6d..ebb83f0 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBRecordReader.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBRecordReader.java
+@@ -54,15 +54,18 @@ public class DataDrivenDBRecordReader<T extends DBWritable> extends DBRecordRead
+ 
+   private static final Log LOG = LogFactory.getLog(DataDrivenDBRecordReader.class);
+ 
++  private String dbProductName; // database manufacturer string.
++
+   /**
+    * @param split The InputSplit to read data for
+    * @throws SQLException 
+    */
+   public DataDrivenDBRecordReader(DBInputFormat.DBInputSplit split,
+       Class<T> inputClass, Configuration conf, Connection conn, DBConfiguration dbConfig,
+-      String cond, String [] fields, String table)
++      String cond, String [] fields, String table, String dbProduct)
+       throws SQLException {
+     super(split, inputClass, conf, conn, dbConfig, cond, fields, table);
++    this.dbProductName = dbProduct;
+   }
+ 
+   /** Returns the query for selecting the records,
+@@ -96,7 +99,11 @@ public class DataDrivenDBRecordReader<T extends DBWritable> extends DBRecordRead
+       }
+ 
+       query.append(" FROM ").append(tableName);
+-      query.append(" AS ").append(tableName); //in hsqldb this is necessary
++      if (!dbProductName.startsWith("ORACLE")) {
++        // Seems to be necessary for hsqldb? Oracle explicitly does *not*
++        // use this clause.
++        query.append(" AS ").append(tableName);
++      }
+       query.append(" WHERE ");
+       if (conditions != null && conditions.length() > 0) {
+         // Put the user's conditions first.
+@@ -119,6 +126,8 @@ public class DataDrivenDBRecordReader<T extends DBWritable> extends DBRecordRead
+           conditionClauses.toString()));
+     }
+ 
++    LOG.debug("Using query: " + query.toString());
++
+     return query.toString();
+   }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DateSplitter.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DateSplitter.java
+index 31b909d..42ce9b5 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DateSplitter.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DateSplitter.java
+@@ -52,8 +52,8 @@ public class DateSplitter extends IntegerSplitter {
+     minVal = resultSetColToLong(results, 1, sqlDataType);
+     maxVal = resultSetColToLong(results, 2, sqlDataType);
+ 
+-    String lowClausePrefix = colName + " >= '";
+-    String highClausePrefix = colName + " < '";
++    String lowClausePrefix = colName + " >= ";
++    String highClausePrefix = colName + " < ";
+ 
+     int numSplits = conf.getInt("mapred.map.tasks", 1);
+     if (numSplits < 1) {
+@@ -99,13 +99,13 @@ public class DateSplitter extends IntegerSplitter {
+         }
+         // This is the last one; use a closed interval.
+         splits.add(new DataDrivenDBInputFormat.DataDrivenDBInputSplit(
+-            lowClausePrefix + startDate.toString() + "'",
+-            colName + " <= '" + endDate.toString() + "'"));
++            lowClausePrefix + dateToString(startDate),
++            colName + " <= " + dateToString(endDate)));
+       } else {
+         // Normal open-interval case.
+         splits.add(new DataDrivenDBInputFormat.DataDrivenDBInputSplit(
+-            lowClausePrefix + startDate.toString() + "'",
+-            highClausePrefix + endDate.toString() + "'"));
++            lowClausePrefix + dateToString(startDate),
++            highClausePrefix + dateToString(endDate)));
+       }
+ 
+       start = end;
+@@ -159,4 +159,15 @@ public class DateSplitter extends IntegerSplitter {
+       return null;
+     }
+   }
++
++  /**
++   * Given a Date 'd', format it as a string for use in a SQL date
++   * comparison operation.
++   * @param d the date to format.
++   * @return the string representing this date in SQL with any appropriate
++   * quotation characters, etc.
++   */
++  protected String dateToString(Date d) {
++    return "'" + d.toString() + "'";
++  }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/MySQLDataDrivenDBRecordReader.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/MySQLDataDrivenDBRecordReader.java
+index e1335c8..fb78422 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/MySQLDataDrivenDBRecordReader.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/MySQLDataDrivenDBRecordReader.java
+@@ -34,7 +34,7 @@ public class MySQLDataDrivenDBRecordReader<T extends DBWritable>
+   public MySQLDataDrivenDBRecordReader(DBInputFormat.DBInputSplit split,
+       Class<T> inputClass, Configuration conf, Connection conn, DBConfiguration dbConfig,
+       String cond, String [] fields, String table) throws SQLException {
+-    super(split, inputClass, conf, conn, dbConfig, cond, fields, table);
++    super(split, inputClass, conf, conn, dbConfig, cond, fields, table, "MYSQL");
+   }
+ 
+   // Execute statements for mysql in unbuffered mode.
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDBRecordReader.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDBRecordReader.java
+index db6bc9e..516147e 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDBRecordReader.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDBRecordReader.java
+@@ -99,9 +99,10 @@ public class OracleDBRecordReader<T extends DBWritable> extends DBRecordReader<T
+    * @param conn      Connection object
+    * @throws          SQLException instance
+    */
+-  private void setSessionTimeZone(Connection conn) throws SQLException {
+-    // need to use reflection to call the method setSessionTimeZone on the OracleConnection class
+-    // because oracle specific java libraries are not accessible in this context
++  public static void setSessionTimeZone(Connection conn) throws SQLException {
++    // need to use reflection to call the method setSessionTimeZone on
++    // the OracleConnection class because oracle specific java libraries are
++    // not accessible in this context.
+     Method method;
+     try {
+       method = conn.getClass().getMethod(
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDataDrivenDBInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDataDrivenDBInputFormat.java
+new file mode 100644
+index 0000000..1cd0c17
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDataDrivenDBInputFormat.java
+@@ -0,0 +1,89 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.db;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++import java.sql.Connection;
++import java.sql.DatabaseMetaData;
++import java.sql.PreparedStatement;
++import java.sql.ResultSet;
++import java.sql.SQLException;
++import java.sql.Statement;
++import java.sql.Types;
++import java.util.ArrayList;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++import org.apache.hadoop.io.LongWritable;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.mapreduce.InputFormat;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.RecordReader;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++import org.apache.hadoop.util.ReflectionUtils;
++import org.apache.hadoop.conf.Configurable;
++import org.apache.hadoop.conf.Configuration;
++
++/**
++ * A InputFormat that reads input data from an SQL table in an Oracle db.
++ */
++public class OracleDataDrivenDBInputFormat<T extends DBWritable>
++    extends DataDrivenDBInputFormat<T> implements Configurable {
++
++  /**
++   * @return the DBSplitter implementation to use to divide the table/query into InputSplits.
++   */
++  @Override
++  protected DBSplitter getSplitter(int sqlDataType) {
++    switch (sqlDataType) {
++    case Types.DATE:
++    case Types.TIME:
++    case Types.TIMESTAMP:
++      return new OracleDateSplitter();
++
++    default:
++      return super.getSplitter(sqlDataType);
++    }
++  }
++
++  @Override
++  protected RecordReader<LongWritable, T> createDBRecordReader(DBInputSplit split,
++      Configuration conf) throws IOException {
++
++    DBConfiguration dbConf = getDBConf();
++    @SuppressWarnings("unchecked")
++    Class<T> inputClass = (Class<T>) (dbConf.getInputClass());
++
++    try {
++      // Use Oracle-specific db reader
++      return new OracleDataDrivenDBRecordReader<T>(split, inputClass,
++          conf, getConnection(), dbConf, dbConf.getInputConditions(),
++          dbConf.getInputFieldNames(), dbConf.getInputTableName());
++    } catch (SQLException ex) {
++      throw new IOException(ex.getMessage());
++    }
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDataDrivenDBRecordReader.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDataDrivenDBRecordReader.java
+new file mode 100644
+index 0000000..e383db2
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDataDrivenDBRecordReader.java
+@@ -0,0 +1,45 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.db;
++
++import java.sql.Connection;
++import java.sql.ResultSet;
++import java.sql.PreparedStatement;
++import java.sql.SQLException;
++
++import org.apache.hadoop.conf.Configuration;
++
++/**
++ * A RecordReader that reads records from a Oracle table via DataDrivenDBRecordReader
++ */
++public class OracleDataDrivenDBRecordReader<T extends DBWritable>
++    extends DataDrivenDBRecordReader<T> {
++
++  public OracleDataDrivenDBRecordReader(DBInputFormat.DBInputSplit split,
++      Class<T> inputClass, Configuration conf, Connection conn,
++      DBConfiguration dbConfig, String cond, String [] fields,
++      String table) throws SQLException {
++
++    super(split, inputClass, conf, conn, dbConfig, cond, fields, table,
++        "ORACLE");
++
++    // Must initialize the tz used by the connection for Oracle.
++    OracleDBRecordReader.setSessionTimeZone(conn);
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDateSplitter.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDateSplitter.java
+new file mode 100644
+index 0000000..e7ad1f7
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/OracleDateSplitter.java
+@@ -0,0 +1,37 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.db;
++
++import java.util.Date;
++
++/**
++ * Implement DBSplitter over date/time values returned by an Oracle db.
++ * Make use of logic from DateSplitter, since this just needs to use
++ * some Oracle-specific functions on the formatting end when generating
++ * InputSplits.
++ */
++public class OracleDateSplitter extends DateSplitter {
++
++  @SuppressWarnings("unchecked")
++  @Override
++  protected String dateToString(Date d) {
++    // Oracle Data objects are always actually Timestamps
++    return "TO_TIMESTAMP('" + d.toString() + "', 'YYYY-MM-DD HH24:MI:SS.FF')";
++  }
++}
+-- 
+1.7.0.4
+

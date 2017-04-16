@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<compositeCheatsheet name="IBM MapReduce Tools for Eclipse">
+	<taskGroup name="Develop Hadoop Applications" kind="set">
+		<intro
+			href="http://www.alphaworks.ibm.com/tech/mapreducetools">
+			IBM(R) MapReduce Tools for Eclipse enables you to write
+			distributed applications based on the MapReduce paradigm
+			using the Apache Hadoop runtime. This cheat sheet will walk
+			you through the steps needed to write a MapReduce
+			application and run it on a Hadoop server.
+		</intro>
+		<onCompletion>
+
+		</onCompletion>
+		<taskGroup name="Initial Setup" kind="sequence" skip="true">
+			<intro>
+				This task takes you through the steps to setup the
+				Hadoop environment with the MapReduce Tools. If you
+				already have Hadoop installed and linked to Eclipse, you
+				can skip this task.
+			</intro>
+			<onCompletion>
+				Congratulations! You have now installed Hadoop on your
+				computer and linked it with the MapReduce Tools.
+			</onCompletion>
+			<task kind="cheatsheet"
+				name="Download and unzip Apache Hadoop distribution">
+				<intro>
+					Hadoop must be downloaded to a place where Eclipse
+					can access its libraries. This task covers the steps
+					needed to execute this task.
+				</intro>
+				<param name="showIntro" value="false" />
+				<param name="path" value="Setup.xml" />
+				<onCompletion>
+					The plugin currently supports Hadoop v0.7.2 through
+					0.12.2. Now click on the top-most link that you feel
+					comfortable installing.
+				</onCompletion>
+			</task>
+			<task kind="cheatsheet"
+				name="Specify path to Apache Hadoop distribution">
+				...
+				<intro>
+					This tutorial informs you how to set the default
+					Hadoop directory for the plugin.
+				</intro>
+				<param name="showIntro" value="false" />
+			 	<param name="path" value="SetHadoopPath.xml" />
+			</task>
+		</taskGroup>
+		<taskGroup name="Create and run a MapReduce project"
+			kind="sequence" skip="true">
+			<intro>
+				This section walks you through the steps to create and
+				run your MapReduce project.
+			</intro>
+
+			<task kind="cheatsheet" name="Create a MapReduce project"
+				skip="true">
+				<intro>
+					This tutorial guides you through the creation of a
+					simple MapReduce project with three MapReduce
+					classes: a Mapper, a Reducer, and a Driver.
+				</intro>
+				<param name="showIntro" value="false" />
+				<param name="path" value="CreateProj.xml" />
+				<onCompletion>
+					Congratulations! You have now mastered the steps for
+					creating a Hadoop project.
+				</onCompletion>
+			</task>
+			<task kind="cheatsheet"
+				name="Run a MapReduce application">
+				<param name="path" value="RunProj.xml" />
+				<onCompletion>
+					Congratulations! You have now mastered the steps for
+					implementing a Hadoop application.
+				</onCompletion>
+			</task>
+
+		</taskGroup>
+
+		<taskGroup name="Using a MapReduce cluster" kind="set"
+			skip="true">
+			<intro>
+				The MapReduce Tools for Eclipse plugin lets you 
+				browse and upload files to the DFS of a MapReduce cluster.
+			</intro>
+			<onCompletion>
+				Congratulations!  You have completed the tutorials on using a
+				MapReduce Cluster.
+			</onCompletion>
+			<task kind="cheatsheet"
+				name="Connect to a MapReduce cluster" skip="true">
+				<intro>
+					This tutorial explains how to show files in the DFS of a
+					MapReduce cluster.
+				</intro>
+				<param name="showIntro" value="false" />
+				<param name="path" value="ConnectDFS.xml" />
+			</task>
+			<task kind="cheatsheet" id="viewFiles"
+				name="Viewing file contents on the Hadoop Distributed File System (HDFS)">
+				<intro>
+					Simply double-click on any file in the DFS in the Project
+					Explorer view.
+				</intro>
+			</task>
+			<task kind="cheatsheet" 
+				name="Transfer files to the Hadoop Distributed File System (HDFS)">
+				<intro>
+					Right-click on an existing directory in the DFS.<br />
+					Choose the <b>Import from local directory option.</b>
+					<br />
+					Note that files can only be uploaded to the HDFS at this time.
+				</intro>
+			</task>
+		</taskGroup>
+	</taskGroup>
+</compositeCheatsheet>

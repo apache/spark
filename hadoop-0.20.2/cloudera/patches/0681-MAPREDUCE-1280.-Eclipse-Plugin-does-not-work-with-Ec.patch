@@ -1,0 +1,54 @@
+From b839ebbb2f517eb57930dbe8ed40afc5307dbe3a Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 2 Sep 2010 16:07:47 -0700
+Subject: [PATCH 0681/1179] MAPREDUCE-1280. Eclipse Plugin does not work with Eclipse Ganymede (3.4).
+
+Reason: Bug
+Author: Alex Kozlov
+Ref: CDH-537
+---
+ .../launch/HadoopApplicationLaunchShortcut.java    |    4 ++--
+ .../hadoop/eclipse/servers/RunOnHadoopWizard.java  |    4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/contrib/eclipse-plugin/src/java/org/apache/hadoop/eclipse/launch/HadoopApplicationLaunchShortcut.java b/src/contrib/eclipse-plugin/src/java/org/apache/hadoop/eclipse/launch/HadoopApplicationLaunchShortcut.java
+index 3297c64..0d9e546 100644
+--- a/src/contrib/eclipse-plugin/src/java/org/apache/hadoop/eclipse/launch/HadoopApplicationLaunchShortcut.java
++++ b/src/contrib/eclipse-plugin/src/java/org/apache/hadoop/eclipse/launch/HadoopApplicationLaunchShortcut.java
+@@ -32,7 +32,7 @@ import org.eclipse.debug.core.ILaunchConfigurationWorkingCopy;
+ import org.eclipse.jdt.core.IJavaProject;
+ import org.eclipse.jdt.core.IType;
+ import org.eclipse.jdt.core.JavaCore;
+-import org.eclipse.jdt.internal.debug.ui.launcher.JavaApplicationLaunchShortcut;
++import org.eclipse.jdt.debug.ui.launchConfigurations.JavaApplicationLaunchShortcut;
+ import org.eclipse.jdt.launching.IJavaLaunchConfigurationConstants;
+ import org.eclipse.jdt.launching.IRuntimeClasspathEntry;
+ import org.eclipse.jdt.launching.JavaRuntime;
+@@ -64,7 +64,7 @@ public class HadoopApplicationLaunchShortcut extends
+     // Find an existing or create a launch configuration (Standard way)
+     ILaunchConfiguration iConf =
+         super.findLaunchConfiguration(type, configType);
+-
++    if (iConf == null) iConf = super.createConfiguration(type);
+     ILaunchConfigurationWorkingCopy iConfWC;
+     try {
+       /*
+diff --git a/src/contrib/eclipse-plugin/src/java/org/apache/hadoop/eclipse/servers/RunOnHadoopWizard.java b/src/contrib/eclipse-plugin/src/java/org/apache/hadoop/eclipse/servers/RunOnHadoopWizard.java
+index a080510..04eb4bf 100644
+--- a/src/contrib/eclipse-plugin/src/java/org/apache/hadoop/eclipse/servers/RunOnHadoopWizard.java
++++ b/src/contrib/eclipse-plugin/src/java/org/apache/hadoop/eclipse/servers/RunOnHadoopWizard.java
+@@ -159,9 +159,9 @@ public class RunOnHadoopWizard extends Wizard {
+ 
+     // Write it to the disk file
+     try {
+-      // File confFile = File.createTempFile("hadoop-site-", ".xml",
++      // File confFile = File.createTempFile("core-site-", ".xml",
+       // confDir);
+-      File confFile = new File(confDir, "hadoop-site.xml");
++      File confFile = new File(confDir, "core-site.xml");
+       FileOutputStream fos = new FileOutputStream(confFile);
+       conf.writeXml(fos);
+       fos.close();
+-- 
+1.7.0.4
+

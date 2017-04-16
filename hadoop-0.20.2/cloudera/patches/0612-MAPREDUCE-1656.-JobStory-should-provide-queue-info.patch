@@ -1,0 +1,96 @@
+From 457cf14f7168bacd185c03c9afc8527210e06410 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 16 Apr 2010 14:35:38 -0700
+Subject: [PATCH 0612/1179] MAPREDUCE-1656. JobStory should provide queue info.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12441905/mr-1656-yhadoop-20.1xx.patch.
+Author: Hong Tang
+Ref: YDH
+---
+ .../apache/hadoop/mapred/gridmix/JobFactory.java   |    3 +++
+ .../hadoop/mapred/gridmix/DebugJobProducer.java    |    6 ++++++
+ .../org/apache/hadoop/tools/rumen/JobStory.java    |    6 ++++++
+ .../org/apache/hadoop/tools/rumen/ZombieJob.java   |    7 +++++++
+ 4 files changed, 22 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobFactory.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobFactory.java
+index 3aaae7a..c66de4c 100644
+--- a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobFactory.java
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobFactory.java
+@@ -161,6 +161,9 @@ abstract class JobFactory<T> implements Gridmix.Component<Void>,StatListener<T>{
+     public Values getOutcome() {
+       return job.getOutcome();
+     }
++    public String getQueueName() {
++      return job.getQueueName();
++    }
+   }
+ 
+   protected abstract Thread createReaderThread() ;
+diff --git a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java
+index 5c4c755..83a300f 100644
+--- a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java
++++ b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java
+@@ -26,6 +26,7 @@ import org.apache.hadoop.tools.rumen.TaskInfo;
+ import org.apache.hadoop.tools.rumen.TaskAttemptInfo;
+ import org.apache.hadoop.tools.rumen.Pre21JobHistoryConstants.Values;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapreduce.JobID;
+ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.mapreduce.InputSplit;
+@@ -287,6 +288,11 @@ public class DebugJobProducer implements JobStoryProducer {
+       throw new UnsupportedOperationException();
+     }
+ 
++    @Override
++    public String getQueueName() {
++      return JobConf.DEFAULT_QUEUE_NAME;
++    }
++    
+     public static void reset() {
+       seq.set(0);
+       timestamp.set(System.currentTimeMillis() - TimeUnit.MILLISECONDS.convert(
+diff --git a/src/tools/org/apache/hadoop/tools/rumen/JobStory.java b/src/tools/org/apache/hadoop/tools/rumen/JobStory.java
+index c5a27d8..36eeeab 100644
+--- a/src/tools/org/apache/hadoop/tools/rumen/JobStory.java
++++ b/src/tools/org/apache/hadoop/tools/rumen/JobStory.java
+@@ -115,4 +115,10 @@ public interface JobStory {
+    * @return The outcome of the job execution.
+    */
+   public Values getOutcome();
++  
++  /**
++   * Get the queue where the job is submitted.
++   * @return the queue where the job is submitted.
++   */
++  public String getQueueName();
+ }
+diff --git a/src/tools/org/apache/hadoop/tools/rumen/ZombieJob.java b/src/tools/org/apache/hadoop/tools/rumen/ZombieJob.java
+index f47c68b..475d416 100644
+--- a/src/tools/org/apache/hadoop/tools/rumen/ZombieJob.java
++++ b/src/tools/org/apache/hadoop/tools/rumen/ZombieJob.java
+@@ -125,6 +125,7 @@ public class ZombieJob implements JobStory {
+       jobConf.setUser(getUser());
+       jobConf.setNumMapTasks(getNumberMaps());
+       jobConf.setNumReduceTasks(getNumberReduces());
++      jobConf.setQueueName(getQueueName());
+     }
+     return jobConf;
+   }
+@@ -252,6 +253,12 @@ public class ZombieJob implements JobStory {
+     return job.getSubmitTime() - job.getRelativeTime();
+   }
+ 
++  @Override
++  public String getQueueName() {
++    String queue = job.getQueue();
++    return (queue == null)? JobConf.DEFAULT_QUEUE_NAME : queue;
++  }
++  
+   /**
+    * Getting the number of map tasks that are actually logged in the trace.
+    * @return The number of map tasks that are actually logged in the trace.
+-- 
+1.7.0.4
+

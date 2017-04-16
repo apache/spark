@@ -1,0 +1,384 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8">
+<meta name="Forrest-skin-name" content="pelt">
+<title>Quotas Guide</title>
+<link type="text/css" href="skin/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="skin/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="skin/print.css" rel="stylesheet">
+<link type="text/css" href="skin/profile.css" rel="stylesheet">
+<script src="skin/getBlank.js" language="javascript" type="text/javascript"></script><script src="skin/getMenu.js" language="javascript" type="text/javascript"></script><script src="skin/fontsize.js" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="images/favicon.ico">
+</head>
+<body onload="init()">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+<a href="http://www.apache.org/">Apache</a> &gt; <a href="http://hadoop.apache.org/">Hadoop</a> &gt; <a href="http://hadoop.apache.org/core/">Core</a><script src="skin/breadcrumbs.js" language="JavaScript" type="text/javascript"></script>
+</div>
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<div class="grouplogo">
+<a href="http://hadoop.apache.org/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo.jpg" title="Apache Hadoop"></a>
+</div>
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogo">
+<a href="http://hadoop.apache.org/core/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo-2.gif" title="Scalable Computing Platform"></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="archive.cloudera.com" name="sitesearch" type="hidden"><input onFocus="getBlank (this, 'Search the site with google');" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://hadoop.apache.org/core/">Project</a>
+</li>
+<li>
+<a class="unselected" href="http://wiki.apache.org/hadoop">Wiki</a>
+</li>
+<li class="current">
+<a class="selected" href="index.html">Hadoop 0.20 Documentation</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu('menu_1.1', 'skin/')" id="menu_1.1Title" class="menutitle">Getting Started</div>
+<div id="menu_1.1" class="menuitemgroup">
+<div class="menuitem">
+<a href="index.html">Overview</a>
+</div>
+<div class="menuitem">
+<a href="single_node_setup.html">Single Node Setup</a>
+</div>
+<div class="menuitem">
+<a href="cluster_setup.html">Cluster Setup</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.2', 'skin/')" id="menu_1.2Title" class="menutitle">Guides</div>
+<div id="menu_1.2" class="menuitemgroup">
+<div class="menuitem">
+<a href="HttpAuthentication.html">Authentication for Hadoop HTTP web-consoles</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.3', 'skin/')" id="menu_1.3Title" class="menutitle">MapReduce</div>
+<div id="menu_1.3" class="menuitemgroup">
+<div class="menuitem">
+<a href="mapred_tutorial.html">MapReduce Tutorial</a>
+</div>
+<div class="menuitem">
+<a href="streaming.html">Hadoop Streaming</a>
+</div>
+<div class="menuitem">
+<a href="commands_manual.html">Hadoop Commands</a>
+</div>
+<div class="menuitem">
+<a href="distcp.html">DistCp</a>
+</div>
+<div class="menuitem">
+<a href="vaidya.html">Vaidya</a>
+</div>
+<div class="menuitem">
+<a href="hadoop_archives.html">Hadoop Archives</a>
+</div>
+<div class="menuitem">
+<a href="gridmix.html">Gridmix</a>
+</div>
+<div class="menuitem">
+<a href="capacity_scheduler.html">Capacity Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="fair_scheduler.html">Fair Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="hod_scheduler.html">Hod Scheduler</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_selected_1.4', 'skin/')" id="menu_selected_1.4Title" class="menutitle" style="background-image: url('skin/images/chapter_open.gif');">HDFS</div>
+<div id="menu_selected_1.4" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="hdfs_user_guide.html">HDFS Users </a>
+</div>
+<div class="menuitem">
+<a href="hdfs_design.html">HDFS Architecture</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_permissions_guide.html">Permissions</a>
+</div>
+<div class="menupage">
+<div class="menupagetitle">Quotas</div>
+</div>
+<div class="menuitem">
+<a href="hdfs_imageviewer.html">Offline Image Viewer Guide</a>
+</div>
+<div class="menuitem">
+<a href="SLG_user_guide.html">Synthetic Load Generator</a>
+</div>
+<div class="menuitem">
+<a href="libhdfs.html">C API libhdfs</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.5', 'skin/')" id="menu_1.5Title" class="menutitle">Common</div>
+<div id="menu_1.5" class="menuitemgroup">
+<div class="menuitem">
+<a href="file_system_shell.html">File System Shell</a>
+</div>
+<div class="menuitem">
+<a href="service_level_auth.html">Service Level Authorization</a>
+</div>
+<div class="menuitem">
+<a href="native_libraries.html">Native Libraries</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.6', 'skin/')" id="menu_1.6Title" class="menutitle">Miscellaneous</div>
+<div id="menu_1.6" class="menuitemgroup">
+<div class="menuitem">
+<a href="Secure_Impersonation.html">Secure Impersonation</a>
+</div>
+<div class="menuitem">
+<a href="api/index.html">API Docs</a>
+</div>
+<div class="menuitem">
+<a href="jdiff/changes.html">API Changes</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/">Wiki</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>
+</div>
+<div class="menuitem">
+<a href="releasenotes.html">Release Notes</a>
+</div>
+<div class="menuitem">
+<a href="changes.html">Change Log</a>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="skin/images/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="hdfs_quota_admin_guide.pdf"><img alt="PDF -icon" src="skin/images/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1>Quotas Guide</h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="#Overview">Overview</a>
+</li>
+<li>
+<a href="#Name+Quotas">Name Quotas</a>
+</li>
+<li>
+<a href="#Space+Quotas">Space Quotas</a>
+</li>
+<li>
+<a href="#Administrative+Commands">Administrative Commands</a>
+</li>
+<li>
+<a href="#Reporting+Command">Reporting Command</a>
+</li>
+</ul>
+</div>
+ 
+ 
+<a name="N1000D"></a><a name="Overview"></a>
+<h2 class="h3">Overview</h2>
+<div class="section">
+<p> The Hadoop Distributed File System (HDFS) allows the <strong>administrator</strong> to set quotas for the number of names used and the
+amount of space used for individual directories. Name quotas and space quotas operate independently, but the administration and
+implementation of the two types of quotas are closely parallel. </p>
+</div>
+
+
+<a name="N1001A"></a><a name="Name+Quotas"></a>
+<h2 class="h3">Name Quotas</h2>
+<div class="section">
+<p> The name quota is a hard limit on the number of file and directory names in the tree rooted at that directory. File and
+directory creations fail if the quota would be exceeded. Quotas stick with renamed directories; the rename operation fails if
+operation would result in a quota violation. The attempt to set a quota will still succeed even if the directory would be in violation of the new
+quota. A newly created directory has no associated quota. The largest quota is <span class="codefrag">Long.Max_Value</span>. A quota of one
+forces a directory to remain empty. (Yes, a directory counts against its own quota!) </p>
+<p> Quotas are persistent with the <span class="codefrag">fsimage</span>. When starting, if the <span class="codefrag">fsimage</span> is immediately in
+violation of a quota (perhaps the <span class="codefrag">fsimage</span> was surreptitiously modified), 
+a warning is printed for each of such violations. Setting or removing a quota creates a journal entry. </p>
+</div>
+
+
+<a name="N10033"></a><a name="Space+Quotas"></a>
+<h2 class="h3">Space Quotas</h2>
+<div class="section">
+<p> The space quota is a hard limit on the number of bytes used by files in the tree rooted at that directory. Block
+allocations fail if the quota would not allow a full block to be written. Each replica of a block counts against the quota. Quotas
+stick with renamed directories; the rename operation fails if the operation would result in a quota violation. A newly created directory has no associated quota.
+The largest quota is <span class="codefrag">Long.Max_Value</span>. A quota of zero still permits files to be created, but no blocks can be added to the files.
+Directories don't use host file system space and don't count against the space quota. The host file system space used to save
+the file meta data is not counted against the quota. Quotas are charged at the intended replication factor for the file;
+changing the replication factor for a file will credit or debit quotas. </p>
+<p> Quotas are persistent with the <span class="codefrag">fsimage</span>. When starting, if the <span class="codefrag">fsimage</span> is immediately in
+violation of a quota (perhaps the <span class="codefrag">fsimage</span> was surreptitiously modified), a warning is printed for
+each of such violations. Setting or removing a quota creates a journal entry. </p>
+</div>
+
+
+<a name="N1004C"></a><a name="Administrative+Commands"></a>
+<h2 class="h3">Administrative Commands</h2>
+<div class="section">
+<p> Quotas are managed by a set of commands available only to the administrator. </p>
+<ul>
+
+ 
+<li> 
+<span class="codefrag">dfsadmin -setQuota &lt;N&gt; &lt;directory&gt;...&lt;directory&gt;</span> 
+<br> Set the name quota to be <span class="codefrag">N</span> for
+each directory. Best effort for each directory, with faults reported if <span class="codefrag">N</span> is not a positive long integer, the
+directory does not exist or it is a file, or the directory would immediately exceed the new quota. </li>
+
+ 
+<li> 
+<span class="codefrag">dfsadmin -clrQuota &lt;directory&gt;...&lt;director&gt;</span>
+<br> Remove any name quota for each directory. Best
+effort for each directory, with faults reported if the directory does not exist or it is a file. It is not a fault if the
+directory has no quota. </li>
+
+ 
+<li> 
+<span class="codefrag">dfsadmin -setSpaceQuota &lt;N&gt; &lt;directory&gt;...&lt;directory&gt;</span> 
+<br> Set the space quota to be
+N bytes for each directory. This is a hard limit on total size of all the files under the directory tree.
+The space quota takes replication also into account, i.e. one GB of data with replication of 3 consumes 3GB of quota. N can also be specified with a binary prefix for convenience, for e.g. 50g for 50 gigabytes and 
+2t for 2 terabytes etc. Best effort for each directory, with faults reported if <span class="codefrag">N</span> is
+neither zero nor a positive integer, the directory does not exist or it is a file, or the directory would immediately exceed
+the new quota. </li>
+
+ 
+<li> 
+<span class="codefrag">dfsadmin -clrSpaceQuota &lt;directory&gt;...&lt;director&gt;</span>
+<br> Remove any space quota for each directory. Best
+effort for each directory, with faults reported if the directory does not exist or it is a file. It is not a fault if the
+directory has no quota. </li>
+
+ 
+</ul>
+</div>
+
+
+<a name="N10080"></a><a name="Reporting+Command"></a>
+<h2 class="h3">Reporting Command</h2>
+<div class="section">
+<p> An an extension to the <span class="codefrag">count</span> command of the HDFS shell reports quota values and the current count of names and bytes in use. </p>
+<ul>
+	
+	
+<li>
+
+ 
+<span class="codefrag">fs -count -q &lt;directory&gt;...&lt;directory&gt;</span>
+<br> With the <span class="codefrag">-q</span> option, also report the name quota
+value set for each directory, the available name quota remaining, the space quota value set, and the available space quota
+remaining. If the directory does not have a quota set, the reported values are <span class="codefrag">none</span> and <span class="codefrag">inf</span>.
+
+ </li>
+
+ 
+</ul>
+</div>
+
+
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<div class="copyright">
+        Copyright &copy;
+         2008 <a href="http://www.apache.org/licenses/">The Apache Software Foundation.</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+</body>
+</html>

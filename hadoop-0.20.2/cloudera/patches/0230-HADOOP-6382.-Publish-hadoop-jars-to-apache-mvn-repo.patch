@@ -1,0 +1,1301 @@
+From 4b592cf8cb44c018f86abe529d71434d5106ce1e Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Mon, 29 Mar 2010 13:07:15 -0700
+Subject: [PATCH 0230/1179] HADOOP-6382. Publish hadoop jars to apache mvn repo.
+
+Description: This provides an 'ant mvn-install' command that will
+install Hadoop core, streaming, examples, etc. jars in a maven repository.
+
+Uses the maven ant task to publish hadoop 20 jars to the apache maven repo.
+Reason: Required for cross-distribution dependency management in downstream projects (e.g., sqoop)
+Author: Giridharan Kesavan
+Ref: CDH-402
+---
+ bin/hadoop                            |    6 +-
+ bin/rcc                               |    2 +-
+ build.xml                             |  354 ++++++++++++++++++++++++---------
+ ivy/hadoop-core-pom-template.xml      |  122 +++++++++++
+ ivy/hadoop-core.pom                   |  257 ------------------------
+ ivy/hadoop-examples-pom-template.xml  |   34 +++
+ ivy/hadoop-streaming-pom-template.xml |   34 +++
+ ivy/hadoop-test-pom-template.xml      |   53 +++++
+ ivy/hadoop-tools-pom-template.xml     |   34 +++
+ ivy/libraries.properties              |    2 +
+ src/contrib/build-contrib.xml         |    6 +-
+ src/contrib/data_join/build.xml       |    5 +-
+ src/contrib/eclipse-plugin/build.xml  |    4 +-
+ src/contrib/failmon/build.xml         |    4 +-
+ src/contrib/index/build.xml           |    2 +-
+ src/contrib/streaming/build.xml       |    6 +-
+ src/contrib/thriftfs/build.xml        |    2 +-
+ src/contrib/vaidya/build.xml          |    2 +-
+ 18 files changed, 560 insertions(+), 369 deletions(-)
+ create mode 100644 ivy/hadoop-core-pom-template.xml
+ create mode 100644 ivy/hadoop-examples-pom-template.xml
+ create mode 100644 ivy/hadoop-streaming-pom-template.xml
+ create mode 100644 ivy/hadoop-test-pom-template.xml
+ create mode 100644 ivy/hadoop-tools-pom-template.xml
+
+diff --git a/bin/hadoop b/bin/hadoop
+index af3db20..bdf5eac 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -134,7 +134,7 @@ IFS=
+ if [ -d "$HADOOP_HOME/webapps" ]; then
+   CLASSPATH=${CLASSPATH}:$HADOOP_HOME
+ fi
+-for f in $HADOOP_HOME/hadoop-*-core.jar; do
++for f in $HADOOP_HOME/hadoop-core-*.jar; do
+   CLASSPATH=${CLASSPATH}:$f;
+ done
+ 
+@@ -153,10 +153,10 @@ for f in $HADOOP_HOME/lib/jsp-2.1/*.jar; do
+   CLASSPATH=${CLASSPATH}:$f;
+ done
+ 
+-for f in $HADOOP_HOME/hadoop-*-tools.jar; do
++for f in $HADOOP_HOME/hadoop-tools-*.jar; do
+   TOOL_PATH=${TOOL_PATH}:$f;
+ done
+-for f in $HADOOP_HOME/build/hadoop-*-tools.jar; do
++for f in $HADOOP_HOME/build/hadoop-tools-*.jar; do
+   TOOL_PATH=${TOOL_PATH}:$f;
+ done
+ 
+diff --git a/bin/rcc b/bin/rcc
+index a39745b..a023da0 100755
+--- a/bin/rcc
++++ b/bin/rcc
+@@ -72,7 +72,7 @@ IFS=
+ if [ -d "$HADOOP_HOME/webapps" ]; then
+   CLASSPATH=${CLASSPATH}:$HADOOP_HOME
+ fi
+-for f in $HADOOP_HOME/hadoop-*-core.jar; do
++for f in $HADOOP_HOME/hadoop-core-*.jar; do
+   CLASSPATH=${CLASSPATH}:$f;
+ done
+ 
+diff --git a/build.xml b/build.xml
+index e5eb1c2..3b3d6bf 100644
+--- a/build.xml
++++ b/build.xml
+@@ -18,6 +18,7 @@
+ -->
+ 
+ <project name="Hadoop" default="compile" 
++   xmlns:artifact="urn:maven-artifact-ant"
+    xmlns:ivy="antlib:org.apache.ivy.ant"> 
+ 
+   <!-- Load all the default properties, and any the user wants    -->
+@@ -27,9 +28,17 @@
+  
+   <property name="Name" value="Hadoop"/>
+   <property name="name" value="hadoop"/>
+-  <property name="version" value="0.20.3-dev"/>
++  <property name="version" value="0.20.2-CDH3b2-SNAPSHOT"/>
+   <property name="final.name" value="${name}-${version}"/>
+   <property name="year" value="2009"/>
++  
++
++  <property name="core.final.name" value="${name}-core-${version}"/>
++  <property name="test.final.name" value="${name}-test-${version}"/>
++  <property name="examples.final.name" value="${name}-examples-${version}"/>
++  <property name="tools.final.name" value="${name}-tools-${version}"/>
++  <property name="ant.final.name" value="${name}-ant-${version}"/>
++  <property name="streaming.final.name" value="${name}-streaming-${version}"/>
+ 
+   <property name="src.dir" value="${basedir}/src"/>  	
+   <property name="core.src.dir" value="${src.dir}/core"/>
+@@ -152,29 +161,65 @@
+   <!-- IVY properteis set here -->
+   <property name="ivy.dir" location="ivy" />
+   <loadproperties srcfile="${ivy.dir}/libraries.properties"/>
++  <property name="mvnrepo" value="http://repo2.maven.org/maven2"/>
++  <property name="asfrepo" value="https://repository.apache.org"/> 
+   <property name="ivy.jar" location="${ivy.dir}/ivy-${ivy.version}.jar"/>
+-  <property name="ivy_repo_url" value="http://repo2.maven.org/maven2/org/apache/ivy/ivy/${ivy.version}/ivy-${ivy.version}.jar"/>
+-  <property name="ivysettings.xml" location="${ivy.dir}/ivysettings.xml" />
++  <property name="ivy_repo_url" 
++    value="${mvnrepo}/org/apache/ivy/ivy/${ivy.version}/ivy-${ivy.version}.jar"/>
++  <property name="ant_task.jar" 
++    location="${ivy.dir}/maven-ant-tasks-${ant-task.version}.jar"/>
++  <property name="tsk.org" value="/org/apache/maven/maven-ant-tasks/"/>
++  <property name="ant_task_repo_url"
++    value="${mvnrepo}${tsk.org}${ant-task.version}/maven-ant-tasks-${ant-task.version}.jar"/>
++  <property name="repo" value="snapshots"/>
++  <property name="asfsnapshotrepo" 
++    value="${asfrepo}/content/repositories/snapshots"/> 
++  <property name="asfstagingrepo"
++    value="${asfrepo}/service/local/staging/deploy/maven2"/> 
++  <property name="ivysettings.xml" location="${ivy.dir}/ivysettings.xml"/>
+   <property name="ivy.org" value="org.apache.hadoop"/>
+   <property name="build.dir" location="build" />
+   <property name="dist.dir" value="${build.dir}/${final.name}"/>
+   <property name="build.ivy.dir" location="${build.dir}/ivy" />
+-  <property name="build.ivy.lib.dir" location="${build.ivy.dir}/lib" />
+-  <property name="common.ivy.lib.dir" location="${build.ivy.lib.dir}/${ant.project.name}/common"/>
+-  <property name="build.ivy.report.dir" location="${build.ivy.dir}/report" />
+-  <property name="build.ivy.maven.dir" location="${build.ivy.dir}/maven" />
+-  <property name="build.ivy.maven.pom" location="${build.ivy.maven.dir}/hadoop-core-${hadoop.version}.pom" />
+-  <property name="build.ivy.maven.jar" location="${build.ivy.maven.dir}/hadoop-core-${hadoop.version}.jar" />
+-
++  <property name="build.ivy.lib.dir" location="${build.ivy.dir}/lib"/>
++  <property name="common.ivy.lib.dir" 
++    location="${build.ivy.lib.dir}/${ant.project.name}/common"/>
++  <property name="build.ivy.report.dir" location="${build.ivy.dir}/report"/>
++
++  <property name="hadoop-core.pom" location="${ivy.dir}/hadoop-core-pom.xml"/>
++  <property name="hadoop-core-pom-template.xml" 
++    location="${ivy.dir}/hadoop-core-pom-template.xml"/>
++  <property name="hadoop-core.jar" location="${build.dir}/${core.final.name}.jar"/>
++  <property name="hadoop-test.pom" location="${ivy.dir}/hadoop-test-pom.xml"/>
++  <property name="hadoop-test-pom-template.xml" 
++    location="${ivy.dir}/hadoop-test-pom-template.xml" />
++  <property name="hadoop-test.jar" location="${build.dir}/${test.final.name}.jar"/>
++  <property name="hadoop-tools.pom" location="${ivy.dir}/hadoop-tools-pom.xml"/>
++  <property name="hadoop-tools-pom-template.xml" 
++    location="${ivy.dir}/hadoop-tools-pom-template.xml" />
++  <property name="hadoop-tools.jar" location="${build.dir}/${tools.final.name}.jar"/>
++  <property name="hadoop-examples.pom" location="${ivy.dir}/hadoop-examples-pom.xml"/>
++  <property name="hadoop-examples-pom-template.xml" 
++    location="${ivy.dir}/hadoop-examples-pom-template.xml"/>
++  <property name="hadoop-examples.jar" 
++    location="${build.dir}/${examples.final.name}.jar"/>
++  <property name="hadoop-streaming.pom" 
++    location="${ivy.dir}/hadoop-streaming-pom.xml"/>
++  <property name="hadoop-streaming-pom-template.xml" 
++    location="${ivy.dir}/hadoop-streaming-pom-template.xml"/>
++  <property name="hadoop-streaming.jar" 
++    location="${build.dir}/contrib/streaming/${streaming.final.name}.jar"/>
++   
+   <!--this is the naming policy for artifacts we want pulled down-->
+-  <property name="ivy.artifact.retrieve.pattern" value="${ant.project.name}/[conf]/[artifact]-[revision].[ext]"/>
++  <property name="ivy.artifact.retrieve.pattern" 
++    value="${ant.project.name}/[conf]/[artifact]-[revision].[ext]"/>
+ 
+   <!--this is how artifacts that get built are named-->
+   <property name="ivy.publish.pattern" value="hadoop-[revision]-core.[ext]"/>
+-  <property name="hadoop.jar" location="${build.dir}/hadoop-${hadoop.version}-core.jar" />
+ 
+   <!-- jdiff.home property set -->
+-  <property name="jdiff.home" value="${build.ivy.lib.dir}/${ant.project.name}/jdiff"/>
++  <property name="jdiff.home" 
++    value="${build.ivy.lib.dir}/${ant.project.name}/jdiff"/>
+   <property name="jdiff.jar" value="${jdiff.home}/jdiff-${jdiff.version}.jar"/>
+   <property name="xerces.jar" value="${jdiff.home}/xerces-${xerces.version}.jar"/>
+ 
+@@ -189,6 +234,10 @@
+     </and>
+   </condition>
+ 
++  <condition property="staging">
++     <equals arg1="${repo}" arg2="staging"/>
++  </condition>
++
+   <!-- the normal classpath -->
+   <path id="classpath">
+     <pathelement location="${build.classes}"/>
+@@ -210,8 +259,8 @@
+     <pathelement location="${build.tools}"/>
+     <pathelement path="${clover.jar}"/>
+     <fileset dir="${test.lib.dir}">
+-      <include name="**/*.jar" />
+-      <exclude name="**/excluded/" />
++      <include name="**/*.jar"/>
++      <exclude name="**/excluded/"/>
+     </fileset>
+     <path refid="classpath"/>
+   </path>
+@@ -224,9 +273,6 @@
+     <pathelement location="${build.dir}"/>
+   </path>
+ 
+-  <!-- properties dependent on the items defined above. -->
+-  <!--<available classname="${rat.reporting.classname}" classpathref="classpath" property="rat.present" value="true"/> -->
+-
+   <!-- ====================================================== -->
+   <!-- Macro definitions                                      -->
+   <!-- ====================================================== -->
+@@ -550,7 +596,7 @@
+     <tar compression="gzip" destfile="${build.classes}/bin.tgz">
+       <tarfileset dir="bin" mode="755"/>
+     </tar>
+-    <jar jarfile="${build.dir}/${final.name}-core.jar"
++    <jar jarfile="${build.dir}/${core.final.name}.jar"
+          basedir="${build.classes}">
+       <manifest>
+         <section name="org/apache/hadoop">
+@@ -572,7 +618,7 @@
+   <!--                                                                    -->
+   <!-- ================================================================== -->
+   <target name="examples" depends="jar, compile-examples" description="Make the Hadoop examples jar.">
+-    <jar jarfile="${build.dir}/${final.name}-examples.jar"
++    <jar jarfile="${build.dir}/${examples.final.name}.jar"
+          basedir="${build.examples}">
+       <manifest>
+         <attribute name="Main-Class" 
+@@ -583,7 +629,7 @@
+ 
+   <target name="tools-jar" depends="jar, compile-tools" 
+           description="Make the Hadoop tools jar.">
+-    <jar jarfile="${build.dir}/${final.name}-tools.jar"
++    <jar jarfile="${build.dir}/${tools.final.name}.jar"
+          basedir="${build.tools}">
+       <manifest>
+         <attribute name="Main-Class" 
+@@ -703,7 +749,7 @@
+   <!--                                                                    -->
+   <!-- ================================================================== -->
+   <target name="jar-test" depends="compile-core-test" description="Make hadoop-test.jar">
+-    <jar jarfile="${build.dir}/${final.name}-test.jar"
++    <jar jarfile="${build.dir}/${test.final.name}.jar"
+          basedir="${test.build.classes}">
+          <manifest>
+            <attribute name="Main-Class"
+@@ -860,10 +906,10 @@
+       <sourcePath path="${examples.dir}" />
+       <sourcePath path="${tools.src}" />
+       <sourcePath path="${basedir}/src/contrib/streaming/src/java" />
+-      <class location="${basedir}/build/${final.name}-core.jar" />
+-      <class location="${basedir}/build/${final.name}-examples.jar" />
+-      <class location="${basedir}/build/${final.name}-tools.jar" />
+-      <class location="${basedir}/build/contrib/streaming/${final.name}-streaming.jar" />
++      <class location="${build.dir}/${core.final.name}.jar" />
++      <class location="${build.dir}/${examples.final.name}.jar" />
++      <class location="${build.dir}/${tools.final.name}.jar" />
++      <class location="${build.dir}/contrib/streaming/${streaming.final.name}.jar" />
+     </findbugs>
+ 
+         <xslt style="${findbugs.home}/src/xsl/default.xsl"
+@@ -1175,7 +1221,7 @@
+     </copy>
+ 
+     <copy todir="${dist.dir}"> 
+-      <fileset file="${build.dir}/${final.name}-*.jar"/>
++      <fileset file="${build.dir}/${name}-*-${version}.jar"/>
+     </copy>
+     
+     <copy todir="${dist.dir}/bin">
+@@ -1256,12 +1302,29 @@
+   <!-- ================================================================== -->
+   <!-- Clean.  Delete the build files, and their directories              -->
+   <!-- ================================================================== -->
+-  <target name="clean" depends="clean-contrib" description="Clean.  Delete the build files, and their directories">
++  <target name="clean" depends="clean-contrib, clean-sign" description="Clean.  Delete the build files, and their directories">
+     <delete dir="${build.dir}"/>
+     <delete dir="${docs.src}/build"/>
+     <delete dir="${src.docs.cn}/build"/>
++    <delete file="${basedir}/ivy/hadoop-core-pom.xml"/>
++    <delete file="${basedir}/ivy/hadoop-test-pom.xml"/>
++    <delete file="${basedir}/ivy/hadoop-examples-pom.xml"/>
++    <delete file="${basedir}/ivy/hadoop-tools-pom.xml"/>
++    <delete file="${basedir}/ivy/hadoop-streaming-pom.xml"/>
++  </target>
++
++  <target name="clean-sign" description="Clean.  Delete .asc files">
++    <delete>
++      <fileset dir="." includes="**/**/*.asc"/>
++    </delete>
++  </target>  
++ 
++  <target name="veryclean" depends="clean" description="Delete mvn ant task jar and ivy ant taks jar">
++    <delete file="${ant_task.jar}"/>
++    <delete file="${ivy.jar}"/>
+   </target>
+ 
++
+   <!-- ================================================================== -->
+   <!-- Clean contrib target. For now, must be called explicitly           -->
+   <!-- Using subant instead of ant as a workaround for 30569              -->
+@@ -1492,7 +1555,7 @@
+   <target name="ant-tasks" depends="jar, compile-ant-tasks">
+     <copy file="${anttasks.dir}/org/apache/hadoop/ant/antlib.xml"
+           todir="${build.anttasks}/org/apache/hadoop/ant"/>
+-    <jar destfile="${build.dir}/${final.name}-ant.jar">
++    <jar destfile="${build.dir}/${ant.final.name}.jar">
+       <fileset dir="${build.anttasks}"/>
+     </jar>
+   </target>
+@@ -1606,7 +1669,6 @@
+     <mkdir dir="${build.ivy.dir}" />
+     <mkdir dir="${build.ivy.lib.dir}" />
+     <mkdir dir="${build.ivy.report.dir}" />
+-    <mkdir dir="${build.ivy.maven.dir}" />
+   </target>
+ 
+   <target name="ivy-probe-antlib" >
+@@ -1736,70 +1798,180 @@
+     </echo>
+   </target>
+ 
+-  <target name="assert-hadoop-jar-exists" depends="ivy-init">
+-    <fail>
+-      <condition >
+-        <not>
+-          <available file="${hadoop.jar}" />
+-        </not>
+-      </condition>
+-      Not found: ${hadoop.jar}
+-      Please run the target "jar" in the main build file
+-    </fail>
+-
++  <target name="ant-task-download" description="To download mvn-ant-task">
++    <get src="${ant_task_repo_url}" dest="${ant_task.jar}" usetimestamp="true"/>
+   </target>
+ 
+-  <target name="ready-to-publish" depends="jar,assert-hadoop-jar-exists,ivy-resolve"/>
+-
+-  <target name="ivy-publish-local" depends="ready-to-publish,ivy-resolve">
+-    <ivy:publish
+-      settingsRef="${ant.project.name}.ivy.settings"
+-      resolver="local"
+-      pubrevision="${hadoop.version}"
+-      overwrite="true"
+-      artifactspattern="${build.dir}/${ivy.publish.pattern}" />
+-  </target>
+-
+-
+-  <!-- this is here for curiosity, to see how well the makepom task works
+-  Answer: it depends whether you want transitive dependencies excluded or not
+-  -->
+-  <target name="makepom" depends="ivy-resolve">
+-    <ivy:makepom settingsRef="${ant.project.name}.ivy.settings"
+-      ivyfile="ivy.xml"
+-      pomfile="${build.ivy.maven.dir}/generated.pom">
+-      <ivy:mapping conf="default" scope="default"/>
+-      <ivy:mapping conf="master" scope="master"/>
+-      <ivy:mapping conf="runtime" scope="runtime"/>
+-    </ivy:makepom>
+-  </target>
+-
+-
+-  <target name="copy-jar-to-maven" depends="ready-to-publish">
+-    <copy file="${hadoop.jar}"
+-      tofile="${build.ivy.maven.jar}"/>
+-    <checksum file="${build.ivy.maven.jar}" algorithm="md5"/>
+-  </target>
+-
+-  <target name="copypom" depends="ivy-init-dirs">
+-
+-   <presetdef name="expandingcopy" >
+-    <copy overwrite="true">
+-      <filterchain>
+-        <expandproperties/>
+-      </filterchain>
+-    </copy>
+-   </presetdef>
+-
+-   <expandingcopy file="ivy/hadoop-core.pom"
+-      tofile="${build.ivy.maven.pom}"/>
+-   <checksum file="${build.ivy.maven.pom}" algorithm="md5"/>
+-  </target>
+-
+-  <target name="maven-artifacts" depends="copy-jar-to-maven,copypom" />
+-
+-  <target name="published" depends="ivy-publish-local,maven-artifacts">
++  <target name="mvn-taskdef" depends="ant-task-download">
++     <path id="mvn-ant-task.classpath" path="${ant_task.jar}"/>
++     <typedef resource="org/apache/maven/artifact/ant/antlib.xml"
++         uri="urn:maven-artifact-ant"
++         classpathref="mvn-ant-task.classpath"/>
++  </target>  
+ 
++  <target name="mvn-install" depends="mvn-taskdef,bin-package,set-version"
++     description="To install hadoop core and test jars to local filesystem's m2 cache">
++     <artifact:pom file="${hadoop-core.pom}" id="hadoop.core"/>
++     <artifact:pom file="${hadoop-test.pom}" id="hadoop.test"/>
++     <artifact:pom file="${hadoop-examples.pom}" id="hadoop.examples"/>
++     <artifact:pom file="${hadoop-tools.pom}" id="hadoop.tools"/>
++     <artifact:pom file="${hadoop-streaming.pom}" id="hadoop.streaming"/>
++
++     <artifact:install file="${hadoop-core.jar}">
++        <pom refid="hadoop.core"/>
++     </artifact:install>
++     <artifact:install file="${hadoop-test.jar}">
++        <pom refid="hadoop.test"/>
++     </artifact:install>
++     <artifact:install file="${hadoop-tools.jar}">
++        <pom refid="hadoop.tools"/>
++     </artifact:install>
++     <artifact:install file="${hadoop-examples.jar}">
++        <pom refid="hadoop.examples"/>
++     </artifact:install>
++     <artifact:install file="${hadoop-streaming.jar}">
++        <pom refid="hadoop.streaming"/>
++     </artifact:install>
++  </target>
++
++  <target name="mvn-deploy" depends="mvn-taskdef, bin-package, set-version, signanddeploy, simpledeploy"
++     description="To deploy hadoop core and test jar's to apache maven repository"/>
++
++  <target name="signanddeploy" if="staging" depends="sign">
++     <artifact:pom file="${hadoop-core.pom}" id="hadoop.core"/>
++     <artifact:pom file="${hadoop-test.pom}" id="hadoop.core.test"/>
++     <artifact:pom file="${hadoop-examples.pom}" id="hadoop.examples"/>
++     <artifact:pom file="${hadoop-tools.pom}" id="hadoop.tools"/>
++     <artifact:pom file="${hadoop-streaming.pom}" id="hadoop.streaming"/>
++     <artifact:install-provider artifactId="wagon-http"
++       version="${wagon-http.version}"/>
++     <artifact:deploy file="${hadoop-core.jar}">
++         <remoteRepository id="apache.staging.https" url="${asfstagingrepo}"/>
++         <pom refid="hadoop.core"/>
++         <attach file="${hadoop-core.jar}.asc" type="jar.asc"/>
++         <attach file="${hadoop-core.pom}.asc" type="pom.asc"/>
++     </artifact:deploy>
++     <artifact:deploy file="${hadoop-test.jar}">
++         <remoteRepository id="apache.staging.https" url="${asfstagingrepo}"/> 
++         <pom refid="hadoop.core.test"/>
++         <attach file="${hadoop-test.jar}.asc" type="jar.asc"/>
++         <attach file="${hadoop-test.pom}.asc" type="pom.asc"/>
++     </artifact:deploy>
++     <artifact:deploy file="${hadoop-tools.jar}">
++         <remoteRepository id="apache.staging.https" url="${asfstagingrepo}"/> 
++         <pom refid="hadoop.tools"/>
++         <attach file="${hadoop-tools.jar}.asc" type="jar.asc"/>
++         <attach file="${hadoop-tools.pom}.asc" type="pom.asc"/>
++     </artifact:deploy>
++     <artifact:deploy file="${hadoop-examples.jar}">
++         <remoteRepository id="apache.staging.https" url="${asfstagingrepo}"/> 
++         <pom refid="hadoop.examples"/>
++         <attach file="${hadoop-examples.jar}.asc" type="jar.asc"/>
++         <attach file="${hadoop-examples.pom}.asc" type="pom.asc"/>
++     </artifact:deploy>
++     <artifact:deploy file="${hadoop-streaming.jar}">
++         <remoteRepository id="apache.staging.https" url="${asfstagingrepo}"/> 
++         <pom refid="hadoop.streaming"/>
++         <attach file="${hadoop-streaming.jar}.asc" type="jar.asc"/>
++         <attach file="${hadoop-streaming.pom}.asc" type="pom.asc"/>
++     </artifact:deploy>
++  </target>
++
++  <target name="sign" depends="clean-sign" if="staging">
++    <input message="password:>" addproperty="gpg.passphrase">
++     <handler classname="org.apache.tools.ant.input.SecureInputHandler" />
++    </input>
++    <macrodef name="sign-artifact" description="Signs the artifact">
++      <attribute name="input.file"/>
++      <attribute name="output.file" default="@{input.file}.asc"/>
++      <attribute name="gpg.passphrase"/>
++      <sequential>
++        <echo>Signing @{input.file} Sig File: @{output.file}</echo>
++        <exec executable="gpg" >
++          <arg value="--armor"/>
++          <arg value="--output"/>
++          <arg value="@{output.file}"/>
++          <arg value="--passphrase"/>
++          <arg value="@{gpg.passphrase}"/>
++          <arg value="--detach-sig"/>
++          <arg value="@{input.file}"/>
++        </exec>
++      </sequential>
++    </macrodef>
++    <sign-artifact input.file="${hadoop-core.jar}" 
++     output.file="${hadoop-core.jar}.asc" gpg.passphrase="${gpg.passphrase}"/>
++    <sign-artifact input.file="${hadoop-test.jar}" 
++     output.file="${hadoop-test.jar}.asc" gpg.passphrase="${gpg.passphrase}"/>
++    <sign-artifact input.file="${hadoop-tools.jar}" 
++     output.file="${hadoop-tools.jar}.asc" gpg.passphrase="${gpg.passphrase}"/>
++    <sign-artifact input.file="${hadoop-examples.jar}" 
++     output.file="${hadoop-examples.jar}.asc" gpg.passphrase="${gpg.passphrase}"/>
++    <sign-artifact input.file="${hadoop-streaming.jar}" 
++     output.file="${hadoop-streaming.jar}.asc" gpg.passphrase="${gpg.passphrase}"/>
++    <sign-artifact input.file="${hadoop-core.pom}" 
++     output.file="${hadoop-core.pom}.asc" gpg.passphrase="${gpg.passphrase}"/>
++    <sign-artifact input.file="${hadoop-test.pom}" 
++     output.file="${hadoop-test.pom}.asc" gpg.passphrase="${gpg.passphrase}"/>
++    <sign-artifact input.file="${hadoop-tools.pom}" 
++     output.file="${hadoop-tools.pom}.asc" gpg.passphrase="${gpg.passphrase}"/>
++    <sign-artifact input.file="${hadoop-examples.pom}" 
++     output.file="${hadoop-examples.pom}.asc" gpg.passphrase="${gpg.passphrase}"/>
++    <sign-artifact input.file="${hadoop-streaming.pom}" 
++     output.file="${hadoop-streaming.pom}.asc" gpg.passphrase="${gpg.passphrase}"/>
++  </target>
++
++  <target name="simpledeploy" unless="staging">
++     <artifact:pom file="${hadoop-core.pom}" id="hadoop.core"/>
++     <artifact:pom file="${hadoop-test.pom}" id="hadoop.test"/>
++     <artifact:pom file="${hadoop-examples.pom}" id="hadoop.examples"/>
++     <artifact:pom file="${hadoop-tools.pom}" id="hadoop.tools"/>
++     <artifact:pom file="${hadoop-streaming.pom}" id="hadoop.streaming"/>
++
++     <artifact:install-provider artifactId="wagon-http" version="${wagon-http.version}"/>
++     <artifact:deploy file="${hadoop-core.jar}">
++         <remoteRepository id="apache.snapshots.https" url="${asfsnapshotrepo}"/>
++         <pom refid="hadoop.core"/>
++     </artifact:deploy>
++     <artifact:deploy file="${hadoop-test.jar}">
++         <remoteRepository id="apache.snapshots.https" url="${asfsnapshotrepo}"/>
++         <pom refid="hadoop.test"/>
++     </artifact:deploy> 
++     <artifact:deploy file="${hadoop-examples.jar}">
++         <remoteRepository id="apache.snapshots.https" url="${asfsnapshotrepo}"/>
++         <pom refid="hadoop.examples"/>
++     </artifact:deploy>
++     <artifact:deploy file="${hadoop-tools.jar}">
++         <remoteRepository id="apache.snapshots.https" url="${asfsnapshotrepo}"/>
++         <pom refid="hadoop.tools"/>
++     </artifact:deploy>
++     <artifact:deploy file="${hadoop-streaming.jar}">
++         <remoteRepository id="apache.snapshots.https" url="${asfsnapshotrepo}"/>
++         <pom refid="hadoop.streaming"/>
++     </artifact:deploy>
++  </target>
++
++  <target name="set-version">
++    <delete file="${hadoop-core.pom}"/>
++    <delete file="${hadoop-test.pom}"/>
++    <delete file="${hadoop-examples.pom}"/>
++    <delete file="${hadoop-tools.pom}"/>
++    <delete file="${hadoop-streaming.pom}"/>
++    <copy file="${hadoop-core-pom-template.xml}" tofile="${hadoop-core.pom}"/>
++    <copy file="${hadoop-test-pom-template.xml}" tofile="${hadoop-test.pom}"/>
++    <copy file="${hadoop-examples-pom-template.xml}" tofile="${hadoop-examples.pom}"/>
++    <copy file="${hadoop-tools-pom-template.xml}" tofile="${hadoop-tools.pom}"/>
++    <copy file="${hadoop-streaming-pom-template.xml}" tofile="${hadoop-streaming.pom}"/>
++    <replaceregexp byline="true">
++      <regexp pattern="@version"/>
++      <substitution expression="${version}"/>
++      <fileset dir="${basedir}/ivy">
++        <include name="hadoop-core-pom.xml"/>
++        <include name="hadoop-test-pom.xml"/>
++        <include name="hadoop-tools-pom.xml"/>
++        <include name="hadoop-examples-pom.xml"/>
++        <include name="hadoop-streaming-pom.xml"/>
++      </fileset>
++    </replaceregexp>
+   </target>
+ 
+ </project>
+diff --git a/ivy/hadoop-core-pom-template.xml b/ivy/hadoop-core-pom-template.xml
+new file mode 100644
+index 0000000..9e2bb65
+--- /dev/null
++++ b/ivy/hadoop-core-pom-template.xml
+@@ -0,0 +1,122 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++  <modelVersion>4.0.0</modelVersion>
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-core</artifactId>
++  <packaging>jar</packaging>
++  <version>@version</version>
++  <dependencies>
++   <dependency>
++      <groupId>commons-cli</groupId>
++      <artifactId>commons-cli</artifactId>
++      <version>1.2</version>
++    </dependency>
++   <dependency>
++      <groupId>xmlenc</groupId>
++      <artifactId>xmlenc</artifactId>
++      <version>0.52</version>
++    </dependency>
++    <dependency>
++      <groupId>commons-httpclient</groupId>
++      <artifactId>commons-httpclient</artifactId>
++      <version>3.0.1</version>
++    </dependency>
++    <dependency>
++      <groupId>commons-codec</groupId>
++      <artifactId>commons-codec</artifactId>
++      <version>1.3</version>
++    </dependency>
++    <dependency>
++      <groupId>commons-net</groupId>
++      <artifactId>commons-net</artifactId>
++      <version>1.4.1</version>
++    </dependency>
++    <dependency>
++      <groupId>org.mortbay.jetty</groupId>
++      <artifactId>jetty</artifactId>
++      <version>6.1.14</version>
++    </dependency>
++    <dependency>
++      <groupId>org.mortbay.jetty</groupId>
++      <artifactId>jetty-util</artifactId>
++      <version>6.1.14</version>
++    </dependency>
++    <dependency>
++      <groupId>tomcat</groupId>
++      <artifactId>jasper-runtime</artifactId>
++      <version>5.5.12</version>
++    </dependency>
++    <dependency>
++      <groupId>tomcat</groupId>
++      <artifactId>jasper-compiler</artifactId>
++      <version>5.5.12</version>
++    </dependency>
++    <dependency>
++      <groupId>org.mortbay.jetty</groupId>
++      <artifactId>jsp-api-2.1</artifactId>
++      <version>6.1.14</version>
++    </dependency>
++    <dependency>
++      <groupId>org.mortbay.jetty</groupId>
++      <artifactId>jsp-2.1</artifactId>
++      <version>6.1.14</version>
++    </dependency>
++    <dependency>
++      <groupId>commons-el</groupId>
++      <artifactId>commons-el</artifactId>
++      <version>1.0</version>
++    </dependency>
++    <dependency>
++      <groupId>net.java.dev.jets3t</groupId>
++      <artifactId>jets3t</artifactId>
++      <version>0.7.1</version>
++    </dependency>
++    <dependency>
++      <groupId>commons-net</groupId>
++      <artifactId>commons-net</artifactId>
++      <version>1.4.1</version>
++    </dependency>
++    <dependency>
++      <groupId>org.mortbay.jetty</groupId>
++      <artifactId>servlet-api-2.5</artifactId>
++      <version>6.1.14</version>
++    </dependency>
++    <dependency>
++      <groupId>net.sf.kosmosfs</groupId>
++      <artifactId>kfs</artifactId>
++      <version>0.3</version>
++    </dependency>
++    <dependency>
++      <groupId>hsqldb</groupId>
++      <artifactId>hsqldb</artifactId>
++      <version>1.8.0.10</version>
++    </dependency>
++    <dependency>
++      <groupId>oro</groupId>
++      <artifactId>oro</artifactId>
++      <version>2.0.8</version>
++    </dependency>
++    <dependency>
++      <groupId>org.eclipse.jdt</groupId>
++      <artifactId>core</artifactId>
++      <version>3.1.1</version>
++    </dependency>
++  </dependencies>
++</project>
+diff --git a/ivy/hadoop-core.pom b/ivy/hadoop-core.pom
+index ffdd189..e69de29 100644
+--- a/ivy/hadoop-core.pom
++++ b/ivy/hadoop-core.pom
+@@ -1,257 +0,0 @@
+-<project xmlns="http://maven.apache.org/POM/4.0.0"
+-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+-
+-  <!--
+-   Licensed to the Apache Software Foundation (ASF) under one or more
+-   contributor license agreements.  See the NOTICE file distributed with
+-   this work for additional information regarding copyright ownership.
+-   The ASF licenses this file to You under the Apache License, Version 2.0
+-   (the "License"); you may not use this file except in compliance with
+-   the License.  You may obtain a copy of the License at
+-
+-       http://www.apache.org/licenses/LICENSE-2.0
+-
+-   Unless required by applicable law or agreed to in writing, software
+-   distributed under the License is distributed on an "AS IS" BASIS,
+-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-   See the License for the specific language governing permissions and
+-   limitations under the License.
+-  -->
+-
+-  <modelVersion>4.0.0</modelVersion>
+-  <groupId>org.apache.hadoop</groupId>
+-  <artifactId>hadoop-core</artifactId>
+-  <packaging>jar</packaging>
+-  <version>${hadoop.version}</version>
+-  <description>
+-    Hadoop is the distributed computing framework of Apache; hadoop-core contains
+-    the filesystem, job tracker and map/reduce modules
+-  </description>
+-  <licenses>
+-    <license>
+-      <name>Apache License, Version 2.0</name>
+-      <url>http://apache.org/licenses/LICENSE-2.0</url>
+-    </license>
+-  </licenses>
+-  <dependencies>
+-
+-
+-    <!-- always include commons-logging and log4J -->
+-    <dependency>
+-      <groupId>commons-logging</groupId>
+-      <artifactId>commons-logging</artifactId>
+-      <version>${commons-logging.version}</version>
+-      <exclusions>
+-        <exclusion>
+-          <groupId>avalon-framework</groupId>
+-          <artifactId>avalon-framework</artifactId>
+-        </exclusion>
+-        <exclusion>
+-          <groupId>javax.servlet</groupId>
+-          <artifactId>servlet-api</artifactId>
+-        </exclusion>
+-        <exclusion>
+-          <groupId>junit</groupId>
+-          <artifactId>junit</artifactId>
+-        </exclusion>
+-        <exclusion>
+-          <groupId>logkit</groupId>
+-          <artifactId>logkit</artifactId>
+-        </exclusion>
+-        <exclusion>
+-          <groupId>log4j</groupId>
+-          <artifactId>log4j</artifactId>
+-        </exclusion>
+-      </exclusions>
+-    </dependency>
+-
+-    <dependency>
+-      <groupId>log4j</groupId>
+-      <artifactId>log4j</artifactId>
+-      <version>${log4j.version}</version>
+-      <scope>optional</scope>
+-      <exclusions>
+-        <exclusion>
+-          <groupId>javax.mail</groupId>
+-          <artifactId>mail</artifactId>
+-        </exclusion>
+-        <exclusion>
+-          <groupId>javax.jms</groupId>
+-          <artifactId>jms</artifactId>
+-        </exclusion>
+-        <exclusion>
+-          <groupId>com.sun.jdmk</groupId>
+-          <artifactId>jmxtools</artifactId>
+-        </exclusion>
+-        <exclusion>
+-          <groupId>com.sun.jmx</groupId>
+-          <artifactId>jmxri</artifactId>
+-        </exclusion>
+-      </exclusions>
+-    </dependency>
+-
+-    <!--SLF4J is a JAR-based dependency; this POM binds it to log4J-->
+-    <dependency>
+-      <groupId>org.slf4j</groupId>
+-      <artifactId>slf4j-api</artifactId>
+-      <version>${slf4j-api.version}</version>
+-      <scope>optional</scope>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.slf4j</groupId>
+-      <artifactId>slf4j-log4j12</artifactId>
+-      <version>${slf4j-log4j12.version}</version>
+-      <scope>optional</scope>
+-      <exclusions>
+-        <exclusion>
+-          <groupId>log4j</groupId>
+-          <artifactId>log4j</artifactId>
+-        </exclusion>
+-      </exclusions>
+-    </dependency>
+-
+-    <!--Httpclient and its components are optional-->
+-
+-    <dependency>
+-      <groupId>commons-httpclient</groupId>
+-      <artifactId>commons-httpclient</artifactId>
+-      <version>3.1</version>
+-      <scope>optional</scope>
+-      <exclusions>
+-        <exclusion>
+-          <groupId>commons-logging</groupId>
+-          <artifactId>commons-logging</artifactId>
+-        </exclusion>
+-        <exclusion>
+-          <groupId>junit</groupId>
+-          <artifactId>junit</artifactId>
+-        </exclusion>
+-      </exclusions>
+-    </dependency>
+-    <dependency>
+-      <groupId>commons-codec</groupId>
+-      <artifactId>commons-codec</artifactId>
+-      <version>1.3</version>
+-      <scope>optional</scope>
+-    </dependency>
+-
+-    <!--CLI is needed to scan the command line, but only the 1.0 branch is released -->
+-    <dependency>
+-      <groupId>commons-cli</groupId>
+-      <artifactId>commons-cli</artifactId>
+-      <version>2.0-20070823</version>
+-      <scope>optional</scope>
+-    </dependency>
+-
+-
+-   <!-- this is used for the ftp:// filesystem-->
+-    <dependency>
+-      <groupId>commons-net</groupId>
+-      <artifactId>commons-net</artifactId>
+-      <version>1.4.1</version>
+-      <scope>optional</scope>
+-    </dependency>
+-
+-    <!-- Jetty is used to serve up the application. It is marked as optional because
+-    clients do not need it. All server-side deployments will need
+-     all of these files.-->
+-    <dependency>
+-      <groupId>javax.servlet</groupId>
+-      <artifactId>servlet-api</artifactId>
+-      <version>${servlet-api.version}</version>
+-      <scope>optional</scope>
+-    </dependency>
+-    <dependency>
+-      <groupId>jetty</groupId>
+-      <artifactId>org.mortbay.jetty</artifactId>
+-      <version>${jetty.version}</version>
+-      <scope>optional</scope>
+-    </dependency>
+-
+-
+-    <!--JSP support -->
+-
+-    <dependency>
+-      <groupId>org.mortbay.jetty</groupId>
+-      <artifactId>jsp-2.1</artifactId>
+-      <version>${jetty.version}</version>
+-      <scope>optional</scope>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.mortbay.jetty</groupId>
+-      <artifactId>jsp-api-2.1</artifactId>
+-      <version>${jetty.version}</version>
+-      <scope>optional</scope>
+-    </dependency>
+-    <dependency>
+-      <groupId>commons-el</groupId>
+-      <artifactId>commons-el</artifactId>
+-      <version>${commons-el.version}</version>
+-      <scope>optional</scope>
+-    </dependency>
+-
+-
+-    <!--JSPC assistance-->
+-
+-    <dependency>
+-      <groupId>org.eclipse.jdt</groupId>
+-      <artifactId>core</artifactId>
+-      <version>${core.version}</version>
+-      <scope>optional</scope>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.ant</groupId>
+-      <artifactId>ant</artifactId>
+-      <version>${apacheant.version}</version>
+-      <scope>optional</scope>
+-    </dependency>
+-
+-    <!-- JetS3t is a client library for S3.
+-    -It is only needed if you want to work with S3 filesystems
+-    -It pulls in commons-logging 1.1.1 and does not exclude all the cruft that comes with it.
+-    By excluding it we stay in control of versions and dependencies
+-    -->
+-
+-    <dependency>
+-      <groupId>net.java.dev.jets3t</groupId>
+-      <artifactId>jets3t</artifactId>
+-      <version>${jets3t.version}</version>
+-      <scope>optional</scope>
+-      <exclusions>
+-        <exclusion>
+-          <groupId>commons-logging</groupId>
+-          <artifactId>commons-logging</artifactId>
+-        </exclusion>
+-        <exclusion>
+-          <groupId>junit</groupId>
+-          <artifactId>junit</artifactId>
+-        </exclusion>
+-      </exclusions>
+-    </dependency>
+-
+-    <!--Kosmos filesystem
+-    http://kosmosfs.sourceforge.net/
+-    This is not in the central repository
+-    -->
+-    <!--
+-        <dependency>
+-          <groupId>org.kosmix</groupId>
+-          <artifactId>kfs</artifactId>
+-          <version>0.1</version>
+-          <scope>optional</scope>
+-        </dependency>
+-    -->
+-
+-    <!--
+-     http://xmlenc.sourceforge.net/
+-     "The xmlenc library is a fast stream-based XML output library for Java."
+-    -->
+-    <dependency>
+-      <groupId>xmlenc</groupId>
+-      <artifactId>xmlenc</artifactId>
+-      <version>0.52</version>
+-      <scope>optional</scope>
+-    </dependency>
+-  </dependencies>
+-</project>
+diff --git a/ivy/hadoop-examples-pom-template.xml b/ivy/hadoop-examples-pom-template.xml
+new file mode 100644
+index 0000000..4d4d518
+--- /dev/null
++++ b/ivy/hadoop-examples-pom-template.xml
+@@ -0,0 +1,34 @@
++<?xml version="1.0" encoding="UTF-8"?>
++ <!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++
++  <modelVersion>4.0.0</modelVersion>
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-examples</artifactId>
++  <packaging>jar</packaging>
++  <version>@version</version>
++  <dependencies>
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-core</artifactId>
++      <version>@version</version>
++    </dependency>
++  </dependencies>
++</project>
+diff --git a/ivy/hadoop-streaming-pom-template.xml b/ivy/hadoop-streaming-pom-template.xml
+new file mode 100644
+index 0000000..f779ba0
+--- /dev/null
++++ b/ivy/hadoop-streaming-pom-template.xml
+@@ -0,0 +1,34 @@
++<?xml version="1.0" encoding="UTF-8"?>
++ <!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++
++  <modelVersion>4.0.0</modelVersion>
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-streaming</artifactId>
++  <packaging>jar</packaging>
++  <version>@version</version>
++  <dependencies>
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-core</artifactId>
++      <version>@version</version>
++    </dependency>
++  </dependencies>
++</project>
+diff --git a/ivy/hadoop-test-pom-template.xml b/ivy/hadoop-test-pom-template.xml
+new file mode 100644
+index 0000000..3795e54
+--- /dev/null
++++ b/ivy/hadoop-test-pom-template.xml
+@@ -0,0 +1,53 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++  <modelVersion>4.0.0</modelVersion>
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-test</artifactId>
++  <packaging>jar</packaging>
++  <version>@version</version>
++  <dependencies>
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-core</artifactId>
++      <version>@version</version>
++    </dependency>
++    <dependency>
++      <groupId>org.apache.ftpserver</groupId>
++      <artifactId>ftplet-api</artifactId>
++      <version>1.0.0</version>
++    </dependency>
++    <dependency>
++      <groupId>org.apache.mina</groupId>
++      <artifactId>mina-core</artifactId>
++      <version>2.0.0-M5</version>
++    </dependency>
++    <dependency>
++      <groupId>org.apache.ftpserver</groupId>
++      <artifactId>ftpserver-core</artifactId>
++      <version>1.0.0</version>
++    </dependency>
++    <dependency>
++      <groupId>org.apache.ftpserver</groupId>
++      <artifactId>ftpserver-deprecated</artifactId>
++      <version>1.0.0-M2</version>
++    </dependency>
++  </dependencies>
++</project>
+diff --git a/ivy/hadoop-tools-pom-template.xml b/ivy/hadoop-tools-pom-template.xml
+new file mode 100644
+index 0000000..5dab238
+--- /dev/null
++++ b/ivy/hadoop-tools-pom-template.xml
+@@ -0,0 +1,34 @@
++<?xml version="1.0" encoding="UTF-8"?>
++ <!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++
++  <modelVersion>4.0.0</modelVersion>
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-tools</artifactId>
++  <packaging>jar</packaging>
++  <version>@version</version>
++  <dependencies>
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-core</artifactId>
++      <version>@version</version>
++    </dependency>
++  </dependencies>
++</project>
+diff --git a/ivy/libraries.properties b/ivy/libraries.properties
+index 7a33c58..fec577a 100644
+--- a/ivy/libraries.properties
++++ b/ivy/libraries.properties
+@@ -18,6 +18,7 @@ hadoop.version=0.20.0
+ 
+ #These are the versions of our dependencies (in alphabetical order)
+ apacheant.version=1.7.0
++ant-task.version=2.0.10
+ 
+ checkstyle.version=4.2
+ 
+@@ -70,5 +71,6 @@ servlet-api.version=2.5
+ slf4j-api.version=1.4.3
+ slf4j-log4j12.version=1.4.3
+ 
++wagon-http.version=1.0-beta-2
+ xmlenc.version=0.52
+ xerces.version=1.4.4
+diff --git a/src/contrib/build-contrib.xml b/src/contrib/build-contrib.xml
+index 1014fce..375673e 100644
+--- a/src/contrib/build-contrib.xml
++++ b/src/contrib/build-contrib.xml
+@@ -183,7 +183,7 @@
+   <target name="jar" depends="compile" unless="skip.contrib">
+     <echo message="contrib: ${name}"/>
+     <jar
+-      jarfile="${build.dir}/hadoop-${version}-${name}.jar"
++      jarfile="${build.dir}/hadoop-${name}-${version}.jar"
+       basedir="${build.classes}"      
+     />
+   </target>
+@@ -195,7 +195,7 @@
+   <target name="jar-examples" depends="compile-examples"
+           if="examples.available" unless="skip.contrib">
+     <echo message="contrib: ${name}"/>
+-    <jar jarfile="${build.dir}/hadoop-${version}-${name}-examples.jar">
++    <jar jarfile="${build.dir}/hadoop-${name}-examples-${version}.jar">
+       <fileset dir="${build.classes}">
+       </fileset>
+       <fileset dir="${build.examples}">
+@@ -210,7 +210,7 @@
+     <mkdir dir="${dist.dir}/contrib/${name}"/>
+     <copy todir="${dist.dir}/contrib/${name}" includeEmptyDirs="false" flatten="true">
+       <fileset dir="${build.dir}">
+-        <include name="hadoop-${version}-${name}.jar" />
++        <include name="hadoop-${name}-${version}.jar" />
+       </fileset>
+     </copy>
+ 
+diff --git a/src/contrib/data_join/build.xml b/src/contrib/data_join/build.xml
+index db9ce2c..00d758a 100644
+--- a/src/contrib/data_join/build.xml
++++ b/src/contrib/data_join/build.xml
+@@ -28,9 +28,8 @@ to call at top-level: ant deploy-contrib compile-core-test
+   <!-- Override jar target to specify main class -->
+   <target name="jar" depends="compile">
+     <jar
+-      jarfile="${build.dir}/hadoop-${version}-${name}.jar"
+-      basedir="${build.classes}"      
+-    >
++      jarfile="${build.dir}/hadoop-${name}-${version}.jar"
++      basedir="${build.classes}">      
+   	<manifest>
+ 	    <attribute name="Main-Class" value="org.apache.hadoop.contrib.utils.join.DataJoinJob"/>
+ 	</manifest>
+diff --git a/src/contrib/eclipse-plugin/build.xml b/src/contrib/eclipse-plugin/build.xml
+index 783cb23..f04a74a 100644
+--- a/src/contrib/eclipse-plugin/build.xml
++++ b/src/contrib/eclipse-plugin/build.xml
+@@ -66,10 +66,10 @@
+   <!-- Override jar target to specify manifest -->
+   <target name="jar" depends="compile" unless="skip.contrib">
+     <mkdir dir="${build.dir}/lib"/>
+-    <copy file="${hadoop.root}/build/hadoop-${version}-core.jar" tofile="${build.dir}/lib/hadoop-core.jar" verbose="true"/>
++    <copy file="${hadoop.root}/build/hadoop-core-${version}.jar" tofile="${build.dir}/lib/hadoop-core.jar" verbose="true"/>
+     <copy file="${hadoop.root}/build/ivy/lib/Hadoop/common/commons-cli-${commons-cli.version}.jar"  todir="${build.dir}/lib" verbose="true"/>
+     <jar
+-      jarfile="${build.dir}/hadoop-${version}-${name}.jar"
++      jarfile="${build.dir}/hadoop-${name}-${version}.jar"
+       manifest="${root}/META-INF/MANIFEST.MF">
+       <fileset dir="${build.dir}" includes="classes/ lib/"/>
+       <fileset dir="${root}" includes="resources/ plugin.xml"/>
+diff --git a/src/contrib/failmon/build.xml b/src/contrib/failmon/build.xml
+index b2248f1..c77ff46 100644
+--- a/src/contrib/failmon/build.xml
++++ b/src/contrib/failmon/build.xml
+@@ -21,7 +21,7 @@
+ 
+   <import file="../build-contrib.xml"/>
+ 
+-  <property name="jarfile" value="${build.dir}/${name}.jar"/>
++  <property name="jarfile" value="${build.dir}/hadoop-${name}-${version}.jar"/>
+ 
+   <target name="jar" depends="compile" unless="skip.contrib">
+     <!-- Make sure that the hadoop jar has been created -->
+@@ -113,7 +113,7 @@
+     <delete file="${name}.jar"/>
+ 
+     <move file="${name}.tar.gz" todir="${build.dir}"/>
+-    <echo message= "${hadoop.root}/build/contrib/failmon/${name}.jar"/>
++    <echo message= "${hadoop.root}/build/contrib/failmon/hadoop-${name}-${version}.jar"/>
+     
+   </target>
+   
+diff --git a/src/contrib/index/build.xml b/src/contrib/index/build.xml
+index 3b3cbb7..d0bfdcf 100755
+--- a/src/contrib/index/build.xml
++++ b/src/contrib/index/build.xml
+@@ -25,7 +25,7 @@
+   <target name="jar" depends="compile" unless="skip.contrib">
+     <echo message="contrib: ${name}"/>
+     <jar
+-      jarfile="${build.dir}/hadoop-${version}-${name}.jar"
++      jarfile="${build.dir}/hadoop-${name}-${version}.jar"
+       basedir="${build.classes}"
+     >
+       <manifest>
+diff --git a/src/contrib/streaming/build.xml b/src/contrib/streaming/build.xml
+index 0e351da..a4c5cd9 100644
+--- a/src/contrib/streaming/build.xml
++++ b/src/contrib/streaming/build.xml
+@@ -27,10 +27,8 @@ to call at top-level: ant deploy-contrib compile-core-test
+ 
+   <!-- Override jar target to specify main class -->
+   <target name="jar" depends="compile">
+-    <jar
+-      jarfile="${build.dir}/hadoop-${version}-${name}.jar"
+-      basedir="${build.classes}"      
+-    >
++      <jar jarfile="${build.dir}/hadoop-${name}-${version}.jar"
++      basedir="${build.classes}">
+   	<manifest>
+ 	    <attribute name="Main-Class" value="org.apache.hadoop.streaming.HadoopStreaming"/>
+ 	</manifest>
+diff --git a/src/contrib/thriftfs/build.xml b/src/contrib/thriftfs/build.xml
+index 89e4ebd..b8ac0d9 100644
+--- a/src/contrib/thriftfs/build.xml
++++ b/src/contrib/thriftfs/build.xml
+@@ -34,7 +34,7 @@ to call at top-level: ant deploy-contrib compile-core-test
+   <!-- Override jar target to specify main class -->
+   <target name="jar" depends="compile">
+     <jar
+-      jarfile="${build.dir}/hadoop-${version}-${name}.jar"
++      jarfile="${build.dir}/hadoop-${name}-${version}.jar"
+       basedir="${build.classes}"      
+     >
+   	<manifest>
+diff --git a/src/contrib/vaidya/build.xml b/src/contrib/vaidya/build.xml
+index d5ab229..b6e428b 100644
+--- a/src/contrib/vaidya/build.xml
++++ b/src/contrib/vaidya/build.xml
+@@ -47,7 +47,7 @@
+ 	<!-- ====================================================== -->
+ 	<target name="jar" depends="compile" unless="skip.contrib">
+ 		<echo message="contrib: ${name}" />
+-		<jar jarfile="${build.dir}/hadoop-${version}-${name}.jar">
++		<jar jarfile="${build.dir}/hadoop-${name}-${version}.jar">
+ 			<fileset dir="${build.classes}" />
+ 			<fileset dir="${basedir}/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests">
+ 				<include name="postex_diagnosis_tests.xml" />
+-- 
+1.7.0.4
+

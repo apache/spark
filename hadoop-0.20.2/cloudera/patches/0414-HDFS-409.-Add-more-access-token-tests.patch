@@ -1,0 +1,977 @@
+From 6205b10e6bbd702cab014af83061791b35a2248a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 24 Dec 2009 11:50:12 -0800
+Subject: [PATCH 0414/1179] HDFS-409. Add more access token tests
+
+Patch: https://issues.apache.org/jira/secure/attachment/12428924/HDFS-409-0_20.4.patch
+Author: Kan Zhang
+Ref: CDH-648
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   33 +-
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |   16 +-
+ src/test/org/apache/hadoop/hdfs/DFSTestUtil.java   |   12 +
+ .../org/apache/hadoop/hdfs/MiniDFSCluster.java     |  121 ++++-
+ .../hadoop/hdfs/server/balancer/TestBalancer.java  |   35 +-
+ .../server/namenode/TestAccessTokenWithDFS.java    |  531 ++++++++++++++++++++
+ 6 files changed, 689 insertions(+), 59 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestAccessTokenWithDFS.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 5cda71d..9bcf95b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -1407,14 +1407,16 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       if (status != DataTransferProtocol.OP_STATUS_SUCCESS) {
+         if (status == DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN) {
+           throw new InvalidAccessTokenException(
+-              "Got access token error in response to OP_READ_BLOCK "
+-                  + "for file " + file + " for block " + blockId);
++              "Got access token error for OP_READ_BLOCK, self="
++                  + sock.getLocalSocketAddress() + ", remote="
++                  + sock.getRemoteSocketAddress() + ", for file " + file
++                  + ", for block " + blockId + "_" + genStamp);
+         } else {
+           throw new IOException("Got error in response to OP_READ_BLOCK " +
+                                 "self=" + sock.getLocalSocketAddress() +
+                                 ", remote=" + sock.getRemoteSocketAddress() + 
+                                 " for file " + file + 
+-                                " for block " + blockId);
++                                " for block " + blockId + "_" + genStamp);
+         }
+       }
+       DataChecksum checksum = DataChecksum.newDataChecksum( in );
+@@ -1739,9 +1741,10 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+               buffersize, verifyChecksum, clientName);
+           return chosenNode;
+         } catch (IOException ex) {
+-          LOG.debug("Failed to connect to " + targetAddr + ":" 
+-                    + StringUtils.stringifyException(ex));
+-          if (ex instanceof InvalidAccessTokenException && refetchToken-- > 0) {
++          if (ex instanceof InvalidAccessTokenException && refetchToken > 0) {
++            LOG.info("Will fetch a new access token and retry, " 
++                + "access token was invalid when connecting to " + targetAddr
++                + " : " + ex);
+             /*
+              * Get a new access token and retry. Retry is needed in 2 cases. 1)
+              * When both NN and DN re-started while DFSClient holding a cached
+@@ -1752,8 +1755,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+              * access key from its memory since it's considered expired based on
+              * the estimated expiration date.
+              */
++            refetchToken--;
+             fetchBlockAt(target);
+           } else {
++            LOG.info("Failed to connect to " + targetAddr
++                + ", add to deadNodes and continue", ex);
+             // Put chosen node into dead list, continue
+             addToDeadNodes(chosenNode);
+           }
+@@ -1976,12 +1982,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+                    e.getPos() + " from " + chosenNode.getName());
+           reportChecksumFailure(src, block.getBlock(), chosenNode);
+         } catch (IOException e) {
+-          if (e instanceof InvalidAccessTokenException && refetchToken-- > 0) {
+-            LOG.info("Invalid access token when connecting to " + targetAddr
+-                + " for file " + src + " for block "
+-                + block.getBlock() + ":"
+-                + StringUtils.stringifyException(e)
+-                + ", get a new access token and retry...");
++          if (e instanceof InvalidAccessTokenException && refetchToken > 0) {
++            LOG.info("Will get a new access token and retry, "
++                + "access token was invalid when connecting to " + targetAddr
++                + " : " + e);
++            refetchToken--;
+             fetchBlockAt(block.getStartOffset());
+             continue;
+           } else {
+@@ -2252,6 +2257,10 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     private Progressable progress;
+     private short blockReplication; // replication factor of file
+ 
++    AccessToken getAccessToken() {
++      return accessToken;
++    }
++
+     private void setLastException(IOException e) {
+       if (lastException == null) {
+         lastException = e;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index 77f0f1c..83dedc9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -180,8 +180,8 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+       try {
+         out.writeShort(DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN);
+         out.flush();
+-        throw new IOException("Access token verification failed, on client "
+-            + "request for reading block " + block);
++        throw new IOException("Access token verification failed, for client "
++            + remoteAddress + " for OP_READ_BLOCK for block " + block);
+       } finally {
+         IOUtils.closeStream(out);
+       }
+@@ -289,8 +289,8 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+           Text.writeString(replyOut, datanode.dnRegistration.getName());
+           replyOut.flush();
+         }
+-        throw new IOException("Access token verification failed, on client "
+-            + "request for writing block " + block);
++        throw new IOException("Access token verification failed, for client "
++            + remoteAddress + " for OP_WRITE_BLOCK for block " + block);
+       } finally {
+         IOUtils.closeStream(replyOut);
+       }
+@@ -454,8 +454,8 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+         out.writeShort(DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN);
+         out.flush();
+         throw new IOException(
+-            "Access token verification failed, on getBlockChecksum() "
+-                + "for block " + block);
++            "Access token verification failed, for client " + remoteAddress
++                + " for OP_BLOCK_CHECKSUM for block " + block);
+       } finally {
+         IOUtils.closeStream(out);
+       }
+@@ -511,7 +511,7 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+         && !datanode.accessTokenHandler.checkAccess(accessToken, null, blockId,
+             AccessTokenHandler.AccessMode.COPY)) {
+       LOG.warn("Invalid access token in request from "
+-          + s.getRemoteSocketAddress() + " for copying block " + block);
++          + remoteAddress + " for OP_COPY_BLOCK for block " + block);
+       sendResponse(s,
+           (short) DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN,
+           datanode.socketWriteTimeout);
+@@ -589,7 +589,7 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+         && !datanode.accessTokenHandler.checkAccess(accessToken, null, blockId,
+             AccessTokenHandler.AccessMode.REPLACE)) {
+       LOG.warn("Invalid access token in request from "
+-          + s.getRemoteSocketAddress() + " for replacing block " + block);
++          + remoteAddress + " for OP_REPLACE_BLOCK for block " + block);
+       sendResponse(s, (short)DataTransferProtocol.OP_STATUS_ERROR_ACCESS_TOKEN,
+           datanode.socketWriteTimeout);
+       return;
+diff --git a/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java b/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java
+index 1997380..34824fe 100644
+--- a/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java
++++ b/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java
+@@ -25,11 +25,14 @@ import java.io.FileReader;
+ import java.io.IOException;
+ import java.net.URL;
+ import java.net.URLConnection;
++import java.util.List;
+ import java.util.Random;
+ import junit.framework.TestCase;
+ import org.apache.hadoop.hdfs.DFSClient.DFSDataInputStream;
+ import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+ import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.security.AccessToken;
+ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -247,6 +250,15 @@ public class DFSTestUtil extends TestCase {
+     return in.getCurrentBlock();
+   }  
+ 
++  public static List<LocatedBlock> getAllBlocks(FSDataInputStream in)
++      throws IOException {
++    return ((DFSClient.DFSDataInputStream) in).getAllBlocks();
++  }
++
++  public static AccessToken getAccessToken(FSDataOutputStream out) {
++    return ((DFSClient.DFSOutputStream) out.getWrappedStream()).getAccessToken();
++  }
++
+   static void setLogLevel2All(org.apache.commons.logging.Log log) {
+     ((org.apache.commons.logging.impl.Log4JLogger)log
+         ).getLogger().setLevel(org.apache.log4j.Level.ALL);
+diff --git a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+index 4733159..56ad52e 100644
+--- a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
++++ b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+@@ -43,6 +43,7 @@ import org.apache.hadoop.hdfs.tools.DFSAdmin;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.security.*;
++import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.ToolRunner;
+ 
+ /**
+@@ -568,6 +569,45 @@ public class MiniDFSCluster {
+     }
+   }
+ 
++  /**
++   * Shutdown namenode.
++   */
++  public synchronized void shutdownNameNode() {
++    if (nameNode != null) {
++      System.out.println("Shutting down the namenode");
++      nameNode.stop();
++      nameNode.join();
++      nameNode = null;
++    }
++  }
++
++  /**
++   * Restart namenode.
++   */
++  public synchronized void restartNameNode() throws IOException {
++    shutdownNameNode();
++    nameNode = NameNode.createNameNode(new String[] {}, conf);
++    waitClusterUp();
++    System.out.println("Restarted the namenode");
++    int failedCount = 0;
++    while (true) {
++      try {
++        waitActive();
++        break;
++      } catch (IOException e) {
++        failedCount++;
++        // Cached RPC connection to namenode, if any, is expected to fail once
++        if (failedCount > 1) {
++          System.out.println("Tried waitActive() " + failedCount
++              + " time(s) and failed, giving up.  "
++              + StringUtils.stringifyException(e));
++          throw e;
++        }
++      }
++    }
++    System.out.println("Cluster is active");
++  }
++
+   /*
+    * Corrupt a block on all datanode
+    */
+@@ -607,7 +647,7 @@ public class MiniDFSCluster {
+   /*
+    * Shutdown a particular datanode
+    */
+-  public DataNodeProperties stopDataNode(int i) {
++  public synchronized DataNodeProperties stopDataNode(int i) {
+     if (i < 0 || i >= dataNodes.size()) {
+       return null;
+     }
+@@ -622,62 +662,93 @@ public class MiniDFSCluster {
+     return dnprop;
+   }
+ 
++  /*
++   * Shutdown a datanode by name.
++   */
++  public synchronized DataNodeProperties stopDataNode(String name) {
++    int i;
++    for (i = 0; i < dataNodes.size(); i++) {
++      DataNode dn = dataNodes.get(i).datanode;
++      if (dn.dnRegistration.getName().equals(name)) {
++        break;
++      }
++    }
++    return stopDataNode(i);
++  }
++
+   /**
+    * Restart a datanode
+    * @param dnprop datanode's property
+    * @return true if restarting is successful
+    * @throws IOException
+    */
+-  public synchronized boolean restartDataNode(DataNodeProperties dnprop)
+-  throws IOException {
++  public boolean restartDataNode(DataNodeProperties dnprop) throws IOException {
++    return restartDataNode(dnprop, false);
++  }
++
++  /**
++   * Restart a datanode, on the same port if requested
++   * @param dnprop, the datanode to restart
++   * @param keepPort, whether to use the same port
++   * @return true if restarting is successful
++   * @throws IOException
++   */
++  public synchronized boolean restartDataNode(DataNodeProperties dnprop,
++      boolean keepPort) throws IOException {
+     Configuration conf = dnprop.conf;
+     String[] args = dnprop.dnArgs;
+     Configuration newconf = new Configuration(conf); // save cloned config
+-    dataNodes.add(new DataNodeProperties(
+-                     DataNode.createDataNode(args, conf), 
+-                     newconf, args));
++    if (keepPort) {
++      InetSocketAddress addr = dnprop.datanode.getSelfAddr();
++      conf.set("dfs.datanode.address", addr.getAddress().getHostAddress() + ":"
++          + addr.getPort());
++    }
++    dataNodes.add(new DataNodeProperties(DataNode.createDataNode(args, conf),
++        newconf, args));
+     numDataNodes++;
+     return true;
++  }
+ 
++  /*
++   * Restart a particular datanode, use newly assigned port
++   */
++  public boolean restartDataNode(int i) throws IOException {
++    return restartDataNode(i, false);
+   }
++
+   /*
+-   * Restart a particular datanode
++   * Restart a particular datanode, on the same port if keepPort is true
+    */
+-  public synchronized boolean restartDataNode(int i) throws IOException {
++  public synchronized boolean restartDataNode(int i, boolean keepPort)
++      throws IOException {
+     DataNodeProperties dnprop = stopDataNode(i);
+     if (dnprop == null) {
+       return false;
+     } else {
+-      return restartDataNode(dnprop);
++      return restartDataNode(dnprop, keepPort);
+     }
+   }
+ 
+   /*
+-   * Restart all datanodes
++   * Restart all datanodes, on the same ports if keepPort is true
+    */
+-  public synchronized boolean restartDataNodes() throws IOException {
+-    for (int i = dataNodes.size()-1; i >= 0; i--) {
+-      System.out.println("Restarting DataNode " + i);
+-      if (!restartDataNode(i)) 
++  public synchronized boolean restartDataNodes(boolean keepPort)
++      throws IOException {
++    for (int i = dataNodes.size() - 1; i >= 0; i--) {
++      if (!restartDataNode(i, keepPort))
+         return false;
++      System.out.println("Restarted DataNode " + i);
+     }
+     return true;
+   }
+ 
+   /*
+-   * Shutdown a datanode by name.
++   * Restart all datanodes, use newly assigned ports
+    */
+-  public synchronized DataNodeProperties stopDataNode(String name) {
+-    int i;
+-    for (i = 0; i < dataNodes.size(); i++) {
+-      DataNode dn = dataNodes.get(i).datanode;
+-      if (dn.dnRegistration.getName().equals(name)) {
+-        break;
+-      }
+-    }
+-    return stopDataNode(i);
++  public boolean restartDataNodes() throws IOException {
++    return restartDataNodes(false);
+   }
+-  
++
+   /**
+    * Returns true if the NameNode is running and is out of Safe Mode.
+    */
+diff --git a/src/test/org/apache/hadoop/hdfs/server/balancer/TestBalancer.java b/src/test/org/apache/hadoop/hdfs/server/balancer/TestBalancer.java
+index 3ed5bf5..cc33450 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/balancer/TestBalancer.java
++++ b/src/test/org/apache/hadoop/hdfs/server/balancer/TestBalancer.java
+@@ -34,7 +34,6 @@ import org.apache.hadoop.hdfs.protocol.FSConstants.DatanodeReportType;
+ import org.apache.hadoop.hdfs.server.datanode.SimulatedFSDataset;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.security.AccessTokenHandler;
+ 
+ import junit.framework.TestCase;
+ /**
+@@ -60,7 +59,6 @@ public class TestBalancer extends TestCase {
+   }
+ 
+   private void initConf(Configuration conf) {
+-    conf.setBoolean(AccessTokenHandler.STRING_ENABLE_ACCESS_TOKEN, false);
+     conf.setLong("dfs.block.size", DEFAULT_BLOCK_SIZE);
+     conf.setInt("io.bytes.per.checksum", DEFAULT_BLOCK_SIZE);
+     conf.setLong("dfs.heartbeat.interval", 1L);
+@@ -259,23 +257,32 @@ public class TestBalancer extends TestCase {
+     } while(!balanced);
+ 
+   }
++  
++  /** one-node cluster test*/
++  private void oneNodeTest(Configuration conf) throws Exception {
++    // add an empty node with half of the CAPACITY & the same rack
++    test(conf, new long[]{CAPACITY}, new String[]{RACK0}, CAPACITY/2, RACK0);
++  }
++  
++  /** two-node cluster test */
++  private void twoNodeTest(Configuration conf) throws Exception {
++    test(conf, new long[]{CAPACITY, CAPACITY}, new String[]{RACK0, RACK1},
++        CAPACITY, RACK2);
++  }
++  
++  /** test using a user-supplied conf */
++  public void integrationTest(Configuration conf) throws Exception {
++    initConf(conf);
++    oneNodeTest(conf);
++  }
++  
+   /** Test a cluster with even distribution, 
+    * then a new empty node is added to the cluster*/
+   public void testBalancer0() throws Exception {
+     Configuration conf = new Configuration();
+     initConf(conf);
+-    /** one-node cluster test*/
+-    // add an empty node with half of the CAPACITY & the same rack
+-    test(conf, new long[]{CAPACITY}, new String[]{RACK0}, CAPACITY/2, RACK0);
+-
+-    /** two-node cluster test */
+-    test(conf, new long[]{CAPACITY, CAPACITY}, new String[]{RACK0, RACK1},
+-        CAPACITY, RACK2);
+-    
+-    /** End-to-end testing of access token, involving NN, DN, and Balancer */
+-    Configuration newConf = new Configuration(conf);
+-    newConf.setBoolean(AccessTokenHandler.STRING_ENABLE_ACCESS_TOKEN, true);
+-    test(newConf, new long[]{CAPACITY}, new String[]{RACK0}, CAPACITY/2, RACK0);
++    oneNodeTest(conf);
++    twoNodeTest(conf);
+   }
+ 
+   /** Test unevenly distributed cluster */
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestAccessTokenWithDFS.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestAccessTokenWithDFS.java
+new file mode 100644
+index 0000000..51afc51
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestAccessTokenWithDFS.java
+@@ -0,0 +1,531 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import java.io.IOException;
++import java.net.InetSocketAddress;
++import java.net.Socket;
++import java.util.EnumSet;
++import java.util.List;
++import java.util.Random;
++
++import org.apache.commons.logging.impl.Log4JLogger;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.DFSClient;
++import org.apache.hadoop.hdfs.DFSTestUtil;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
++import org.apache.hadoop.hdfs.protocol.LocatedBlock;
++import org.apache.hadoop.hdfs.server.balancer.TestBalancer;
++import org.apache.hadoop.hdfs.server.common.HdfsConstants;
++import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.fs.FSDataInputStream;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.security.AccessToken;
++import org.apache.hadoop.security.AccessTokenHandler;
++import org.apache.hadoop.security.InvalidAccessTokenException;
++import org.apache.hadoop.security.SecurityTestUtil;
++import org.apache.log4j.Level;
++
++import junit.framework.TestCase;
++
++public class TestAccessTokenWithDFS extends TestCase {
++
++  private static final int BLOCK_SIZE = 1024;
++  private static final int FILE_SIZE = 2 * BLOCK_SIZE;
++  private static final String FILE_TO_READ = "/fileToRead.dat";
++  private static final String FILE_TO_WRITE = "/fileToWrite.dat";
++  private static final String FILE_TO_APPEND = "/fileToAppend.dat";
++  private final byte[] rawData = new byte[FILE_SIZE];
++
++  {
++    ((Log4JLogger) DFSClient.LOG).getLogger().setLevel(Level.ALL);
++    Random r = new Random();
++    r.nextBytes(rawData);
++  }
++
++  private void createFile(FileSystem fs, Path filename) throws IOException {
++    FSDataOutputStream out = fs.create(filename);
++    out.write(rawData);
++    out.close();
++  }
++
++  // read a file using blockSeekTo()
++  private boolean checkFile1(FSDataInputStream in) {
++    byte[] toRead = new byte[FILE_SIZE];
++    int totalRead = 0;
++    int nRead = 0;
++    try {
++      while ((nRead = in.read(toRead, totalRead, toRead.length - totalRead)) > 0) {
++        totalRead += nRead;
++      }
++    } catch (IOException e) {
++      return false;
++    }
++    assertEquals("Cannot read file.", toRead.length, totalRead);
++    return checkFile(toRead);
++  }
++
++  // read a file using fetchBlockByteRange()
++  private boolean checkFile2(FSDataInputStream in) {
++    byte[] toRead = new byte[FILE_SIZE];
++    try {
++      assertEquals("Cannot read file", toRead.length, in.read(0, toRead, 0,
++          toRead.length));
++    } catch (IOException e) {
++      return false;
++    }
++    return checkFile(toRead);
++  }
++
++  private boolean checkFile(byte[] fileToCheck) {
++    if (fileToCheck.length != rawData.length) {
++      return false;
++    }
++    for (int i = 0; i < fileToCheck.length; i++) {
++      if (fileToCheck[i] != rawData[i]) {
++        return false;
++      }
++    }
++    return true;
++  }
++
++  // creates a file and returns a descriptor for writing to it
++  private static FSDataOutputStream writeFile(FileSystem fileSys, Path name,
++      short repl, long blockSize) throws IOException {
++    FSDataOutputStream stm = fileSys.create(name, true, fileSys.getConf()
++        .getInt("io.file.buffer.size", 4096), repl, blockSize);
++    return stm;
++  }
++
++  // try reading a block using a BlockReader directly
++  private static void tryRead(Configuration conf, LocatedBlock lblock,
++      boolean shouldSucceed) {
++    InetSocketAddress targetAddr = null;
++    Socket s = null;
++    DFSClient.BlockReader blockReader = null;
++    Block block = lblock.getBlock();
++    try {
++      DatanodeInfo[] nodes = lblock.getLocations();
++      targetAddr = NetUtils.createSocketAddr(nodes[0].getName());
++      s = new Socket();
++      s.connect(targetAddr, HdfsConstants.READ_TIMEOUT);
++      s.setSoTimeout(HdfsConstants.READ_TIMEOUT);
++
++      blockReader = DFSClient.BlockReader.newBlockReader(s, targetAddr
++          .toString()
++          + ":" + block.getBlockId(), block.getBlockId(), lblock
++          .getAccessToken(), block.getGenerationStamp(), 0, -1, conf.getInt(
++          "io.file.buffer.size", 4096));
++
++    } catch (IOException ex) {
++      if (ex instanceof InvalidAccessTokenException) {
++        assertFalse("OP_READ_BLOCK: access token is invalid, "
++            + "when it is expected to be valid", shouldSucceed);
++        return;
++      }
++      fail("OP_READ_BLOCK failed due to reasons other than access token");
++    } finally {
++      if (s != null) {
++        try {
++          s.close();
++        } catch (IOException iex) {
++        } finally {
++          s = null;
++        }
++      }
++    }
++    if (blockReader == null) {
++      fail("OP_READ_BLOCK failed due to reasons other than access token");
++    }
++    assertTrue("OP_READ_BLOCK: access token is valid, "
++        + "when it is expected to be invalid", shouldSucceed);
++  }
++
++  // get a conf for testing
++  private static Configuration getConf(int numDataNodes) throws IOException {
++    Configuration conf = new Configuration();
++    conf.setBoolean(AccessTokenHandler.STRING_ENABLE_ACCESS_TOKEN, true);
++    conf.setLong("dfs.block.size", BLOCK_SIZE);
++    conf.setInt("io.bytes.per.checksum", BLOCK_SIZE);
++    conf.setInt("dfs.heartbeat.interval", 1);
++    conf.setInt("dfs.replication", numDataNodes);
++    conf.setInt("ipc.client.connect.max.retries", 0);
++    conf.setBoolean("dfs.support.append", true);
++    return conf;
++  }
++
++  /*
++   * testing that APPEND operation can handle token expiration when
++   * re-establishing pipeline is needed
++   */
++  public void testAppend() throws Exception {
++    MiniDFSCluster cluster = null;
++    int numDataNodes = 2;
++    Configuration conf = getConf(numDataNodes);
++
++    try {
++      cluster = new MiniDFSCluster(conf, numDataNodes, true, null);
++      cluster.waitActive();
++      assertEquals(numDataNodes, cluster.getDataNodes().size());
++      // set a short token lifetime (1 second)
++      SecurityTestUtil.setAccessTokenLifetime(
++          cluster.getNameNode().getNamesystem().accessTokenHandler, 1000L);
++      Path fileToAppend = new Path(FILE_TO_APPEND);
++      FileSystem fs = cluster.getFileSystem();
++
++      // write a one-byte file
++      FSDataOutputStream stm = writeFile(fs, fileToAppend,
++          (short) numDataNodes, BLOCK_SIZE);
++      stm.write(rawData, 0, 1);
++      stm.close();
++      // open the file again for append
++      stm = fs.append(fileToAppend);
++      int mid = rawData.length - 1;
++      stm.write(rawData, 1, mid - 1);
++      stm.sync();
++
++      /*
++       * wait till token used in stm expires
++       */
++      AccessToken token = DFSTestUtil.getAccessToken(stm);
++      while (!SecurityTestUtil.isAccessTokenExpired(token)) {
++        try {
++          Thread.sleep(10);
++        } catch (InterruptedException ignored) {
++        }
++      }
++
++      // remove a datanode to force re-establishing pipeline
++      cluster.stopDataNode(0);
++      // append the rest of the file
++      stm.write(rawData, mid, rawData.length - mid);
++      stm.close();
++      // check if append is successful
++      FSDataInputStream in5 = fs.open(fileToAppend);
++      assertTrue(checkFile1(in5));
++    } finally {
++      if (cluster != null) {
++        cluster.shutdown();
++      }
++    }
++  }
++
++  /*
++   * testing that WRITE operation can handle token expiration when
++   * re-establishing pipeline is needed
++   */
++  public void testWrite() throws Exception {
++    MiniDFSCluster cluster = null;
++    int numDataNodes = 2;
++    Configuration conf = getConf(numDataNodes);
++
++    try {
++      cluster = new MiniDFSCluster(conf, numDataNodes, true, null);
++      cluster.waitActive();
++      assertEquals(numDataNodes, cluster.getDataNodes().size());
++      // set a short token lifetime (1 second)
++      SecurityTestUtil.setAccessTokenLifetime(
++          cluster.getNameNode().getNamesystem().accessTokenHandler, 1000L);
++      Path fileToWrite = new Path(FILE_TO_WRITE);
++      FileSystem fs = cluster.getFileSystem();
++
++      FSDataOutputStream stm = writeFile(fs, fileToWrite, (short) numDataNodes,
++          BLOCK_SIZE);
++      // write a partial block
++      int mid = rawData.length - 1;
++      stm.write(rawData, 0, mid);
++      stm.sync();
++
++      /*
++       * wait till token used in stm expires
++       */
++      AccessToken token = DFSTestUtil.getAccessToken(stm);
++      while (!SecurityTestUtil.isAccessTokenExpired(token)) {
++        try {
++          Thread.sleep(10);
++        } catch (InterruptedException ignored) {
++        }
++      }
++
++      // remove a datanode to force re-establishing pipeline
++      cluster.stopDataNode(0);
++      // write the rest of the file
++      stm.write(rawData, mid, rawData.length - mid);
++      stm.close();
++      // check if write is successful
++      FSDataInputStream in4 = fs.open(fileToWrite);
++      assertTrue(checkFile1(in4));
++    } finally {
++      if (cluster != null) {
++        cluster.shutdown();
++      }
++    }
++  }
++
++  public void testRead() throws Exception {
++    MiniDFSCluster cluster = null;
++    int numDataNodes = 2;
++    Configuration conf = getConf(numDataNodes);
++
++    try {
++      cluster = new MiniDFSCluster(conf, numDataNodes, true, null);
++      cluster.waitActive();
++      assertEquals(numDataNodes, cluster.getDataNodes().size());
++      // set a short token lifetime (1 second) initially
++      SecurityTestUtil.setAccessTokenLifetime(
++          cluster.getNameNode().getNamesystem().accessTokenHandler, 1000L);
++      Path fileToRead = new Path(FILE_TO_READ);
++      FileSystem fs = cluster.getFileSystem();
++      createFile(fs, fileToRead);
++
++      /*
++       * setup for testing expiration handling of cached tokens
++       */
++
++      // read using blockSeekTo(). Acquired tokens are cached in in1
++      FSDataInputStream in1 = fs.open(fileToRead);
++      assertTrue(checkFile1(in1));
++      // read using blockSeekTo(). Acquired tokens are cached in in2
++      FSDataInputStream in2 = fs.open(fileToRead);
++      assertTrue(checkFile1(in2));
++      // read using fetchBlockByteRange(). Acquired tokens are cached in in3
++      FSDataInputStream in3 = fs.open(fileToRead);
++      assertTrue(checkFile2(in3));
++
++      /*
++       * testing READ interface on DN using a BlockReader
++       */
++
++      DFSClient dfsclient = new DFSClient(new InetSocketAddress("localhost",
++          cluster.getNameNodePort()), conf);
++      List<LocatedBlock> locatedBlocks = cluster.getNameNode().getBlockLocations(
++          FILE_TO_READ, 0, FILE_SIZE).getLocatedBlocks();
++      LocatedBlock lblock = locatedBlocks.get(0); // first block
++      AccessToken myToken = lblock.getAccessToken();
++      // verify token is not expired
++      assertFalse(SecurityTestUtil.isAccessTokenExpired(myToken));
++      // read with valid token, should succeed
++      tryRead(conf, lblock, true);
++
++      /*
++       * wait till myToken and all cached tokens in in1, in2 and in3 expire
++       */
++
++      while (!SecurityTestUtil.isAccessTokenExpired(myToken)) {
++        try {
++          Thread.sleep(10);
++        } catch (InterruptedException ignored) {
++        }
++      }
++
++      /*
++       * continue testing READ interface on DN using a BlockReader
++       */
++
++      // verify token is expired
++      assertTrue(SecurityTestUtil.isAccessTokenExpired(myToken));
++      // read should fail
++      tryRead(conf, lblock, false);
++      // use a valid new token
++      lblock.setAccessToken(cluster.getNameNode().getNamesystem()
++          .accessTokenHandler.generateToken(lblock.getBlock().getBlockId(),
++              EnumSet.of(AccessTokenHandler.AccessMode.READ)));
++      // read should succeed
++      tryRead(conf, lblock, true);
++      // use a token with wrong blockID
++      lblock.setAccessToken(cluster.getNameNode().getNamesystem()
++          .accessTokenHandler.generateToken(lblock.getBlock().getBlockId() + 1,
++              EnumSet.of(AccessTokenHandler.AccessMode.READ)));
++      // read should fail
++      tryRead(conf, lblock, false);
++      // use a token with wrong access modes
++      lblock.setAccessToken(cluster.getNameNode().getNamesystem()
++          .accessTokenHandler.generateToken(lblock.getBlock().getBlockId(), EnumSet.of(
++              AccessTokenHandler.AccessMode.WRITE,
++              AccessTokenHandler.AccessMode.COPY,
++              AccessTokenHandler.AccessMode.REPLACE)));
++      // read should fail
++      tryRead(conf, lblock, false);
++
++      // set a long token lifetime for future tokens
++      SecurityTestUtil.setAccessTokenLifetime(
++          cluster.getNameNode().getNamesystem().accessTokenHandler, 600 * 1000L);
++
++      /*
++       * testing that when cached tokens are expired, DFSClient will re-fetch
++       * tokens transparently for READ.
++       */
++
++      // confirm all tokens cached in in1 are expired by now
++      List<LocatedBlock> lblocks = DFSTestUtil.getAllBlocks(in1);
++      for (LocatedBlock blk : lblocks) {
++        assertTrue(SecurityTestUtil.isAccessTokenExpired(blk.getAccessToken()));
++      }
++      // verify blockSeekTo() is able to re-fetch token transparently
++      in1.seek(0);
++      assertTrue(checkFile1(in1));
++
++      // confirm all tokens cached in in2 are expired by now
++      List<LocatedBlock> lblocks2 = DFSTestUtil.getAllBlocks(in2);
++      for (LocatedBlock blk : lblocks2) {
++        assertTrue(SecurityTestUtil.isAccessTokenExpired(blk.getAccessToken()));
++      }
++      // verify blockSeekTo() is able to re-fetch token transparently (testing
++      // via another interface method)
++      assertTrue(in2.seekToNewSource(0));
++      assertTrue(checkFile1(in2));
++
++      // confirm all tokens cached in in3 are expired by now
++      List<LocatedBlock> lblocks3 = DFSTestUtil.getAllBlocks(in3);
++      for (LocatedBlock blk : lblocks3) {
++        assertTrue(SecurityTestUtil.isAccessTokenExpired(blk.getAccessToken()));
++      }
++      // verify fetchBlockByteRange() is able to re-fetch token transparently
++      assertTrue(checkFile2(in3));
++
++      /*
++       * testing that after datanodes are restarted on the same ports, cached
++       * tokens should still work and there is no need to fetch new tokens from
++       * namenode. This test should run while namenode is down (to make sure no
++       * new tokens can be fetched from namenode).
++       */
++
++      // restart datanodes on the same ports that they currently use
++      assertTrue(cluster.restartDataNodes(true));
++      cluster.waitActive();
++      assertEquals(numDataNodes, cluster.getDataNodes().size());
++      cluster.shutdownNameNode();
++
++      // confirm tokens cached in in1 are still valid
++      lblocks = DFSTestUtil.getAllBlocks(in1);
++      for (LocatedBlock blk : lblocks) {
++        assertFalse(SecurityTestUtil.isAccessTokenExpired(blk.getAccessToken()));
++      }
++      // verify blockSeekTo() still works (forced to use cached tokens)
++      in1.seek(0);
++      assertTrue(checkFile1(in1));
++
++      // confirm tokens cached in in2 are still valid
++      lblocks2 = DFSTestUtil.getAllBlocks(in2);
++      for (LocatedBlock blk : lblocks2) {
++        assertFalse(SecurityTestUtil.isAccessTokenExpired(blk.getAccessToken()));
++      }
++      // verify blockSeekTo() still works (forced to use cached tokens)
++      in2.seekToNewSource(0);
++      assertTrue(checkFile1(in2));
++
++      // confirm tokens cached in in3 are still valid
++      lblocks3 = DFSTestUtil.getAllBlocks(in3);
++      for (LocatedBlock blk : lblocks3) {
++        assertFalse(SecurityTestUtil.isAccessTokenExpired(blk.getAccessToken()));
++      }
++      // verify fetchBlockByteRange() still works (forced to use cached tokens)
++      assertTrue(checkFile2(in3));
++
++      /*
++       * testing that when namenode is restarted, cached tokens should still
++       * work and there is no need to fetch new tokens from namenode. Like the
++       * previous test, this test should also run while namenode is down. The
++       * setup for this test depends on the previous test.
++       */
++
++      // restart the namenode and then shut it down for test
++      cluster.restartNameNode();
++      cluster.shutdownNameNode();
++
++      // verify blockSeekTo() still works (forced to use cached tokens)
++      in1.seek(0);
++      assertTrue(checkFile1(in1));
++      // verify again blockSeekTo() still works (forced to use cached tokens)
++      in2.seekToNewSource(0);
++      assertTrue(checkFile1(in2));
++      // verify fetchBlockByteRange() still works (forced to use cached tokens)
++      assertTrue(checkFile2(in3));
++
++      /*
++       * testing that after both namenode and datanodes got restarted (namenode
++       * first, followed by datanodes), DFSClient can't access DN without
++       * re-fetching tokens and is able to re-fetch tokens transparently. The
++       * setup of this test depends on the previous test.
++       */
++
++      // restore the cluster and restart the datanodes for test
++      cluster.restartNameNode();
++      assertTrue(cluster.restartDataNodes(true));
++      cluster.waitActive();
++      assertEquals(numDataNodes, cluster.getDataNodes().size());
++
++      // shutdown namenode so that DFSClient can't get new tokens from namenode
++      cluster.shutdownNameNode();
++
++      // verify blockSeekTo() fails (cached tokens become invalid)
++      in1.seek(0);
++      assertFalse(checkFile1(in1));
++      // verify fetchBlockByteRange() fails (cached tokens become invalid)
++      assertFalse(checkFile2(in3));
++
++      // restart the namenode to allow DFSClient to re-fetch tokens
++      cluster.restartNameNode();
++      // verify blockSeekTo() works again (by transparently re-fetching
++      // tokens from namenode)
++      in1.seek(0);
++      assertTrue(checkFile1(in1));
++      in2.seekToNewSource(0);
++      assertTrue(checkFile1(in2));
++      // verify fetchBlockByteRange() works again (by transparently
++      // re-fetching tokens from namenode)
++      assertTrue(checkFile2(in3));
++
++      /*
++       * testing that when datanodes are restarted on different ports, DFSClient
++       * is able to re-fetch tokens transparently to connect to them
++       */
++
++      // restart datanodes on newly assigned ports
++      assertTrue(cluster.restartDataNodes(false));
++      cluster.waitActive();
++      assertEquals(numDataNodes, cluster.getDataNodes().size());
++      // verify blockSeekTo() is able to re-fetch token transparently
++      in1.seek(0);
++      assertTrue(checkFile1(in1));
++      // verify blockSeekTo() is able to re-fetch token transparently
++      in2.seekToNewSource(0);
++      assertTrue(checkFile1(in2));
++      // verify fetchBlockByteRange() is able to re-fetch token transparently
++      assertTrue(checkFile2(in3));
++
++    } finally {
++      if (cluster != null) {
++        cluster.shutdown();
++      }
++    }
++  }
++
++  /*
++   * Integration testing of access token, involving NN, DN, and Balancer
++   */
++  public void testEnd2End() throws Exception {
++    Configuration conf = new Configuration();
++    conf.setBoolean(AccessTokenHandler.STRING_ENABLE_ACCESS_TOKEN, true);
++    new TestBalancer().integrationTest(conf);
++  }
++}
+-- 
+1.7.0.4
+

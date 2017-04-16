@@ -1,0 +1,26 @@
+From 604d3a71334b9340a6219e3b88bf563b79f5d083 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:19:11 -0800
+Subject: [PATCH 0132/1179] CLOUDERA-BUILD. Copy the sqoop manpage to the expected version number
+
+Author: Chad Metcalf
+---
+ cloudera/do-release-build |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 217c257..70c156b 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -97,6 +97,8 @@ popd
+ mkdir -p build/hadoop-$FULL_VERSION/docs/
+ cp -r build/contrib/sqoop/doc/ build/hadoop-$FULL_VERSION/docs/sqoop
+ 
++cp build/hadoop-$FULL_VERSION/docs/sqoop/sqoop.1.gz \
++   build/hadoop-$FULL_VERSION/docs/sqoop/sqoop-0.20.1.gz
+ 
+ JAVA_HOME=$JAVA64_HOME \
+   CFLAGS=-m64 \
+-- 
+1.7.0.4
+

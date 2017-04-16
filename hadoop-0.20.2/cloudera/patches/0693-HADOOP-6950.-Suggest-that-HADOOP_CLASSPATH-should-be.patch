@@ -1,0 +1,28 @@
+From 283d6b8d3d1c0ffece93bdf4046b09972b0f44a3 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 16 Sep 2010 00:05:09 -0700
+Subject: [PATCH 0693/1179] HADOOP-6950. Suggest that HADOOP_CLASSPATH should be preserved in hadoop-env.sh.template.
+
+Reason: Improvement
+Author: Philip Zeyliger
+Ref: CDH-2135
+---
+ conf/hadoop-env.sh.template |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/conf/hadoop-env.sh.template b/conf/hadoop-env.sh.template
+index ada5bef..eea9ecd 100644
+--- a/conf/hadoop-env.sh.template
++++ b/conf/hadoop-env.sh.template
+@@ -9,7 +9,7 @@
+ # export JAVA_HOME=/usr/lib/j2sdk1.5-sun
+ 
+ # Extra Java CLASSPATH elements.  Optional.
+-# export HADOOP_CLASSPATH=
++# export HADOOP_CLASSPATH="<extra_entries>:$HADOOP_CLASSPATH"
+ 
+ # The maximum amount of heap to use, in MB. Default is 1000.
+ # export HADOOP_HEAPSIZE=2000
+-- 
+1.7.0.4
+

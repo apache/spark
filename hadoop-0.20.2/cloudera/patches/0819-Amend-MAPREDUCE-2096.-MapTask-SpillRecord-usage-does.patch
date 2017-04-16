@@ -1,0 +1,28 @@
+From f19b644c987305988a36e7d6038b16a9768cb084 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 9 Feb 2011 17:31:35 -0800
+Subject: [PATCH 0819/1179] Amend MAPREDUCE-2096. MapTask SpillRecord usage doesn't need username.
+
+Author: Yahoo Eng
+Ref: CDH-2622
+---
+ src/mapred/org/apache/hadoop/mapred/MapTask.java |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/MapTask.java b/src/mapred/org/apache/hadoop/mapred/MapTask.java
+index e8cb088..3b76133 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MapTask.java
++++ b/src/mapred/org/apache/hadoop/mapred/MapTask.java
+@@ -1477,8 +1477,7 @@ class MapTask extends Task {
+       // read in paged indices
+       for (int i = indexCacheList.size(); i < numSpills; ++i) {
+         Path indexFileName = mapOutputFile.getSpillIndexFile(i);
+-        indexCacheList.add(new SpillRecord(indexFileName, job, 
+-            UserGroupInformation.getCurrentUser().getShortUserName()));
++        indexCacheList.add(new SpillRecord(indexFileName, job, null));
+       }
+ 
+       //make correction in the length to include the sequence file header
+-- 
+1.7.0.4
+

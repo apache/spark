@@ -1,0 +1,51 @@
+From ff22ad890d9228399e36846f308dd42f96c49fde Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:49 -0700
+Subject: [PATCH 0351/1179] MAPREDUCE-809. Job summary logs from MAPREDUCE-740 show status of completed jobs as RUNNING
+
+Author: Arun C Murthy
+Reason: Bug fix for MAPREDUCE-740
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   13 ++++++++++---
+ 1 files changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index cdae3bf..9a3230a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -2361,14 +2361,16 @@ public class JobInProgress {
+   private synchronized void terminateJob(int jobTerminationState) {
+     if ((status.getRunState() == JobStatus.RUNNING) ||
+         (status.getRunState() == JobStatus.PREP)) {
+-      // Log the job summary
+-      JobSummary.logJobSummary(this, jobtracker.getClusterStatus(false));
+-      
+       if (jobTerminationState == JobStatus.FAILED) {
+         this.status = new JobStatus(status.getJobID(),
+                                     1.0f, 1.0f, 1.0f, JobStatus.FAILED,
+                                     status.getJobPriority());
+         this.finishTime = System.currentTimeMillis();
++
++        // Log the job summary
++        JobSummary.logJobSummary(this, jobtracker.getClusterStatus(false));
++        
++        // Log to job-history
+         JobHistory.JobInfo.logFailed(this.status.getJobID(), finishTime, 
+                                      this.finishedMapTasks, 
+                                      this.finishedReduceTasks);
+@@ -2377,6 +2379,11 @@ public class JobInProgress {
+                                     1.0f, 1.0f, 1.0f, JobStatus.KILLED,
+                                     status.getJobPriority());
+         this.finishTime = System.currentTimeMillis();
++
++        // Log the job summary
++        JobSummary.logJobSummary(this, jobtracker.getClusterStatus(false));
++        
++        // Log to job-history
+         JobHistory.JobInfo.logKilled(this.status.getJobID(), finishTime, 
+                                      this.finishedMapTasks, 
+                                      this.finishedReduceTasks);
+-- 
+1.7.0.4
+

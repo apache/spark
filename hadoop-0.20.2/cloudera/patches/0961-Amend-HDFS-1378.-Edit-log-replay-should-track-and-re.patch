@@ -1,0 +1,151 @@
+From 86fe9a95f6356855038f9c605fe54e682304c88e Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Thu, 12 May 2011 15:52:25 -0700
+Subject: [PATCH 0961/1179] Amend HDFS-1378. Edit log replay should track and report file offsets in case of errors
+
+Reason: Original back-port had a bug. This back-port includes the fix as committed to trunk.
+Author: Aaron T. Myers and Todd Lipcon
+Ref: CDH-3072
+---
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |   27 ++++---
+ .../hdfs/server/namenode/TestEditLogLoading.java   |   79 ++++++++++++++++++++
+ 2 files changed, 94 insertions(+), 12 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogLoading.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index b24ad1d..0f0e6d2 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -516,6 +516,7 @@ public class FSEditLog {
+     PositionTrackingInputStream tracker = 
+       new PositionTrackingInputStream(new BufferedInputStream(edits));
+     long recentOpcodeOffsets[] = new long[4];
++    Arrays.fill(recentOpcodeOffsets, -1);
+ 
+     DataInputStream in = new DataInputStream(tracker);
+     try {
+@@ -862,21 +863,23 @@ public class FSEditLog {
+         }
+         }
+       }
+-    } catch (IOException ioe) {
+-      FSImage.LOG.error("Error replaying edit log at offset " +
+-        tracker.getPos());
+-      Arrays.sort(recentOpcodeOffsets);
++    } catch (Throwable t) {
++      // Catch Throwable because in the case of a truly corrupt edits log, any
++      // sort of error might be thrown (NumberFormat, NullPointer, EOF, etc.)
+       StringBuilder sb = new StringBuilder();
+-      for (long offset : recentOpcodeOffsets) {
+-        if (offset != 0) {
+-          sb.append(' ').append(offset);
++      sb.append("Error replaying edit log at offset " + tracker.getPos());
++      if (recentOpcodeOffsets[0] != -1) {
++        Arrays.sort(recentOpcodeOffsets);
++        sb.append("\nRecent opcode offsets:");
++        for (long offset : recentOpcodeOffsets) {
++          if (offset != -1) {
++            sb.append(' ').append(offset);
++          }
+         }
+       }
+-      if (!sb.toString().isEmpty()) {
+-        FSImage.LOG.error("Last 4 opcodes at offsets:" +
+-          sb);
+-      }
+-      throw ioe;
++      String errorMessage = sb.toString();
++      FSImage.LOG.error(errorMessage);
++      throw new IOException(errorMessage, t);
+     } finally {
+       in.close();
+     }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogLoading.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogLoading.java
+new file mode 100644
+index 0000000..153ec07
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogLoading.java
+@@ -0,0 +1,79 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import static org.junit.Assert.*;
++
++import java.io.File;
++import java.io.IOException;
++import java.io.RandomAccessFile;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.junit.Test;
++
++public class TestEditLogLoading {
++  
++  private static final int NUM_DATA_NODES = 0;
++  
++  @Test
++  public void testDisplayRecentEditLogOpCodes() throws IOException {
++    // start a cluster 
++    Configuration conf = new Configuration();
++    conf.set("dfs.name.dir", new File(MiniDFSCluster.getBaseDir(), "name").getPath());
++    
++    MiniDFSCluster cluster = null;
++    FileSystem fileSys = null;
++    cluster = new MiniDFSCluster(0, conf, NUM_DATA_NODES, true, false, null, null);
++    cluster.waitActive();
++    fileSys = cluster.getFileSystem();
++    final FSNamesystem namesystem = cluster.getNameNode().getNamesystem();
++
++    FSImage fsimage = namesystem.getFSImage();
++    final FSEditLog editLog = fsimage.getEditLog();
++    for (int i = 0; i < 20; i++) {
++      fileSys.mkdirs(new Path("/tmp/tmp" + i));
++    }
++    File editFile = editLog.getFsEditName();
++    System.out.println("edit log file: " + editFile);
++    editLog.close();
++    cluster.shutdown();
++    
++    // Corrupt the edits file.
++    long fileLen = editFile.length();
++    RandomAccessFile rwf = new RandomAccessFile(editFile, "rw");
++    rwf.seek(fileLen - 40);
++    for (int i = 0; i < 20; i++) {
++      rwf.write((byte) 2); // FSEditLog.DELETE
++    }
++    rwf.close();
++    
++    String expectedErrorMessage = "^Error replaying edit log at offset \\d+\n";
++    expectedErrorMessage += "Recent opcode offsets: (\\d+\\s*){4}$";
++    try {
++      cluster = new MiniDFSCluster(0, conf, NUM_DATA_NODES, false, false, null, null);
++      cluster.waitActive();
++      fail("should not be able to start");
++    } catch (IOException e) {
++      assertTrue("error message contains opcodes message",
++          e.getMessage().matches(expectedErrorMessage));
++    }
++  }
++}
+\ No newline at end of file
+-- 
+1.7.0.4
+

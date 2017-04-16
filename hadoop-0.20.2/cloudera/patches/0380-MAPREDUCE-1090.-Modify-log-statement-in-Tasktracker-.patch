@@ -1,0 +1,41 @@
+From 6ae254e4aef44f833859bb060797bd3177085d4e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 25 Oct 2009 17:41:49 +0530
+Subject: [PATCH 0380/1179] MAPREDUCE-1090. Modify log statement in Tasktracker log related to memory monitoring to include attempt id.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12423142/MAPREDUCE-1090-20.patch
+Author: Hemanth Yamijala
+Ref: YDH
+---
+ .../hadoop/mapred/TaskMemoryManagerThread.java     |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java b/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
+index 257f629..198fd16 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
+@@ -50,6 +50,10 @@ class TaskMemoryManagerThread extends Thread {
+   private Map<TaskAttemptID, ProcessTreeInfo> tasksToBeAdded;
+   private List<TaskAttemptID> tasksToBeRemoved;
+ 
++  private static final String MEMORY_USAGE_STRING =
++    "Memory usage of ProcessTree %s for task-id %s : %d bytes, " +
++      "limit : %d bytes";
++  
+   public TaskMemoryManagerThread(TaskTracker taskTracker) {
+     
+     this(taskTracker.getTotalMemoryAllottedForTasksOnTT() * 1024 * 1024L,
+@@ -210,8 +214,8 @@ class TaskMemoryManagerThread extends Thread {
+           // are processes more than 1 iteration old.
+           long curMemUsageOfAgedProcesses = pTree.getCumulativeVmem(1);
+           long limit = ptInfo.getMemLimit();
+-          LOG.info("Memory usage of ProcessTree " + pId + " :"
+-              + currentMemUsage + "bytes. Limit : " + limit + "bytes");
++          LOG.info(String.format(MEMORY_USAGE_STRING, 
++                                pId, tid.toString(), currentMemUsage, limit));
+ 
+           if (isProcessTreeOverLimit(tid.toString(), currentMemUsage, 
+                                       curMemUsageOfAgedProcesses, limit)) {
+-- 
+1.7.0.4
+

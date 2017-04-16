@@ -1,0 +1,63 @@
+From ea78340db1b2eb3333a5f79fad076285f82917e7 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 20 Mar 2010 00:01:23 +0530
+Subject: [PATCH 0580/1179] MAPREDUCE-1612. job conf file is not accessible from job history web page
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439310/jobconf_history_jsp.fix.20S.patch
+Author: Ravi Gummadi
+Ref: YDH
+---
+ .../hadoop/mapred/TestWebUIAuthorization.java      |    4 +++
+ src/webapps/job/jobconf_history.jsp                |   21 ++++---------------
+ 2 files changed, 9 insertions(+), 16 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java b/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java
+index 414732a..7c64ef2 100644
+--- a/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java
++++ b/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java
+@@ -262,6 +262,10 @@ public class TestWebUIAuthorization extends ClusterMapReduceTestCase {
+         String.valueOf(true));
+     props.setProperty("dfs.permissions", "false");
+ 
++    // Let us have history files on HDFS
++    props.setProperty("mapred.job.tracker.history.completed.location",
++        "historyDoneFolderOnHDFS");
++
+     props.setProperty(JobConf.MR_SUPERGROUP, "superGroup");
+ 
+     MyGroupsProvider.mapping.put(jobSubmitter, Arrays.asList("group1"));
+diff --git a/src/webapps/job/jobconf_history.jsp b/src/webapps/job/jobconf_history.jsp
+index 624d03a..f2b4b1e 100644
+--- a/src/webapps/job/jobconf_history.jsp
++++ b/src/webapps/job/jobconf_history.jsp
+@@ -46,22 +46,11 @@
+     jobFile = fs.open(jobFilePath);
+     JobConf jobConf = new JobConf(jobFilePath);
+     JobTracker jobTracker = (JobTracker) application.getAttribute("job.tracker");
+-    String user = request.getRemoteUser();
+-    if (user != null) {
+-      try {
+-        jobTracker.getJobACLsManager().checkAccess(JobID.forName(jobId),
+-            UserGroupInformation.createRemoteUser(user), JobACL.VIEW_JOB,
+-            jobConf.getUser(),
+-            new AccessControlList(jobConf.get(JobACL.VIEW_JOB.getAclName())));
+-        } catch (AccessControlException e) {
+-          String errMsg =
+-            user
+-                + " is not authorized to view details of job "
+-                + jobId
+-                + "<hr><a href=\"jobhistory.jsp\">Go back to JobHistory</a><br>";
+-        JSPUtil.setErrorAndForward(errMsg, request, response);
+-        return;
+-        }
++
++    JobHistory.JobInfo job = JSPUtil.checkAccessAndGetJobInfo(request,
++        response, jobTracker, fs, logFile);
++    if (job == null) {
++      return;
+     }
+ 
+     XMLUtils.transform(
+-- 
+1.7.0.4
+

@@ -1,0 +1,171 @@
+From 945dc2bdacb99855b66ce70b3024a6f0f8b9f2d6 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 23 Jun 2010 14:37:10 -0700
+Subject: [PATCH 0664/1179] HADOOP-6832. Add a static user plugin for web auth for external users.
+
+Author: Owen O'Malley
+Reason: Security
+Ref: CDH-648
+---
+ .../hadoop/http/lib/StaticUserWebFilter.java       |  117 ++++++++++++++++++++
+ src/core/org/apache/hadoop/http/lib/package.html   |   24 ++++
+ 2 files changed, 141 insertions(+), 0 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/http/lib/StaticUserWebFilter.java
+ create mode 100644 src/core/org/apache/hadoop/http/lib/package.html
+
+diff --git a/src/core/org/apache/hadoop/http/lib/StaticUserWebFilter.java b/src/core/org/apache/hadoop/http/lib/StaticUserWebFilter.java
+new file mode 100644
+index 0000000..dbb358d
+--- /dev/null
++++ b/src/core/org/apache/hadoop/http/lib/StaticUserWebFilter.java
+@@ -0,0 +1,117 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.http.lib;
++
++import java.io.IOException;
++import java.security.Principal;
++import java.util.HashMap;
++
++import javax.servlet.FilterChain;
++import javax.servlet.FilterConfig;
++import javax.servlet.ServletException;
++import javax.servlet.ServletRequest;
++import javax.servlet.ServletResponse;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletRequestWrapper;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.http.FilterContainer;
++import org.apache.hadoop.http.FilterInitializer;
++
++import javax.servlet.Filter;
++
++/**
++ * Provides a servlet filter that pretends to authenticate a fake user (Dr.Who)
++ * so that the web UI is usable for a secure cluster without authentication.
++ */
++public class StaticUserWebFilter extends FilterInitializer {
++  private static final String WEB_USERNAME = "Dr.Who";
++  private static final Principal WEB_USER = new User(WEB_USERNAME);
++
++  static class User implements Principal {
++    private final String name;
++    public User(String name) {
++      this.name = name;
++    }
++    @Override
++    public String getName() {
++      return name;
++    }
++    @Override
++    public int hashCode() {
++      return name.hashCode();
++    }
++    @Override
++    public boolean equals(Object other) {
++      if (other == this) {
++        return true;
++      } else if (other == null || other.getClass() != getClass()) {
++        return false;
++      }
++      return ((User) other).name.equals(name);
++    }
++    @Override
++    public String toString() {
++      return name;
++    }    
++  }
++
++  public static class StaticUserFilter implements Filter {
++
++    @Override
++    public void destroy() {
++      // NOTHING
++    }
++
++    @Override
++    public void doFilter(ServletRequest request, ServletResponse response,
++                         FilterChain chain
++                         ) throws IOException, ServletException {
++      HttpServletRequest httpRequest = (HttpServletRequest) request;
++      // if the user is already authenticated, don't override it
++      if (httpRequest.getRemoteUser() != null) {
++        chain.doFilter(request, response);
++      } else {
++        HttpServletRequestWrapper wrapper = 
++            new HttpServletRequestWrapper(httpRequest) {
++          @Override
++          public Principal getUserPrincipal() {
++            return WEB_USER;
++          }
++          @Override
++          public String getRemoteUser() {
++            return WEB_USERNAME;
++          }
++        };
++        chain.doFilter(wrapper, response);
++      }
++    }
++
++    @Override
++    public void init(FilterConfig conf) throws ServletException {
++      // NOTHING
++    }
++    
++  }
++
++  @Override
++  public void initFilter(FilterContainer container, Configuration conf) {
++    container.addFilter("static_user_filter", StaticUserFilter.class.getName(), 
++                        new HashMap<String,String>());
++  }
++}
+diff --git a/src/core/org/apache/hadoop/http/lib/package.html b/src/core/org/apache/hadoop/http/lib/package.html
+new file mode 100644
+index 0000000..fea283b
+--- /dev/null
++++ b/src/core/org/apache/hadoop/http/lib/package.html
+@@ -0,0 +1,24 @@
++<html>
++
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<body>
++</body>
++This package provides user-selectable (via configuration) classes that add
++functionality to the web UI.
++</html>
+-- 
+1.7.0.4
+

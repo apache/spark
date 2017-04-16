@@ -1,0 +1,90 @@
+From 5dcd47a711f530fb989350569dd5553b93e62490 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 4 Mar 2010 00:55:53 -0800
+Subject: [PATCH 0536/1179] HDFS-1015. Intermittent failure in TestSecurityTokenEditLog
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437830/HDFS-1015-y20.1.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ .../delegation/DelegationTokenSecretManager.java   |    8 ++++++++
+ .../server/namenode/TestSecurityTokenEditLog.java  |    9 +++++----
+ 2 files changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSecretManager.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSecretManager.java
+index 94ee24e..1d73c10 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSecretManager.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSecretManager.java
+@@ -204,6 +204,14 @@ public class DelegationTokenSecretManager
+     }
+     currentTokens.remove(identifier);
+   }
++  
++  /**
++   * Returns the number of delegation keys currently stored.
++   * @return number of delegation keys
++   */
++  public synchronized int getNumberOfKeys() {
++    return allKeys.size();
++  }
+ 
+   /**
+    * Private helper methods to save delegation keys and tokens in fsimage
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestSecurityTokenEditLog.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestSecurityTokenEditLog.java
+index 9d51c49..9867f72 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestSecurityTokenEditLog.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestSecurityTokenEditLog.java
+@@ -33,6 +33,7 @@ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.hdfs.server.namenode.FSEditLog.EditLogFileInputStream;
++import org.mortbay.log.Log;
+ 
+ /**
+  * This class tests the creation and validation of a checkpoint.
+@@ -95,7 +96,6 @@ public class TestSecurityTokenEditLog extends TestCase {
+       cluster.waitActive();
+       fileSys = cluster.getFileSystem();
+       final FSNamesystem namesystem = cluster.getNameNode().getNamesystem();
+-      namesystem.getDelegationTokenSecretManager().startThreads();
+   
+       for (Iterator<File> it = cluster.getNameDirs().iterator(); it.hasNext(); ) {
+         File dir = new File(it.next().getPath());
+@@ -109,6 +109,7 @@ public class TestSecurityTokenEditLog extends TestCase {
+       editLog.setBufferCapacity(2048);
+       editLog.close();
+       editLog.open();
++      namesystem.getDelegationTokenSecretManager().startThreads();
+     
+       // Create threads and make them run transactions concurrently.
+       Thread threadId[] = new Thread[NUM_THREADS];
+@@ -128,13 +129,13 @@ public class TestSecurityTokenEditLog extends TestCase {
+       } 
+       
+       editLog.close();
+-      editLog.open();
+   
+       // Verify that we can read in all the transactions that we have written.
+       // If there were any corruptions, it is likely that the reading in
+       // of these transactions will throw an exception.
+       //
+       namesystem.getDelegationTokenSecretManager().stopThreads();
++      int numKeys = namesystem.getDelegationTokenSecretManager().getNumberOfKeys();
+       for (Iterator<StorageDirectory> it = 
+               fsimage.dirIterator(NameNodeDirType.EDITS); it.hasNext();) {
+         File editFile = FSImage.getImageFile(it.next(), NameNodeFile.EDITS);
+@@ -142,9 +143,9 @@ public class TestSecurityTokenEditLog extends TestCase {
+         int numEdits = FSEditLog.loadFSEdits(
+                                   new EditLogFileInputStream(editFile));
+         assertTrue("Verification for " + editFile + " failed. " +
+-                   "Expected " + (NUM_THREADS * opsPerTrans * NUM_TRANSACTIONS + 2) + " transactions. "+
++                   "Expected " + (NUM_THREADS * opsPerTrans * NUM_TRANSACTIONS + numKeys) + " transactions. "+
+                    "Found " + numEdits + " transactions.",
+-                   numEdits == NUM_THREADS * opsPerTrans * NUM_TRANSACTIONS +2);
++                   numEdits == NUM_THREADS * opsPerTrans * NUM_TRANSACTIONS +numKeys);
+   
+       }
+     } finally {
+-- 
+1.7.0.4
+

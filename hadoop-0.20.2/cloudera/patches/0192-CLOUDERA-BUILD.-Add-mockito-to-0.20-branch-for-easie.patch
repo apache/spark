@@ -1,0 +1,31 @@
+From b332fe77255047409da701dfb97df1bddb5b10cb Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:40:05 -0800
+Subject: [PATCH 0192/1179] CLOUDERA-BUILD. Add mockito to 0.20 branch for easier unit testing of HDFS stability patches.
+
+Reason: Test coverage improvement
+Author: Todd Lipcon
+---
+ ivy.xml |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
+
+diff --git a/ivy.xml b/ivy.xml
+index a76a238..8bd265e 100644
+--- a/ivy.xml
++++ b/ivy.xml
+@@ -265,6 +265,11 @@
+       name="jackson-mapper-asl"
+       rev="1.0.1"
+       conf="common->default"/>
++    <dependency org="org.mockito"
++      name="mockito-all"
++      rev="${mockito-all.version}"
++      conf="common->master"/>
++
+     </dependencies>
+-  
++
+ </ivy-module>
+-- 
+1.7.0.4
+

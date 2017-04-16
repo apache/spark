@@ -1,0 +1,54 @@
+From 64eca816d6b6e35c27464065d300a05932165ac8 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Fri, 26 Aug 2011 12:44:14 -0700
+Subject: [PATCH 1040/1179] HDFS-970. FSImage writing should always fsync before close
+
+Reason: Bug
+Author: Todd Lipcon
+Ref: CDH-3474
+---
+ .../hadoop/hdfs/server/namenode/FSImage.java       |    7 +++++--
+ .../hdfs/server/namenode/TransferFsImage.java      |    1 +
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index a5c3bd1..6a7c157 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -1053,9 +1053,9 @@ public class FSImage extends Storage {
+     //
+     // Write out data
+     //
++    FileOutputStream fos = new FileOutputStream(newFile);
+     DataOutputStream out = new DataOutputStream(
+-                                                new BufferedOutputStream(
+-                                                                         new FileOutputStream(newFile)));
++      new BufferedOutputStream(fos));
+     try {
+       out.writeInt(FSConstants.LAYOUT_VERSION);
+       out.writeInt(namespaceID);
+@@ -1070,6 +1070,9 @@ public class FSImage extends Storage {
+       fsNamesys.saveFilesUnderConstruction(out);
+       fsNamesys.saveSecretManagerState(out);
+       strbuf = null;
++
++      out.flush();
++      fos.getChannel().force(true);
+     } finally {
+       out.close();
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+index 133a7c0..b1fc067 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+@@ -205,6 +205,7 @@ class TransferFsImage implements FSConstants {
+       if (output != null) {
+         for (int i = 0; i < output.length; i++) {
+           if (output[i] != null) {
++            output[i].getChannel().force(true);
+             output[i].close();
+           }
+         }
+-- 
+1.7.0.4
+

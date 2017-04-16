@@ -1,0 +1,38 @@
+From d713dc1063afc4967381b6583ec424d2850bac63 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:24:30 -0800
+Subject: [PATCH 0147/1179] MAPREDUCE-1059. distcp can generate uneven map task assignments
+
+Description: distcp writes out a SequenceFile containing the source files to transfer, and their sizes. Map tasks are created over spans of this file, representing files which each mapper should transfer. In practice, some transfer loads yield many empty map tasks and a few tasks perform the bulk of the work.
+Reason: Improvement for load balancing
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/tools/org/apache/hadoop/tools/DistCp.java |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/src/tools/org/apache/hadoop/tools/DistCp.java b/src/tools/org/apache/hadoop/tools/DistCp.java
+index 04b4d06..3b7ab94 100644
+--- a/src/tools/org/apache/hadoop/tools/DistCp.java
++++ b/src/tools/org/apache/hadoop/tools/DistCp.java
+@@ -992,6 +992,8 @@ public class DistCp implements Tool {
+     Path jobDirectory = new Path(jClient.getSystemDir(), NAME + "_" + randomId);
+     jobConf.set(JOB_DIR_LABEL, jobDirectory.toString());
+ 
++    long maxBytesPerMap = conf.getLong(BYTES_PER_MAP_LABEL, BYTES_PER_MAP);
++
+     FileSystem dstfs = args.dst.getFileSystem(conf);
+     boolean dstExists = dstfs.exists(args.dst);
+     boolean dstIsDir = false;
+@@ -1088,7 +1090,7 @@ public class DistCp implements Tool {
+ 
+                 ++cnsyncf;
+                 cbsyncs += child.getLen();
+-                if (cnsyncf > SYNC_FILE_MAX || cbsyncs > BYTES_PER_MAP) {
++                if (cnsyncf > SYNC_FILE_MAX || cbsyncs > maxBytesPerMap) {
+                   src_writer.sync();
+                   dst_writer.sync();
+                   cnsyncf = 0;
+-- 
+1.7.0.4
+

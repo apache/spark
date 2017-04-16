@@ -1,0 +1,158 @@
+<?xml version="1.0"?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<project name="fuse-dfs" default="jar">
+
+  <import file="../build-contrib.xml"/>
+
+  <target name="check-libhdfs-fuse">
+    <condition property="libhdfs-fuse">
+      <and>
+        <isset property="fusedfs"/>
+        <isset property="libhdfs"/>
+      </and>
+    </condition>
+  </target>
+
+
+  <target name="check-libhdfs-exists" if="fusedfs">
+    <property name="libhdfs.lib" value="${build.c++.libhdfs}/libhdfs.so"/>
+        <available file="${libhdfs.lib}" property="libhdfs-exists"/>
+    <fail message="libhdfs.so does not exist: ${libhdfs.lib}. Please check flags -Dlibhdfs=1 -Dfusedfs=1 are set or first try ant compile -Dcompile.c++=true -Dlibhdfs=true">
+         <condition>
+            <not><isset property="libhdfs-exists"/></not>
+          </condition>
+   </fail>
+   </target>
+
+  <!-- override compile target !-->
+  <target name="compile" depends="check-libhdfs-fuse,check-libhdfs-exists" if="libhdfs-fuse">
+    <echo message="contrib: ${name}"/>
+
+    <condition property="perms" value="1" else="0">
+    <not>
+      <isset property="libhdfs.noperms"/>
+    </not>
+    </condition>
+
+    <exec executable="/bin/sh" failonerror="true">
+      <arg value="${root}/bootstrap.sh"/>
+    </exec>
+    <exec executable="make" failonerror="true">
+      <env key="OS_NAME" value="${os.name}"/>
+      <env key="OS_ARCH" value="${os.arch}"/>
+      <env key="HADOOP_HOME" value="${hadoop.root}"/>
+      <env key="PACKAGE_VERSION" value="0.1.0"/>
+      <env key="BUILD_PLATFORM" value="${build.platform}" />
+    </exec>
+
+    <mkdir dir="${build.dir}"/>
+    <mkdir dir="${build.dir}/test"/>
+
+    <!-- Use exec since the copy task doesn't preserve attrs -->
+    <exec executable="cp" failonerror="true">
+      <arg line="${hadoop.root}/src/contrib/fuse-dfs/src/fuse_dfs ${build.dir}"/>
+    </exec>
+
+    <exec executable="cp" failonerror="true">
+      <arg line="${hadoop.root}/src/contrib/fuse-dfs/src/fuse_dfs_wrapper.sh ${build.dir}"/>
+    </exec>
+    <mkdir dir="${build.dir}"/>
+    <mkdir dir="${build.dir}/test"/>
+    <!-- Use exec since the copy task doesn't preserve attrs -->
+    <exec executable="cp" failonerror="true">
+      <arg line="${hadoop.root}/src/contrib/fuse-dfs/src/fuse_dfs ${build.dir}"/>
+    </exec>
+    <exec executable="cp" failonerror="true">
+      <arg line="${hadoop.root}/src/contrib/fuse-dfs/src/fuse_dfs_wrapper.sh ${build.dir}"/>
+    </exec>
+
+  </target>
+
+  <!-- override jar target !-->
+  <target name="jar"/>
+
+  <!-- override package target !-->
+  <target name="package" depends="check-libhdfs-fuse" if="libhdfs-fuse">
+    <echo message="contrib: ${name}"/>
+
+    <mkdir dir="${dist.dir}/contrib/${name}"/>
+    <exec executable="cp">
+      <arg value="-p"/>
+      <arg value="README"/>
+      <arg value="src/fuse_dfs"/>
+      <arg value="src/fuse_dfs_wrapper.sh"/>
+      <arg value="${dist.dir}/contrib/${name}"/>
+    </exec>
+  </target>
+
+  <!-- Override test.classpath to avoid referencing "${ant.project.name}.test-classpath" -->
+  <path id="test.classpath">
+    <pathelement location="${build.test}"/>
+    <pathelement location="${hadoop.root}/build/test/classes"/>
+    <pathelement location="${hadoop.root}/src/contrib/test"/>
+    <pathelement location="${conf.dir}"/>
+    <pathelement location="${hadoop.root}/build"/>
+    <path refid="contrib-classpath"/>
+  </path>
+
+  <target name="compile-test" depends="init, ivy-retrieve-common, check-libhdfs-exists" if="fusedfs">
+    <javac encoding="${build.encoding}"
+	   srcdir="${src.test}"
+	   includes="**/*.java"
+	   destdir="${build.test}"
+	   debug="${javac.debug}">
+      <classpath refid="test.classpath"/>
+    </javac>
+  </target>
+
+  <target name="test" depends="compile-test,check-libhdfs-exists" if="fusedfs">
+    <junit showoutput="${test.output}" fork="yes" printsummary="yes" 
+          errorProperty="tests.failed" haltonfailure="no" failureProperty="tests.failed">
+      <classpath refid="test.classpath"/>
+      <sysproperty key="test.build.data" value="${build.test}/data"/>
+      <sysproperty key="build.test" value="${build.test}"/>
+      <sysproperty key="user.dir" value="${build.test}/data"/>
+      <sysproperty key="hadoop.log.dir" value="${hadoop.log.dir}"/>
+      <sysproperty key="test.src.dir" value="${test.src.dir}"/>
+      <formatter type="${test.junit.output.format}" />
+      <batchtest todir="${build.test}" unless="testcase">
+        <fileset dir="${src.test}">
+          <include name="**/Test*.java"/>
+        </fileset>
+      </batchtest>
+      <batchtest todir="${build.test}" if="testcase">
+        <fileset dir="${src.test}">
+          <include name="**/${testcase}.java"/>
+        </fileset>
+      </batchtest>
+    </junit>
+    <fail if="tests.failed">Tests failed!</fail>
+ </target>
+
+  <!-- override clean target !-->
+  <target name="clean" depends="check-libhdfs-fuse" if="libhdfs-fuse">
+    <echo message="contrib: ${name}"/>
+
+    <exec executable="make">
+      <arg value="clean"/>
+    </exec>
+  </target>
+
+</project>

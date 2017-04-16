@@ -1,0 +1,43 @@
+From 6bc623041a1c0d511250bcfdcae85a7b084b0d5f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 19:35:12 -0800
+Subject: [PATCH 0812/1179] HDFS-1153. Verify dfsnodelist input for correctness
+
+Author: Ravi Phulari
+Ref: CDH-2622
+---
+ src/webapps/hdfs/dfsnodelist.jsp |   11 ++++++++++-
+ 1 files changed, 10 insertions(+), 1 deletions(-)
+
+diff --git a/src/webapps/hdfs/dfsnodelist.jsp b/src/webapps/hdfs/dfsnodelist.jsp
+index a94a024..a8ca0a6 100644
+--- a/src/webapps/hdfs/dfsnodelist.jsp
++++ b/src/webapps/hdfs/dfsnodelist.jsp
+@@ -168,7 +168,13 @@ throws IOException {
+ 	ArrayList<DatanodeDescriptor> dead = new ArrayList<DatanodeDescriptor>();
+ 	jspHelper.DFSNodesStatus(live, dead);
+ 
+-	whatNodes = request.getParameter("whatNodes"); // show only live or only dead nodes
++       //verify input for correctness 
++       String whatNodes = request.getParameter("whatNodes");// show only live or only dead nodes
++       if (whatNodes == null || whatNodes.length() == 0) {
++         out.print("Invalid input");
++         return;
++       }
++
+ 	sorterField = request.getParameter("sorter/field");
+ 	sorterOrder = request.getParameter("sorter/order");
+ 	if ( sorterField == null )
+@@ -293,6 +299,9 @@ throws IOException {
+                           out.print("</table>\n");
+                         }
+                         out.print("</div>");
++                  } else {
++                    // if nothing matches then print invalid input
++                    out.println("Invalid input");
+                   }
+ 	}
+ }%>
+-- 
+1.7.0.4
+

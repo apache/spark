@@ -1,0 +1,63 @@
+From e08745678913d8a348815dcee69465f4a6a03540 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 17 Jun 2011 18:05:16 -0700
+Subject: [PATCH 0999/1179] HADOOP-7402. TestConfiguration doesn't clean up after itself
+
+Reason: test cleanliness
+Author: Aaron T. Myers
+Ref: CDH-3279
+---
+ .../org/apache/hadoop/conf/TestConfiguration.java  |   16 ++++++++++++++--
+ 1 files changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/conf/TestConfiguration.java b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+index 107e69a..4bbb0d1 100644
+--- a/src/test/org/apache/hadoop/conf/TestConfiguration.java
++++ b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+@@ -26,6 +26,7 @@ import java.io.ByteArrayOutputStream;
+ import java.io.ByteArrayInputStream;
+ import java.io.DataOutputStream;
+ import java.io.StringWriter;
++import java.util.Arrays;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.Map;
+@@ -36,6 +37,7 @@ import junit.framework.TestCase;
+ import static org.junit.Assert.assertArrayEquals;
+ 
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.util.StringUtils;
+ import org.codehaus.jackson.map.ObjectMapper;
+ 
+ 
+@@ -249,7 +251,12 @@ public class TestConfiguration extends TestCase {
+ 
+   public void testGetLocalPath() throws IOException {
+     Configuration conf = new Configuration();
+-    conf.set("dirs", "a, b, c ");
++    String[] dirs = new String[]{"a", "b", "c"};
++    for (int i = 0; i < dirs.length; i++) {
++      dirs[i] = new Path(System.getProperty("test.build.data"), dirs[i])
++          .toString();
++    }
++    conf.set("dirs", StringUtils.join(",", Arrays.<String>asList(dirs)));
+     for (int i = 0; i < 1000; i++) {
+       String localPath = conf.getLocalPath("dirs", "dir" + i).toString();
+       assertTrue("Path doesn't end in specified dir: " + localPath,
+@@ -261,7 +268,12 @@ public class TestConfiguration extends TestCase {
+ 
+   public void testGetFile() throws IOException {
+     Configuration conf = new Configuration();
+-    conf.set("dirs", "a, b, c ");
++    String[] dirs = new String[]{"a", "b", "c"};
++    for (int i = 0; i < dirs.length; i++) {
++      dirs[i] = new Path(System.getProperty("test.build.data"), dirs[i])
++          .toString();
++    }
++    conf.set("dirs", StringUtils.join(",", Arrays.<String>asList(dirs)));
+     for (int i = 0; i < 1000; i++) {
+       String localPath = conf.getFile("dirs", "dir" + i).toString();
+       assertTrue("Path doesn't end in specified dir: " + localPath,
+-- 
+1.7.0.4
+

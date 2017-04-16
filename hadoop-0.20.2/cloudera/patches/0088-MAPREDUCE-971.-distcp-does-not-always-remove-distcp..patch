@@ -1,0 +1,53 @@
+From 155394ca5eed2e2a6151a5c9d9452e9cfbb30a11 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:57:58 -0800
+Subject: [PATCH 0088/1179] MAPREDUCE-971. distcp does not always remove distcp.tmp.dir
+
+Description: Sometimes distcp leaves behind its tmpdir when the target filesystem is s3n.
+Reason: Bugfix
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/tools/org/apache/hadoop/tools/DistCp.java |   12 ++++++++++--
+ 1 files changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/src/tools/org/apache/hadoop/tools/DistCp.java b/src/tools/org/apache/hadoop/tools/DistCp.java
+index fcb0b8f..b0eb2d1 100644
+--- a/src/tools/org/apache/hadoop/tools/DistCp.java
++++ b/src/tools/org/apache/hadoop/tools/DistCp.java
+@@ -447,7 +447,7 @@ public class DistCp implements Tool {
+           throw new IOException(absdst + " is a directory");
+         }
+         if (!destFileSys.mkdirs(absdst.getParent())) {
+-          throw new IOException("Failed to craete parent dir: " + absdst.getParent());
++          throw new IOException("Failed to create parent dir: " + absdst.getParent());
+         }
+         rename(tmpfile, absdst);
+ 
+@@ -936,7 +936,10 @@ public class DistCp implements Tool {
+   static void fullyDelete(String dir, Configuration conf) throws IOException {
+     if (dir != null) {
+       Path tmp = new Path(dir);
+-      tmp.getFileSystem(conf).delete(tmp, true);
++      boolean success = tmp.getFileSystem(conf).delete(tmp, true);
++      if (!success) {
++        LOG.warn("Could not fully delete " + tmp);
++      }
+     }
+   }
+ 
+@@ -1139,6 +1142,11 @@ public class DistCp implements Tool {
+         (dstExists && !dstIsDir) || (!dstExists && srcCount == 1)?
+         args.dst.getParent(): args.dst, "_distcp_tmp_" + randomId);
+     jobConf.set(TMP_DIR_LABEL, tmpDir.toUri().toString());
++
++    // Explicitly create the tmpDir to ensure that it can be cleaned
++    // up by fullyDelete() later.
++    tmpDir.getFileSystem(conf).mkdirs(tmpDir);
++
+     LOG.info("srcCount=" + srcCount);
+     jobConf.setInt(SRC_COUNT_LABEL, srcCount);
+     jobConf.setLong(TOTAL_SIZE_LABEL, byteCount);
+-- 
+1.7.0.4
+

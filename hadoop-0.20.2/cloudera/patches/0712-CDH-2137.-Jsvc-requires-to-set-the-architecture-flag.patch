@@ -1,0 +1,42 @@
+From daa2fd5e76c63c9d9efa11225383fd5496442862 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Bruno=20Mah=C3=A9?= <bruno@cloudera.com>
+Date: Mon, 27 Sep 2010 16:53:47 -0700
+Subject: [PATCH 0712/1179] CDH-2137. Jsvc requires to set the architecture flag to the link command
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reason: Bug
+Author: Bruno Mahé
+---
+ build.xml              |    1 +
+ src/c++/jsvc/build.xml |    1 +
+ 2 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index e653fac..278f984 100644
+--- a/build.xml
++++ b/build.xml
+@@ -2252,6 +2252,7 @@
+       <property name="c++.jsvc.src" value="${c++.jsvc.src}" />
+       <property name="build.c++.jsvc" value="${build.c++}/jsvc" />
+       <property name="jsvc.install.dir" value="${dist.dir}/bin" /> 
++      <property name="jsvc.arch" value="${jvm.arch}" />
+       <fileset file="${c++.jsvc.src}/build.xml"/>
+     </subant>
+   </target>
+diff --git a/src/c++/jsvc/build.xml b/src/c++/jsvc/build.xml
+index 289b796..51d154e 100644
+--- a/src/c++/jsvc/build.xml
++++ b/src/c++/jsvc/build.xml
+@@ -35,6 +35,7 @@
+ 
+     <exec executable="sh" dir="${build.c++.jsvc}/${jsvc.src.code.dir}"
+         failonerror="yes">
++        <env key="LDFLAGS" value="-m${jsvc.arch}"/>
+         <arg value="configure" />
+     </exec>
+ 
+-- 
+1.7.0.4
+

@@ -1,0 +1,507 @@
+From 73c38ae4211b732cae575d7f52f233e2cf6f909e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 5 Jan 2011 14:39:10 -0800
+Subject: [PATCH 0754/1179] MAPREDUCE-1734. Un-deprecate the old MapReduce API in the 0.20 branch.
+
+Reason: Old APIs will remain through at least 0.23
+Author: Todd Lipcon
+Ref: CDH-2494
+---
+ src/mapred/org/apache/hadoop/mapred/Counters.java  |    3 ---
+ .../org/apache/hadoop/mapred/FileInputFormat.java  |    3 ---
+ src/mapred/org/apache/hadoop/mapred/FileSplit.java |    3 ---
+ src/mapred/org/apache/hadoop/mapred/ID.java        |    1 -
+ .../org/apache/hadoop/mapred/InputFormat.java      |    2 --
+ .../org/apache/hadoop/mapred/InputSplit.java       |    2 --
+ src/mapred/org/apache/hadoop/mapred/JobConf.java   |    2 --
+ .../org/apache/hadoop/mapred/JobConfigurable.java  |    1 -
+ .../org/apache/hadoop/mapred/JobContext.java       |    4 ----
+ src/mapred/org/apache/hadoop/mapred/JobID.java     |    1 -
+ .../org/apache/hadoop/mapred/LineRecordReader.java |    3 ---
+ .../org/apache/hadoop/mapred/MapReduceBase.java    |    1 -
+ .../org/apache/hadoop/mapred/MapRunnable.java      |    2 --
+ src/mapred/org/apache/hadoop/mapred/Mapper.java    |    2 --
+ .../org/apache/hadoop/mapred/OutputCommitter.java  |    2 --
+ .../org/apache/hadoop/mapred/OutputFormat.java     |    2 --
+ .../org/apache/hadoop/mapred/Partitioner.java      |    2 --
+ src/mapred/org/apache/hadoop/mapred/Reducer.java   |    2 --
+ .../hadoop/mapred/SequenceFileInputFormat.java     |    4 ----
+ .../hadoop/mapred/SequenceFileOutputFormat.java    |    4 ----
+ .../apache/hadoop/mapred/TaskAttemptContext.java   |    5 -----
+ .../org/apache/hadoop/mapred/TaskAttemptID.java    |    1 -
+ src/mapred/org/apache/hadoop/mapred/TaskID.java    |    1 -
+ .../org/apache/hadoop/mapred/TextInputFormat.java  |    3 ---
+ .../org/apache/hadoop/mapred/TextOutputFormat.java |    3 ---
+ .../apache/hadoop/mapred/lib/HashPartitioner.java  |    3 ---
+ .../apache/hadoop/mapred/lib/IdentityMapper.java   |    2 --
+ .../apache/hadoop/mapred/lib/IdentityReducer.java  |    2 --
+ .../apache/hadoop/mapred/lib/InverseMapper.java    |    3 ---
+ .../apache/hadoop/mapred/lib/LongSumReducer.java   |    3 ---
+ .../apache/hadoop/mapred/lib/NullOutputFormat.java |    3 ---
+ .../apache/hadoop/mapred/lib/TokenCountMapper.java |    3 ---
+ 32 files changed, 0 insertions(+), 78 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/Counters.java b/src/mapred/org/apache/hadoop/mapred/Counters.java
+index 114a290..04a0f8e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Counters.java
++++ b/src/mapred/org/apache/hadoop/mapred/Counters.java
+@@ -47,9 +47,7 @@ import org.apache.hadoop.util.StringUtils;
+  * 
+  * <p><code>Counters</code> are bunched into {@link Group}s, each comprising of
+  * counters from a particular <code>Enum</code> class. 
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.Counters} instead.
+  */
+-@Deprecated
+ public class Counters implements Writable, Iterable<Counters.Group> {
+   private static final Log LOG = LogFactory.getLog(Counters.class);
+   private static final char GROUP_OPEN = '{';
+@@ -119,7 +117,6 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+     }
+     
+     // Checks for (content) equality of two (basic) counters
+-    @Deprecated
+     synchronized boolean contentEquals(Counter c) {
+       return this.equals(c);
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/FileInputFormat.java b/src/mapred/org/apache/hadoop/mapred/FileInputFormat.java
+index 5d6768c..7f5b31c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/FileInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/FileInputFormat.java
+@@ -52,10 +52,7 @@ import org.apache.hadoop.util.StringUtils;
+  * Subclasses of <code>FileInputFormat</code> can also override the 
+  * {@link #isSplitable(FileSystem, Path)} method to ensure input-files are
+  * not split-up and are processed as a whole by {@link Mapper}s.
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.lib.input.FileInputFormat}
+- *  instead.
+  */
+-@Deprecated
+ public abstract class FileInputFormat<K, V> implements InputFormat<K, V> {
+ 
+   public static final Log LOG =
+diff --git a/src/mapred/org/apache/hadoop/mapred/FileSplit.java b/src/mapred/org/apache/hadoop/mapred/FileSplit.java
+index d56898a..a3d0f5c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/FileSplit.java
++++ b/src/mapred/org/apache/hadoop/mapred/FileSplit.java
+@@ -28,10 +28,7 @@ import org.apache.hadoop.fs.Path;
+ /** A section of an input file.  Returned by {@link
+  * InputFormat#getSplits(JobConf, int)} and passed to
+  * {@link InputFormat#getRecordReader(InputSplit,JobConf,Reporter)}. 
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.lib.input.FileSplit}
+- *  instead.
+  */
+-@Deprecated
+ public class FileSplit extends org.apache.hadoop.mapreduce.InputSplit 
+                        implements InputSplit {
+   private Path file;
+diff --git a/src/mapred/org/apache/hadoop/mapred/ID.java b/src/mapred/org/apache/hadoop/mapred/ID.java
+index b01f70b..78d0a6f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ID.java
++++ b/src/mapred/org/apache/hadoop/mapred/ID.java
+@@ -27,7 +27,6 @@ package org.apache.hadoop.mapred;
+  * @see TaskID
+  * @see TaskAttemptID
+  */
+-@Deprecated
+ public abstract class ID extends org.apache.hadoop.mapreduce.ID {
+ 
+   /** constructs an ID object from the given int */
+diff --git a/src/mapred/org/apache/hadoop/mapred/InputFormat.java b/src/mapred/org/apache/hadoop/mapred/InputFormat.java
+index cfcfe85..c0968e4 100644
+--- a/src/mapred/org/apache/hadoop/mapred/InputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/InputFormat.java
+@@ -61,9 +61,7 @@ import org.apache.hadoop.fs.FileSystem;
+  * @see RecordReader
+  * @see JobClient
+  * @see FileInputFormat
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.InputFormat} instead.
+  */
+-@Deprecated
+ public interface InputFormat<K, V> {
+ 
+   /** 
+diff --git a/src/mapred/org/apache/hadoop/mapred/InputSplit.java b/src/mapred/org/apache/hadoop/mapred/InputSplit.java
+index 8e9086f..9de35fb 100644
+--- a/src/mapred/org/apache/hadoop/mapred/InputSplit.java
++++ b/src/mapred/org/apache/hadoop/mapred/InputSplit.java
+@@ -31,9 +31,7 @@ import org.apache.hadoop.io.Writable;
+  * 
+  * @see InputFormat
+  * @see RecordReader
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.InputSplit} instead.
+  */
+-@Deprecated
+ public interface InputSplit extends Writable {
+ 
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobConf.java b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+index 35466e1..ce66970 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobConf.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+@@ -102,9 +102,7 @@ import org.apache.hadoop.util.Tool;
+  * @see ClusterStatus
+  * @see Tool
+  * @see DistributedCache
+- * @deprecated Use {@link Configuration} instead
+  */
+-@Deprecated
+ public class JobConf extends Configuration {
+   
+   private static final Log LOG = LogFactory.getLog(JobConf.class);
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobConfigurable.java b/src/mapred/org/apache/hadoop/mapred/JobConfigurable.java
+index e6c2304..c453b2e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobConfigurable.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobConfigurable.java
+@@ -19,7 +19,6 @@
+ package org.apache.hadoop.mapred;
+ 
+ /** That what may be configured. */
+-@Deprecated
+ public interface JobConfigurable {
+   /** Initializes a new instance from a {@link JobConf}.
+    *
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobContext.java b/src/mapred/org/apache/hadoop/mapred/JobContext.java
+index 987b4c0..fc441a5 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobContext.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobContext.java
+@@ -19,10 +19,6 @@ package org.apache.hadoop.mapred;
+ 
+ import org.apache.hadoop.util.Progressable;
+ 
+-/**
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.JobContext} instead.
+- */
+-@Deprecated
+ public class JobContext extends org.apache.hadoop.mapreduce.JobContext {
+   private JobConf job;
+   private Progressable progress;
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobID.java b/src/mapred/org/apache/hadoop/mapred/JobID.java
+index e4ea6e1..6cca5d2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobID.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobID.java
+@@ -38,7 +38,6 @@ import java.io.IOException;
+  * @see TaskID
+  * @see TaskAttemptID
+  */
+-@Deprecated
+ public class JobID extends org.apache.hadoop.mapreduce.JobID {
+   /**
+    * Constructs a JobID object 
+diff --git a/src/mapred/org/apache/hadoop/mapred/LineRecordReader.java b/src/mapred/org/apache/hadoop/mapred/LineRecordReader.java
+index 3355e1d..53a6d14 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LineRecordReader.java
++++ b/src/mapred/org/apache/hadoop/mapred/LineRecordReader.java
+@@ -34,10 +34,7 @@ import org.apache.commons.logging.Log;
+ 
+ /**
+  * Treats keys as offset in file and value as line. 
+- * @deprecated Use 
+- *   {@link org.apache.hadoop.mapreduce.lib.input.LineRecordReader} instead.
+  */
+-@Deprecated
+ public class LineRecordReader implements RecordReader<LongWritable, Text> {
+   private static final Log LOG
+     = LogFactory.getLog(LineRecordReader.class.getName());
+diff --git a/src/mapred/org/apache/hadoop/mapred/MapReduceBase.java b/src/mapred/org/apache/hadoop/mapred/MapReduceBase.java
+index 0c71aae..d26d703 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MapReduceBase.java
++++ b/src/mapred/org/apache/hadoop/mapred/MapReduceBase.java
+@@ -29,7 +29,6 @@ import org.apache.hadoop.mapred.JobConfigurable;
+  * <p>Provides default no-op implementations for a few methods, most non-trivial
+  * applications need to override some of them.</p>
+  */
+-@Deprecated
+ public class MapReduceBase implements Closeable, JobConfigurable {
+ 
+   /** Default implementation that does nothing. */
+diff --git a/src/mapred/org/apache/hadoop/mapred/MapRunnable.java b/src/mapred/org/apache/hadoop/mapred/MapRunnable.java
+index 6b112b3..d283edf 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MapRunnable.java
++++ b/src/mapred/org/apache/hadoop/mapred/MapRunnable.java
+@@ -27,9 +27,7 @@ import java.io.IOException;
+  * control on map processing e.g. multi-threaded, asynchronous mappers etc.</p>
+  * 
+  * @see Mapper
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.Mapper} instead.
+  */
+-@Deprecated
+ public interface MapRunnable<K1, V1, K2, V2>
+     extends JobConfigurable {
+   
+diff --git a/src/mapred/org/apache/hadoop/mapred/Mapper.java b/src/mapred/org/apache/hadoop/mapred/Mapper.java
+index 7fa44a9..cc60e51 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Mapper.java
++++ b/src/mapred/org/apache/hadoop/mapred/Mapper.java
+@@ -127,9 +127,7 @@ import org.apache.hadoop.io.compress.CompressionCodec;
+  * @see MapReduceBase
+  * @see MapRunnable
+  * @see SequenceFile
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.Mapper} instead.
+  */
+-@Deprecated
+ public interface Mapper<K1, V1, K2, V2> extends JobConfigurable, Closeable {
+   
+   /** 
+diff --git a/src/mapred/org/apache/hadoop/mapred/OutputCommitter.java b/src/mapred/org/apache/hadoop/mapred/OutputCommitter.java
+index 320d0de..9718807 100644
+--- a/src/mapred/org/apache/hadoop/mapred/OutputCommitter.java
++++ b/src/mapred/org/apache/hadoop/mapred/OutputCommitter.java
+@@ -53,9 +53,7 @@ import java.io.IOException;
+  * @see FileOutputCommitter 
+  * @see JobContext
+  * @see TaskAttemptContext 
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.OutputCommitter} instead.
+  */
+-@Deprecated
+ public abstract class OutputCommitter 
+                 extends org.apache.hadoop.mapreduce.OutputCommitter {
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapred/OutputFormat.java b/src/mapred/org/apache/hadoop/mapred/OutputFormat.java
+index bf5bec1..ed5f407 100644
+--- a/src/mapred/org/apache/hadoop/mapred/OutputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/OutputFormat.java
+@@ -42,9 +42,7 @@ import org.apache.hadoop.util.Progressable;
+  * 
+  * @see RecordWriter
+  * @see JobConf
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.OutputFormat} instead.
+  */
+-@Deprecated
+ public interface OutputFormat<K, V> {
+ 
+   /** 
+diff --git a/src/mapred/org/apache/hadoop/mapred/Partitioner.java b/src/mapred/org/apache/hadoop/mapred/Partitioner.java
+index 00f47e6..8d61788 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Partitioner.java
++++ b/src/mapred/org/apache/hadoop/mapred/Partitioner.java
+@@ -29,9 +29,7 @@ package org.apache.hadoop.mapred;
+  * record) is sent for reduction.</p>
+  * 
+  * @see Reducer
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.Partitioner} instead.
+  */
+-@Deprecated
+ public interface Partitioner<K2, V2> extends JobConfigurable {
+   
+   /** 
+diff --git a/src/mapred/org/apache/hadoop/mapred/Reducer.java b/src/mapred/org/apache/hadoop/mapred/Reducer.java
+index e87cdef..0ba386a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Reducer.java
++++ b/src/mapred/org/apache/hadoop/mapred/Reducer.java
+@@ -160,9 +160,7 @@ import org.apache.hadoop.io.Closeable;
+  * @see Partitioner
+  * @see Reporter
+  * @see MapReduceBase
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.Reducer} instead.
+  */
+-@Deprecated
+ public interface Reducer<K2, V2, K3, V3> extends JobConfigurable, Closeable {
+   
+   /** 
+diff --git a/src/mapred/org/apache/hadoop/mapred/SequenceFileInputFormat.java b/src/mapred/org/apache/hadoop/mapred/SequenceFileInputFormat.java
+index f8773fd..aba8ea4 100644
+--- a/src/mapred/org/apache/hadoop/mapred/SequenceFileInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/SequenceFileInputFormat.java
+@@ -28,11 +28,7 @@ import org.apache.hadoop.io.SequenceFile;
+ import org.apache.hadoop.io.MapFile;
+ 
+ /** An {@link InputFormat} for {@link SequenceFile}s. 
+- * @deprecated Use 
+- *  {@link org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat} 
+- *  instead.
+  */
+-@Deprecated
+ public class SequenceFileInputFormat<K, V> extends FileInputFormat<K, V> {
+ 
+   public SequenceFileInputFormat() {
+diff --git a/src/mapred/org/apache/hadoop/mapred/SequenceFileOutputFormat.java b/src/mapred/org/apache/hadoop/mapred/SequenceFileOutputFormat.java
+index 2c9348a..02e454f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/SequenceFileOutputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/SequenceFileOutputFormat.java
+@@ -33,11 +33,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.util.*;
+ 
+ /** An {@link OutputFormat} that writes {@link SequenceFile}s. 
+- * @deprecated Use 
+- *   {@link org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat} 
+- *   instead.
+  */
+-@Deprecated
+ public class SequenceFileOutputFormat <K,V> extends FileOutputFormat<K, V> {
+ 
+   public RecordWriter<K, V> getRecordWriter(
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskAttemptContext.java b/src/mapred/org/apache/hadoop/mapred/TaskAttemptContext.java
+index 6a409b6..072f53c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskAttemptContext.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskAttemptContext.java
+@@ -19,11 +19,6 @@ package org.apache.hadoop.mapred;
+ 
+ import org.apache.hadoop.util.Progressable;
+ 
+-/**
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.TaskAttemptContext}
+- *   instead.
+- */
+-@Deprecated
+ public class TaskAttemptContext 
+        extends org.apache.hadoop.mapreduce.TaskAttemptContext {
+   private Progressable progress;
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskAttemptID.java b/src/mapred/org/apache/hadoop/mapred/TaskAttemptID.java
+index a1c5f93..1c80798 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskAttemptID.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskAttemptID.java
+@@ -41,7 +41,6 @@ import java.io.IOException;
+  * @see JobID
+  * @see TaskID
+  */
+-@Deprecated
+ public class TaskAttemptID extends org.apache.hadoop.mapreduce.TaskAttemptID {
+   
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskID.java b/src/mapred/org/apache/hadoop/mapred/TaskID.java
+index 5f276a8..48c7961 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskID.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskID.java
+@@ -43,7 +43,6 @@ import java.io.IOException;
+  * @see JobID
+  * @see TaskAttemptID
+  */
+-@Deprecated
+ public class TaskID extends org.apache.hadoop.mapreduce.TaskID {
+ 
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapred/TextInputFormat.java b/src/mapred/org/apache/hadoop/mapred/TextInputFormat.java
+index fd59576..edf6f68 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TextInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/TextInputFormat.java
+@@ -28,10 +28,7 @@ import org.apache.hadoop.io.compress.*;
+ /** An {@link InputFormat} for plain text files.  Files are broken into lines.
+  * Either linefeed or carriage-return are used to signal end of line.  Keys are
+  * the position in the file, and values are the line of text.. 
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.lib.input.TextInputFormat}
+- *  instead.
+  */
+-@Deprecated
+ public class TextInputFormat extends FileInputFormat<LongWritable, Text>
+   implements JobConfigurable {
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TextOutputFormat.java b/src/mapred/org/apache/hadoop/mapred/TextOutputFormat.java
+index 70029b4..d350fac 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TextOutputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/TextOutputFormat.java
+@@ -33,10 +33,7 @@ import org.apache.hadoop.io.compress.GzipCodec;
+ import org.apache.hadoop.util.*;
+ 
+ /** An {@link OutputFormat} that writes plain text files. 
+- * @deprecated Use 
+- *   {@link org.apache.hadoop.mapreduce.lib.output.TextOutputFormat} instead.
+  */
+-@Deprecated
+ public class TextOutputFormat<K, V> extends FileOutputFormat<K, V> {
+ 
+   protected static class LineRecordWriter<K, V>
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/HashPartitioner.java b/src/mapred/org/apache/hadoop/mapred/lib/HashPartitioner.java
+index 7366d83..595775c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/HashPartitioner.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/HashPartitioner.java
+@@ -22,10 +22,7 @@ import org.apache.hadoop.mapred.Partitioner;
+ import org.apache.hadoop.mapred.JobConf;
+ 
+ /** Partition keys by their {@link Object#hashCode()}. 
+- * @deprecated Use 
+- *   {@link org.apache.hadoop.mapreduce.lib.partition.HashPartitioner} instead.
+  */
+-@Deprecated
+ public class HashPartitioner<K2, V2> implements Partitioner<K2, V2> {
+ 
+   public void configure(JobConf job) {}
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/IdentityMapper.java b/src/mapred/org/apache/hadoop/mapred/lib/IdentityMapper.java
+index 34931fa..ed248b7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/IdentityMapper.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/IdentityMapper.java
+@@ -26,9 +26,7 @@ import org.apache.hadoop.mapred.Reporter;
+ import org.apache.hadoop.mapred.MapReduceBase;
+ 
+ /** Implements the identity function, mapping inputs directly to outputs. 
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.Mapper} instead.
+  */
+-@Deprecated
+ public class IdentityMapper<K, V>
+     extends MapReduceBase implements Mapper<K, V, K, V> {
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/IdentityReducer.java b/src/mapred/org/apache/hadoop/mapred/lib/IdentityReducer.java
+index b86e1fa..45776ab 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/IdentityReducer.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/IdentityReducer.java
+@@ -28,9 +28,7 @@ import org.apache.hadoop.mapred.Reporter;
+ import org.apache.hadoop.mapred.MapReduceBase;
+ 
+ /** Performs no reduction, writing all input values directly to the output. 
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.Reducer} instead.
+  */
+-@Deprecated
+ public class IdentityReducer<K, V>
+     extends MapReduceBase implements Reducer<K, V, K, V> {
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/InverseMapper.java b/src/mapred/org/apache/hadoop/mapred/lib/InverseMapper.java
+index de0aeaf..f22bac9 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/InverseMapper.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/InverseMapper.java
+@@ -26,10 +26,7 @@ import org.apache.hadoop.mapred.OutputCollector;
+ import org.apache.hadoop.mapred.Reporter;
+ 
+ /** A {@link Mapper} that swaps keys and values. 
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.lib.map.InverseMapper} 
+- *   instead.
+  */
+-@Deprecated
+ public class InverseMapper<K, V>
+     extends MapReduceBase implements Mapper<K, V, V, K> {
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/LongSumReducer.java b/src/mapred/org/apache/hadoop/mapred/lib/LongSumReducer.java
+index cc105dd..174bd53 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/LongSumReducer.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/LongSumReducer.java
+@@ -29,10 +29,7 @@ import org.apache.hadoop.mapred.MapReduceBase;
+ import org.apache.hadoop.io.LongWritable;
+ 
+ /** A {@link Reducer} that sums long values. 
+- * @deprecated Use {@link org.apache.hadoop.mapreduce.lib.reduce.LongSumReducer}
+- *    instead.
+  */
+-@Deprecated
+ public class LongSumReducer<K> extends MapReduceBase
+     implements Reducer<K, LongWritable, K, LongWritable> {
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/NullOutputFormat.java b/src/mapred/org/apache/hadoop/mapred/lib/NullOutputFormat.java
+index b9e1fbe..1e0a24f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/NullOutputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/NullOutputFormat.java
+@@ -27,10 +27,7 @@ import org.apache.hadoop.util.Progressable;
+ 
+ /**
+  * Consume all outputs and put them in /dev/null. 
+- * @deprecated Use 
+- *   {@link org.apache.hadoop.mapreduce.lib.output.NullOutputFormat} instead.
+  */
+-@Deprecated
+ public class NullOutputFormat<K, V> implements OutputFormat<K, V> {
+   
+   public RecordWriter<K, V> getRecordWriter(FileSystem ignored, JobConf job, 
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/TokenCountMapper.java b/src/mapred/org/apache/hadoop/mapred/lib/TokenCountMapper.java
+index f5a25ce..8aae7e1 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/TokenCountMapper.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/TokenCountMapper.java
+@@ -31,10 +31,7 @@ import org.apache.hadoop.mapred.Reporter;
+ 
+ /** A {@link Mapper} that maps text values into <token,freq> pairs.  Uses
+  * {@link StringTokenizer} to break text into tokens. 
+- * @deprecated Use 
+- *    {@link org.apache.hadoop.mapreduce.lib.map.TokenCounterMapper} instead.
+  */
+-@Deprecated
+ public class TokenCountMapper<K> extends MapReduceBase
+     implements Mapper<K, Text, Text, LongWritable> {
+ 
+-- 
+1.7.0.4
+

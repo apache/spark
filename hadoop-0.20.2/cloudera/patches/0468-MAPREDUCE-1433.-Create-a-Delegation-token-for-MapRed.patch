@@ -1,0 +1,625 @@
+From b96008a997c4cf52f01a32daa103244a27190639 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 9 Feb 2010 21:06:07 -0800
+Subject: [PATCH 0468/1179] MAPREDUCE-1433. Create a Delegation token for MapReduce
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435412/1433.bp20.patch
+Author: Owen O'Malley
+Ref: CDH-648
+---
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |   50 ++++++++++
+ .../hadoop/mapred/JobSubmissionProtocol.java       |   43 +++++++++-
+ .../org/apache/hadoop/mapred/JobTracker.java       |   77 ++++++++++++++++-
+ .../org/apache/hadoop/mapred/LocalJobRunner.java   |   21 +++++
+ .../delegation/DelegationTokenIdentifier.java      |   56 ++++++++++++
+ .../delegation/DelegationTokenSecretManager.java   |   57 ++++++++++++
+ .../token/delegation/DelegationTokenSelector.java  |   33 +++++++
+ .../token/delegation/TestDelegationToken.java      |   96 ++++++++++++++++++++
+ 8 files changed, 431 insertions(+), 2 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenIdentifier.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenSecretManager.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenSelector.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationToken.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index f6cb357..df17c35 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -55,9 +55,11 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.mapreduce.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.RPC;
++import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.mapred.Counters.Counter;
+ import org.apache.hadoop.mapred.Counters.Group;
+ import org.apache.hadoop.mapreduce.InputFormat;
+@@ -68,6 +70,8 @@ import org.apache.hadoop.mapreduce.security.TokenCache;
+ import org.apache.hadoop.mapreduce.split.JobSplitWriter;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Tool;
+@@ -1858,8 +1862,54 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+   public QueueAclsInfo[] getQueueAclsForCurrentUser() throws IOException {
+     return jobSubmitClient.getQueueAclsForCurrentUser();
+   }
++  /* Get a delegation token for the user from the JobTracker.
++   * @param renewer the user who can renew the token
++   * @return the new token
++   * @throws IOException
++   */
++  public Token<DelegationTokenIdentifier> 
++    getDelegationToken(Text renewer) throws IOException, InterruptedException {
++    Token<DelegationTokenIdentifier> result =
++      jobSubmitClient.getDelegationToken(renewer);
++    InetSocketAddress addr = JobTracker.getAddress(getConf());
++    StringBuilder service = new StringBuilder();
++    service.append(NetUtils.normalizeHostName(addr.getAddress().
++                                              getHostAddress()));
++    service.append(':');
++    service.append(addr.getPort());
++    result.setService(new Text(service.toString()));
++    return result;
++  }
+ 
+   /**
++   * Renew a delegation token
++   * @param token the token to renew
++   * @return true if the renewal went well
++   * @throws InvalidToken
++   * @throws IOException
++   */
++  public boolean renewDelegationToken(Token<DelegationTokenIdentifier> token)
++  throws InvalidToken, IOException, InterruptedException {
++    try {
++      return jobSubmitClient.renewDelegationToken(token);
++    } catch (RemoteException re) {
++      throw re.unwrapRemoteException(InvalidToken.class);
++    }
++  }
++
++  /**
++   * Cancel a delegation token from the JobTracker
++   * @param token the token to cancel
++   * @return true if everything went well
++   * @throws IOException
++   */
++  public boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token
++                                       ) throws IOException, 
++                                                InterruptedException {
++    return jobSubmitClient.cancelDelegationToken(token);
++  }
++ 
++  /**
+    */
+   public static void main(String argv[]) throws Exception {
+     int res = ToolRunner.run(new JobClient(), argv);
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+index 17a2528..36db62e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+@@ -20,10 +20,15 @@ package org.apache.hadoop.mapred;
+ 
+ import java.io.IOException;
+ 
++import org.apache.hadoop.mapreduce.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.mapreduce.security.token.delegation.DelegationTokenSelector;
++import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.VersionedProtocol;
+ import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.security.KerberosInfo;
+ import org.apache.hadoop.security.TokenStorage;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenInfo;
+ 
+ /** 
+  * Protocol that a JobClient and the central JobTracker use to communicate.  The
+@@ -31,6 +36,7 @@ import org.apache.hadoop.security.TokenStorage;
+  * the current system status.
+  */ 
+ @KerberosInfo(JobContext.JOB_JOBTRACKER_ID)
++@TokenInfo(DelegationTokenSelector.class)
+ interface JobSubmissionProtocol extends VersionedProtocol {
+   /* 
+    *Changing the versionID to 2L since the getTaskCompletionEvents method has
+@@ -68,8 +74,9 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+    *             user home dir. JobTracker reads the required files from the
+    *             staging area using user credentials passed via the rpc. 
+    * Version 23: Provide TokenStorage object while submitting a job
++   * Version 24: Added delegation tokens (add, renew, cancel)
+    */
+-  public static final long versionID = 23L;
++  public static final long versionID = 24L;
+ 
+   /**
+    * Allocate a name for the job.
+@@ -238,4 +245,38 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+    * @throws IOException
+    */
+   public QueueAclsInfo[] getQueueAclsForCurrentUser() throws IOException;
++  
++  /**
++   * Get a new delegation token.
++   * @param renewer the user other than the creator (if any) that can renew the 
++   *        token
++   * @return the new delegation token
++   * @throws IOException
++   * @throws InterruptedException
++   */ 
++  public 
++  Token<DelegationTokenIdentifier> getDelegationToken(Text renewer
++                                                      ) throws IOException,
++                                                          InterruptedException;
++
++  /**
++   * Renew an existing delegation token
++   * @param token the token to renew
++   * @return true if the token was successfully renewed
++   * @throws IOException
++   * @throws InterruptedException
++   */ 
++  public boolean renewDelegationToken(Token<DelegationTokenIdentifier> token
++                                      ) throws IOException,
++                                               InterruptedException;
++
++  /**
++   * Cancel a delegation token.
++   * @param token the token to cancel
++   * @return true if the token was successfully canceled
++   * @throws IOException
++   * @throws InterruptedException
++   */ 
++  public boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token
++                                       ) throws IOException,InterruptedException;
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index e636c2e..a886b07 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -67,6 +67,8 @@ import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.mapreduce.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.mapreduce.security.token.delegation.DelegationTokenSecretManager;
+ import org.apache.hadoop.http.HttpServer;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.RPC;
+@@ -92,6 +94,7 @@ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
++import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.util.HostsFileReader;
+ import org.apache.hadoop.util.MRAsyncDiskService;
+ import org.apache.hadoop.util.PluginDispatcher;
+@@ -123,6 +126,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   static long RETIRE_JOB_INTERVAL;
+   static long RETIRE_JOB_CHECK_INTERVAL;
+ 
++  private final long DELEGATION_TOKEN_GC_INTERVAL = 3600000; // 1 hour
++  private final DelegationTokenSecretManager secretManager;
++
+   
+   // The interval after which one fault of a tracker will be discarded,
+   // if there are no faults during this. 
+@@ -138,6 +144,20 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   // tracker could be blacklisted across all jobs
+   private int MAX_BLACKLISTS_PER_TRACKER = 4;
+   
++  //Delegation token related keys
++  public static final String  DELEGATION_KEY_UPDATE_INTERVAL_KEY =  
++    "mapreduce.cluster.delegation.key.update-interval";
++  public static final long    DELEGATION_KEY_UPDATE_INTERVAL_DEFAULT =  
++    24*60*60*1000; // 1 day
++  public static final String  DELEGATION_TOKEN_RENEW_INTERVAL_KEY =  
++    "mapreduce.cluster.delegation.token.renew-interval";
++  public static final long    DELEGATION_TOKEN_RENEW_INTERVAL_DEFAULT =  
++    24*60*60*1000;  // 1 day
++  public static final String  DELEGATION_TOKEN_MAX_LIFETIME_KEY =  
++    "mapreduce.cluster.delegation.token.max-lifetime";
++  public static final long    DELEGATION_TOKEN_MAX_LIFETIME_DEFAULT =  
++    7*24*60*60*1000; // 7 days
++  
+   // Approximate number of heartbeats that could arrive JobTracker
+   // in a second
+   static final String JT_HEARTBEATS_IN_SECOND = "mapred.heartbeats.in.second";
+@@ -1982,6 +2002,22 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     supergroup = conf.get("mapred.permissions.supergroup", "supergroup");
+     LOG.info("Starting jobtracker with owner as " + mrOwner.getShortUserName() 
+              + " and supergroup as " + supergroup);
++    long secretKeyInterval = 
++    conf.getLong(DELEGATION_KEY_UPDATE_INTERVAL_KEY, 
++                   DELEGATION_KEY_UPDATE_INTERVAL_DEFAULT);
++    long tokenMaxLifetime =
++      conf.getLong(DELEGATION_TOKEN_MAX_LIFETIME_KEY,
++                   DELEGATION_TOKEN_MAX_LIFETIME_DEFAULT);
++    long tokenRenewInterval =
++      conf.getLong(DELEGATION_TOKEN_RENEW_INTERVAL_KEY, 
++                   DELEGATION_TOKEN_RENEW_INTERVAL_DEFAULT);
++    secretManager = 
++      new DelegationTokenSecretManager(secretKeyInterval,
++                                       tokenMaxLifetime,
++                                       tokenRenewInterval,
++                                       DELEGATION_TOKEN_GC_INTERVAL);
++    secretManager.startThreads();
++       
+ 
+     //
+     // Grab some static constants
+@@ -2047,7 +2083,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+     
+     int handlerCount = conf.getInt("mapred.job.tracker.handler.count", 10);
+-    this.interTrackerServer = RPC.getServer(this, addr.getHostName(), addr.getPort(), handlerCount, false, conf);
++    this.interTrackerServer = 
++      RPC.getServer(this, addr.getHostName(), addr.getPort(), handlerCount, 
++          false, conf, secretManager);
+     if (LOG.isDebugEnabled()) {
+       Properties p = System.getProperties();
+       for (Iterator it = p.keySet().iterator(); it.hasNext();) {
+@@ -3810,6 +3848,43 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       updateJobInProgressListeners(event);
+     }
+   }
++  /**
++   * Discard a current delegation token.
++   */ 
++  @Override
++  public boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token
++                                       ) throws IOException,
++                                                InterruptedException {
++    String user = UserGroupInformation.getCurrentUser().getUserName();
++    return secretManager.cancelToken(token, user);
++  }  
++  /**
++   * Get a new delegation token.
++   */ 
++  @Override
++  public Token<DelegationTokenIdentifier> 
++     getDelegationToken(Text renewer
++                        )throws IOException, InterruptedException {
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    Text owner = new Text(ugi.getUserName());
++    Text realUser = null;
++    if (ugi.getRealUser() != null) {
++      realUser = new Text(ugi.getRealUser().getUserName());
++    }  
++    DelegationTokenIdentifier ident =  
++      new DelegationTokenIdentifier(owner, renewer, realUser);
++    return new Token<DelegationTokenIdentifier>(ident, secretManager);
++  }  
++  /**
++   * Renew a delegation token to extend its lifetime.
++   */ 
++  @Override
++  public boolean renewDelegationToken(Token<DelegationTokenIdentifier> token
++                                      ) throws IOException,
++                                               InterruptedException {
++    String user = UserGroupInformation.getCurrentUser().getUserName();
++    return secretManager.renewToken(token, user);
++  }  
+ 
+   public void initJob(JobInProgress job) {
+     if (null == job) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+index 9c3fee9..e34f2ce 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+@@ -35,7 +35,9 @@ import org.apache.hadoop.filecache.TrackerDistributedCacheManager;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapreduce.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.io.DataOutputBuffer;
++import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.serializer.SerializationFactory;
+ import org.apache.hadoop.io.serializer.Serializer;
+ import org.apache.hadoop.mapreduce.split.SplitMetaInfoReader;
+@@ -43,6 +45,7 @@ import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitMetaInfo;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.mapreduce.security.TokenCache;
+ import org.apache.hadoop.security.TokenStorage;
++import org.apache.hadoop.security.token.Token;
+ 
+ /** Implements MapReduce locally, in-process, for debugging. */ 
+ class LocalJobRunner implements JobSubmissionProtocol {
+@@ -537,4 +540,22 @@ class LocalJobRunner implements JobSubmissionProtocol {
+   public QueueAclsInfo[] getQueueAclsForCurrentUser() throws IOException{
+     return null;
+   }
++  
++  @Override
++  public boolean cancelDelegationToken(Token<DelegationTokenIdentifier> token
++                                       ) throws IOException,
++                                                InterruptedException {
++    return false;
++  }  
++  @Override
++  public Token<DelegationTokenIdentifier> 
++     getDelegationToken(Text renewer) throws IOException, InterruptedException {
++    return null;
++  }  
++  @Override
++  public boolean renewDelegationToken(Token<DelegationTokenIdentifier> token
++                                      ) throws IOException,InterruptedException{
++    return false;
++  }  
++
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenIdentifier.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenIdentifier.java
+new file mode 100644
+index 0000000..fd64394
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenIdentifier.java
+@@ -0,0 +1,56 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.security.token.delegation;
++
++//import org.apache.hadoop.classification.InterfaceAudience;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier;
++
++/**
++ * A delegation token identifier that is specific to MapReduce.
++ */
++//@InterfaceAudience.Private
++public class DelegationTokenIdentifier 
++  extends AbstractDelegationTokenIdentifier {
++static final Text MAPREDUCE_DELEGATION_KIND = 
++  new Text("MAPREDUCE_DELEGATION_TOKEN");
++
++/**
++ * Create an empty delegation token identifier for reading into.
++ */
++public DelegationTokenIdentifier() {
++}
++
++/**
++ * Create a new delegation token identifier
++ * @param owner the effective username of the token owner
++ * @param renewer the username of the renewer
++ * @param realUser the real username of the token owner
++ */
++public DelegationTokenIdentifier(Text owner, Text renewer, Text realUser) {
++  super(owner, renewer, realUser);
++}
++
++@Override
++public Text getKind() {
++  return MAPREDUCE_DELEGATION_KIND;
++}
++
++}
++
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenSecretManager.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenSecretManager.java
+new file mode 100644
+index 0000000..870b277
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenSecretManager.java
+@@ -0,0 +1,57 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.security.token.delegation;
++
++//import org.apache.hadoop.classification.InterfaceAudience;
++import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenSecretManager;
++
++/**
++ * A MapReduce specific delegation token secret manager.
++ * The secret manager is responsible for generating and accepting the password
++ * for each token.
++ */
++//@InterfaceAudience.Private
++public class DelegationTokenSecretManager
++    extends AbstractDelegationTokenSecretManager<DelegationTokenIdentifier> {
++
++  /**
++   * Create a secret manager
++   * @param delegationKeyUpdateInterval the number of seconds for rolling new
++   *        secret keys.
++   * @param delegationTokenMaxLifetime the maximum lifetime of the delegation
++   *        tokens
++   * @param delegationTokenRenewInterval how often the tokens must be renewed
++   * @param delegationTokenRemoverScanInterval how often the tokens are scanned
++   *        for expired tokens
++   */
++  public DelegationTokenSecretManager(long delegationKeyUpdateInterval,
++                                      long delegationTokenMaxLifetime, 
++                                      long delegationTokenRenewInterval,
++                                      long delegationTokenRemoverScanInterval) {
++    super(delegationKeyUpdateInterval, delegationTokenMaxLifetime,
++          delegationTokenRenewInterval, delegationTokenRemoverScanInterval);
++  }
++
++  @Override
++  public DelegationTokenIdentifier createIdentifier() {
++    return new DelegationTokenIdentifier();
++  }
++
++}
++
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenSelector.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenSelector.java
+new file mode 100644
+index 0000000..f2782aa
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/delegation/DelegationTokenSelector.java
+@@ -0,0 +1,33 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapreduce.security.token.delegation;
++
++//import org.apache.hadoop.classification.InterfaceAudience;
++import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenSelector;
++
++/**
++ * A delegation token that is specialized for MapReduce
++ */
++//@InterfaceAudience.Private
++public class DelegationTokenSelector
++    extends AbstractDelegationTokenSelector<DelegationTokenIdentifier>{
++
++  public DelegationTokenSelector() {
++    super(DelegationTokenIdentifier.MAPREDUCE_DELEGATION_KIND);
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationToken.java b/src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationToken.java
+new file mode 100644
+index 0000000..e526152
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/security/token/delegation/TestDelegationToken.java
+@@ -0,0 +1,96 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.security.token.delegation;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.security.PrivilegedExceptionAction;
++
++import org.apache.hadoop.io.DataInputBuffer;
++import org.apache.hadoop.io.DataOutputBuffer;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.JobClient;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.MiniMRCluster;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
++import org.junit.Before;
++import org.junit.Test;
++
++import static org.junit.Assert.*;
++
++public class TestDelegationToken {
++  private MiniMRCluster cluster;
++  private UserGroupInformation user1;
++  private UserGroupInformation user2;
++  
++  @Before
++  public void setup() throws Exception {
++    user1 = UserGroupInformation.createUserForTesting("alice", 
++                                                      new String[]{"users"});
++    user2 = UserGroupInformation.createUserForTesting("bob", 
++                                                      new String[]{"users"});
++    cluster = new MiniMRCluster(0,0,1,"file:///",1);
++  }
++  
++  @Test
++  public void testDelegationToken() throws Exception {
++    
++    JobClient client;
++    client = user1.doAs(new PrivilegedExceptionAction<JobClient>(){
++
++      @Override
++      public JobClient run() throws Exception {
++        return new JobClient(cluster.createJobConf());
++      }});
++    JobClient bobClient;
++    bobClient = user2.doAs(new PrivilegedExceptionAction<JobClient>(){
++
++      @Override
++      public JobClient run() throws Exception {
++        return new JobClient(cluster.createJobConf());
++      }});
++    
++    Token<DelegationTokenIdentifier> token = 
++      client.getDelegationToken(new Text(user1.getUserName()));
++    
++    DataInputBuffer inBuf = new DataInputBuffer();
++    byte[] bytes = token.getIdentifier();
++    inBuf.reset(bytes, bytes.length);
++    DelegationTokenIdentifier ident = new DelegationTokenIdentifier();
++    ident.readFields(inBuf);
++    
++    assertEquals("alice", ident.getUser().getUserName());
++    long createTime = ident.getIssueDate();
++    long maxTime = ident.getMaxDate();
++    long currentTime = System.currentTimeMillis();
++    System.out.println("create time: " + createTime);
++    System.out.println("current time: " + currentTime);
++    System.out.println("max time: " + maxTime);
++    assertTrue("createTime < current", createTime < currentTime);
++    assertTrue("current < maxTime", currentTime < maxTime);
++    assertTrue("alice renew", client.renewDelegationToken(token));
++    assertTrue("alice renew", client.renewDelegationToken(token));
++    assertFalse("bob renew", bobClient.renewDelegationToken(token));
++    assertFalse("bob cancel", bobClient.cancelDelegationToken(token));
++    assertTrue("alice cancel", client.cancelDelegationToken(token));
++    assertFalse("second alice cancel", client.cancelDelegationToken(token));
++  }
++}
++
+-- 
+1.7.0.4
+

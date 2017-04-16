@@ -1,0 +1,433 @@
+From 08cbce1e413e98d0aaeceeaca26a60c3d9a50b29 Mon Sep 17 00:00:00 2001
+From: todd <todd@monster01.sf.cloudera.com>
+Date: Sun, 21 Mar 2010 14:56:56 -0700
+Subject: [PATCH 0276/1179] HDFS-611. Move block deletions to an async thread. Applying this to make the HDFS-142 patch apply cleanly
+
+Description: Moves the deletion of blocks in the datanode into a thread
+             pool. Substantially improves datanode heartbeat consistency
+             for workloads with heavy deletes and/or lots of disks.
+Reason: Substantially reduces frequency of "could not complete block"
+        errors and needless re-replication on clusters with lots of disks
+        or heavy deletes.
+Author: Zheng Shao
+Ref: CDH-659
+---
+ .../apache/hadoop/hdfs/protocol/FSConstants.java   |    2 +-
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |   43 +++--
+ .../server/datanode/FSDatasetAsyncDiskService.java |  195 ++++++++++++++++++++
+ src/test/org/apache/hadoop/hdfs/TestDFSRemove.java |   91 +++++++++
+ 4 files changed, 313 insertions(+), 18 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetAsyncDiskService.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/TestDFSRemove.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
+index 044dc44..0e84877 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
+@@ -27,7 +27,7 @@ public interface FSConstants {
+   public static int MIN_BLOCKS_FOR_WRITE = 5;
+ 
+   // Chunk the block Invalidate message
+-  public static final int BLOCK_INVALIDATE_CHUNK = 100;
++  public static final int BLOCK_INVALIDATE_CHUNK = 1000;
+ 
+   // Long that indicates "leave current quota unchanged"
+   public static final long QUOTA_DONT_SET = Long.MAX_VALUE;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index ee28dfc..5334f65 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -342,6 +342,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+   }
+ 
+   class FSVolume {
++    private File currentDir;
+     private FSDir dataDir;
+     private File tmpDir;
+     private File blocksBeingWritten;     // clients write here
+@@ -354,6 +355,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     FSVolume(File currentDir, Configuration conf) throws IOException {
+       this.reserved = conf.getLong("dfs.datanode.du.reserved", 0);
+       this.dataDir = new FSDir(currentDir);
++      this.currentDir = currentDir;
+       boolean supportAppends = conf.getBoolean("dfs.support.append", false);
+       File parent = currentDir.getParentFile();
+ 
+@@ -401,8 +403,16 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       this.dfsUsage.start();
+     }
+ 
++    File getCurrentDir() {
++      return currentDir;
++    }
++    
+     void decDfsUsed(long value) {
+-      dfsUsage.decDfsUsed(value);
++      // The caller to this method (BlockFileDeleteTask.run()) does
++      // not have locked FSDataset.this yet.
++      synchronized(FSDataset.this) {
++        dfsUsage.decDfsUsed(value);
++      }
+     }
+     
+     long getDfsUsed() throws IOException {
+@@ -835,6 +845,8 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+   static  Random random = new Random();
+   private int validVolsRequired;
+ 
++  FSDatasetAsyncDiskService asyncDiskService;
++
+   /**
+    * An FSDataset has a directory where it loads its data files.
+    */
+@@ -856,6 +868,11 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     }
+     volumes = new FSVolumeSet(volArray);
+     volumes.getVolumeMap(volumeMap);
++    File[] roots = new File[storage.getNumStorageDirs()];
++    for (int idx = 0; idx < storage.getNumStorageDirs(); idx++) {
++      roots[idx] = storage.getStorageDir(idx).getCurrentDir();
++    }
++    asyncDiskService = new FSDatasetAsyncDiskService(roots);
+     registerMBean(storage.getStorageID());
+   }
+ 
+@@ -1615,22 +1632,10 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+         volumeMap.remove(invalidBlks[i]);
+       }
+       File metaFile = getMetaFile( f, invalidBlks[i] );
+-      long blockSize = f.length()+metaFile.length();
+-      if ( !f.delete() || ( !metaFile.delete() && metaFile.exists() ) ) {
+-        DataNode.LOG.warn("Unexpected error trying to delete block "
+-                          + invalidBlks[i] + " at file " + f);
+-        error = true;
+-        continue;
+-      }
+-      v.decDfsUsed(blockSize);
+-      DataNode.LOG.info("Deleting block " + invalidBlks[i] + " file " + f);
+-      if (f.exists()) {
+-        //
+-        // This is a temporary check especially for hadoop-1220. 
+-        // This will go away in the future.
+-        //
+-        DataNode.LOG.info("File " + f + " was deleted but still exists!");
+-      }
++      long dfsBytes = f.length() + metaFile.length();
++      
++      // Delete the block asynchronously to make sure we can do it fast enough
++      asyncDiskService.deleteAsync(v, f, metaFile, dfsBytes, invalidBlks[i].toString());
+     }
+     if (error) {
+       throw new IOException("Error in deleting blocks.");
+@@ -1735,6 +1740,10 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     if (mbeanName != null)
+       MBeanUtil.unregisterMBean(mbeanName);
+     
++    if (asyncDiskService != null) {
++      asyncDiskService.shutdown();
++    }
++    
+     if(volumes != null) {
+       for (FSVolume volume : volumes.volumes) {
+         if(volume != null) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetAsyncDiskService.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetAsyncDiskService.java
+new file mode 100644
+index 0000000..ca6665c
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetAsyncDiskService.java
+@@ -0,0 +1,195 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.server.datanode;
++
++import java.io.File;
++import java.util.HashMap;
++import java.util.Map;
++import java.util.concurrent.LinkedBlockingQueue;
++import java.util.concurrent.ThreadFactory;
++import java.util.concurrent.ThreadPoolExecutor;
++import java.util.concurrent.TimeUnit;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/*
++ * This class is a container of multiple thread pools, each for a volume,
++ * so that we can schedule async disk operations easily.
++ * 
++ * Examples of async disk operations are deletion of block files in FSDataset.
++ * We don't want to create a new thread for each of the deletion request, and
++ * we don't want to do all deletions in the heartbeat thread since deletion
++ * can be slow, and we don't want to use a single thread pool because that
++ * is inefficient when we have more than 1 volume.  AsyncDiskService is the
++ * solution for these.
++ * 
++ * This class is used inside FSDataset.
++ * 
++ * In the future, we should extract AsyncDiskService and put it into common.
++ * The FSDataset-specific logic should reside here. 
++ */
++class FSDatasetAsyncDiskService {
++  
++  public static final Log LOG = LogFactory.getLog(FSDatasetAsyncDiskService.class);
++  
++  // ThreadPool core pool size
++  private static final int CORE_THREADS_PER_VOLUME = 1;
++  // ThreadPool maximum pool size
++  private static final int MAXIMUM_THREADS_PER_VOLUME = 4;
++  // ThreadPool keep-alive time for threads over core pool size
++  private static final long THREADS_KEEP_ALIVE_SECONDS = 60; 
++  
++  private final ThreadGroup threadGroup = new ThreadGroup("async disk service");
++  
++  private ThreadFactory threadFactory;
++  
++  private HashMap<File, ThreadPoolExecutor> executors
++      = new HashMap<File, ThreadPoolExecutor>();
++  
++  /**
++   * Create a AsyncDiskServices with a set of volumes (specified by their
++   * root directories).
++   * 
++   * The AsyncDiskServices uses one ThreadPool per volume to do the async
++   * disk operations.
++   * 
++   * @param volumes The roots of the data volumes.
++   */
++  FSDatasetAsyncDiskService(File[] volumes) {
++    
++    threadFactory = new ThreadFactory() {
++      public Thread newThread(Runnable r) {
++        return new Thread(threadGroup, r);
++      }
++    };
++    
++    // Create one ThreadPool per volume
++    for (int v = 0 ; v < volumes.length; v++) {
++      ThreadPoolExecutor executor = new ThreadPoolExecutor(
++          CORE_THREADS_PER_VOLUME, MAXIMUM_THREADS_PER_VOLUME, 
++          THREADS_KEEP_ALIVE_SECONDS, TimeUnit.SECONDS, 
++          new LinkedBlockingQueue<Runnable>(), threadFactory);
++
++      // This can reduce the number of running threads
++      executor.allowCoreThreadTimeOut(true);
++      executors.put(volumes[v], executor);
++    }
++    
++  }
++  
++  /**
++   * Execute the task sometime in the future, using ThreadPools.
++   */
++  synchronized void execute(File root, Runnable task) {
++    if (executors == null) {
++      throw new RuntimeException("AsyncDiskService is already shutdown");
++    }
++    ThreadPoolExecutor executor = executors.get(root);
++    if (executor == null) {
++      throw new RuntimeException("Cannot find root " + root
++          + " for execution of task " + task);
++    } else {
++      executor.execute(task);
++    }
++  }
++  
++  /**
++   * Gracefully shut down all ThreadPool. Will wait for all deletion
++   * tasks to finish.
++   */
++  synchronized void shutdown() {
++    
++    if (executors == null) {
++      
++      LOG.warn("AsyncDiskService has already shut down.");
++      
++    } else {
++      LOG.info("Shutting down all async disk service threads...");
++      
++      for (Map.Entry<File, ThreadPoolExecutor> e
++          : executors.entrySet()) {
++        e.getValue().shutdown();
++      }
++      // clear the executor map so that calling execute again will fail.
++      executors = null;
++      
++      LOG.info("All async disk service threads have been shut down.");
++    }
++  }
++
++  /**
++   * Delete the block file and meta file from the disk asynchronously, adjust
++   * dfsUsed statistics accordingly.
++   */
++  void deleteAsync(FSDataset.FSVolume volume, File blockFile,
++      File metaFile, long dfsBytes, String blockName) {
++    DataNode.LOG.info("Scheduling block " + blockName + " file " + blockFile
++        + " for deletion");
++    ReplicaFileDeleteTask deletionTask = 
++        new ReplicaFileDeleteTask(volume, blockFile, metaFile, dfsBytes,
++            blockName);
++    execute(volume.getCurrentDir(), deletionTask);
++  }
++  
++  /** A task for deleting a block file and its associated meta file, as well
++   *  as decrement the dfs usage of the volume. 
++   */
++  static class ReplicaFileDeleteTask implements Runnable {
++
++    FSDataset.FSVolume volume;
++    File blockFile;
++    File metaFile;
++    long dfsBytes;
++    String blockName;
++    
++    ReplicaFileDeleteTask(FSDataset.FSVolume volume, File blockFile,
++        File metaFile, long dfsBytes, String blockName) {
++      this.volume = volume;
++      this.blockFile = blockFile;
++      this.metaFile = metaFile;
++      this.dfsBytes = dfsBytes;
++      this.blockName = blockName;
++    }
++    
++    FSDataset.FSVolume getVolume() {
++      return volume;
++    }
++
++    @Override
++    public String toString() {
++      // Called in AsyncDiskService.execute for displaying error messages.
++      return "deletion of block " + blockName + " with block file " + blockFile
++          + " and meta file " + metaFile + " from volume " + volume;
++    }
++
++    @Override
++    public void run() {
++      if ( !blockFile.delete() || ( !metaFile.delete() && metaFile.exists() ) ) {
++        DataNode.LOG.warn("Unexpected error trying to delete block "
++            + blockName + " at file " + blockFile + ". Ignored.");
++      } else {
++        volume.decDfsUsed(dfsBytes);
++        DataNode.LOG.info("Deleted block " + blockName + " at file " + blockFile);
++      }
++    }
++  };
++  
++  
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSRemove.java b/src/test/org/apache/hadoop/hdfs/TestDFSRemove.java
+new file mode 100644
+index 0000000..866ec1a
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSRemove.java
+@@ -0,0 +1,91 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs;
++
++import java.io.*;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.protocol.FSConstants;
++import org.apache.hadoop.hdfs.server.datanode.DataNode;
++
++public class TestDFSRemove extends junit.framework.TestCase {
++  static int countLease(MiniDFSCluster cluster) {
++    return cluster.getNameNode().namesystem.leaseManager.countLease();
++  }
++  
++  final Path dir = new Path("/test/remove/");
++
++  void list(FileSystem fs, String name) throws IOException {
++    FileSystem.LOG.info("\n\n" + name);
++    for(FileStatus s : fs.listStatus(dir)) {
++      FileSystem.LOG.info("" + s.getPath());
++    }
++  }
++
++  static void createFile(FileSystem fs, Path f) throws IOException {
++    DataOutputStream a_out = fs.create(f);
++    a_out.writeBytes("something");
++    a_out.close();
++  }
++  
++  static long getTotalDfsUsed(MiniDFSCluster cluster) throws IOException {
++    long total = 0;
++    for(DataNode node : cluster.getDataNodes()) {
++      total += node.getFSDataset().getDfsUsed();
++    }
++    return total;
++  }
++  
++  public void testRemove() throws Exception {
++    Configuration conf = new Configuration();
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, 2, true, null);
++    try {
++      FileSystem fs = cluster.getFileSystem();
++      assertTrue(fs.mkdirs(dir));
++      
++      long dfsUsedStart = getTotalDfsUsed(cluster);
++      {
++        // Create 100 files
++        final int fileCount = 100;
++        for (int i = 0; i < fileCount; i++) {
++          Path a = new Path(dir, "a" + i);
++          createFile(fs, a);
++        }
++        long dfsUsedMax = getTotalDfsUsed(cluster);
++        // Remove 100 files
++        for (int i = 0; i < fileCount; i++) {
++          Path a = new Path(dir, "a" + i);
++          fs.delete(a, false);
++        }
++        // wait 5 heartbeat intervals, so that all blocks are deleted.
++        Thread.sleep(5 * FSConstants.HEARTBEAT_INTERVAL * 1000);
++        // all blocks should be gone now.
++        long dfsUsedFinal = getTotalDfsUsed(cluster);
++        assertEquals("All blocks should be gone. start=" + dfsUsedStart
++            + " max=" + dfsUsedMax + " final=" + dfsUsedFinal, dfsUsedStart, dfsUsedFinal);
++      }
++
++      fs.delete(dir, true);
++    } finally {
++      if (cluster != null) {cluster.shutdown();}
++    }
++  }
++}
+-- 
+1.7.0.4
+

@@ -1,0 +1,33 @@
+From ee5c73991b43fd49a1a4eed599d2d52065054209 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Feb 2011 12:17:35 -0800
+Subject: [PATCH 0859/1179] Amend MAPREDUCE-2178. Check result of chdir
+
+Reason: necessary to pass -Werror on more recent gcc
+Author: Todd Lipcon
+Ref: CDH-2623
+---
+ src/c++/task-controller/impl/task-controller.c |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
+
+diff --git a/src/c++/task-controller/impl/task-controller.c b/src/c++/task-controller/impl/task-controller.c
+index 31f63c1..24ca411 100644
+--- a/src/c++/task-controller/impl/task-controller.c
++++ b/src/c++/task-controller/impl/task-controller.c
+@@ -756,7 +756,12 @@ int initialize_job(const char *user, const char *jobid,
+     fclose(stdout);
+   }
+   fclose(stderr);
+-  chdir(primary_job_dir);
++  if (chdir(primary_job_dir)) {
++    fprintf(LOGFILE, "Failure to chdir to job dir - %s\n",
++      strerror(errno));
++    return -1;
++  }
++
+   execvp(args[0], args);
+   fprintf(LOGFILE, "Failure to exec job initialization process - %s\n",
+ 	  strerror(errno));
+-- 
+1.7.0.4
+

@@ -1,0 +1,85 @@
+From 1c9d2fac2188cd2c7ecf3b93711f1ecac3544bf9 Mon Sep 17 00:00:00 2001
+From: Ahmed Radwan <ahmed@cloudera.com>
+Date: Mon, 19 Mar 2012 18:12:38 -0700
+Subject: [PATCH 1147/1179] HADOOP-7987. Support setting the run-as user in unsecure mode.
+
+Author: Jitendra Nath Pandey
+Reason: Improvement
+Ref: CDH-4273
+---
+ .../hadoop/security/UserGroupInformation.java      |   12 +++++++-
+ .../apache/hadoop/security/TestUserFromEnv.java    |   32 ++++++++++++++++++++
+ 2 files changed, 43 insertions(+), 1 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/security/TestUserFromEnv.java
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 75a7c85..01f295c 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -78,6 +78,7 @@ public class UserGroupInformation {
+    * Percentage of the ticket window to use before we renew ticket.
+    */
+   private static final float TICKET_RENEW_WINDOW = 0.80f;
++  static final String HADOOP_USER_NAME = "HADOOP_USER_NAME";
+   
+   /** 
+    * UgiMetrics maintains UGI activity statistics
+@@ -153,7 +154,16 @@ public class UserGroupInformation {
+           LOG.debug("using kerberos user:"+user);
+         }
+       }
+-      // if we don't have a kerberos user, use the OS user
++      //If we don't have a kerberos user and security is disabled, check
++      //if user is specified in the environment or properties
++      if (!isSecurityEnabled() && (user == null)) {
++        String envUser = System.getenv(HADOOP_USER_NAME);
++        if (envUser == null) {
++          envUser = System.getProperty(HADOOP_USER_NAME);
++        }
++        user = envUser == null ? null : new User(envUser);
++      }
++      // use the OS user
+       if (user == null) {
+         user = getCanonicalUser(OS_PRINCIPAL_CLASS);
+         if (LOG.isDebugEnabled()) {
+diff --git a/src/test/org/apache/hadoop/security/TestUserFromEnv.java b/src/test/org/apache/hadoop/security/TestUserFromEnv.java
+new file mode 100644
+index 0000000..c51a006
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/TestUserFromEnv.java
+@@ -0,0 +1,32 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements. See the NOTICE file distributed with this
++ * work for additional information regarding copyright ownership. The ASF
++ * licenses this file to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
++ * License for the specific language governing permissions and limitations under
++ * the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++import org.junit.Assert;
++import org.junit.Test;
++
++public class TestUserFromEnv {
++
++  @Test
++  public void testUserFromEnvironment() throws IOException {
++    System.setProperty(UserGroupInformation.HADOOP_USER_NAME, "randomUser");
++    Assert.assertEquals("randomUser", UserGroupInformation.getLoginUser()
++        .getUserName());
++  }
++}
+-- 
+1.7.0.4
+

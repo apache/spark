@@ -1,0 +1,147 @@
+From 51c966ff9e07ff017eb1960cac87d8035e4549c6 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 19 Mar 2010 10:10:35 -0700
+Subject: [PATCH 0578/1179] HADOOP-6644. Fix incorrect code style in util.Shell
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439243/HADOOP-6644-BP20.patch
+Author: Boris Shkolnik
+Ref: YDH
+---
+ src/core/org/apache/hadoop/ipc/Server.java         |   21 ++++++++++++++-----
+ .../security/ShellBasedUnixGroupsMapping.java      |    2 +-
+ .../authorize/ServiceAuthorizationManager.java     |    6 ++--
+ src/core/org/apache/hadoop/util/Shell.java         |    4 +-
+ .../hadoop/fs/TestLocalFileSystemPermission.java   |    2 +-
+ 5 files changed, 22 insertions(+), 13 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 0698bdd..98c5a6e 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -119,7 +119,7 @@ public abstract class Server {
+   static final int IPC_SERVER_RPC_MAX_RESPONSE_SIZE_DEFAULT = 1024*1024;
+   
+   public static final Log LOG = LogFactory.getLog(Server.class);
+-  public static final Log auditLOG = 
++  private static final Log AUDITLOG = 
+     LogFactory.getLog("SecurityLogger."+Server.class.getName());
+   private static final String AUTH_FAILED_FOR = "Auth failed for ";
+   private static final String AUTH_SUCCESSFULL_FOR = "Auth successfull for "; 
+@@ -932,7 +932,7 @@ public abstract class Server {
+           rpcMetrics.authenticationFailures.inc();
+           String clientIP = this.toString();
+           // attempting user could be null
+-          auditLOG.warn(AUTH_FAILED_FOR + clientIP + ":" + attemptingUser, e);
++          AUDITLOG.warn(AUTH_FAILED_FOR + clientIP + ":" + attemptingUser, e);
+           throw e;
+         }
+         if (replyToken != null) {
+@@ -950,7 +950,7 @@ public abstract class Server {
+           user = getAuthorizedUgi(saslServer.getAuthorizationID());
+           LOG.info("SASL server successfully authenticated client: " + user);
+           rpcMetrics.authenticationSuccesses.inc();
+-          auditLOG.info(AUTH_SUCCESSFULL_FOR + user);
++          AUDITLOG.info(AUTH_SUCCESSFULL_FOR + user);
+           saslContextEstablished = true;
+         }
+       } else {
+@@ -1328,12 +1328,21 @@ public abstract class Server {
+   }
+   
+   protected Server(String bindAddress, int port,
+-                  Class<? extends Writable> paramClass, int handlerCount, 
+-                  Configuration conf)
+-    throws IOException 
++      Class<? extends Writable> paramClass, int handlerCount, 
++      Configuration conf)
++  throws IOException 
+   {
+     this(bindAddress, port, paramClass, handlerCount,  conf, Integer.toString(port), null);
+   }
++
++  protected Server(String bindAddress, int port,
++      Class<? extends Writable> paramClass, int handlerCount, 
++      Configuration conf, String serverName)
++  throws IOException 
++  {
++    this(bindAddress, port, paramClass, handlerCount,  conf, serverName, null);
++  }
++  
+   /** Constructs a server listening on the named port and address.  Parameters passed must
+    * be of the named class.  The <code>handlerCount</handlerCount> determines
+    * the number of handler threads that will be used to process calls.
+diff --git a/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java b/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
+index cc4caa2..fe170ce 100644
+--- a/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
++++ b/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
+@@ -60,7 +60,7 @@ public class ShellBasedUnixGroupsMapping implements GroupMappingServiceProvider
+   private static List<String> getUnixGroups(final String user) throws IOException {
+     String result = "";
+     try {
+-      result = Shell.execCommand(Shell.getGROUPS_FOR_USER_COMMAND(user));
++      result = Shell.execCommand(Shell.getGroupsForUserCommand(user));
+     } catch (ExitCodeException e) {
+       // if we didn't get the group - just return empty list;
+       LOG.warn("got exception trying to get groups for user " + user, e);
+diff --git a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+index 30c5edc..35c204c 100644
+--- a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
++++ b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+@@ -50,7 +50,7 @@ public class ServiceAuthorizationManager {
+   public static final String SERVICE_AUTHORIZATION_CONFIG = 
+     "hadoop.security.authorization";
+   
+-  public static final Log auditLOG =
++  private static final Log AUDITLOG =
+     LogFactory.getLog("SecurityLogger."+ServiceAuthorizationManager.class.getName());
+ 
+   private static final String AUTHZ_SUCCESSFULL_FOR = "Authorization successfull for ";
+@@ -99,12 +99,12 @@ public class ServiceAuthorizationManager {
+     }
+     if((clientPrincipal != null && !clientPrincipal.equals(user.getUserName())) || 
+         !acl.isUserAllowed(user)) {
+-      auditLOG.warn(AUTHZ_FAILED_FOR + user + " for protocol="+protocol);
++      AUDITLOG.warn(AUTHZ_FAILED_FOR + user + " for protocol="+protocol);
+       throw new AuthorizationException("User " + user + 
+           " is not authorized for protocol " + 
+           protocol);
+     }
+-    auditLOG.info(AUTHZ_SUCCESSFULL_FOR + user + " for protocol="+protocol);
++    AUDITLOG.info(AUTHZ_SUCCESSFULL_FOR + user + " for protocol="+protocol);
+   }
+ 
+   public static synchronized void refresh(Configuration conf,
+diff --git a/src/core/org/apache/hadoop/util/Shell.java b/src/core/org/apache/hadoop/util/Shell.java
+index 997a629..7a97a7b 100644
+--- a/src/core/org/apache/hadoop/util/Shell.java
++++ b/src/core/org/apache/hadoop/util/Shell.java
+@@ -44,11 +44,11 @@ abstract public class Shell {
+   /** a Unix command to get the current user's name */
+   public final static String USER_NAME_COMMAND = "whoami";
+   /** a Unix command to get the current user's groups list */
+-  public static String[] getGROUPS_COMMAND() {
++  public static String[] getGroupsCommand() {
+     return new String[]{"bash", "-c", "groups"};
+   }
+   /** a Unix command to get a given user's groups list */
+-  public static String[] getGROUPS_FOR_USER_COMMAND(final String user) {
++  public static String[] getGroupsForUserCommand(final String user) {
+     //'groups username' command return is non-consistent across different unixes
+     return new String [] {"bash", "-c", "id -Gn " + user};
+   }
+diff --git a/src/test/org/apache/hadoop/fs/TestLocalFileSystemPermission.java b/src/test/org/apache/hadoop/fs/TestLocalFileSystemPermission.java
+index f68cdb6..d76d27e 100644
+--- a/src/test/org/apache/hadoop/fs/TestLocalFileSystemPermission.java
++++ b/src/test/org/apache/hadoop/fs/TestLocalFileSystemPermission.java
+@@ -144,7 +144,7 @@ public class TestLocalFileSystemPermission extends TestCase {
+ 
+   static List<String> getGroups() throws IOException {
+     List<String> a = new ArrayList<String>();
+-    String s = Shell.execCommand(Shell.getGROUPS_COMMAND());
++    String s = Shell.execCommand(Shell.getGroupsCommand());
+     for(StringTokenizer t = new StringTokenizer(s); t.hasMoreTokens(); ) {
+       a.add(t.nextToken());
+     }
+-- 
+1.7.0.4
+

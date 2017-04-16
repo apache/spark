@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+export HADOOP_HOME=../../..
+
+export CLASSPATH="$HADOOP_HOME/build/classes"
+
+# so that filenames w/ spaces are handled correctly in loops below
+IFS=
+
+# add libs to CLASSPATH
+for f in $HADOOP_HOME/lib/*.jar; do
+  CLASSPATH=${CLASSPATH}:$f;
+done
+
+for f in $HADOOP_HOME/lib/jetty-ext/*.jar; do
+  CLASSPATH=${CLASSPATH}:$f;
+done
+
+# restore ordinary behaviour
+unset IFS
+jythonc -p org.apache.hadoop.examples -d -j wc.jar -c WordCount.py

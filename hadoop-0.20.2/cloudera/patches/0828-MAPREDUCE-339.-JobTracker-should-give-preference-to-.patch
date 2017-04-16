@@ -1,0 +1,395 @@
+From 16d9cf021a1989467b1372d3c2a050e6c4606230 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:51 -0800
+Subject: [PATCH 0828/1179] MAPREDUCE-339. JobTracker should give preference to failed tasks over virgin tasks so as to terminate the job ASAP if it is
+
+Author: Devaraj Das
+Ref: CDH-2622
+---
+ .../apache/hadoop/mapred/TestFairScheduler.java    |    4 -
+ .../org/apache/hadoop/mapred/JobInProgress.java    |  140 +++++++++++---------
+ 2 files changed, 75 insertions(+), 69 deletions(-)
+
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index 8b4a4a9..aa0b1f7 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -74,11 +74,7 @@ public class TestFairScheduler extends TestCase {
+       this.startTime = System.currentTimeMillis();
+       this.status = new JobStatus();
+       this.status.setRunState(JobStatus.PREP);
+-      this.nonLocalMaps = new LinkedList<TaskInProgress>();
+-      this.nonLocalRunningMaps = new LinkedHashSet<TaskInProgress>();
+       this.runningMapCache = new IdentityHashMap<Node, Set<TaskInProgress>>();
+-      this.nonRunningReduces = new LinkedList<TaskInProgress>();   
+-      this.runningReduces = new LinkedHashSet<TaskInProgress>();
+       initTasks();
+     }
+     
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index d889b75..559e450 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -30,7 +30,9 @@ import java.util.LinkedList;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
++import java.util.SortedSet;
+ import java.util.TreeMap;
++import java.util.TreeSet;
+ import java.util.Vector;
+ import java.util.concurrent.atomic.AtomicBoolean;
+ 
+@@ -79,8 +81,8 @@ public class JobInProgress {
+   /**
+    * Used when the a kill is issued to a job which is initializing.
+    */
++  @SuppressWarnings("serial")
+   static class KillInterruptedException extends InterruptedException {
+-   private static final long serialVersionUID = 1L;
+     public KillInterruptedException(String msg) {
+       super(msg);
+     }
+@@ -122,8 +124,8 @@ public class JobInProgress {
+   int speculativeMapTasks = 0;
+   int speculativeReduceTasks = 0;
+   
+-  int mapFailuresPercent = 0;
+-  int reduceFailuresPercent = 0;
++  final int mapFailuresPercent;
++  final int reduceFailuresPercent;
+   int failedMapTIPs = 0;
+   int failedReduceTIPs = 0;
+   private volatile boolean launchedCleanup = false;
+@@ -142,14 +144,17 @@ public class JobInProgress {
+   // Map of NetworkTopology Node to set of running TIPs
+   Map<Node, Set<TaskInProgress>> runningMapCache;
+ 
+-  // A list of non-local non-running maps
+-  List<TaskInProgress> nonLocalMaps;
++  // A list of non-local, non-running maps
++  final List<TaskInProgress> nonLocalMaps;
++
++  // Set of failed, non-running maps sorted by #failures
++  final SortedSet<TaskInProgress> failedMaps;
+ 
+   // A set of non-local running maps
+   Set<TaskInProgress> nonLocalRunningMaps;
+ 
+   // A list of non-running reduce TIPs
+-  List<TaskInProgress> nonRunningReduces;
++  Set<TaskInProgress> nonRunningReduces;
+ 
+   // A set of running reduce TIPs
+   Set<TaskInProgress> runningReduces;
+@@ -160,6 +165,21 @@ public class JobInProgress {
+   // A list of cleanup tasks for the reduce task attempts, to be launched
+   List<TaskAttemptID> reduceCleanupTasks = new LinkedList<TaskAttemptID>();
+ 
++  // keep failedMaps, nonRunningReduces ordered by failure count to bias
++  // scheduling toward failing tasks
++  private static final Comparator<TaskInProgress> failComparator =
++    new Comparator<TaskInProgress>() {
++      @Override
++      public int compare(TaskInProgress t1, TaskInProgress t2) {
++        if (t1 == null) return -1;
++        if (t2 == null) return 1;
++        
++        int failures = t2.numTaskFailures() - t1.numTaskFailures();
++        return (failures == 0) ? (t1.getTIPId().getId() - t2.getTIPId().getId())
++            : failures;
++      }
++    };
++
+   private final int maxLevel;
+ 
+   /**
+@@ -219,7 +239,7 @@ public class JobInProgress {
+   private final int restartCount;
+ 
+   private JobConf conf;
+-  AtomicBoolean tasksInited = new AtomicBoolean(false);
++  volatile boolean tasksInited = false;
+   private JobInitKillStatus jobInitKillStatus = new JobInitKillStatus();
+ 
+   private LocalFileSystem localFs;
+@@ -315,9 +335,10 @@ public class JobInProgress {
+     hasSpeculativeMaps = conf.getMapSpeculativeExecution();
+     hasSpeculativeReduces = conf.getReduceSpeculativeExecution();
+     this.nonLocalMaps = new LinkedList<TaskInProgress>();
++    this.failedMaps = new TreeSet<TaskInProgress>(failComparator);
+     this.nonLocalRunningMaps = new LinkedHashSet<TaskInProgress>();
+     this.runningMapCache = new IdentityHashMap<Node, Set<TaskInProgress>>();
+-    this.nonRunningReduces = new LinkedList<TaskInProgress>();
++    this.nonRunningReduces = new TreeSet<TaskInProgress>(failComparator);
+     this.runningReduces = new LinkedHashSet<TaskInProgress>();
+     this.resourceEstimator = new ResourceEstimator(this);
+     this.status = new JobStatus(jobid, 0.0f, 0.0f, JobStatus.PREP);
+@@ -327,6 +348,8 @@ public class JobInProgress {
+     this.memoryPerMap = conf.getMemoryForMapTask();
+     this.memoryPerReduce = conf.getMemoryForReduceTask();
+     this.maxTaskFailuresPerTracker = conf.getMaxTaskFailuresPerTracker();
++    this.mapFailuresPercent = conf.getMaxMapTaskFailuresPercent();
++    this.reduceFailuresPercent = conf.getMaxReduceTaskFailuresPercent();
+ 
+     this.taskCompletionEvents = new ArrayList<TaskCompletionEvent>
+       (numMapTasks + numReduceTasks + 10);
+@@ -435,9 +458,10 @@ public class JobInProgress {
+       this.maxLevel = jobtracker.getNumTaskCacheLevels();
+       this.anyCacheLevel = this.maxLevel+1;
+       this.nonLocalMaps = new LinkedList<TaskInProgress>();
++      this.failedMaps = new TreeSet<TaskInProgress>(failComparator);
+       this.nonLocalRunningMaps = new LinkedHashSet<TaskInProgress>();
+       this.runningMapCache = new IdentityHashMap<Node, Set<TaskInProgress>>();
+-      this.nonRunningReduces = new LinkedList<TaskInProgress>();    
++      this.nonRunningReduces = new TreeSet<TaskInProgress>(failComparator);
+       this.runningReduces = new LinkedHashSet<TaskInProgress>();
+       this.resourceEstimator = new ResourceEstimator(this);
+       this.reduce_input_limit = conf.getLong("mapreduce.reduce.input.limit", 
+@@ -560,7 +584,7 @@ public class JobInProgress {
+    *         <code>false</code> otherwise
+    */
+   public boolean inited() {
+-    return tasksInited.get();
++    return tasksInited;
+   }
+  
+   /**
+@@ -631,7 +655,7 @@ public class JobInProgress {
+    */
+   public synchronized void initTasks() 
+   throws IOException, KillInterruptedException {
+-    if (tasksInited.get() || isComplete()) {
++    if (tasksInited || isComplete()) {
+       return;
+     }
+     synchronized(jobInitKillStatus){
+@@ -763,7 +787,7 @@ public class JobInProgress {
+       }
+     }
+     
+-    tasksInited.set(true);
++    tasksInited = true;
+     JobHistory.JobInfo.logInited(profile.getJobID(), this.launchTime, 
+                                  numMapTasks, numReduceTasks);
+     
+@@ -771,7 +795,7 @@ public class JobInProgress {
+    LOG.info("Job " + jobId + " initialized successfully with " + numMapTasks
+             + " map tasks and " + numReduceTasks + " reduce tasks.");
+   }
+-  
++
+   TaskSplitMetaInfo[] createSplits(org.apache.hadoop.mapreduce.JobID jobId)
+   throws IOException {
+     TaskSplitMetaInfo[] allTaskSplitMetaInfo =
+@@ -1299,7 +1323,7 @@ public class JobInProgress {
+   public Task obtainTaskCleanupTask(TaskTrackerStatus tts, 
+                                                  boolean isMapSlot)
+   throws IOException {
+-    if (!tasksInited.get()) {
++    if (!tasksInited) {
+       return null;
+     }
+     synchronized (this) {
+@@ -1335,7 +1359,7 @@ public class JobInProgress {
+                                                      int clusterSize, 
+                                                      int numUniqueHosts)
+   throws IOException {
+-    if (!tasksInited.get()) {
++    if (!tasksInited) {
+       LOG.info("Cannot create task split for " + profile.getJobID());
+       return null;
+     }
+@@ -1347,7 +1371,7 @@ public class JobInProgress {
+                                                     int clusterSize, 
+                                                     int numUniqueHosts)
+   throws IOException {
+-    if (!tasksInited.get()) {
++    if (!tasksInited) {
+       LOG.info("Cannot create task split for " + profile.getJobID());
+       return null;
+     }
+@@ -1376,6 +1400,7 @@ public class JobInProgress {
+   /**
+    * Check if we can schedule an off-switch task for this job.
+    * 
++   * @param numTaskTrackers number of tasktrackers
+    * @return <code>true</code> if we can schedule off-switch, 
+    *         <code>false</code> otherwise
+    * We check the number of missed opportunities for the job. 
+@@ -1398,7 +1423,7 @@ public class JobInProgress {
+                                              int numUniqueHosts,
+                                              boolean isMapSlot
+                                             ) throws IOException {
+-    if(!tasksInited.get()) {
++    if(!tasksInited) {
+       return null;
+     }
+     
+@@ -1490,7 +1515,7 @@ public class JobInProgress {
+                                              int numUniqueHosts,
+                                              boolean isMapSlot
+                                             ) throws IOException {
+-    if(!tasksInited.get()) {
++    if(!tasksInited) {
+       return null;
+     }
+     
+@@ -1540,7 +1565,7 @@ public class JobInProgress {
+    * @return true/false
+    */
+   private synchronized boolean canLaunchSetupTask() {
+-    return (tasksInited.get() && status.getRunState() == JobStatus.PREP && 
++    return (tasksInited && status.getRunState() == JobStatus.PREP && 
+            !launchedSetup && !jobKilled && !jobFailed);
+   }
+   
+@@ -1977,37 +2002,14 @@ public class JobInProgress {
+    * @param tip the tip that needs to be failed
+    */
+   private synchronized void failMap(TaskInProgress tip) {
+-    if (nonRunningMapCache == null) {
+-      LOG.warn("Non-running cache for maps missing!! "
+-               + "Job details are missing.");
++    if (failedMaps == null) {
++      LOG.warn("Failed cache for maps is missing! Job details are missing.");
+       return;
+     }
+ 
+-    // 1. Its added everywhere since other nodes (having this split local)
+-    //    might have removed this tip from their local cache
+-    // 2. Give high priority to failed tip - fail early
+-
+-    String[] splitLocations = tip.getSplitLocations();
+-
+-    // Add the TIP in the front of the list for non-local non-running maps
+-    if (splitLocations == null || splitLocations.length == 0) {
+-      nonLocalMaps.add(0, tip);
+-      return;
+-    }
+-
+-    for(String host: splitLocations) {
+-      Node node = jobtracker.getNode(host);
+-      
+-      for (int j = 0; j < maxLevel; ++j) {
+-        List<TaskInProgress> hostMaps = nonRunningMapCache.get(node);
+-        if (hostMaps == null) {
+-          hostMaps = new LinkedList<TaskInProgress>();
+-          nonRunningMapCache.put(node, hostMaps);
+-        }
+-        hostMaps.add(0, tip);
+-        node = node.getParent();
+-      }
+-    }
++    // Ignore locality for subsequent scheduling on this TIP. Always schedule
++    // it ahead of other tasks.
++    failedMaps.add(tip);
+   }
+   
+   /**
+@@ -2020,7 +2022,7 @@ public class JobInProgress {
+                + "Job details are missing.");
+       return;
+     }
+-    nonRunningReduces.add(0, tip);
++    nonRunningReduces.add(tip);
+   }
+   
+   /**
+@@ -2164,24 +2166,33 @@ public class JobInProgress {
+     }
+     
+     
+-    // For scheduling a map task, we have two caches and a list (optional)
+-    //  I)   one for non-running task
+-    //  II)  one for running task (this is for handling speculation)
+-    //  III) a list of TIPs that have empty locations (e.g., dummy splits),
+-    //       the list is empty if all TIPs have associated locations
++    // When scheduling a map task:
++    //  0) Schedule a failed task without considering locality
++    //  1) Schedule non-running tasks
++    //  2) Schedule speculative tasks
++    //  3) Schedule tasks with no location information
+ 
+     // First a look up is done on the non-running cache and on a miss, a look 
+     // up is done on the running cache. The order for lookup within the cache:
+     //   1. from local node to root [bottom up]
+     //   2. breadth wise for all the parent nodes at max level
+-
+-    // We fall to linear scan of the list (III above) if we have misses in the 
++    // We fall to linear scan of the list ((3) above) if we have misses in the 
+     // above caches
+ 
++    // 0) Schedule the task with the most failures, unless failure was on this
++    //    machine
++    tip = findTaskFromList(failedMaps, tts, numUniqueHosts, false);
++    if (tip != null) {
++      // Add to the running list
++      scheduleMap(tip);
++      LOG.info("Choosing a failed task " + tip.getTIPId());
++      return tip.getIdWithinJob();
++    }
++
+     Node node = jobtracker.getNode(tts.getHost());
+     
+     //
+-    // I) Non-running TIP :
++    // 1) Non-running TIP :
+     // 
+ 
+     // 1. check from local node to the root [bottom up cache lookup]
+@@ -2191,10 +2202,10 @@ public class JobInProgress {
+       Node key = node;
+       int level = 0;
+       // maxCacheLevel might be greater than this.maxLevel if findNewMapTask is
+-      // called to schedule any task (local, rack-local, off-switch or speculative)
+-      // tasks or it might be NON_LOCAL_CACHE_LEVEL (i.e. -1) if findNewMapTask is
+-      //  (i.e. -1) if findNewMapTask is to only schedule off-switch/speculative
+-      // tasks
++      // called to schedule any task (local, rack-local, off-switch or
++      // speculative) tasks or it might be NON_LOCAL_CACHE_LEVEL (i.e. -1) if
++      // findNewMapTask is (i.e. -1) if findNewMapTask is to only schedule
++      // off-switch/speculative tasks
+       int maxLevelToSchedule = Math.min(maxCacheLevel, maxLevel);
+       for (level = 0;level < maxLevelToSchedule; ++level) {
+         List <TaskInProgress> cacheForLevel = nonRunningMapCache.get(key);
+@@ -2270,7 +2281,7 @@ public class JobInProgress {
+     }
+ 
+     //
+-    // II) Running TIP :
++    // 2) Running TIP :
+     // 
+  
+     if (hasSpeculativeMaps) {
+@@ -2676,7 +2687,7 @@ public class JobInProgress {
+    * @param jobTerminationState job termination state
+    */
+   private synchronized void terminate(int jobTerminationState) {
+-    if(!tasksInited.get()) {
++    if(!tasksInited) {
+     	//init could not be done, we just terminate directly.
+       terminateJob(jobTerminationState);
+       return;
+@@ -3062,6 +3073,7 @@ public class JobInProgress {
+ 
+       cleanUpMetrics();
+       // free up the memory used by the data structures
++      this.failedMaps.clear();
+       this.nonRunningMapCache = null;
+       this.runningMapCache = null;
+       this.nonRunningReduces = null;
+@@ -3158,9 +3170,7 @@ public class JobInProgress {
+     
+     float failureRate = (float)fetchFailures / runningReduceTasks;
+     // declare faulty if fetch-failures >= max-allowed-failures
+-    boolean isMapFaulty = (failureRate >= MAX_ALLOWED_FETCH_FAILURES_PERCENT) 
+-                          ? true
+-                          : false;
++    boolean isMapFaulty = failureRate >= MAX_ALLOWED_FETCH_FAILURES_PERCENT;
+     if (fetchFailures >= MAX_FETCH_FAILURES_NOTIFICATIONS
+         && isMapFaulty) {
+       LOG.info("Too many fetch-failures for output of task: " + mapTaskId 
+-- 
+1.7.0.4
+

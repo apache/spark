@@ -1,0 +1,96 @@
+From 51a15afdd3f2b33e9c6573bfa9d002034edaaaf7 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Mon, 10 Jan 2011 13:49:10 -0800
+Subject: [PATCH 0761/1179] HADOOP-5476. calling new SequenceFile.Reader(...) leaves an InputStream open, if the given sequence file is broken
+
+Reason: Fix file handle leak, as requested on Hive list.
+Author: Michael Tamm
+Ref: DISTRO-28
+---
+ src/core/org/apache/hadoop/io/SequenceFile.java    |   14 +++++-
+ .../org/apache/hadoop/io/TestSequenceFile.java     |   44 ++++++++++++++++++++
+ 2 files changed, 55 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/SequenceFile.java b/src/core/org/apache/hadoop/io/SequenceFile.java
+index d86c830..a85b95a 100644
+--- a/src/core/org/apache/hadoop/io/SequenceFile.java
++++ b/src/core/org/apache/hadoop/io/SequenceFile.java
+@@ -1430,9 +1430,17 @@ public class SequenceFile {
+       this.file = file;
+       this.in = openFile(fs, file, bufferSize, length);
+       this.conf = conf;
+-      seek(start);
+-      this.end = in.getPos() + length;
+-      init(tempReader);
++      boolean succeeded = false;
++      try {
++        seek(start);
++        this.end = in.getPos() + length;
++        init(tempReader);
++        succeeded = true;
++      } finally {
++        if (!succeeded) {
++          IOUtils.cleanup(LOG, in);
++        }
++      }
+     }
+ 
+     /**
+diff --git a/src/test/org/apache/hadoop/io/TestSequenceFile.java b/src/test/org/apache/hadoop/io/TestSequenceFile.java
+index e7f9236..38f808a 100644
+--- a/src/test/org/apache/hadoop/io/TestSequenceFile.java
++++ b/src/test/org/apache/hadoop/io/TestSequenceFile.java
+@@ -440,6 +440,50 @@ public class TestSequenceFile extends TestCase {
+     assertFalse(reader2.next(text));
+   }
+ 
++  private static class TestFSDataInputStream extends FSDataInputStream {
++    private boolean closed = false;
++
++    private TestFSDataInputStream(InputStream in) throws IOException {
++      super(in);
++    }
++
++    public void close() throws IOException {
++      closed = true;
++      super.close();
++    }
++
++    public boolean isClosed() {
++      return closed;
++    }
++  }
++
++  public void testCloseForErroneousSequenceFile()
++    throws IOException {
++    Configuration conf = new Configuration();
++    LocalFileSystem fs = FileSystem.getLocal(conf);
++
++    // create an empty file (which is not a valid sequence file)
++    Path path = new Path(System.getProperty("test.build.data",".")+"/broken.seq");
++    fs.create(path).close();
++
++    // try to create SequenceFile.Reader
++    final TestFSDataInputStream[] openedFile = new TestFSDataInputStream[1];
++    try {
++      new SequenceFile.Reader(fs, path, conf) {
++        // this method is called by the SequenceFile.Reader constructor, overwritten, so we can access the opened file
++        protected FSDataInputStream openFile(FileSystem fs, Path file, int bufferSize, long length) throws IOException {
++          final InputStream in = super.openFile(fs, file, bufferSize, length);
++          openedFile[0] = new TestFSDataInputStream(in);
++          return openedFile[0];
++        }
++      };
++      fail("IOException expected.");
++    } catch (IOException expected) {}
++
++    assertNotNull(path + " should have been opened.", openedFile[0]);
++    assertTrue("InputStream for " + path + " should have been closed.", openedFile[0].isClosed());
++  }
++
+   /** For debugging and testing. */
+   public static void main(String[] args) throws Exception {
+     int count = 1024 * 1024;
+-- 
+1.7.0.4
+

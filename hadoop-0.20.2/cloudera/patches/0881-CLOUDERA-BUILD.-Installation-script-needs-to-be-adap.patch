@@ -1,0 +1,31 @@
+From 279a018f693a5721d7228e7c801327dda0aecb81 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Bruno=20Mah=C3=A9?= <bruno@gnoll.org>
+Date: Tue, 15 Feb 2011 15:25:19 -0800
+Subject: [PATCH 0881/1179] CLOUDERA-BUILD. Installation script needs to be adapted for the new naming scheme.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reason: Our mavenization effort changes our artifacts names
+Author: Bruno Mahé
+Ref: KITCHEN-833
+---
+ cloudera/install_hadoop.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 41728a7..7b5ab2c 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -123,7 +123,7 @@ mkdir -p $LIB_DIR
+ # packages can depend on
+ (cd $LIB_DIR &&
+ for j in hadoop-*.jar; do
+-  if [[ $j =~ hadoop-([a-zA-Z]+)-([0-9+\.-]+).jar ]]; then
++  if [[ $j =~ hadoop-([a-zA-Z]+)-(.*).jar ]]; then
+     name=${BASH_REMATCH[1]}
+     ver=${BASH_REMATCH[2]}
+     ln -s hadoop-$name-$ver.jar hadoop-$ver-$name.jar
+-- 
+1.7.0.4
+

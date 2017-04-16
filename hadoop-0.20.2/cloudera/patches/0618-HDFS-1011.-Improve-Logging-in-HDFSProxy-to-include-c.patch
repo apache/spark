@@ -1,0 +1,169 @@
+From 4aa8da2788a0794be5469227140509cc87d29c47 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 20 Apr 2010 01:13:14 +0530
+Subject: [PATCH 0618/1179] HDFS-1011. Improve Logging in HDFSProxy to include cluster name associated with the request
+
+Patch: https://issues.apache.org/jira/secure/attachment/12441031/HDFS-1011-bp-y20s.patch
+Author: Ramesh Sekaran
+Ref: YDH
+---
+ .../hadoop/hdfsproxy/AuthorizationFilter.java      |    3 +
+ .../hdfsproxy/KerberosAuthorizationFilter.java     |    2 +-
+ .../apache/hadoop/hdfsproxy/LdapIpDirFilter.java   |   84 +++++++++++---------
+ 3 files changed, 51 insertions(+), 38 deletions(-)
+
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java
+index 135f1f7..f1b2bd0 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java
+@@ -48,8 +48,11 @@ public class AuthorizationFilter implements Filter {
+   protected static final Pattern FILEPATH_PATTERN = Pattern
+       .compile("^(/listPaths|/data|/file)$");
+ 
++  protected String contextPath;
++
+   /** {@inheritDoc} **/
+   public void init(FilterConfig filterConfig) throws ServletException {
++    contextPath = filterConfig.getServletContext().getContextPath();
+   }
+ 
+   /** {@inheritDoc} **/
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/KerberosAuthorizationFilter.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/KerberosAuthorizationFilter.java
+index e35a829..d822d62 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/KerberosAuthorizationFilter.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/KerberosAuthorizationFilter.java
+@@ -42,7 +42,7 @@ public class KerberosAuthorizationFilter extends AuthorizationFilter {
+           conf.get("hdfsproxy.kerberos.principal"),
+           conf.get("hdfsproxy.kerberos.keytab"));
+ 
+-      LOG.info("Logged in user: " +
++      LOG.info(contextPath + " :: Logged in user: " +
+           UserGroupInformation.getLoginUser().getUserName() +
+           ", Current User: " + UserGroupInformation.getCurrentUser().getUserName());
+ 
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
+index b07f9a3..f8aff5c 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
+@@ -68,6 +68,8 @@ public class LdapIpDirFilter implements Filter {
+     }
+   }
+ 
++  protected String contextPath;
++
+   public void initialize(String bName, InitialLdapContext ctx) {
+     // hook to cooperate unit test
+     baseName = bName;
+@@ -82,6 +84,8 @@ public class LdapIpDirFilter implements Filter {
+   public void init(FilterConfig filterConfig) throws ServletException {
+     ServletContext context = filterConfig.getServletContext();
+ 
++    contextPath = context.getContextPath();
++
+     Configuration conf = new Configuration(false);
+     conf.addResource("hdfsproxy-default.xml");
+     conf.addResource("hdfsproxy-site.xml");
+@@ -120,7 +124,7 @@ public class LdapIpDirFilter implements Filter {
+       hdfsPathSchemaStr = conf.get("hdfsproxy.ldap.hdfs.path.schema.string",
+           "documentLocation");
+     }
+-    LOG.info("LdapIpDirFilter initialization successful");
++    LOG.info(contextPath + ":: LdapIpDirFilter initialization successful");
+   }
+ 
+   private String getNamenode(Configuration conf) throws ServletException {
+@@ -140,49 +144,55 @@ public class LdapIpDirFilter implements Filter {
+   public void doFilter(ServletRequest request, ServletResponse response,
+       FilterChain chain) throws IOException, ServletException {
+ 
+-    HttpServletRequest rqst = (HttpServletRequest) request;
+-    HttpServletResponse rsp = (HttpServletResponse) response;
+-
+-    if (LOG.isDebugEnabled()) {
+-      StringBuilder b = new StringBuilder("Request from ").append(
+-          rqst.getRemoteHost()).append("/").append(rqst.getRemoteAddr())
+-          .append(":").append(rqst.getRemotePort());
+-      b.append("\n The Scheme is " + rqst.getScheme());
+-      b.append("\n The Path Info is " + rqst.getPathInfo());
+-      b.append("\n The Translated Path Info is " + rqst.getPathTranslated());
+-      b.append("\n The Context Path is " + rqst.getContextPath());
+-      b.append("\n The Query String is " + rqst.getQueryString());
+-      b.append("\n The Request URI is " + rqst.getRequestURI());
+-      b.append("\n The Request URL is " + rqst.getRequestURL());
+-      b.append("\n The Servlet Path is " + rqst.getServletPath());
+-      LOG.debug(b.toString());
+-    }
+-    LdapRoleEntry ldapent = new LdapRoleEntry();
+-    // check ip address
+-    String userIp = rqst.getRemoteAddr();
++    String prevThreadName = Thread.currentThread().getName();
+     try {
+-      boolean isAuthorized = getLdapRoleEntryFromUserIp(userIp, ldapent);
+-      if (!isAuthorized) {
+-        rsp.sendError(HttpServletResponse.SC_FORBIDDEN, "IP " + userIp
+-            + " is not authorized to access");
+-        return;
++      Thread.currentThread().setName(contextPath);
++      HttpServletRequest rqst = (HttpServletRequest) request;
++      HttpServletResponse rsp = (HttpServletResponse) response;
++
++      if (LOG.isDebugEnabled()) {
++        StringBuilder b = new StringBuilder("Request from ").append(
++            rqst.getRemoteHost()).append("/").append(rqst.getRemoteAddr())
++            .append(":").append(rqst.getRemotePort());
++        b.append("\n The Scheme is " + rqst.getScheme());
++        b.append("\n The Path Info is " + rqst.getPathInfo());
++        b.append("\n The Translated Path Info is " + rqst.getPathTranslated());
++        b.append("\n The Context Path is " + rqst.getContextPath());
++        b.append("\n The Query String is " + rqst.getQueryString());
++        b.append("\n The Request URI is " + rqst.getRequestURI());
++        b.append("\n The Request URL is " + rqst.getRequestURL());
++        b.append("\n The Servlet Path is " + rqst.getServletPath());
++        LOG.debug(b.toString());
++      }
++      LdapRoleEntry ldapent = new LdapRoleEntry();
++      // check ip address
++      String userIp = rqst.getRemoteAddr();
++      try {
++        boolean isAuthorized = getLdapRoleEntryFromUserIp(userIp, ldapent);
++        if (!isAuthorized) {
++          rsp.sendError(HttpServletResponse.SC_FORBIDDEN, "IP " + userIp
++              + " is not authorized to access");
++          return;
++        }
++      } catch (NamingException ne) {
++        throw new IOException("NamingException while searching ldap"
++            + ne.toString());
+       }
+-    } catch (NamingException ne) {
+-      throw new IOException("NamingException while searching ldap"
+-          + ne.toString());
+-    }
+ 
+-    // since we cannot pass ugi object cross context as they are from
+-    // different classloaders in different war file, we have to use String attribute.
+-    rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.userID",
++      // since we cannot pass ugi object cross context as they are from
++      // different classloaders in different war file, we have to use String attribute.
++      rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.userID",
+         ldapent.userId);
+-    rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.paths",
++      rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.paths",
+         ldapent.paths);
+ 
+-    LOG.info("User: " + ldapent.userId + " Request: " + rqst.getPathInfo() +
+-        " From: " + rqst.getRemoteAddr());
++      LOG.info("User: " + ldapent.userId + " Request: " + rqst.getPathInfo() +
++          " From: " + rqst.getRemoteAddr());
+ 
+-    chain.doFilter(request, response);
++      chain.doFilter(request, response);
++    } finally {
++      Thread.currentThread().setName(prevThreadName);
++    }
+   }
+ 
+   /**
+-- 
+1.7.0.4
+

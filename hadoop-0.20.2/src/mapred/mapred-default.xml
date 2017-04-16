@@ -1,0 +1,1256 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Do not modify this file directly.  Instead, copy entries that you -->
+<!-- wish to modify from this file into mapred-site.xml and change them -->
+<!-- there.  If mapred-site.xml does not already exist, create it.      -->
+
+<configuration>
+
+<property>
+  <name>hadoop.job.history.location</name>
+  <value></value>
+  <description> If job tracker is static the history files are stored 
+  in this single well known place. If No value is set here, by default,
+  it is in the local file system at ${hadoop.log.dir}/history.
+  </description>
+</property>
+
+<property>
+  <name>hadoop.job.history.user.location</name>
+  <value></value>
+  <description> User can specify a location to store the history files of 
+  a particular job. If nothing is specified, the logs are stored in 
+  output directory. The files are stored in "_logs/history/" in the directory.
+  User can stop logging by giving the value "none". 
+  </description>
+</property>
+
+<property>
+  <name>mapred.job.tracker.history.completed.location</name>
+  <value></value>
+  <description> The completed job history files are stored at this single well 
+  known location. If nothing is specified, the files are stored at 
+  ${hadoop.job.history.location}/done.
+  </description>
+</property>
+
+<!-- i/o properties -->
+
+<property>
+  <name>io.sort.factor</name>
+  <value>10</value>
+  <description>The number of streams to merge at once while sorting
+  files.  This determines the number of open file handles.</description>
+</property>
+
+<property>
+  <name>io.sort.mb</name>
+  <value>100</value>
+  <description>The total amount of buffer memory to use while sorting 
+  files, in megabytes.  By default, gives each merge stream 1MB, which
+  should minimize seeks.</description>
+</property>
+
+<property>
+  <name>io.sort.record.percent</name>
+  <value>0.05</value>
+  <description>The percentage of io.sort.mb dedicated to tracking record
+  boundaries. Let this value be r, io.sort.mb be x. The maximum number
+  of records collected before the collection thread must block is equal
+  to (r * x) / 4</description>
+</property>
+
+<property>
+  <name>io.sort.spill.percent</name>
+  <value>0.80</value>
+  <description>The soft limit in either the buffer or record collection
+  buffers. Once reached, a thread will begin to spill the contents to disk
+  in the background. Note that this does not imply any chunking of data to
+  the spill. A value less than 0.5 is not recommended.</description>
+</property>
+
+<property>
+  <name>io.map.index.skip</name>
+  <value>0</value>
+  <description>Number of index entries to skip between each entry.
+  Zero by default. Setting this to values larger than zero can
+  facilitate opening large map files using less memory.</description>
+</property>
+
+<property>
+  <name>mapred.job.tracker</name>
+  <value>local</value>
+  <description>The host and port that the MapReduce job tracker runs
+  at.  If "local", then jobs are run in-process as a single map
+  and reduce task.
+  </description>
+</property>
+
+<property>
+  <name>mapred.job.tracker.http.address</name>
+  <value>0.0.0.0:50030</value>
+  <description>
+    The job tracker http server address and port the server will listen on.
+    If the port is 0 then the server will start on a free port.
+  </description>
+</property>
+
+<property>
+  <name>mapred.job.tracker.handler.count</name>
+  <value>10</value>
+  <description>
+    The number of server threads for the JobTracker. This should be roughly
+    4% of the number of tasktracker nodes.
+  </description>
+</property>
+
+<property>
+  <name>mapred.task.tracker.report.address</name>
+  <value>127.0.0.1:0</value>
+  <description>The interface and port that task tracker server listens on. 
+  Since it is only connected to by the tasks, it uses the local interface.
+  EXPERT ONLY. Should only be changed if your host does not have the loopback 
+  interface.</description>
+</property>
+
+<property>
+  <name>mapred.local.dir</name>
+  <value>${hadoop.tmp.dir}/mapred/local</value>
+  <description>The local directory where MapReduce stores intermediate
+  data files.  May be a comma-separated list of
+  directories on different devices in order to spread disk i/o.
+  Directories that do not exist are ignored.
+  </description>
+</property>
+
+<property>
+  <name>mapred.system.dir</name>
+  <value>${hadoop.tmp.dir}/mapred/system</value>
+  <description>The directory where MapReduce stores control files.
+  </description>
+</property>
+
+<property>
+  <name>mapreduce.jobtracker.staging.root.dir</name>
+  <value>${hadoop.tmp.dir}/mapred/staging</value>
+  <description>The root of the staging area for users' job files
+  In practice, this should be the directory where users' home 
+  directories are located (usually /user)
+  </description>
+</property>
+
+<property>
+  <name>mapred.temp.dir</name>
+  <value>${hadoop.tmp.dir}/mapred/temp</value>
+  <description>A shared directory for temporary files.
+  </description>
+</property>
+
+<property>
+  <name>mapred.local.dir.minspacestart</name>
+  <value>0</value>
+  <description>If the space in mapred.local.dir drops under this, 
+  do not ask for more tasks.
+  Value in bytes.
+  </description>
+</property>
+
+<property>
+  <name>mapred.local.dir.minspacekill</name>
+  <value>0</value>
+  <description>If the space in mapred.local.dir drops under this, 
+    do not ask more tasks until all the current ones have finished and 
+    cleaned up. Also, to save the rest of the tasks we have running, 
+    kill one of them, to clean up some space. Start with the reduce tasks,
+    then go with the ones that have finished the least.
+    Value in bytes.
+  </description>
+</property>
+
+<!-- TaskTracker DistributedCache configuration -->
+<property>
+  <name>local.cache.size</name>
+  <value>10737418240</value>
+  <description>The number of bytes to allocate in each local TaskTracker
+  directory for holding Distributed Cache data.</description>
+</property>
+
+<property>
+  <name>mapreduce.tasktracker.cache.local.numberdirectories</name>
+  <value>10000</value>
+  <description>
+  The maximum number of subdirectories that should be created in any particular
+  distributed cache store. After this many directories have been created,
+  cache items will be expunged regardless of whether the total size threshold
+  has been exceeded.
+  </description>
+</property>
+<!-- End of TaskTracker DistributedCache configuration -->
+
+
+<property>
+  <name>mapred.tasktracker.expiry.interval</name>
+  <value>600000</value>
+  <description>Expert: The time-interval, in miliseconds, after which
+  a tasktracker is declared 'lost' if it doesn't send heartbeats.
+  </description>
+</property>
+
+<property>
+  <name>mapred.tasktracker.instrumentation</name>
+  <value>org.apache.hadoop.mapred.TaskTrackerMetricsInst</value>
+  <description>Expert: The instrumentation class to associate with each TaskTracker.
+  </description>
+</property>
+
+<property>
+  <name>mapred.tasktracker.resourcecalculatorplugin</name>
+  <value></value>
+  <description>
+   Name of the class whose instance will be used to query resource information
+   on the tasktracker.
+   
+   The class must be an instance of 
+   org.apache.hadoop.util.ResourceCalculatorPlugin. If the value is null, the
+   tasktracker attempts to use a class appropriate to the platform. 
+   Currently, the only platform supported is Linux.
+  </description>
+</property>
+
+<property>
+  <name>mapred.tasktracker.taskmemorymanager.monitoring-interval</name>
+  <value>5000</value>
+  <description>The interval, in milliseconds, for which the tasktracker waits
+   between two cycles of monitoring its tasks' memory usage. Used only if
+   tasks' memory management is enabled via mapred.tasktracker.tasks.maxmemory.
+   </description>
+</property>
+
+<property>
+  <name>mapred.tasktracker.tasks.sleeptime-before-sigkill</name>
+  <value>5000</value>
+  <description>The time, in milliseconds, the tasktracker waits for sending a
+  SIGKILL to a process, after it has been sent a SIGTERM.</description>
+</property>
+
+<property>
+  <name>mapred.map.tasks</name>
+  <value>2</value>
+  <description>The default number of map tasks per job.
+  Ignored when mapred.job.tracker is "local".  
+  </description>
+</property>
+
+<property>
+  <name>mapred.reduce.tasks</name>
+  <value>1</value>
+  <description>The default number of reduce tasks per job. Typically set to 99%
+  of the cluster's reduce capacity, so that if a node fails the reduces can 
+  still be executed in a single wave.
+  Ignored when mapred.job.tracker is "local".
+  </description>
+</property>
+
+<property>
+  <name>mapreduce.tasktracker.outofband.heartbeat</name>
+  <value>false</value>
+  <description>Expert: Set this to true to let the tasktracker send an 
+  out-of-band heartbeat on task-completion for better latency.
+  </description>
+</property>
+
+<property>
+  <name>mapred.jobtracker.restart.recover</name>
+  <value>false</value>
+  <description>"true" to enable (job) recovery upon restart,
+               "false" to start afresh
+  </description>
+</property>
+
+<property>
+  <name>mapred.jobtracker.job.history.block.size</name>
+  <value>3145728</value>
+  <description>The block size of the job history file. Since the job recovery
+               uses job history, its important to dump job history to disk as 
+               soon as possible. Note that this is an expert level parameter.
+               The default value is set to 3 MB.
+  </description>
+</property>
+
+<property>
+  <name>mapreduce.jobtracker.split.metainfo.maxsize</name>
+  <value>10000000</value>
+  <description>The maximum permissible size of the split metainfo file.
+  The JobTracker won't attempt to read split metainfo files bigger than
+  the configured value.
+  No limits if set to -1.
+  </description>
+</property>
+
+<property>
+  <name>mapred.jobtracker.taskScheduler</name>
+  <value>org.apache.hadoop.mapred.JobQueueTaskScheduler</value>
+  <description>The class responsible for scheduling the tasks.</description>
+</property>
+
+<property>
+  <name>mapred.jobtracker.taskScheduler.maxRunningTasksPerJob</name>
+  <value></value>
+  <description>The maximum number of running tasks for a job before
+  it gets preempted. No limits if undefined.
+  </description>
+</property>
+
+<property>
+  <name>mapred.map.max.attempts</name>
+  <value>4</value>
+  <description>Expert: The maximum number of attempts per map task.
+  In other words, framework will try to execute a map task these many number
+  of times before giving up on it.
+  </description>
+</property>
+
+<property>
+  <name>mapred.reduce.max.attempts</name>
+  <value>4</value>
+  <description>Expert: The maximum number of attempts per reduce task.
+  In other words, framework will try to execute a reduce task these many number
+  of times before giving up on it.
+  </description>
+</property>
+
+<property>
+  <name>mapred.reduce.parallel.copies</name>
+  <value>5</value>
+  <description>The default number of parallel transfers run by reduce
+  during the copy(shuffle) phase.
+  </description>
+</property>
+
+<property>
+  <name>mapreduce.reduce.shuffle.maxfetchfailures</name>
+  <value>10</value>
+  <description>The maximum number of times a reducer tries to
+  fetch a map output before it reports it.
+</description></property>
+
+<property>
+  <name>mapreduce.reduce.shuffle.connect.timeout</name>
+  <value>180000</value>
+  <description>Expert: The maximum amount of time (in milli seconds) a reduce
+  task spends in trying to connect to a tasktracker for getting map output.
+  </description>
+</property>
+
+<property>
+  <name>mapreduce.reduce.shuffle.read.timeout</name>
+  <value>180000</value>
+  <description>Expert: The maximum amount of time (in milli seconds) a reduce
+  task waits for map output data to be available for reading after obtaining
+  connection.
+  </description>
+</property>
+
+<property>
+  <name>mapred.task.timeout</name>
+  <value>600000</value>
+  <description>The number of milliseconds before a task will be
+  terminated if it neither reads an input, writes an output, nor
+  updates its status string.
+  </description>
+</property>
+
+<property>
+  <name>mapred.tasktracker.map.tasks.maximum</name>
+  <value>2</value>
+  <description>The maximum number of map tasks that will be run
+  simultaneously by a task tracker.
+  </description>
+</property>
+
+<property>
+  <name>mapred.tasktracker.reduce.tasks.maximum</name>
+  <value>2</value>
+  <description>The maximum number of reduce tasks that will be run
+  simultaneously by a task tracker.
+  </description>
+</property>
+
+<property>
+  <name>mapred.jobtracker.completeuserjobs.maximum</name>
+  <value>100</value>
+  <description>The maximum number of complete jobs per user to keep around 
+  before delegating them to the job history.</description>
+</property>
+
+<property>
+  <name>mapreduce.reduce.input.limit</name>
+  <value>-1</value>
+  <description>The limit on the input size of the reduce. If the estimated
+  input size of the reduce is greater than this value, job is failed. A
+  value of -1 means that there is no limit set. </description>
+</property>
+
+<property>
+  <name>mapred.job.tracker.retiredjobs.cache.size</name>
+  <value>1000</value>
+  <description>The number of retired job status to keep in the cache.
+  </description>
+</property>
+
+<property>
+  <name>mapred.job.tracker.jobhistory.lru.cache.size</name>
+  <value>5</value>
+  <description>The number of job history files loaded in memory. The jobs are 
+  loaded when they are first accessed. The cache is cleared based on LRU.
+  </description>
+</property>
+
+<property>
+  <name>mapred.jobtracker.instrumentation</name>
+  <value>org.apache.hadoop.mapred.JobTrackerMetricsInst</value>
+  <description>Expert: The instrumentation class to associate with each JobTracker.
+  </description>
+</property>
+
+<property>
+  <name>mapred.jobtracker.plugins</name>
+  <value></value>
+  <description>Comma-separated list of jobtracker plug-ins to be activated.
+  </description>
+</property>
+
+<property>
+  <name>mapred.child.java.opts</name>
+  <value>-Xmx200m</value>
+  <description>Java opts for the task tracker child processes.  
+  The following symbol, if present, will be interpolated: @taskid@ is replaced 
+  by current TaskID. Any other occurrences of '@' will go unchanged.
+  For example, to enable verbose gc logging to a file named for the taskid in
+  /tmp and to set the heap maximum to be a gigabyte, pass a 'value' of:
+        -Xmx1024m -verbose:gc -Xloggc:/tmp/@taskid@.gc
+  
+  The configuration variable mapred.child.ulimit can be used to control the
+  maximum virtual memory of the child processes. 
+  </description>
+</property>
+
+<property>
+  <name>mapred.child.env</name>
+  <value></value>
+  <description>User added environment variables for the task tracker child 
+  processes. Example :
+  1) A=foo  This will set the env variable A to foo
+  2) B=$B:c This is inherit tasktracker's B env variable.  
+  </description>
+</property>
+
+<property>
+  <name>mapred.child.ulimit</name>
+  <value></value>
+  <description>The maximum virtual memory, in KB, of a process launched by the 
+  Map-Reduce framework. This can be used to control both the Mapper/Reducer 
+  tasks and applications using Hadoop Pipes, Hadoop Streaming etc. 
+  By default it is left unspecified to let cluster admins control it via 
+  limits.conf and other such relevant mechanisms.
+  
+  Note: mapred.child.ulimit must be greater than or equal to the -Xmx passed to
+  JavaVM, else the VM might not start. 
+  </description>
+</property>
+
+<property>
+  <name>mapred.cluster.map.memory.mb</name>
+  <value>-1</value>
+  <description>The size, in terms of virtual memory, of a single map slot 
+  in the Map-Reduce framework, used by the scheduler. 
+  A job can ask for multiple slots for a single map task via 
+  mapred.job.map.memory.mb, upto the limit specified by 
+  mapred.cluster.max.map.memory.mb, if the scheduler supports the feature. 
+  The value of -1 indicates that this feature is turned off.
+  </description>
+</property>
+
+<property>
+  <name>mapred.cluster.reduce.memory.mb</name>
+  <value>-1</value>
+  <description>The size, in terms of virtual memory, of a single reduce slot 
+  in the Map-Reduce framework, used by the scheduler. 
+  A job can ask for multiple slots for a single reduce task via 
+  mapred.job.reduce.memory.mb, upto the limit specified by 
+  mapred.cluster.max.reduce.memory.mb, if the scheduler supports the feature. 
+  The value of -1 indicates that this feature is turned off.
+  </description>
+</property>
+
+<property>
+  <name>mapred.cluster.max.map.memory.mb</name>
+  <value>-1</value>
+  <description>The maximum size, in terms of virtual memory, of a single map 
+  task launched by the Map-Reduce framework, used by the scheduler. 
+  A job can ask for multiple slots for a single map task via 
+  mapred.job.map.memory.mb, upto the limit specified by 
+  mapred.cluster.max.map.memory.mb, if the scheduler supports the feature. 
+  The value of -1 indicates that this feature is turned off.
+  </description>
+</property>
+
+<property>
+  <name>mapred.cluster.max.reduce.memory.mb</name>
+  <value>-1</value>
+  <description>The maximum size, in terms of virtual memory, of a single reduce 
+  task launched by the Map-Reduce framework, used by the scheduler. 
+  A job can ask for multiple slots for a single reduce task via 
+  mapred.job.reduce.memory.mb, upto the limit specified by 
+  mapred.cluster.max.reduce.memory.mb, if the scheduler supports the feature. 
+  The value of -1 indicates that this feature is turned off.
+  </description>
+</property>
+
+<property>
+  <name>mapred.job.map.memory.mb</name>
+  <value>-1</value>
+  <description>The size, in terms of virtual memory, of a single map task 
+  for the job.
+  A job can ask for multiple slots for a single map task, rounded up to the 
+  next multiple of mapred.cluster.map.memory.mb and upto the limit 
+  specified by mapred.cluster.max.map.memory.mb, if the scheduler supports 
+  the feature. 
+  The value of -1 indicates that this feature is turned off iff 
+  mapred.cluster.map.memory.mb is also turned off (-1).
+  </description>
+</property>
+
+<property>
+  <name>mapred.job.reduce.memory.mb</name>
+  <value>-1</value>
+  <description>The size, in terms of virtual memory, of a single reduce task 
+  for the job.
+  A job can ask for multiple slots for a single map task, rounded up to the 
+  next multiple of mapred.cluster.reduce.memory.mb and upto the limit 
+  specified by mapred.cluster.max.reduce.memory.mb, if the scheduler supports 
+  the feature. 
+  The value of -1 indicates that this feature is turned off iff
+  mapred.cluster.reduce.memory.mb is also turned off (-1).  
+  </description>
+</property>
+
+<property>
+  <name>mapred.child.tmp</name>
+  <value>./tmp</value>
+  <description> To set the value of tmp directory for map and reduce tasks.
+  If the value is an absolute path, it is directly assigned. Otherwise, it is
+  prepended with task's working directory. The java tasks are executed with
+  option -Djava.io.tmpdir='the absolute path of the tmp dir'. Pipes and
+  streaming are set with environment variable,
+   TMPDIR='the absolute path of the tmp dir'
+  </description>
+</property>
+
+<property>
+  <name>mapred.inmem.merge.threshold</name>
+  <value>1000</value>
+  <description>The threshold, in terms of the number of files 
+  for the in-memory merge process. When we accumulate threshold number of files
+  we initiate the in-memory merge and spill to disk. A value of 0 or less than
+  0 indicates we want to DON'T have any threshold and instead depend only on
+  the ramfs's memory consumption to trigger the merge.
+  </description>
+</property>
+
+<property>
+  <name>mapred.job.shuffle.merge.percent</name>
+  <value>0.66</value>
+  <description>The usage threshold at which an in-memory merge will be
+  initiated, expressed as a percentage of the total memory allocated to
+  storing in-memory map outputs, as defined by
+  mapred.job.shuffle.input.buffer.percent.
+  </description>
+</property>
+
+<property>
+  <name>mapred.job.shuffle.input.buffer.percent</name>
+  <value>0.70</value>
+  <description>The percentage of memory to be allocated from the maximum heap
+  size to storing map outputs during the shuffle.
+  </description>
+</property>
+
+<property>
+  <name>mapred.job.reduce.input.buffer.percent</name>
+  <value>0.0</value>
+  <description>The percentage of memory- relative to the maximum heap size- to
+  retain map outputs during the reduce. When the shuffle is concluded, any
+  remaining map outputs in memory must consume less than this threshold before
+  the reduce can begin.
+  </description>
+</property>
+
+<property>
+  <name>mapred.map.tasks.speculative.execution</name>
+  <value>true</value>
+  <description>If true, then multiple instances of some map tasks 
+               may be executed in parallel.</description>
+</property>
+
+<property>
+  <name>mapred.reduce.tasks.speculative.execution</name>
+  <value>true</value>
+  <description>If true, then multiple instances of some reduce tasks 
+               may be executed in parallel.</description>
+</property>
+
+<property>
+  <name>mapred.job.reuse.jvm.num.tasks</name>
+  <value>1</value>
+  <description>How many tasks to run per jvm. If set to -1, there is
+  no limit. 
+  </description>
+</property>
+
+<property>
+  <name>mapred.min.split.size</name>
+  <value>0</value>
+  <description>The minimum size chunk that map input should be split
+  into.  Note that some file formats may have minimum split sizes that
+  take priority over this setting.</description>
+</property>
+
+<property>
+  <name>mapred.jobtracker.maxtasks.per.job</name>
+  <value>-1</value>
+  <description>The maximum number of tasks for a single job.
+  A value of -1 indicates that there is no maximum.  </description>
+</property>
+
+<property>
+  <name>mapred.submit.replication</name>
+  <value>10</value>
+  <description>The replication level for submitted job files.  This
+  should be around the square root of the number of nodes.
+  </description>
+</property>
+
+
+<property>
+  <name>mapred.tasktracker.dns.interface</name>
+  <value>default</value>
+  <description>The name of the Network Interface from which a task
+  tracker should report its IP address.
+  </description>
+ </property>
+ 
+<property>
+  <name>mapred.tasktracker.dns.nameserver</name>
+  <value>default</value>
+  <description>The host name or IP address of the name server (DNS)
+  which a TaskTracker should use to determine the host name used by
+  the JobTracker for communication and display purposes.
+  </description>
+ </property>
+ 
+<property>
+  <name>tasktracker.http.threads</name>
+  <value>40</value>
+  <description>The number of worker threads that for the http server. This is
+               used for map output fetching
+  </description>
+</property>
+
+<property>
+  <name>mapred.task.tracker.http.address</name>
+  <value>0.0.0.0:50060</value>
+  <description>
+    The task tracker http server address and port.
+    If the port is 0 then the server will start on a free port.
+  </description>
+</property>
+
+<property>
+  <name>keep.failed.task.files</name>
+  <value>false</value>
+  <description>Should the files for failed tasks be kept. This should only be 
+               used on jobs that are failing, because the storage is never
+               reclaimed. It also prevents the map outputs from being erased
+               from the reduce directory as they are consumed.</description>
+</property>
+
+
+<!-- 
+  <property>
+  <name>keep.task.files.pattern</name>
+  <value>.*_m_123456_0</value>
+  <description>Keep all files from tasks whose task names match the given
+               regular expression. Defaults to none.</description>
+  </property>
+-->
+
+<property>
+  <name>mapred.output.compress</name>
+  <value>false</value>
+  <description>Should the job outputs be compressed?
+  </description>
+</property>
+
+<property>
+  <name>mapred.output.compression.type</name>
+  <value>RECORD</value>
+  <description>If the job outputs are to compressed as SequenceFiles, how should
+               they be compressed? Should be one of NONE, RECORD or BLOCK.
+  </description>
+</property>
+
+<property>
+  <name>mapred.output.compression.codec</name>
+  <value>org.apache.hadoop.io.compress.DefaultCodec</value>
+  <description>If the job outputs are compressed, how should they be compressed?
+  </description>
+</property>
+
+<property>
+  <name>mapred.compress.map.output</name>
+  <value>false</value>
+  <description>Should the outputs of the maps be compressed before being
+               sent across the network. Uses SequenceFile compression.
+  </description>
+</property>
+
+<property>
+  <name>mapred.map.output.compression.codec</name>
+  <value>org.apache.hadoop.io.compress.DefaultCodec</value>
+  <description>If the map outputs are compressed, how should they be 
+               compressed?
+  </description>
+</property>
+
+<property>
+  <name>map.sort.class</name>
+  <value>org.apache.hadoop.util.QuickSort</value>
+  <description>The default sort class for sorting keys.
+  </description>
+</property>
+
+<property>
+  <name>mapred.userlog.limit.kb</name>
+  <value>0</value>
+  <description>The maximum size of user-logs of each task in KB. 0 disables the cap.
+  </description>
+</property>
+
+<property>
+  <name>mapred.userlog.retain.hours</name>
+  <value>24</value>
+  <description>The maximum time, in hours, for which the user-logs are to be 
+               retained after the job completion.
+  </description>
+</property>
+
+<property>
+  <name>mapred.user.jobconf.limit</name>
+  <value>5242880</value>
+  <description>The maximum allowed size of the user jobconf. The 
+  default is set to 5 MB</description>
+</property>
+
+<property>
+  <name>mapred.hosts</name>
+  <value></value>
+  <description>Names a file that contains the list of nodes that may
+  connect to the jobtracker.  If the value is empty, all hosts are
+  permitted.</description>
+</property>
+
+<property>
+  <name>mapred.hosts.exclude</name>
+  <value></value>
+  <description>Names a file that contains the list of hosts that
+  should be excluded by the jobtracker.  If the value is empty, no
+  hosts are excluded.</description>
+</property>
+
+<property>
+  <name>mapred.heartbeats.in.second</name>
+  <value>100</value>
+  <description>Expert: Approximate number of heart-beats that could arrive 
+               at JobTracker in a second. Assuming each RPC can be processed 
+               in 10msec, the default value is made 100 RPCs in a second.
+  </description>
+</property> 
+
+<property>
+  <name>mapred.max.tracker.blacklists</name>
+  <value>4</value>
+  <description>The number of blacklists for a taskTracker by various jobs
+               after which the task tracker could be blacklisted across
+               all jobs. The tracker will be given a tasks later
+               (after a day). The tracker will become a healthy
+               tracker after a restart.
+  </description>
+</property> 
+
+<property>
+  <name>mapred.max.tracker.failures</name>
+  <value>4</value>
+  <description>The number of task-failures on a tasktracker of a given job 
+               after which new tasks of that job aren't assigned to it.
+  </description>
+</property>
+
+<property>
+  <name>jobclient.output.filter</name>
+  <value>FAILED</value>
+  <description>The filter for controlling the output of the task's userlogs sent
+               to the console of the JobClient. 
+               The permissible options are: NONE, KILLED, FAILED, SUCCEEDED and 
+               ALL.
+  </description>
+</property>
+
+  <property>
+    <name>jobclient.completion.poll.interval</name>
+    <value>5000</value>
+    <description>The interval (in milliseconds) between which the JobClient
+    polls the JobTracker for updates about job status. You may want to set this
+    to a lower value to make tests run faster on a single node system. Adjusting
+    this value in production may lead to unwanted client-server traffic.
+    </description>
+  </property>
+
+  <property>
+    <name>jobclient.progress.monitor.poll.interval</name>
+    <value>1000</value>
+    <description>The interval (in milliseconds) between which the JobClient
+    reports status to the console and checks for job completion. You may want to set this
+    to a lower value to make tests run faster on a single node system. Adjusting
+    this value in production may lead to unwanted client-server traffic.
+    </description>
+  </property>
+
+  <property>
+    <name>mapred.job.tracker.persist.jobstatus.active</name>
+    <value>false</value>
+    <description>Indicates if persistency of job status information is
+      active or not.
+    </description>
+  </property>
+
+  <property>
+  <name>mapred.job.tracker.persist.jobstatus.hours</name>
+  <value>0</value>
+  <description>The number of hours job status information is persisted in DFS.
+    The job status information will be available after it drops of the memory
+    queue and between jobtracker restarts. With a zero value the job status
+    information is not persisted at all in DFS.
+  </description>
+</property>
+
+  <property>
+    <name>mapred.job.tracker.persist.jobstatus.dir</name>
+    <value>/jobtracker/jobsInfo</value>
+    <description>The directory where the job status information is persisted
+      in a file system to be available after it drops of the memory queue and
+      between jobtracker restarts.
+    </description>
+  </property>
+
+  <property>
+    <name>mapreduce.job.complete.cancel.delegation.tokens</name>
+    <value>true</value>
+    <description> if false - do not unregister/cancel delegation tokens
+    from renewal, because same tokens may be used by spawned jobs
+    </description>
+  </property>
+
+  <property>
+    <name>mapred.task.profile</name>
+    <value>false</value>
+    <description>To set whether the system should collect profiler
+     information for some of the tasks in this job? The information is stored
+     in the user log directory. The value is "true" if task profiling
+     is enabled.</description>
+  </property>
+
+  <property>
+    <name>mapred.task.profile.maps</name>
+    <value>0-2</value>
+    <description> To set the ranges of map tasks to profile.
+    mapred.task.profile has to be set to true for the value to be accounted.
+    </description>
+  </property>
+
+  <property>
+    <name>mapred.task.profile.reduces</name>
+    <value>0-2</value>
+    <description> To set the ranges of reduce tasks to profile.
+    mapred.task.profile has to be set to true for the value to be accounted.
+    </description>
+  </property>
+
+  <property>
+    <name>mapred.line.input.format.linespermap</name>
+    <value>1</value>
+    <description> Number of lines per split in NLineInputFormat.
+    </description>
+  </property>
+  
+  <property>
+    <name>mapred.skip.attempts.to.start.skipping</name>
+    <value>2</value>
+    <description> The number of Task attempts AFTER which skip mode 
+    will be kicked off. When skip mode is kicked off, the 
+    tasks reports the range of records which it will process 
+    next, to the TaskTracker. So that on failures, TT knows which 
+    ones are possibly the bad records. On further executions, 
+    those are skipped.
+    </description>
+  </property>
+  
+  <property>
+    <name>mapred.skip.map.auto.incr.proc.count</name>
+    <value>true</value>
+    <description> The flag which if set to true, 
+    SkipBadRecords.COUNTER_MAP_PROCESSED_RECORDS is incremented 
+    by MapRunner after invoking the map function. This value must be set to 
+    false for applications which process the records asynchronously 
+    or buffer the input records. For example streaming. 
+    In such cases applications should increment this counter on their own.
+    </description>
+  </property>
+  
+  <property>
+    <name>mapred.skip.reduce.auto.incr.proc.count</name>
+    <value>true</value>
+    <description> The flag which if set to true, 
+    SkipBadRecords.COUNTER_REDUCE_PROCESSED_GROUPS is incremented 
+    by framework after invoking the reduce function. This value must be set to 
+    false for applications which process the records asynchronously 
+    or buffer the input records. For example streaming. 
+    In such cases applications should increment this counter on their own.
+    </description>
+  </property>
+  
+  <property>
+    <name>mapred.skip.out.dir</name>
+    <value></value>
+    <description> If no value is specified here, the skipped records are 
+    written to the output directory at _logs/skip.
+    User can stop writing skipped records by giving the value "none". 
+    </description>
+  </property>
+
+  <property>
+    <name>mapred.skip.map.max.skip.records</name>
+    <value>0</value>
+    <description> The number of acceptable skip records surrounding the bad 
+    record PER bad record in mapper. The number includes the bad record as well.
+    To turn the feature of detection/skipping of bad records off, set the 
+    value to 0.
+    The framework tries to narrow down the skipped range by retrying  
+    until this threshold is met OR all attempts get exhausted for this task. 
+    Set the value to Long.MAX_VALUE to indicate that framework need not try to 
+    narrow down. Whatever records(depends on application) get skipped are 
+    acceptable.
+    </description>
+  </property>
+  
+  <property>
+    <name>mapred.skip.reduce.max.skip.groups</name>
+    <value>0</value>
+    <description> The number of acceptable skip groups surrounding the bad 
+    group PER bad group in reducer. The number includes the bad group as well.
+    To turn the feature of detection/skipping of bad groups off, set the 
+    value to 0.
+    The framework tries to narrow down the skipped range by retrying  
+    until this threshold is met OR all attempts get exhausted for this task. 
+    Set the value to Long.MAX_VALUE to indicate that framework need not try to 
+    narrow down. Whatever groups(depends on application) get skipped are 
+    acceptable.
+    </description>
+  </property>
+  
+<!-- Job Notification Configuration -->
+
+<!--
+<property>
+ <name>job.end.notification.url</name>
+ <value>http://localhost:8080/jobstatus.php?jobId=$jobId&amp;jobStatus=$jobStatus</value>
+ <description>Indicates url which will be called on completion of job to inform
+              end status of job.
+              User can give at most 2 variables with URI : $jobId and $jobStatus.
+              If they are present in URI, then they will be replaced by their
+              respective values.
+</description>
+</property>
+-->
+
+<property>
+  <name>job.end.retry.attempts</name>
+  <value>0</value>
+  <description>Indicates how many times hadoop should attempt to contact the
+               notification URL </description>
+</property>
+
+<property>
+  <name>job.end.retry.interval</name>
+   <value>30000</value>
+   <description>Indicates time in milliseconds between notification URL retry
+                calls</description>
+</property>
+  
+<!-- Proxy Configuration -->
+<property>
+  <name>hadoop.rpc.socket.factory.class.JobSubmissionProtocol</name>
+  <value></value>
+  <description> SocketFactory to use to connect to a Map/Reduce master
+    (JobTracker). If null or empty, then use hadoop.rpc.socket.class.default.
+  </description>
+</property>
+
+<property>
+  <name>mapred.task.cache.levels</name>
+  <value>2</value>
+  <description> This is the max level of the task cache. For example, if
+    the level is 2, the tasks cached are at the host level and at the rack
+    level.
+  </description>
+</property>
+
+<property>
+  <name>mapred.queue.names</name>
+  <value>default</value>
+  <description> Comma separated list of queues configured for this jobtracker.
+    Jobs are added to queues and schedulers can configure different 
+    scheduling properties for the various queues. To configure a property 
+    for a queue, the name of the queue must match the name specified in this 
+    value. Queue properties that are common to all schedulers are configured 
+    here with the naming convention, mapred.queue.$QUEUE-NAME.$PROPERTY-NAME,
+    for e.g. mapred.queue.default.submit-job-acl.
+    The number of queues configured in this parameter could depend on the
+    type of scheduler being used, as specified in 
+    mapred.jobtracker.taskScheduler. For example, the JobQueueTaskScheduler
+    supports only a single queue, which is the default configured here.
+    Before adding more queues, ensure that the scheduler you've configured
+    supports multiple queues.
+  </description>
+</property>
+
+<property>
+  <name>mapred.acls.enabled</name>
+  <value>false</value>
+  <description> Specifies whether ACLs should be checked
+    for authorization of users for doing various queue and job level operations.
+    ACLs are disabled by default. If enabled, access control checks are made by
+    JobTracker and TaskTracker when requests are made by users for queue
+    operations like submit job to a queue and kill a job in the queue and job
+    operations like viewing the job-details (See mapreduce.job.acl-view-job)
+    or for modifying the job (See mapreduce.job.acl-modify-job) using
+    Map/Reduce APIs, RPCs or via the console and web user interfaces.
+  </description>
+</property>
+
+<property>
+  <name>mapred.queue.default.state</name>
+  <value>RUNNING</value>
+  <description>
+   This values defines the state , default queue is in.
+   the values can be either "STOPPED" or "RUNNING"
+   This value can be changed at runtime.
+  </description>
+</property>
+
+<property>
+  <name>mapred.job.queue.name</name>
+  <value>default</value>
+  <description> Queue to which a job is submitted. This must match one of the
+    queues defined in mapred.queue.names for the system. Also, the ACL setup
+    for the queue must allow the current user to submit a job to the queue.
+    Before specifying a queue, ensure that the system is configured with 
+    the queue, and access is allowed for submitting jobs to the queue.
+  </description>
+</property>
+
+<property>
+  <name>mapreduce.job.acl-modify-job</name>
+  <value> </value>
+  <description> Job specific access-control list for 'modifying' the job. It
+    is only used if authorization is enabled in Map/Reduce by setting the
+    configuration property mapred.acls.enabled to true.
+    This specifies the list of users and/or groups who can do modification
+    operations on the job. For specifying a list of users and groups the
+    format to use is "user1,user2 group1,group". If set to '*', it allows all
+    users/groups to modify this job. If set to ' '(i.e. space), it allows
+    none. This configuration is used to guard all the modifications with respect
+    to this job and takes care of all the following operations:
+      o killing this job
+      o killing a task of this job, failing a task of this job
+      o setting the priority of this job
+    Each of these operations are also protected by the per-queue level ACL
+    "acl-administer-jobs" configured via mapred-queues.xml. So a caller should
+    have the authorization to satisfy either the queue-level ACL or the
+    job-level ACL.
+
+    Irrespective of this ACL configuration, job-owner, the user who started the
+    cluster, cluster administrators configured via
+    mapreduce.cluster.administrators and queue administrators of the queue to
+    which this job is submitted to configured via
+    mapred.queue.queue-name.acl-administer-jobs  in mapred-queue-acls.xml can
+    do all the modification operations on a job.
+
+    By default, nobody else besides job-owner, the user who started the cluster,
+    cluster administrators and queue administrators can perform modification
+    operations on a job.
+  </description>
+</property>
+
+<property>
+  <name>mapreduce.job.acl-view-job</name>
+  <value> </value>
+  <description> Job specific access-control list for 'viewing' the job. It is
+    only used if authorization is enabled in Map/Reduce by setting the
+    configuration property mapred.acls.enabled to true.
+    This specifies the list of users and/or groups who can view private details
+    about the job. For specifying a list of users and groups the
+    format to use is "user1,user2 group1,group". If set to '*', it allows all
+    users/groups to modify this job. If set to ' '(i.e. space), it allows
+    none. This configuration is used to guard some of the job-views and at
+    present only protects APIs that can return possibly sensitive information
+    of the job-owner like
+      o job-level counters
+      o task-level counters
+      o tasks' diagnostic information
+      o task-logs displayed on the TaskTracker web-UI and
+      o job.xml showed by the JobTracker's web-UI
+    Every other piece of information of jobs is still accessible by any other
+    user, for e.g., JobStatus, JobProfile, list of jobs in the queue, etc.
+    
+    Irrespective of this ACL configuration, job-owner, the user who started the
+    cluster, cluster administrators configured via
+    mapreduce.cluster.administrators and queue administrators of the queue to
+    which this job is submitted to configured via
+    mapred.queue.queue-name.acl-administer-jobs in mapred-queue-acls.xml can do
+    all the view operations on a job.
+    
+    By default, nobody else besides job-owner, the user who started the
+    cluster, cluster administrators and queue administrators can perform
+    view operations on a job.
+  </description>
+</property>
+
+<property>
+  <name>mapred.tasktracker.indexcache.mb</name>
+  <value>10</value>
+  <description> The maximum memory that a task tracker allows for the 
+    index cache that is used when serving map outputs to reducers.
+  </description>
+</property>
+
+<property>
+  <name>mapred.merge.recordsBeforeProgress</name>
+  <value>10000</value>
+  <description> The number of records to process during merge before
+   sending a progress notification to the TaskTracker.
+  </description>
+</property>
+
+<property>
+  <name>mapred.reduce.slowstart.completed.maps</name>
+  <value>0.05</value>
+  <description>Fraction of the number of maps in the job which should be 
+  complete before reduces are scheduled for the job. 
+  </description>
+</property>
+
+<property>
+  <name>mapred.task.tracker.task-controller</name>
+  <value>org.apache.hadoop.mapred.DefaultTaskController</value>
+  <description>TaskController which is used to launch and manage task execution 
+  </description>
+</property>
+
+<property>
+  <name>mapreduce.tasktracker.group</name>
+  <value></value>
+  <description>Expert: Group to which TaskTracker belongs. If
+   LinuxTaskController is configured via mapreduce.tasktracker.taskcontroller,
+   the group owner of the task-controller binary should be same as this group.
+  </description>
+</property>
+
+ <property>
+  <name>mapred.disk.healthChecker.interval</name>
+  <value>60000</value>
+  <description>How often the TaskTracker checks the health of its
+  local directories. Configuring this to a value smaller than the
+  heartbeat interval is equivalent to setting this to heartbeat
+  interval value.
+  </description>
+</property>
+
+<!--  Node health script variables -->
+
+<property>
+  <name>mapred.healthChecker.script.path</name>
+  <value></value>
+  <description>Absolute path to the script which is
+  periodicallyrun by the node health monitoring service to determine if
+  the node is healthy or not. If the value of this key is empty or the
+  file does not exist in the location configured here, the node health
+  monitoring service is not started.</description>
+</property>
+
+<property>
+  <name>mapred.healthChecker.interval</name>
+  <value>60000</value>
+  <description>Frequency of the node health script to be run,
+  in milliseconds</description>
+</property>
+
+<property>
+  <name>mapred.healthChecker.script.timeout</name>
+  <value>600000</value>
+  <description>Time after node health script should be killed if 
+  unresponsive and considered that the script has failed.</description>
+</property>
+
+<property>
+  <name>mapred.healthChecker.script.args</name>
+  <value></value>
+  <description>List of arguments which are to be passed to 
+  node health script when it is being launched comma seperated.
+  </description>
+</property>
+
+<!--  end of node health script variables -->
+
+<property>
+  <name>mapreduce.job.counters.max</name>
+  <value>120</value>
+  <description>Limit on the number of counters allowed per job.
+  </description>
+</property>
+
+<property>
+  <name>mapreduce.job.counters.groups.max</name>
+  <value>50</value>
+  <description>Limit on the number of counter groups allowed per job.
+  </description>
+</property>
+
+<property>
+  <name>mapreduce.job.counters.counter.name.max</name>
+  <value>64</value>
+  <description>Limit on the length of counter names in jobs. Names
+  exceeding this limit will be truncated.
+  </description>
+</property>
+
+<property>
+  <name>mapreduce.job.counters.group.name.max</name>
+  <value>128</value>
+  <description>Limit on the length of counter group names in jobs. Names
+  exceeding this limit will be truncated.
+  </description>
+</property>
+
+</configuration>

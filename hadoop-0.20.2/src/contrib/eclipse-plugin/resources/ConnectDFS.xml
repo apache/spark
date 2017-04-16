@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<cheatsheet title="Set default Hadoop path tutorial">
+	<intro>
+		<description>
+			This tutorial informs you how to set the default Hadoop
+			directory for the plugin.
+		</description>
+	</intro>
+	<item title="Create MapReduce Cluster" skip="true">
+		<description>
+			Define a MapReduce cluster [if you have not done so already]
+			by opening the MapReduce Servers view and clicking on the
+			blue elephant in the upper right.
+
+			Use the following embedded command to create a new Hadoop Server:
+		</description>
+
+		<action pluginId="com.ibm.hipods.mapreduce"
+			class="org.apache.hadoop.eclipse.actions.NewServerAction" />
+	</item>
+	<item title="Open and Explore DFS Tree">
+
+		<description>
+			Project Explorer view shows an elephant icon for each defined
+			server.  Opening a server entry will open a connection to
+			the root of that server's DFS tree.  You can then explore the
+			DFS tree.
+		</description>
+
+	</item>
+</cheatsheet>

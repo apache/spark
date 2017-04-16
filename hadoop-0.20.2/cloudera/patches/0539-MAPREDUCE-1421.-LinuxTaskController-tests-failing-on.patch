@@ -1,0 +1,532 @@
+From 072d68d2af1235eaacb49975f78d3457cec60938 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 5 Mar 2010 15:41:57 +0530
+Subject: [PATCH 0539/1179] MAPREDUCE-1421. LinuxTaskController tests failing on trunk after the commit of MAPREDUCE-1385
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437985/patch-1421-1-ydist.txt
+Author: Amareshwari Sriramadasu
+Ref: CDH-648
+---
+ .../mapred/ClusterWithLinuxTaskController.java     |   27 +++++--
+ .../mapred/TestJobExecutionAsDifferentUser.java    |   92 +++++++++++---------
+ ...estKillSubProcessesWithLinuxTaskController.java |   49 +++++++++++
+ .../hadoop/mapred/TestLinuxTaskController.java     |    9 +--
+ .../TestLocalizationWithLinuxTaskController.java   |   24 +++---
+ ...ributedCacheManagerWithLinuxTaskController.java |   10 +--
+ .../org/apache/hadoop/mapred/pipes/TestPipes.java  |    8 +-
+ .../mapred/pipes/TestPipesAsDifferentUser.java     |   48 ++++++----
+ 8 files changed, 172 insertions(+), 95 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestKillSubProcessesWithLinuxTaskController.java
+
+diff --git a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+index a6f9413..68e3414 100644
+--- a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+@@ -31,7 +31,6 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+-import org.apache.hadoop.security.Groups;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+ import junit.framework.TestCase;
+@@ -45,7 +44,11 @@ import junit.framework.TestCase;
+  * <ol>
+  * <li>Build LinuxTaskController by not passing any
+  * <code>-Dhadoop.conf.dir</code></li>
+- * <li>Make the built binary to setuid executable</li>
++ * <li>Change ownership of the built binary to root:group1, where group1 is
++ * a secondary group of the test runner.</li>
++ * <li>Change permissions on the binary so that <em>others</em> component does
++ * not have any permissions on binary</li> 
++ * <li>Make the built binary to setuid and setgid executable</li>
+  * <li>Execute following targets:
+  * <code>ant test -Dcompile.c++=true -Dtaskcontroller-path=<em>path to built binary</em> 
+  * -Dtaskcontroller-ugi=<em>user,group</em></code></li>
+@@ -69,10 +72,7 @@ public class ClusterWithLinuxTaskController extends TestCase {
+     @Override
+     public void setup() throws IOException {
+       // get the current ugi and set the task controller group owner
+-      Groups groups = new Groups(new Configuration());
+-      String ttGroup = groups.getGroups(
+-          UserGroupInformation.getCurrentUser().getUserName()).get(0);
+-      getConf().set(TT_GROUP, ttGroup);
++      getConf().set(TT_GROUP, taskTrackerSpecialGroup);
+ 
+       // write configuration file
+       configurationFile = createTaskControllerConf(System
+@@ -110,6 +110,21 @@ public class ClusterWithLinuxTaskController extends TestCase {
+   private static File configurationFile = null;
+ 
+   protected UserGroupInformation taskControllerUser;
++  
++  protected static String taskTrackerSpecialGroup = null;
++  static {
++    if (isTaskExecPathPassed()) {
++      try {
++        taskTrackerSpecialGroup = FileSystem.getLocal(new Configuration())
++            .getFileStatus(
++                new Path(System.getProperty(TASKCONTROLLER_PATH),
++                    "task-controller")).getGroup();
++      } catch (IOException e) {
++        LOG.warn("Could not get group of the binary", e);
++        fail("Could not get group of the binary");
++      }
++    }
++  }
+ 
+   /*
+    * Utility method which subclasses use to start and configure the MR Cluster
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java b/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
+index d3073f9..68f2482 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
+@@ -19,6 +19,7 @@
+ package org.apache.hadoop.mapred;
+ 
+ import java.io.IOException;
++import java.security.PrivilegedExceptionAction;
+ 
+ import org.apache.hadoop.examples.SleepJob;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -40,57 +41,68 @@ public class TestJobExecutionAsDifferentUser extends
+       return;
+     }
+     startCluster();
+-    Path inDir = new Path("input");
+-    Path outDir = new Path("output");
++    taskControllerUser.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws Exception {
++        Path inDir = new Path("input");
++        Path outDir = new Path("output");
+ 
+-    RunningJob job;
++        RunningJob job;
+ 
+-    // Run a job with zero maps/reduces
+-    job = UtilsForTests.runJob(getClusterConf(), inDir, outDir, 0, 0);
+-    job.waitForCompletion();
+-    assertTrue("Job failed", job.isSuccessful());
+-    assertOwnerShip(outDir);
++        // Run a job with zero maps/reduces
++        job = UtilsForTests.runJob(getClusterConf(), inDir, outDir, 0, 0);
++        job.waitForCompletion();
++        assertTrue("Job failed", job.isSuccessful());
++        assertOwnerShip(outDir);
+ 
+-    // Run a job with 1 map and zero reduces
+-    job = UtilsForTests.runJob(getClusterConf(), inDir, outDir, 1, 0);
+-    job.waitForCompletion();
+-    assertTrue("Job failed", job.isSuccessful());
+-    assertOwnerShip(outDir);
++        // Run a job with 1 map and zero reduces
++        job = UtilsForTests.runJob(getClusterConf(), inDir, outDir, 1, 0);
++        job.waitForCompletion();
++        assertTrue("Job failed", job.isSuccessful());
++        assertOwnerShip(outDir);
+ 
+-    // Run a normal job with maps/reduces
+-    job = UtilsForTests.runJob(getClusterConf(), inDir, outDir, 1, 1);
+-    job.waitForCompletion();
+-    assertTrue("Job failed", job.isSuccessful());
+-    assertOwnerShip(outDir);
++        // Run a normal job with maps/reduces
++        job = UtilsForTests.runJob(getClusterConf(), inDir, outDir, 1, 1);
++        job.waitForCompletion();
++        assertTrue("Job failed", job.isSuccessful());
++        assertOwnerShip(outDir);
+ 
+-    // Run a job with jvm reuse
+-    JobConf myConf = getClusterConf();
+-    myConf.set("mapred.job.reuse.jvm.num.tasks", "-1");
+-    String[] args = { "-m", "6", "-r", "3", "-mt", "1000", "-rt", "1000" };
+-    assertEquals(0, ToolRunner.run(myConf, new SleepJob(), args));
++        // Run a job with jvm reuse
++        JobConf myConf = getClusterConf();
++        myConf.set("mapred.job.reuse.jvm.num.tasks", "-1");
++        String[] args = { "-m", "6", "-r", "3", "-mt", "1000", "-rt", "1000" };
++        assertEquals(0, ToolRunner.run(myConf, new SleepJob(), args));
++        return null;
++      }
++    });
+   }
+-  
++
+   public void testEnvironment() throws Exception {
+     if (!shouldRun()) {
+       return;
+     }
+     startCluster();
+-    TestMiniMRChildTask childTask = new TestMiniMRChildTask();
+-    Path inDir = new Path("input1");
+-    Path outDir = new Path("output1");
+-    try {
+-      childTask.runTestTaskEnv(getClusterConf(), inDir, outDir, false);
+-    } catch (IOException e) {
+-      fail("IOException thrown while running enviroment test."
+-          + e.getMessage());
+-    } finally {
+-      FileSystem outFs = outDir.getFileSystem(getClusterConf());
+-      if (outFs.exists(outDir)) {
+-        assertOwnerShip(outDir);
+-        outFs.delete(outDir, true);
+-      } else {
+-        fail("Output directory does not exist" + outDir.toString());
++    taskControllerUser.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws Exception {
++
++        TestMiniMRChildTask childTask = new TestMiniMRChildTask();
++        Path inDir = new Path("input1");
++        Path outDir = new Path("output1");
++        try {
++          childTask.runTestTaskEnv(getClusterConf(), inDir, outDir, false);
++        } catch (IOException e) {
++          fail("IOException thrown while running enviroment test."
++              + e.getMessage());
++        } finally {
++          FileSystem outFs = outDir.getFileSystem(getClusterConf());
++          if (outFs.exists(outDir)) {
++            assertOwnerShip(outDir);
++            outFs.delete(outDir, true);
++          } else {
++            fail("Output directory does not exist" + outDir.toString());
++          }
++          return null;
++        }
+       }
+-    }
++    });
+   }
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/TestKillSubProcessesWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestKillSubProcessesWithLinuxTaskController.java
+new file mode 100644
+index 0000000..ba8e22b
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestKillSubProcessesWithLinuxTaskController.java
+@@ -0,0 +1,49 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.security.PrivilegedExceptionAction;
++
++/**
++ * Test killing of child processes spawned by the jobs with LinuxTaskController
++ * running the jobs as a user different from the user running the cluster. 
++ * See {@link ClusterWithLinuxTaskController}
++ */
++
++public class TestKillSubProcessesWithLinuxTaskController extends 
++  ClusterWithLinuxTaskController {
++
++  public void testKillSubProcess() throws Exception{
++    if(!shouldRun()) {
++      return;
++    }
++    startCluster();
++    taskControllerUser.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws Exception {
++        JobConf myConf = getClusterConf();
++        JobTracker jt = mrCluster.getJobTrackerRunner().getJobTracker();
++
++        TestKillSubProcesses.mr = mrCluster;
++        TestKillSubProcesses sbProc = new TestKillSubProcesses();
++        sbProc.runTests(myConf, jt);
++        return null;
++      }
++    });
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+index 9773e8d..81cd3cf 100644
+--- a/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+@@ -22,8 +22,6 @@ import java.io.IOException;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileUtil;
+-import org.apache.hadoop.security.Groups;
+-import org.apache.hadoop.security.UserGroupInformation;
+ 
+ import junit.framework.TestCase;
+ 
+@@ -96,11 +94,8 @@ public class TestLinuxTaskController extends TestCase {
+         conf);
+     validateTaskControllerSetup(controller, true);
+ 
+-    // get the current ugi and set the task controller group owner in conf
+-    Groups groups = new Groups(new Configuration());
+-    String ttGroup = groups.getGroups(
+-        UserGroupInformation.getCurrentUser().getUserName()).get(0);
+-    conf.set(ClusterWithLinuxTaskController.TT_GROUP, ttGroup);
++    conf.set(ClusterWithLinuxTaskController.TT_GROUP,
++        ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+     // write the task-controller's conf file
+     ClusterWithLinuxTaskController.createTaskControllerConf(taskControllerPath,
+         conf);
+diff --git a/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
+index 438b945..a20faa9 100644
+--- a/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestLocalizationWithLinuxTaskController.java
+@@ -41,8 +41,6 @@ public class TestLocalizationWithLinuxTaskController extends
+ 
+   private File configFile;
+ 
+-  private static String taskTrackerSpecialGroup;
+-
+   @Override
+   protected boolean canRun() {
+     return ClusterWithLinuxTaskController.shouldRun();
+@@ -63,7 +61,6 @@ public class TestLocalizationWithLinuxTaskController extends
+         System.getProperty(ClusterWithLinuxTaskController.TASKCONTROLLER_PATH);
+     String execPath = path + "/task-controller";
+     ((MyLinuxTaskController) taskController).setTaskControllerExe(execPath);
+-    taskTrackerSpecialGroup = getFilePermissionAttrs(execPath)[2];
+     taskController.setConf(trackerFConf);
+     taskController.setup();
+ 
+@@ -121,13 +118,13 @@ public class TestLocalizationWithLinuxTaskController extends
+       assertTrue("user-dir in taskTrackerSubdir " + taskTrackerSubDir
+           + "is not created!", userDir.exists());
+       checkFilePermissions(userDir.getAbsolutePath(), "dr-xrws---", task
+-          .getUser(), taskTrackerSpecialGroup);
++          .getUser(), ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+ 
+       File jobCache = new File(userDir, TaskTracker.JOBCACHE);
+       assertTrue("jobcache in the userDir " + userDir + " isn't created!",
+           jobCache.exists());
+       checkFilePermissions(jobCache.getAbsolutePath(), "dr-xrws---", task
+-          .getUser(), taskTrackerSpecialGroup);
++          .getUser(), ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+ 
+       // Verify the distributed cache dir.
+       File distributedCacheDir =
+@@ -136,7 +133,8 @@ public class TestLocalizationWithLinuxTaskController extends
+       assertTrue("distributed cache dir " + distributedCacheDir
+           + " doesn't exists!", distributedCacheDir.exists());
+       checkFilePermissions(distributedCacheDir.getAbsolutePath(),
+-          "dr-xrws---", task.getUser(), taskTrackerSpecialGroup);
++          "dr-xrws---", task.getUser(),
++          ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+     }
+   }
+ 
+@@ -149,7 +147,7 @@ public class TestLocalizationWithLinuxTaskController extends
+               .toString()));
+       // check the private permissions on the job directory
+       checkFilePermissions(jobDir.getAbsolutePath(), "dr-xrws---", task
+-          .getUser(), taskTrackerSpecialGroup);
++          .getUser(), ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+     }
+ 
+     // check the private permissions of various directories
+@@ -161,7 +159,8 @@ public class TestLocalizationWithLinuxTaskController extends
+     dirs.add(new Path(jarsDir, "lib"));
+     for (Path dir : dirs) {
+       checkFilePermissions(dir.toUri().getPath(), "dr-xrws---",
+-          task.getUser(), taskTrackerSpecialGroup);
++          task.getUser(),
++          ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+     }
+ 
+     // job-work dir needs user writable permissions
+@@ -169,7 +168,7 @@ public class TestLocalizationWithLinuxTaskController extends
+         lDirAlloc.getLocalPathToRead(TaskTracker.getJobWorkDir(task.getUser(),
+             jobId.toString()), trackerFConf);
+     checkFilePermissions(jobWorkDir.toUri().getPath(), "drwxrws---", task
+-        .getUser(), taskTrackerSpecialGroup);
++        .getUser(), ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+ 
+     // check the private permissions of various files
+     List<Path> files = new ArrayList<Path>();
+@@ -181,7 +180,7 @@ public class TestLocalizationWithLinuxTaskController extends
+     files.add(new Path(jarsDir, "lib" + Path.SEPARATOR + "lib2.jar"));
+     for (Path file : files) {
+       checkFilePermissions(file.toUri().getPath(), "-r-xrwx---", task
+-          .getUser(), taskTrackerSpecialGroup);
++          .getUser(), ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+     }
+   }
+ 
+@@ -197,7 +196,8 @@ public class TestLocalizationWithLinuxTaskController extends
+     dirs.add(new Path(attemptLogFiles[1].getParentFile().getAbsolutePath()));
+     for (Path dir : dirs) {
+       checkFilePermissions(dir.toUri().getPath(), "drwxrws---",
+-          task.getUser(), taskTrackerSpecialGroup);
++          task.getUser(),
++          ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+     }
+ 
+     // check the private permissions of various files
+@@ -207,7 +207,7 @@ public class TestLocalizationWithLinuxTaskController extends
+         task.isTaskCleanupTask()), trackerFConf));
+     for (Path file : files) {
+       checkFilePermissions(file.toUri().getPath(), "-rwxrwx---", task
+-          .getUser(), taskTrackerSpecialGroup);
++          .getUser(), ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+     }
+   }
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
+index 4ecf827..b49c846 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestTrackerDistributedCacheManagerWithLinuxTaskController.java
+@@ -37,7 +37,6 @@ public class TestTrackerDistributedCacheManagerWithLinuxTaskController extends
+     TestTrackerDistributedCacheManager {
+ 
+   private File configFile;
+-  private String taskTrackerSpecialGroup;
+ 
+   private static final Log LOG =
+       LogFactory
+@@ -65,9 +64,6 @@ public class TestTrackerDistributedCacheManagerWithLinuxTaskController extends
+     ((MyLinuxTaskController)taskController).setTaskControllerExe(execPath);
+     taskController.setConf(conf);
+     taskController.setup();
+-
+-    taskTrackerSpecialGroup =
+-        TestTaskTrackerLocalization.getFilePermissionAttrs(execPath)[2];
+   }
+ 
+   @Override
+@@ -113,7 +109,8 @@ public class TestTrackerDistributedCacheManagerWithLinuxTaskController extends
+     for (Path p : localCacheFiles) {
+       // First make sure that the cache file has proper permissions.
+       TestTaskTrackerLocalization.checkFilePermissions(p.toUri().getPath(),
+-          "-r-xrwx---", userName, taskTrackerSpecialGroup);
++          "-r-xrwx---", userName,
++          ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+       // Now. make sure that all the path components also have proper
+       // permissions.
+       checkPermissionOnPathComponents(p.toUri().getPath(), userName);
+@@ -148,7 +145,8 @@ public class TestTrackerDistributedCacheManagerWithLinuxTaskController extends
+     File path = new File(cachedFilePath).getParentFile();
+     while (!path.getAbsolutePath().equals(leadingStringForFirstFile)) {
+       TestTaskTrackerLocalization.checkFilePermissions(path.getAbsolutePath(),
+-          "dr-xrws---", userName, taskTrackerSpecialGroup);
++          "dr-xrws---", userName, 
++          ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+       path = path.getParentFile();
+     }
+   }
+diff --git a/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java b/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java
+index 86d6524..e20e045 100644
+--- a/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java
++++ b/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java
+@@ -73,8 +73,8 @@ public class TestPipes extends TestCase {
+     }
+     MiniDFSCluster dfs = null;
+     MiniMRCluster mr = null;
+-    Path inputPath = new Path("/testing/in");
+-    Path outputPath = new Path("/testing/out");
++    Path inputPath = new Path("testing/in");
++    Path outputPath = new Path("testing/out");
+     try {
+       final int numSlaves = 2;
+       Configuration conf = new Configuration();
+@@ -151,7 +151,7 @@ public class TestPipes extends TestCase {
+                           int numMaps, int numReduces, String[] expectedResults,
+                           JobConf conf
+                          ) throws IOException {
+-    Path wordExec = new Path("/testing/bin/application");
++    Path wordExec = new Path("testing/bin/application");
+     JobConf job = null;
+     if(conf == null) {
+       job = mr.createJobConf();
+@@ -231,7 +231,7 @@ public class TestPipes extends TestCase {
+                             "pipes");
+     Path inDir = new Path(testDir, "input");
+     nonPipedOutDir = new Path(testDir, "output");
+-    Path wordExec = new Path("/testing/bin/application");
++    Path wordExec = new Path("testing/bin/application");
+     Path jobXml = new Path(testDir, "job.xml");
+     {
+       FileSystem fs = dfs.getFileSystem();
+diff --git a/src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java b/src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java
+index 761d9e2..dcc3cd1 100644
+--- a/src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java
++++ b/src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java
+@@ -18,6 +18,8 @@
+ 
+ package org.apache.hadoop.mapred.pipes;
+ 
++import java.security.PrivilegedExceptionAction;
++
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -46,29 +48,35 @@ public class TestPipesAsDifferentUser extends ClusterWithLinuxTaskController {
+     }
+ 
+     super.startCluster();
+-    JobConf clusterConf = getClusterConf();
+-    Path inputPath = new Path(homeDirectory, "in");
+-    Path outputPath = new Path(homeDirectory, "out");
++    taskControllerUser.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws Exception {
++        JobConf clusterConf = getClusterConf();
++        Path inputPath = new Path(homeDirectory, "in");
++        Path outputPath = new Path(homeDirectory, "out");
+ 
+-    TestPipes.writeInputFile(FileSystem.get(clusterConf), inputPath);
+-    TestPipes.runProgram(mrCluster, dfsCluster, TestPipes.wordCountSimple,
+-        inputPath, outputPath, 3, 2, TestPipes.twoSplitOutput, clusterConf);
+-    assertOwnerShip(outputPath);
+-    TestPipes.cleanup(dfsCluster.getFileSystem(), outputPath);
++        TestPipes.writeInputFile(FileSystem.get(clusterConf), inputPath);
++        TestPipes.runProgram(mrCluster, dfsCluster, TestPipes.wordCountSimple,
++            inputPath, outputPath, 3, 2, TestPipes.twoSplitOutput, clusterConf);
++        assertOwnerShip(outputPath);
++        TestPipes.cleanup(dfsCluster.getFileSystem(), outputPath);
+ 
+-    TestPipes.runProgram(mrCluster, dfsCluster, TestPipes.wordCountSimple,
+-        inputPath, outputPath, 3, 0, TestPipes.noSortOutput, clusterConf);
+-    assertOwnerShip(outputPath);
+-    TestPipes.cleanup(dfsCluster.getFileSystem(), outputPath);
++        TestPipes.runProgram(mrCluster, dfsCluster, TestPipes.wordCountSimple,
++            inputPath, outputPath, 3, 0, TestPipes.noSortOutput, clusterConf);
++        assertOwnerShip(outputPath);
++        TestPipes.cleanup(dfsCluster.getFileSystem(), outputPath);
+ 
+-    TestPipes.runProgram(mrCluster, dfsCluster, TestPipes.wordCountPart,
+-        inputPath, outputPath, 3, 2, TestPipes.fixedPartitionOutput,
+-        clusterConf);
+-    assertOwnerShip(outputPath);
+-    TestPipes.cleanup(dfsCluster.getFileSystem(), outputPath);
++        TestPipes.runProgram(mrCluster, dfsCluster, TestPipes.wordCountPart,
++            inputPath, outputPath, 3, 2, TestPipes.fixedPartitionOutput,
++            clusterConf);
++        assertOwnerShip(outputPath);
++        TestPipes.cleanup(dfsCluster.getFileSystem(), outputPath);
+ 
+-    TestPipes.runNonPipedProgram(mrCluster, dfsCluster,
+-        TestPipes.wordCountNoPipes, clusterConf);
+-    assertOwnerShip(TestPipes.nonPipedOutDir, FileSystem.getLocal(clusterConf));
++        TestPipes.runNonPipedProgram(mrCluster, dfsCluster,
++            TestPipes.wordCountNoPipes, clusterConf);
++        assertOwnerShip(TestPipes.nonPipedOutDir, FileSystem
++            .getLocal(clusterConf));
++        return null;
++      }
++    });
+   }
+ }
+-- 
+1.7.0.4
+

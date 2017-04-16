@@ -1,0 +1,650 @@
+From d229a5fc83e4722162912a60eae40121f2e504e6 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 6 Apr 2010 17:01:51 -0700
+Subject: [PATCH 0593/1179] HDFS-1007. Update HFTP to use delegation tokens
+
+Patch: https://issues.apache.org/jira/secure/attachment/12440931/HDFS-1007-BP20-fix-3.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ .../org/apache/hadoop/hdfsproxy/HdfsProxy.java     |    3 +-
+ .../hadoop/hdfsproxy/ProxyFileDataServlet.java     |   12 ++++-
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |   46 ++++++++++---------
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   19 +++-----
+ .../server/namenode/ContentSummaryServlet.java     |    2 +-
+ .../hadoop/hdfs/server/namenode/DfsServlet.java    |    2 +-
+ .../hdfs/server/namenode/FileChecksumServlets.java |    2 +-
+ .../hdfs/server/namenode/FileDataServlet.java      |   22 +++++++---
+ .../hadoop/hdfs/server/namenode/FsckServlet.java   |    2 +-
+ .../hdfs/server/namenode/GetImageServlet.java      |    2 +-
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |    1 +
+ .../hdfs/server/namenode/ListPathsServlet.java     |    2 +-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    2 +-
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    2 +-
+ .../hadoop/hdfs/server/namenode/StreamFile.java    |    4 +-
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |    2 +-
+ .../hadoop/mapreduce/security/TokenCache.java      |   21 ++++++---
+ src/tools/org/apache/hadoop/tools/DistCp.java      |   13 +++---
+ src/webapps/datanode/browseBlock.jsp               |    2 +-
+ src/webapps/datanode/browseDirectory.jsp           |    2 +-
+ src/webapps/datanode/tail.jsp                      |    2 +-
+ src/webapps/hdfs/nn_browsedfscontent.jsp           |    2 +-
+ 22 files changed, 95 insertions(+), 72 deletions(-)
+
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/HdfsProxy.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/HdfsProxy.java
+index 6357e62..349a7f4 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/HdfsProxy.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/HdfsProxy.java
+@@ -29,6 +29,7 @@ import javax.net.ssl.HttpsURLConnection;
+ import javax.net.ssl.HostnameVerifier;
+ import javax.net.ssl.SSLSession;
+ import javax.servlet.http.HttpServletResponse;
++import org.apache.hadoop.hdfs.server.namenode.JspHelper;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -74,7 +75,7 @@ public class HdfsProxy {
+     this.server = new ProxyHttpServer(sslAddr, sslConf);
+     this.server.setAttribute("proxy.https.port", server.getPort());
+     this.server.setAttribute("name.node.address", nnAddr);
+-    this.server.setAttribute("name.conf", new Configuration());
++    this.server.setAttribute(JspHelper.CURRENT_CONF, new Configuration());
+     this.server.addGlobalFilter("ProxyFilter", ProxyFilter.class.getName(), null);
+     this.server.addServlet("listPaths", "/listPaths/*", ProxyListPathsServlet.class);
+     this.server.addServlet("data", "/data/*", ProxyFileDataServlet.class);
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+index 4007028..f15ef66 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+ import org.apache.hadoop.hdfs.server.namenode.FileDataServlet;
++import org.apache.hadoop.hdfs.server.namenode.JspHelper;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /** {@inheritDoc} */
+@@ -37,11 +38,18 @@ public class ProxyFileDataServlet extends FileDataServlet {
+   /** {@inheritDoc} */
+   @Override
+   protected URI createUri(String parent, HdfsFileStatus i, UserGroupInformation ugi,
+-      ClientProtocol nnproxy, HttpServletRequest request) throws IOException,
++      ClientProtocol nnproxy, HttpServletRequest request, String dt) throws IOException,
+       URISyntaxException {
++    
++    String dtParam="";
++    if (dt != null) {
++      StringBuilder sb = new StringBuilder(JspHelper.SET_DELEGATION).append(dt);
++      dtParam=sb.toString();
++    }
++    
+     return new URI(request.getScheme(), null, request.getServerName(), request
+         .getServerPort(), "/streamFile", "filename=" + i.getFullName(parent) 
+-        + "&ugi=" + ugi.getShortUserName(), null);
++        + "&ugi=" + ugi.getShortUserName() + dtParam, null);
+   }
+ 
+   /** {@inheritDoc} */
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index 8e55018..ecc93ae 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -19,51 +19,47 @@
+ package org.apache.hadoop.hdfs;
+ 
+ import java.io.FileNotFoundException;
+-import java.io.InputStream;
+ import java.io.IOException;
+-
++import java.io.InputStream;
+ import java.net.HttpURLConnection;
+ import java.net.InetSocketAddress;
+ import java.net.URI;
+ import java.net.URISyntaxException;
+ import java.net.URL;
+-
+ import java.security.PrivilegedExceptionAction;
+ import java.text.ParseException;
+ import java.text.SimpleDateFormat;
+-
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.TimeZone;
+ 
+-import org.xml.sax.Attributes;
+-import org.xml.sax.InputSource;
+-import org.xml.sax.SAXException;
+-import org.xml.sax.XMLReader;
+-import org.xml.sax.helpers.DefaultHandler;
+-import org.xml.sax.helpers.XMLReaderFactory;
+-
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.fs.ContentSummary;
++import org.apache.hadoop.fs.FSDataInputStream;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FSInputStream;
+ import org.apache.hadoop.fs.FileChecksum;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+-import org.apache.hadoop.fs.FSInputStream;
+-import org.apache.hadoop.fs.FSDataInputStream;
+-import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.MD5MD5CRC32FileChecksum;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.server.namenode.JspHelper;
+-import org.apache.hadoop.hdfs.server.namenode.ListPathsServlet;
+ import org.apache.hadoop.hdfs.tools.DelegationTokenFetcher;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.RemoteException;
+-import org.apache.hadoop.security.*;
++import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.Credentials;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.util.Progressable;
++import org.xml.sax.Attributes;
++import org.xml.sax.InputSource;
++import org.xml.sax.SAXException;
++import org.xml.sax.XMLReader;
++import org.xml.sax.helpers.DefaultHandler;
++import org.xml.sax.helpers.XMLReaderFactory;
+ 
+ /** An implementation of a protocol for accessing filesystems over HTTP.
+  * The following implementation provides a limited, read-only interface
+@@ -83,6 +79,7 @@ public class HftpFileSystem extends FileSystem {
+   public static final String HFTP_DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ssZ";
+   private Token<? extends TokenIdentifier> delegationToken;
+   public static final String HFTP_RENEWER = "fs.hftp.renewer";
++  public static final String HFTP_SERVICE_NAME_KEY = "hdfs.service.host_";
+ 
+   public static final SimpleDateFormat getDateFormat() {
+     final SimpleDateFormat df = new SimpleDateFormat(HFTP_DATE_FORMAT);
+@@ -107,17 +104,22 @@ public class HftpFileSystem extends FileSystem {
+     nnAddr = NetUtils.createSocketAddr(name.toString());
+     
+     if (UserGroupInformation.isSecurityEnabled()) {
+-      StringBuffer sb = new StringBuffer();
+-      final String nnServiceName = 
+-        (sb.append(NetUtils.normalizeHostName(name.getHost()))
+-                .append(":").append(name.getPort())).toString();
+-      Text nnServiceNameText = new Text(nnServiceName);
++      StringBuffer sb = new StringBuffer(HFTP_SERVICE_NAME_KEY);
++      // configuration has the actual service name for this url. Build the key 
++      // and get it.
++      final String key = sb.append(NetUtils.normalizeHostName(name.getHost())).
++        append(".").append(name.getPort()).toString();
++      
++      LOG.debug("Trying to find DT for " + name + " using key=" + key + "; conf=" + conf.get(key, ""));
++      Text nnServiceNameText = new Text(conf.get(key, ""));
++      
+       Collection<Token<? extends TokenIdentifier>> tokens =
+         ugi.getTokens();
+       //try finding a token for this namenode (esp applicable for tasks
+       //using hftp). If there exists one, just set the delegationField
+       for (Token<? extends TokenIdentifier> t : tokens) {
+         if ((t.getService()).equals(nnServiceNameText)) {
++          LOG.debug("Found existing DT for " + name);
+           delegationToken = t;
+           return;
+         }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index f4b5d64..7e9e7d3 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -17,8 +17,6 @@
+  */
+ package org.apache.hadoop.hdfs.server.datanode;
+ 
+-import static org.junit.Assert.assertTrue;
+-
+ import java.io.BufferedOutputStream;
+ import java.io.DataOutputStream;
+ import java.io.File;
+@@ -50,13 +48,11 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.conf.Configured;
+-import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.DFSConfigKeys;
+-import org.apache.hadoop.hdfs.DFSUtil;
+ import org.apache.hadoop.hdfs.HDFSPolicyProvider;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.BlockListAsLongs;
+@@ -70,14 +66,15 @@ import org.apache.hadoop.hdfs.protocol.UnregisteredDatanodeException;
+ import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
+ import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
+ import org.apache.hadoop.hdfs.security.token.block.ExportedBlockKeys;
+-import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
+-import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.hdfs.server.common.GenerationStamp;
++import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.hdfs.server.common.IncorrectVersionException;
+ import org.apache.hadoop.hdfs.server.common.Storage;
++import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
+ import org.apache.hadoop.hdfs.server.datanode.metrics.DataNodeMetrics;
+ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+ import org.apache.hadoop.hdfs.server.namenode.FileChecksumServlets;
++import org.apache.hadoop.hdfs.server.namenode.JspHelper;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.hdfs.server.namenode.StreamFile;
+ import org.apache.hadoop.hdfs.server.protocol.BlockCommand;
+@@ -87,8 +84,8 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeCommand;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
+ import org.apache.hadoop.hdfs.server.protocol.DisallowedDatanodeException;
+-import org.apache.hadoop.hdfs.server.protocol.KeyUpdateCommand;
+ import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
++import org.apache.hadoop.hdfs.server.protocol.KeyUpdateCommand;
+ import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
+ import org.apache.hadoop.hdfs.server.protocol.UpgradeCommand;
+ import org.apache.hadoop.http.HttpServer;
+@@ -101,6 +98,9 @@ import org.apache.hadoop.net.DNS;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.util.Daemon;
+ import org.apache.hadoop.util.DiskChecker;
+ import org.apache.hadoop.util.PluginDispatcher;
+@@ -110,9 +110,6 @@ import org.apache.hadoop.util.SingleArgumentRunnable;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+ import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
+-import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+-import org.apache.hadoop.security.token.Token;
+-import org.apache.hadoop.security.token.TokenIdentifier;
+ 
+ /**********************************************************
+  * DataNode is a class (and program) that stores a set of
+@@ -419,7 +416,7 @@ public class DataNode extends Configured
+     this.infoServer.addInternalServlet(null, "/getFileChecksum/*",
+         FileChecksumServlets.GetServlet.class);
+     this.infoServer.setAttribute("datanode.blockScanner", blockScanner);
+-    this.infoServer.setAttribute("datanode.conf", conf);
++    this.infoServer.setAttribute(JspHelper.CURRENT_CONF, conf);
+     this.infoServer.addServlet(null, "/blockScannerReport", 
+                                DataBlockScanner.Servlet.class);
+     this.infoServer.start();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+index 32cd53d..7d0741a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+@@ -41,7 +41,7 @@ public class ContentSummaryServlet extends DfsServlet {
+   public void doGet(final HttpServletRequest request,
+       final HttpServletResponse response) throws ServletException, IOException {
+     final Configuration conf = 
+-      (Configuration) getServletContext().getAttribute("name.conf");
++      (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+     final UserGroupInformation ugi = getUGI(request, conf);
+     try {
+       ugi.doAs(new PrivilegedExceptionAction<Object>() {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+index 114a962..b2d4f73 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+@@ -60,7 +60,7 @@ abstract class DfsServlet extends HttpServlet {
+     ServletContext context = getServletContext();
+     InetSocketAddress nnAddr = (InetSocketAddress)context.getAttribute("name.node.address");
+     Configuration conf = new Configuration(
+-        (Configuration)context.getAttribute("name.conf"));
++        (Configuration)context.getAttribute(JspHelper.CURRENT_CONF));
+     return DFSClient.createNamenode(nnAddr, conf);
+   }
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
+index d1dac0b..a80b31a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
+@@ -53,7 +53,7 @@ public class FileChecksumServlets {
+     public void doGet(HttpServletRequest request, HttpServletResponse response
+         ) throws ServletException, IOException {
+       final ServletContext context = getServletContext();
+-      Configuration conf = (Configuration) context.getAttribute("name.conf");
++      Configuration conf = (Configuration) context.getAttribute(JspHelper.CURRENT_CONF);
+       final UserGroupInformation ugi = getUGI(request, conf);
+       final NameNode namenode = (NameNode)context.getAttribute("name.node");
+       final DatanodeID datanode = namenode.namesystem.getRandomDatanode();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+index fb29079..6e964d9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+@@ -41,7 +41,7 @@ public class FileDataServlet extends DfsServlet {
+ 
+   /** Create a redirection URI */
+   protected URI createUri(String parent, HdfsFileStatus i, UserGroupInformation ugi,
+-      ClientProtocol nnproxy, HttpServletRequest request)
++      ClientProtocol nnproxy, HttpServletRequest request, String dt)
+       throws IOException, URISyntaxException {
+     String scheme = request.getScheme();
+     final DatanodeID host = pickSrcDatanode(parent, i, nnproxy);
+@@ -51,12 +51,19 @@ public class FileDataServlet extends DfsServlet {
+     } else {
+       hostname = host.getHost();
+     }
++    
++    String dtParam="";
++    if (dt != null) {
++      StringBuilder sb = new StringBuilder(JspHelper.SET_DELEGATION).append(dt);
++      dtParam=sb.toString();
++    }
++    
+     return new URI(scheme, null, hostname,
+         "https".equals(scheme)
+           ? (Integer)getServletContext().getAttribute("datanode.https.port")
+           : host.getInfoPort(),
+         "/streamFile", "filename=" + i.getFullName(parent) + 
+-        "&ugi=" + ugi.getShortUserName(), null);
++        "&ugi=" + ugi.getShortUserName() + dtParam, null);
+   }
+ 
+   private static JspHelper jspHelper = null;
+@@ -91,7 +98,7 @@ public class FileDataServlet extends DfsServlet {
+   public void doGet(HttpServletRequest request, HttpServletResponse response)
+     throws IOException {
+     Configuration conf =
+-	(Configuration) getServletContext().getAttribute("name.conf");
++	(Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+     final UserGroupInformation ugi = getUGI(request, conf);
+ 
+     try {
+@@ -103,13 +110,16 @@ public class FileDataServlet extends DfsServlet {
+             }
+           });
+ 
+-      final String path = request.getPathInfo() != null ? 
+-                                                    request.getPathInfo() : "/";
++      final String path = 
++        request.getPathInfo() != null ? request.getPathInfo() : "/";
++      
++      String delegationToken = 
++        request.getParameter(JspHelper.DELEGATION_PARAMETER_NAME);
+       
+       HdfsFileStatus info = nnproxy.getFileInfo(path);
+       if ((info != null) && !info.isDir()) {
+         response.sendRedirect(createUri(path, info, ugi, nnproxy,
+-              request).toURL().toString());
++              request, delegationToken).toURL().toString());
+       } else if (info == null){
+         response.sendError(400, "cat: File not found " + path);
+       } else {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java
+index c9d1f5a..9488b14 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java
+@@ -45,7 +45,7 @@ public class FsckServlet extends DfsServlet {
+     final PrintWriter out = response.getWriter();
+     final ServletContext context = getServletContext();
+     final Configuration conf = 
+-      (Configuration) context.getAttribute("name.conf");
++      (Configuration) context.getAttribute(JspHelper.CURRENT_CONF);
+     final UserGroupInformation ugi = getUGI(request, conf);
+     try {
+       ugi.doAs(new PrivilegedExceptionAction<Object>() {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+index b9200b8..8adf2ab 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+@@ -57,7 +57,7 @@ public class GetImageServlet extends HttpServlet {
+       ServletContext context = getServletContext();
+       final FSImage nnImage = (FSImage)context.getAttribute("name.system.image");
+       final TransferFsImage ff = new TransferFsImage(pmap, request, response);
+-      final Configuration conf = (Configuration)getServletContext().getAttribute("name.conf");
++      final Configuration conf = (Configuration)getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+       if(UserGroupInformation.isSecurityEnabled() && 
+           !isValidRequestor(request.getRemoteUser(), conf)) {
+         response.sendError(HttpServletResponse.SC_FORBIDDEN, 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index cbbc9b5..4bf21a6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -58,6 +58,7 @@ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.net.NetUtils;
+ 
+ public class JspHelper {
++  public static final String CURRENT_CONF = "current.conf";
+   final static public String WEB_UGI_PROPERTY_NAME = "dfs.web.ugi";
+   public static final String DELEGATION_PARAMETER_NAME = "delegation";
+   public static final String SET_DELEGATION = "&" + DELEGATION_PARAMETER_NAME +
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+index 2e7b35a..8b29309 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+@@ -136,7 +136,7 @@ public class ListPathsServlet extends DfsServlet {
+       final Pattern filter = Pattern.compile(root.get("filter"));
+       final Pattern exclude = Pattern.compile(root.get("exclude"));
+       final Configuration conf = 
+-        (Configuration) getServletContext().getAttribute("name.conf");
++        (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+       
+       ClientProtocol nnproxy = getUGI(request, conf).doAs
+         (new PrivilegedExceptionAction<ClientProtocol>() {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 420ca4c..b300a80 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -316,7 +316,7 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+           httpServer.setAttribute("name.node", NameNode.this);
+           httpServer.setAttribute("name.node.address", getNameNodeAddress());
+           httpServer.setAttribute("name.system.image", getFSImage());
+-          httpServer.setAttribute("name.conf", conf);
++          httpServer.setAttribute(JspHelper.CURRENT_CONF, conf);
+           httpServer.addInternalServlet("getDelegationToken", 
+               DelegationTokenServlet.PATH_SPEC, DelegationTokenServlet.class, true);
+           httpServer.addInternalServlet("fsck", "/fsck", FsckServlet.class, true);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index 5cbe705..e452866 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -211,7 +211,7 @@ public class SecondaryNameNode implements Runnable {
+           }
+           
+           infoServer.setAttribute("name.system.image", checkpointImage);
+-          infoServer.setAttribute("name.conf", conf);
++          infoServer.setAttribute(JspHelper.CURRENT_CONF, conf);
+           infoServer.addInternalServlet("getimage", "/getimage",
+               GetImageServlet.class, true);
+           infoServer.start();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+index 8739e36..3335fbb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+@@ -40,7 +40,7 @@ public class StreamFile extends DfsServlet {
+   public void doGet(HttpServletRequest request, HttpServletResponse response)
+     throws ServletException, IOException {
+     Configuration conf = 
+-      (Configuration) getServletContext().getAttribute("name.conf");
++      (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+     String filename = request.getParameter("filename");
+     if (filename == null || filename.length() == 0) {
+       response.setContentType("text/plain");
+@@ -52,7 +52,7 @@ public class StreamFile extends DfsServlet {
+     DFSClient dfs;
+     UserGroupInformation ugi = getUGI(request, conf);
+     try {
+-	dfs = JspHelper.getDFSClient(ugi, nameNodeAddr, conf);
++      dfs = JspHelper.getDFSClient(ugi, nameNodeAddr, conf);
+     } catch (InterruptedException e) {
+       response.sendError(400, e.getMessage());
+       return;
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index 100b566..b3422ee 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -2000,7 +2000,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+  
+     // add the delegation tokens from configuration
+     String [] nameNodes = conf.getStrings(JobContext.JOB_NAMENODES);
+-    LOG.info("adding the following namenodes' delegation tokens:" + Arrays.toString(nameNodes));
++    LOG.debug("adding the following namenodes' delegation tokens:" + Arrays.toString(nameNodes));
+     if(nameNodes != null) {
+       Path [] ps = new Path[nameNodes.length];
+       for(int i=0; i< nameNodes.length; i++) {
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+index 5e4be14..1cba290 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+@@ -20,30 +20,26 @@ package org.apache.hadoop.mapreduce.security;
+ 
+ import java.io.IOException;
+ import java.net.URI;
+-import java.util.Collection;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.DistributedFileSystem;
+ import org.apache.hadoop.hdfs.HftpFileSystem;
+ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+-import org.apache.hadoop.hdfs.tools.DelegationTokenFetcher;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.JobTracker;
+-import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.Credentials;
+ import org.apache.hadoop.security.KerberosName;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+-import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+  * This class provides user facing APIs for transferring secrets from
+@@ -130,7 +126,7 @@ public class TokenCache {
+ 
+         token.setService(new Text(fs_addr));
+         credentials.addToken(new Text(fs_addr), token);
+-        LOG.info("Got dt for " + p.toString() + ";uri="+ fs_addr + 
++        LOG.info("Got dt for " + p + ";uri="+ fs_addr + 
+             ";t.service="+token.getService());
+       } else if (fs instanceof HftpFileSystem) {
+         String fs_addr = buildDTServiceName(fs.getUri());
+@@ -142,8 +138,17 @@ public class TokenCache {
+         }
+         //the initialize method of hftp, called via FileSystem.get() done
+         //earlier gets a delegation token
+-        credentials.addToken(new Text(fs_addr), 
+-            ((HftpFileSystem) fs).getDelegationToken());
++        Token<? extends TokenIdentifier> t = ((HftpFileSystem) fs).getDelegationToken(); 
++        credentials.addToken(new Text(fs_addr), t);
++        
++        // in this case port in fs_addr is port for hftp request, but
++        // token's port is for RPC
++        // to find the correct DT we need to know the mapping between Hftp port 
++        // and RPC one. hence this new setting in the conf.
++        URI uri = ((HftpFileSystem) fs).getUri();
++        String key = HftpFileSystem.HFTP_SERVICE_NAME_KEY+uri.getHost() + "." + uri.getPort();
++        conf.set(key, t.getService().toString());
++        LOG.info("GOT dt for " + p + " and stored in conf as " + key + "=" + t.getService());
+       }
+     }
+   }
+diff --git a/src/tools/org/apache/hadoop/tools/DistCp.java b/src/tools/org/apache/hadoop/tools/DistCp.java
+index fc18a5e..7e0ca27 100644
+--- a/src/tools/org/apache/hadoop/tools/DistCp.java
++++ b/src/tools/org/apache/hadoop/tools/DistCp.java
+@@ -623,21 +623,20 @@ public class DistCp implements Tool {
+   }
+ 
+   /** Sanity check for srcPath */
+-  private static void checkSrcPath(Configuration conf, 
+-                                   List<Path> srcPaths, JobConf jobConf)
++  private static void checkSrcPath(JobConf jobConf, List<Path> srcPaths)
+   throws IOException {
+     List<IOException> rslt = new ArrayList<IOException>();
+     
+     // get tokens for all the required FileSystems..
+     // also set the renewer as the JobTracker for the hftp case
+-    conf.set(HftpFileSystem.HFTP_RENEWER, 
+-        conf.get(JobTracker.JT_USER_NAME, ""));
++    jobConf.set(HftpFileSystem.HFTP_RENEWER, 
++        jobConf.get(JobTracker.JT_USER_NAME, ""));
+     Path[] ps = new Path[srcPaths.size()];
+     ps = srcPaths.toArray(ps);
+-    TokenCache.obtainTokensForNamenodes(jobConf.getCredentials(), ps, conf);
++    TokenCache.obtainTokensForNamenodes(jobConf.getCredentials(), ps, jobConf);
+ 
+     for (Path p : srcPaths) {
+-      FileSystem fs = p.getFileSystem(conf);
++      FileSystem fs = p.getFileSystem(jobConf);
+       if (!fs.exists(p)) {
+         rslt.add(new IOException("Input source " + p + " does not exist."));
+       }
+@@ -658,7 +657,7 @@ public class DistCp implements Tool {
+ 
+     JobConf job = createJobConf(conf);
+     
+-    checkSrcPath(conf, args.srcs, job);
++    checkSrcPath(job, args.srcs);
+     if (args.preservedAttributes != null) {
+       job.set(PRESERVE_STATUS_LABEL, args.preservedAttributes);
+     }
+diff --git a/src/webapps/datanode/browseBlock.jsp b/src/webapps/datanode/browseBlock.jsp
+index af484c4..8c0b150 100644
+--- a/src/webapps/datanode/browseBlock.jsp
++++ b/src/webapps/datanode/browseBlock.jsp
+@@ -413,7 +413,7 @@
+ <body onload="document.goto.dir.focus()">
+ <% 
+    Configuration conf = 
+-     (Configuration) getServletContext().getAttribute("datanode.conf");
++     (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+    generateFileChunks(out, request, conf);
+ %>
+ <hr>
+diff --git a/src/webapps/datanode/browseDirectory.jsp b/src/webapps/datanode/browseDirectory.jsp
+index e790cfa..84340dc 100644
+--- a/src/webapps/datanode/browseDirectory.jsp
++++ b/src/webapps/datanode/browseDirectory.jsp
+@@ -170,7 +170,7 @@
+ <body onload="document.goto.dir.focus()">
+ <% 
+   Configuration conf = 
+-    (Configuration) getServletContext().getAttribute("datanode.conf");
++    (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+   try {
+     generateDirectoryStructure(out,request,response,conf);
+   }
+diff --git a/src/webapps/datanode/tail.jsp b/src/webapps/datanode/tail.jsp
+index 831fed5..c5d3d3c 100644
+--- a/src/webapps/datanode/tail.jsp
++++ b/src/webapps/datanode/tail.jsp
+@@ -127,7 +127,7 @@
+ <form action="/tail.jsp" method="GET">
+ <% 
+    Configuration conf = 
+-     (Configuration) application.getAttribute("datanode.conf");
++     (Configuration) application.getAttribute(JspHelper.CURRENT_CONF);
+    generateFileChunks(out, request, conf);
+ %>
+ </form>
+diff --git a/src/webapps/hdfs/nn_browsedfscontent.jsp b/src/webapps/hdfs/nn_browsedfscontent.jsp
+index 0f3d363..d788cd8 100644
+--- a/src/webapps/hdfs/nn_browsedfscontent.jsp
++++ b/src/webapps/hdfs/nn_browsedfscontent.jsp
+@@ -77,7 +77,7 @@
+ <body>
+ <% 
+   NameNode nn = (NameNode)application.getAttribute("name.node");
+-  Configuration conf = (Configuration) application.getAttribute("name.conf");
++  Configuration conf = (Configuration) application.getAttribute(JspHelper.CURRENT_CONF);
+   redirectToRandomDataNode(nn, request, response, conf); 
+ %>
+ <hr>
+-- 
+1.7.0.4
+

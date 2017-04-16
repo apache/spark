@@ -1,0 +1,851 @@
+From 2c5115af8426e44b9de804b80fcc9502d64efadd Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 10 Feb 2011 15:16:56 -0800
+Subject: [PATCH 0807/1179] MAPREDUCE-1118. Enhance the JobTracker web-ui to ensure tabular columns are sortable, also added a /scheduler servlet to CapacityScheduler for enhanced UI for queue information.
+
+Author: Krishna Ramachandran
+Ref: CDH-2622
+---
+ .../hadoop/mapred/CapacitySchedulerServlet.java    |  154 ++++++
+ .../hadoop/mapred/CapacityTaskScheduler.java       |   25 +-
+ .../mapred/TestCapacitySchedulerServlet.java       |   72 +++
+ src/mapred/org/apache/hadoop/mapred/JSPUtil.java   |    3 +-
+ src/webapps/job/jobtracker.jsp                     |    3 +-
+ src/webapps/static/sorttable.js                    |  493 ++++++++++++++++++++
+ 6 files changed, 746 insertions(+), 4 deletions(-)
+ create mode 100644 src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacitySchedulerServlet.java
+ create mode 100644 src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacitySchedulerServlet.java
+ create mode 100644 src/webapps/static/sorttable.js
+
+diff --git a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacitySchedulerServlet.java b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacitySchedulerServlet.java
+new file mode 100644
+index 0000000..01adda0
+--- /dev/null
++++ b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacitySchedulerServlet.java
+@@ -0,0 +1,154 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.ByteArrayOutputStream;
++import java.io.IOException;
++import java.io.OutputStream;
++import java.io.PrintWriter;
++import java.util.Collections;
++import java.util.HashMap;
++import javax.servlet.ServletContext;
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServlet;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++
++import org.apache.hadoop.mapreduce.TaskType;
++import org.apache.hadoop.mapred.JobHistory.JobInfo;
++import org.apache.hadoop.util.StringUtils;
++
++/**
++ * Servlet for displaying fair scheduler information, installed at [job tracker
++ * URL]/scheduler when the {@link FairScheduler} is in use.
++ * 
++ * The main features are viewing each job's task count and fair share, ability
++ * to change job priorities and pools from the UI, and ability to switch the
++ * scheduler to FIFO mode without restarting the JobTracker if this is required
++ * for any reason.
++ * 
++ * There is also an "advanced" view for debugging that can be turned on by going
++ * to [job tracker URL]/scheduler?advanced.
++ */
++public class CapacitySchedulerServlet extends HttpServlet {
++  private static final long serialVersionUID = 9104070533067306659L;
++
++  private transient CapacityTaskScheduler scheduler;
++  private transient  JobTracker jobTracker;
++
++  @Override
++  public void init() throws ServletException {
++    super.init();
++    ServletContext servletContext = this.getServletContext();
++    this.scheduler = (CapacityTaskScheduler) servletContext
++        .getAttribute("scheduler");
++    this.jobTracker = (JobTracker) scheduler.taskTrackerManager;
++  }
++
++  @Override
++  protected void doPost(HttpServletRequest req, HttpServletResponse resp)
++      throws ServletException, IOException {
++    doGet(req, resp); // Same handler for both GET and POST
++  }
++
++  @Override
++  public void doGet(HttpServletRequest request, HttpServletResponse response)
++      throws ServletException, IOException {
++    // Print out the normal response
++    response.setContentType("text/html");
++
++    // Because the client may read arbitrarily slow, and we hold locks while
++    // the servlet output, we want to write to our own buffer which we know
++    // won't block.
++    ByteArrayOutputStream baos = new ByteArrayOutputStream();
++    PrintWriter out = new PrintWriter(baos);
++    String hostname = StringUtils.simpleHostname(jobTracker
++        .getJobTrackerMachine());
++    out.print("<html><head>");
++    out.printf("<title>%s Job Scheduler Admininstration</title>\n", hostname);
++    out.print("<link rel=\"stylesheet\" type=\"text/css\" "
++        + "href=\"/static/hadoop.css\">\n");
++    out.print("<script type=\"text/javascript\" "
++        + "src=\"/static/sorttable.js\"></script> \n");
++    out.print("</head><body>\n");
++    out.printf("<h1><a href=\"/jobtracker.jsp\">%s</a> "
++        + "Job Scheduler Administration</h1>\n", hostname);
++    showQueues(out);
++    out.print("</body></html>\n");
++    out.close();
++
++    // Flush our buffer to the real servlet output
++    OutputStream servletOut = response.getOutputStream();
++    baos.writeTo(servletOut);
++    servletOut.close();
++  }
++
++  /**
++   * Print a view of pools to the given output writer.
++   */
++
++  private void showQueues(PrintWriter out) 
++      throws IOException {
++    synchronized(scheduler) {
++      out.print("<h2>Queues</h2>\n");
++      out.print("<table border=\"2\" cellpadding=\"5\" " + 
++                " cellspacing=\"2\" class=\"sortable\"> \n");
++      out.print("<tr><th>Queue</th>" +
++      		      "<th>Running Jobs</th>" + 
++                "<th>Pending Jobs</th>" + 
++      		      "<th>Capacity Percentage</th>" +
++      		      "<th>Map Task Capacity</th>" +
++      		      "<th>Map Task Used Capacity</th>" +
++      		      "<th>Running Maps</th>" +
++      		      "<th>Reduce Task Capacity</th>" + 
++                "<th>Reduce Task Used Capacity</th>" +
++                "<th>Running Reduces </tr>\n");
++      for (CapacitySchedulerQueue queue : scheduler.getQueueInfoMap().values()) {
++        String queueName = queue.getQueueName();
++        out.print("<tr>\n");
++        out.printf(
++            "<td><a href=\"jobqueue_details.jsp?queueName=%s\">%s</a></td>\n",
++            queueName, queueName);
++        out.printf("<td>%s</td>\n", 
++            (queue.getNumRunningJobs() + queue.getNumInitializingJobs()));
++        out.printf("<td>%s</td>\n", queue.getNumWaitingJobs());
++        out.printf("<td>%.1f%%</td>\n", queue.getCapacityPercent());
++        int mapCapacity = queue.getCapacity(TaskType.MAP);
++        int mapSlotsOccupied = queue.getNumSlotsOccupied(TaskType.MAP);
++        int reduceSlotsOccupied = queue.getNumSlotsOccupied(TaskType.REDUCE);
++        float occupiedSlotsAsPercent = 
++            mapCapacity != 0 ? ((float) mapSlotsOccupied * 100 / mapCapacity)
++            : 0;
++        out.printf("<td>%s</td>\n", mapCapacity);
++        out.printf("<td>%s (%.1f%% of Capacity)</td>\n", mapSlotsOccupied,
++            occupiedSlotsAsPercent);
++        out.printf("<td>%s</td>\n", queue.getNumRunningTasks(TaskType.MAP));
++        int reduceCapacity = queue.getCapacity(TaskType.REDUCE);
++        float redOccupiedSlotsAsPercent = 
++          (reduceCapacity != 0 ? ((float)reduceSlotsOccupied*100 / mapCapacity)
++            : 0);
++        out.printf("<td>%s</td>\n", reduceCapacity);
++        out.printf("<td>%s (%.1f%% of Capacity)</td>\n", reduceSlotsOccupied,
++            redOccupiedSlotsAsPercent);
++        out.printf("<td>%s</td>\n", queue.getNumRunningTasks(TaskType.REDUCE));
++      }
++      out.print("</table>\n");
++    }
++  }
++}
+diff --git a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
+index 5f23074..4411712 100644
+--- a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
++++ b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
+@@ -31,6 +31,7 @@ import java.util.Set;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.http.HttpServer;
+ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
+ 
+@@ -146,7 +147,7 @@ class CapacityTaskScheduler extends TaskScheduler {
+    * There may be slight variations later, in which case we can make this
+    * an abstract base class and have derived classes for Map and Reduce.  
+    */
+-  private static abstract class TaskSchedulingMgr {
++  static abstract class TaskSchedulingMgr {
+ 
+     /** our TaskScheduler object */
+     protected CapacityTaskScheduler scheduler;
+@@ -833,6 +834,14 @@ class CapacityTaskScheduler extends TaskScheduler {
+     initializationPoller.setDaemon(true);
+     initializationPoller.start();
+ 
++    if (taskTrackerManager instanceof JobTracker) {
++      JobTracker jobTracker = (JobTracker) taskTrackerManager;
++      HttpServer infoServer = jobTracker.infoServer;
++      infoServer.setAttribute("scheduler", this);
++      infoServer.addServlet("scheduler", "/scheduler",
++          CapacitySchedulerServlet.class);
++    }
++
+     started = true;
+     LOG.info("Capacity scheduler initialized " + queueNames.size() + " queues");  
+   }
+@@ -1193,6 +1202,20 @@ class CapacityTaskScheduler extends TaskScheduler {
+     return queueInfoMap;
+   }
+ 
++  /**
++   * @return the mapScheduler
++   */
++  TaskSchedulingMgr getMapScheduler() {
++    return mapScheduler;
++  }
++
++  /**
++   * @return the reduceScheduler
++   */
++  TaskSchedulingMgr getReduceScheduler() {
++    return reduceScheduler;
++  }
++
+   synchronized String getDisplayInfo(String queueName) {
+     CapacitySchedulerQueue queue = queueInfoMap.get(queueName);
+     if (null == queue) { 
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacitySchedulerServlet.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacitySchedulerServlet.java
+new file mode 100644
+index 0000000..2a66a52
+--- /dev/null
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacitySchedulerServlet.java
+@@ -0,0 +1,72 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++import java.io.InputStream;
++import java.util.Properties;
++import java.net.URL;
++
++public class TestCapacitySchedulerServlet extends
++    ClusterWithCapacityScheduler {
++
++  /**
++   * Test case checks CapacitySchedulerServlet. Check if queues are 
++   * initialized {@link CapacityTaskScheduler} 
++   * 
++   * @throws IOException
++   */
++  public void testCapacitySchedulerServlet() throws IOException {
++    Properties schedulerProps = new Properties();
++    String[] queues = new String[] { "Q1", "Q2" };
++    for (String q : queues) {
++      schedulerProps.put(CapacitySchedulerConf
++          .toFullPropertyName(q, "capacity"), "50");
++      schedulerProps.put(CapacitySchedulerConf.toFullPropertyName(q,
++          "minimum-user-limit-percent"), "100");
++    }
++    Properties clusterProps = new Properties();
++    clusterProps.put("mapred.tasktracker.map.tasks.maximum", String.valueOf(2));
++    clusterProps.put("mapred.tasktracker.reduce.tasks.maximum", String
++        .valueOf(2));
++    clusterProps.put("mapred.queue.names", queues[0] + "," + queues[1]);
++    startCluster(2, clusterProps, schedulerProps);
++
++    JobTracker jt = getJobTracker();
++    int port = jt.getInfoPort();
++    String host = jt.getJobTrackerMachine();
++    URL url = new URL("http://" + host + ":" + port + "/scheduler");
++    String queueData = readOutput(url);
++    assertTrue(queueData.contains("Q1"));
++    assertTrue(queueData.contains("Q2"));
++    assertTrue(queueData.contains("50.0%"));
++  }
++
++  private String readOutput(URL url) throws IOException {
++    StringBuilder out = new StringBuilder();
++    InputStream in = url.openConnection().getInputStream();
++    byte[] buffer = new byte[64 * 1024];
++    int len = in.read(buffer);
++    while (len > 0) {
++      out.append(new String(buffer, 0, len));
++      len = in.read(buffer);
++    }
++    return out.toString();
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+index 6f2436a..4c097e7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
++++ b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+@@ -371,8 +371,7 @@ class JSPUtil {
+     throws IOException {
+ 
+     StringBuffer sb = new StringBuffer();
+-    
+-    sb.append("<table border=\"1\" cellpadding=\"5\" cellspacing=\"0\">\n");
++    sb.append("<table border=\"1\" cellpadding=\"5\" cellspacing=\"0\" class=\"sortable\">\n");
+ 
+     Iterator<RetireJobInfo> iterator = 
+       tracker.retireJobs.getAll().descendingIterator();
+diff --git a/src/webapps/job/jobtracker.jsp b/src/webapps/job/jobtracker.jsp
+index 1088a50..d67e2ea 100644
+--- a/src/webapps/job/jobtracker.jsp
++++ b/src/webapps/job/jobtracker.jsp
+@@ -80,6 +80,7 @@
+ <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
+ <link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ <script type="text/javascript" src="/static/jobtracker.js"></script>
++<script type='text/javascript' src='/static/sorttable.js'></script>
+ </head>
+ <body>
+ 
+@@ -112,7 +113,7 @@
+ %>
+ <hr>
+ <h2 id="scheduling_info">Scheduling Information</h2>
+-<table border="2" cellpadding="5" cellspacing="2">
++<table border="2" cellpadding="5" cellspacing="2" class="sortable">
+ <thead style="font-weight: bold">
+ <tr>
+ <td> Queue Name </td>
+diff --git a/src/webapps/static/sorttable.js b/src/webapps/static/sorttable.js
+new file mode 100644
+index 0000000..2a10471
+--- /dev/null
++++ b/src/webapps/static/sorttable.js
+@@ -0,0 +1,493 @@
++/*
++  SortTable
++  version 2
++  7th April 2007
++  Stuart Langridge, http://www.kryogenix.org/code/browser/sorttable/
++  
++  Instructions:
++  Download this file
++  Add <script src="sorttable.js"></script> to your HTML
++  Add class="sortable" to any table you'd like to make sortable
++  Click on the headers to sort
++  
++  Thanks to many, many people for contributions and suggestions.
++  Licenced as X11: http://www.kryogenix.org/code/browser/licence.html
++  This basically means: do what you want with it.
++*/
++
++ 
++var stIsIE = /*@cc_on!@*/false;
++
++sorttable = {
++  init: function() {
++    // quit if this function has already been called
++    if (arguments.callee.done) return;
++    // flag this function so we don't do the same thing twice
++    arguments.callee.done = true;
++    // kill the timer
++    if (_timer) clearInterval(_timer);
++    
++    if (!document.createElement || !document.getElementsByTagName) return;
++    
++    sorttable.DATE_RE = /^(\d\d?)[\/\.-](\d\d?)[\/\.-]((\d\d)?\d\d)$/;
++    
++    forEach(document.getElementsByTagName('table'), function(table) {
++      if (table.className.search(/\bsortable\b/) != -1) {
++        sorttable.makeSortable(table);
++      }
++    });
++    
++  },
++  
++  makeSortable: function(table) {
++    if (table.getElementsByTagName('thead').length == 0) {
++      // table doesn't have a tHead. Since it should have, create one and
++      // put the first table row in it.
++      the = document.createElement('thead');
++      the.appendChild(table.rows[0]);
++      table.insertBefore(the,table.firstChild);
++    }
++    // Safari doesn't support table.tHead, sigh
++    if (table.tHead == null) table.tHead = table.getElementsByTagName('thead')[0];
++    
++    if (table.tHead.rows.length != 1) return; // can't cope with two header rows
++    
++    // Sorttable v1 put rows with a class of "sortbottom" at the bottom (as
++    // "total" rows, for example). This is B&R, since what you're supposed
++    // to do is put them in a tfoot. So, if there are sortbottom rows,
++    // for backwards compatibility, move them to tfoot (creating it if needed).
++    sortbottomrows = [];
++    for (var i=0; i<table.rows.length; i++) {
++      if (table.rows[i].className.search(/\bsortbottom\b/) != -1) {
++        sortbottomrows[sortbottomrows.length] = table.rows[i];
++      }
++    }
++    if (sortbottomrows) {
++      if (table.tFoot == null) {
++        // table doesn't have a tfoot. Create one.
++        tfo = document.createElement('tfoot');
++        table.appendChild(tfo);
++      }
++      for (var i=0; i<sortbottomrows.length; i++) {
++        tfo.appendChild(sortbottomrows[i]);
++      }
++      delete sortbottomrows;
++    }
++    
++    // work through each column and calculate its type
++    headrow = table.tHead.rows[0].cells;
++    for (var i=0; i<headrow.length; i++) {
++      // manually override the type with a sorttable_type attribute
++      if (!headrow[i].className.match(/\bsorttable_nosort\b/)) { // skip this col
++        mtch = headrow[i].className.match(/\bsorttable_([a-z0-9]+)\b/);
++        if (mtch) { override = mtch[1]; }
++	      if (mtch && typeof sorttable["sort_"+override] == 'function') {
++	        headrow[i].sorttable_sortfunction = sorttable["sort_"+override];
++	      } else {
++	        headrow[i].sorttable_sortfunction = sorttable.guessType(table,i);
++	      }
++	      // make it clickable to sort
++	      headrow[i].sorttable_columnindex = i;
++	      headrow[i].sorttable_tbody = table.tBodies[0];
++	      dean_addEvent(headrow[i],"click", function(e) {
++
++          if (this.className.search(/\bsorttable_sorted\b/) != -1) {
++            // if we're already sorted by this column, just 
++            // reverse the table, which is quicker
++            sorttable.reverse(this.sorttable_tbody);
++            this.className = this.className.replace('sorttable_sorted',
++                                                    'sorttable_sorted_reverse');
++            this.removeChild(document.getElementById('sorttable_sortfwdind'));
++            sortrevind = document.createElement('span');
++            sortrevind.id = "sorttable_sortrevind";
++            sortrevind.innerHTML = stIsIE ? '&nbsp<font face="webdings">5</font>' : '&nbsp;&#x25B4;';
++            this.appendChild(sortrevind);
++            return;
++          }
++          if (this.className.search(/\bsorttable_sorted_reverse\b/) != -1) {
++            // if we're already sorted by this column in reverse, just 
++            // re-reverse the table, which is quicker
++            sorttable.reverse(this.sorttable_tbody);
++            this.className = this.className.replace('sorttable_sorted_reverse',
++                                                    'sorttable_sorted');
++            this.removeChild(document.getElementById('sorttable_sortrevind'));
++            sortfwdind = document.createElement('span');
++            sortfwdind.id = "sorttable_sortfwdind";
++            sortfwdind.innerHTML = stIsIE ? '&nbsp<font face="webdings">6</font>' : '&nbsp;&#x25BE;';
++            this.appendChild(sortfwdind);
++            return;
++          }
++          
++          // remove sorttable_sorted classes
++          theadrow = this.parentNode;
++          forEach(theadrow.childNodes, function(cell) {
++            if (cell.nodeType == 1) { // an element
++              cell.className = cell.className.replace('sorttable_sorted_reverse','');
++              cell.className = cell.className.replace('sorttable_sorted','');
++            }
++          });
++          sortfwdind = document.getElementById('sorttable_sortfwdind');
++          if (sortfwdind) { sortfwdind.parentNode.removeChild(sortfwdind); }
++          sortrevind = document.getElementById('sorttable_sortrevind');
++          if (sortrevind) { sortrevind.parentNode.removeChild(sortrevind); }
++          
++          this.className += ' sorttable_sorted';
++          sortfwdind = document.createElement('span');
++          sortfwdind.id = "sorttable_sortfwdind";
++          sortfwdind.innerHTML = stIsIE ? '&nbsp<font face="webdings">6</font>' : '&nbsp;&#x25BE;';
++          this.appendChild(sortfwdind);
++
++	        // build an array to sort. This is a Schwartzian transform thing,
++	        // i.e., we "decorate" each row with the actual sort key,
++	        // sort based on the sort keys, and then put the rows back in order
++	        // which is a lot faster because you only do getInnerText once per row
++	        row_array = [];
++	        col = this.sorttable_columnindex;
++	        rows = this.sorttable_tbody.rows;
++	        for (var j=0; j<rows.length; j++) {
++	          row_array[row_array.length] = [sorttable.getInnerText(rows[j].cells[col]), rows[j]];
++	        }
++	        /* If you want a stable sort, uncomment the following line */
++	        //sorttable.shaker_sort(row_array, this.sorttable_sortfunction);
++	        /* and comment out this one */
++	        row_array.sort(this.sorttable_sortfunction);
++	        
++	        tb = this.sorttable_tbody;
++	        for (var j=0; j<row_array.length; j++) {
++	          tb.appendChild(row_array[j][1]);
++	        }
++	        
++	        delete row_array;
++	      });
++	    }
++    }
++  },
++  
++  guessType: function(table, column) {
++    // guess the type of a column based on its first non-blank row
++    sortfn = sorttable.sort_alpha;
++    for (var i=0; i<table.tBodies[0].rows.length; i++) {
++      text = sorttable.getInnerText(table.tBodies[0].rows[i].cells[column]);
++      if (text != '') {
++        if (text.match(/^-?[£$¤]?[\d,.]+%?$/)) {
++          return sorttable.sort_numeric;
++        }
++        // check for a date: dd/mm/yyyy or dd/mm/yy 
++        // can have / or . or - as separator
++        // can be mm/dd as well
++        possdate = text.match(sorttable.DATE_RE)
++        if (possdate) {
++          // looks like a date
++          first = parseInt(possdate[1]);
++          second = parseInt(possdate[2]);
++          if (first > 12) {
++            // definitely dd/mm
++            return sorttable.sort_ddmm;
++          } else if (second > 12) {
++            return sorttable.sort_mmdd;
++          } else {
++            // looks like a date, but we can't tell which, so assume
++            // that it's dd/mm (English imperialism!) and keep looking
++            sortfn = sorttable.sort_ddmm;
++          }
++        }
++      }
++    }
++    return sortfn;
++  },
++  
++  getInnerText: function(node) {
++    // gets the text we want to use for sorting for a cell.
++    // strips leading and trailing whitespace.
++    // this is *not* a generic getInnerText function; it's special to sorttable.
++    // for example, you can override the cell text with a customkey attribute.
++    // it also gets .value for <input> fields.
++    
++    hasInputs = (typeof node.getElementsByTagName == 'function') &&
++                 node.getElementsByTagName('input').length;
++    
++    if (node.getAttribute("sorttable_customkey") != null) {
++      return node.getAttribute("sorttable_customkey");
++    }
++    else if (typeof node.textContent != 'undefined' && !hasInputs) {
++      return node.textContent.replace(/^\s+|\s+$/g, '');
++    }
++    else if (typeof node.innerText != 'undefined' && !hasInputs) {
++      return node.innerText.replace(/^\s+|\s+$/g, '');
++    }
++    else if (typeof node.text != 'undefined' && !hasInputs) {
++      return node.text.replace(/^\s+|\s+$/g, '');
++    }
++    else {
++      switch (node.nodeType) {
++        case 3:
++          if (node.nodeName.toLowerCase() == 'input') {
++            return node.value.replace(/^\s+|\s+$/g, '');
++          }
++        case 4:
++          return node.nodeValue.replace(/^\s+|\s+$/g, '');
++          break;
++        case 1:
++        case 11:
++          var innerText = '';
++          for (var i = 0; i < node.childNodes.length; i++) {
++            innerText += sorttable.getInnerText(node.childNodes[i]);
++          }
++          return innerText.replace(/^\s+|\s+$/g, '');
++          break;
++        default:
++          return '';
++      }
++    }
++  },
++  
++  reverse: function(tbody) {
++    // reverse the rows in a tbody
++    newrows = [];
++    for (var i=0; i<tbody.rows.length; i++) {
++      newrows[newrows.length] = tbody.rows[i];
++    }
++    for (var i=newrows.length-1; i>=0; i--) {
++       tbody.appendChild(newrows[i]);
++    }
++    delete newrows;
++  },
++  
++  /* sort functions
++     each sort function takes two parameters, a and b
++     you are comparing a[0] and b[0] */
++  sort_numeric: function(a,b) {
++    aa = parseFloat(a[0].replace(/[^0-9.-]/g,''));
++    if (isNaN(aa)) aa = 0;
++    bb = parseFloat(b[0].replace(/[^0-9.-]/g,'')); 
++    if (isNaN(bb)) bb = 0;
++    return aa-bb;
++  },
++  sort_alpha: function(a,b) {
++    if (a[0]==b[0]) return 0;
++    if (a[0]<b[0]) return -1;
++    return 1;
++  },
++  sort_ddmm: function(a,b) {
++    mtch = a[0].match(sorttable.DATE_RE);
++    y = mtch[3]; m = mtch[2]; d = mtch[1];
++    if (m.length == 1) m = '0'+m;
++    if (d.length == 1) d = '0'+d;
++    dt1 = y+m+d;
++    mtch = b[0].match(sorttable.DATE_RE);
++    y = mtch[3]; m = mtch[2]; d = mtch[1];
++    if (m.length == 1) m = '0'+m;
++    if (d.length == 1) d = '0'+d;
++    dt2 = y+m+d;
++    if (dt1==dt2) return 0;
++    if (dt1<dt2) return -1;
++    return 1;
++  },
++  sort_mmdd: function(a,b) {
++    mtch = a[0].match(sorttable.DATE_RE);
++    y = mtch[3]; d = mtch[2]; m = mtch[1];
++    if (m.length == 1) m = '0'+m;
++    if (d.length == 1) d = '0'+d;
++    dt1 = y+m+d;
++    mtch = b[0].match(sorttable.DATE_RE);
++    y = mtch[3]; d = mtch[2]; m = mtch[1];
++    if (m.length == 1) m = '0'+m;
++    if (d.length == 1) d = '0'+d;
++    dt2 = y+m+d;
++    if (dt1==dt2) return 0;
++    if (dt1<dt2) return -1;
++    return 1;
++  },
++  
++  shaker_sort: function(list, comp_func) {
++    // A stable sort function to allow multi-level sorting of data
++    // see: http://en.wikipedia.org/wiki/Cocktail_sort
++    // thanks to Joseph Nahmias
++    var b = 0;
++    var t = list.length - 1;
++    var swap = true;
++
++    while(swap) {
++        swap = false;
++        for(var i = b; i < t; ++i) {
++            if ( comp_func(list[i], list[i+1]) > 0 ) {
++                var q = list[i]; list[i] = list[i+1]; list[i+1] = q;
++                swap = true;
++            }
++        } // for
++        t--;
++
++        if (!swap) break;
++
++        for(var i = t; i > b; --i) {
++            if ( comp_func(list[i], list[i-1]) < 0 ) {
++                var q = list[i]; list[i] = list[i-1]; list[i-1] = q;
++                swap = true;
++            }
++        } // for
++        b++;
++
++    } // while(swap)
++  }  
++}
++
++/* ******************************************************************
++   Supporting functions: bundled here to avoid depending on a library
++   ****************************************************************** */
++
++// Dean Edwards/Matthias Miller/John Resig
++
++/* for Mozilla/Opera9 */
++if (document.addEventListener) {
++    document.addEventListener("DOMContentLoaded", sorttable.init, false);
++}
++
++/* for Internet Explorer */
++/*@cc_on @*/
++/*@if (@_win32)
++    document.write("<script id=__ie_onload defer src=javascript:void(0)><\/script>");
++    var script = document.getElementById("__ie_onload");
++    script.onreadystatechange = function() {
++        if (this.readyState == "complete") {
++            sorttable.init(); // call the onload handler
++        }
++    };
++/*@end @*/
++
++/* for Safari */
++if (/WebKit/i.test(navigator.userAgent)) { // sniff
++    var _timer = setInterval(function() {
++        if (/loaded|complete/.test(document.readyState)) {
++            sorttable.init(); // call the onload handler
++        }
++    }, 10);
++}
++
++/* for other browsers */
++window.onload = sorttable.init;
++
++// written by Dean Edwards, 2005
++// with input from Tino Zijdel, Matthias Miller, Diego Perini
++
++// http://dean.edwards.name/weblog/2005/10/add-event/
++
++function dean_addEvent(element, type, handler) {
++	if (element.addEventListener) {
++		element.addEventListener(type, handler, false);
++	} else {
++		// assign each event handler a unique ID
++		if (!handler.$$guid) handler.$$guid = dean_addEvent.guid++;
++		// create a hash table of event types for the element
++		if (!element.events) element.events = {};
++		// create a hash table of event handlers for each element/event pair
++		var handlers = element.events[type];
++		if (!handlers) {
++			handlers = element.events[type] = {};
++			// store the existing event handler (if there is one)
++			if (element["on" + type]) {
++				handlers[0] = element["on" + type];
++			}
++		}
++		// store the event handler in the hash table
++		handlers[handler.$$guid] = handler;
++		// assign a global event handler to do all the work
++		element["on" + type] = handleEvent;
++	}
++};
++// a counter used to create unique IDs
++dean_addEvent.guid = 1;
++
++function removeEvent(element, type, handler) {
++	if (element.removeEventListener) {
++		element.removeEventListener(type, handler, false);
++	} else {
++		// delete the event handler from the hash table
++		if (element.events && element.events[type]) {
++			delete element.events[type][handler.$$guid];
++		}
++	}
++};
++
++function handleEvent(event) {
++	var returnValue = true;
++	// grab the event object (IE uses a global event object)
++	event = event || fixEvent(((this.ownerDocument || this.document || this).parentWindow || window).event);
++	// get a reference to the hash table of event handlers
++	var handlers = this.events[event.type];
++	// execute each event handler
++	for (var i in handlers) {
++		this.$$handleEvent = handlers[i];
++		if (this.$$handleEvent(event) === false) {
++			returnValue = false;
++		}
++	}
++	return returnValue;
++};
++
++function fixEvent(event) {
++	// add W3C standard event methods
++	event.preventDefault = fixEvent.preventDefault;
++	event.stopPropagation = fixEvent.stopPropagation;
++	return event;
++};
++fixEvent.preventDefault = function() {
++	this.returnValue = false;
++};
++fixEvent.stopPropagation = function() {
++  this.cancelBubble = true;
++}
++
++// Dean's forEach: http://dean.edwards.name/base/forEach.js
++/*
++	forEach, version 1.0
++	Copyright 2006, Dean Edwards
++	License: http://www.opensource.org/licenses/mit-license.php
++*/
++
++// array-like enumeration
++if (!Array.forEach) { // mozilla already supports this
++	Array.forEach = function(array, block, context) {
++		for (var i = 0; i < array.length; i++) {
++			block.call(context, array[i], i, array);
++		}
++	};
++}
++
++// generic enumeration
++Function.prototype.forEach = function(object, block, context) {
++	for (var key in object) {
++		if (typeof this.prototype[key] == "undefined") {
++			block.call(context, object[key], key, object);
++		}
++	}
++};
++
++// character enumeration
++String.forEach = function(string, block, context) {
++	Array.forEach(string.split(""), function(chr, index) {
++		block.call(context, chr, index, string);
++	});
++};
++
++// globally resolve forEach enumeration
++var forEach = function(object, block, context) {
++	if (object) {
++		var resolve = Object; // default
++		if (object instanceof Function) {
++			// functions have a "length" property
++			resolve = Function;
++		} else if (object.forEach instanceof Function) {
++			// the object implements a custom forEach method so use that
++			object.forEach(block, context);
++			return;
++		} else if (typeof object == "string") {
++			// the object is a string
++			resolve = String;
++		} else if (typeof object.length == "number") {
++			// the object is array-like
++			resolve = Array;
++		}
++		resolve.forEach(object, block, context);
++	}
++};
++
+-- 
+1.7.0.4
+

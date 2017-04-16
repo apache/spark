@@ -1,0 +1,75 @@
+From 4982c344c20ecdf6475de2601fb21f167f4fddea Mon Sep 17 00:00:00 2001
+From: Sho Shimauchi <sho.shimauchi@gmail.com>
+Date: Mon, 12 Mar 2012 13:22:22 +0900
+Subject: [PATCH 1149/1179] HDFS-1773. Do not show decommissioned datanodes on web and JMX interfaces.
+
+Reason: Customer request
+Author: Tanping Wang and Tsz-wo Sze
+Ref: CDH-3799
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   25 ++++++++++++++++++++
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |    5 +++-
+ 2 files changed, 29 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index d6bea5a..341fbc9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -5766,6 +5766,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     final Map<String, Object> info = new HashMap<String, Object>();
+     final ArrayList<DatanodeDescriptor> deadNodeList =
+       this.getDatanodeListForReport(DatanodeReportType.DEAD); 
++    removeDecomNodeFromDeadList(deadNodeList);
+     for (DatanodeDescriptor node : deadNodeList) {
+       final Map<String, Object> innerinfo = new HashMap<String, Object>();
+       innerinfo.put("lastContact", getLastContact(node));
+@@ -5871,4 +5872,28 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     }
+     return rackSet.size();
+   }
++
++  /**
++   * Remove an already decommissioned data node who is neither in include nor
++   * exclude lists from the dead node list.
++   * @param dead, array list of dead nodes
++   */
++  void removeDecomNodeFromDeadList(ArrayList<DatanodeDescriptor> dead) {
++    // If the include list is empty, any nodes are welcomed and it does not 
++    // make sense to exclude any nodes from the cluster.  Therefore, no remove.
++    if (hostsReader.getHosts().isEmpty()) {
++      return;
++    }
++    for (Iterator<DatanodeDescriptor> it = dead.iterator();it.hasNext();){
++      DatanodeDescriptor node = it.next();
++      if ((!inHostsList(node,null)) 
++          && (!inExcludedHostsList(node, null))
++          && node.isDecommissioned()){
++        // Include list is not empty, an existing datanode does not appear 
++        // in both include or exclude lists and it has been decommissioned.
++        // Remove it from dead node list.
++        it.remove();
++      } 
++    }
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index 2c25f2d..1ae4e58 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -176,9 +176,12 @@ public class JspHelper {
+   }
+   public void DFSNodesStatus(ArrayList<DatanodeDescriptor> live,
+                              ArrayList<DatanodeDescriptor> dead) {
+-    if (fsn != null)
++    if (fsn != null) {
+       fsn.DFSNodesStatus(live, dead);
++      fsn.removeDecomNodeFromDeadList(dead);  
++    }
+   }
++
+   public void addTableHeader(JspWriter out) throws IOException {
+     out.print("<table class=\"nnbrowse datatable\">\n");
+   }
+-- 
+1.7.0.4
+

@@ -1,0 +1,189 @@
+From 0f2f19e1bd5725f6163998ae86d9103c0d552de3 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 13 May 2010 20:07:02 -0700
+Subject: [PATCH 0244/1179] HDFS-1024. SecondaryNamenode fails to checkpoint because namenode fails with CancelledKeyException.
+
+Description: The secondary namenode fails to retrieve the entire fsimage from the Namenode. It fetches a part of the fsimage but believes that it has fetched the entire fsimage file and proceeds ahead with the checkpointing.
+
+Reason: Bug fix
+Author: Eli Collins
+Ref: CDH-891
+---
+ .../hdfs/server/namenode/GetImageServlet.java      |    4 ++
+ .../hdfs/server/namenode/TransferFsImage.java      |   28 +++++++++++
+ .../hdfs/server/namenode/TestCheckpoint.java       |   52 +++++++++++++++++++-
+ 3 files changed, 83 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+index d6e7180..b92e0d0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+@@ -45,10 +45,14 @@ public class GetImageServlet extends HttpServlet {
+       FSImage nnImage = (FSImage)context.getAttribute("name.system.image");
+       TransferFsImage ff = new TransferFsImage(pmap, request, response);
+       if (ff.getImage()) {
++        response.setHeader(TransferFsImage.CONTENT_LENGTH,
++          String.valueOf(nnImage.getFsImageName().length()));
+         // send fsImage
+         TransferFsImage.getFileServer(response.getOutputStream(),
+                                       nnImage.getFsImageName()); 
+       } else if (ff.getEdit()) {
++        response.setHeader(TransferFsImage.CONTENT_LENGTH,
++          String.valueOf(nnImage.getFsEditName().length()));
+         // send edits
+         TransferFsImage.getFileServer(response.getOutputStream(),
+                                       nnImage.getFsEditName());
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+index 68c0621..6f06d81 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+@@ -21,6 +21,7 @@ import java.io.*;
+ import java.net.*;
+ import java.util.Iterator;
+ import java.util.Map;
++import java.lang.Math;
+ import javax.servlet.http.HttpServletResponse;
+ import javax.servlet.http.HttpServletRequest;
+ 
+@@ -32,6 +33,8 @@ import org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode.ErrorSimulator;
+  */
+ class TransferFsImage implements FSConstants {
+   
++  public final static String CONTENT_LENGTH = "Content-Length";
++  
+   private boolean isGetImage;
+   private boolean isGetEdit;
+   private boolean isPutImage;
+@@ -118,6 +121,16 @@ class TransferFsImage implements FSConstants {
+         throw new IOException("If this exception is not caught by the " +
+             "name-node fs image will be truncated.");
+       }
++      
++      if (ErrorSimulator.getErrorSimulation(3)
++          && localfile.getAbsolutePath().contains("fsimage")) {
++          // Test sending image shorter than localfile
++          long len = localfile.length();
++          buf = new byte[(int)Math.min(len/2, BUFFER_SIZE)];
++          // This will read at most half of the image
++          // and the rest of the image will be sent over the wire
++          infile.read(buf);
++      }
+       int num = 1;
+       while (num > 0) {
+         num = infile.read(buf);
+@@ -148,6 +161,15 @@ class TransferFsImage implements FSConstants {
+     //
+     URL url = new URL(str.toString());
+     URLConnection connection = url.openConnection();
++    long advertisedSize;
++    String contentLength = connection.getHeaderField(CONTENT_LENGTH);
++    if (contentLength != null) {
++      advertisedSize = Long.parseLong(contentLength);
++    } else {
++      throw new IOException(CONTENT_LENGTH + " header is not provided " +
++                            "by the namenode when trying to fetch " + str);
++    }
++    long received = 0;
+     InputStream stream = connection.getInputStream();
+     FileOutputStream[] output = null;
+ 
+@@ -162,6 +184,7 @@ class TransferFsImage implements FSConstants {
+       while (num > 0) {
+         num = stream.read(buf);
+         if (num > 0 && localPath != null) {
++          received += num;
+           for (int i = 0; i < output.length; i++) {
+             output[i].write(buf, 0, num);
+           }
+@@ -176,6 +199,11 @@ class TransferFsImage implements FSConstants {
+           }
+         }
+       }
++      if (received != advertisedSize) {
++        throw new IOException("File " + str + " received length " + received +
++                              " is not of the advertised size " +
++                              advertisedSize);
++      }
+     }
+   }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
+index 8080928..51069b7 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
+@@ -383,6 +383,55 @@ public class TestCheckpoint extends TestCase {
+   }
+ 
+   /**
++   * Simulate namenode failing to send the whole file
++   * secondary namenode sometimes assumed it received all of it
++   */
++  @SuppressWarnings("deprecation")
++  void testNameNodeImageSendFail(Configuration conf)
++    throws IOException {
++    System.out.println("Starting testNameNodeImageSendFail");
++    Path file1 = new Path("checkpointww.dat");
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, numDatanodes, 
++                                                false, null);
++    cluster.waitActive();
++    FileSystem fileSys = cluster.getFileSystem();
++    try {
++      assertTrue(!fileSys.exists(file1));
++      //
++      // Make the checkpoint fail after rolling the edit log.
++      //
++      SecondaryNameNode secondary = startSecondaryNameNode(conf);
++      ErrorSimulator.setErrorSimulation(3);
++
++      try {
++        secondary.doCheckpoint();  // this should fail
++        fail("Did not get expected exception");
++      } catch (IOException e) {
++        // We only sent part of the image. Have to trigger this exception
++        assertTrue(e.getMessage().contains("is not of the advertised size"));
++      }
++      ErrorSimulator.clearErrorSimulation(3);
++      secondary.shutdown(); // secondary namenode crash!
++
++      // start new instance of secondary and verify that 
++      // a new rollEditLog suceedes inspite of the fact that 
++      // edits.new already exists.
++      //
++      secondary = startSecondaryNameNode(conf);
++      secondary.doCheckpoint();  // this should work correctly
++      secondary.shutdown();
++
++      //
++      // Create a new file
++      //
++      writeFile(fileSys, file1, replication);
++      checkFile(fileSys, file1, replication);
++    } finally {
++      fileSys.close();
++      cluster.shutdown();
++    }
++  }
++  /**
+    * Test different startup scenarios.
+    * <p><ol>
+    * <li> Start of primary name-node in secondary directory must succeed. 
+@@ -592,7 +641,7 @@ public class TestCheckpoint extends TestCase {
+       // Take a checkpoint
+       //
+       SecondaryNameNode secondary = startSecondaryNameNode(conf);
+-      ErrorSimulator.initializeErrorSimulationEvent(3);
++      ErrorSimulator.initializeErrorSimulationEvent(4);
+       secondary.doCheckpoint();
+       secondary.shutdown();
+     } finally {
+@@ -646,6 +695,7 @@ public class TestCheckpoint extends TestCase {
+ 
+     // file2 is left behind.
+ 
++    testNameNodeImageSendFail(conf);
+     testSecondaryNamenodeError1(conf);
+     testSecondaryNamenodeError2(conf);
+     testSecondaryNamenodeError3(conf);
+-- 
+1.7.0.4
+

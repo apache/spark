@@ -1,0 +1,48 @@
+From 4305750d026b895b3afbd0d4a4ee4b3b42596016 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 15:01:29 -0800
+Subject: [PATCH 0093/1179] HADOOP-6269. Missing synchronization for defaultResources in Configuration.addResource
+
+Description: Configuration.defaultResources is a simple ArrayList. In two places in Configuration it is accessed without appropriate synchronization, which we've seen to occasionally result in ConcurrentModificationExceptions.
+Reason: Bugfix (race condition)
+Author: Sreekanth Ramakrishnan
+Ref: UNKNOWN
+---
+ src/core/org/apache/hadoop/conf/Configuration.java |   14 +++++++++-----
+ 1 files changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index f03b657..f6d1213 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -1052,10 +1052,12 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+                              ArrayList resources,
+                              boolean quiet) {
+     if(loadDefaults) {
+-      for (String resource : defaultResources) {
+-        loadResource(properties, resource, quiet);
+-      }
+-    
++      // To avoid addResource causing a ConcurrentModificationException
++      synchronized(Configuration.class) {
++        for (String resource : defaultResources) {
++          loadResource(properties, resource, quiet);
++        }
++      }    
+       //support the hadoop-site.xml as a deprecated case
+       if(getResource("hadoop-site.xml")!=null) {
+         loadResource(properties, "hadoop-site.xml", quiet);
+@@ -1268,7 +1270,9 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+     StringBuffer sb = new StringBuffer();
+     sb.append("Configuration: ");
+     if(loadDefaults) {
+-      toString(defaultResources, sb);
++      synchronized (Configuration.class) {
++        toString(defaultResources, sb);
++      }
+       if(resources.size()>0) {
+         sb.append(", ");
+       }
+-- 
+1.7.0.4
+

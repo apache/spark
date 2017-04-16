@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+for ((i=0; i < $NUM_OF_SMALL_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/pipesort.small.$i
+    mkdir $CLUSTER_DIR
+
+    hod script -d $CLUSTER_DIR $SMALL_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/pipesort/text-sort.small  2>&1 > pipesort.small.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/streamsort.small.$i
+    mkdir $CLUSTER_DIR
+    hod script -d $CLUSTER_DIR $SMALL_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/streamsort/text-sort.small  2>&1 > streamsort.small.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/javasort.small.$i
+    mkdir $CLUSTER_DIR
+    hod script -d $CLUSTER_DIR $SMALL_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/javasort/text-sort.small  2>&1 > javasort.small.$i.out  &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+    
+for ((i=0; i < $NUM_OF_MEDIUM_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/pipesort.medium.$i
+    mkdir $CLUSTER_DIR
+    hod script -d $CLUSTER_DIR $MEDIUM_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/pipesort/text-sort.medium  2>&1 > pipesort.medium.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/streamsort.medium.$i
+    mkdir $CLUSTER_DIR
+    hod script -d $CLUSTER_DIR $MEDIUM_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/streamsort/text-sort.medium  2>&1 > streamsort.medium.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/javasort.medium.$i
+    mkdir $CLUSTER_DIR
+    hod script -d $CLUSTER_DIR $MEDIUM_JOB_HOD_OPTIONS --hod.script=$GRID_MIX_HOME/javasort/text-sort.medium  2>&1 > javasort.medium.$i.out  &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+
+for ((i=0; i < $NUM_OF_LARGE_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/pipesort.large.$i
+    mkdir $CLUSTER_DIR
+    hod  script -d $CLUSTER_DIR $LARGE_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/pipesort/text-sort.large  2>&1 >  pipesort.large.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/streamsort.large.$i
+    mkdir $CLUSTER_DIR
+    hod script -d $CLUSTER_DIR $LARGE_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/streamsort/text-sort.large  2>&1 > streamsort.large.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/javasort.large.$i
+    mkdir $CLUSTER_DIR
+    hod  script -d $CLUSTER_DIR $LARGE_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/javasort/text-sort.large  2>&1 > javasort.large.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+    

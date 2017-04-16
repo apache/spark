@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<configuration>
+
+<property>
+  <name>mapred.reduce.tasks</name>
+  <value>2</value>
+</property>
+
+<property>
+  <name>hadoop.pipes.executable</name>
+  <value>/examples/bin/wordcount-simple#wordcount-simple</value>
+  <description> Executable path is given as "path#executable-name"
+                sothat the executable will have a symlink in working directory.
+                This can be used for gdb debugging etc.
+  </description>
+</property>
+
+<property>
+  <name>hadoop.pipes.java.recordreader</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>hadoop.pipes.java.recordwriter</name>
+  <value>true</value>
+</property>
+
+</configuration>

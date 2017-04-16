@@ -1,0 +1,79 @@
+From 7f9f42b27b109eff6fafc6ee24526fcadaf68d69 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:52:23 -0800
+Subject: [PATCH 0219/1179] MAPREDUCE-1467. Add a --verbose flag to Sqoop
+
+Description: Need a <tt>--verbose</tt> flag that sets the log4j level to DEBUG.
+Reason: Logging improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/contrib/sqoop/doc/Sqoop-manpage.txt            |    3 +++
+ src/contrib/sqoop/doc/misc-args.txt                |    4 ++++
+ .../java/org/apache/hadoop/sqoop/SqoopOptions.java |   10 ++++++++++
+ 3 files changed, 17 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/sqoop/doc/Sqoop-manpage.txt b/src/contrib/sqoop/doc/Sqoop-manpage.txt
+index 84da64c..be82c66 100644
+--- a/src/contrib/sqoop/doc/Sqoop-manpage.txt
++++ b/src/contrib/sqoop/doc/Sqoop-manpage.txt
+@@ -186,6 +186,9 @@ no import or code generation is performed.
+ --list-tables::
+   List tables in database and exit
+ 
++--verbose::
++  Print more information while working
++
+ Database-specific options
+ ~~~~~~~~~~~~~~~~~~~~~~~~~
+ 
+diff --git a/src/contrib/sqoop/doc/misc-args.txt b/src/contrib/sqoop/doc/misc-args.txt
+index 9d77a98..2143942 100644
+--- a/src/contrib/sqoop/doc/misc-args.txt
++++ b/src/contrib/sqoop/doc/misc-args.txt
+@@ -34,3 +34,7 @@ Data emitted to HDFS is by default uncompressed. You can instruct
+ Sqoop to use gzip to compress your data by providing either the
+ +--compress+ or +-z+ argument (both are equivalent).
+ 
++Using +--verbose+ will instruct Sqoop to print more details about its
++operation; this is particularly handy if Sqoop appears to be misbehaving.
++
++
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
+index d11788b..c09ea0c 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/SqoopOptions.java
+@@ -31,6 +31,9 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.util.ToolRunner;
++import org.apache.log4j.Category;
++import org.apache.log4j.Level;
++import org.apache.log4j.Logger;
+ 
+ /**
+  * Command-line arguments used by Sqoop
+@@ -363,6 +366,7 @@ public class SqoopOptions {
+     System.out.println("--list-tables                List tables in database and exit");
+     System.out.println("--list-databases             List all databases available and exit");
+     System.out.println("--debug-sql (statement)      Execute 'statement' in SQL and exit");
++    System.out.println("--verbose                    Print more information while working");
+     System.out.println("");
+     System.out.println("Database-specific options:");
+     System.out.println("Arguments may be passed to the database manager after a lone '-':");
+@@ -595,6 +599,12 @@ public class SqoopOptions {
+           for (i++; i < args.length; i++) {
+             this.debugSqlCmd = this.debugSqlCmd + args[i] + " ";
+           }
++        } else if (args[i].equals("--verbose")) {
++          // Immediately switch into DEBUG logging.
++          Category sqoopLogger =
++              Logger.getLogger(SqoopOptions.class.getName()).getParent();
++          sqoopLogger.setLevel(Level.DEBUG);
++
+         } else if (args[i].equals("--help")) {
+           printUsage();
+           throw new InvalidOptionsException("");
+-- 
+1.7.0.4
+

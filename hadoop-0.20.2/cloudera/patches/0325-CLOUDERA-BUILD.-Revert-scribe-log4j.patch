@@ -1,0 +1,39 @@
+From e463bba27fcae3ea83a8d33a64a8c1c38c2a7578 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 24 Aug 2010 13:41:13 -0700
+Subject: [PATCH 0325/1179] CLOUDERA-BUILD. Revert scribe log4j.
+
+Revert "CLOUDERA-BUILD. Fix scribe-log4j's ivy.xml to properly get log4j on the compile classpath"
+
+This reverts commit 349281bfa0243f5adbbd459266f4a9ac7ac8c1cc.
+
+Ref: CDH-742
+---
+ src/contrib/scribe-log4j/ivy.xml |   12 ------------
+ 1 files changed, 0 insertions(+), 12 deletions(-)
+
+diff --git a/src/contrib/scribe-log4j/ivy.xml b/src/contrib/scribe-log4j/ivy.xml
+index 4b26330..b51d9d9 100644
+--- a/src/contrib/scribe-log4j/ivy.xml
++++ b/src/contrib/scribe-log4j/ivy.xml
+@@ -19,17 +19,5 @@
+     <conf name="test" visibility="private" extends="runtime"/>
+   </configurations>
+   <dependencies>
+-    <dependency org="commons-logging"
+-      name="commons-logging"
+-      rev="${commons-logging.version}"
+-      conf="common->master"/>
+-    <dependency org="log4j"
+-      name="log4j"
+-      rev="${log4j.version}"
+-      conf="common->master"/>
+-   <dependency org="junit"
+-      name="junit"
+-      rev="${junit.version}"
+-      conf="common->master"/>
+   </dependencies>
+ </ivy-module>
+-- 
+1.7.0.4
+

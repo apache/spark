@@ -1,0 +1,31 @@
+From 4d2f9fdf63f30f0149f60142796838e245e7d564 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 18 Oct 2009 23:21:37 -0700
+Subject: [PATCH 0374/1179] MAPREDUCE-1088. JobHistory files should have narrower 0600 perms
+
+Patch: https://issues.apache.org/jira/secure/attachment/12422526/MAPREDUCE-1088_yhadoop20.patch
+Author: Arun C Murthy
+Ref: CDH-648
+---
+ .../org/apache/hadoop/mapred/JobHistory.java       |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index c05ed79..bb550c1 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -103,9 +103,9 @@ public class JobHistory {
+   private static String jobtrackerHostname;
+   private static JobHistoryFilesManager fileManager = null;
+   final static FsPermission HISTORY_DIR_PERMISSION =
+-    FsPermission.createImmutable((short) 0750); // rwxr-x---
++    FsPermission.createImmutable((short) 0755); // rwxr-xr-x
+   final static FsPermission HISTORY_FILE_PERMISSION =
+-    FsPermission.createImmutable((short) 0740); // rwxr-----
++    FsPermission.createImmutable((short) 0744); // rwxr--r--
+   private static FileSystem LOGDIR_FS; // log dir filesystem
+   private static FileSystem DONEDIR_FS; // Done dir filesystem
+   private static JobConf jtConf;
+-- 
+1.7.0.4
+

@@ -1,0 +1,38 @@
+From 057e7fc4942d0aa9a36f5b0ae2dd73d516fcf8ba Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 7 May 2010 13:15:22 +0530
+Subject: [PATCH 0643/1179] HADOOP-6757. Fix NPE when streaming jobs launch further Hadoop clients
+
+Patch: https://issues.apache.org/jira/secure/attachment/12443934/BZ-3620565-v1.0.patch
+Author: Amar Kamat
+Ref: YDH
+---
+ bin/hadoop |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 67c7f82..3eefd65 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -224,8 +224,10 @@ elif [ "$COMMAND" = "tasktracker" ] ; then
+   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_TASKTRACKER_OPTS"
+ elif [ "$COMMAND" = "job" ] ; then
+   CLASS=org.apache.hadoop.mapred.JobClient
++  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+ elif [ "$COMMAND" = "queue" ] ; then
+   CLASS=org.apache.hadoop.mapred.JobQueueClient
++  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+ elif [ "$COMMAND" = "pipes" ] ; then
+   CLASS=org.apache.hadoop.mapred.pipes.Submitter
+   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+@@ -234,6 +236,7 @@ elif [ "$COMMAND" = "version" ] ; then
+   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+ elif [ "$COMMAND" = "jar" ] ; then
+   CLASS=org.apache.hadoop.util.RunJar
++  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+ elif [ "$COMMAND" = "distcp" ] ; then
+   CLASS=org.apache.hadoop.tools.DistCp
+   CLASSPATH=${CLASSPATH}:${TOOL_PATH}
+-- 
+1.7.0.4
+

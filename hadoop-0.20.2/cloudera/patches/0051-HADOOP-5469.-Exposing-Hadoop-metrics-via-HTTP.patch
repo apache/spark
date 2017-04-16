@@ -1,0 +1,700 @@
+From cad421ec1c51382f81714ccafb96a6bb8bcc8aec Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:46:11 -0800
+Subject: [PATCH 0051/1179] HADOOP-5469. Exposing Hadoop metrics via HTTP
+
+Description: Implement a "/metrics" URL on the HTTP server of Hadoop daemons, to expose metrics data to users via their web browsers, in plain-text and JSON.
+Reason: MISSING: Reason for inclusion
+Author: Philip Zeyliger
+Ref: UNKNOWN
+---
+ src/core/org/apache/hadoop/http/HttpServer.java    |    2 +
+ .../org/apache/hadoop/metrics/ContextFactory.java  |   10 ++
+ .../org/apache/hadoop/metrics/MetricsContext.java  |   13 ++-
+ .../org/apache/hadoop/metrics/MetricsServlet.java  |  160 ++++++++++++++++++++
+ .../apache/hadoop/metrics/file/FileContext.java    |   14 +--
+ .../hadoop/metrics/ganglia/GangliaContext.java     |   14 +--
+ .../hadoop/metrics/spi/AbstractMetricsContext.java |   52 ++++++-
+ .../hadoop/metrics/spi/NoEmitMetricsContext.java   |   49 ++++++
+ .../metrics/spi/NullContextWithUpdateThread.java   |   16 +--
+ .../apache/hadoop/metrics/spi/OutputRecord.java    |   20 +++-
+ .../apache/hadoop/metrics/TestMetricsServlet.java  |  110 ++++++++++++++
+ .../hadoop/metrics/spi/TestOutputRecord.java       |   38 +++++
+ 12 files changed, 453 insertions(+), 45 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/metrics/MetricsServlet.java
+ create mode 100644 src/core/org/apache/hadoop/metrics/spi/NoEmitMetricsContext.java
+ create mode 100644 src/test/org/apache/hadoop/metrics/TestMetricsServlet.java
+ create mode 100644 src/test/org/apache/hadoop/metrics/spi/TestOutputRecord.java
+
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index 4fc44c1..200b99b 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -38,6 +38,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.log.LogLevel;
++import org.apache.hadoop.metrics.MetricsServlet;
+ import org.apache.hadoop.util.ReflectionUtils;
+ 
+ import org.mortbay.jetty.Connector;
+@@ -189,6 +190,7 @@ public class HttpServer implements FilterContainer {
+     // set up default servlets
+     addServlet("stacks", "/stacks", StackServlet.class);
+     addServlet("logLevel", "/logLevel", LogLevel.Servlet.class);
++    addServlet("metrics", "/metrics", MetricsServlet.class);
+   }
+ 
+   public void addContext(Context ctxt, boolean isFiltered)
+diff --git a/src/core/org/apache/hadoop/metrics/ContextFactory.java b/src/core/org/apache/hadoop/metrics/ContextFactory.java
+index be83700..81ea8c8 100644
+--- a/src/core/org/apache/hadoop/metrics/ContextFactory.java
++++ b/src/core/org/apache/hadoop/metrics/ContextFactory.java
+@@ -22,6 +22,8 @@ package org.apache.hadoop.metrics;
+ 
+ import java.io.IOException;
+ import java.io.InputStream;
++import java.util.ArrayList;
++import java.util.Collection;
+ import java.util.HashMap;
+ import java.util.Iterator;
+ import java.util.Map;
+@@ -142,6 +144,14 @@ public class ContextFactory {
+            IllegalAccessException {
+     return getContext(contextName, contextName);
+   }
++  
++  /** 
++   * Returns all MetricsContexts built by this factory.
++   */
++  public synchronized Collection<MetricsContext> getAllContexts() {
++    // Make a copy to avoid race conditions with creating new contexts.
++    return new ArrayList<MetricsContext>(contextMap.values());
++  }
+     
+   /**
+    * Returns a "null" context - one which does nothing.
+diff --git a/src/core/org/apache/hadoop/metrics/MetricsContext.java b/src/core/org/apache/hadoop/metrics/MetricsContext.java
+index ba0d149..588a572 100644
+--- a/src/core/org/apache/hadoop/metrics/MetricsContext.java
++++ b/src/core/org/apache/hadoop/metrics/MetricsContext.java
+@@ -21,6 +21,10 @@
+ package org.apache.hadoop.metrics;
+ 
+ import java.io.IOException;
++import java.util.Collection;
++import java.util.Map;
++
++import org.apache.hadoop.metrics.spi.OutputRecord;
+ 
+ /**
+  * The main interface to the metrics package. 
+@@ -103,5 +107,12 @@ public interface MetricsContext {
+    * Returns the timer period.
+    */
+   public abstract int getPeriod();
+-    
++  
++  /**
++   * Retrieves all the records managed by this MetricsContext.
++   * Useful for monitoring systems that are polling-based.
++   * 
++   * @return A non-null map from all record names to the records managed.
++   */
++   Map<String, Collection<OutputRecord>> getAllRecords();
+ }
+diff --git a/src/core/org/apache/hadoop/metrics/MetricsServlet.java b/src/core/org/apache/hadoop/metrics/MetricsServlet.java
+new file mode 100644
+index 0000000..44c0bd3
+--- /dev/null
++++ b/src/core/org/apache/hadoop/metrics/MetricsServlet.java
+@@ -0,0 +1,160 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.metrics;
++
++import java.io.IOException;
++import java.io.PrintWriter;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.List;
++import java.util.Map;
++import java.util.TreeMap;
++
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServlet;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++
++import org.apache.hadoop.metrics.spi.OutputRecord;
++import org.apache.hadoop.metrics.spi.AbstractMetricsContext.MetricMap;
++import org.apache.hadoop.metrics.spi.AbstractMetricsContext.TagMap;
++import org.mortbay.util.ajax.JSON;
++import org.mortbay.util.ajax.JSON.Output;
++
++/**
++ * A servlet to print out metrics data.  By default, the servlet returns a 
++ * textual representation (no promises are made for parseability), and
++ * users can use "?format=json" for parseable output.
++ */
++public class MetricsServlet extends HttpServlet {
++  
++  /**
++   * A helper class to hold a TagMap and MetricMap.
++   */
++  static class TagsMetricsPair implements JSON.Convertible {
++    final TagMap tagMap;
++    final MetricMap metricMap;
++    
++    public TagsMetricsPair(TagMap tagMap, MetricMap metricMap) {
++      this.tagMap = tagMap;
++      this.metricMap = metricMap;
++    }
++
++    @SuppressWarnings("unchecked")
++    public void fromJSON(Map map) {
++      throw new UnsupportedOperationException();
++    }
++
++    /** Converts to JSON by providing an array. */
++    public void toJSON(Output out) {
++      out.add(new Object[] { tagMap, metricMap });
++    }
++  }
++  
++  /**
++   * Collects all metric data, and returns a map:
++   *   contextName -> recordName -> [ (tag->tagValue), (metric->metricValue) ].
++   * The values are either String or Number.  The final value is implemented
++   * as a list of TagsMetricsPair.
++   */
++   Map<String, Map<String, List<TagsMetricsPair>>> makeMap(
++       Collection<MetricsContext> contexts) throws IOException {
++    Map<String, Map<String, List<TagsMetricsPair>>> map = 
++      new TreeMap<String, Map<String, List<TagsMetricsPair>>>();
++
++    for (MetricsContext context : contexts) {
++      Map<String, List<TagsMetricsPair>> records = 
++        new TreeMap<String, List<TagsMetricsPair>>();
++      map.put(context.getContextName(), records);
++    
++      for (Map.Entry<String, Collection<OutputRecord>> r : 
++          context.getAllRecords().entrySet()) {
++        List<TagsMetricsPair> metricsAndTags = 
++          new ArrayList<TagsMetricsPair>();
++        records.put(r.getKey(), metricsAndTags);
++        for (OutputRecord outputRecord : r.getValue()) {
++          TagMap tagMap = outputRecord.getTagsCopy();
++          MetricMap metricMap = outputRecord.getMetricsCopy();
++          metricsAndTags.add(new TagsMetricsPair(tagMap, metricMap));
++        }
++      }
++    }
++    return map;
++  }
++  
++  @Override
++  public void doGet(HttpServletRequest request, HttpServletResponse response)
++      throws ServletException, IOException {
++    PrintWriter out = new PrintWriter(response.getOutputStream());
++    String format = request.getParameter("format");
++    Collection<MetricsContext> allContexts = 
++      ContextFactory.getFactory().getAllContexts();
++    if ("json".equals(format)) {
++      // Uses Jetty's built-in JSON support to convert the map into JSON.
++      out.print(new JSON().toJSON(makeMap(allContexts)));
++    } else {
++      printMap(out, makeMap(allContexts));
++    }
++    out.close();
++  }
++  
++  /**
++   * Prints metrics data in a multi-line text form.
++   */
++  void printMap(PrintWriter out, Map<String, Map<String, List<TagsMetricsPair>>> map) {
++    for (Map.Entry<String, Map<String, List<TagsMetricsPair>>> context : map.entrySet()) {
++      out.println(context.getKey());
++      for (Map.Entry<String, List<TagsMetricsPair>> record : context.getValue().entrySet()) {
++        indent(out, 1);
++        out.println(record.getKey());
++        for (TagsMetricsPair pair : record.getValue()) {
++          indent(out, 2);
++          // Prints tag values in the form "{key=value,key=value}:"
++          out.print("{");
++          boolean first = true;
++          for (Map.Entry<String, Object> tagValue : pair.tagMap.entrySet()) {
++            if (first) {
++              first = false;
++            } else {
++              out.print(",");
++            }
++            out.print(tagValue.getKey());
++            out.print("=");
++            out.print(tagValue.getValue().toString());
++          }
++          out.println("}:");
++          
++          // Now print metric values, one per line
++          for (Map.Entry<String, Number> metricValue : 
++              pair.metricMap.entrySet()) {
++            indent(out, 3);
++            out.print(metricValue.getKey());
++            out.print("=");
++            out.println(metricValue.getValue().toString());
++          }
++        }
++      }
++    }    
++  }
++  
++  private void indent(PrintWriter out, int indent) {
++    for (int i = 0; i < indent; ++i) {
++      out.append("  ");
++    }
++  }
++}
+diff --git a/src/core/org/apache/hadoop/metrics/file/FileContext.java b/src/core/org/apache/hadoop/metrics/file/FileContext.java
+index 8686a75..1619327 100644
+--- a/src/core/org/apache/hadoop/metrics/file/FileContext.java
++++ b/src/core/org/apache/hadoop/metrics/file/FileContext.java
+@@ -27,7 +27,6 @@ import java.io.IOException;
+ import java.io.PrintWriter;
+ 
+ import org.apache.hadoop.metrics.ContextFactory;
+-import org.apache.hadoop.metrics.MetricsException;
+ import org.apache.hadoop.metrics.spi.AbstractMetricsContext;
+ import org.apache.hadoop.metrics.spi.OutputRecord;
+ 
+@@ -62,18 +61,7 @@ public class FileContext extends AbstractMetricsContext {
+       file = new File(fileName);
+     }
+         
+-    String periodStr = getAttribute(PERIOD_PROPERTY);
+-    if (periodStr != null) {
+-      int period = 0;
+-      try {
+-        period = Integer.parseInt(periodStr);
+-      } catch (NumberFormatException nfe) {
+-      }
+-      if (period <= 0) {
+-        throw new MetricsException("Invalid period: " + periodStr);
+-      }
+-      setPeriod(period);
+-    }
++    parseAndSetPeriod(PERIOD_PROPERTY);
+   }
+ 
+   /**
+diff --git a/src/core/org/apache/hadoop/metrics/ganglia/GangliaContext.java b/src/core/org/apache/hadoop/metrics/ganglia/GangliaContext.java
+index 73d837e..1affb02 100644
+--- a/src/core/org/apache/hadoop/metrics/ganglia/GangliaContext.java
++++ b/src/core/org/apache/hadoop/metrics/ganglia/GangliaContext.java
+@@ -88,19 +88,7 @@ public class GangliaContext extends AbstractMetricsContext {
+     
+   public void init(String contextName, ContextFactory factory) {
+     super.init(contextName, factory);
+-        
+-    String periodStr = getAttribute(PERIOD_PROPERTY);
+-    if (periodStr != null) {
+-      int period = 0;
+-      try {
+-        period = Integer.parseInt(periodStr);
+-      } catch (NumberFormatException nfe) {
+-      }
+-      if (period <= 0) {
+-        throw new MetricsException("Invalid period: " + periodStr);
+-      }
+-      setPeriod(period);
+-    }
++    parseAndSetPeriod(PERIOD_PROPERTY);
+         
+     metricsServers = 
+       Util.parse(getAttribute(SERVERS_PROPERTY), DEFAULT_PORT); 
+diff --git a/src/core/org/apache/hadoop/metrics/spi/AbstractMetricsContext.java b/src/core/org/apache/hadoop/metrics/spi/AbstractMetricsContext.java
+index 8e9205f..e6f85ae 100644
+--- a/src/core/org/apache/hadoop/metrics/spi/AbstractMetricsContext.java
++++ b/src/core/org/apache/hadoop/metrics/spi/AbstractMetricsContext.java
+@@ -26,6 +26,7 @@ import java.util.Collection;
+ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.Iterator;
++import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
+ import java.util.Timer;
+@@ -60,7 +61,7 @@ public abstract class AbstractMetricsContext implements MetricsContext {
+   private ContextFactory factory = null;
+   private String contextName = null;
+     
+-  static class TagMap extends TreeMap<String,Object> {
++  public static class TagMap extends TreeMap<String,Object> {
+     private static final long serialVersionUID = 3546309335061952993L;
+     TagMap() {
+       super();
+@@ -83,8 +84,14 @@ public abstract class AbstractMetricsContext implements MetricsContext {
+     }
+   }
+   
+-  static class MetricMap extends TreeMap<String,Number> {
++  public static class MetricMap extends TreeMap<String,Number> {
+     private static final long serialVersionUID = -7495051861141631609L;
++    MetricMap() {
++      super();
++    }
++    MetricMap(MetricMap orig) {
++      super(orig);
++    }
+   }
+             
+   static class RecordMap extends HashMap<TagMap,MetricMap> {
+@@ -309,6 +316,28 @@ public abstract class AbstractMetricsContext implements MetricsContext {
+     }
+     flush();
+   }
++  
++  /**
++   * Retrieves all the records managed by this MetricsContext.
++   * Useful for monitoring systems that are polling-based.
++   * @return A non-null collection of all monitoring records.
++   */
++  public synchronized Map<String, Collection<OutputRecord>> getAllRecords() {
++    Map<String, Collection<OutputRecord>> out = new TreeMap<String, Collection<OutputRecord>>();
++    for (String recordName : bufferedData.keySet()) {
++      RecordMap recordMap = bufferedData.get(recordName);
++      synchronized (recordMap) {
++        List<OutputRecord> records = new ArrayList<OutputRecord>();
++        Set<Entry<TagMap, MetricMap>> entrySet = recordMap.entrySet();
++        for (Entry<TagMap, MetricMap> entry : entrySet) {
++          OutputRecord outRec = new OutputRecord(entry.getKey(), entry.getValue());
++          records.add(outRec);
++        }
++        out.put(recordName, records);
++      }
++    }
++    return out;
++  }
+ 
+   /**
+    * Sends a record to the metrics system.
+@@ -424,4 +453,23 @@ public abstract class AbstractMetricsContext implements MetricsContext {
+   protected void setPeriod(int period) {
+     this.period = period;
+   }
++  
++  /**
++   * If a period is set in the attribute passed in, override
++   * the default with it.
++   */
++  protected void parseAndSetPeriod(String attributeName) {
++    String periodStr = getAttribute(attributeName);
++    if (periodStr != null) {
++      int period = 0;
++      try {
++        period = Integer.parseInt(periodStr);
++      } catch (NumberFormatException nfe) {
++      }
++      if (period <= 0) {
++        throw new MetricsException("Invalid period: " + periodStr);
++      }
++      setPeriod(period);
++    }
++  }
+ }
+diff --git a/src/core/org/apache/hadoop/metrics/spi/NoEmitMetricsContext.java b/src/core/org/apache/hadoop/metrics/spi/NoEmitMetricsContext.java
+new file mode 100644
+index 0000000..9e98934
+--- /dev/null
++++ b/src/core/org/apache/hadoop/metrics/spi/NoEmitMetricsContext.java
+@@ -0,0 +1,49 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.metrics.spi;
++
++import org.apache.hadoop.metrics.ContextFactory;
++import org.apache.hadoop.metrics.MetricsServlet;
++
++/** 
++ * A MetricsContext that does not emit data, but, unlike NullContextWithUpdate,
++ * does save it for retrieval with getAllRecords().
++ * 
++ * This is useful if you want to support {@link MetricsServlet}, but
++ * not emit metrics in any other way.
++ */
++public class NoEmitMetricsContext extends AbstractMetricsContext {
++    
++    private static final String PERIOD_PROPERTY = "period";
++      
++    /** Creates a new instance of NullContextWithUpdateThread */
++    public NoEmitMetricsContext() {
++    }
++    
++    public void init(String contextName, ContextFactory factory) {
++      super.init(contextName, factory);
++      parseAndSetPeriod(PERIOD_PROPERTY);
++    }
++     
++    /**
++     * Do-nothing version of emitRecord
++     */
++    protected void emitRecord(String contextName, String recordName,
++                              OutputRecord outRec) {
++    }
++}
+diff --git a/src/core/org/apache/hadoop/metrics/spi/NullContextWithUpdateThread.java b/src/core/org/apache/hadoop/metrics/spi/NullContextWithUpdateThread.java
+index 10504c2..5efe5f0 100644
+--- a/src/core/org/apache/hadoop/metrics/spi/NullContextWithUpdateThread.java
++++ b/src/core/org/apache/hadoop/metrics/spi/NullContextWithUpdateThread.java
+@@ -44,21 +44,7 @@ public class NullContextWithUpdateThread extends AbstractMetricsContext {
+   
+   public void init(String contextName, ContextFactory factory) {
+     super.init(contextName, factory);
+-    
+-    // If period is specified, use it, otherwise the default is good enough
+-        
+-    String periodStr = getAttribute(PERIOD_PROPERTY);
+-    if (periodStr != null) {
+-      int period = 0;
+-      try {
+-        period = Integer.parseInt(periodStr);
+-      } catch (NumberFormatException nfe) {
+-      }
+-      if (period <= 0) {
+-        throw new MetricsException("Invalid period: " + periodStr);
+-      }
+-      setPeriod(period);
+-    }
++    parseAndSetPeriod(PERIOD_PROPERTY);
+   }
+    
+     
+diff --git a/src/core/org/apache/hadoop/metrics/spi/OutputRecord.java b/src/core/org/apache/hadoop/metrics/spi/OutputRecord.java
+index 2c91284..4fa5415 100644
+--- a/src/core/org/apache/hadoop/metrics/spi/OutputRecord.java
++++ b/src/core/org/apache/hadoop/metrics/spi/OutputRecord.java
+@@ -21,7 +21,11 @@
+ package org.apache.hadoop.metrics.spi;
+ 
+ import java.util.Collections;
++import java.util.Map;
+ import java.util.Set;
++import java.util.TreeMap;
++import java.util.Map.Entry;
++
+ import org.apache.hadoop.metrics.spi.AbstractMetricsContext.MetricMap;
+ import org.apache.hadoop.metrics.spi.AbstractMetricsContext.TagMap;
+ 
+@@ -68,5 +72,19 @@ public class OutputRecord {
+   public Number getMetric(String name) {
+     return metricMap.get(name);
+   }
+-    
++  
++
++  /**
++   * Returns a copy of this record's tags.
++   */
++  public TagMap getTagsCopy() {
++    return new TagMap(tagMap);
++  }
++  
++  /**
++   * Returns a copy of this record's metrics.
++   */
++  public MetricMap getMetricsCopy() {
++    return new MetricMap(metricMap);
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/metrics/TestMetricsServlet.java b/src/test/org/apache/hadoop/metrics/TestMetricsServlet.java
+new file mode 100644
+index 0000000..8d5cfc9
+--- /dev/null
++++ b/src/test/org/apache/hadoop/metrics/TestMetricsServlet.java
+@@ -0,0 +1,110 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.metrics;
++
++import java.io.IOException;
++import java.io.PrintWriter;
++import java.io.StringWriter;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.List;
++import java.util.Map;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.metrics.MetricsServlet.TagsMetricsPair;
++import org.apache.hadoop.metrics.spi.NoEmitMetricsContext;
++import org.apache.hadoop.metrics.spi.OutputRecord;
++import org.mortbay.util.ajax.JSON;
++
++public class TestMetricsServlet extends TestCase {
++  MetricsContext nc1;
++  MetricsContext nc2;
++  // List containing nc1 and nc2.
++  List<MetricsContext> contexts;
++  OutputRecord outputRecord;
++  
++  /**
++   * Initializes, for testing, two NoEmitMetricsContext's, and adds one value 
++   * to the first of them.
++   */
++  public void setUp() throws IOException {
++    nc1 = new NoEmitMetricsContext();
++    nc1.init("test1", ContextFactory.getFactory());
++    nc2 = new NoEmitMetricsContext();
++    nc2.init("test2", ContextFactory.getFactory());
++    contexts = new ArrayList<MetricsContext>();
++    contexts.add(nc1);
++    contexts.add(nc2);
++
++    MetricsRecord r = nc1.createRecord("testRecord");
++    
++    r.setTag("testTag1", "testTagValue1");
++    r.setTag("testTag2", "testTagValue2");
++    r.setMetric("testMetric1", 1);
++    r.setMetric("testMetric2", 33);
++    r.update();
++
++    Map<String, Collection<OutputRecord>> m = nc1.getAllRecords();
++    assertEquals(1, m.size());
++    assertEquals(1, m.values().size());
++    Collection<OutputRecord> outputRecords = m.values().iterator().next();
++    assertEquals(1, outputRecords.size());
++    outputRecord = outputRecords.iterator().next();
++  }
++  
++ 
++  
++  public void testTagsMetricsPair() throws IOException {
++    TagsMetricsPair pair = new TagsMetricsPair(outputRecord.getTagsCopy(), 
++        outputRecord.getMetricsCopy());
++    String s = JSON.toString(pair);
++    assertEquals(
++        "[{\"testTag1\":\"testTagValue1\",\"testTag2\":\"testTagValue2\"},"+
++        "{\"testMetric1\":1,\"testMetric2\":33}]", s);
++  }
++  
++  public void testGetMap() throws IOException {
++    MetricsServlet servlet = new MetricsServlet();
++    Map<String, Map<String, List<TagsMetricsPair>>> m = servlet.makeMap(contexts);
++    assertEquals("Map missing contexts", 2, m.size());
++    assertTrue(m.containsKey("test1"));
++   
++    Map<String, List<TagsMetricsPair>> m2 = m.get("test1");
++    
++    assertEquals("Missing records", 1, m2.size());
++    assertTrue(m2.containsKey("testRecord"));
++    assertEquals("Wrong number of tags-values pairs.", 1, m2.get("testRecord").size());
++  }
++  
++  public void testPrintMap() throws IOException {
++    StringWriter sw = new StringWriter();
++    PrintWriter out = new PrintWriter(sw);
++    MetricsServlet servlet = new MetricsServlet();
++    servlet.printMap(out, servlet.makeMap(contexts));
++    
++    String EXPECTED = "" +
++      "test1\n" +
++      "  testRecord\n" +
++      "    {testTag1=testTagValue1,testTag2=testTagValue2}:\n" +
++      "      testMetric1=1\n" +
++      "      testMetric2=33\n" +
++      "test2\n";
++    assertEquals(EXPECTED, sw.toString());
++  }
++}
+diff --git a/src/test/org/apache/hadoop/metrics/spi/TestOutputRecord.java b/src/test/org/apache/hadoop/metrics/spi/TestOutputRecord.java
+new file mode 100644
+index 0000000..02e94a9
+--- /dev/null
++++ b/src/test/org/apache/hadoop/metrics/spi/TestOutputRecord.java
+@@ -0,0 +1,38 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.metrics.spi;
++
++import org.apache.hadoop.metrics.spi.AbstractMetricsContext.MetricMap;
++import org.apache.hadoop.metrics.spi.AbstractMetricsContext.TagMap;
++
++import junit.framework.TestCase;
++
++public class TestOutputRecord extends TestCase {
++  public void testCopy() {
++    TagMap tags = new TagMap();
++    tags.put("tagkey", "tagval");
++    MetricMap metrics = new MetricMap();
++    metrics.put("metrickey", 123.4);
++    OutputRecord r = new OutputRecord(tags, metrics);
++    
++    assertEquals(tags, r.getTagsCopy());    
++    assertNotSame(tags, r.getTagsCopy());
++    assertEquals(metrics, r.getMetricsCopy());
++    assertNotSame(metrics, r.getMetricsCopy());
++  } 
++}
+-- 
+1.7.0.4
+

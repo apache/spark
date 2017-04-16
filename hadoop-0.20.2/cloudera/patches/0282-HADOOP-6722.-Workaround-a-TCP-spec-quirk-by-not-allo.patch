@@ -1,0 +1,117 @@
+From 587de668e43486f7109a885f617b9b757d7a649e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 24 Apr 2010 17:33:34 -0700
+Subject: [PATCH 0282/1179] HADOOP-6722. Workaround a TCP spec quirk by not allowing NetUtils.connect to connect to itself
+
+Description: TCP's ephemeral port assignment results in the possibility
+             that a client can connect back to its own outgoing socket,
+             resulting in failed RPCs or datanode transfers.
+Reason: Fixes intermittent errors in cluster testing with ephemeral
+        IPC/transceiver ports on datanodes.
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ src/core/org/apache/hadoop/net/NetUtils.java     |   16 ++++++
+ src/test/org/apache/hadoop/net/TestNetUtils.java |   56 ++++++++++++++++++++++
+ 2 files changed, 72 insertions(+), 0 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/net/TestNetUtils.java
+
+diff --git a/src/core/org/apache/hadoop/net/NetUtils.java b/src/core/org/apache/hadoop/net/NetUtils.java
+index 854a00a..4c33a73 100644
+--- a/src/core/org/apache/hadoop/net/NetUtils.java
++++ b/src/core/org/apache/hadoop/net/NetUtils.java
+@@ -26,6 +26,7 @@ import java.net.Socket;
+ import java.net.SocketAddress;
+ import java.net.URI;
+ import java.net.UnknownHostException;
++import java.net.ConnectException;
+ import java.nio.channels.SocketChannel;
+ import java.util.Map.Entry;
+ import java.util.*;
+@@ -406,6 +407,21 @@ public class NetUtils {
+     } else {
+       SocketIOWithTimeout.connect(ch, endpoint, timeout);
+     }
++
++    // There is a very rare case allowed by the TCP specification, such that
++    // if we are trying to connect to an endpoint on the local machine,
++    // and we end up choosing an ephemeral port equal to the destination port,
++    // we will actually end up getting connected to ourself (ie any data we
++    // send just comes right back). This is only possible if the target
++    // daemon is down, so we'll treat it like connection refused.
++    if (socket.getLocalPort() == socket.getPort() &&
++        socket.getLocalAddress().equals(socket.getInetAddress())) {
++      LOG.info("Detected a loopback TCP socket, disconnecting it");
++      socket.close();
++      throw new ConnectException(
++        "Localhost targeted connection resulted in a loopback. " +
++        "No daemon is listening on the target port.");
++    }
+   }
+   
+   /** 
+diff --git a/src/test/org/apache/hadoop/net/TestNetUtils.java b/src/test/org/apache/hadoop/net/TestNetUtils.java
+new file mode 100644
+index 0000000..52fb209
+--- /dev/null
++++ b/src/test/org/apache/hadoop/net/TestNetUtils.java
+@@ -0,0 +1,56 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.net;
++
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++import java.net.Socket;
++import java.net.ConnectException;
++import java.net.InetSocketAddress;
++import org.apache.hadoop.conf.Configuration;
++
++public class TestNetUtils {
++
++  /**
++   * Test that we can't accidentally connect back to the connecting socket due
++   * to a quirk in the TCP spec.
++   *
++   * This is a regression test for HADOOP-6722.
++   */
++  @Test
++  public void testAvoidLoopbackTcpSockets() throws Exception {
++    Configuration conf = new Configuration();
++
++    Socket socket = NetUtils.getDefaultSocketFactory(conf)
++      .createSocket();
++    socket.bind(new InetSocketAddress("127.0.0.1", 0));
++    System.err.println("local address: " + socket.getLocalAddress());
++    System.err.println("local port: " + socket.getLocalPort());
++    try {
++      NetUtils.connect(socket,
++        new InetSocketAddress(socket.getLocalAddress(), socket.getLocalPort()),
++        20000);
++      socket.close();
++      fail("Should not have connected");
++    } catch (ConnectException ce) {
++      System.err.println("Got exception: " + ce);
++      assertTrue(ce.getMessage().contains("resulted in a loopback"));
++    }
++  }
++}
+-- 
+1.7.0.4
+

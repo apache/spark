@@ -1,0 +1,38 @@
+From 5880960fb32ae0fc2c16bac1f333dbb237c3448f Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:30:27 -0800
+Subject: [PATCH 0166/1179] CLOUDERA-BUILD. Solaris do-release-build fix
+
+Author: Eli Collins
+Ref: CDH-531
+---
+ cloudera/do-release-build |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 459f275..b160c37 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -5,11 +5,19 @@
+ 
+ set -e
+ 
++if [ $(uname -s) = "SunOS" ]; then
++if [ $(isainfo -b) != "64" ]; then
++  echo Release build should be done on a 64-bit box to generate 1>&2
++  echo both 64 and 32 bit native libraries. 1>&2
++  exit 1
++fi
++else
+ if [ $(uname -m) != "x86_64" ]; then
+   echo Release build should be done on a 64-bit box to generate 1>&2
+   echo both 64 and 32 bit native libraries. 1>&2
+   exit 1
+ fi
++fi
+ 
+ JAVA32_HOME=${JAVA32_HOME:-$JAVA_HOME}
+ JAVA64_HOME=${JAVA64_HOME:-$JAVA_HOME}
+-- 
+1.7.0.4
+

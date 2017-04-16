@@ -1,0 +1,183 @@
+From fadd26e431dc879d9611f22f2974d4eab30d7efa Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Fri, 7 Jan 2011 16:06:03 -0800
+Subject: [PATCH 0778/1179] MAPREDUCE-1382. MRAsyncDiscService should tolerate missing local.dir
+
+Reason: Makes it possible for jobtracker and tasktracker to share config file and have different volumes.
+Author: Zheng Shao
+Ref: CDH-2395, DISTRO-36
+---
+ .../org/apache/hadoop/util/MRAsyncDiskService.java |   64 +++++++++++++-------
+ .../mapreduce/util/TestMRAsyncDiskService.java     |   31 ++++++++-
+ 2 files changed, 68 insertions(+), 27 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/util/MRAsyncDiskService.java b/src/mapred/org/apache/hadoop/util/MRAsyncDiskService.java
+index edbb00a..64cf378 100644
+--- a/src/mapred/org/apache/hadoop/util/MRAsyncDiskService.java
++++ b/src/mapred/org/apache/hadoop/util/MRAsyncDiskService.java
+@@ -83,28 +83,32 @@ public class MRAsyncDiskService {
+       // Create the root for file deletion
+       Path absoluteSubdir = new Path(volumes[v], TOBEDELETED);
+       if (!localFileSystem.mkdirs(absoluteSubdir)) {
+-        throw new IOException("Cannot create " + TOBEDELETED + " in "
+-            + volumes[v]);
++        // We should tolerate missing volumes. 
++        LOG.warn("Cannot create " + TOBEDELETED + " in " + volumes[v] + ". Ignored.");
+       }
+     }
+     
+     // Create tasks to delete the paths inside the volumes
+     for (int v = 0 ; v < volumes.length; v++) {
+       Path absoluteSubdir = new Path(volumes[v], TOBEDELETED);
+-      // List all files inside the volumes
+-      FileStatus[] files = localFileSystem.listStatus(absoluteSubdir);
+-      for (int f = 0; f < files.length; f++) {
+-        // Get the relative file name to the root of the volume
+-        String absoluteFilename = files[f].getPath().toUri().getPath();
+-        String relative = getRelativePathName(absoluteFilename, volumes[v]);
+-        if (relative == null) {
+-          // This should never happen
+-          throw new IOException("Cannot delete " + absoluteFilename
+-              + " because it's outside of " + volumes[v]);
++      FileStatus[] files = null;
++      try {
++        // List all files inside the volumes TOBEDELETED sub directory
++        files = localFileSystem.listStatus(absoluteSubdir);
++      } catch (Exception e) {
++        // Ignore exceptions in listStatus
++        // We tolerate missing sub directories.
++      }
++      if (files != null) {
++        for (int f = 0; f < files.length; f++) {
++          // Get the relative file name to the root of the volume
++          String absoluteFilename = files[f].getPath().toUri().getPath();
++          String relative = TOBEDELETED + Path.SEPARATOR_CHAR
++              + files[f].getPath().getName();
++          DeleteTask task = new DeleteTask(volumes[v], absoluteFilename,
++              relative);
++          execute(volumes[v], task);
+         }
+-        DeleteTask task = new DeleteTask(volumes[v], absoluteFilename,
+-            relative);
+-        execute(volumes[v], task);
+       }
+     }
+   }
+@@ -250,9 +254,15 @@ public class MRAsyncDiskService {
+     newPathName = TOBEDELETED + Path.SEPARATOR_CHAR + newPathName;
+     
+     Path source = new Path(volume, pathName);
+-    Path target = new Path(volume, newPathName); 
++    Path target = new Path(volume, newPathName);
+     try {
+       if (!localFileSystem.rename(source, target)) {
++        // If the source does not exists, return false.
++        // This is necessary because rename can return false if the source  
++        // does not exists.
++        if (!localFileSystem.exists(source)) {
++          return false;
++        }
+         // Try to recreate the parent directory just in case it gets deleted.
+         if (!localFileSystem.mkdirs(new Path(volume, TOBEDELETED))) {
+           throw new IOException("Cannot create " + TOBEDELETED + " under "
+@@ -302,13 +312,21 @@ public class MRAsyncDiskService {
+   public void cleanupAllVolumes() throws IOException {
+     for (int v = 0; v < volumes.length; v++) {
+       // List all files inside the volumes
+-      FileStatus[] files = localFileSystem.listStatus(new Path(volumes[v]));
+-      for (int f = 0; f < files.length; f++) {
+-        // Get the file name - the last component of the Path
+-        String entryName = files[f].getPath().getName();
+-        // Do not delete the current TOBEDELETED
+-        if (!TOBEDELETED.equals(entryName)) {
+-          moveAndDeleteRelativePath(volumes[v], entryName);
++      FileStatus[] files = null;
++      try {
++        files = localFileSystem.listStatus(new Path(volumes[v]));
++      } catch (Exception e) {
++        // Ignore exceptions in listStatus
++        // We tolerate missing volumes.
++      }
++      if (files != null) {
++        for (int f = 0; f < files.length; f++) {
++          // Get the file name - the last component of the Path
++          String entryName = files[f].getPath().getName();
++          // Do not delete the current TOBEDELETED
++          if (!TOBEDELETED.equals(entryName)) {
++            moveAndDeleteRelativePath(volumes[v], entryName);
++          }
+         }
+       }
+     }
+diff --git a/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java b/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java
+index b04da78..1d6f67f 100644
+--- a/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java
++++ b/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java
+@@ -28,6 +28,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.util.MRAsyncDiskService;
+ 
+ /**
+@@ -39,6 +40,11 @@ public class TestMRAsyncDiskService extends TestCase {
+   
+   private static String TEST_ROOT_DIR = new Path(System.getProperty(
+       "test.build.data", "/tmp")).toString();
++  
++  @Override
++  protected void setUp() throws Exception {
++    FileUtil.fullyDelete(new File(TEST_ROOT_DIR));
++  }
+ 
+   /**
+    * Given 'pathname', compute an equivalent path relative to the cwd.
+@@ -189,6 +195,8 @@ public class TestMRAsyncDiskService extends TestCase {
+     assertFalse(fb.exists());
+     assertFalse(fc.exists());
+     
++    assertFalse(service.moveAndDeleteRelativePath(vols[1], "not_exists"));
++    
+     // asyncDiskService is NOT able to delete files outside all volumes.
+     IOException ee = null;
+     try {
+@@ -269,10 +277,11 @@ public class TestMRAsyncDiskService extends TestCase {
+     String d = "d";
+     
+     // Create directories inside SUBDIR
+-    File fa = new File(vols[0] + Path.SEPARATOR_CHAR + MRAsyncDiskService.TOBEDELETED, a);
+-    File fb = new File(vols[1] + Path.SEPARATOR_CHAR + MRAsyncDiskService.TOBEDELETED, b);
+-    File fc = new File(vols[1] + Path.SEPARATOR_CHAR + MRAsyncDiskService.TOBEDELETED, c);
+-    File fd = new File(vols[1] + Path.SEPARATOR_CHAR + MRAsyncDiskService.TOBEDELETED, d);
++    String suffix = Path.SEPARATOR_CHAR + MRAsyncDiskService.TOBEDELETED;
++    File fa = new File(vols[0] + suffix, a);
++    File fb = new File(vols[1] + suffix, b);
++    File fc = new File(vols[1] + suffix, c);
++    File fd = new File(vols[1] + suffix, d);
+     
+     // Create the directories
+     fa.mkdirs();
+@@ -311,5 +320,19 @@ public class TestMRAsyncDiskService extends TestCase {
+           + MRAsyncDiskService.TOBEDELETED, 0, subDirContent.length);
+     }
+   }
++  
++  public void testToleratesSomeUnwritableVolumes() throws Throwable {
++    FileSystem localFileSystem = FileSystem.getLocal(new Configuration());
++    String[] vols = new String[]{TEST_ROOT_DIR + "/0",
++        TEST_ROOT_DIR + "/1"};
+     
++    assertTrue(new File(vols[0]).mkdirs());
++    assertEquals(0, FileUtil.chmod(vols[0], "400")); // read only
++    try {
++      new MRAsyncDiskService(localFileSystem, vols);
++    } finally {
++      FileUtil.chmod(vols[0], "755"); // make writable again
++    }
++  }
++  
+ }
+-- 
+1.7.0.4
+

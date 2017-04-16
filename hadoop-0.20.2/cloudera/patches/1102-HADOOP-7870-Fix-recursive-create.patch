@@ -1,0 +1,97 @@
+From dc1f32f60531bc146d6c42f473d5ba6a0b59fff3 Mon Sep 17 00:00:00 2001
+From: Jonathan Hsieh <jon@cloudera.com>
+Date: Wed, 30 Nov 2011 08:54:06 -0800
+Subject: [PATCH 1102/1179] HADOOP-7870 Fix recursive create.
+
+Reason: Bug (hbase data loss)
+Author: Jonathan Hsieh
+Ref: CDH-3798
+---
+ src/core/org/apache/hadoop/io/SequenceFile.java    |   23 +++++++++++-------
+ .../org/apache/hadoop/io/TestSequenceFile.java     |   25 ++++++++++++++++++++
+ 2 files changed, 39 insertions(+), 9 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/SequenceFile.java b/src/core/org/apache/hadoop/io/SequenceFile.java
+index 83addf7..7e0c485 100644
+--- a/src/core/org/apache/hadoop/io/SequenceFile.java
++++ b/src/core/org/apache/hadoop/io/SequenceFile.java
+@@ -437,19 +437,24 @@ public class SequenceFile {
+                                          "GzipCodec without native-hadoop code!");
+     }
+ 
++
++    FSDataOutputStream fsos;
++    if (createParent) {
++      fsos = fs.create(name, true, bufferSize, replication, blockSize);
++    } else {
++      fsos = fs.createNonRecursive(name, true, bufferSize, replication,
++          blockSize, null);
++    }
++
+     switch (compressionType) {
+     case NONE:
+-      return new Writer(conf, 
+-          fs.createNonRecursive(name, true, bufferSize, replication, blockSize, null),
+-          keyClass, valClass, metadata).ownStream();
++      return new Writer(conf, fsos, keyClass, valClass, metadata).ownStream();
+     case RECORD:
+-      return new RecordCompressWriter(conf, 
+-          fs.createNonRecursive(name, true, bufferSize, replication, blockSize, null),
+-          keyClass, valClass, codec, metadata).ownStream();
++      return new RecordCompressWriter(conf, fsos, keyClass, valClass, codec,
++          metadata).ownStream();
+     case BLOCK:
+-      return new BlockCompressWriter(conf,
+-          fs.createNonRecursive(name, true, bufferSize, replication, blockSize, null),
+-          keyClass, valClass, codec, metadata).ownStream();
++      return new BlockCompressWriter(conf, fsos, keyClass, valClass, codec,
++          metadata).ownStream();
+     default:
+       return null;
+     }
+diff --git a/src/test/org/apache/hadoop/io/TestSequenceFile.java b/src/test/org/apache/hadoop/io/TestSequenceFile.java
+index 38f808a..8890788 100644
+--- a/src/test/org/apache/hadoop/io/TestSequenceFile.java
++++ b/src/test/org/apache/hadoop/io/TestSequenceFile.java
+@@ -26,6 +26,7 @@ import org.apache.commons.logging.*;
+ 
+ import org.apache.hadoop.fs.*;
+ import org.apache.hadoop.io.SequenceFile.CompressionType;
++import org.apache.hadoop.io.SequenceFile.Metadata;
+ import org.apache.hadoop.io.compress.CompressionCodec;
+ import org.apache.hadoop.io.compress.DefaultCodec;
+ import org.apache.hadoop.util.ReflectionUtils;
+@@ -484,6 +485,30 @@ public class TestSequenceFile extends TestCase {
+     assertTrue("InputStream for " + path + " should have been closed.", openedFile[0].isClosed());
+   }
+ 
++  public void testRecursiveSeqFileCreate() throws IOException {
++    Configuration conf = new Configuration();
++    FileSystem fs = FileSystem.getLocal(conf);
++    Path name = new Path(new Path(System.getProperty("test.build.data","."),
++        "recursiveCreateDir") , "file");
++    boolean createParent = false;
++
++    try {
++      SequenceFile.createWriter(fs, conf, name, RandomDatum.class,
++          RandomDatum.class, 512, (short) 1, 4096, createParent,
++          CompressionType.NONE, null, new Metadata());
++      fail("Expected an IOException due to missing parent");
++    } catch (IOException ioe) {
++      // expected 
++    }
++
++    createParent = true;
++    SequenceFile.createWriter(fs, conf, name, RandomDatum.class,
++        RandomDatum.class, 512, (short) 1, 4096, createParent,
++        CompressionType.NONE, null, new Metadata());
++
++    // should succeed, fails if exception thrown
++  }
++  
+   /** For debugging and testing. */
+   public static void main(String[] args) throws Exception {
+     int count = 1024 * 1024;
+-- 
+1.7.0.4
+

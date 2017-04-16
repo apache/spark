@@ -1,0 +1,52 @@
+From e4596923b767eb163e141e41d5058c983e95f885 Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Wed, 23 Feb 2011 09:53:00 -0800
+Subject: [PATCH 0890/1179] CLOUDERA-BUILD. Fixing reactor repo specification.
+
+---
+ cloudera/do-release-build |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 929c519..9ccfc26 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -53,7 +53,7 @@ mvn dependency:tree
+ cd $RELEASE_DIR
+ 
+ if which aclocal-1.9 && which autoconf ; then
+-  ant -Dreactor.repo=$HOME/.m2/repository -Dcompile.c++=true \
++  ant -Dreactor.repo=file://$HOME/.m2/repository -Dcompile.c++=true \
+     -Dcompile.native=true create-c++-configure
+ fi
+ 
+@@ -72,7 +72,7 @@ JAVA_HOME=$JAVA32_HOME \
+   CFLAGS=-m32 \
+   CXXFLAGS=-m32 \
+   ant \
+-  -Dreactor.repo=$HOME/.m2/repository \
++  -Dreactor.repo=file://$HOME/.m2/repository \
+   -Dlibhdfs=true \
+   -Dcompile.native=true \
+   -Dcompile.c++=true \
+@@ -83,7 +83,7 @@ JAVA_HOME=$JAVA32_HOME \
+ 
+ if [ -z "$SKIP_JDIFF" ]; then
+ ant \
+-  -Dreactor.repo=$HOME/.m2/repository \
++  -Dreactor.repo=file://$HOME/.m2/repository \
+   -Djdiff.stable=0.20.1 \
+   -Djdiff.build.dir=build/docs/jdiff-cloudera \
+   -propertyfile build.properties \
+@@ -97,7 +97,7 @@ JAVA_HOME=$JAVA64_HOME \
+   CFLAGS=-m64 \
+   CXXFLAGS=-m64 \
+   ant \
+-  -Dreactor.repo=$HOME/.m2/repository \
++  -Dreactor.repo=file://$HOME/.m2/repository \
+   -Dlibhdfs=true \
+   -Dcompile.native=true \
+   -Dcompile.c++=true \
+-- 
+1.7.0.4
+

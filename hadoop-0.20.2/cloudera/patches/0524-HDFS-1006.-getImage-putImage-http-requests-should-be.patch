@@ -1,0 +1,359 @@
+From e5ec38e7ece3c2e9d7c64ae8bad4fe60e2a75088 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 1 Mar 2010 01:05:29 -0800
+Subject: [PATCH 0524/1179] HDFS-1006. getImage/putImage http requests should be https for the case of security enabled.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437467/HDFS-1006-Y20.1.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ .../hdfs/server/namenode/GetImageServlet.java      |   62 +++++----
+ .../hdfs/server/namenode/SecondaryNameNode.java    |  146 ++++++++++++++------
+ .../hdfs/server/namenode/TransferFsImage.java      |    8 +-
+ 3 files changed, 147 insertions(+), 69 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+index b92e0d0..937b3da 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+@@ -17,16 +17,20 @@
+  */
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
+-import java.util.*;
+-import java.io.*;
++import java.io.IOException;
++import java.security.PrivilegedExceptionAction;
++import java.util.Map;
++
+ import javax.servlet.ServletContext;
+ import javax.servlet.ServletException;
+ import javax.servlet.http.HttpServlet;
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+ 
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.StringUtils;
+ 
++
+ /**
+  * This class is used in Namesystem's jetty to retrieve a file.
+  * Typically used by the Secondary NameNode to retrieve image and
+@@ -36,33 +40,41 @@ public class GetImageServlet extends HttpServlet {
+   private static final long serialVersionUID = -7669068179452648952L;
+ 
+   @SuppressWarnings("unchecked")
+-  public void doGet(HttpServletRequest request,
+-                    HttpServletResponse response
++  public void doGet(final HttpServletRequest request,
++                    final HttpServletResponse response
+                     ) throws ServletException, IOException {
+     Map<String,String[]> pmap = request.getParameterMap();
+     try {
+       ServletContext context = getServletContext();
+-      FSImage nnImage = (FSImage)context.getAttribute("name.system.image");
+-      TransferFsImage ff = new TransferFsImage(pmap, request, response);
+-      if (ff.getImage()) {
+-        response.setHeader(TransferFsImage.CONTENT_LENGTH,
+-          String.valueOf(nnImage.getFsImageName().length()));
+-        // send fsImage
+-        TransferFsImage.getFileServer(response.getOutputStream(),
+-                                      nnImage.getFsImageName()); 
+-      } else if (ff.getEdit()) {
+-        response.setHeader(TransferFsImage.CONTENT_LENGTH,
+-          String.valueOf(nnImage.getFsEditName().length()));
+-        // send edits
+-        TransferFsImage.getFileServer(response.getOutputStream(),
+-                                      nnImage.getFsEditName());
+-      } else if (ff.putImage()) {
+-        // issue a HTTP get request to download the new fsimage 
+-        nnImage.validateCheckpointUpload(ff.getToken());
+-        TransferFsImage.getFileClient(ff.getInfoServer(), "getimage=1", 
+-                                      nnImage.getFsImageNameCheckpoint());
+-        nnImage.checkpointUploadDone();
+-      }
++      final FSImage nnImage = (FSImage)context.getAttribute("name.system.image");
++      final TransferFsImage ff = new TransferFsImage(pmap, request, response);
++      UserGroupInformation.getCurrentUser().doAs(new PrivilegedExceptionAction<Void>() {
++
++        @Override
++        public Void run() throws Exception {
++          if (ff.getImage()) {
++            response.setHeader(TransferFsImage.CONTENT_LENGTH,
++              String.valueOf(nnImage.getFsImageName().length()));
++            // send fsImage
++            TransferFsImage.getFileServer(response.getOutputStream(),
++                                          nnImage.getFsImageName()); 
++          } else if (ff.getEdit()) {
++            response.setHeader(TransferFsImage.CONTENT_LENGTH,
++              String.valueOf(nnImage.getFsEditName().length()));
++            // send edits
++            TransferFsImage.getFileServer(response.getOutputStream(),
++                                          nnImage.getFsEditName());
++          } else if (ff.putImage()) {
++            // issue a HTTP get request to download the new fsimage 
++            nnImage.validateCheckpointUpload(ff.getToken());
++            TransferFsImage.getFileClient(ff.getInfoServer(), "getimage=1", 
++                                          nnImage.getFsImageNameCheckpoint());
++            nnImage.checkpointUploadDone();
++          }
++          return null;
++        }
++      });
++
+     } catch (Exception ie) {
+       String errMsg = "GetImage failed. " + StringUtils.stringifyException(ie);
+       response.sendError(HttpServletResponse.SC_GONE, errMsg);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index ffe3d1b..adcb121 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -22,6 +22,7 @@ import java.io.IOException;
+ import java.net.InetAddress;
+ import java.net.InetSocketAddress;
+ import java.net.URI;
++import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Iterator;
+@@ -41,6 +42,8 @@ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.metrics.jvm.JvmMetrics;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.Krb5AndCertsSslSocketConnector;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.Daemon;
+ import org.apache.hadoop.util.StringUtils;
+ 
+@@ -71,6 +74,7 @@ public class SecondaryNameNode implements Runnable {
+   private volatile boolean shouldRun;
+   private HttpServer infoServer;
+   private int infoPort;
++  private int imagePort;
+   private String infoBindAddress;
+ 
+   private Collection<File> checkpointDirs;
+@@ -130,7 +134,7 @@ public class SecondaryNameNode implements Runnable {
+   /**
+    * Initialize SecondaryNameNode.
+    */
+-  private void initialize(Configuration conf) throws IOException {
++  private void initialize(final Configuration conf) throws IOException {
+     // initiate Java VM metrics
+     JvmMetrics.init("SecondaryNameNode", conf.get("session.id"));
+     
+@@ -157,25 +161,67 @@ public class SecondaryNameNode implements Runnable {
+     checkpointSize = conf.getLong("fs.checkpoint.size", 4194304);
+ 
+     // initialize the webserver for uploading files.
+-    String infoAddr = 
+-      NetUtils.getServerAddress(conf, 
+-                                "dfs.secondary.info.bindAddress",
+-                                "dfs.secondary.info.port",
+-                                "dfs.secondary.http.address");
+-    InetSocketAddress infoSocAddr = NetUtils.createSocketAddr(infoAddr);
+-    infoBindAddress = infoSocAddr.getHostName();
+-    int tmpInfoPort = infoSocAddr.getPort();
+-    infoServer = new HttpServer("secondary", infoBindAddress, tmpInfoPort,
+-        tmpInfoPort == 0, conf);
+-    infoServer.setAttribute("name.system.image", checkpointImage);
+-    this.infoServer.setAttribute("name.conf", conf);
+-    infoServer.addInternalServlet("getimage", "/getimage", GetImageServlet.class);
+-    infoServer.start();
+-
++    // Kerberized SSL servers must be run from the host principal...
++    DFSUtil.login(conf, DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY, 
++        DFSConfigKeys.DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY);
++    UserGroupInformation ugi = UserGroupInformation.getLoginUser();
++    try {
++      infoServer = ugi.doAs(new PrivilegedExceptionAction<HttpServer>() {
++
++        @Override
++        public HttpServer run() throws IOException, InterruptedException {
++          LOG.info("Starting web server as: " +
++              UserGroupInformation.getLoginUser().getUserName());
++
++          String infoAddr = 
++            NetUtils.getServerAddress(conf, 
++                "dfs.secondary.info.bindAddress",
++                "dfs.secondary.info.port",
++            "dfs.secondary.http.address");
++
++          InetSocketAddress infoSocAddr = NetUtils.createSocketAddr(infoAddr);
++          infoBindAddress = infoSocAddr.getHostName();
++          int tmpInfoPort = infoSocAddr.getPort();
++          infoServer = new HttpServer("secondary", infoBindAddress, tmpInfoPort,
++              tmpInfoPort == 0, conf);
++          
++          if(UserGroupInformation.isSecurityEnabled()) {
++            System.setProperty("https.cipherSuites", 
++                Krb5AndCertsSslSocketConnector.KRB5_CIPHER_SUITES[0]);
++            InetSocketAddress secInfoSocAddr = 
++              NetUtils.createSocketAddr(infoBindAddress + ":"+ conf.get(
++                "dfs.secondary.https.port", infoBindAddress + ":" + 0));
++            imagePort = secInfoSocAddr.getPort();
++            infoServer.addSslListener(secInfoSocAddr, conf, false, true);
++          }
++          
++          infoServer.setAttribute("name.system.image", checkpointImage);
++          infoServer.setAttribute("name.conf", conf);
++          infoServer.addInternalServlet("getimage", "/getimage",
++              GetImageServlet.class, true);
++          infoServer.start();
++          return infoServer;
++        }
++      });
++    } catch (InterruptedException e) {
++      throw new RuntimeException(e);
++    } finally {
++      // Go back to being the correct Namenode principal
++      LOG.info("Web server init done, returning to: " + 
++          UserGroupInformation.getLoginUser().getUserName());
++      DFSUtil.login(conf, DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY,
++          DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY);
++      
++    }
+     // The web-server port can be ephemeral... ensure we have the correct info
++    
+     infoPort = infoServer.getPort();
++    if(!UserGroupInformation.isSecurityEnabled())
++      imagePort = infoPort;
++    
+     conf.set("dfs.secondary.http.address", infoBindAddress + ":" +infoPort); 
+     LOG.info("Secondary Web-server up at: " + infoBindAddress + ":" +infoPort);
++    LOG.info("Secondary image servlet up at: " + infoBindAddress + ":" + imagePort);
+     LOG.warn("Checkpoint Period   :" + checkpointPeriod + " secs " +
+              "(" + checkpointPeriod/60 + " min)");
+     LOG.warn("Log Size Trigger    :" + checkpointSize + " bytes " +
+@@ -251,36 +297,47 @@ public class SecondaryNameNode implements Runnable {
+    * files from the name-node.
+    * @throws IOException
+    */
+-  private void downloadCheckpointFiles(CheckpointSignature sig
++  private void downloadCheckpointFiles(final CheckpointSignature sig
+                                       ) throws IOException {
+-    
+-    checkpointImage.cTime = sig.cTime;
+-    checkpointImage.checkpointTime = sig.checkpointTime;
+-
+-    // get fsimage
+-    String fileid = "getimage=1";
+-    File[] srcNames = checkpointImage.getImageFiles();
+-    assert srcNames.length > 0 : "No checkpoint targets.";
+-    TransferFsImage.getFileClient(fsName, fileid, srcNames);
+-    LOG.info("Downloaded file " + srcNames[0].getName() + " size " +
+-             srcNames[0].length() + " bytes.");
+-
+-    // get edits file
+-    fileid = "getedit=1";
+-    srcNames = checkpointImage.getEditsFiles();
+-    assert srcNames.length > 0 : "No checkpoint targets.";
+-    TransferFsImage.getFileClient(fsName, fileid, srcNames);
+-    LOG.info("Downloaded file " + srcNames[0].getName() + " size " +
+-        srcNames[0].length() + " bytes.");
+-
+-    checkpointImage.checkpointUploadDone();
++    try {
++      UserGroupInformation.getCurrentUser().doAs(new PrivilegedExceptionAction<Void>() {
++
++        @Override
++        public Void run() throws Exception {
++          checkpointImage.cTime = sig.cTime;
++          checkpointImage.checkpointTime = sig.checkpointTime;
++
++          // get fsimage
++          String fileid = "getimage=1";
++          File[] srcNames = checkpointImage.getImageFiles();
++          assert srcNames.length > 0 : "No checkpoint targets.";
++          TransferFsImage.getFileClient(fsName, fileid, srcNames);
++          LOG.info("Downloaded file " + srcNames[0].getName() + " size " +
++                   srcNames[0].length() + " bytes.");
++
++          // get edits file
++          fileid = "getedit=1";
++          srcNames = checkpointImage.getEditsFiles();
++          assert srcNames.length > 0 : "No checkpoint targets.";
++          TransferFsImage.getFileClient(fsName, fileid, srcNames);
++          LOG.info("Downloaded file " + srcNames[0].getName() + " size " +
++              srcNames[0].length() + " bytes.");
++
++          checkpointImage.checkpointUploadDone();
++          return null;
++        }
++      });
++    } catch (InterruptedException e) {
++      throw new RuntimeException(e);
++    }
++
+   }
+ 
+   /**
+    * Copy the new fsimage into the NameNode
+    */
+   private void putFSImage(CheckpointSignature sig) throws IOException {
+-    String fileid = "putimage=1&port=" + infoPort +
++    String fileid = "putimage=1&port=" + imagePort +
+       "&machine=" +
+       InetAddress.getLocalHost().getHostAddress() +
+       "&token=" + sig.toString();
+@@ -296,14 +353,17 @@ public class SecondaryNameNode implements Runnable {
+     if (!FSConstants.HDFS_URI_SCHEME.equalsIgnoreCase(fsName.getScheme())) {
+       throw new IOException("This is not a DFS");
+     }
+-
+-    String configuredAddress = NetUtils.getServerAddress(conf, "dfs.info.bindAddress", 
+-                                     "dfs.info.port", "dfs.http.address");
+-    InetSocketAddress sockAddr = NetUtils.createSocketAddr(configuredAddress);
++    String http = UserGroupInformation.isSecurityEnabled() ? "dfs.https.address" 
++                                                           : "dfs.http.address";
++    String infoAddr = NetUtils.getServerAddress(conf, "dfs.info.bindAddress", 
++                                     "dfs.info.port", http);
++    
++    LOG.debug("infoAddr = " + infoAddr);
++    InetSocketAddress sockAddr = NetUtils.createSocketAddr(infoAddr);
+     if (sockAddr.getAddress().isAnyLocalAddress()) {
+       return fsName.getHost() + ":" + sockAddr.getPort();
+     } else {
+-      return configuredAddress;
++      return infoAddr;
+     }
+   }
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+index 6f06d81..0813d4d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+@@ -25,8 +25,11 @@ import java.lang.Math;
+ import javax.servlet.http.HttpServletResponse;
+ import javax.servlet.http.HttpServletRequest;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode.ErrorSimulator;
++import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+  * This class provides fetching a specified file from the NameNode.
+@@ -35,6 +38,7 @@ class TransferFsImage implements FSConstants {
+   
+   public final static String CONTENT_LENGTH = "Content-Length";
+   
++  private static final Log LOG = LogFactory.getLog(TransferFsImage.class);
+   private boolean isGetImage;
+   private boolean isGetEdit;
+   private boolean isPutImage;
+@@ -153,7 +157,9 @@ class TransferFsImage implements FSConstants {
+   static void getFileClient(String fsName, String id, File[] localPath)
+     throws IOException {
+     byte[] buf = new byte[BUFFER_SIZE];
+-    StringBuffer str = new StringBuffer("http://"+fsName+"/getimage?");
++    String proto = UserGroupInformation.isSecurityEnabled() ? "https://" : "http://";
++    
++    StringBuffer str = new StringBuffer(proto+fsName+"/getimage?");
+     str.append(id);
+ 
+     //
+-- 
+1.7.0.4
+

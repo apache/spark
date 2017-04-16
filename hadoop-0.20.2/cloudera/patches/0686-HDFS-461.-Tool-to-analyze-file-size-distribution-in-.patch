@@ -1,0 +1,358 @@
+From 83da6170d68e29c1ae7881c2606af59a2145a8aa Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 3 Sep 2010 17:09:05 -0700
+Subject: [PATCH 0686/1179] HDFS-461. Tool to analyze file size distribution in HDFS.
+
+Author: Konstantin Shvachko
+Ref: CDH-2106
+---
+ .../content/xdocs/hdfs_imageviewer.xml             |   15 ++
+ .../FileDistributionVisitor.java                   |  182 ++++++++++++++++++++
+ .../tools/offlineImageViewer/ImageVisitor.java     |    2 +-
+ .../offlineImageViewer/OfflineImageViewer.java     |   12 ++-
+ .../offlineImageViewer/TestOfflineImageViewer.java |   39 ++++-
+ 5 files changed, 244 insertions(+), 6 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/FileDistributionVisitor.java
+
+diff --git a/src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml b/src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml
+index 2924a01..3a2568d 100644
+--- a/src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml
++++ b/src/docs/src/documentation/content/xdocs/hdfs_imageviewer.xml
+@@ -70,6 +70,21 @@
+           of this processor is amenable to automated processing and analysis with XML tools.
+           Due to the verbosity of the XML syntax, this processor will also generate
+           the largest amount of output.</li>
++        <li><strong>FileDistribution</strong> is the tool for analyzing file 
++          sizes in the namespace image. In order to run the tool one should 
++          define a range of integers <code>[0, maxSize]</code> by specifying
++          <code>maxSize</code> and a <code>step</code>.
++          The range of integers is divided into segments of size
++          <code>step</code>:
++          <code>[0, s</code><sub>1</sub><code>, ..., s</code><sub>n-1</sub><code>, maxSize]</code>, 
++          and the processor calculates how many files in the system fall into 
++          each segment <code>[s</code><sub>i-1</sub><code>, s</code><sub>i</sub><code>)</code>.
++          Note that files larger than <code>maxSize</code> always fall into 
++          the very last segment.
++          The output file is formatted as a tab separated two column table:
++          Size and NumFiles. Where Size represents the start of the segment,
++          and numFiles is the number of files form the image which size falls
++          in this segment.</li>
+         </ol>
+ 
+     </section> <!-- overview -->
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/FileDistributionVisitor.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/FileDistributionVisitor.java
+new file mode 100644
+index 0000000..965d053
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/FileDistributionVisitor.java
+@@ -0,0 +1,182 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.tools.offlineImageViewer;
++
++import java.io.IOException;
++import java.util.LinkedList;
++
++/**
++ * File size distribution visitor.
++ * 
++ * <h3>Description.</h3>
++ * This is the tool for analyzing file sizes in the namespace image.
++ * In order to run the tool one should define a range of integers
++ * <tt>[0, maxSize]</tt> by specifying <tt>maxSize</tt> and a <tt>step</tt>.
++ * The range of integers is divided into segments of size <tt>step</tt>: 
++ * <tt>[0, s<sub>1</sub>, ..., s<sub>n-1</sub>, maxSize]</tt>,
++ * and the visitor calculates how many files in the system fall into 
++ * each segment <tt>[s<sub>i-1</sub>, s<sub>i</sub>)</tt>. 
++ * Note that files larger than <tt>maxSize</tt> always fall into 
++ * the very last segment.
++ * 
++ * <h3>Input.</h3>
++ * <ul>
++ * <li><tt>filename</tt> specifies the location of the image file;</li>
++ * <li><tt>maxSize</tt> determines the range <tt>[0, maxSize]</tt> of files
++ * sizes considered by the visitor;</li>
++ * <li><tt>step</tt> the range is divided into segments of size step.</li>
++ * </ul>
++ *
++ * <h3>Output.</h3>
++ * The output file is formatted as a tab separated two column table:
++ * Size and NumFiles. Where Size represents the start of the segment,
++ * and numFiles is the number of files form the image which size falls in 
++ * this segment.
++ */
++class FileDistributionVisitor extends TextWriterImageVisitor {
++  final private LinkedList<ImageElement> elemS = new LinkedList<ImageElement>();
++
++  private final static long MAX_SIZE_DEFAULT = 0x2000000000L;   // 1/8 TB = 2^37
++  private final static int INTERVAL_DEFAULT = 0x200000;         // 2 MB = 2^21
++
++  private int[] distribution;
++  private long maxSize;
++  private int step;
++
++  private int totalFiles;
++  private int totalDirectories;
++  private int totalBlocks;
++  private long totalSpace;
++  private long maxFileSize;
++
++  private FileContext current;
++
++  private boolean inInode = false;
++
++  /**
++   * File or directory information.
++   */
++  private static class FileContext {
++    String path;
++    long fileSize;
++    int numBlocks;
++    int replication;
++  }
++
++  public FileDistributionVisitor(String filename,
++                                 long maxSize,
++                                 int step) throws IOException {
++    super(filename, false);
++    this.maxSize = (maxSize == 0 ? MAX_SIZE_DEFAULT : maxSize);
++    this.step = (step == 0 ? INTERVAL_DEFAULT : step);
++    long numIntervals = this.maxSize / this.step;
++    if(numIntervals >= Integer.MAX_VALUE)
++      throw new IOException("Too many distribution intervals " + numIntervals);
++    this.distribution = new int[1 + (int)(numIntervals)];
++    this.totalFiles = 0;
++    this.totalDirectories = 0;
++    this.totalBlocks = 0;
++    this.totalSpace = 0;
++    this.maxFileSize = 0;
++  }
++
++  @Override
++  void start() throws IOException {}
++
++  @Override
++  void finish() throws IOException {
++    // write the distribution into the output file
++    write("Size\tNumFiles\n");
++    for(int i = 0; i < distribution.length; i++)
++      write(((long)i * step) + "\t" + distribution[i] + "\n");
++    System.out.println("totalFiles = " + totalFiles);
++    System.out.println("totalDirectories = " + totalDirectories);
++    System.out.println("totalBlocks = " + totalBlocks);
++    System.out.println("totalSpace = " + totalSpace);
++    System.out.println("maxFileSize = " + maxFileSize);
++    super.finish();
++  }
++
++  @Override
++  void leaveEnclosingElement() throws IOException {
++    ImageElement elem = elemS.pop();
++
++    if(elem != ImageElement.INODE &&
++       elem != ImageElement.INODE_UNDER_CONSTRUCTION)
++      return;
++    inInode = false;
++    if(current.numBlocks < 0) {
++      totalDirectories ++;
++      return;
++    }
++    totalFiles++;
++    totalBlocks += current.numBlocks;
++    totalSpace += current.fileSize * current.replication;
++    if(maxFileSize < current.fileSize)
++      maxFileSize = current.fileSize;
++    int high;
++    if(current.fileSize > maxSize)
++      high = distribution.length-1;
++    else
++      high = (int)Math.ceil((double)current.fileSize / step);
++    distribution[high]++;
++    if(totalFiles % 1000000 == 1)
++      System.out.println("Files processed: " + totalFiles
++          + "  Current: " + current.path);
++  }
++
++  @Override
++  void visit(ImageElement element, String value) throws IOException {
++    if(inInode) {
++      switch(element) {
++      case INODE_PATH:
++        current.path = (value.equals("") ? "/" : value);
++        break;
++      case REPLICATION:
++        current.replication = Integer.valueOf(value);
++        break;
++      case NUM_BYTES:
++        current.fileSize += Long.valueOf(value);
++        break;
++      default:
++        break;
++      }
++    }
++  }
++
++  @Override
++  void visitEnclosingElement(ImageElement element) throws IOException {
++    elemS.push(element);
++    if(element == ImageElement.INODE ||
++       element == ImageElement.INODE_UNDER_CONSTRUCTION) {
++      current = new FileContext();
++      inInode = true;
++    }
++  }
++
++  @Override
++  void visitEnclosingElement(ImageElement element,
++      ImageElement key, String value) throws IOException {
++    elemS.push(element);
++    if(element == ImageElement.INODE ||
++       element == ImageElement.INODE_UNDER_CONSTRUCTION)
++      inInode = true;
++    else if(element == ImageElement.BLOCKS)
++      current.numBlocks = Integer.parseInt(value);
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java
+index 3c0f2eb..c8238e4 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java
+@@ -93,7 +93,7 @@ abstract class ImageVisitor {
+   abstract void finishAbnormally() throws IOException;
+ 
+   /**
+-   * Visit element of fsimage with specified value.
++   * Visit non enclosing element of fsimage with specified value.
+    *
+    * @param element FSImage element
+    * @param value Element's value
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java
+index ce2680d..25e7094 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/OfflineImageViewer.java
+@@ -67,6 +67,11 @@ public class OfflineImageViewer {
+     "  * XML: This processor creates an XML document with all elements of\n" +
+     "    the fsimage enumerated, suitable for further analysis by XML\n" +
+     "    tools.\n" +
++    "  * FileDistribution: This processor analyzes the file size\n" +
++    "    distribution in the image.\n" +
++    "    -maxSize specifies the range [0, maxSize] of file sizes to be\n" +
++    "     analyzed (128GB by default).\n" +
++    "    -step defines the granularity of the distribution. (2MB by default)\n" +
+     "\n" + 
+     "Required command line arguments:\n" +
+     "-i,--inputFile <arg>   FSImage file to process.\n" +
+@@ -75,7 +80,8 @@ public class OfflineImageViewer {
+     "\n" + 
+     "Optional command line arguments:\n" +
+     "-p,--processor <arg>   Select which type of processor to apply\n" +
+-    "                       against image file. (Ls|XML|Delimited|Indented).\n" +
++    "                       against image file." +
++    " (Ls|XML|Delimited|Indented|FileDistribution).\n" +
+     "-h,--help              Display usage information and exit\n" +
+     "-printToScreen         For processors that write to a file, also\n" +
+     "                       output to screen. On large image files this\n" +
+@@ -223,6 +229,10 @@ public class OfflineImageViewer {
+                  new DelimitedImageVisitor(outputFile, printToScreen) :
+                  new DelimitedImageVisitor(outputFile, printToScreen, delimiter);
+       skipBlocks = false;
++    } else if (processor.equals("FileDistribution")) {
++      long maxSize = Long.parseLong(cmd.getOptionValue("maxSize", "0"));
++      int step = Integer.parseInt(cmd.getOptionValue("step", "0"));
++      v = new FileDistributionVisitor(outputFile, maxSize, step);
+     } else {
+       v = new LsImageVisitor(outputFile, printToScreen);
+       skipBlocks = false;
+diff --git a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java
+index a6cd379..8b64a3d 100644
+--- a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java
++++ b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java
+@@ -51,6 +51,8 @@ import org.apache.hadoop.hdfs.protocol.FSConstants.SafeModeAction;
+  *     file that ends suddenly.
+  */
+ public class TestOfflineImageViewer extends TestCase {
++  private static final int NUM_DIRS = 3;
++  private static final int FILES_PER_DIR = 4;
+ 
+   // Elements of lines of ls-file output to be compared to FileStatus instance
+   private class LsElements {
+@@ -79,6 +81,7 @@ public class TestOfflineImageViewer extends TestCase {
+     
+     // Tests:
+     outputOfLSVisitor(originalFsimage);
++    outputOfFileDistributionVisitor(originalFsimage);
+     
+     unsupportedFSLayoutVersion(originalFsimage);
+     
+@@ -100,16 +103,14 @@ public class TestOfflineImageViewer extends TestCase {
+       cluster = new MiniDFSCluster(conf, 4, true, null);
+       FileSystem hdfs = cluster.getFileSystem();
+       
+-      int numDirs = 3;
+-      int numFilesPerDir = 4;
+       int filesize = 256;
+       
+       // Create a reasonable namespace 
+-      for(int i = 0; i < numDirs; i++)  {
++      for(int i = 0; i < NUM_DIRS; i++)  {
+         Path dir = new Path("/dir" + i);
+         hdfs.mkdirs(dir);
+         writtenFiles.put(dir.toString(), pathToFileEntry(hdfs, dir.toString()));
+-        for(int j = 0; j < numFilesPerDir; j++) {
++        for(int j = 0; j < FILES_PER_DIR; j++) {
+           Path file = new Path(dir, "file" + j);
+           FSDataOutputStream o = hdfs.create(file);
+           o.write(new byte[ filesize++ ]);
+@@ -368,4 +369,34 @@ public class TestOfflineImageViewer extends TestCase {
+       if(out != null) out.close();
+     }
+   }
++
++  private void outputOfFileDistributionVisitor(File originalFsimage) {
++    File testFile = new File(ROOT, "/basicCheck");
++    File outputFile = new File(ROOT, "/fileDistributionCheckOutput");
++
++    int totalFiles = 0;
++    try {
++      copyFile(originalFsimage, testFile);
++      ImageVisitor v = new FileDistributionVisitor(outputFile.getPath(), 0, 0);
++      OfflineImageViewer oiv = 
++        new OfflineImageViewer(testFile.getPath(), v, false);
++
++      oiv.go();
++
++      BufferedReader reader = new BufferedReader(new FileReader(outputFile));
++      String line = reader.readLine();
++      assertEquals(line, "Size\tNumFiles");
++      while((line = reader.readLine()) != null) {
++        String[] row = line.split("\t");
++        assertEquals(row.length, 2);
++        totalFiles += Integer.parseInt(row[1]);
++      }
++    } catch (IOException e) {
++      fail("Failed reading valid file: " + e.getMessage());
++    } finally {
++      if(testFile.exists()) testFile.delete();
++      if(outputFile.exists()) outputFile.delete();
++    }
++    assertEquals(totalFiles, NUM_DIRS * FILES_PER_DIR);
++  }
+ }
+-- 
+1.7.0.4
+

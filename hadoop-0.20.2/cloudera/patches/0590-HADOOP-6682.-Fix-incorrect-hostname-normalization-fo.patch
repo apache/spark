@@ -1,0 +1,27 @@
+From 9637fcdf4f49a8a6f8674f9ca047b33ab34dba0d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 1 Apr 2010 16:35:15 -0700
+Subject: [PATCH 0590/1179] HADOOP-6682. Fix incorrect hostname normalization for hostnames starting with [a-f]
+
+Author: Jakob Homan
+Ref: YDH
+---
+ src/core/org/apache/hadoop/net/NetUtils.java |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/net/NetUtils.java b/src/core/org/apache/hadoop/net/NetUtils.java
+index 4c33a73..edd9795 100644
+--- a/src/core/org/apache/hadoop/net/NetUtils.java
++++ b/src/core/org/apache/hadoop/net/NetUtils.java
+@@ -433,7 +433,7 @@ public class NetUtils {
+    * @return its IP address in the string format
+    */
+   public static String normalizeHostName(String name) {
+-    if (Character.digit(name.charAt(0), 16) != -1) { // it is an IP
++    if (Character.digit(name.charAt(0), 10) != -1) { //FIXME 
+       return name;
+     } else {
+       try {
+-- 
+1.7.0.4
+

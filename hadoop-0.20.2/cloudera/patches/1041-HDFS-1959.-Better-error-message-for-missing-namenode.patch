@@ -1,0 +1,51 @@
+From 542c18a9d5d871d6363f93d99133e627688ef564 Mon Sep 17 00:00:00 2001
+From: Harsh J <harsh@cloudera.com>
+Date: Fri, 26 Aug 2011 14:05:42 +0530
+Subject: [PATCH 1041/1179] HDFS-1959. Better error message for missing namenode directory.
+
+Better error message when NN starts with a missing name
+dir.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-3502
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    4 +++-
+ .../server/namenode/NameNodeResourceChecker.java   |    6 +++++-
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 43c1e2b..43b1614 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -557,7 +557,9 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+           lmthread.interrupt();
+           lmthread.join(3000);
+         }
+-        dir.close();
++        if (dir != null) {
++          dir.close();
++        }
+         blocksMap.close();
+       } catch (InterruptedException ie) {
+       } catch (IOException ie) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
+index fd12883..a755ea3 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
+@@ -83,7 +83,11 @@ public class NameNodeResourceChecker {
+   private void addDirsToCheck(Collection<File> directoriesToCheck)
+       throws IOException {
+     for (File directory : directoriesToCheck) {
+-      DF df = new DF(directory, conf);
++      File dir = new File(directory.toURI().getPath());
++      if (!dir.exists()) {
++        throw new IOException("Missing directory "+dir.getAbsolutePath());
++      }
++      DF df = new DF(dir, conf);
+       volumes.put(df.getFilesystem(), df);
+     }
+   }
+-- 
+1.7.0.4
+

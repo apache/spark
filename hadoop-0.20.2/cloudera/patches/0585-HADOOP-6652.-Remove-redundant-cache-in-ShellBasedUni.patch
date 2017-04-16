@@ -1,0 +1,40 @@
+From a1871a06d05bcaa41c68673b68339a10c5f5e183 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 20 Mar 2010 17:06:36 -0700
+Subject: [PATCH 0585/1179] HADOOP-6652. Remove redundant cache in ShellBasedUnixGroupsMapping
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439372/groups.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ .../security/ShellBasedUnixGroupsMapping.java      |    9 +--------
+ 1 files changed, 1 insertions(+), 8 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java b/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
+index fe170ce..7125214 100644
+--- a/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
++++ b/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
+@@ -35,19 +35,12 @@ import org.apache.hadoop.util.Shell.ExitCodeException;
+  * memberships of a given user.
+  */
+ public class ShellBasedUnixGroupsMapping implements GroupMappingServiceProvider {
+-  Map<String, List<String>> userGroups = 
+-    new ConcurrentHashMap<String, List<String>>();
+   
+   private static final Log LOG = LogFactory.getLog(ShellBasedUnixGroupsMapping.class);
+   
+   @Override
+   public List<String> getGroups(String user) throws IOException {
+-    List<String> groups = userGroups.get(user);
+-    if (groups == null) {
+-      groups = getUnixGroups(user);
+-      userGroups.put(user, groups);
+-    }
+-    return groups;
++    return getUnixGroups(user);
+   }
+ 
+   /** 
+-- 
+1.7.0.4
+

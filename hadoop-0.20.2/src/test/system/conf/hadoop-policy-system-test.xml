@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<configuration>
+<!--
+  This is Herriot specific protocols. This section shouldn't be present in
+  a production cluster configuration. This file needs to be linked up to the
+  main conf/hadoop-policy.xml in the deployment process
+-->
+  <property>
+    <name>security.daemon.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for DaemonProtocol, extended by all other
+    Herriot RPC protocols.
+    The ACL is a comma-separated list of user and group names. The user and
+    group list is separated by a blank. For e.g. "alice,bob users,wheel".
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.nn.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for NNProtocol, used by the
+    Herriot AbstractDaemonCluster's implementations to connect to a remote
+    NameNode.
+    The ACL is a comma-separated list of user and group names. The user and
+    group list is separated by a blank. For e.g. "alice,bob users,wheel".
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.dn.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for DNProtocol, used by the
+    Herriot AbstractDaemonCluster's implementations to connect to a remote
+    DataNode.
+    The ACL is a comma-separated list of user and group names. The user and
+    group list is separated by a blank. For e.g. "alice,bob users,wheel".
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.tt.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for TTProtocol, used by the
+    Herriot AbstractDaemonCluster's implementations to connect to a remote
+    TaskTracker.
+    The ACL is a comma-separated list of user and group names. The user and
+    group list is separated by a blank. For e.g. "alice,bob users,wheel".
+    A special value of "*" means all users are allowed.</description>
+  </property>
+</configuration>

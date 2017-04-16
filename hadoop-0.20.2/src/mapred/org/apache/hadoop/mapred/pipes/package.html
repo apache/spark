@@ -1,0 +1,127 @@
+<html>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<body>
+
+Hadoop Pipes allows C++ code to use Hadoop DFS and map/reduce. The
+primary approach is to split the C++ code into a separate process that
+does the application specific code. In many ways, the approach will be
+similar to Hadoop streaming, but using Writable serialization to
+convert the types into bytes that are sent to the process via a
+socket.
+
+<p>
+
+The class org.apache.hadoop.mapred.pipes.Submitter has a public static
+method to submit a job as a JobConf and a main method that takes an
+application and optional configuration file, input directories, and
+output directory. The cli for the main looks like:
+
+<pre>
+bin/hadoop pipes \
+  [-input <i>inputDir</i>] \
+  [-output <i>outputDir</i>] \
+  [-jar <i>applicationJarFile</i>] \
+  [-inputformat <i>class</i>] \
+  [-map <i>class</i>] \
+  [-partitioner <i>class</i>] \
+  [-reduce <i>class</i>] \
+  [-writer <i>class</i>] \
+  [-program <i>program url</i>] \ 
+  [-conf <i>configuration file</i>] \
+  [-D <i>property=value</i>] \
+  [-fs <i>local|namenode:port</i>] \
+  [-jt <i>local|jobtracker:port</i>] \
+  [-files <i>comma separated list of files</i>] \ 
+  [-libjars <i>comma separated list of jars</i>] \
+  [-archives <i>comma separated list of archives</i>] 
+</pre>
+
+
+<p>
+
+The application programs link against a thin C++ wrapper library that
+handles the communication with the rest of the Hadoop system.  The C++
+interface is "swigable" so that interfaces can be generated for python
+and other scripting languages. All of the C++ functions and classes
+are in the HadoopPipes namespace. The job may consist of any
+combination of Java and C++ RecordReaders, Mappers, Paritioner,
+Combiner, Reducer, and RecordWriter.
+
+<p>
+
+Hadoop Pipes has a generic Java class for handling the mapper and
+reducer (PipesMapRunner and PipesReducer). They fork off the
+application program and communicate with it over a socket. The
+communication is handled by the C++ wrapper library and the
+PipesMapRunner and PipesReducer.
+
+<p>
+
+The application program passes in a factory object that can create
+the various objects needed by the framework to the runTask
+function. The framework creates the Mapper or Reducer as
+appropriate and calls the map or reduce method to invoke the
+application's code. The JobConf is available to the application.
+
+<p>
+
+The Mapper and Reducer objects get all of their inputs, outputs, and
+context via context objects. The advantage of using the context
+objects is that their interface can be extended with additional
+methods without breaking clients. Although this interface is different
+from the current Java interface, the plan is to migrate the Java
+interface in this direction.
+
+<p>
+
+Although the Java implementation is typed, the C++ interfaces of keys
+and values is just a byte buffer. Since STL strings provide precisely
+the right functionality and are standard, they will be used. The
+decision to not use stronger types was to simplify the interface.
+
+<p>
+
+The application can also define combiner functions. The combiner will
+be run locally by the framework in the application process to avoid
+the round trip to the Java process and back. Because the compare
+function is not available in C++, the combiner will use memcmp to
+sort the inputs to the combiner. This is not as general as the Java
+equivalent, which uses the user's comparator, but should cover the
+majority of the use cases. As the map function outputs key/value
+pairs, they will be buffered. When the buffer is full, it will be
+sorted and passed to the combiner. The output of the combiner will be
+sent to the Java process.
+
+<p>
+
+The application can also set a partition function to control which key
+is given to a particular reduce. If a partition function is not
+defined, the Java one will be used. The partition function will be
+called by the C++ framework before the key/value pair is sent back to
+Java.
+
+<p>
+
+The application programs can also register counters with a group and a name 
+and also increment the counters and get the counter values. Word-count 
+example illustrating pipes usage with counters is available at 
+<a href="https://svn.apache.org/repos/asf/hadoop/core/trunk/src/examples/pipes/impl/wordcount-simple.cc">wordcount-simple.cc</a>
+</body>
+</html>

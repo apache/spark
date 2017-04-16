@@ -1,0 +1,68 @@
+<html>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<body>
+
+Typed bytes are sequences of bytes in which the first byte is a type code. They are especially useful as a 
+(simple and very straightforward) binary format for transferring data to and from Hadoop Streaming programs.
+
+<h3>Type Codes</h3>
+
+Each typed bytes sequence starts with an unsigned byte that contains the type code. Possible values are:
+<p>
+<table border="1" cellpadding="2">
+<tr><th>Code</th><th>Type</th></tr>
+<tr><td><i>0</i></td><td>A sequence of bytes.</td></tr>
+<tr><td><i>1</i></td><td>A byte.</td></tr>
+<tr><td><i>2</i></td><td>A boolean.</td></tr>
+<tr><td><i>3</i></td><td>An integer.</td></tr>
+<tr><td><i>4</i></td><td>A long.</td></tr>
+<tr><td><i>5</i></td><td>A float.</td></tr>
+<tr><td><i>6</i></td><td>A double.</td></tr>
+<tr><td><i>7</i></td><td>A string.</td></tr>
+<tr><td><i>8</i></td><td>A vector.</td></tr>
+<tr><td><i>9</i></td><td>A list.</td></tr>
+<tr><td><i>10</i></td><td>A map.</td></tr>
+</table>
+</p>
+The type codes <i>50</i> to <i>200</i> are treated as aliases for <i>0</i>, and can thus be used for
+application-specific serialization.
+
+<h3>Subsequent Bytes</h3>
+
+These are the subsequent bytes for the different type codes (everything is big-endian and unpadded):
+<p>
+<table border="1" cellpadding="2">
+<tr><th>Code</th><th>Subsequent Bytes</th></tr>
+<tr><td><i>0</i></td><td>&lt;32-bit signed integer&gt; &lt;as many bytes as indicated by the integer&gt;</td></tr>
+<tr><td><i>1</i></td><td>&lt;signed byte&gt;</td></tr>
+<tr><td><i>2</i></td><td>&lt;signed byte (<i>0 = <i>false</i> and <i>1</i> = <i>true</i>)&gt;</td></tr>
+<tr><td><i>3</i></td><td>&lt;32-bit signed integer&gt;</td></tr>
+<tr><td><i>4</i></td><td>&lt;64-bit signed integer&gt;</td></tr>
+<tr><td><i>5</i></td><td>&lt;32-bit IEEE floating point number&gt;</td></tr>
+<tr><td><i>6</i></td><td>&lt;64-bit IEEE floating point number&gt;</td></tr>
+<tr><td><i>7</i></td><td>&lt;32-bit signed integer&gt; &lt;as many UTF-8 bytes as indicated by the integer&gt;</td></tr>
+<tr><td><i>8</i></td><td>&lt;32-bit signed integer&gt; &lt;as many typed bytes sequences as indicated by the integer&gt;</td></tr>
+<tr><td><i>9</i></td><td>&lt;variable number of typed bytes sequences&gt; &lt;<i>255</i> written as an unsigned byte&gt;</td></tr>
+<tr><td><i>10</i></td><td>&lt;32-bit signed integer&gt; &lt;as many (key-value) pairs of typed bytes sequences as indicated by the integer&gt;</td></tr>
+</table>
+</p>
+
+</body>
+</html>

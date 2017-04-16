@@ -1,0 +1,189 @@
+From 855b0bf3718f2c397ef79967475468e4153f120a Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:24:20 -0800
+Subject: [PATCH 0146/1179] MAPREDUCE-1128. MRUnit Allows Iteration Twice
+
+Description: MRUnit allows one to iterate over a collection of values twice (ie.
+
+<p>reduce(Key key, Iterable&lt;Value&gt; values, Context context){
+   for(Value : values ) /* iterate once */;
+   for(Value : values ) /* iterate again */;
+}</p>
+
+<p>Hadoop will allow this as well, however the second iterator will be empty. MRUnit should either match hadoop's behavior or warn the user that their code is likely flawed.</p>
+Reason: bugfix (API compatibility)
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../mapreduce/mock/MockReduceContextWrapper.java   |   25 ++++++++++-
+ .../org/apache/hadoop/mrunit/TestReduceDriver.java |   44 ++++++++++++++++++++
+ .../hadoop/mrunit/mapreduce/TestReduceDriver.java  |   38 +++++++++++++++++
+ 3 files changed, 105 insertions(+), 2 deletions(-)
+
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
+index f785a02..c84cf05 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
+@@ -83,20 +83,41 @@ public class MockReduceContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+     private class InspectableIterable implements Iterable<VALUEIN> {
+       private Iterable<VALUEIN> base;
+       private VALUEIN lastVal;
++      private boolean used; // if true, don't re-iterate.
+ 
+       public InspectableIterable(final Iterable<VALUEIN> baseCollection) {
+         this.base = baseCollection;
+       }
+ 
+       public Iterator<VALUEIN> iterator() {
+-        return new InspectableIterator(this.base.iterator());
++        if (used) {
++          return new NullIterator();
++        } else {
++          used = true;
++          return new InspectableIterator(this.base.iterator());
++        }
+       }
+ 
+       public VALUEIN getLastVal() {
+         return lastVal;
+       }
+ 
+-      private class InspectableIterator 
++      private class NullIterator
++          extends ReduceContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT>.ValueIterator
++          implements Iterator<VALUEIN> {
++        public VALUEIN next() {
++          return null;
++        }
++
++        public boolean hasNext() {
++          return false;
++        }
++
++        public void remove() {
++        }
++      }
++
++      private class InspectableIterator
+           extends ReduceContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT>.ValueIterator
+           implements Iterator<VALUEIN> {
+         private Iterator<VALUEIN> iter;
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestReduceDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestReduceDriver.java
+index 381f136..3174e41 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestReduceDriver.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestReduceDriver.java
+@@ -22,13 +22,17 @@ import static org.apache.hadoop.mrunit.testutil.ExtendedAssert.assertListEquals;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
++import java.util.Iterator;
+ import java.util.List;
+ 
+ import junit.framework.TestCase;
+ 
+ import org.apache.hadoop.io.LongWritable;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.MapReduceBase;
++import org.apache.hadoop.mapred.OutputCollector;
+ import org.apache.hadoop.mapred.Reducer;
++import org.apache.hadoop.mapred.Reporter;
+ import org.apache.hadoop.mapred.lib.LongSumReducer;
+ import org.apache.hadoop.mrunit.types.Pair;
+ import org.junit.Before;
+@@ -222,5 +226,45 @@ public class TestReduceDriver extends TestCase {
+       // expected.
+     }
+   }
++
++  /**
++   * Reducer that counts its values twice; the second iteration
++   * according to mapreduce semantics should be empty.
++   */
++  private static class DoubleIterReducer<K, V>
++      extends MapReduceBase implements Reducer<K, V, K, LongWritable> {
++    public void reduce(K key, Iterator<V> values,
++        OutputCollector<K, LongWritable> out, Reporter r) throws IOException {
++      long count = 0;
++
++      while (values.hasNext()) {
++        count++;
++        values.next();
++      }
++
++      // This time around, iteration should yield no values.
++      while (values.hasNext()) {
++        count++;
++        values.next();
++      }
++      out.collect(key, new LongWritable(count));
++    }
++  }
++
++  @Test
++  public void testDoubleIteration() {
++    reducer = new DoubleIterReducer<Text, LongWritable>();
++    driver = new ReduceDriver<Text, LongWritable, Text, LongWritable>(
++        reducer);
++
++    driver
++        .withInputKey(new Text("foo"))
++        .withInputValue(new LongWritable(1))
++        .withInputValue(new LongWritable(1))
++        .withInputValue(new LongWritable(1))
++        .withInputValue(new LongWritable(1))
++        .withOutput(new Text("foo"), new LongWritable(4))
++        .runTest();
++  }
+ }
+ 
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java
+index dc51e83..e694264 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java
+@@ -223,5 +223,43 @@ public class TestReduceDriver extends TestCase {
+       // expected.
+     }
+   }
++
++  /**
++   * Reducer that counts its values twice; the second iteration
++   * according to mapreduce semantics should be empty.
++   */
++  private static class DoubleIterReducer<K, V>
++      extends Reducer<K, V, K, LongWritable> {
++    public void reduce(K key, Iterable<V> values, Context c)
++        throws IOException, InterruptedException {
++      long count = 0;
++
++      for (V val : values) {
++        count++;
++      }
++
++      // This time around, iteration should yield no values.
++      for (V val : values) {
++        count++;
++      }
++      c.write(key, new LongWritable(count));
++    }
++  }
++
++  @Test
++  public void testDoubleIteration() {
++    reducer = new DoubleIterReducer<Text, LongWritable>();
++    driver = new ReduceDriver<Text, LongWritable, Text, LongWritable>(
++        reducer);
++
++    driver
++        .withInputKey(new Text("foo"))
++        .withInputValue(new LongWritable(1))
++        .withInputValue(new LongWritable(1))
++        .withInputValue(new LongWritable(1))
++        .withInputValue(new LongWritable(1))
++        .withOutput(new Text("foo"), new LongWritable(4))
++        .runTest();
++  }
+ }
+ 
+-- 
+1.7.0.4
+

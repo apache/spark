@@ -1,0 +1,38 @@
+From 3cc1405289ac4ec6616a5ba9da18ff421a93678e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Mon, 14 Jun 2010 01:43:18 -0700
+Subject: [PATCH 0301/1179] HDFS-1209. Add parameter dfs.client.block.recovery.retries to determine how many times to try to recover block
+
+Reason: Used by append tests
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 491682e..87198cb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2168,7 +2168,6 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     private long lastFlushOffset = 0; // offset when flush was invoked
+     private boolean persistBlocks = false; // persist blocks on namenode
+     private int recoveryErrorCount = 0; // number of times block recovery failed
+-    private int maxRecoveryErrorCount = 5; // try block recovery 5 times
+     private volatile boolean appendChunk = false;   // appending to existing partial block
+     private long initialFileSize = 0; // at time of file open
+     private Progressable progress;
+@@ -2630,6 +2629,10 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         } catch (IOException e) {
+           LOG.warn("Failed recovery attempt #" + recoveryErrorCount +
+               " from primary datanode " + primaryNode, e);
++
++          // try block recovery 5 times by default
++          int maxRecoveryErrorCount = conf.getInt("dfs.client.block.recovery.retries", 5);
++
+           recoveryErrorCount++;
+           if (recoveryErrorCount > maxRecoveryErrorCount) {
+             if (nodes.length > 1) {
+-- 
+1.7.0.4
+

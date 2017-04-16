@@ -1,0 +1,116 @@
+From 1c79f4afcb7cd8a49aa997a7f47c6cbef24d527c Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu@cloudera.com>
+Date: Wed, 25 Apr 2012 08:32:57 -0700
+Subject: [PATCH 1170/1179] HADOOP-8314. HttpServer#hasAdminAccess should return false if authorization is enabled but user is not authenticated. (tucu)
+
+  Reason: security bug
+  Author: Alejandro Abdelnur
+  Ref: CDH-5384
+---
+ src/core/org/apache/hadoop/http/HttpServer.java    |    9 ++--
+ .../org/apache/hadoop/http/TestHttpServer.java     |   46 ++++++++++++++++++++
+ 2 files changed, 51 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index bd1b7d5..88a5bda 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -660,7 +660,10 @@ public class HttpServer implements FilterContainer {
+ 
+     String remoteUser = request.getRemoteUser();
+     if (remoteUser == null) {
+-      return true;
++      response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
++                         "Unauthenticated users are not " +
++                         "authorized to access this page.");
++      return false;
+     }
+     AccessControlList adminsAcl = (AccessControlList) servletContext
+         .getAttribute(ADMINS_ACL);
+@@ -669,9 +672,7 @@ public class HttpServer implements FilterContainer {
+     if (adminsAcl != null) {
+       if (!adminsAcl.isUserAllowed(remoteUserUGI)) {
+         response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "User "
+-            + remoteUser + " is unauthorized to access this page. "
+-            + "AccessControlList for accessing this page : "
+-            + adminsAcl.toString());
++            + remoteUser + " is unauthorized to access this page.");
+         return false;
+       }
+     }
+diff --git a/src/test/org/apache/hadoop/http/TestHttpServer.java b/src/test/org/apache/hadoop/http/TestHttpServer.java
+index 71c07ac..78ac990 100644
+--- a/src/test/org/apache/hadoop/http/TestHttpServer.java
++++ b/src/test/org/apache/hadoop/http/TestHttpServer.java
+@@ -38,6 +38,7 @@ import java.util.TreeSet;
+ import javax.servlet.Filter;
+ import javax.servlet.FilterChain;
+ import javax.servlet.FilterConfig;
++import javax.servlet.ServletContext;
+ import javax.servlet.ServletException;
+ import javax.servlet.ServletRequest;
+ import javax.servlet.ServletResponse;
+@@ -52,10 +53,13 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.security.Groups;
+ import org.apache.hadoop.security.ShellBasedUnixGroupsMapping;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AccessControlList;
+ import org.junit.After;
++import org.junit.Assert;
+ import org.junit.Before;
+ import org.junit.Test;
++import org.mockito.Mockito;
+ 
+ public class TestHttpServer {
+   private HttpServer server;
+@@ -390,4 +394,46 @@ public class TestHttpServer {
+     }
+     myServer.stop();
+   }
++
++  @Test
++  public void testHasAdministratorAccess() throws Exception {
++    Configuration conf = new Configuration();
++    conf.setBoolean(CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false);
++    ServletContext context = Mockito.mock(ServletContext.class);
++    Mockito.when(context.getAttribute(HttpServer.CONF_CONTEXT_ATTRIBUTE)).thenReturn(conf);
++    Mockito.when(context.getAttribute(HttpServer.ADMINS_ACL)).thenReturn(null);
++    HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++    Mockito.when(request.getRemoteUser()).thenReturn(null);
++    HttpServletResponse response = Mockito.mock(HttpServletResponse.class);
++
++    //authorization OFF
++    Assert.assertTrue(HttpServer.hasAdministratorAccess(context, request, response));
++
++    //authorization ON & user NULL
++    response = Mockito.mock(HttpServletResponse.class);
++    conf.setBoolean(CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, true);
++    Assert.assertFalse(HttpServer.hasAdministratorAccess(context, request, response));
++    Mockito.verify(response).sendError(Mockito.eq(HttpServletResponse.SC_UNAUTHORIZED), Mockito.anyString());
++
++    //authorization ON & user NOT NULL & ACLs NULL
++    response = Mockito.mock(HttpServletResponse.class);
++    Mockito.when(request.getRemoteUser()).thenReturn("foo");
++    Assert.assertTrue(HttpServer.hasAdministratorAccess(context, request, response));
++
++    //authorization ON & user NOT NULL & ACLs NOT NULL & user not in ACLs
++    response = Mockito.mock(HttpServletResponse.class);
++    AccessControlList acls = Mockito.mock(AccessControlList.class);
++    Mockito.when(acls.isUserAllowed(Mockito.<UserGroupInformation>any())).thenReturn(false);
++    Mockito.when(context.getAttribute(HttpServer.ADMINS_ACL)).thenReturn(acls);
++    Assert.assertFalse(HttpServer.hasAdministratorAccess(context, request, response));
++    Mockito.verify(response).sendError(Mockito.eq(HttpServletResponse.SC_UNAUTHORIZED), Mockito.anyString());
++
++    //authorization ON & user NOT NULL & ACLs NOT NULL & user in in ACLs
++    response = Mockito.mock(HttpServletResponse.class);
++    Mockito.when(acls.isUserAllowed(Mockito.<UserGroupInformation>any())).thenReturn(true);
++    Mockito.when(context.getAttribute(HttpServer.ADMINS_ACL)).thenReturn(acls);
++    Assert.assertTrue(HttpServer.hasAdministratorAccess(context, request, response));
++
++  }
++
+ }
+-- 
+1.7.0.4
+

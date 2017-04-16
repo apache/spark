@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<configuration>
+
+<property>
+  <name>ssl.server.truststore.location</name>
+  <value></value>
+  <description>Truststore to be used by NN and DN. Must be specified.
+  </description>
+</property>
+
+<property>
+  <name>ssl.server.truststore.password</name>
+  <value></value>
+  <description>Optional. Default value is "".
+  </description>
+</property>
+
+<property>
+  <name>ssl.server.truststore.type</name>
+  <value>jks</value>
+  <description>Optional. Default value is "jks".
+  </description>
+</property>
+
+<property>
+  <name>ssl.server.keystore.location</name>
+  <value></value>
+  <description>Keystore to be used by NN and DN. Must be specified.
+  </description>
+</property>
+
+<property>
+  <name>ssl.server.keystore.password</name>
+  <value></value>
+  <description>Must be specified.
+  </description>
+</property>
+
+<property>
+  <name>ssl.server.keystore.keypassword</name>
+  <value></value>
+  <description>Must be specified.
+  </description>
+</property>
+
+<property>
+  <name>ssl.server.keystore.type</name>
+  <value>jks</value>
+  <description>Optional. Default value is "jks".
+  </description>
+</property>
+
+</configuration>

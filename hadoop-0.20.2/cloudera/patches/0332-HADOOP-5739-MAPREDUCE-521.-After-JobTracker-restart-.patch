@@ -1,0 +1,166 @@
+From feb0e489f3e9757db541ea1694fe49f902e93f8c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:17 -0700
+Subject: [PATCH 0332/1179] HADOOP-5739 / MAPREDUCE-521. After JobTracker restart Capacity Scheduler does not schedule pending tasks from already running tasks.
+
+Reason: YDH
+Author: Rahul K Singh
+Ref: YDH
+---
+ .../mapred/ClusterWithCapacityScheduler.java       |    7 ++
+ .../hadoop/mapred/TestJobTrackerRestartWithCS.java |   82 ++++++++++++++++++++
+ .../org/apache/hadoop/mapred/JobTracker.java       |   17 ++++-
+ 3 files changed, 104 insertions(+), 2 deletions(-)
+ create mode 100644 src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithCS.java
+
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/ClusterWithCapacityScheduler.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/ClusterWithCapacityScheduler.java
+index c0daf59..4bdf307 100644
+--- a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/ClusterWithCapacityScheduler.java
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/ClusterWithCapacityScheduler.java
+@@ -197,6 +197,13 @@ public class ClusterWithCapacityScheduler extends TestCase {
+     }
+   }
+ 
++  /**
++   * @return the mrCluster
++   */
++  public MiniMRCluster getMrCluster() {
++    return mrCluster;
++  }
++
+   static class MyClassLoader extends ClassLoader {
+     @Override
+     public URL getResource(String name) {
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithCS.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithCS.java
+new file mode 100644
+index 0000000..46152b5
+--- /dev/null
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestJobTrackerRestartWithCS.java
+@@ -0,0 +1,82 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import java.util.Properties;
++import org.apache.hadoop.mapred.ControlledMapReduceJob.ControlledMapReduceJobRunner;
++
++
++public class TestJobTrackerRestartWithCS extends ClusterWithCapacityScheduler {
++
++  /**
++   * Test single queue.
++   *
++   * <p>
++   *
++   * Submit a job with more M/R tasks than total capacity. Full queue capacity
++   * should be utilized and remaining M/R tasks should wait for slots to be
++   * available.
++   *
++   * @throws Exception
++   */
++  public void testJobTrackerRestartWithCS()
++          throws Exception {
++    try {
++      Properties schedulerProps = new Properties();
++      schedulerProps.put(
++              "mapred.capacity-scheduler.queue.default.guaranteed-capacity", "100");
++      Properties clusterProps = new Properties();
++      clusterProps.put("mapred.tasktracker.map.tasks.maximum", String.valueOf(2));
++      clusterProps.put("mapred.tasktracker.reduce.tasks.maximum", String.valueOf(0));
++
++      // cluster capacity 2 maps, 0 reduces
++      startCluster(1, clusterProps, schedulerProps);
++
++      ControlledMapReduceJobRunner jobRunner =
++              ControlledMapReduceJobRunner.getControlledMapReduceJobRunner(
++              getJobConf(), 4, 0);
++      jobRunner.start();
++      ControlledMapReduceJob controlledJob = jobRunner.getJob();
++      JobID myJobID = jobRunner.getJobID();
++      JobInProgress myJob = getJobTracker().getJob(myJobID);
++      ControlledMapReduceJob.waitTillNTasksStartRunning(myJob, true, 2);
++
++      LOG.info("Trying to finish 2 maps");
++      controlledJob.finishNTasks(true, 2);
++      ControlledMapReduceJob.waitTillNTotalTasksFinish(myJob, true, 2);
++      assertTrue("Number of maps finished", myJob.finishedMaps() == 2);
++
++      JobClient jobClient = new JobClient(getMrCluster().createJobConf());
++      getMrCluster().stopJobTracker();
++
++      getMrCluster().getJobTrackerConf().setBoolean("mapred.jobtracker.restart.recover",
++              true);
++      getMrCluster().startJobTracker();
++
++      UtilsForTests.waitForJobTracker(jobClient);
++      ControlledMapReduceJob.waitTillNTasksStartRunning(myJob, true, 1);
++
++      controlledJob.finishNTasks(true, 2);
++      ControlledMapReduceJob.waitTillNTotalTasksFinish(myJob, true, 2);
++    } catch (Exception e) {
++      e.printStackTrace();
++    } finally {
++      tearDown();
++    }
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 689e000..13b4dac 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -777,7 +777,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         
+         TaskID id = TaskID.forName(taskId);
+         TaskInProgress tip = getTip(id);
+-        
++
+         updateTip(tip, task);
+       }
+ 
+@@ -790,7 +790,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         
+         // Check if the transaction for this attempt can be committed
+         String taskStatus = attempt.get(Keys.TASK_STATUS);
+-        
++        TaskAttemptID taskID = TaskAttemptID.forName(taskAttemptId);
++        JobInProgress jip = getJob(taskID.getJobID());
++        JobStatus prevStatus = (JobStatus)jip.getStatus().clone();
++
+         if (taskStatus.length() > 0) {
+           // This means this is an update event
+           if (taskStatus.equals(Values.SUCCESS.name())) {
+@@ -804,6 +807,16 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         } else {
+           createTaskAttempt(jip, id, attempt);
+         }
++        
++        JobStatus newStatus = (JobStatus)jip.getStatus().clone();
++        if (prevStatus.getRunState() != newStatus.getRunState()) {
++          if(LOG.isDebugEnabled())
++            LOG.debug("Status changed hence informing prevStatus" +  prevStatus + " currentStatus "+ newStatus);
++          JobStatusChangeEvent event =
++            new JobStatusChangeEvent(jip, EventType.RUN_STATE_CHANGED,
++                                     prevStatus, newStatus);
++          updateJobInProgressListeners(event);
++        }
+       }
+ 
+       public void handle(JobHistory.RecordTypes recType, Map<Keys, 
+-- 
+1.7.0.4
+

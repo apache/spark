@@ -1,0 +1,70 @@
+From ce660087bdc95831ee5d2d18621bbdafb2c7e3fb Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:46 -0700
+Subject: [PATCH 0347/1179] MAPREDUCE-734. ConcurrentModificationException observed in unreserving slots for HiRam Jobs
+
+Author: Arun Murthy
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   18 ++++++++++++------
+ 1 files changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 7a533c7..4079414 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -22,6 +22,7 @@ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.HashMap;
++import java.util.HashSet;
+ import java.util.IdentityHashMap;
+ import java.util.Iterator;
+ import java.util.LinkedHashSet;
+@@ -2311,7 +2312,6 @@ public class JobInProgress {
+         this.status.setReduceProgress(1.0f);
+       }
+       this.finishTime = System.currentTimeMillis();
+-      cancelReservedSlots();
+       LOG.info("Job " + this.status.getJobID() + 
+                " has completed successfully.");
+       JobHistory.JobInfo.logFinished(this.status.getJobID(), finishTime, 
+@@ -2395,17 +2395,21 @@ public class JobInProgress {
+       for (int i = 0; i < reduces.length; i++) {
+         reduces[i].kill();
+       }
+-      
+-      // Clear out reserved tasktrackers
+-      cancelReservedSlots();
+     }
+   }
+ 
+   private void cancelReservedSlots() {
+-    for (TaskTracker tt : trackersReservedForMaps.keySet()) {
++    // Make a copy of the set of TaskTrackers to prevent a 
++    // ConcurrentModificationException ...
++    Set<TaskTracker> tm = 
++      new HashSet<TaskTracker>(trackersReservedForMaps.keySet());
++    for (TaskTracker tt : tm) {
+       tt.unreserveSlots(TaskType.MAP, this);
+     }
+-    for (TaskTracker tt : trackersReservedForReduces.keySet()) {
++
++    Set<TaskTracker> tr = 
++      new HashSet<TaskTracker>(trackersReservedForReduces.keySet());
++    for (TaskTracker tt : tr) {
+       tt.unreserveSlots(TaskType.REDUCE, this);
+     }
+   }
+@@ -2696,6 +2700,8 @@ public class JobInProgress {
+    * from the various tables.
+    */
+   synchronized void garbageCollect() {
++    //Cancel task tracker reservation
++    cancelReservedSlots();
+     // Let the JobTracker know that a job is complete
+     jobtracker.getInstrumentation().decWaitingMaps(getJobID(), pendingMaps());
+     jobtracker.getInstrumentation().decWaitingReduces(getJobID(), pendingReduces());
+-- 
+1.7.0.4
+

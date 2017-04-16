@@ -1,0 +1,482 @@
+From df154b1e141761112f667455baab2b4620f1b465 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 7 Mar 2011 22:36:45 -0800
+Subject: [PATCH 0911/1179] HADOOP-7115. Reapply final patch to add a cache to username resolution
+
+Also fixes a bug where a user not found would trigger an assertion error
+and crash the JVM.
+
+Author: Devaraj Das
+Ref: CDH-2779
+---
+ src/core/core-default.xml                          |    6 ++
+ src/core/org/apache/hadoop/io/SecureIOUtils.java   |   35 +++-----
+ .../org/apache/hadoop/io/nativeio/NativeIO.java    |   59 ++++++++++++--
+ .../org/apache/hadoop/mapred/SpillRecord.java      |    2 +-
+ src/mapred/org/apache/hadoop/mapred/TaskLog.java   |    4 +-
+ .../apache/hadoop/mapred/TaskLogsTruncater.java    |    2 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    2 +-
+ .../src/org/apache/hadoop/io/nativeio/NativeIO.c   |   89 +++++++++++++++-----
+ .../org/apache/hadoop/io/TestSecureIOUtils.java    |    9 +-
+ .../apache/hadoop/io/nativeio/TestNativeIO.java    |   13 +++-
+ 10 files changed, 158 insertions(+), 63 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index be2f455..bd1554d 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -476,6 +476,12 @@
+   </description>
+ </property>
+ 
++<property>
++  <name>hadoop.security.uid.cache.secs</name>
++  <value>14400</value>
++  <description> NativeIO maintains a cache from UID to UserName. This is
++  the timeout for an entry in that cache. </description>
++</property>
+ 
+ 
+ </configuration>
+diff --git a/src/core/org/apache/hadoop/io/SecureIOUtils.java b/src/core/org/apache/hadoop/io/SecureIOUtils.java
+index 80a8be5..3c5d0e5 100644
+--- a/src/core/org/apache/hadoop/io/SecureIOUtils.java
++++ b/src/core/org/apache/hadoop/io/SecureIOUtils.java
+@@ -31,7 +31,6 @@ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.io.nativeio.Errno;
+ import org.apache.hadoop.io.nativeio.NativeIO;
+ import org.apache.hadoop.io.nativeio.NativeIOException;
+-import org.apache.hadoop.io.nativeio.NativeIO.Stat;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+@@ -91,31 +90,31 @@ public class SecureIOUtils {
+   private final static FileSystem rawFilesystem;
+ 
+   /**
+-   * Open the given File for read access, verifying the expected user/group
++   * Open the given File for read access, verifying the expected user
+    * constraints.
+    * @param f the file that we are trying to open
+    * @param expectedOwner the expected user owner for the file
+-   * @param expectedGroup the expected group owner for the file
+-   * @throws IOException if an IO Error occurred, or the user/group does not 
++   * @throws IOException if an IO Error occurred, or the user does not 
+    * match
+    */
+-  public static FileInputStream openForRead(File f, String expectedOwner, 
+-      String expectedGroup) throws IOException {
++  public static FileInputStream openForRead(File f, String expectedOwner) 
++  throws IOException {
++    FileInputStream fis = new FileInputStream(f);
++    if (expectedOwner == null) { //no security checks
++      return fis;
++    }
+     if (skipSecurity) {
+       // Subject to race conditions but this is the best we can do
+       FileStatus status =
+         rawFilesystem.getFileStatus(new Path(f.getAbsolutePath()));
+-      checkStat(f, status.getOwner(), status.getGroup(),
+-          expectedOwner, expectedGroup);
+-      return new FileInputStream(f);
++      checkStat(f, status.getOwner(), expectedOwner);
++      return fis;
+     }
+ 
+-    FileInputStream fis = new FileInputStream(f);
+     boolean success = false;
+     try {
+-      Stat stat = NativeIO.fstat(fis.getFD());
+-      checkStat(f, stat.getOwner(), stat.getGroup(), expectedOwner,
+-          expectedGroup);
++      String owner = NativeIO.getOwner(fis.getFD());
++      checkStat(f, owner, expectedOwner);
+       success = true;
+       return fis;
+     } finally {
+@@ -174,21 +173,13 @@ public class SecureIOUtils {
+     }
+   }
+ 
+-  private static void checkStat(File f, String owner, String group, 
+-      String expectedOwner, 
+-      String expectedGroup) throws IOException {
++  private static void checkStat(File f, String owner, String expectedOwner) throws IOException {
+     if (expectedOwner != null &&
+         !expectedOwner.equals(owner)) {
+       throw new IOException(
+         "Owner '" + owner + "' for path " + f + " did not match " +
+         "expected owner '" + expectedOwner + "'");
+     }
+-    if (expectedGroup != null &&
+-        !expectedGroup.equals(group)) {
+-      throw new IOException(
+-        "Group '" + group + "' for path " + f + " did not match " +
+-        "expected group '" + expectedGroup + "'");
+-    }
+   }
+ 
+   /**
+diff --git a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+index db45125..f216c32 100644
+--- a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
++++ b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+@@ -19,7 +19,10 @@ package org.apache.hadoop.io.nativeio;
+ 
+ import java.io.FileDescriptor;
+ import java.io.IOException;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.util.NativeCodeLoader;
+ 
+ import org.apache.commons.logging.Log;
+@@ -72,20 +75,66 @@ public class NativeIO {
+ 
+   /** Wrapper around open(2) */
+   public static native FileDescriptor open(String path, int flags, int mode) throws IOException;
++
+   /** Wrapper around fstat(2) */
++  //TODO: fstat is an old implementation. Doesn't use the cache. This should be 
++  //changed to use the cache.
+   public static native Stat fstat(FileDescriptor fd) throws IOException;
+   /** Wrapper around chmod(2) */
+   public static native void chmod(String path, int mode) throws IOException;
+ 
++  private static native long getUIDForFDOwner(FileDescriptor fd) throws IOException;
++  private static native String getUserName(long uid) throws IOException;
++
+   /** Initialize the JNI method ID and class ID cache */
+   private static native void initNative();
++  
++  private static class CachedUid {
++    final long timestamp;
++    final String username;
++    public CachedUid(String username, long timestamp) {
++      this.timestamp = timestamp;
++      this.username = username;
++    }
++  }
++  private static final Map<Long, CachedUid> uidCache = 
++    new ConcurrentHashMap<Long, CachedUid>();
++  private static long cacheTimeout;
++  private static boolean initialized = false;
++  
++  public static String getOwner(FileDescriptor fd) throws IOException {
++    ensureInitialized();
++    long uid = getUIDForFDOwner(fd);
++    CachedUid cUid = uidCache.get(uid);
++    long now = System.currentTimeMillis();
++    if (cUid != null && (cUid.timestamp + cacheTimeout) > now) {
++      return cUid.username;
++    }
++    String user = getUserName(uid);
++    LOG.debug("Got UserName " + user + " for UID " + uid + 
++        " from the native implementation");
++    cUid = new CachedUid(user, now);
++    uidCache.put(uid, cUid);
++    return user;
++  }
++    
++  private synchronized static void ensureInitialized() {
++    if (!initialized) {
++      cacheTimeout = 
++        new Configuration().getLong("hadoop.security.uid.cache.secs", 
++                                     4*60*60) * 1000;
++      LOG.debug("Initialized cache for UID to User mapping with a cache" +
++      		" timeout of " + cacheTimeout/1000 + " seconds.");
++      initialized = true;
++    }
++  }
+ 
+ 
+   /**
+    * Result type of the fstat call
+    */
+   public static class Stat {
+-    private String owner, group;
++    private String owner;
+     private int mode;
+ 
+     // Mode constants
+@@ -105,23 +154,19 @@ public class NativeIO {
+     public static final int S_IWUSR = 0000200;  /* write permission, owner */
+     public static final int S_IXUSR = 0000100;  /* execute/search permission, owner */
+ 
+-    Stat(String owner, String group, int mode) {
++    Stat(String owner, int mode) {
+       this.owner = owner;
+-      this.group = group;
+       this.mode = mode;
+     }
+ 
+     public String toString() {
+-      return "Stat(owner='" + owner + "', group='" + group + "'" +
++      return "Stat(owner='" + owner + "'" +
+         ", mode=" + mode + ")";
+     }
+ 
+     public String getOwner() {
+       return owner;
+     }
+-    public String getGroup() {
+-      return group;
+-    }
+     public int getMode() {
+       return mode;
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/SpillRecord.java b/src/mapred/org/apache/hadoop/mapred/SpillRecord.java
+index f90c681..b67a7a4 100644
+--- a/src/mapred/org/apache/hadoop/mapred/SpillRecord.java
++++ b/src/mapred/org/apache/hadoop/mapred/SpillRecord.java
+@@ -61,7 +61,7 @@ class SpillRecord {
+     final FileSystem rfs = FileSystem.getLocal(job).getRaw();
+     final DataInputStream in = 
+       new DataInputStream(SecureIOUtils.openForRead(
+-          new File(indexFileName.toUri().getPath()), expectedIndexOwner, null));
++         new File(indexFileName.toUri().getPath()), expectedIndexOwner));
+     try {
+       final long length = rfs.getFileStatus(indexFileName).getLen();
+       final int partitions = (int) length / MAP_OUTPUT_INDEX_RECORD_LENGTH;
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskLog.java b/src/mapred/org/apache/hadoop/mapred/TaskLog.java
+index bd88410..3d67801 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskLog.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskLog.java
+@@ -108,7 +108,7 @@ public class TaskLog {
+ 
+     File indexFile = getIndexFile(taskid, isCleanup);
+     BufferedReader fis = new BufferedReader(new InputStreamReader(
+-      SecureIOUtils.openForRead(indexFile, obtainLogDirOwner(taskid), null)));
++      SecureIOUtils.openForRead(indexFile, obtainLogDirOwner(taskid))));
+     //the format of the index file is
+     //LOG_DIR: <the dir where the task logs are really stored>
+     //stdout:<start-offset in the stdout file> <length>
+@@ -348,7 +348,7 @@ public class TaskLog {
+       bytesRemaining = end - start;
+       String owner = obtainLogDirOwner(taskid);
+       file = SecureIOUtils.openForRead(new File(fileDetail.location, kind.toString()), 
+-          owner, null);
++          owner);
+       // skip upto start
+       long pos = 0;
+       while (pos < start) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java b/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java
+index fff55bc..f4ed1e2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskLogsTruncater.java
+@@ -185,7 +185,7 @@ public class TaskLogsTruncater {
+ 
+       // ////// Open logFile for reading //////
+       try {
+-        logFileInputStream = SecureIOUtils.openForRead(logFile, owner, null);
++        logFileInputStream = SecureIOUtils.openForRead(logFile, owner);
+       } catch (IOException ioe) {
+         if (LOG.isDebugEnabled()) {
+           LOG.debug("Cannot open " + logFile.getAbsolutePath()
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index aba4185..0277a70 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -3618,7 +3618,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+          */
+         //open the map-output file
+         mapOutputIn = SecureIOUtils.openForRead(
+-            new File(mapOutputFileName.toUri().getPath()), runAsUserName, null);
++            new File(mapOutputFileName.toUri().getPath()), runAsUserName);
+ 
+         //seek to the correct offset for the reduce
+         mapOutputIn.skip(info.startOffset);
+diff --git a/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c b/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
+index b5f9670..71608e4 100644
+--- a/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
++++ b/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
+@@ -53,7 +53,7 @@ static void stat_init(JNIEnv *env) {
+   PASS_EXCEPTIONS(env);
+   stat_clazz = (*env)->NewGlobalRef(env, clazz);
+   stat_ctor = (*env)->GetMethodID(env, stat_clazz, "<init>",
+-    "(Ljava/lang/String;Ljava/lang/String;I)V");
++    "(Ljava/lang/String;I)V");
+ }
+ 
+ static void stat_deinit(JNIEnv *env) {
+@@ -151,33 +151,17 @@ Java_org_apache_hadoop_io_nativeio_NativeIO_fstat(
+       goto cleanup;
+     }
+   }
+-  assert(pwdp == &pwd);
++  if (rc == 0 && pwdp == NULL) {
++    throw_ioe(env, ENOENT);
++    goto cleanup;
++  }
+ 
+   jstring jstr_username = (*env)->NewStringUTF(env, pwd.pw_name);
+   if (jstr_username == NULL) goto cleanup;
+ 
+-  // Grab group
+-  struct group grp, *grpp;
+-  while ((rc = getgrgid_r(s.st_gid, &grp, pw_buf, pw_buflen, &grpp)) != 0) {
+-    if (rc != ERANGE) {
+-      throw_ioe(env, rc);
+-      goto cleanup;
+-    }
+-    free(pw_buf);
+-    pw_buflen *= 2;
+-    if ((pw_buf = malloc(pw_buflen)) == NULL) {
+-      THROW(env, "java/lang/OutOfMemoryError", "Couldn't allocate memory for pw buffer");
+-      goto cleanup;
+-    }
+-  }
+-  assert(grpp == &grp);
+-
+-  jstring jstr_groupname = (*env)->NewStringUTF(env, grp.gr_name);
+-  PASS_EXCEPTIONS_GOTO(env, cleanup);
+-
+   // Construct result
+   ret = (*env)->NewObject(env, stat_clazz, stat_ctor,
+-    jstr_username, jstr_groupname, s.st_mode);
++    jstr_username, s.st_mode);
+ 
+ cleanup:
+   if (pw_buf != NULL) free(pw_buf);
+@@ -239,6 +223,67 @@ Java_org_apache_hadoop_io_nativeio_NativeIO_chmod(
+ 
+ 
+ /*
++ * private static native long getUIDForFDOwner(FileDescriptor fd);
++ */
++JNIEXPORT jlong JNICALL 
++Java_org_apache_hadoop_io_nativeio_NativeIO_getUIDForFDOwner(JNIEnv *env, jclass clazz,
++ jobject fd_object) {
++  int fd = fd_get(env, fd_object);
++  PASS_EXCEPTIONS_GOTO(env, cleanup);
++
++  struct stat s;
++  int rc = fstat(fd, &s);
++  if (rc != 0) {
++    throw_ioe(env, errno);
++    goto cleanup;
++  }
++  return (jlong)(s.st_uid);
++cleanup:
++  return (jlong)(-1);
++}
++
++/*
++ * private static native String getUserName(long uid);
++ */
++JNIEXPORT jstring JNICALL 
++Java_org_apache_hadoop_io_nativeio_NativeIO_getUserName(JNIEnv *env, 
++jclass clazz, jlong uid) {
++   
++  char *pw_buf = NULL;
++  int rc;
++  size_t pw_buflen = get_pw_buflen();
++  if ((pw_buf = malloc(pw_buflen)) == NULL) {
++    THROW(env, "java/lang/OutOfMemoryError", "Couldn't allocate memory for pw buffer");
++    goto cleanup;
++  }
++
++  // Grab username
++  struct passwd pwd, *pwdp;
++  while ((rc = getpwuid_r((uid_t)uid, &pwd, pw_buf, pw_buflen, &pwdp)) != 0) {
++    if (rc != ERANGE) {
++      throw_ioe(env, rc);
++      goto cleanup;
++    }
++    free(pw_buf);
++    pw_buflen *= 2;
++    if ((pw_buf = malloc(pw_buflen)) == NULL) {
++      THROW(env, "java/lang/OutOfMemoryError", "Couldn't allocate memory for pw buffer");
++      goto cleanup;
++    }
++  }
++  if (rc == 0 && pwdp == NULL) {
++    throw_ioe(env, ENOENT);
++    goto cleanup;
++  }
++
++  jstring jstr_username = (*env)->NewStringUTF(env, pwd.pw_name);
++
++cleanup:
++  if (pw_buf != NULL) free(pw_buf);
++  return jstr_username;
++}
++
++/*
+  * Throw a java.IO.IOException, generating the message from errno.
+  */
+ static void throw_ioe(JNIEnv* env, int errnum)
+diff --git a/src/test/org/apache/hadoop/io/TestSecureIOUtils.java b/src/test/org/apache/hadoop/io/TestSecureIOUtils.java
+index df87507..f4e981b 100644
+--- a/src/test/org/apache/hadoop/io/TestSecureIOUtils.java
++++ b/src/test/org/apache/hadoop/io/TestSecureIOUtils.java
+@@ -35,7 +35,7 @@ import java.io.FileInputStream;
+ import java.io.FileOutputStream;
+ 
+ public class TestSecureIOUtils {
+-  private static String realOwner, realGroup; 
++  private static String realOwner; 
+   private static final File testFilePath =
+       new File(System.getProperty("test.build.data"), "TestSecureIOContext");
+ 
+@@ -50,24 +50,23 @@ public class TestSecureIOUtils {
+     FileStatus stat = rawFS.getFileStatus(
+       new Path(testFilePath.toString()));
+     realOwner = stat.getOwner();
+-    realGroup = stat.getGroup();
+   }
+ 
+   @Test
+   public void testReadUnrestricted() throws IOException {
+-    SecureIOUtils.openForRead(testFilePath, null, null).close();
++    SecureIOUtils.openForRead(testFilePath, null).close();
+   }
+ 
+   @Test
+   public void testReadCorrectlyRestrictedWithSecurity() throws IOException {
+     SecureIOUtils
+-      .openForRead(testFilePath, realOwner, realGroup).close();
++      .openForRead(testFilePath, realOwner).close();
+   }
+ 
+   @Test(expected=IOException.class)
+   public void testReadIncorrectlyRestrictedWithSecurity() throws IOException {
+     SecureIOUtils
+-      .openForRead(testFilePath, "invalidUser", null).close();
++      .openForRead(testFilePath, "invalidUser").close();
+     fail("Didn't throw expection for wrong ownership!");
+   }
+ 
+diff --git a/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java b/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
+index c689663..78531ed 100644
+--- a/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
++++ b/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
+@@ -61,13 +61,22 @@ public class TestNativeIO {
+     LOG.info("Stat: " + String.valueOf(stat));
+ 
+     assertEquals(System.getProperty("user.name"), stat.getOwner());
+-    assertNotNull(stat.getGroup());
+-    assertTrue(!"".equals(stat.getGroup()));
+     assertEquals("Stat mode field should indicate a regular file",
+       NativeIO.Stat.S_IFREG, stat.getMode() & NativeIO.Stat.S_IFMT);
+   }
+ 
+   @Test
++  public void testGetOwner() throws Exception {
++    FileOutputStream fos = new FileOutputStream(
++      new File(TEST_DIR, "testfstat"));
++    String owner = NativeIO.getOwner(fos.getFD());
++    fos.close();
++    LOG.info("Owner: " + owner);
++
++    assertEquals(System.getProperty("user.name"), owner);
++  }
++
++  @Test
+   public void testFstatClosedFd() throws Exception {
+     FileOutputStream fos = new FileOutputStream(
+       new File(TEST_DIR, "testfstat2"));
+-- 
+1.7.0.4
+

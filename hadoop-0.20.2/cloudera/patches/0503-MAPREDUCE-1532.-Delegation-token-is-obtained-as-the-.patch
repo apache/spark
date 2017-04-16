@@ -1,0 +1,541 @@
+From a9847d0ea9f695dca2d3dca6e81a8cd1f29665fc Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 25 Feb 2010 18:25:29 -0800
+Subject: [PATCH 0503/1179] MAPREDUCE-1532. Delegation token is obtained as the superuser
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437096/1532-bp20.4.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |  161 ++++++++++++--------
+ .../org/apache/hadoop/mapred/JobTracker.java       |    2 +
+ src/mapred/org/apache/hadoop/mapreduce/Job.java    |   11 +-
+ .../org/apache/hadoop/mapreduce/JobContext.java    |    8 +
+ .../security/token/DelegationTokenRenewal.java     |  105 ++++++-------
+ .../security/token/TestDelegationTokenRenewal.java |   16 +--
+ 6 files changed, 165 insertions(+), 138 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index 1a4a6fa..4c47ffb 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -432,6 +432,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+   private Path stagingAreaDir = null;
+   
+   private FileSystem fs = null;
++  private UserGroupInformation ugi;
+ 
+   /**
+    * Create a job client.
+@@ -459,6 +460,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+    */
+   public void init(JobConf conf) throws IOException {
+     String tracker = conf.get("mapred.job.tracker", "local");
++    this.ugi = UserGroupInformation.getCurrentUser();
+     if ("local".equals(tracker)) {
+       conf.setNumMapTasks(1);
+       this.jobSubmitClient = new LocalJobRunner(conf);
+@@ -492,6 +494,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+    */
+   public JobClient(InetSocketAddress jobTrackAddr, 
+                    Configuration conf) throws IOException {
++    this.ugi = UserGroupInformation.getCurrentUser();
+     jobSubmitClient = createRPCProxy(jobTrackAddr, conf);
+   }
+ 
+@@ -509,13 +512,22 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+    * for submission to the MapReduce system.
+    * 
+    * @return the filesystem handle.
++   * @throws IOException 
+    */
+   public synchronized FileSystem getFs() throws IOException {
+     if (this.fs == null) {
+-      Path sysDir = getSystemDir();
+-      this.fs = sysDir.getFileSystem(getConf());
++      try {
++        this.fs = ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
++          public FileSystem run() throws IOException {
++            Path sysDir = getSystemDir();
++            return sysDir.getFileSystem(getConf());
++          }
++        });
++      } catch (InterruptedException e) {
++        throw new RuntimeException(e);
++      }
+     }
+-    return fs;
++    return this.fs;
+   }
+   
+   /* see if two file systems are the same or not
+@@ -558,8 +570,9 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+ 
+   // copies a file to the jobtracker filesystem and returns the path where it
+   // was copied to
+-  private Path copyRemoteFiles(FileSystem jtFs, Path parentDir, Path originalPath, 
+-                               JobConf job, short replication) throws IOException {
++  private Path copyRemoteFiles(FileSystem jtFs, Path parentDir, 
++      final Path originalPath, final JobConf job, short replication) 
++  throws IOException, InterruptedException {
+     //check if we do not need to copy the files
+     // is jt using the same file system.
+     // just checking for uri strings... doing no dns lookups 
+@@ -568,6 +581,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     
+     FileSystem remoteFs = null;
+     remoteFs = originalPath.getFileSystem(job);
++    
+     if (compareFs(remoteFs, jtFs)) {
+       return originalPath;
+     }
+@@ -587,7 +601,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+    * @throws IOException
+    */
+   private void copyAndConfigureFiles(JobConf job, Path jobSubmitDir) 
+-  throws IOException {
++  throws IOException, InterruptedException {
+     short replication = (short)job.getInt("mapred.submit.replication", 10);
+     copyAndConfigureFiles(job, jobSubmitDir, replication);
+ 
+@@ -598,7 +612,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+   }
+   
+   private void copyAndConfigureFiles(JobConf job, Path submitJobDir, 
+-      short replication) throws IOException {
++      short replication) throws IOException, InterruptedException {
+     
+     if (!(job.getBoolean("mapred.used.genericoptionsparser", false))) {
+       LOG.warn("Use GenericOptionsParser for parsing the arguments. " +
+@@ -762,7 +776,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+    * @throws IOException
+    */
+   public 
+-  RunningJob submitJobInternal(JobConf job
++  RunningJob submitJobInternal(final JobConf job
+                                ) throws FileNotFoundException, 
+                                         ClassNotFoundException,
+                                         InterruptedException,
+@@ -770,67 +784,80 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     /*
+      * configure the command line options correctly on the submitting dfs
+      */
+-    Path jobStagingArea = JobSubmissionFiles.getStagingDir(this, job);
+-    JobID jobId = jobSubmitClient.getNewJobId();
+-    Path submitJobDir = new Path(jobStagingArea, jobId.toString());
+-    job.set("mapreduce.job.dir", submitJobDir.toString());
+-    JobStatus status = null;
+-    try {
+-      
+-      copyAndConfigureFiles(job, submitJobDir);
+-      
+-      // get delegation token for the dir
+-      TokenCache.obtainTokensForNamenodes(new Path [] {submitJobDir}, job);
+-      
+-      Path submitJobFile = JobSubmissionFiles.getJobConfPath(submitJobDir);
+-      int reduces = job.getNumReduceTasks();
+-      JobContext context = new JobContext(job, jobId);
+-      
+-      job = (JobConf)context.getConfiguration();
++    return ugi.doAs(new PrivilegedExceptionAction<RunningJob>() {
++      public RunningJob run() throws FileNotFoundException, 
++      ClassNotFoundException,
++      InterruptedException,
++      IOException{
++
++        JobConf jobCopy = job;
++        Path jobStagingArea = JobSubmissionFiles.getStagingDir(JobClient.this,
++            jobCopy);
++        JobID jobId = jobSubmitClient.getNewJobId();
++        Path submitJobDir = new Path(jobStagingArea, jobId.toString());
++        jobCopy.set("mapreduce.job.dir", submitJobDir.toString());
++        JobStatus status = null;
++        try {
+ 
+-      // Check the output specification
+-      if (reduces == 0 ? job.getUseNewMapper() : job.getUseNewReducer()) {
+-        org.apache.hadoop.mapreduce.OutputFormat<?,?> output =
+-          ReflectionUtils.newInstance(context.getOutputFormatClass(), job);
+-        output.checkOutputSpecs(context);
+-      } else {
+-        job.getOutputFormat().checkOutputSpecs(fs, job);
+-      }
++          copyAndConfigureFiles(jobCopy, submitJobDir);
+ 
+-      // Create the splits for the job
+-      LOG.debug("Creating splits at " + fs.makeQualified(submitJobDir));
+-      int maps = writeSplits(context, submitJobDir);
+-      job.setNumMapTasks(maps);
++          // get delegation token for the dir
++          TokenCache.obtainTokensForNamenodes(new Path [] {submitJobDir},
++              jobCopy);
+ 
+-      // Write job file to JobTracker's fs        
+-      FSDataOutputStream out = 
+-        FileSystem.create(fs, submitJobFile,
+-            new FsPermission(JobSubmissionFiles.JOB_FILE_PERMISSION));
++          Path submitJobFile = JobSubmissionFiles.getJobConfPath(submitJobDir);
++          int reduces = jobCopy.getNumReduceTasks();
++          JobContext context = new JobContext(jobCopy, jobId);
+ 
+-      try {
+-        job.writeXml(out);
+-      } finally {
+-        out.close();
+-      }
+-      
++          jobCopy = (JobConf)context.getConfiguration();
+ 
+-      //
+-      // Now, actually submit the job (using the submit name)
+-      //
+-      populateTokenCache(job);
+-      status = jobSubmitClient.submitJob(
+-         jobId, submitJobDir.toString(), TokenCache.getTokenStorage());
+-      if (status != null) {
+-        return new NetworkedJob(status);
+-      } else {
+-        throw new IOException("Could not launch job");
+-      }
+-    } finally {
+-      if (status == null) {
+-        LOG.info("Cleaning up the staging area " + submitJobDir);
+-        fs.delete(submitJobDir, true);
++          // Check the output specification
++          if (reduces == 0 ? jobCopy.getUseNewMapper() : 
++            jobCopy.getUseNewReducer()) {
++            org.apache.hadoop.mapreduce.OutputFormat<?,?> output =
++              ReflectionUtils.newInstance(context.getOutputFormatClass(),
++                  jobCopy);
++            output.checkOutputSpecs(context);
++          } else {
++            jobCopy.getOutputFormat().checkOutputSpecs(fs, jobCopy);
++          }
++
++          // Create the splits for the job
++          LOG.debug("Creating splits at " + fs.makeQualified(submitJobDir));
++          int maps = writeSplits(context, submitJobDir);
++          jobCopy.setNumMapTasks(maps);
++
++          // Write job file to JobTracker's fs        
++          FSDataOutputStream out = 
++            FileSystem.create(fs, submitJobFile,
++                new FsPermission(JobSubmissionFiles.JOB_FILE_PERMISSION));
++
++          try {
++            jobCopy.writeXml(out);
++          } finally {
++            out.close();
++          }
++
++
++          //
++          // Now, actually submit the job (using the submit name)
++          //
++          populateTokenCache(jobCopy);
++          status = jobSubmitClient.submitJob(
++              jobId, submitJobDir.toString(), TokenCache.getTokenStorage());
++          if (status != null) {
++            return new NetworkedJob(status);
++          } else {
++            throw new IOException("Could not launch job");
++          }
++        } finally {
++          if (status == null) {
++            LOG.info("Cleaning up the staging area " + submitJobDir);
++            fs.delete(submitJobDir, true);
++          }
++        }
+       }
+-    }
++    });
+   }
+ 
+   @SuppressWarnings("unchecked")
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 1941b20..f5296ab 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -104,6 +104,7 @@ import org.apache.hadoop.util.VersionInfo;
+ 
+ import org.apache.hadoop.mapreduce.ClusterMetrics;
+ import org.apache.hadoop.mapreduce.TaskType;
++import org.apache.hadoop.mapreduce.security.token.DelegationTokenRenewal;
+ import org.apache.hadoop.mapreduce.security.token.JobTokenSecretManager;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
+ import org.apache.hadoop.security.TokenStorage;
+@@ -2477,6 +2478,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         ex.printStackTrace();
+       }
+     }
++    DelegationTokenRenewal.close();
+     LOG.info("stopped all jobtracker services");
+     return;
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/Job.java b/src/mapred/org/apache/hadoop/mapreduce/Job.java
+index 0465acd..526989c 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/Job.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/Job.java
+@@ -19,6 +19,7 @@
+ package org.apache.hadoop.mapreduce;
+ 
+ import java.io.IOException;
++import java.security.PrivilegedExceptionAction;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.Path;
+@@ -469,9 +470,15 @@ public class Job extends JobContext {
+   /**
+    * Open a connection to the JobTracker
+    * @throws IOException
++   * @throws InterruptedException 
+    */
+-  private void connect() throws IOException {
+-    jobClient = new JobClient((JobConf) getConfiguration());
++  private void connect() throws IOException, InterruptedException {
++    ugi.doAs(new PrivilegedExceptionAction<Object>() {
++      public Object run() throws IOException {
++        jobClient = new JobClient((JobConf) getConfiguration());    
++        return null;
++      }
++    });
+   }
+   
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+index 5c26cfb..d0bbde6 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+@@ -27,6 +27,7 @@ import org.apache.hadoop.mapreduce.Mapper;
+ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+ import org.apache.hadoop.mapreduce.lib.partition.HashPartitioner;
++import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+  * A read-only view of the job that is provided to the tasks while they
+@@ -60,9 +61,16 @@ public class JobContext {
+   public static final String JOB_CANCEL_DELEGATION_TOKEN = 
+     "mapreduce.job.complete.cancel.delegation.tokens";
+   
++  protected UserGroupInformation ugi;
++  
+   public JobContext(Configuration conf, JobID jobId) {
+     this.conf = new org.apache.hadoop.mapred.JobConf(conf);
+     this.jobId = jobId;
++    try {
++      this.ugi = UserGroupInformation.getCurrentUser();
++    } catch (IOException e) {
++      throw new RuntimeException(e);
++    }
+   }
+ 
+   void setJobID(JobID jobId) {
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+index b5fa8a3..f5fed42 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+@@ -18,16 +18,15 @@
+ 
+ package org.apache.hadoop.mapreduce.security.token;
+ 
++import java.io.IOException;
+ import java.net.URI;
+-import java.security.AccessControlException;
++import org.apache.hadoop.security.AccessControlException;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Collections;
+ import java.util.Date;
+-import java.util.HashMap;
+ import java.util.Iterator;
+ import java.util.List;
+-import java.util.Map;
+ import java.util.Timer;
+ import java.util.TimerTask;
+ 
+@@ -80,6 +79,14 @@ public class DelegationTokenRenewal {
+     public String toString() {
+       return token + ";exp="+expirationDate;
+     }
++    @Override
++    public boolean equals (Object obj) {
++      return token.equals(((DelegationTokenToRenew)obj).token);
++    }
++    @Override
++    public int hashCode() {
++      return token.hashCode();
++    }
+   }
+   
+   // global single timer (daemon)
+@@ -87,19 +94,14 @@ public class DelegationTokenRenewal {
+   
+   //managing the list of tokens using Map
+   // jobId=>List<tokens>
+-  private static Map<JobID, List<DelegationTokenToRenew>> delegationTokens = 
+-    Collections.synchronizedMap(new HashMap<JobID, 
+-                                       List<DelegationTokenToRenew>>());
++  private static List<DelegationTokenToRenew> delegationTokens = 
++    Collections.synchronizedList(new ArrayList<DelegationTokenToRenew>());
+   //adding token
+-  private static void addTokenToMap(DelegationTokenToRenew t) {
+-    // see if a list already exists
+-    JobID jobId = t.jobId;
+-    List<DelegationTokenToRenew> l = delegationTokens.get(jobId);
+-    if(l==null) {
+-      l = new ArrayList<DelegationTokenToRenew>();
+-      delegationTokens.put(jobId, l);
+-    }
+-    l.add(t);
++  private static void addTokenToList(DelegationTokenToRenew t) {
++    //check to see if the token already exists in the list
++    if (delegationTokens.contains(t))
++      return;
++    delegationTokens.add(t);
+   }
+   
+   // kind of tokens we currently renew
+@@ -128,7 +130,7 @@ public class DelegationTokenRenewal {
+       DelegationTokenToRenew dtr = 
+         new DelegationTokenToRenew(jobId, dt, conf, now); 
+ 
+-      addTokenToMap(dtr);
++      addTokenToList(dtr);
+       
+       setTimerForTokenRenewal(dtr, true);
+       LOG.info("registering token for renewal for service =" + dt.getService()+
+@@ -147,15 +149,14 @@ public class DelegationTokenRenewal {
+         DistributedFileSystem dfs = getDFSForToken(token, conf);
+         newExpirationDate = dfs.renewDelegationToken(token);
+       } catch (InvalidToken ite) {
+-        LOG.warn("token canceled - not scheduling for renew");
+-        removeFailedDelegationToken(dttr);
+-        throw new Exception("failed to renew token", ite);
+-      } catch (AccessControlException ace) {
+-        LOG.warn("token canceled - not scheduling for renew");
++        LOG.warn("invalid token - not scheduling for renew");
+         removeFailedDelegationToken(dttr);
+-        throw new Exception("failed to renew token", ace);
+-      } catch (Exception ioe) {
++        throw new IOException("failed to renew token", ite);
++      } catch (AccessControlException ioe) {
+         LOG.warn("failed to renew token:"+token, ioe);
++        removeFailedDelegationToken(dttr);
++      } catch (Exception e) {
++        LOG.warn("failed to renew token:"+token, e);
+         // returns default expiration date
+       }
+     } else {
+@@ -266,26 +267,13 @@ public class DelegationTokenRenewal {
+    */
+   private static void removeFailedDelegationToken(DelegationTokenToRenew t) {
+     JobID jobId = t.jobId;
+-    List<DelegationTokenToRenew> l = delegationTokens.get(jobId);
+-    if(l==null) return;
+-
+-    Iterator<DelegationTokenToRenew> it = l.iterator();
+-    while(it.hasNext()) {
+-      DelegationTokenToRenew dttr = it.next();
+-      if(dttr == t) {
+-        if (LOG.isDebugEnabled())
+-          LOG.debug("removing failed delegation token for jobid=" + jobId + 
+-            ";t=" + dttr.token.getService());
+-
+-        // cancel the timer
+-        if(dttr.timerTask!=null)
+-          dttr.timerTask.cancel();
+-
+-        // no need to cancel the token - it is invalid
+-        it.remove();
+-        break; //should be only one
+-      }
+-    }
++    if (LOG.isDebugEnabled())
++      LOG.debug("removing failed delegation token for jobid=" + jobId + 
++          ";t=" + t.token.getService());
++    delegationTokens.remove(t);
++    // cancel the timer
++    if(t.timerTask!=null)
++      t.timerTask.cancel();
+   }
+   
+   /**
+@@ -293,24 +281,25 @@ public class DelegationTokenRenewal {
+    * @param jobId
+    */
+   public static void removeDelegationTokenRenewalForJob(JobID jobId) {
+-    List<DelegationTokenToRenew> l = delegationTokens.remove(jobId);
+-    if(l==null) return;
+-
+-    Iterator<DelegationTokenToRenew> it = l.iterator();
+-    while(it.hasNext()) {
+-      DelegationTokenToRenew dttr = it.next();
+-      if (LOG.isDebugEnabled())
+-        LOG.debug("removing delegation token for jobid=" + jobId + 
+-          ";t=" + dttr.token.getService());
++    synchronized (delegationTokens) {
++      Iterator<DelegationTokenToRenew> it = delegationTokens.iterator();
++      while(it.hasNext()) {
++        DelegationTokenToRenew dttr = it.next();
++        if (dttr.jobId.equals(jobId)) {
++          if (LOG.isDebugEnabled())
++            LOG.debug("removing delegation token for jobid=" + jobId + 
++                ";t=" + dttr.token.getService());
+ 
+-      // cancel the timer
+-      if(dttr.timerTask!=null)
+-        dttr.timerTask.cancel();
++          // cancel the timer
++          if(dttr.timerTask!=null)
++            dttr.timerTask.cancel();
+ 
+-      // cancel the token
+-      cancelToken(dttr);
++          // cancel the token
++          cancelToken(dttr);
+ 
+-      it.remove();
++          it.remove();
++        }
++      }
+     }
+   }
+ }
+diff --git a/src/test/org/apache/hadoop/mapreduce/security/token/TestDelegationTokenRenewal.java b/src/test/org/apache/hadoop/mapreduce/security/token/TestDelegationTokenRenewal.java
+index b9f794a..92d4246 100644
+--- a/src/test/org/apache/hadoop/mapreduce/security/token/TestDelegationTokenRenewal.java
++++ b/src/test/org/apache/hadoop/mapreduce/security/token/TestDelegationTokenRenewal.java
+@@ -233,7 +233,7 @@ public class TestDelegationTokenRenewal {
+     // first 3 initial renewals + 1 real
+     int numberOfExpectedRenewals = 3+1; 
+     
+-    int attempts = 4;
++    int attempts = 10;
+     while(attempts-- > 0) {
+       try {
+         Thread.sleep(3*1000); // sleep 3 seconds, so it has time to renew
+@@ -269,16 +269,10 @@ public class TestDelegationTokenRenewal {
+     JobID jid2 = new JobID("job2",1);
+     DelegationTokenRenewal.registerDelegationTokensForRenewal(jid2, ts, conf);
+     DelegationTokenRenewal.removeDelegationTokenRenewalForJob(jid2);
+-    numberOfExpectedRenewals++; // one more initial renewal
+-    attempts = 4;
+-    while(attempts-- > 0) {
+-      try {
+-        Thread.sleep(3*1000); // sleep 3 seconds, so it has time to renew
+-      } catch (InterruptedException e) {}
+-      // since we cannot guarantee timely execution - let's give few chances
+-      if(dfs.getCounter()==numberOfExpectedRenewals)
+-        break;
+-    }
++    numberOfExpectedRenewals = dfs.getCounter(); // number of renewals so far
++    try {
++      Thread.sleep(6*1000); // sleep 6 seconds, so it has time to renew
++    } catch (InterruptedException e) {}
+     System.out.println("Counter = " + dfs.getCounter() + ";t="+dfs.getToken());
+     
+     // counter and the token should stil be the old ones
+-- 
+1.7.0.4
+

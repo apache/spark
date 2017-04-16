@@ -1,0 +1,141 @@
+From 2df0683fe8b9a6f1c7dc9f9ec49697960b473add Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 18 Jan 2011 09:46:30 -0800
+Subject: [PATCH 0783/1179] HADOOP-7110. Use JNI to implement chmod for performance
+
+Reason: fork can be rather slow, chmod is common
+Author: Todd Lipcon
+---
+ .../org/apache/hadoop/fs/RawLocalFileSystem.java   |   10 ++++-
+ .../org/apache/hadoop/io/nativeio/NativeIO.java    |    3 ++
+ .../src/org/apache/hadoop/io/nativeio/NativeIO.c   |   19 +++++++++++
+ .../apache/hadoop/io/nativeio/TestNativeIO.java    |   35 ++++++++++++++++++++
+ 4 files changed, 65 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java b/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
+index 9fd7bb0..f9fc838 100644
+--- a/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
++++ b/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
+@@ -26,6 +26,7 @@ import java.util.*;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.permission.*;
++import org.apache.hadoop.io.nativeio.NativeIO;
+ import org.apache.hadoop.util.Progressable;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Shell;
+@@ -481,8 +482,13 @@ public class RawLocalFileSystem extends FileSystem {
+   @Override
+   public void setPermission(Path p, FsPermission permission
+       ) throws IOException {
+-    execCommand(pathToFile(p), Shell.SET_PERMISSION_COMMAND,
+-        String.format("%04o", permission.toShort()));
++    if (NativeIO.isAvailable()) {
++      NativeIO.chmod(pathToFile(p).getCanonicalPath(),
++                     permission.toShort());
++    } else {
++      execCommand(pathToFile(p), Shell.SET_PERMISSION_COMMAND,
++          String.format("%04o", permission.toShort()));
++    }
+   }
+ 
+   private static String execCommand(File f, String... cmd) throws IOException {
+diff --git a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+index 6e16c73..db45125 100644
+--- a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
++++ b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+@@ -74,6 +74,9 @@ public class NativeIO {
+   public static native FileDescriptor open(String path, int flags, int mode) throws IOException;
+   /** Wrapper around fstat(2) */
+   public static native Stat fstat(FileDescriptor fd) throws IOException;
++  /** Wrapper around chmod(2) */
++  public static native void chmod(String path, int mode) throws IOException;
++
+   /** Initialize the JNI method ID and class ID cache */
+   private static native void initNative();
+ 
+diff --git a/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c b/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
+index 3e5f198..b5f9670 100644
+--- a/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
++++ b/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
+@@ -219,6 +219,25 @@ cleanup:
+   return ret;
+ }
+ 
++/**
++ * public static native void chmod(String path, int mode) throws IOException;
++ */
++JNIEXPORT void JNICALL
++Java_org_apache_hadoop_io_nativeio_NativeIO_chmod(
++  JNIEnv *env, jclass clazz, jstring j_path,
++  jint mode)
++{
++  const char *path = (*env)->GetStringUTFChars(env, j_path, NULL);
++  if (path == NULL) return; // JVM throws Exception for us
++
++  if (chmod(path, mode) != 0) {
++    throw_ioe(env, errno);
++  }
++
++  (*env)->ReleaseStringUTFChars(env, j_path, path);
++}
++
++
+ /*
+  * Throw a java.IO.IOException, generating the message from errno.
+  */
+diff --git a/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java b/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
+index 972c9fc..c689663 100644
+--- a/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
++++ b/src/test/org/apache/hadoop/io/nativeio/TestNativeIO.java
+@@ -28,7 +28,11 @@ import static org.junit.Assert.*;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.util.NativeCodeLoader;
+ 
+ public class TestNativeIO {
+@@ -134,4 +138,35 @@ public class TestNativeIO {
+     }
+   }
+ 
++  /**
++   * Test basic chmod operation
++   */
++  @Test
++  public void testChmod() throws Exception {
++    try {
++      NativeIO.chmod("/this/file/doesnt/exist", 777);
++      fail("Chmod of non-existent file didn't fail");
++    } catch (NativeIOException nioe) {
++      assertEquals(Errno.ENOENT, nioe.getErrno());
++    }
++
++    File toChmod = new File(TEST_DIR, "testChmod");
++    assertTrue("Create test subject",
++               toChmod.exists() || toChmod.mkdir());
++    NativeIO.chmod(toChmod.getAbsolutePath(), 0777);
++    assertPermissions(toChmod, 0777);
++    NativeIO.chmod(toChmod.getAbsolutePath(), 0000);
++    assertPermissions(toChmod, 0000);
++    NativeIO.chmod(toChmod.getAbsolutePath(), 0644);
++    assertPermissions(toChmod, 0644);
++  }
++
++  private void assertPermissions(File f, int expected) throws IOException {
++    FileSystem localfs = FileSystem.getLocal(new Configuration());
++    FsPermission perms = localfs.getFileStatus(
++      new Path(f.getAbsolutePath())).getPermission();
++    assertEquals(expected, perms.toShort());
++  }
++
++
+ }
+-- 
+1.7.0.4
+

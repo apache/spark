@@ -1,0 +1,36 @@
+From fa3b91e008607ff69bd2796f025680aacc97bd11 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sat, 5 Feb 2011 16:21:19 -0800
+Subject: [PATCH 0801/1179] DISTRO-44. Hadoop core POM missing jackson dependency.
+
+Reason: Bug
+Author: Eli Collins
+Ref: DISTRO-44
+---
+ cloudera/maven-packaging/hadoop-core/pom.xml |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/cloudera/maven-packaging/hadoop-core/pom.xml b/cloudera/maven-packaging/hadoop-core/pom.xml
+index cb96e1a..0957372 100644
+--- a/cloudera/maven-packaging/hadoop-core/pom.xml
++++ b/cloudera/maven-packaging/hadoop-core/pom.xml
+@@ -135,6 +135,16 @@
+       <groupId>org.eclipse.jdt</groupId>
+       <artifactId>core</artifactId>
+     </dependency>
++    <dependency>
++      <groupId>org.codehaus.jackson</groupId>
++      <artifactId>jackson-mapper-asl</artifactId>
++      <version>1.5.2</version>
++    </dependency>
++    <dependency>
++      <groupId>org.codehaus.jackson</groupId>
++      <artifactId>jackson-core-asl</artifactId>
++      <version>1.5.2</version>
++    </dependency>
+   </dependencies>
+   
+   <build>
+-- 
+1.7.0.4
+

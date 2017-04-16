@@ -1,0 +1,55 @@
+From 708b259abe2a0e287b4370cc41da87254b4c46dd Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 5 Jul 2011 16:02:22 -0700
+Subject: [PATCH 1010/1179] HDFS-1836. Thousand of CLOSE_WAIT socket.
+
+Reason: Bug
+Author: Bharath Mundlapudi
+Ref: CDH-3200
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |   15 +++------------
+ 1 files changed, 3 insertions(+), 12 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index ca70841..870ecde 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2575,11 +2575,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+             }
+ 
+             synchronized (dataQueue) {
+-              try {
+-                blockStream.close();
+-                blockReplyStream.close();
+-              } catch (IOException e) {
+-              }
++              IOUtils.cleanup(LOG, blockStream, blockReplyStream);
+               nodes = null;
+               response = null;
+               blockStream = null;
+@@ -2727,11 +2723,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       }
+ 
+       if (blockStream != null) {
+-        try {
+-          blockStream.close();
+-          blockReplyStream.close();
+-        } catch (IOException e) {
+-        }
++        IOUtils.cleanup(LOG, blockStream, blockReplyStream);
+       }
+       blockStream = null;
+       blockReplyStream = null;
+@@ -3556,8 +3548,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         synchronized (dataQueue) {
+           if (blockStream != null) {
+             blockStream.writeInt(0); // indicate end-of-block to datanode
+-            blockStream.close();
+-            blockReplyStream.close();
++            IOUtils.cleanup(LOG, blockStream, blockReplyStream);
+           }
+           if (s != null) {
+             s.close();
+-- 
+1.7.0.4
+

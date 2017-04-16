@@ -1,0 +1,384 @@
+options {
+STATIC=false;
+}
+
+PARSER_BEGIN(Rcc)
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.hadoop.record.compiler.generated;
+
+import org.apache.hadoop.record.compiler.*;
+import java.util.ArrayList;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+public class Rcc {
+    private static String language = "java";
+    private static String destDir = ".";
+    private static ArrayList<String> recFiles = new ArrayList<String>();
+    private static ArrayList<String> cmdargs = new ArrayList<String>();
+    private static JFile curFile;
+    private static Hashtable<String,JRecord> recTab;
+    private static String curDir = ".";
+    private static String curFileName;
+    private static String curModuleName;
+
+    public static void main(String[] args) {
+        System.exit(driver(args));
+    }
+ 
+    public static void usage() {
+        System.err.println("Usage: rcc --language [java|c++] ddl-files");
+    }
+
+    public static int driver(String[] args) {
+        for (int i=0; i<args.length; i++) {
+            if ("-l".equalsIgnoreCase(args[i]) ||
+                "--language".equalsIgnoreCase(args[i])) {
+                language = args[i+1].toLowerCase();
+                i++;
+            } else if ("-d".equalsIgnoreCase(args[i]) ||
+                "--destdir".equalsIgnoreCase(args[i])) {
+                destDir = args[i+1];
+                i++;
+            } else if (args[i].startsWith("-")) {
+              String arg = args[i].substring(1);
+              if (arg.startsWith("-")) {
+                arg = arg.substring(1);
+              }
+              cmdargs.add(arg.toLowerCase());
+            } else {
+                recFiles.add(args[i]);
+            }
+        }
+        if (recFiles.size() == 0) {
+            usage();
+            return 1;
+        }
+        for (int i=0; i<recFiles.size(); i++) {
+            curFileName = recFiles.get(i);
+            File file = new File(curFileName);
+            try {
+                FileReader reader = new FileReader(file);
+                Rcc parser = new Rcc(reader);
+                try {
+                    recTab = new Hashtable<String,JRecord>();
+                    curFile = parser.Input();
+                } catch (ParseException e) {
+                    System.err.println(e.toString());
+                    return 1;
+                }
+                try {
+                    reader.close();
+                } catch (IOException e) {
+                }
+            } catch (FileNotFoundException e) {
+                System.err.println("File " + (String) recFiles.get(i) +
+                    " Not found.");
+                return 1;
+            }
+            try {
+                int retCode = curFile.genCode(language, destDir, cmdargs);
+                if (retCode != 0) { return retCode; }
+            } catch (IOException e) {
+                System.err.println(e.toString());
+                return 1;
+            }
+        }
+        return 0;
+    }
+}
+
+PARSER_END(Rcc)
+
+SKIP :
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+}
+
+SPECIAL_TOKEN :
+{
+  "//" : WithinOneLineComment
+}
+
+<WithinOneLineComment> SPECIAL_TOKEN :
+{
+  <("\n" | "\r" | "\r\n" )> : DEFAULT
+}
+
+<WithinOneLineComment> MORE :
+{
+  <~[]>
+}
+
+SPECIAL_TOKEN :
+{
+  "/*" : WithinMultiLineComment
+}
+
+<WithinMultiLineComment> SPECIAL_TOKEN :
+{
+  "*/" : DEFAULT
+}
+
+<WithinMultiLineComment> MORE :
+{
+  <~[]>
+}
+
+TOKEN :
+{
+    <MODULE_TKN: "module">
+|   <RECORD_TKN: "class">
+|   <INCLUDE_TKN: "include">
+|   <BYTE_TKN: "byte">
+|   <BOOLEAN_TKN: "boolean">
+|   <INT_TKN: "int">
+|   <LONG_TKN: "long">
+|   <FLOAT_TKN: "float">
+|   <DOUBLE_TKN: "double">
+|   <USTRING_TKN: "ustring">
+|   <BUFFER_TKN: "buffer">
+|   <VECTOR_TKN: "vector">
+|   <MAP_TKN: "map">
+|   <LBRACE_TKN: "{">
+|   <RBRACE_TKN: "}">
+|   <LT_TKN: "<">
+|   <GT_TKN: ">">
+|   <SEMICOLON_TKN: ";">
+|   <COMMA_TKN: ",">
+|   <DOT_TKN: ".">
+|   <CSTRING_TKN: "\"" ( ~["\""] )+ "\"">
+|   <IDENT_TKN: ["A"-"Z","a"-"z"] (["a"-"z","A"-"Z","0"-"9","_"])*>
+}
+
+JFile Input() :
+{
+    ArrayList<JFile> ilist = new ArrayList<JFile>();
+    ArrayList<JRecord> rlist = new ArrayList<JRecord>();
+    JFile i;
+    ArrayList<JRecord> l;
+}
+{
+    (
+        i = Include()
+        { ilist.add(i); }
+    |   l = Module()
+        { rlist.addAll(l); }
+    )+
+    <EOF>
+    { return new JFile(curFileName, ilist, rlist); }
+}
+
+JFile Include() :
+{
+    String fname;
+    Token t;
+}
+{
+    <INCLUDE_TKN>
+    t = <CSTRING_TKN>
+    {
+        JFile ret = null;
+        fname = t.image.replaceAll("^\"", "").replaceAll("\"$","");
+        File file = new File(curDir, fname);
+        String tmpDir = curDir;
+        String tmpFile = curFileName;
+        curDir = file.getParent();
+        curFileName = file.getName();
+        try {
+            FileReader reader = new FileReader(file);
+            Rcc parser = new Rcc(reader);
+            try {
+                ret = parser.Input();
+                System.out.println(fname + " Parsed Successfully");
+            } catch (ParseException e) {
+                System.out.println(e.toString());
+                System.exit(1);
+            }
+            try {
+                reader.close();
+            } catch (IOException e) {
+            }
+        } catch (FileNotFoundException e) {
+            System.out.println("File " + fname +
+                " Not found.");
+            System.exit(1);
+        }
+        curDir = tmpDir;
+        curFileName = tmpFile;
+        return ret;
+    }
+}
+
+ArrayList<JRecord> Module() :
+{
+    String mName;
+    ArrayList<JRecord> rlist;
+}
+{
+    <MODULE_TKN>
+    mName = ModuleName()
+    { curModuleName = mName; }
+    <LBRACE_TKN>
+    rlist = RecordList()
+    <RBRACE_TKN>
+    { return rlist; }
+}
+
+String ModuleName() :
+{
+    String name = "";
+    Token t;
+}
+{
+    t = <IDENT_TKN>
+    { name += t.image; }
+    (
+        <DOT_TKN>
+        t = <IDENT_TKN>
+        { name += "." + t.image; }
+    )*
+    { return name; }
+}
+
+ArrayList<JRecord> RecordList() :
+{
+    ArrayList<JRecord> rlist = new ArrayList<JRecord>();
+    JRecord r;
+}
+{
+    (
+        r = Record()
+        { rlist.add(r); }
+    )+
+    { return rlist; }
+}
+
+JRecord Record() :
+{
+    String rname;
+    ArrayList<JField<JType>> flist = new ArrayList<JField<JType>>();
+    Token t;
+    JField<JType> f;
+}
+{
+    <RECORD_TKN>
+    t = <IDENT_TKN>
+    { rname = t.image; }
+    <LBRACE_TKN>
+    (
+        f = Field()
+        { flist.add(f); }
+        <SEMICOLON_TKN>
+    )+
+    <RBRACE_TKN>
+    {
+        String fqn = curModuleName + "." + rname;
+        JRecord r = new JRecord(fqn, flist);
+        recTab.put(fqn, r);
+        return r;
+    }
+}
+
+JField<JType> Field() :
+{
+    JType jt;
+    Token t;
+}
+{
+    jt = Type()
+    t = <IDENT_TKN>
+    { return new JField<JType>(t.image, jt); }
+}
+
+JType Type() :
+{
+    JType jt;
+    Token t;
+    String rname;
+}
+{
+    jt = Map()
+    { return jt; }
+|   jt = Vector()
+    { return jt; }
+|   <BYTE_TKN>
+    { return new JByte(); }
+|   <BOOLEAN_TKN>
+    { return new JBoolean(); }
+|   <INT_TKN>
+    { return new JInt(); }
+|   <LONG_TKN>
+    { return new JLong(); }
+|   <FLOAT_TKN>
+    { return new JFloat(); }
+|   <DOUBLE_TKN>
+    { return new JDouble(); }
+|   <USTRING_TKN>
+    { return new JString(); }
+|   <BUFFER_TKN>
+    { return new JBuffer(); }
+|   rname = ModuleName()
+    {
+        if (rname.indexOf('.', 0) < 0) {
+            rname = curModuleName + "." + rname;
+        }
+        JRecord r = recTab.get(rname);
+        if (r == null) {
+            System.out.println("Type " + rname + " not known. Exiting.");
+            System.exit(1);
+        }
+        return r;
+    }
+}
+
+JMap Map() :
+{
+    JType jt1;
+    JType jt2;
+}
+{
+    <MAP_TKN>
+    <LT_TKN>
+    jt1 = Type()
+    <COMMA_TKN>
+    jt2 = Type()
+    <GT_TKN>
+    { return new JMap(jt1, jt2); }
+}
+
+JVector Vector() :
+{
+    JType jt;
+}
+{
+    <VECTOR_TKN>
+    <LT_TKN>
+    jt = Type()
+    <GT_TKN>
+    { return new JVector(jt); }
+}

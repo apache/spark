@@ -1,0 +1,308 @@
+From 0629ac30abb5e58fb80be56a385867ac7360de22 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:28:37 -0800
+Subject: [PATCH 0157/1179] MAPREDUCE-1148. SQL identifiers are a superset of Java identifiers
+
+Description: SQL identifiers can contain arbitrary characters, can start with numbers, can be words like <tt>class</tt> which are reserved in Java, etc. If Sqoop uses these names literally for class and field names then compilation errors can occur in auto-generated classes. SQL identifiers need to be cleansed to map onto Java identifiers.
+Reason: bugfix
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/sqoop/orm/ClassWriter.java   |  166 ++++++++++++++++++--
+ .../apache/hadoop/sqoop/orm/TableClassName.java    |    3 +-
+ .../apache/hadoop/sqoop/orm/TestClassWriter.java   |   47 ++++++
+ 3 files changed, 202 insertions(+), 14 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/ClassWriter.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/ClassWriter.java
+index 9c6f8fd..805bade 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/ClassWriter.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/ClassWriter.java
+@@ -33,6 +33,7 @@ import java.io.IOException;
+ import java.io.OutputStream;
+ import java.io.OutputStreamWriter;
+ import java.io.Writer;
++import java.util.HashSet;
+ import java.util.Map;
+ 
+ import org.apache.commons.logging.Log;
+@@ -40,14 +41,57 @@ import org.apache.commons.logging.LogFactory;
+ 
+ /**
+  * Creates an ORM class to represent a table from a database
+- *
+- * 
+- *
+  */
+ public class ClassWriter {
+ 
+   public static final Log LOG = LogFactory.getLog(ClassWriter.class.getName());
+ 
++  // The following are keywords and cannot be used for class, method, or field
++  // names.
++  public static final HashSet<String> JAVA_RESERVED_WORDS;
++
++  static {
++    JAVA_RESERVED_WORDS = new HashSet<String>();
++
++    JAVA_RESERVED_WORDS.add("abstract");
++    JAVA_RESERVED_WORDS.add("else");
++    JAVA_RESERVED_WORDS.add("int");
++    JAVA_RESERVED_WORDS.add("strictfp");
++    JAVA_RESERVED_WORDS.add("assert");
++    JAVA_RESERVED_WORDS.add("enum");
++    JAVA_RESERVED_WORDS.add("interface");
++    JAVA_RESERVED_WORDS.add("super");
++    JAVA_RESERVED_WORDS.add("boolean");
++    JAVA_RESERVED_WORDS.add("extends");
++    JAVA_RESERVED_WORDS.add("long");
++    JAVA_RESERVED_WORDS.add("switch");
++    JAVA_RESERVED_WORDS.add("break");
++    JAVA_RESERVED_WORDS.add("false");
++    JAVA_RESERVED_WORDS.add("native");
++    JAVA_RESERVED_WORDS.add("synchronized");
++    JAVA_RESERVED_WORDS.add("byte");
++    JAVA_RESERVED_WORDS.add("final");
++    JAVA_RESERVED_WORDS.add("new");
++    JAVA_RESERVED_WORDS.add("this");
++    JAVA_RESERVED_WORDS.add("case");
++    JAVA_RESERVED_WORDS.add("finally");
++    JAVA_RESERVED_WORDS.add("null");
++    JAVA_RESERVED_WORDS.add("throw");
++    JAVA_RESERVED_WORDS.add("catch");
++    JAVA_RESERVED_WORDS.add("float");
++    JAVA_RESERVED_WORDS.add("package");
++    JAVA_RESERVED_WORDS.add("throws");
++    JAVA_RESERVED_WORDS.add("char");
++    JAVA_RESERVED_WORDS.add("for");
++    JAVA_RESERVED_WORDS.add("private");
++    JAVA_RESERVED_WORDS.add("transient");
++    JAVA_RESERVED_WORDS.add("class");
++    JAVA_RESERVED_WORDS.add("goto");
++    JAVA_RESERVED_WORDS.add("protected");
++    JAVA_RESERVED_WORDS.add("true");
++    JAVA_RESERVED_WORDS.add("const");
++  }
++
+   /**
+    * This version number is injected into all generated Java classes to denote
+    * which version of the ClassWriter's output format was used to generate the
+@@ -76,6 +120,87 @@ public class ClassWriter {
+     this.compileManager = compMgr;
+   }
+ 
++  /**
++   * Given some character that can't be in an identifier,
++   * try to map it to a string that can.
++   *
++   * @param c a character that can't be in a Java identifier
++   * @return a string of characters that can, or null if there's
++   * no good translation.
++   */
++  static String getIdentifierStrForChar(char c) {
++    if (Character.isJavaIdentifierPart(c)) {
++      return "" + c;
++    } else if (Character.isWhitespace(c)) {
++      // Eliminate whitespace.
++      return null;
++    } else {
++      // All other characters map to underscore.
++      return "_";
++    }
++  }
++
++  /**
++   * @param word a word to test.
++   * @return true if 'word' is reserved the in Java language.
++   */
++  private static boolean isReservedWord(String word) {
++    return JAVA_RESERVED_WORDS.contains(word);
++  }
++
++  /**
++   * Coerce a candidate name for an identifier into one which will
++   * definitely compile.
++   *
++   * Ensures that the returned identifier matches [A-Za-z_][A-Za-z0-9_]*
++   * and is not a reserved word.
++   *
++   * @param candidate A string we want to use as an identifier
++   * @return A string naming an identifier which compiles and is
++   *   similar to the candidate.
++   */
++  public static String toIdentifier(String candidate) {
++    StringBuilder sb = new StringBuilder();
++    boolean first = true;
++    for (char c : candidate.toCharArray()) {
++      if (Character.isJavaIdentifierStart(c) && first) {
++        // Ok for this to be the first character of the identifier.
++        sb.append(c);
++        first = false;
++      } else if (Character.isJavaIdentifierPart(c) && !first) {
++        // Ok for this character to be in the output identifier.
++        sb.append(c);
++      } else {
++        // We have a character in the original that can't be
++        // part of this identifier we're building.
++        // If it's just not allowed to be the first char, add a leading '_'.
++        // If we have a reasonable translation (e.g., '-' -> '_'), do that.
++        // Otherwise, drop it.
++        if (first && Character.isJavaIdentifierPart(c)
++            && !Character.isJavaIdentifierStart(c)) {
++          sb.append("_");
++          sb.append(c);
++          first = false;
++        } else {
++          // Try to map this to a different character or string.
++          // If we can't just give up.
++          String translated = getIdentifierStrForChar(c);
++          if (null != translated) {
++            sb.append(translated);
++            first = false;
++          }
++        }
++      }
++    }
++
++    String output = sb.toString();
++    if (isReservedWord(output)) {
++      // e.g., 'class' -> '_class';
++      return "_" + output;
++    }
++
++    return output;
++  }
+ 
+   /**
+    * @param javaType
+@@ -593,8 +718,21 @@ public class ClassWriter {
+       colNames = connManager.getColumnNames(tableName);
+     }
+ 
++    // Translate all the column names into names that are safe to
++    // use as identifiers.
++    String [] cleanedColNames = new String[colNames.length];
++    for (int i = 0; i < colNames.length; i++) {
++      String col = colNames[i];
++      String identifier = toIdentifier(col);
++      cleanedColNames[i] = identifier;
++
++      // make sure the col->type mapping holds for the 
++      // new identifier name, too.
++      columnTypes.put(identifier, columnTypes.get(col));
++    }
++
+     // Generate the Java code
+-    StringBuilder sb = generateClassForColumns(columnTypes, colNames);
++    StringBuilder sb = generateClassForColumns(columnTypes, cleanedColNames);
+ 
+     // Write this out to a file.
+     String codeOutDir = options.getCodeOutputDir();
+@@ -605,16 +743,18 @@ public class ClassWriter {
+     String sourceFilename = className.replace('.', File.separatorChar) + ".java";
+     String filename = codeOutDir + sourceFilename;
+ 
+-    LOG.debug("Writing source file: " + filename);
+-    LOG.debug("Table name: " + tableName);
+-    StringBuilder sbColTypes = new StringBuilder();
+-    for (String col : colNames) {
+-      Integer colType = columnTypes.get(col);
+-      sbColTypes.append(col + ":" + colType + ", ");
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Writing source file: " + filename);
++      LOG.debug("Table name: " + tableName);
++      StringBuilder sbColTypes = new StringBuilder();
++      for (String col : colNames) {
++        Integer colType = columnTypes.get(col);
++        sbColTypes.append(col + ":" + colType + ", ");
++      }
++      String colTypeStr = sbColTypes.toString();
++      LOG.debug("Columns: " + colTypeStr);
++      LOG.debug("sourceFilename is " + sourceFilename);
+     }
+-    String colTypeStr = sbColTypes.toString();
+-    LOG.debug("Columns: " + colTypeStr);
+-    LOG.debug("sourceFilename is " + sourceFilename);
+ 
+     compileManager.addSourceFile(sourceFilename);
+ 
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/TableClassName.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/TableClassName.java
+index 5d78934..965a71a 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/TableClassName.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/TableClassName.java
+@@ -90,7 +90,8 @@ public class TableClassName {
+     }
+ 
+     // no specific class; no specific package.
+-    return tableName;
++    // Just make sure it's a legal identifier.
++    return ClassWriter.toIdentifier(tableName);
+   }
+ 
+   /**
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestClassWriter.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestClassWriter.java
+index 6e86ff8..8b0e95e 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestClassWriter.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestClassWriter.java
+@@ -21,6 +21,8 @@ package org.apache.hadoop.sqoop.orm;
+ import java.io.File;
+ import java.io.FileInputStream;
+ import java.io.IOException;
++import java.sql.Connection;
++import java.sql.Statement;
+ import java.sql.SQLException;
+ import java.util.Enumeration;
+ import java.util.jar.JarEntry;
+@@ -267,5 +269,50 @@ public class TestClassWriter extends TestCase {
+ 
+     runGenerationTest(argv, OVERRIDE_PACKAGE_NAME + "." + HsqldbTestServer.getTableName());
+   }
++
++
++  // Test the SQL identifier -> Java identifier conversion.
++  @Test
++  public void testIdentifierConversion() {
++    assertNull(ClassWriter.getIdentifierStrForChar(' '));
++    assertNull(ClassWriter.getIdentifierStrForChar('\t'));
++    assertNull(ClassWriter.getIdentifierStrForChar('\r'));
++    assertNull(ClassWriter.getIdentifierStrForChar('\n'));
++    assertEquals("x", ClassWriter.getIdentifierStrForChar('x'));
++    assertEquals("_", ClassWriter.getIdentifierStrForChar('-'));
++    assertEquals("_", ClassWriter.getIdentifierStrForChar('_'));
++
++    assertEquals("foo", ClassWriter.toIdentifier("foo"));
++    assertEquals("_class", ClassWriter.toIdentifier("class"));
++    assertEquals("_class", ClassWriter.toIdentifier("cla ss"));
++    assertEquals("_int", ClassWriter.toIdentifier("int"));
++    assertEquals("thisismanywords", ClassWriter.toIdentifier("this is many words"));
++    assertEquals("_9isLegalInSql", ClassWriter.toIdentifier("9isLegalInSql"));
++    assertEquals("___", ClassWriter.toIdentifier("___"));
++  }
++
++  @Test
++  public void testWeirdColumnNames() throws SQLException {
++    // Recreate the table with column names that aren't legal Java identifiers.
++    String tableName = HsqldbTestServer.getTableName();
++    Connection connection = testServer.getConnection();
++    Statement st = connection.createStatement();
++    st.executeUpdate("DROP TABLE " + tableName + " IF EXISTS");
++    st.executeUpdate("CREATE TABLE " + tableName + " (class INT, \"9field\" INT)");
++    st.executeUpdate("INSERT INTO " + tableName + " VALUES(42, 41)");
++    connection.commit();
++    connection.close();
++
++    String [] argv = {
++        "--bindir",
++        JAR_GEN_DIR,
++        "--outdir",
++        CODE_GEN_DIR,
++        "--package-name",
++        OVERRIDE_PACKAGE_NAME
++    };
++
++    runGenerationTest(argv, OVERRIDE_PACKAGE_NAME + "." + HsqldbTestServer.getTableName());
++  }
+ }
+ 
+-- 
+1.7.0.4
+

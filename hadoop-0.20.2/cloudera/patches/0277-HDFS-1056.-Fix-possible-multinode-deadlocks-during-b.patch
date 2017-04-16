@@ -1,0 +1,38 @@
+From 23cfa9e8263ad1d92814b5829e2f50bb37d57857 Mon Sep 17 00:00:00 2001
+From: todd <todd@monster01.sf.cloudera.com>
+Date: Sun, 21 Mar 2010 16:25:48 -0700
+Subject: [PATCH 0277/1179] HDFS-1056. Fix possible multinode deadlocks during block recovery when using ephemeral dataxceiver ports
+
+Description: Fixes the logic by which datanodes identify local RPC targets
+             during block recovery for the case when the datanode
+             is configured with an ephemeral data transceiver port.
+Reason: Potential internode deadlock for clusters using ephemeral ports
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index afa6de5..7f0fae1 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -1537,8 +1537,13 @@ public class DataNode extends Configured
+       //check generation stamps
+       for(DatanodeID id : datanodeids) {
+         try {
+-          InterDatanodeProtocol datanode = dnRegistration.equals(id)?
+-              this: DataNode.createInterDataNodeProtocolProxy(id, getConf());
++          InterDatanodeProtocol datanode;
++          if (dnRegistration.getHost().equals(id.getHost()) &&
++              dnRegistration.getIpcPort() == id.getIpcPort()) {
++            datanode = this;
++          } else {
++            datanode = DataNode.createInterDataNodeProtocolProxy(id, getConf());
++          }
+           BlockMetaDataInfo info = datanode.getBlockMetaDataInfo(block);
+           if (info != null && info.getGenerationStamp() >= block.getGenerationStamp()) {
+             if (keepLength) {
+-- 
+1.7.0.4
+

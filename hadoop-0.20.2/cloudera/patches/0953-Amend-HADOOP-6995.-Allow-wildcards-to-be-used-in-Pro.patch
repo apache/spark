@@ -1,0 +1,29 @@
+From 0efd27c636b1a2a23c64e019af50cebcc2c98d83 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Thu, 28 Apr 2011 00:32:33 -0700
+Subject: [PATCH 0953/1179] Amend HADOOP-6995. Allow wildcards to be used in ProxyUsers configurations
+
+Reason: Forgot to backport documentation portion of the change
+Author: Todd Lipcon
+Ref: CDH-3100
+---
+ .../content/xdocs/Secure_Impersonation.xml         |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/Secure_Impersonation.xml b/src/docs/src/documentation/content/xdocs/Secure_Impersonation.xml
+index 85b43eb..f4154a3 100644
+--- a/src/docs/src/documentation/content/xdocs/Secure_Impersonation.xml
++++ b/src/docs/src/documentation/content/xdocs/Secure_Impersonation.xml
+@@ -88,6 +88,9 @@
+         <p>
+            If these configurations are not present, impersonation will not be allowed and connection will fail.
+         </p>
++        <p>
++          If more lax security is preferred, the wildcard value <code>*</code> may be used to allow impersonation from any host or of any user.
++        </p>
+       </section>
+ 
+  
+-- 
+1.7.0.4
+

@@ -1,0 +1,115 @@
+From b329fa59501af3bef287aa0bdaa4c517cd41ad04 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Feb 2011 21:17:06 -0800
+Subject: [PATCH 0871/1179] CLOUDERA-BUILD. Add AM_MAINTAINER_MODE to all configure.ac
+
+---
+ src/c++/libhdfs/configure.ac         |    5 +++++
+ src/c++/pipes/configure.ac           |    6 ++++++
+ src/c++/task-controller/configure.ac |    5 +++++
+ src/c++/utils/configure.ac           |    5 +++++
+ src/examples/pipes/configure.ac      |    6 ++++++
+ src/native/configure.ac              |    5 +++++
+ 6 files changed, 32 insertions(+), 0 deletions(-)
+
+diff --git a/src/c++/libhdfs/configure.ac b/src/c++/libhdfs/configure.ac
+index cb46365..b13b0ed 100644
+--- a/src/c++/libhdfs/configure.ac
++++ b/src/c++/libhdfs/configure.ac
+@@ -25,6 +25,11 @@ AC_PREFIX_DEFAULT([`pwd`/../install])
+ AM_INIT_AUTOMAKE(foreign no-dist)
+ AC_CONFIG_FILES(Makefile)
+ 
++# Dont generate rules to re-automake if timestamps are off
++# since we check in the generated files and revision control
++# doesn't track timestamps
++AM_MAINTAINER_MODE
++
+ LT_INIT
+  
+ AC_CONFIG_MACRO_DIR([m4])
+diff --git a/src/c++/pipes/configure.ac b/src/c++/pipes/configure.ac
+index 9ddfb5b..7fb119b 100644
+--- a/src/c++/pipes/configure.ac
++++ b/src/c++/pipes/configure.ac
+@@ -22,6 +22,12 @@ AC_INIT(hadoop-pipes, 0.13.0, omalley@apache.org)
+ 
+ AM_INIT_AUTOMAKE([subdir-objects foreign no-dist])
+ 
++# Dont generate rules to re-automake if timestamps are off
++# since we check in the generated files and revision control
++# doesn't track timestamps
++AM_MAINTAINER_MODE
++
++
+ AC_CONFIG_SRCDIR([impl/HadoopPipes.cc])
+ AC_CONFIG_HEADER([impl/config.h])
+ AC_CONFIG_FILES([Makefile])
+diff --git a/src/c++/task-controller/configure.ac b/src/c++/task-controller/configure.ac
+index 4ed8d63..3f6a5a9 100644
+--- a/src/c++/task-controller/configure.ac
++++ b/src/c++/task-controller/configure.ac
+@@ -23,6 +23,11 @@ AC_GNU_SOURCE
+ 
+ AM_INIT_AUTOMAKE([subdir-objects foreign no-dist])
+ 
++# Dont generate rules to re-automake if timestamps are off
++# since we check in the generated files and revision control
++# doesn't track timestamps
++AM_MAINTAINER_MODE
++
+ AC_CONFIG_SRCDIR([impl/task-controller.c])
+ AC_CONFIG_FILES([Makefile])
+ 
+diff --git a/src/c++/utils/configure.ac b/src/c++/utils/configure.ac
+index a4dc71f..1480c78 100644
+--- a/src/c++/utils/configure.ac
++++ b/src/c++/utils/configure.ac
+@@ -22,6 +22,11 @@ AC_INIT(hadoop-utils, 0.13.0, omalley@apache.org)
+ 
+ AM_INIT_AUTOMAKE([subdir-objects foreign no-dist])
+ 
++# Dont generate rules to re-automake if timestamps are off
++# since we check in the generated files and revision control
++# doesn't track timestamps
++AM_MAINTAINER_MODE
++
+ AC_CONFIG_SRCDIR([impl/SerialUtils.cc])
+ AC_CONFIG_HEADER([impl/config.h])
+ AC_CONFIG_FILES([Makefile])
+diff --git a/src/examples/pipes/configure.ac b/src/examples/pipes/configure.ac
+index 89b4791..b5c5f14 100644
+--- a/src/examples/pipes/configure.ac
++++ b/src/examples/pipes/configure.ac
+@@ -22,6 +22,12 @@ AC_INIT(hadoop-pipes-examples, 0.13.0, omalley@apache.org)
+ 
+ AM_INIT_AUTOMAKE([subdir-objects foreign no-dist])
+ 
++# Dont generate rules to re-automake if timestamps are off
++# since we check in the generated files and revision control
++# doesn't track timestamps
++AM_MAINTAINER_MODE
++
++
+ AC_CONFIG_SRCDIR([impl/wordcount-simple.cc])
+ AC_CONFIG_HEADER([impl/config.h])
+ AC_CONFIG_FILES([Makefile])
+diff --git a/src/native/configure.ac b/src/native/configure.ac
+index 2448427..f6ba3ba 100644
+--- a/src/native/configure.ac
++++ b/src/native/configure.ac
+@@ -41,6 +41,11 @@ AC_CONFIG_HEADER([config.h])
+ 
+ AM_INIT_AUTOMAKE(hadoop,1.0.0)
+ 
++# Dont generate rules to re-automake if timestamps are off
++# since we check in the generated files and revision control
++# doesn't track timestamps
++AM_MAINTAINER_MODE
++
+ # Checks for programs.
+ AC_PROG_CC
+ AC_PROG_LIBTOOL
+-- 
+1.7.0.4
+

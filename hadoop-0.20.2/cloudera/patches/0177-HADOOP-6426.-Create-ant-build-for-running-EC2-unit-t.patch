@@ -1,0 +1,1377 @@
+From 63152ce4ba3c0cf2006016cc825fc72b0bd23d2d Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:33:49 -0800
+Subject: [PATCH 0177/1179] HADOOP-6426. Create ant build for running EC2 unit tests
+
+Description: There is no easy way currently to run the Python unit tests for the cloud contrib.
+Reason: Test coverage improvement
+Author: Tom White
+Ref: UNKNOWN
+---
+ src/contrib/cloud/build.xml                        |   41 ++++
+ src/contrib/cloud/lib/pyAntTasks-1.3-LICENSE.txt   |  202 ++++++++++++++++++++
+ src/contrib/cloud/lib/pyAntTasks-1.3.jar           |  Bin 0 -> 18788 bytes
+ src/contrib/cloud/src/test/hadoop/__init__.py      |   14 --
+ .../cloud/src/test/hadoop/cloud/__init__.py        |   14 --
+ .../cloud/src/test/hadoop/cloud/alltests.py        |   36 ----
+ .../cloud/src/test/hadoop/cloud/testcluster.py     |   37 ----
+ .../cloud/src/test/hadoop/cloud/teststorage.py     |  143 --------------
+ .../cloud/src/test/hadoop/cloud/testuserdata.py    |   44 -----
+ .../cloud/src/test/hadoop/cloud/testutil.py        |   81 --------
+ src/contrib/cloud/src/test/py/testcluster.py       |   37 ++++
+ src/contrib/cloud/src/test/py/teststorage.py       |  143 ++++++++++++++
+ src/contrib/cloud/src/test/py/testuserdata.py      |   44 +++++
+ src/contrib/cloud/src/test/py/testutil.py          |   81 ++++++++
+ 14 files changed, 548 insertions(+), 369 deletions(-)
+ create mode 100644 src/contrib/cloud/build.xml
+ create mode 100644 src/contrib/cloud/lib/pyAntTasks-1.3-LICENSE.txt
+ create mode 100644 src/contrib/cloud/lib/pyAntTasks-1.3.jar
+ delete mode 100644 src/contrib/cloud/src/test/hadoop/__init__.py
+ delete mode 100644 src/contrib/cloud/src/test/hadoop/cloud/__init__.py
+ delete mode 100644 src/contrib/cloud/src/test/hadoop/cloud/alltests.py
+ delete mode 100644 src/contrib/cloud/src/test/hadoop/cloud/testcluster.py
+ delete mode 100644 src/contrib/cloud/src/test/hadoop/cloud/teststorage.py
+ delete mode 100644 src/contrib/cloud/src/test/hadoop/cloud/testuserdata.py
+ delete mode 100644 src/contrib/cloud/src/test/hadoop/cloud/testutil.py
+ create mode 100644 src/contrib/cloud/src/test/py/testcluster.py
+ create mode 100644 src/contrib/cloud/src/test/py/teststorage.py
+ create mode 100644 src/contrib/cloud/src/test/py/testuserdata.py
+ create mode 100644 src/contrib/cloud/src/test/py/testutil.py
+
+diff --git a/src/contrib/cloud/build.xml b/src/contrib/cloud/build.xml
+new file mode 100644
+index 0000000..a154e21
+--- /dev/null
++++ b/src/contrib/cloud/build.xml
+@@ -0,0 +1,41 @@
++<?xml version="1.0"?>
++
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<project name="hadoop-cloud" default="test-py">
++  <property name="lib.dir" value="${basedir}/lib"/>
++  <path id="java.classpath">
++    <fileset dir="${lib.dir}">
++      <include name="**/*.jar" />
++    </fileset>
++  </path>
++  <path id="test.py.path">
++    <pathelement location="${basedir}/src/py"/>
++    <pathelement location="${basedir}/src/test/py"/>
++  </path>
++  <target name="test-py" description="Run python unit tests">
++    <taskdef name="py-test" classname="org.pyant.tasks.PythonTestTask">
++      <classpath refid="java.classpath" />
++    </taskdef>
++    <py-test python="python" pythonpathref="test.py.path" >
++      <fileset dir="${basedir}/src/test/py">
++        <include name="*.py"/>
++      </fileset>
++    </py-test>
++  </target>
++</project>
+\ No newline at end of file
+diff --git a/src/contrib/cloud/lib/pyAntTasks-1.3-LICENSE.txt b/src/contrib/cloud/lib/pyAntTasks-1.3-LICENSE.txt
+new file mode 100644
+index 0000000..d645695
+--- /dev/null
++++ b/src/contrib/cloud/lib/pyAntTasks-1.3-LICENSE.txt
+@@ -0,0 +1,202 @@
++
++                                 Apache License
++                           Version 2.0, January 2004
++                        http://www.apache.org/licenses/
++
++   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
++
++   1. Definitions.
++
++      "License" shall mean the terms and conditions for use, reproduction,
++      and distribution as defined by Sections 1 through 9 of this document.
++
++      "Licensor" shall mean the copyright owner or entity authorized by
++      the copyright owner that is granting the License.
++
++      "Legal Entity" shall mean the union of the acting entity and all
++      other entities that control, are controlled by, or are under common
++      control with that entity. For the purposes of this definition,
++      "control" means (i) the power, direct or indirect, to cause the
++      direction or management of such entity, whether by contract or
++      otherwise, or (ii) ownership of fifty percent (50%) or more of the
++      outstanding shares, or (iii) beneficial ownership of such entity.
++
++      "You" (or "Your") shall mean an individual or Legal Entity
++      exercising permissions granted by this License.
++
++      "Source" form shall mean the preferred form for making modifications,
++      including but not limited to software source code, documentation
++      source, and configuration files.
++
++      "Object" form shall mean any form resulting from mechanical
++      transformation or translation of a Source form, including but
++      not limited to compiled object code, generated documentation,
++      and conversions to other media types.
++
++      "Work" shall mean the work of authorship, whether in Source or
++      Object form, made available under the License, as indicated by a
++      copyright notice that is included in or attached to the work
++      (an example is provided in the Appendix below).
++
++      "Derivative Works" shall mean any work, whether in Source or Object
++      form, that is based on (or derived from) the Work and for which the
++      editorial revisions, annotations, elaborations, or other modifications
++      represent, as a whole, an original work of authorship. For the purposes
++      of this License, Derivative Works shall not include works that remain
++      separable from, or merely link (or bind by name) to the interfaces of,
++      the Work and Derivative Works thereof.
++
++      "Contribution" shall mean any work of authorship, including
++      the original version of the Work and any modifications or additions
++      to that Work or Derivative Works thereof, that is intentionally
++      submitted to Licensor for inclusion in the Work by the copyright owner
++      or by an individual or Legal Entity authorized to submit on behalf of
++      the copyright owner. For the purposes of this definition, "submitted"
++      means any form of electronic, verbal, or written communication sent
++      to the Licensor or its representatives, including but not limited to
++      communication on electronic mailing lists, source code control systems,
++      and issue tracking systems that are managed by, or on behalf of, the
++      Licensor for the purpose of discussing and improving the Work, but
++      excluding communication that is conspicuously marked or otherwise
++      designated in writing by the copyright owner as "Not a Contribution."
++
++      "Contributor" shall mean Licensor and any individual or Legal Entity
++      on behalf of whom a Contribution has been received by Licensor and
++      subsequently incorporated within the Work.
++
++   2. Grant of Copyright License. Subject to the terms and conditions of
++      this License, each Contributor hereby grants to You a perpetual,
++      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
++      copyright license to reproduce, prepare Derivative Works of,
++      publicly display, publicly perform, sublicense, and distribute the
++      Work and such Derivative Works in Source or Object form.
++
++   3. Grant of Patent License. Subject to the terms and conditions of
++      this License, each Contributor hereby grants to You a perpetual,
++      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
++      (except as stated in this section) patent license to make, have made,
++      use, offer to sell, sell, import, and otherwise transfer the Work,
++      where such license applies only to those patent claims licensable
++      by such Contributor that are necessarily infringed by their
++      Contribution(s) alone or by combination of their Contribution(s)
++      with the Work to which such Contribution(s) was submitted. If You
++      institute patent litigation against any entity (including a
++      cross-claim or counterclaim in a lawsuit) alleging that the Work
++      or a Contribution incorporated within the Work constitutes direct
++      or contributory patent infringement, then any patent licenses
++      granted to You under this License for that Work shall terminate
++      as of the date such litigation is filed.
++
++   4. Redistribution. You may reproduce and distribute copies of the
++      Work or Derivative Works thereof in any medium, with or without
++      modifications, and in Source or Object form, provided that You
++      meet the following conditions:
++
++      (a) You must give any other recipients of the Work or
++          Derivative Works a copy of this License; and
++
++      (b) You must cause any modified files to carry prominent notices
++          stating that You changed the files; and
++
++      (c) You must retain, in the Source form of any Derivative Works
++          that You distribute, all copyright, patent, trademark, and
++          attribution notices from the Source form of the Work,
++          excluding those notices that do not pertain to any part of
++          the Derivative Works; and
++
++      (d) If the Work includes a "NOTICE" text file as part of its
++          distribution, then any Derivative Works that You distribute must
++          include a readable copy of the attribution notices contained
++          within such NOTICE file, excluding those notices that do not
++          pertain to any part of the Derivative Works, in at least one
++          of the following places: within a NOTICE text file distributed
++          as part of the Derivative Works; within the Source form or
++          documentation, if provided along with the Derivative Works; or,
++          within a display generated by the Derivative Works, if and
++          wherever such third-party notices normally appear. The contents
++          of the NOTICE file are for informational purposes only and
++          do not modify the License. You may add Your own attribution
++          notices within Derivative Works that You distribute, alongside
++          or as an addendum to the NOTICE text from the Work, provided
++          that such additional attribution notices cannot be construed
++          as modifying the License.
++
++      You may add Your own copyright statement to Your modifications and
++      may provide additional or different license terms and conditions
++      for use, reproduction, or distribution of Your modifications, or
++      for any such Derivative Works as a whole, provided Your use,
++      reproduction, and distribution of the Work otherwise complies with
++      the conditions stated in this License.
++
++   5. Submission of Contributions. Unless You explicitly state otherwise,
++      any Contribution intentionally submitted for inclusion in the Work
++      by You to the Licensor shall be under the terms and conditions of
++      this License, without any additional terms or conditions.
++      Notwithstanding the above, nothing herein shall supersede or modify
++      the terms of any separate license agreement you may have executed
++      with Licensor regarding such Contributions.
++
++   6. Trademarks. This License does not grant permission to use the trade
++      names, trademarks, service marks, or product names of the Licensor,
++      except as required for reasonable and customary use in describing the
++      origin of the Work and reproducing the content of the NOTICE file.
++
++   7. Disclaimer of Warranty. Unless required by applicable law or
++      agreed to in writing, Licensor provides the Work (and each
++      Contributor provides its Contributions) on an "AS IS" BASIS,
++      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++      implied, including, without limitation, any warranties or conditions
++      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
++      PARTICULAR PURPOSE. You are solely responsible for determining the
++      appropriateness of using or redistributing the Work and assume any
++      risks associated with Your exercise of permissions under this License.
++
++   8. Limitation of Liability. In no event and under no legal theory,
++      whether in tort (including negligence), contract, or otherwise,
++      unless required by applicable law (such as deliberate and grossly
++      negligent acts) or agreed to in writing, shall any Contributor be
++      liable to You for damages, including any direct, indirect, special,
++      incidental, or consequential damages of any character arising as a
++      result of this License or out of the use or inability to use the
++      Work (including but not limited to damages for loss of goodwill,
++      work stoppage, computer failure or malfunction, or any and all
++      other commercial damages or losses), even if such Contributor
++      has been advised of the possibility of such damages.
++
++   9. Accepting Warranty or Additional Liability. While redistributing
++      the Work or Derivative Works thereof, You may choose to offer,
++      and charge a fee for, acceptance of support, warranty, indemnity,
++      or other liability obligations and/or rights consistent with this
++      License. However, in accepting such obligations, You may act only
++      on Your own behalf and on Your sole responsibility, not on behalf
++      of any other Contributor, and only if You agree to indemnify,
++      defend, and hold each Contributor harmless for any liability
++      incurred by, or claims asserted against, such Contributor by reason
++      of your accepting any such warranty or additional liability.
++
++   END OF TERMS AND CONDITIONS
++
++   APPENDIX: How to apply the Apache License to your work.
++
++      To apply the Apache License to your work, attach the following
++      boilerplate notice, with the fields enclosed by brackets "[]"
++      replaced with your own identifying information. (Don't include
++      the brackets!)  The text should be enclosed in the appropriate
++      comment syntax for the file format. We also recommend that a
++      file or class name and description of purpose be included on the
++      same "printed page" as the copyright notice for easier
++      identification within third-party archives.
++
++   Copyright [yyyy] [name of copyright owner]
++
++   Licensed under the Apache License, Version 2.0 (the "License");
++   you may not use this file except in compliance with the License.
++   You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
+diff --git a/src/contrib/cloud/lib/pyAntTasks-1.3.jar b/src/contrib/cloud/lib/pyAntTasks-1.3.jar
+new file mode 100644
+index 0000000000000000000000000000000000000000..53a7877220fcfddee090158082bdf4d7b9ba635f
+GIT binary patch
+literal 18788
+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
+UN!*ele-K3Sddo`Pc4NN%02ZtHOaK4?
+
+literal 0
+HcmV?d00001
+
+diff --git a/src/contrib/cloud/src/test/hadoop/__init__.py b/src/contrib/cloud/src/test/hadoop/__init__.py
+deleted file mode 100644
+index 13878a1..0000000
+--- a/src/contrib/cloud/src/test/hadoop/__init__.py
++++ /dev/null
+@@ -1,14 +0,0 @@
+-# Licensed to the Apache Software Foundation (ASF) under one or more
+-# contributor license agreements.  See the NOTICE file distributed with
+-# this work for additional information regarding copyright ownership.
+-# The ASF licenses this file to You under the Apache License, Version 2.0
+-# (the "License"); you may not use this file except in compliance with
+-# the License.  You may obtain a copy of the License at
+-#
+-#     http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+\ No newline at end of file
+diff --git a/src/contrib/cloud/src/test/hadoop/cloud/__init__.py b/src/contrib/cloud/src/test/hadoop/cloud/__init__.py
+deleted file mode 100644
+index 13878a1..0000000
+--- a/src/contrib/cloud/src/test/hadoop/cloud/__init__.py
++++ /dev/null
+@@ -1,14 +0,0 @@
+-# Licensed to the Apache Software Foundation (ASF) under one or more
+-# contributor license agreements.  See the NOTICE file distributed with
+-# this work for additional information regarding copyright ownership.
+-# The ASF licenses this file to You under the Apache License, Version 2.0
+-# (the "License"); you may not use this file except in compliance with
+-# the License.  You may obtain a copy of the License at
+-#
+-#     http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+\ No newline at end of file
+diff --git a/src/contrib/cloud/src/test/hadoop/cloud/alltests.py b/src/contrib/cloud/src/test/hadoop/cloud/alltests.py
+deleted file mode 100644
+index 3eb8341..0000000
+--- a/src/contrib/cloud/src/test/hadoop/cloud/alltests.py
++++ /dev/null
+@@ -1,36 +0,0 @@
+-# Licensed to the Apache Software Foundation (ASF) under one or more
+-# contributor license agreements.  See the NOTICE file distributed with
+-# this work for additional information regarding copyright ownership.
+-# The ASF licenses this file to You under the Apache License, Version 2.0
+-# (the "License"); you may not use this file except in compliance with
+-# the License.  You may obtain a copy of the License at
+-#
+-#     http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-
+-import sys
+-import unittest
+-from hadoop.cloud.testcluster import TestCluster
+-from hadoop.cloud.teststorage import TestJsonVolumeSpecManager
+-from hadoop.cloud.teststorage import TestJsonVolumeManager
+-from hadoop.cloud.testuserdata import TestInstanceUserData
+-from hadoop.cloud.testutil import TestUtilFunctions
+-
+-def testSuite():
+-  alltests = unittest.TestSuite([
+-    unittest.makeSuite(TestCluster, 'test'),
+-    unittest.makeSuite(TestJsonVolumeSpecManager, 'test'),
+-    unittest.makeSuite(TestJsonVolumeManager, 'test'),
+-    unittest.makeSuite(TestInstanceUserData, 'test'),
+-    unittest.makeSuite(TestUtilFunctions, 'test'),
+-  ])
+-  return alltests
+-
+-if __name__ == "__main__":
+-  runner = unittest.TextTestRunner()
+-  sys.exit(not runner.run(testSuite()).wasSuccessful())
+diff --git a/src/contrib/cloud/src/test/hadoop/cloud/testcluster.py b/src/contrib/cloud/src/test/hadoop/cloud/testcluster.py
+deleted file mode 100644
+index abba3d7..0000000
+--- a/src/contrib/cloud/src/test/hadoop/cloud/testcluster.py
++++ /dev/null
+@@ -1,37 +0,0 @@
+-# Licensed to the Apache Software Foundation (ASF) under one or more
+-# contributor license agreements.  See the NOTICE file distributed with
+-# this work for additional information regarding copyright ownership.
+-# The ASF licenses this file to You under the Apache License, Version 2.0
+-# (the "License"); you may not use this file except in compliance with
+-# the License.  You may obtain a copy of the License at
+-#
+-#     http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-
+-import unittest
+-
+-from hadoop.cloud.cluster import RoleSyntaxException
+-from hadoop.cloud.providers.ec2 import Ec2Cluster
+-
+-class TestCluster(unittest.TestCase):
+-
+-  def test_group_name_for_role(self):
+-    cluster = Ec2Cluster("test-cluster", None)
+-    self.assertEqual("test-cluster-foo", cluster._group_name_for_role("foo"))
+-
+-  def test_check_role_name_valid(self):
+-    cluster = Ec2Cluster("test-cluster", None)
+-    cluster._check_role_name(
+-      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+")
+-
+-  def test_check_role_name_dash_is_invalid(self):
+-    cluster = Ec2Cluster("test-cluster", None)
+-    self.assertRaises(RoleSyntaxException, cluster._check_role_name, "a-b")
+-
+-if __name__ == '__main__':
+-  unittest.main()
+diff --git a/src/contrib/cloud/src/test/hadoop/cloud/teststorage.py b/src/contrib/cloud/src/test/hadoop/cloud/teststorage.py
+deleted file mode 100644
+index 527963a..0000000
+--- a/src/contrib/cloud/src/test/hadoop/cloud/teststorage.py
++++ /dev/null
+@@ -1,143 +0,0 @@
+-# Licensed to the Apache Software Foundation (ASF) under one or more
+-# contributor license agreements.  See the NOTICE file distributed with
+-# this work for additional information regarding copyright ownership.
+-# The ASF licenses this file to You under the Apache License, Version 2.0
+-# (the "License"); you may not use this file except in compliance with
+-# the License.  You may obtain a copy of the License at
+-#
+-#     http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-
+-import os
+-import unittest
+-
+-import simplejson as json
+-from StringIO import StringIO
+-
+-from hadoop.cloud.storage import MountableVolume
+-from hadoop.cloud.storage import JsonVolumeManager
+-from hadoop.cloud.storage import JsonVolumeSpecManager
+-
+-spec = {
+- "master": ({"size_gb":"8", "mount_point":"/", "device":"/dev/sdj",
+-             "snapshot_id": "snap_1"},
+-            ),
+- "slave": ({"size_gb":"8", "mount_point":"/", "device":"/dev/sdj",
+-            "snapshot_id": "snap_2"},
+-           {"size_gb":"10", "mount_point":"/data1", "device":"/dev/sdk",
+-            "snapshot_id": "snap_3"},
+-           )
+- }
+-
+-class TestJsonVolumeSpecManager(unittest.TestCase):
+-
+-  def test_volume_specs_for_role(self):
+-
+-    input = StringIO(json.dumps(spec))
+-
+-    volume_spec_manager = JsonVolumeSpecManager(input)
+-
+-    master_specs = volume_spec_manager.volume_specs_for_role("master")
+-    self.assertEqual(1, len(master_specs))
+-    self.assertEqual("/", master_specs[0].mount_point)
+-    self.assertEqual("8", master_specs[0].size)
+-    self.assertEqual("/dev/sdj", master_specs[0].device)
+-    self.assertEqual("snap_1", master_specs[0].snapshot_id)
+-
+-    slave_specs = volume_spec_manager.volume_specs_for_role("slave")
+-    self.assertEqual(2, len(slave_specs))
+-    self.assertEqual("snap_2", slave_specs[0].snapshot_id)
+-    self.assertEqual("snap_3", slave_specs[1].snapshot_id)
+-
+-    self.assertRaises(KeyError, volume_spec_manager.volume_specs_for_role,
+-                      "no-such-role")
+-
+-  def test_get_mappings_string_for_role(self):
+-
+-    input = StringIO(json.dumps(spec))
+-
+-    volume_spec_manager = JsonVolumeSpecManager(input)
+-
+-    master_mappings = volume_spec_manager.get_mappings_string_for_role("master")
+-    self.assertEqual("/,/dev/sdj", master_mappings)
+-
+-    slave_mappings = volume_spec_manager.get_mappings_string_for_role("slave")
+-    self.assertEqual("/,/dev/sdj;/data1,/dev/sdk", slave_mappings)
+-
+-    self.assertRaises(KeyError,
+-                      volume_spec_manager.get_mappings_string_for_role,
+-                      "no-such-role")
+-
+-class TestJsonVolumeManager(unittest.TestCase):
+-
+-  def setUp(self):
+-    try:
+-      os.remove("volumemanagertest.json")
+-    except OSError:
+-      pass
+-
+-  def test_add_instance_storage_for_role(self):
+-    volume_manager = JsonVolumeManager("volumemanagertest.json")
+-    self.assertEqual(0,
+-      len(volume_manager.get_instance_storage_for_role("master")))
+-    self.assertEqual(0, len(volume_manager.get_roles))
+-
+-    volume_manager.add_instance_storage_for_role("master",
+-                                                 [MountableVolume("vol_1", "/",
+-                                                                  "/dev/sdj")])
+-    master_storage = volume_manager.get_instance_storage_for_role("master")
+-    self.assertEqual(1, len(master_storage))
+-    master_storage_instance0 = master_storage[0]
+-    self.assertEqual(1, len(master_storage_instance0))
+-    master_storage_instance0_vol0 = master_storage_instance0[0]
+-    self.assertEqual("vol_1", master_storage_instance0_vol0.volume_id)
+-    self.assertEqual("/", master_storage_instance0_vol0.mount_point)
+-    self.assertEqual("/dev/sdj", master_storage_instance0_vol0.device)
+-
+-    volume_manager.add_instance_storage_for_role("slave",
+-                                                 [MountableVolume("vol_2", "/",
+-                                                                  "/dev/sdj")])
+-    self.assertEqual(1,
+-      len(volume_manager.get_instance_storage_for_role("master")))
+-    slave_storage = volume_manager.get_instance_storage_for_role("slave")
+-    self.assertEqual(1, len(slave_storage))
+-    slave_storage_instance0 = slave_storage[0]
+-    self.assertEqual(1, len(slave_storage_instance0))
+-    slave_storage_instance0_vol0 = slave_storage_instance0[0]
+-    self.assertEqual("vol_2", slave_storage_instance0_vol0.volume_id)
+-    self.assertEqual("/", slave_storage_instance0_vol0.mount_point)
+-    self.assertEqual("/dev/sdj", slave_storage_instance0_vol0.device)
+-
+-    volume_manager.add_instance_storage_for_role("slave",
+-      [MountableVolume("vol_3", "/", "/dev/sdj"),
+-       MountableVolume("vol_4", "/data1", "/dev/sdk")])
+-    self.assertEqual(1,
+-      len(volume_manager.get_instance_storage_for_role("master")))
+-    slave_storage = volume_manager.get_instance_storage_for_role("slave")
+-    self.assertEqual(2, len(slave_storage))
+-    slave_storage_instance0 = slave_storage[0]
+-    slave_storage_instance1 = slave_storage[1]
+-    self.assertEqual(1, len(slave_storage_instance0))
+-    self.assertEqual(2, len(slave_storage_instance1))
+-    slave_storage_instance1_vol0 = slave_storage_instance1[0]
+-    slave_storage_instance1_vol1 = slave_storage_instance1[1]
+-    self.assertEqual("vol_3", slave_storage_instance1_vol0.volume_id)
+-    self.assertEqual("/", slave_storage_instance1_vol0.mount_point)
+-    self.assertEqual("/dev/sdj", slave_storage_instance1_vol0.device)
+-    self.assertEqual("vol_4", slave_storage_instance1_vol1.volume_id)
+-    self.assertEqual("/data1", slave_storage_instance1_vol1.mount_point)
+-    self.assertEqual("/dev/sdk", slave_storage_instance1_vol1.device)
+-    
+-    roles = volume_manager.get_roles
+-    self.assertEqual(2, len(roles))
+-    self.assertTrue("slave" in roles)
+-    self.assertTrue("master" in roles)
+-
+-
+-if __name__ == '__main__':
+-  unittest.main()
+diff --git a/src/contrib/cloud/src/test/hadoop/cloud/testuserdata.py b/src/contrib/cloud/src/test/hadoop/cloud/testuserdata.py
+deleted file mode 100644
+index e6f527b..0000000
+--- a/src/contrib/cloud/src/test/hadoop/cloud/testuserdata.py
++++ /dev/null
+@@ -1,44 +0,0 @@
+-# Licensed to the Apache Software Foundation (ASF) under one or more
+-# contributor license agreements.  See the NOTICE file distributed with
+-# this work for additional information regarding copyright ownership.
+-# The ASF licenses this file to You under the Apache License, Version 2.0
+-# (the "License"); you may not use this file except in compliance with
+-# the License.  You may obtain a copy of the License at
+-#
+-#     http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-
+-import tempfile
+-import unittest
+-
+-from hadoop.cloud.cluster import InstanceUserData
+-
+-class TestInstanceUserData(unittest.TestCase):
+-
+-  def test_replacement(self):
+-    file = tempfile.NamedTemporaryFile()
+-    file.write("Contents go here")
+-    file.flush()
+-    self.assertEqual("Contents go here",
+-                     InstanceUserData(file.name, {}).read())
+-    self.assertEqual("Contents were here",
+-                     InstanceUserData(file.name, { "go": "were"}).read())
+-    self.assertEqual("Contents  here",
+-                     InstanceUserData(file.name, { "go": None}).read())
+-    file.close()
+-
+-  def test_read_file_url(self):
+-    file = tempfile.NamedTemporaryFile()
+-    file.write("Contents go here")
+-    file.flush()
+-    self.assertEqual("Contents go here",
+-                     InstanceUserData("file://%s" % file.name, {}).read())
+-    file.close()
+-
+-if __name__ == '__main__':
+-  unittest.main()
+diff --git a/src/contrib/cloud/src/test/hadoop/cloud/testutil.py b/src/contrib/cloud/src/test/hadoop/cloud/testutil.py
+deleted file mode 100644
+index 2e3f228..0000000
+--- a/src/contrib/cloud/src/test/hadoop/cloud/testutil.py
++++ /dev/null
+@@ -1,81 +0,0 @@
+-# Licensed to the Apache Software Foundation (ASF) under one or more
+-# contributor license agreements.  See the NOTICE file distributed with
+-# this work for additional information regarding copyright ownership.
+-# The ASF licenses this file to You under the Apache License, Version 2.0
+-# (the "License"); you may not use this file except in compliance with
+-# the License.  You may obtain a copy of the License at
+-#
+-#     http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-
+-import ConfigParser
+-import StringIO
+-import unittest
+-
+-from hadoop.cloud.util import bash_quote
+-from hadoop.cloud.util import bash_quote_env
+-from hadoop.cloud.util import build_env_string
+-from hadoop.cloud.util import merge_config_with_options
+-from hadoop.cloud.util import xstr
+-
+-class TestUtilFunctions(unittest.TestCase):
+-
+-  def test_bash_quote(self):
+-    self.assertEqual("", bash_quote(None))
+-    self.assertEqual("''", bash_quote(""))
+-    self.assertEqual("'a'", bash_quote("a"))
+-    self.assertEqual("'a b'", bash_quote("a b"))
+-    self.assertEqual("'a\b'", bash_quote("a\b"))
+-    self.assertEqual("'a '\\'' b'", bash_quote("a ' b"))
+-
+-  def test_bash_quote_env(self):
+-    self.assertEqual("", bash_quote_env(""))
+-    self.assertEqual("a", bash_quote_env("a"))
+-    self.assertEqual("a='b'", bash_quote_env("a=b"))
+-    self.assertEqual("a='b c'", bash_quote_env("a=b c"))
+-    self.assertEqual("a='b\c'", bash_quote_env("a=b\c"))
+-    self.assertEqual("a='b '\\'' c'", bash_quote_env("a=b ' c"))
+-
+-  def test_build_env_string(self):
+-    self.assertEqual("", build_env_string())
+-    self.assertEqual("a='b' c='d'",
+-                     build_env_string(env_strings=["a=b", "c=d"]))
+-    self.assertEqual("a='b' c='d'",
+-                     build_env_string(pairs={"a": "b", "c": "d"}))
+-
+-  def test_merge_config_with_options(self):
+-    options = { "a": "b" }
+-    config = ConfigParser.ConfigParser()
+-    self.assertEqual({ "a": "b" },
+-                     merge_config_with_options("section", config, options))
+-    config.add_section("section")
+-    self.assertEqual({ "a": "b" },
+-                     merge_config_with_options("section", config, options))
+-    config.set("section", "a", "z")
+-    config.set("section", "c", "d")
+-    self.assertEqual({ "a": "z", "c": "d" },
+-                     merge_config_with_options("section", config, {}))
+-    self.assertEqual({ "a": "b", "c": "d" },
+-                     merge_config_with_options("section", config, options))
+-
+-  def test_merge_config_with_options_list(self):
+-    config = ConfigParser.ConfigParser()
+-    config.readfp(StringIO.StringIO("""[section]
+-env1=a=b
+- c=d
+-env2=e=f
+- g=h"""))
+-    self.assertEqual({ "env1": ["a=b", "c=d"], "env2": ["e=f", "g=h"] },
+-                     merge_config_with_options("section", config, {}))
+-
+-  def test_xstr(self):
+-    self.assertEqual("", xstr(None))
+-    self.assertEqual("a", xstr("a"))
+-
+-if __name__ == '__main__':
+-  unittest.main()
+diff --git a/src/contrib/cloud/src/test/py/testcluster.py b/src/contrib/cloud/src/test/py/testcluster.py
+new file mode 100644
+index 0000000..abba3d7
+--- /dev/null
++++ b/src/contrib/cloud/src/test/py/testcluster.py
+@@ -0,0 +1,37 @@
++# Licensed to the Apache Software Foundation (ASF) under one or more
++# contributor license agreements.  See the NOTICE file distributed with
++# this work for additional information regarding copyright ownership.
++# The ASF licenses this file to You under the Apache License, Version 2.0
++# (the "License"); you may not use this file except in compliance with
++# the License.  You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++import unittest
++
++from hadoop.cloud.cluster import RoleSyntaxException
++from hadoop.cloud.providers.ec2 import Ec2Cluster
++
++class TestCluster(unittest.TestCase):
++
++  def test_group_name_for_role(self):
++    cluster = Ec2Cluster("test-cluster", None)
++    self.assertEqual("test-cluster-foo", cluster._group_name_for_role("foo"))
++
++  def test_check_role_name_valid(self):
++    cluster = Ec2Cluster("test-cluster", None)
++    cluster._check_role_name(
++      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+")
++
++  def test_check_role_name_dash_is_invalid(self):
++    cluster = Ec2Cluster("test-cluster", None)
++    self.assertRaises(RoleSyntaxException, cluster._check_role_name, "a-b")
++
++if __name__ == '__main__':
++  unittest.main()
+diff --git a/src/contrib/cloud/src/test/py/teststorage.py b/src/contrib/cloud/src/test/py/teststorage.py
+new file mode 100644
+index 0000000..78c487f
+--- /dev/null
++++ b/src/contrib/cloud/src/test/py/teststorage.py
+@@ -0,0 +1,143 @@
++# Licensed to the Apache Software Foundation (ASF) under one or more
++# contributor license agreements.  See the NOTICE file distributed with
++# this work for additional information regarding copyright ownership.
++# The ASF licenses this file to You under the Apache License, Version 2.0
++# (the "License"); you may not use this file except in compliance with
++# the License.  You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++import os
++import unittest
++
++import simplejson as json
++from StringIO import StringIO
++
++from hadoop.cloud.storage import MountableVolume
++from hadoop.cloud.storage import JsonVolumeManager
++from hadoop.cloud.storage import JsonVolumeSpecManager
++
++spec = {
++ "master": ({"size_gb":"8", "mount_point":"/", "device":"/dev/sdj",
++             "snapshot_id": "snap_1"},
++            ),
++ "slave": ({"size_gb":"8", "mount_point":"/", "device":"/dev/sdj",
++            "snapshot_id": "snap_2"},
++           {"size_gb":"10", "mount_point":"/data1", "device":"/dev/sdk",
++            "snapshot_id": "snap_3"},
++           )
++ }
++
++class TestJsonVolumeSpecManager(unittest.TestCase):
++
++  def test_volume_specs_for_role(self):
++
++    input = StringIO(json.dumps(spec))
++
++    volume_spec_manager = JsonVolumeSpecManager(input)
++
++    master_specs = volume_spec_manager.volume_specs_for_role("master")
++    self.assertEqual(1, len(master_specs))
++    self.assertEqual("/", master_specs[0].mount_point)
++    self.assertEqual("8", master_specs[0].size)
++    self.assertEqual("/dev/sdj", master_specs[0].device)
++    self.assertEqual("snap_1", master_specs[0].snapshot_id)
++
++    slave_specs = volume_spec_manager.volume_specs_for_role("slave")
++    self.assertEqual(2, len(slave_specs))
++    self.assertEqual("snap_2", slave_specs[0].snapshot_id)
++    self.assertEqual("snap_3", slave_specs[1].snapshot_id)
++
++    self.assertRaises(KeyError, volume_spec_manager.volume_specs_for_role,
++                      "no-such-role")
++
++  def test_get_mappings_string_for_role(self):
++
++    input = StringIO(json.dumps(spec))
++
++    volume_spec_manager = JsonVolumeSpecManager(input)
++
++    master_mappings = volume_spec_manager.get_mappings_string_for_role("master")
++    self.assertEqual("/,/dev/sdj", master_mappings)
++
++    slave_mappings = volume_spec_manager.get_mappings_string_for_role("slave")
++    self.assertEqual("/,/dev/sdj;/data1,/dev/sdk", slave_mappings)
++
++    self.assertRaises(KeyError,
++                      volume_spec_manager.get_mappings_string_for_role,
++                      "no-such-role")
++
++class TestJsonVolumeManager(unittest.TestCase):
++
++  def tearDown(self):
++    try:
++      os.remove("volumemanagertest.json")
++    except OSError:
++      pass
++    
++  def test_add_instance_storage_for_role(self):
++    volume_manager = JsonVolumeManager("volumemanagertest.json")
++    self.assertEqual(0,
++      len(volume_manager.get_instance_storage_for_role("master")))
++    self.assertEqual(0, len(volume_manager.get_roles()))
++
++    volume_manager.add_instance_storage_for_role("master",
++                                                 [MountableVolume("vol_1", "/",
++                                                                  "/dev/sdj")])
++    master_storage = volume_manager.get_instance_storage_for_role("master")
++    self.assertEqual(1, len(master_storage))
++    master_storage_instance0 = master_storage[0]
++    self.assertEqual(1, len(master_storage_instance0))
++    master_storage_instance0_vol0 = master_storage_instance0[0]
++    self.assertEqual("vol_1", master_storage_instance0_vol0.volume_id)
++    self.assertEqual("/", master_storage_instance0_vol0.mount_point)
++    self.assertEqual("/dev/sdj", master_storage_instance0_vol0.device)
++
++    volume_manager.add_instance_storage_for_role("slave",
++                                                 [MountableVolume("vol_2", "/",
++                                                                  "/dev/sdj")])
++    self.assertEqual(1,
++      len(volume_manager.get_instance_storage_for_role("master")))
++    slave_storage = volume_manager.get_instance_storage_for_role("slave")
++    self.assertEqual(1, len(slave_storage))
++    slave_storage_instance0 = slave_storage[0]
++    self.assertEqual(1, len(slave_storage_instance0))
++    slave_storage_instance0_vol0 = slave_storage_instance0[0]
++    self.assertEqual("vol_2", slave_storage_instance0_vol0.volume_id)
++    self.assertEqual("/", slave_storage_instance0_vol0.mount_point)
++    self.assertEqual("/dev/sdj", slave_storage_instance0_vol0.device)
++
++    volume_manager.add_instance_storage_for_role("slave",
++      [MountableVolume("vol_3", "/", "/dev/sdj"),
++       MountableVolume("vol_4", "/data1", "/dev/sdk")])
++    self.assertEqual(1,
++      len(volume_manager.get_instance_storage_for_role("master")))
++    slave_storage = volume_manager.get_instance_storage_for_role("slave")
++    self.assertEqual(2, len(slave_storage))
++    slave_storage_instance0 = slave_storage[0]
++    slave_storage_instance1 = slave_storage[1]
++    self.assertEqual(1, len(slave_storage_instance0))
++    self.assertEqual(2, len(slave_storage_instance1))
++    slave_storage_instance1_vol0 = slave_storage_instance1[0]
++    slave_storage_instance1_vol1 = slave_storage_instance1[1]
++    self.assertEqual("vol_3", slave_storage_instance1_vol0.volume_id)
++    self.assertEqual("/", slave_storage_instance1_vol0.mount_point)
++    self.assertEqual("/dev/sdj", slave_storage_instance1_vol0.device)
++    self.assertEqual("vol_4", slave_storage_instance1_vol1.volume_id)
++    self.assertEqual("/data1", slave_storage_instance1_vol1.mount_point)
++    self.assertEqual("/dev/sdk", slave_storage_instance1_vol1.device)
++    
++    roles = volume_manager.get_roles()
++    self.assertEqual(2, len(roles))
++    self.assertTrue("slave" in roles)
++    self.assertTrue("master" in roles)
++
++
++if __name__ == '__main__':
++  unittest.main()
+diff --git a/src/contrib/cloud/src/test/py/testuserdata.py b/src/contrib/cloud/src/test/py/testuserdata.py
+new file mode 100644
+index 0000000..e6f527b
+--- /dev/null
++++ b/src/contrib/cloud/src/test/py/testuserdata.py
+@@ -0,0 +1,44 @@
++# Licensed to the Apache Software Foundation (ASF) under one or more
++# contributor license agreements.  See the NOTICE file distributed with
++# this work for additional information regarding copyright ownership.
++# The ASF licenses this file to You under the Apache License, Version 2.0
++# (the "License"); you may not use this file except in compliance with
++# the License.  You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++import tempfile
++import unittest
++
++from hadoop.cloud.cluster import InstanceUserData
++
++class TestInstanceUserData(unittest.TestCase):
++
++  def test_replacement(self):
++    file = tempfile.NamedTemporaryFile()
++    file.write("Contents go here")
++    file.flush()
++    self.assertEqual("Contents go here",
++                     InstanceUserData(file.name, {}).read())
++    self.assertEqual("Contents were here",
++                     InstanceUserData(file.name, { "go": "were"}).read())
++    self.assertEqual("Contents  here",
++                     InstanceUserData(file.name, { "go": None}).read())
++    file.close()
++
++  def test_read_file_url(self):
++    file = tempfile.NamedTemporaryFile()
++    file.write("Contents go here")
++    file.flush()
++    self.assertEqual("Contents go here",
++                     InstanceUserData("file://%s" % file.name, {}).read())
++    file.close()
++
++if __name__ == '__main__':
++  unittest.main()
+diff --git a/src/contrib/cloud/src/test/py/testutil.py b/src/contrib/cloud/src/test/py/testutil.py
+new file mode 100644
+index 0000000..2e3f228
+--- /dev/null
++++ b/src/contrib/cloud/src/test/py/testutil.py
+@@ -0,0 +1,81 @@
++# Licensed to the Apache Software Foundation (ASF) under one or more
++# contributor license agreements.  See the NOTICE file distributed with
++# this work for additional information regarding copyright ownership.
++# The ASF licenses this file to You under the Apache License, Version 2.0
++# (the "License"); you may not use this file except in compliance with
++# the License.  You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++import ConfigParser
++import StringIO
++import unittest
++
++from hadoop.cloud.util import bash_quote
++from hadoop.cloud.util import bash_quote_env
++from hadoop.cloud.util import build_env_string
++from hadoop.cloud.util import merge_config_with_options
++from hadoop.cloud.util import xstr
++
++class TestUtilFunctions(unittest.TestCase):
++
++  def test_bash_quote(self):
++    self.assertEqual("", bash_quote(None))
++    self.assertEqual("''", bash_quote(""))
++    self.assertEqual("'a'", bash_quote("a"))
++    self.assertEqual("'a b'", bash_quote("a b"))
++    self.assertEqual("'a\b'", bash_quote("a\b"))
++    self.assertEqual("'a '\\'' b'", bash_quote("a ' b"))
++
++  def test_bash_quote_env(self):
++    self.assertEqual("", bash_quote_env(""))
++    self.assertEqual("a", bash_quote_env("a"))
++    self.assertEqual("a='b'", bash_quote_env("a=b"))
++    self.assertEqual("a='b c'", bash_quote_env("a=b c"))
++    self.assertEqual("a='b\c'", bash_quote_env("a=b\c"))
++    self.assertEqual("a='b '\\'' c'", bash_quote_env("a=b ' c"))
++
++  def test_build_env_string(self):
++    self.assertEqual("", build_env_string())
++    self.assertEqual("a='b' c='d'",
++                     build_env_string(env_strings=["a=b", "c=d"]))
++    self.assertEqual("a='b' c='d'",
++                     build_env_string(pairs={"a": "b", "c": "d"}))
++
++  def test_merge_config_with_options(self):
++    options = { "a": "b" }
++    config = ConfigParser.ConfigParser()
++    self.assertEqual({ "a": "b" },
++                     merge_config_with_options("section", config, options))
++    config.add_section("section")
++    self.assertEqual({ "a": "b" },
++                     merge_config_with_options("section", config, options))
++    config.set("section", "a", "z")
++    config.set("section", "c", "d")
++    self.assertEqual({ "a": "z", "c": "d" },
++                     merge_config_with_options("section", config, {}))
++    self.assertEqual({ "a": "b", "c": "d" },
++                     merge_config_with_options("section", config, options))
++
++  def test_merge_config_with_options_list(self):
++    config = ConfigParser.ConfigParser()
++    config.readfp(StringIO.StringIO("""[section]
++env1=a=b
++ c=d
++env2=e=f
++ g=h"""))
++    self.assertEqual({ "env1": ["a=b", "c=d"], "env2": ["e=f", "g=h"] },
++                     merge_config_with_options("section", config, {}))
++
++  def test_xstr(self):
++    self.assertEqual("", xstr(None))
++    self.assertEqual("a", xstr("a"))
++
++if __name__ == '__main__':
++  unittest.main()
+-- 
+1.7.0.4
+

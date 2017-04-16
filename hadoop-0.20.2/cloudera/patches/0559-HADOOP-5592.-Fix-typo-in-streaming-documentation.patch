@@ -1,0 +1,28 @@
+From d8de7f9dbe8b94d380849f2f5f4ff357ce50e1a6 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 17 Mar 2010 11:57:13 +0530
+Subject: [PATCH 0559/1179] HADOOP-5592. Fix typo in streaming documentation
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436671/patch-5592-ydist.txt
+Author: Corinne Chandel
+Ref: YDH
+---
+ .../src/documentation/content/xdocs/streaming.xml  |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/streaming.xml b/src/docs/src/documentation/content/xdocs/streaming.xml
+index 988920d..494e363 100644
+--- a/src/docs/src/documentation/content/xdocs/streaming.xml
++++ b/src/docs/src/documentation/content/xdocs/streaming.xml
+@@ -728,7 +728,7 @@ You can specify multiple input directories with multiple '-input' options:
+ <section>
+ <title>How do I generate output files with gzip format? </title>
+ <p>
+-Instead of plain text files, you can generate gzip files as your generated output. Pass '-D mapred.output.compress=true -D  mapred.output.compression.codec=org.apache.hadoop.io.compress.GzipCode' as option to your streaming job.
++Instead of plain text files, you can generate gzip files as your generated output. Pass '-D mapred.output.compress=true -D  mapred.output.compression.codec=org.apache.hadoop.io.compress.GzipCodec' as option to your streaming job.
+ </p>
+ </section>
+ 
+-- 
+1.7.0.4
+

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+PROCESSES=""
+
+for ((i=0; i < $NUM_OF_LARGE_JOBS_FOR_ENTROPY_CLASS; i++))
+do
+    echo $i
+    $GRID_MIX_HOME/maxent/maxent.large  2>&1 > maxent.large.$i.out &
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+
+for APROC in ${PROCESSES}; do
+  wait ${APROC}
+done
+

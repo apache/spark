@@ -1,0 +1,603 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8">
+<meta name="Forrest-skin-name" content="pelt">
+<title>
+      Permissions Guide
+    </title>
+<link type="text/css" href="skin/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="skin/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="skin/print.css" rel="stylesheet">
+<link type="text/css" href="skin/profile.css" rel="stylesheet">
+<script src="skin/getBlank.js" language="javascript" type="text/javascript"></script><script src="skin/getMenu.js" language="javascript" type="text/javascript"></script><script src="skin/fontsize.js" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="images/favicon.ico">
+</head>
+<body onload="init()">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+<a href="http://www.apache.org/">Apache</a> &gt; <a href="http://hadoop.apache.org/">Hadoop</a> &gt; <a href="http://hadoop.apache.org/core/">Core</a><script src="skin/breadcrumbs.js" language="JavaScript" type="text/javascript"></script>
+</div>
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<div class="grouplogo">
+<a href="http://hadoop.apache.org/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo.jpg" title="Apache Hadoop"></a>
+</div>
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogo">
+<a href="http://hadoop.apache.org/core/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo-2.gif" title="Scalable Computing Platform"></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="archive.cloudera.com" name="sitesearch" type="hidden"><input onFocus="getBlank (this, 'Search the site with google');" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://hadoop.apache.org/core/">Project</a>
+</li>
+<li>
+<a class="unselected" href="http://wiki.apache.org/hadoop">Wiki</a>
+</li>
+<li class="current">
+<a class="selected" href="index.html">Hadoop 0.20 Documentation</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu('menu_1.1', 'skin/')" id="menu_1.1Title" class="menutitle">Getting Started</div>
+<div id="menu_1.1" class="menuitemgroup">
+<div class="menuitem">
+<a href="index.html">Overview</a>
+</div>
+<div class="menuitem">
+<a href="single_node_setup.html">Single Node Setup</a>
+</div>
+<div class="menuitem">
+<a href="cluster_setup.html">Cluster Setup</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.2', 'skin/')" id="menu_1.2Title" class="menutitle">Guides</div>
+<div id="menu_1.2" class="menuitemgroup">
+<div class="menuitem">
+<a href="HttpAuthentication.html">Authentication for Hadoop HTTP web-consoles</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.3', 'skin/')" id="menu_1.3Title" class="menutitle">MapReduce</div>
+<div id="menu_1.3" class="menuitemgroup">
+<div class="menuitem">
+<a href="mapred_tutorial.html">MapReduce Tutorial</a>
+</div>
+<div class="menuitem">
+<a href="streaming.html">Hadoop Streaming</a>
+</div>
+<div class="menuitem">
+<a href="commands_manual.html">Hadoop Commands</a>
+</div>
+<div class="menuitem">
+<a href="distcp.html">DistCp</a>
+</div>
+<div class="menuitem">
+<a href="vaidya.html">Vaidya</a>
+</div>
+<div class="menuitem">
+<a href="hadoop_archives.html">Hadoop Archives</a>
+</div>
+<div class="menuitem">
+<a href="gridmix.html">Gridmix</a>
+</div>
+<div class="menuitem">
+<a href="capacity_scheduler.html">Capacity Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="fair_scheduler.html">Fair Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="hod_scheduler.html">Hod Scheduler</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_selected_1.4', 'skin/')" id="menu_selected_1.4Title" class="menutitle" style="background-image: url('skin/images/chapter_open.gif');">HDFS</div>
+<div id="menu_selected_1.4" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="hdfs_user_guide.html">HDFS Users </a>
+</div>
+<div class="menuitem">
+<a href="hdfs_design.html">HDFS Architecture</a>
+</div>
+<div class="menupage">
+<div class="menupagetitle">Permissions</div>
+</div>
+<div class="menuitem">
+<a href="hdfs_quota_admin_guide.html">Quotas</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_imageviewer.html">Offline Image Viewer Guide</a>
+</div>
+<div class="menuitem">
+<a href="SLG_user_guide.html">Synthetic Load Generator</a>
+</div>
+<div class="menuitem">
+<a href="libhdfs.html">C API libhdfs</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.5', 'skin/')" id="menu_1.5Title" class="menutitle">Common</div>
+<div id="menu_1.5" class="menuitemgroup">
+<div class="menuitem">
+<a href="file_system_shell.html">File System Shell</a>
+</div>
+<div class="menuitem">
+<a href="service_level_auth.html">Service Level Authorization</a>
+</div>
+<div class="menuitem">
+<a href="native_libraries.html">Native Libraries</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.6', 'skin/')" id="menu_1.6Title" class="menutitle">Miscellaneous</div>
+<div id="menu_1.6" class="menuitemgroup">
+<div class="menuitem">
+<a href="Secure_Impersonation.html">Secure Impersonation</a>
+</div>
+<div class="menuitem">
+<a href="api/index.html">API Docs</a>
+</div>
+<div class="menuitem">
+<a href="jdiff/changes.html">API Changes</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/">Wiki</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>
+</div>
+<div class="menuitem">
+<a href="releasenotes.html">Release Notes</a>
+</div>
+<div class="menuitem">
+<a href="changes.html">Change Log</a>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="skin/images/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="hdfs_permissions_guide.pdf"><img alt="PDF -icon" src="skin/images/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1>
+      Permissions Guide
+    </h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="#Overview">Overview</a>
+</li>
+<li>
+<a href="#User+Identity">User Identity</a>
+</li>
+<li>
+<a href="#Group+Mapping">Group Mapping</a>
+</li>
+<li>
+<a href="#Understanding+the+Implementation">Understanding the Implementation</a>
+</li>
+<li>
+<a href="#Changes+to+the+File+System+API">Changes to the File System API</a>
+</li>
+<li>
+<a href="#Changes+to+the+Application+Shell">Changes to the Application Shell</a>
+</li>
+<li>
+<a href="#The+Super-User">The Super-User</a>
+</li>
+<li>
+<a href="#The+Web+Server">The Web Server</a>
+</li>
+<li>
+<a href="#Configuration+Parameters">Configuration Parameters</a>
+</li>
+</ul>
+</div>
+    
+<a name="N1000D"></a><a name="Overview"></a>
+<h2 class="h3">Overview</h2>
+<div class="section">
+<p>
+		The Hadoop Distributed File System (HDFS) implements a permissions model for files and directories that shares much of the POSIX model. 
+		Each file and directory is associated with an <em>owner</em> and a <em>group</em>. The file or directory has separate permissions for the 
+		user that is the owner, for other users that are members of the group, and for all other users. 
+		
+		For files, the <em>r</em> permission is required to read the file, and the <em>w</em> permission is required to write or append to the file. 
+		
+		For directories, the <em>r</em> permission is required to list the contents of the directory, the <em>w</em> permission is required to create 
+		or delete files or directories, and the <em>x</em> permission is required to access a child of the directory. 
+		</p>
+<p>	
+		In contrast to the POSIX model, there are no <em>setuid</em> or <em>setgid</em> bits for files as there is no notion of executable files. 
+		For directories, there are no <em>setuid</em> or <em>setgid</em> bits directory as a simplification. 
+         </p>
+<p>
+                The <em>sticky bit</em> can be set on directories, preventing anyone except the superuser, directory owner, or file owner from deleting
+                or moving the files within the directory. Setting the sticky bit for a file has no effect.
+         </p>
+<p>
+                Collectively, the permissions of a file or directory are its <em>mode</em>. In general, Unix 
+		customs for representing and displaying modes will be used, including the use of octal numbers in this description. When a file or directory 
+		is created, its owner is the user identity of the client process, and its group is the group of the parent directory (the BSD rule).
+	</p>
+<p>
+		Each client process that accesses HDFS has a two-part identity composed of the <em>user name</em>, and <em>groups list</em>. 
+		Whenever HDFS must do a permissions check for a file or directory <span class="codefrag">foo</span> accessed by a client process,
+	</p>
+<ul>
+		
+<li>
+		   If the user name matches the owner of <span class="codefrag">foo</span>, then the owner permissions are tested;
+		</li>
+		
+<li>
+		   Else if the group of <span class="codefrag">foo</span> matches any of member of the groups list, then the group permissions are tested;
+		</li>
+		
+<li>
+		   Otherwise the other permissions of <span class="codefrag">foo</span> are tested.
+		</li>
+	
+</ul>
+<p>
+		If a permissions check fails, the client operation fails.	
+</p>
+</div>
+
+
+<a name="N1006B"></a><a name="User+Identity"></a>
+<h2 class="h3">User Identity</h2>
+<div class="section">
+<p>
+As of CDH3, Hadoop supports two different modes of operation to determine the user's identity, specified by the
+<span class="codefrag">hadoop.security.authentication</span> property:
+</p>
+<dl>
+  
+<dt>
+<span class="codefrag">simple</span>
+</dt>
+  
+<dd>In this mode of operation, the identity of a client process is determined by the host operating system. On Unix-like systems,
+  the user name is the equivalent of <span class="codefrag">`whoami`</span>.</dd>
+  
+<dt>
+<span class="codefrag">kerberos</span>
+</dt>
+  
+<dd>In Kerberized operation, the identity of a client process is determined by its Kerberos credentials. For example, in a
+  Kerberized environment, a user may use the <span class="codefrag">kinit</span> utility to obtain a Kerberos ticket-granting-ticket (TGT) and
+  use <span class="codefrag">klist</span> to determine their current principal. When mapping a Kerberos principal to an HDFS username, all <em>components</em> except for the <em>primary</em> are dropped. For example, a principal <span class="codefrag">todd/foobar@CORP.COMPANY.COM</span> will act as the simple username <span class="codefrag">todd</span> on HDFS.
+  </dd>
+
+</dl>
+<p>
+Regardless of the mode of operation, the user identity mechanism is extrinsic to HDFS itself.
+There is no provision within HDFS for creating user identities, establishing groups, or processing user credentials.
+</p>
+</div>
+
+
+<a name="N100A0"></a><a name="Group+Mapping"></a>
+<h2 class="h3">Group Mapping</h2>
+<div class="section">
+<p>
+Once a username has been determined as described above, the list of groups is determined by a <em>group mapping
+service</em>, configured by the <span class="codefrag">hadoop.security.group.mapping</span> property.
+The default implementation, <span class="codefrag">org.apache.hadoop.security.ShellBasedUnixGroupsMapping</span>, will shell out
+to the Unix <span class="codefrag">bash -c groups</span> command to resolve a list of groups for a user.
+</p>
+<p>
+For HDFS, the mapping of users to groups is performed on the NameNode. Thus, the host system configuration of
+the NameNode determines the group mappings for the users.
+</p>
+<p>
+Note that HDFS stores the user and group of a file or directory as strings; there is no conversion from user and
+group identity numbers as is conventional in Unix.
+</p>
+</div>
+
+
+<a name="N100BB"></a><a name="Understanding+the+Implementation"></a>
+<h2 class="h3">Understanding the Implementation</h2>
+<div class="section">
+<p>
+Each file or directory operation passes the full path name to the name node, and the permissions checks are applied along the 
+path for each operation. The client framework will implicitly associate the user identity with the connection to the name node, 
+reducing the need for changes to the existing client API. It has always been the case that when one operation on a file succeeds, 
+the operation might fail when repeated because the file, or some directory on the path, no longer exists. For instance, when the 
+client first begins reading a file, it makes a first request to the name node to discover the location of the first blocks of the file. 
+A second request made to find additional blocks may fail. On the other hand, deleting a file does not revoke access by a client 
+that already knows the blocks of the file. With the addition of permissions, a client's access to a file may be withdrawn between 
+requests. Again, changing permissions does not revoke the access of a client that already knows the file's blocks.
+</p>
+</div>
+     
+
+<a name="N100C5"></a><a name="Changes+to+the+File+System+API"></a>
+<h2 class="h3">Changes to the File System API</h2>
+<div class="section">
+<p>
+	All methods that use a path parameter will throw <span class="codefrag">AccessControlException</span> if permission checking fails.
+</p>
+<p>New methods:</p>
+<ul>
+	
+<li>
+		
+<span class="codefrag">public FSDataOutputStream create(Path f, FsPermission permission, boolean overwrite, int bufferSize, short 
+		replication, long blockSize, Progressable progress) throws IOException;</span>
+	
+</li>
+	
+<li>
+		
+<span class="codefrag">public boolean mkdirs(Path f, FsPermission permission) throws IOException;</span>
+	
+</li>
+	
+<li>
+		
+<span class="codefrag">public void setPermission(Path p, FsPermission permission) throws IOException;</span>
+	
+</li>
+	
+<li>
+		
+<span class="codefrag">public void setOwner(Path p, String username, String groupname) throws IOException;</span>
+	
+</li>
+	
+<li>
+		
+<span class="codefrag">public FileStatus getFileStatus(Path f) throws IOException;</span> will additionally return the user, 
+		group and mode associated with the path.
+	</li>
+
+
+</ul>
+<p>
+The mode of a new file or directory is restricted my the <span class="codefrag">umask</span> set as a configuration parameter. 
+When the existing <span class="codefrag">create(path, &hellip;)</span> method (<em>without</em> the permission parameter) 
+is used, the mode of the new file is <span class="codefrag">666&thinsp;&amp;&thinsp;^umask</span>. When the 
+new <span class="codefrag">create(path, </span><em>permission</em><span class="codefrag">, &hellip;)</span> method 
+(<em>with</em> the permission parameter <em>P</em>) is used, the mode of the new file is 
+<span class="codefrag">P&thinsp;&amp;&thinsp;^umask&thinsp;&amp;&thinsp;666</span>. When a new directory is 
+created with the existing <span class="codefrag">mkdirs(path)</span> method (<em>without</em> the permission parameter), 
+the mode of the new directory is <span class="codefrag">777&thinsp;&amp;&thinsp;^umask</span>. When the 
+new <span class="codefrag">mkdirs(path, </span><em>permission</em> <span class="codefrag">)</span> method (<em>with</em> the 
+permission parameter <em>P</em>) is used, the mode of new directory is 
+<span class="codefrag">P&thinsp;&amp;&thinsp;^umask&thinsp;&amp;&thinsp;777</span>. 
+</p>
+</div>
+
+     
+
+<a name="N1012F"></a><a name="Changes+to+the+Application+Shell"></a>
+<h2 class="h3">Changes to the Application Shell</h2>
+<div class="section">
+<p>New operations:</p>
+<ul>
+	
+<li>
+<span class="codefrag">chmod [-R]</span> <em>mode file &hellip;</em>
+	
+<br>Only the owner of a file or the super-user is permitted to change the mode of a file.
+    </li>
+    
+	
+<li>
+<span class="codefrag">chgrp [-R]</span> <em>group file &hellip;</em>
+	
+<br>The user invoking <span class="codefrag">chgrp</span> must belong to the specified group and be the owner of the file, or be the super-user.
+    </li>
+    
+	
+<li>
+<span class="codefrag">chown [-R]</span> <em>[owner][:[group]] file &hellip;</em>
+    
+<br>The owner of a file may only be altered by a super-user.
+    </li>
+	
+	
+<li>
+<span class="codefrag">ls </span> <em>file &hellip;</em>
+	
+</li>
+
+	
+<li>
+<span class="codefrag">lsr </span> <em>file &hellip;</em>
+    
+<br>The output is reformatted to display the owner, group and mode.
+	</li>
+
+</ul>
+</div>
+
+     
+
+<a name="N1016F"></a><a name="The+Super-User"></a>
+<h2 class="h3">The Super-User</h2>
+<div class="section">
+<p>
+	The super-user is the user with the same identity as name node process itself. Loosely, if you started the name 
+	node, then you are the super-user. The super-user can do anything in that permissions checks never fail for the 
+	super-user. There is no persistent notion of who <em>was</em> the super-user; when the name node is started 
+	the process identity determines who is the super-user <em>for now</em>. The HDFS super-user does not have 
+	to be the super-user of the name node host, nor is it necessary that all clusters have the same super-user. Also, 
+	an experimenter running HDFS on a personal workstation, conveniently becomes that installation's super-user 
+	without any configuration.
+	</p>
+<p>
+	In addition, the administrator my identify a distinguished group using a configuration parameter. If set, members 
+	of this group are also super-users.
+</p>
+</div>
+
+
+<a name="N10182"></a><a name="The+Web+Server"></a>
+<h2 class="h3">The Web Server</h2>
+<div class="section">
+<p>
+By default, the identity of the web server is a configuration parameter. That is, the name node has no notion of the identity of 
+the <em>real</em> user, but the web server behaves as if it has the identity (user and groups) of a user chosen 
+by the administrator. Unless the chosen identity matches the super-user, parts of the name space may be inaccessible
+to the web server.</p>
+</div>
+
+
+<a name="N1018F"></a><a name="Configuration+Parameters"></a>
+<h2 class="h3">Configuration Parameters</h2>
+<div class="section">
+<ul>
+	
+<li>
+<span class="codefrag">dfs.permissions = true </span>
+		
+<br>If <span class="codefrag">yes</span> use the permissions system as described here. If <span class="codefrag">no</span>, permission 
+		<em>checking</em> is turned off, but all other behavior is unchanged. Switching from one parameter 
+		value to the other does not change the mode, owner or group of files or directories.
+		<br>Regardless of whether permissions are on or off, <span class="codefrag">chmod</span>, <span class="codefrag">chgrp</span> and 
+		<span class="codefrag">chown</span> <em>always</em> check permissions. These functions are only useful in the 
+		permissions context, and so there is no backwards compatibility issue. Furthermore, this allows 
+		administrators to reliably set owners and permissions in advance of turning on regular permissions checking.
+    </li>
+
+	
+<li>
+<span class="codefrag">dfs.web.ugi = webuser,webgroup</span>
+	
+<br>The user name to be used by the web server. Setting this to the name of the super-user allows any 
+		web client to see everything. Changing this to an otherwise unused identity allows web clients to see 
+		only those things visible using "other" permissions. Additional groups may be added to the comma-separated list.
+    </li>
+    
+	
+<li>
+<span class="codefrag">dfs.permissions.supergroup = supergroup</span>
+	
+<br>The name of the group of super-users.
+	</li>
+
+	
+<li>
+<span class="codefrag">dfs.upgrade.permission = 0777</span>
+	
+<br>The choice of initial mode during upgrade. The <em>x</em> permission is <em>never</em> set for files. 
+		For configuration files, the decimal value <em>511<sub>10</sub></em> may be used.
+    </li>
+    
+	
+<li>
+<span class="codefrag">dfs.umask = 022</span>
+    
+<br>The <span class="codefrag">umask</span> used when creating files and directories. For configuration files, the decimal 
+		value <em>18<sub>10</sub></em> may be used.
+	</li>
+
+</ul>
+</div>
+
+     
+  
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<div class="copyright">
+        Copyright &copy;
+         2008 <a href="http://www.apache.org/licenses/">The Apache Software Foundation.</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+</body>
+</html>

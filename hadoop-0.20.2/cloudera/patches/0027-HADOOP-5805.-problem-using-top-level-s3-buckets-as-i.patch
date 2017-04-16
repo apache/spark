@@ -1,0 +1,72 @@
+From 330f009bae260ac990426a988fc56913897a50ca Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:35:03 -0800
+Subject: [PATCH 0027/1179] HADOOP-5805. problem using top level s3 buckets as input/output directories
+
+Description: When I specify top level s3 buckets as input or output directories, I get the following exception.
+
+<p>hadoop jar subject-map-reduce.jar s3n://infocloud-input s3n://infocloud-output</p>
+
+<p>java.lang.IllegalArgumentException: Path must be absolute: s3n://infocloud-output<br/>
+        at org.apache.hadoop.fs.s3native.NativeS3FileSystem.pathToKey(NativeS3FileSystem.java:246)<br/>
+        at org.apache.hadoop.fs.s3native.NativeS3FileSystem.getFileStatus(NativeS3FileSystem.java:319)<br/>
+        at org.apache.hadoop.fs.FileSystem.exists(FileSystem.java:667)<br/>
+        at org.apache.hadoop.mapred.FileOutputFormat.checkOutputSpecs(FileOutputFormat.java:109)<br/>
+        at org.apache.hadoop.mapred.JobClient.submitJob(JobClient.java:738)<br/>
+        at org.apache.hadoop.mapred.JobClient.runJob(JobClient.java:1026)<br/>
+        at com.evri.infocloud.prototype.subjectmapreduce.SubjectMRDriver.run(SubjectMRDriver.java:63)<br/>
+        at org.apache.hadoop.util.ToolRunner.run(ToolRunner.java:65)<br/>
+        at com.evri.infocloud.prototype.subjectmapreduce.SubjectMRDriver.main(SubjectMRDriver.java:25)<br/>
+        at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)<br/>
+        at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:39)<br/>
+        at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:25)<br/>
+        at java.lang.reflect.Method.invoke(Method.java:597)<br/>
+        at org.apache.hadoop.util.RunJar.main(RunJar.java:155)<br/>
+        at org.apache.hadoop.mapred.JobShell.run(JobShell.java:54)<br/>
+        at org.apache.hadoop.util.ToolRunner.run(ToolRunner.java:65)<br/>
+        at org.apache.hadoop.util.ToolRunner.run(ToolRunner.java:79)<br/>
+        at org.apache.hadoop.mapred.JobShell.main(JobShell.java:68)</p>
+
+<p>The workaround is to specify input/output buckets with sub-directories:</p>
+
+<p>hadoop jar subject-map-reduce.jar s3n://infocloud-input/input-subdir  s3n://infocloud-output/output-subdir</p>
+
+Reason: bugfix
+Author: Ian Nowland
+Ref: UNKNOWN
+---
+ .../hadoop/fs/s3native/NativeS3FileSystem.java     |    5 +++++
+ .../NativeS3FileSystemContractBaseTest.java        |    3 +++
+ 2 files changed, 8 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java b/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
+index 96191ba..d58e61a 100644
+--- a/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
+@@ -249,6 +249,11 @@ public class NativeS3FileSystem extends FileSystem {
+   }
+   
+   private static String pathToKey(Path path) {
++    if (path.toUri().getScheme() != null && "".equals(path.toUri().getPath())) {
++      // allow uris without trailing slash after bucket to refer to root,
++      // like s3n://mybucket
++      return "";
++    }
+     if (!path.isAbsolute()) {
+       throw new IllegalArgumentException("Path must be absolute: " + path);
+     }
+diff --git a/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java b/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
+index bf2e3c3..be39fd0 100644
+--- a/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
++++ b/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
+@@ -56,4 +56,7 @@ public abstract class NativeS3FileSystemContractBaseTest
+     assertEquals(path("/test"), paths[0].getPath());
+   }
+   
++  public void testNoTrailingBackslashOnBucket() throws Exception {
++    assertTrue(fs.getFileStatus(new Path(fs.getUri().toString())).isDir());
++  }
+ }
+-- 
+1.7.0.4
+

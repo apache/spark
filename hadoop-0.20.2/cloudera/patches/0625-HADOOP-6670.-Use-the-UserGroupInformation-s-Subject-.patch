@@ -1,0 +1,294 @@
+From 7c0d1d3221c5558979942f8aaba3f14f29c5f7b4 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 9 Apr 2010 15:38:50 -0700
+Subject: [PATCH 0625/1179] HADOOP-6670. Use the UserGroupInformation's Subject as the criteria for equals and hashCode.
+
+Author: Owen O'Malley
+Reason: Security bug fix
+Ref: CDH-648
+---
+ .../hadoop/mapred/gridmix/TestUserResolve.java     |   10 ++--
+ src/core/org/apache/hadoop/ipc/Client.java         |    6 +-
+ .../hadoop/security/UserGroupInformation.java      |    4 +-
+ .../TestTrackerDistributedCacheManager.java        |   56 +++++++++++++++++---
+ src/test/org/apache/hadoop/fs/TestFileSystem.java  |   16 +++---
+ .../hadoop/security/TestUserGroupInformation.java  |   27 ++++++----
+ 6 files changed, 83 insertions(+), 36 deletions(-)
+
+diff --git a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestUserResolve.java b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestUserResolve.java
+index 35e95e1..50b2cb2 100644
+--- a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestUserResolve.java
++++ b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestUserResolve.java
+@@ -71,13 +71,15 @@ public class TestUserResolve {
+     assertTrue("User list required for RoundRobinUserResolver", fail);
+ 
+     rslv.setTargetUsers(new URI(userlist.toString()), conf);
+-    assertEquals("user0", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre0")).getUserName());
++    UserGroupInformation ugi1;
++    assertEquals("user0", 
++        rslv.getTargetUgi((ugi1 = 
++          UserGroupInformation.createRemoteUser("hfre0"))).getUserName());
+     assertEquals("user1", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre1")).getUserName());
+     assertEquals("user2", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre2")).getUserName());
+-    assertEquals("user0", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre0")).getUserName());
++    assertEquals("user0", rslv.getTargetUgi(ugi1).getUserName());
+     assertEquals("user3", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre3")).getUserName());
+-    assertEquals("user0", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre0")).getUserName());
+-    assertEquals("user0", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre4")).getUserName());
++    assertEquals("user0", rslv.getTargetUgi(ugi1).getUserName());
+   }
+ 
+   @Test
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index 0a29669..326b902 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -1190,8 +1190,8 @@ public class Client {
+      if (obj instanceof ConnectionId) {
+        ConnectionId id = (ConnectionId) obj;
+        return address.equals(id.address) && protocol == id.protocol && 
+-              ticket == id.ticket;
+-       //Note : ticket is a ref comparision.
++              ((ticket != null && ticket.equals(id.ticket)) ||
++               (ticket == id.ticket));
+      }
+      return false;
+     }
+@@ -1199,7 +1199,7 @@ public class Client {
+     @Override
+     public int hashCode() {
+       return (address.hashCode() + PRIME * System.identityHashCode(protocol)) ^ 
+-             System.identityHashCode(ticket);
++             (ticket == null ? 0 : ticket.hashCode());
+     }
+   }  
+ }
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 5eddd78..b89df2d 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -945,7 +945,7 @@ public class UserGroupInformation {
+     } else if (o == null || getClass() != o.getClass()) {
+       return false;
+     } else {
+-      return subject.equals(((UserGroupInformation) o).subject);
++      return subject == ((UserGroupInformation) o).subject;
+     }
+   }
+ 
+@@ -954,7 +954,7 @@ public class UserGroupInformation {
+    */
+   @Override
+   public int hashCode() {
+-    return subject.hashCode();
++    return System.identityHashCode(subject);
+   }
+ 
+   /**
+diff --git a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+index 36703fc..939dedd 100644
+--- a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
++++ b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+@@ -297,18 +297,57 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+     if (!canRun()) {
+       return;
+     }
+-    checkLocalizedPath("true");
+-    checkLocalizedPath("false");
++    checkLocalizedPath(true);
++    checkLocalizedPath(false);
+   }
+   
+-  private void checkLocalizedPath(String visibility) 
++  private void appendStringArray(StringBuilder buffer, String[] data) {
++    if (data != null && data.length != 0) {
++      buffer.append(data[0]);
++      for(int i=1; i < data.length; i++) {
++        buffer.append(',');
++        buffer.append(data[i]);
++      }
++    }
++  }
++
++  private void appendUriArray(StringBuilder buffer, URI[] data) {
++    if (data != null && data.length != 0) {
++      buffer.append(data[0]);
++      for(int i=1; i < data.length; i++) {
++        buffer.append(',');
++        buffer.append(data[i]);
++      }
++    }
++  }
++
++  private void dumpState(Configuration conf1) throws IOException {
++    StringBuilder buf = new StringBuilder();
++    buf.append("\nFiles:");
++    appendUriArray(buf, DistributedCache.getCacheFiles(conf1));
++    buf.append("\nArchives:");
++    appendUriArray(buf, DistributedCache.getCacheArchives(conf1));
++    buf.append("\nFile Visible:");
++    appendStringArray(buf, TrackerDistributedCacheManager.getFileVisibilities
++                      (conf1));
++    buf.append("\nArchive Visible:");
++    appendStringArray(buf, TrackerDistributedCacheManager.getArchiveVisibilities
++                      (conf1));
++    buf.append("\nFile timestamps:");
++    appendStringArray(buf, DistributedCache.getFileTimestamps(conf1));
++    buf.append("\nArchive timestamps:");
++    appendStringArray(buf, DistributedCache.getArchiveTimestamps(conf1));
++    LOG.info("state = " + buf.toString());
++  }
++  
++  private void checkLocalizedPath(boolean visibility) 
+   throws IOException, LoginException, InterruptedException {
+     TrackerDistributedCacheManager manager = 
+       new TrackerDistributedCacheManager(conf, taskController);
+     String userName = getJobOwnerName();
+     File workDir = new File(TEST_ROOT_DIR, "workdir");
+     Path cacheFile = new Path(TEST_ROOT_DIR, "fourthcachefile");
+-    if ("true".equals(visibility)) {
++    if (visibility) {
+       createPublicTempFile(cacheFile);
+     } else {
+       createPrivateTempFile(cacheFile);
+@@ -319,6 +358,7 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+     DistributedCache.addCacheFile(cacheFile.toUri(), conf1);
+     TrackerDistributedCacheManager.determineTimestamps(conf1);
+     TrackerDistributedCacheManager.determineCacheVisibilities(conf1);
++    dumpState(conf1);
+ 
+     // Task localizing for job
+     TaskDistributedCacheManager handle = manager
+@@ -328,7 +368,7 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+           TaskTracker.getPublicDistributedCacheDir());
+     TaskDistributedCacheManager.CacheFile c = handle.getCacheFiles().get(0);
+     String distCacheDir;
+-    if ("true".equals(visibility)) {
++    if (visibility) {
+       distCacheDir = TaskTracker.getPublicDistributedCacheDir(); 
+     } else {
+       distCacheDir = TaskTracker.getPrivateDistributedCacheDir(userName);
+@@ -337,19 +377,19 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+       manager.getLocalCache(cacheFile.toUri(), conf1, distCacheDir,
+           fs.getFileStatus(cacheFile), false,
+           c.timestamp, new Path(TEST_ROOT_DIR), false,
+-          Boolean.parseBoolean(visibility));
++          visibility);
+     assertTrue("Cache file didn't get localized in the expected directory. " +
+         "Expected localization to happen within " + 
+         ROOT_MAPRED_LOCAL_DIR + "/" + distCacheDir +
+         ", but was localized at " + 
+         localizedPath, localizedPath.toString().contains(distCacheDir));
+-    if ("true".equals(visibility)) {
++    if (visibility) {
+       checkPublicFilePermissions(new Path[]{localizedPath});
+     } else {
+       checkFilePermissions(new Path[]{localizedPath});
+     }
+   }
+-  
++
+   /**
+    * Check proper permissions on the cache files
+    * 
+diff --git a/src/test/org/apache/hadoop/fs/TestFileSystem.java b/src/test/org/apache/hadoop/fs/TestFileSystem.java
+index 3c26fbe..d33b559 100644
+--- a/src/test/org/apache/hadoop/fs/TestFileSystem.java
++++ b/src/test/org/apache/hadoop/fs/TestFileSystem.java
+@@ -709,28 +709,26 @@ public class TestFileSystem extends TestCase {
+     assertNotSame(fsA, fsB);
+     
+     Token<T> t1 = mock(Token.class);
+-    ugiA = UserGroupInformation.createRemoteUser("foo");
+-    ugiA.addToken(t1);
++    UserGroupInformation ugiA2 = UserGroupInformation.createRemoteUser("foo");
+     
+-    fsA = ugiA.doAs(new PrivilegedExceptionAction<FileSystem>() {
++    fsA = ugiA2.doAs(new PrivilegedExceptionAction<FileSystem>() {
+       public FileSystem run() throws Exception {
+         return FileSystem.get(new URI("cachedfile://a"), conf);
+       }
+     });
+-    //Although the users in the UGI are same, ugiA has tokens in it, and
+-    //we should end up with different filesystems corresponding to the two UGIs
++    // Although the users in the UGI are same, they have different subjects
++    // and so are different.
+     assertNotSame(fsA, fsA1);
+     
+-    ugiA = UserGroupInformation.createRemoteUser("foo");
+     ugiA.addToken(t1);
+     
+-    fsA1 = ugiA.doAs(new PrivilegedExceptionAction<FileSystem>() {
++    fsA = ugiA.doAs(new PrivilegedExceptionAction<FileSystem>() {
+       public FileSystem run() throws Exception {
+         return FileSystem.get(new URI("cachedfile://a"), conf);
+       }
+     });
+-    //Now the users in the UGI are the same, and they also have the same token.
+-    //We should have the same filesystem for both
++    // Make sure that different UGI's with the same subject lead to the same
++    // file system.
+     assertSame(fsA, fsA1);
+   }
+ }
+diff --git a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+index c0776e0..0ed4e2d 100644
+--- a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
++++ b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+@@ -156,10 +156,17 @@ public class TestUserGroupInformation {
+       UserGroupInformation.createUserForTesting(USER_NAME, GROUP_NAMES);
+ 
+     assertEquals(uugi, uugi);
+-    // The subjects should be equal, so this should work
+-    assertTrue(uugi.equals(
+-                 UserGroupInformation.createUserForTesting
+-                   (USER_NAME, GROUP_NAMES)));
++    // The subjects should be different, so this should fail
++    UserGroupInformation ugi2 = 
++      UserGroupInformation.createUserForTesting(USER_NAME, GROUP_NAMES);
++    assertFalse(uugi.equals(ugi2));
++    assertFalse(uugi.hashCode() == ugi2.hashCode());
++
++    // two ugi that have the same subject need to be equal
++    UserGroupInformation ugi3 = new UserGroupInformation(uugi.getSubject());
++    assertEquals(uugi, ugi3);
++    assertEquals(uugi.hashCode(), ugi3.hashCode());
++    
+     // ensure that different UGI with the same subject are equal
+     assertEquals(uugi, new UserGroupInformation(uugi.getSubject()));
+   }
+@@ -172,8 +179,8 @@ public class TestUserGroupInformation {
+         "RealUser", GROUP_NAMES);
+     UserGroupInformation proxyUgi1 = UserGroupInformation.createProxyUser(
+         USER_NAME, realUgi1);
+-    UserGroupInformation proxyUgi2 = UserGroupInformation.createProxyUser(
+-        USER_NAME, realUgi2);
++    UserGroupInformation proxyUgi2 =
++      new UserGroupInformation( proxyUgi1.getSubject());
+     UserGroupInformation remoteUgi = UserGroupInformation.createRemoteUser(USER_NAME);
+     assertEquals(proxyUgi1, proxyUgi2);
+     assertFalse(remoteUgi.equals(proxyUgi1));
+@@ -284,16 +291,16 @@ public class TestUserGroupInformation {
+         return null;
+       }
+     });
+-    UserGroupInformation proxyUgi2 = UserGroupInformation.createProxyUser(
+-        "proxy", ugi);
++    UserGroupInformation proxyUgi2 = 
++      new UserGroupInformation(proxyUgi.getSubject());
+     proxyUgi2.setAuthenticationMethod(AuthenticationMethod.PROXY);
+     Assert.assertEquals(proxyUgi, proxyUgi2);
+     // Equality should work if authMethod is null
+     UserGroupInformation realugi = UserGroupInformation.getCurrentUser();
+     UserGroupInformation proxyUgi3 = UserGroupInformation.createProxyUser(
+         "proxyAnother", realugi);
+-    UserGroupInformation proxyUgi4 = UserGroupInformation.createProxyUser(
+-        "proxyAnother", realugi);
++    UserGroupInformation proxyUgi4 = 
++      new UserGroupInformation(proxyUgi3.getSubject());
+     Assert.assertEquals(proxyUgi3, proxyUgi4);
+   }
+ }
+-- 
+1.7.0.4
+

@@ -1,0 +1,729 @@
+From 7a636fd4deeb1fbe8f73dd1cab15c180e996ef8a Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 9 Dec 2011 16:55:46 -0800
+Subject: [PATCH 1107/1179] HDFS-2654. Make BlockReaderLocal not extend RemoteBlockReader2.
+
+Reason: Performance
+Author: Eli Collins
+Ref: CDH-3850
+---
+ src/hdfs/org/apache/hadoop/hdfs/BlockReader.java   |   34 ++++++
+ .../org/apache/hadoop/hdfs/BlockReaderLocal.java   |  120 +++++++++++++-------
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   53 +++++----
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |    6 +-
+ .../hadoop/hdfs/server/namenode/NamenodeFsck.java  |   18 ++--
+ .../apache/hadoop/hdfs/BlockReaderTestUtil.java    |    5 +-
+ .../hadoop/hdfs/TestClientBlockVerification.java   |   15 +--
+ src/test/org/apache/hadoop/hdfs/TestConnCache.java |    8 +-
+ .../server/datanode/TestDataNodeVolumeFailure.java |    6 +-
+ .../hdfs/server/datanode/TestDataXceiver.java      |    2 +-
+ .../server/namenode/TestBlockTokenWithDFS.java     |    6 +-
+ 11 files changed, 177 insertions(+), 96 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/BlockReader.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/BlockReader.java b/src/hdfs/org/apache/hadoop/hdfs/BlockReader.java
+new file mode 100644
+index 0000000..928aaa0
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/BlockReader.java
+@@ -0,0 +1,34 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs;
++
++import java.io.IOException;
++
++import org.apache.hadoop.io.Closeable;
++
++/**
++ * The API shared between local and remote block readers.
++ */
++public interface BlockReader extends Closeable {
++
++  public int read(byte buf[], int off, int len) throws IOException;
++
++  public int readAll(byte[] buf, int offset, int len) throws IOException;
++
++  public long skip(long n) throws IOException;
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/BlockReaderLocal.java b/src/hdfs/org/apache/hadoop/hdfs/BlockReaderLocal.java
+index 461a7f6..72e96a2 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/BlockReaderLocal.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/BlockReaderLocal.java
+@@ -29,8 +29,8 @@ import java.util.Map;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSInputChecker;
+ import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.hdfs.DFSClient.BlockReader;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.BlockLocalPathInfo;
+ import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
+@@ -38,6 +38,7 @@ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.datanode.BlockMetadataHeader;
+ import org.apache.hadoop.hdfs.server.datanode.FSDataset;
++import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.util.DataChecksum;
+@@ -57,7 +58,7 @@ import org.apache.hadoop.util.DataChecksum;
+  * if security is enabled.</li>
+  * </ul>
+  */
+-class BlockReaderLocal extends BlockReader {
++class BlockReaderLocal extends FSInputChecker implements BlockReader {
+   public static final Log LOG = LogFactory.getLog(DFSClient.class);
+ 
+   //Stores the cache and proxy for a local datanode.
+@@ -118,7 +119,16 @@ class BlockReaderLocal extends BlockReader {
+ 
+   private FileInputStream dataIn; // reader for the data file
+   private FileInputStream checksumIn;   // reader for the checksum file
+-  
++  private DataChecksum checksum;
++  private int bytesPerChecksum;
++  private int checksumSize;
++  private long firstChunkOffset;
++  private long lastChunkLen = -1;
++  private long lastChunkOffset = -1;
++  private long startOffset;
++  private boolean eos = false;
++  private byte[] skipBuf = null;
++
+   /**
+    * The only way this object can be instantiated.
+    */
+@@ -142,7 +152,7 @@ class BlockReaderLocal extends BlockReader {
+     FileInputStream dataIn = null;
+     FileInputStream checksumIn = null;
+     BlockReaderLocal localBlockReader = null;
+-    boolean skipChecksum = shortCircuitChecksum(conf);
++    boolean skipChecksum = shouldSkipChecksum(conf);
+     try {
+       // get a local file system
+       File blkfile = new File(pathinfo.getBlockPath());
+@@ -226,7 +236,7 @@ class BlockReaderLocal extends BlockReader {
+     return pathinfo;
+   }
+   
+-  private static boolean shortCircuitChecksum(Configuration conf) {
++  private static boolean shouldSkipChecksum(Configuration conf) {
+     return conf.getBoolean(DFSConfigKeys.DFS_CLIENT_READ_SHORTCIRCUIT_SKIP_CHECKSUM_KEY,
+         DFSConfigKeys.DFS_CLIENT_READ_SHORTCIRCUIT_SKIP_CHECKSUM_DEFAULT);
+   }
+@@ -237,8 +247,8 @@ class BlockReaderLocal extends BlockReader {
+     super(
+         new Path("/blk_" + block.getBlockId() + ":of:" + hdfsfile) /*too non path-like?*/,
+         1);
+-    this.startOffset = startOffset;
+     this.dataIn = dataIn;
++    this.startOffset = startOffset;
+     long toSkip = startOffset;
+     while (toSkip > 0) {
+       long skipped = dataIn.skip(toSkip);
+@@ -256,10 +266,12 @@ class BlockReaderLocal extends BlockReader {
+     super(
+         new Path("/blk_" + block.getBlockId() + ":of:" + hdfsfile) /*too non path-like?*/,
+         1,
+-        checksum,
+-        verifyChecksum);
+-    this.startOffset = startOffset;
++        verifyChecksum,
++        checksum.getChecksumSize() > 0? checksum : null,
++            checksum.getBytesPerChecksum(),
++            checksum.getChecksumSize());
+     this.dataIn = dataIn;
++    this.startOffset = startOffset;
+     this.checksumIn = checksumIn;
+     this.checksum = checksum;
+ 
+@@ -278,34 +290,20 @@ class BlockReaderLocal extends BlockReader {
+ 
+     checksumSize = checksum.getChecksumSize();
+ 
+-    long endOffset = blockLength;
+-    if (startOffset < 0 || startOffset > endOffset
+-        || (length + startOffset) > endOffset) {
++    if (startOffset < 0 || startOffset > blockLength
++        || (length + startOffset) > blockLength) {
+       String msg = " Offset " + startOffset + " and length " + length
+-      + " don't match block " + block + " ( blockLen " + endOffset + " )";
++      + " don't match block " + block + " ( blockLen " + blockLength + " )";
+       LOG.warn("BlockReaderLocal requested with incorrect offset: " + msg);
+       throw new IOException(msg);
+     }
+ 
+     firstChunkOffset = (startOffset - (startOffset % bytesPerChecksum));
+ 
+-    if (length >= 0) {
+-      // Make sure endOffset points to end of a checksumed chunk.
+-      long tmpLen = startOffset + length;
+-      if (tmpLen % bytesPerChecksum != 0) {
+-        tmpLen += (bytesPerChecksum - tmpLen % bytesPerChecksum);
+-      }
+-      if (tmpLen < endOffset) {
+-        endOffset = tmpLen;
+-      }
+-    }
+-
+-    // seek to the right offsets
+     if (firstChunkOffset > 0) {
+       dataIn.getChannel().position(firstChunkOffset);
+ 
+       long checksumSkip = (firstChunkOffset / bytesPerChecksum) * checksumSize;
+-      // note blockInStream is  seeked when created below
+       if (checksumSkip > 0) {
+         checksumIn.skip(checksumSkip);
+       }
+@@ -322,9 +320,25 @@ class BlockReaderLocal extends BlockReader {
+     }
+     if (checksum == null) {
+       return dataIn.read(buf, off, len);
+-    } else {
+-      return super.read(buf, off, len);
+     }
++    // For the first read, skip the extra bytes at the front.
++    if (lastChunkLen < 0 && startOffset > firstChunkOffset && len > 0) {
++      // Skip these bytes. But don't call this.skip()!
++      int toSkip = (int)(startOffset - firstChunkOffset);
++      if (skipBuf == null) {
++        skipBuf = new byte[bytesPerChecksum];
++      }
++      if (super.read(skipBuf, 0, toSkip) != toSkip) {
++        // Should never happen
++        throw new IOException("Could not skip " + toSkip + " bytes");
++      }
++    }
++    return super.read(buf, off, len);
++  }
++
++  @Override
++  public int readAll(byte[] buf, int offset, int len) throws IOException {
++    return readFully(this, buf, offset, len);
+   }
+ 
+   @Override
+@@ -334,20 +348,50 @@ class BlockReaderLocal extends BlockReader {
+     }
+     if (checksum == null) {
+       return dataIn.skip(n);
+-    } else {
+-     return super.skip(n);
+     }
++    // Skip by reading the data so we stay in sync with checksums.
++    // This could be implemented more efficiently in the future to
++    // skip to the beginning of the appropriate checksum chunk
++    // and then only read to the middle of that chunk.
++    if (skipBuf == null) {
++      skipBuf = new byte[bytesPerChecksum]; 
++    }
++    long nSkipped = 0;
++    while (nSkipped < n) {
++      int toSkip = (int)Math.min(n-nSkipped, skipBuf.length);
++      int ret = read(skipBuf, 0, toSkip);
++      if (ret <= 0) {
++        return nSkipped;
++      }
++      nSkipped += ret;
++    }
++    return nSkipped;
++  }
++
++  @Override
++  public int read() throws IOException {
++    throw new IOException("read() is not expected to be invoked. " +
++                          "Use read(buf, off, len) instead.");
++  }
++
++  @Override
++  public boolean seekToNewSource(long targetPos) throws IOException {
++    // Checksum errors are handled outside BlockReaderLocal 
++    return false;
+   }
+ 
+   @Override
+   public synchronized void seek(long n) throws IOException {
+-    if (LOG.isDebugEnabled()) {
+-      LOG.debug("seek " + n);
+-    }
+     throw new IOException("Seek() is not supported in BlockReaderLocal");
+   }
+ 
+   @Override
++  protected long getChunkPosition(long pos) {
++    throw new RuntimeException("getChunkPosition() is not supported, " +
++      "since seek is not implemented");
++  }
++
++  @Override
+   protected synchronized int readChunk(long pos, byte[] buf, int offset,
+       int len, byte[] checksumBuf) throws IOException {
+     if (LOG.isDebugEnabled()) {
+@@ -393,13 +437,7 @@ class BlockReaderLocal extends BlockReader {
+ 
+   @Override
+   public synchronized void close() throws IOException {
+-    if (dataIn != null) {
+-      dataIn.close();
+-      dataIn = null;
+-    }
+-    if (checksumIn != null) {
+-      checksumIn.close();
+-      checksumIn = null;
+-    }
++    IOUtils.closeStream(dataIn);
++    IOUtils.closeStream(checksumIn);
+   }
+ }
+\ No newline at end of file
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 23028f9..a4fdacb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -1333,19 +1333,19 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   /** This is a wrapper around connection to datadone
+    * and understands checksum, offset etc
+    */
+-  public static class BlockReader extends FSInputChecker {
++  public static class RemoteBlockReader extends FSInputChecker implements BlockReader {
+     Socket dnSock; //for now just sending the status code (e.g. checksumOk) after the read.
+     private DataInputStream in;
+-    protected DataChecksum checksum;
+-    protected long lastChunkOffset = -1;
+-    protected long lastChunkLen = -1;
++    private DataChecksum checksum;
++    private long lastChunkOffset = -1;
++    private long lastChunkLen = -1;
+     private long lastSeqNo = -1;
+ 
+-    protected long startOffset;
+-    protected long firstChunkOffset;
+-    protected int bytesPerChecksum;
+-    protected int checksumSize;
+-    protected boolean eos = false;
++    private long startOffset;
++    private long firstChunkOffset;
++    private int bytesPerChecksum;
++    private int checksumSize;
++    private boolean eos = false;
+     private boolean sentStatusCode = false;
+     
+     byte[] skipBuf = null;
+@@ -1432,7 +1432,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     
+     @Override
+     public void seek(long pos) throws IOException {
+-      throw new IOException("Seek() is not supported in BlockInputChecker");
++      throw new IOException("Seek() is not supported in BlockReaderRemote");
+     }
+ 
+     @Override
+@@ -1545,7 +1545,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       return chunkLen;
+     }
+     
+-    private BlockReader( String file, long blockId, DataInputStream in, 
++    private RemoteBlockReader( String file, long blockId, DataInputStream in, 
+                          DataChecksum checksum, boolean verifyChecksum,
+                          long startOffset, long firstChunkOffset, 
+                          Socket dnSock ) {
+@@ -1571,11 +1571,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     /**
+      * Public constructor 
+      */  
+-    BlockReader(Path file, int numRetries) {
++    RemoteBlockReader(Path file, int numRetries) {
+       super(file, numRetries);
+     }
+ 
+-    protected BlockReader(Path file, int numRetries, DataChecksum checksum,
++    protected RemoteBlockReader(Path file, int numRetries, DataChecksum checksum,
+         boolean verifyChecksum) {
+       super(file,
+           numRetries,
+@@ -1690,7 +1690,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+                               startOffset + " for file " + file);
+       }
+ 
+-      return new BlockReader( file, blockId, in, checksum, verifyChecksum,
++      return new RemoteBlockReader( file, blockId, in, checksum, verifyChecksum,
+                               startOffset, firstChunkOffset, sock );
+     }
+ 
+@@ -2046,7 +2046,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+               continue;
+             } else {
+               LOG.info("Failed to read block " + targetBlock.getBlock()
+-                  + " on local machine" + StringUtils.stringifyException(ex));
++                  + " on local machine " + ex);
+               LOG.info("Try reading via the datanode on " + targetAddr);
+             }
+           }
+@@ -2240,7 +2240,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       // Connect to best DataNode for desired Block, with potential offset
+       //
+       int refetchToken = 1; // only need to get a new access token once
+-      
++
+       while (true) {
+         // cached block locations may have been updated by chooseDataNode()
+         // or fetchBlockAt(). Always get the latest list of locations at the 
+@@ -2251,9 +2251,10 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         InetSocketAddress targetAddr = retval.addr;
+         BlockReader reader = null;
+             
+-        int len = (int) (end - start + 1);
+         try {
+           Token<BlockTokenIdentifier> accessToken = block.getBlockToken();
++          int len = (int) (end - start + 1);
++
+           // first try reading the block locally.
+           if (shouldTryShortCircuitRead(targetAddr)) {
+             try {
+@@ -2265,6 +2266,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+               shortCircuitLocalReads = false;
+               continue;
+             }
++            IOUtils.readFully((BlockReaderLocal)reader, buf, offset, len);
+           } else {
+             // go to the datanode
+             reader = getBlockReader(targetAddr, src, 
+@@ -2273,8 +2275,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+                                                 block.getBlock().getGenerationStamp(),
+                                                 start, len, buffersize, 
+                                                 verifyChecksum, clientName);
++            IOUtils.readFully((RemoteBlockReader)reader, buf, offset, len);
+           }
+-          IOUtils.readFully(reader, buf, offset, len);
+           return;
+         } catch (ChecksumException e) {
+           LOG.warn("fetchBlockByteRange(). Got a checksum exception for " +
+@@ -2306,11 +2308,14 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+      * Close the given BlockReader and cache its socket.
+      */
+     private void closeBlockReader(BlockReader reader) throws IOException {
+-      if (reader.hasSentStatusCode()) {
+-        Socket oldSock = reader.takeSocket();
+-        socketCache.put(oldSock);
+-      } else if (LOG.isDebugEnabled()) {
+-        LOG.debug("Client couldn't reuse - didnt send code");
++      if (reader instanceof RemoteBlockReader) {
++        RemoteBlockReader remoteReader = (RemoteBlockReader)reader; 
++        if (remoteReader.hasSentStatusCode()) {
++          Socket oldSock = remoteReader.takeSocket();
++          socketCache.put(oldSock);
++        } else if (LOG.isDebugEnabled()) {
++          LOG.debug("Client couldn't reuse - didnt send code");
++        }
+       }
+       reader.close();
+     }
+@@ -2376,7 +2381,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         try {
+           // The OP_READ_BLOCK request is sent as we make the BlockReader
+           BlockReader reader =
+-              BlockReader.newBlockReader(sock, file, blockId,
++              RemoteBlockReader.newBlockReader(sock, file, blockId,
+                                          blockToken, genStamp,
+                                          startOffset, len,
+                                          bufferSize, verifyChecksum,
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index c93c237..2c25f2d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -40,7 +40,9 @@ import javax.servlet.jsp.JspWriter;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.BlockReader;
+ import org.apache.hadoop.hdfs.DFSClient;
++import org.apache.hadoop.hdfs.DFSClient.RemoteBlockReader;
+ import org.apache.hadoop.hdfs.protocol.DatanodeID;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+@@ -144,8 +146,8 @@ public class JspHelper {
+       long amtToRead = Math.min(chunkSizeToView, blockSize - offsetIntoBlock);     
+       
+       // Use the block name for file name. 
+-      DFSClient.BlockReader blockReader = 
+-        DFSClient.BlockReader.newBlockReader(s, addr.toString() + ":" + blockId,
++      BlockReader blockReader = 
++        RemoteBlockReader.newBlockReader(s, addr.toString() + ":" + blockId,
+                                              blockId, accessToken, genStamp ,offsetIntoBlock, 
+                                              amtToRead, 
+                                              conf.getInt("io.file.buffer.size",
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
+index abfd3fe..f3eaf97 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
+@@ -34,7 +34,9 @@ import java.util.TreeSet;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.BlockReader;
+ import org.apache.hadoop.hdfs.DFSClient;
++import org.apache.hadoop.hdfs.DFSClient.RemoteBlockReader;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+@@ -428,7 +430,7 @@ public class NamenodeFsck {
+     InetSocketAddress targetAddr = null;
+     TreeSet<DatanodeInfo> deadNodes = new TreeSet<DatanodeInfo>();
+     Socket s = null;
+-    DFSClient.BlockReader blockReader = null; 
++    BlockReader blockReader = null; 
+     Block block = lblock.getBlock(); 
+ 
+     while (s == null) {
+@@ -456,13 +458,13 @@ public class NamenodeFsck {
+         s.setSoTimeout(HdfsConstants.READ_TIMEOUT);
+         
+         blockReader = 
+-          DFSClient.BlockReader.newBlockReader(s, targetAddr.toString() + ":" + 
+-                                               block.getBlockId(), 
+-                                               block.getBlockId(), 
+-                                               lblock.getBlockToken(),
+-                                               block.getGenerationStamp(), 
+-                                               0, -1,
+-                                               conf.getInt("io.file.buffer.size", 4096));
++          RemoteBlockReader.newBlockReader(s, targetAddr.toString() + ":" + 
++                                           block.getBlockId(), 
++                                           block.getBlockId(), 
++                                           lblock.getBlockToken(),
++                                           block.getGenerationStamp(), 
++                                           0, -1,
++                                           conf.getInt("io.file.buffer.size", 4096));
+         
+       }  catch (IOException ex) {
+         // Put chosen node into dead list, continue
+diff --git a/src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java b/src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java
+index b716dc9..6b38e22 100644
+--- a/src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java
++++ b/src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java
+@@ -21,12 +21,11 @@ package org.apache.hadoop.hdfs;
+ import java.net.Socket;
+ import java.net.InetSocketAddress;
+ import java.io.DataOutputStream;
+-import java.util.Random;
+ import java.util.List;
+ import java.io.IOException;
+ 
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.hdfs.DFSClient.BlockReader;
++import org.apache.hadoop.hdfs.DFSClient.RemoteBlockReader;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+@@ -149,7 +148,7 @@ public class BlockReaderTestUtil {
+     sock.connect(targetAddr, HdfsConstants.READ_TIMEOUT);
+     sock.setSoTimeout(HdfsConstants.READ_TIMEOUT);
+ 
+-    return BlockReader.newBlockReader(
++    return RemoteBlockReader.newBlockReader(
+       sock, targetAddr.toString()+ ":" + block.getBlockId(), block.getBlockId(),
+       testBlock.getBlockToken(),
+       block.getGenerationStamp(),
+diff --git a/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java b/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
+index 99205d9..dc20445 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
++++ b/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
+@@ -26,7 +26,7 @@ import java.util.List;
+ import java.io.IOException;
+ 
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.hdfs.DFSClient.BlockReader;
++import org.apache.hadoop.hdfs.DFSClient.RemoteBlockReader;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.DataTransferProtocol;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+@@ -80,11 +80,10 @@ public class TestClientBlockVerification {
+     testBlock = locatedBlocks.get(0); // first block
+   }
+ 
+-  private BlockReader getBlockReader(
++  private RemoteBlockReader getBlockReader(
+     int offset, int lenToRead) throws IOException {
+     InetSocketAddress targetAddr = null;
+     Socket s = null;
+-    BlockReader blockReader = null;
+     Block block = testBlock.getBlock();
+     DatanodeInfo[] nodes = testBlock.getLocations();
+     targetAddr = NetUtils.createSocketAddr(nodes[0].getName());
+@@ -92,7 +91,7 @@ public class TestClientBlockVerification {
+     s.connect(targetAddr, HdfsConstants.READ_TIMEOUT);
+     s.setSoTimeout(HdfsConstants.READ_TIMEOUT);
+ 
+-    return DFSClient.BlockReader.newBlockReader(
++    return (RemoteBlockReader)RemoteBlockReader.newBlockReader(
+       s, targetAddr.toString()+ ":" + block.getBlockId(),
+       block.getBlockId(),
+       testBlock.getBlockToken(),
+@@ -106,7 +105,7 @@ public class TestClientBlockVerification {
+    */
+   @Test
+   public void testBlockVerification() throws Exception {
+-    BlockReader reader = spy(getBlockReader(0, FILE_SIZE_K * 1024));
++    RemoteBlockReader reader = spy(getBlockReader(0, FILE_SIZE_K * 1024));
+     slurpReader(reader, FILE_SIZE_K * 1024, true);
+     verify(reader).sendReadResult(
+       reader.dnSock,
+@@ -119,7 +118,7 @@ public class TestClientBlockVerification {
+    */
+   @Test
+   public void testIncompleteRead() throws Exception {
+-    BlockReader reader = spy(getBlockReader(0, FILE_SIZE_K * 1024));
++    RemoteBlockReader reader = spy(getBlockReader(0, FILE_SIZE_K * 1024));
+     slurpReader(reader, FILE_SIZE_K / 2 * 1024, false);
+ 
+     // We asked the blockreader for the whole file, and only read
+@@ -138,7 +137,7 @@ public class TestClientBlockVerification {
+   @Test
+   public void testCompletePartialRead() throws Exception {
+     // Ask for half the file
+-    BlockReader reader = spy(getBlockReader(0, FILE_SIZE_K * 1024 / 2));
++    RemoteBlockReader reader = spy(getBlockReader(0, FILE_SIZE_K * 1024 / 2));
+     // And read half the file
+     slurpReader(reader, FILE_SIZE_K * 1024 / 2, true);
+     verify(reader).sendReadResult(reader.dnSock,
+@@ -159,7 +158,7 @@ public class TestClientBlockVerification {
+       for (int length : lengths) {
+         DFSClient.LOG.info("Testing startOffset = " + startOffset + " and " +
+                            " len=" + length);
+-        BlockReader reader = spy(getBlockReader(startOffset, length));
++        RemoteBlockReader reader = spy(getBlockReader(startOffset, length));
+         slurpReader(reader, length, true);
+         verify(reader).sendReadResult(
+           reader.dnSock,
+diff --git a/src/test/org/apache/hadoop/hdfs/TestConnCache.java b/src/test/org/apache/hadoop/hdfs/TestConnCache.java
+index 1a5a5cf..2f2e3b3 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestConnCache.java
++++ b/src/test/org/apache/hadoop/hdfs/TestConnCache.java
+@@ -29,8 +29,8 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.DFSClient;
++import org.apache.hadoop.hdfs.DFSClient.RemoteBlockReader;
+ import org.apache.hadoop.hdfs.DFSClient.DFSInputStream;
+-import org.apache.hadoop.hdfs.DFSClient.BlockReader;
+ import org.apache.hadoop.hdfs.SocketCache;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+@@ -76,7 +76,7 @@ public class TestConnCache {
+    * use the same socket.
+    */
+   private class MockGetBlockReader implements Answer<BlockReader> {
+-    public BlockReader reader = null;
++    public RemoteBlockReader reader = null;
+     private Socket sock = null;
+     private final boolean shouldBeAllTheSame;
+ 
+@@ -85,8 +85,8 @@ public class TestConnCache {
+     }
+ 
+     public BlockReader answer(InvocationOnMock invocation) throws Throwable {
+-      BlockReader prevReader = reader;
+-      reader = (BlockReader) invocation.callRealMethod();
++      RemoteBlockReader prevReader = reader;
++      reader = (RemoteBlockReader) invocation.callRealMethod();
+       if (sock == null) {
+         sock = reader.dnSock;
+       } else if (prevReader != null &&
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailure.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailure.java
+index aea155e..d4de3fa 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailure.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailure.java
+@@ -30,6 +30,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.BlockReader;
+ import org.apache.hadoop.hdfs.DFSClient;
+ import org.apache.hadoop.hdfs.DFSTestUtil;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+@@ -254,7 +255,6 @@ public class TestDataNodeVolumeFailure {
+     throws IOException {
+     InetSocketAddress targetAddr = null;
+     Socket s = null;
+-    DFSClient.BlockReader blockReader = null; 
+     Block block = lblock.getBlock(); 
+    
+     targetAddr = NetUtils.createSocketAddr(datanode.getName());
+@@ -263,8 +263,8 @@ public class TestDataNodeVolumeFailure {
+     s.connect(targetAddr, HdfsConstants.READ_TIMEOUT);
+     s.setSoTimeout(HdfsConstants.READ_TIMEOUT);
+ 
+-    blockReader = 
+-      DFSClient.BlockReader.newBlockReader(s, targetAddr.toString() + ":" + 
++    BlockReader blockReader = 
++      DFSClient.RemoteBlockReader.newBlockReader(s, targetAddr.toString() + ":" + 
+           block.getBlockId(), block.getBlockId(), lblock.getBlockToken(),
+           block.getGenerationStamp(), 0, -1, 4096);
+ 
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java
+index 8424dd3..a5f493b 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java
+@@ -21,10 +21,10 @@ package org.apache.hadoop.hdfs.server.datanode;
+ import java.util.List;
+ 
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.BlockReader;
+ import org.apache.hadoop.hdfs.BlockReaderTestUtil;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+-import org.apache.hadoop.hdfs.DFSClient.BlockReader;
+ 
+ import org.junit.Test;
+ import org.junit.AfterClass;
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockTokenWithDFS.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockTokenWithDFS.java
+index 405a557..95382c3 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockTokenWithDFS.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockTokenWithDFS.java
+@@ -26,7 +26,9 @@ import java.util.Random;
+ 
+ import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.BlockReader;
+ import org.apache.hadoop.hdfs.DFSClient;
++import org.apache.hadoop.hdfs.DFSClient.RemoteBlockReader;
+ import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.DFSTestUtil;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+@@ -120,7 +122,7 @@ public class TestBlockTokenWithDFS extends TestCase {
+       boolean shouldSucceed) {
+     InetSocketAddress targetAddr = null;
+     Socket s = null;
+-    DFSClient.BlockReader blockReader = null;
++    BlockReader blockReader = null;
+     Block block = lblock.getBlock();
+     try {
+       DatanodeInfo[] nodes = lblock.getLocations();
+@@ -129,7 +131,7 @@ public class TestBlockTokenWithDFS extends TestCase {
+       s.connect(targetAddr, HdfsConstants.READ_TIMEOUT);
+       s.setSoTimeout(HdfsConstants.READ_TIMEOUT);
+ 
+-      blockReader = DFSClient.BlockReader.newBlockReader(s, targetAddr
++      blockReader = RemoteBlockReader.newBlockReader(s, targetAddr
+           .toString()
+           + ":" + block.getBlockId(), block.getBlockId(), lblock
+           .getBlockToken(), block.getGenerationStamp(), 0, -1, conf.getInt(
+-- 
+1.7.0.4
+

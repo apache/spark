@@ -1,0 +1,64 @@
+From 2219e76392d0bf29d8c40bf2b60d23d7b188ac3d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 24 Sep 2009 16:08:33 -0700
+Subject: [PATCH 0363/1179] HADOOP-5976. Add a new command, classpath, to the hadoop script. Contributed by Owen O'Malley
+
+Patch: http://issues.apache.org/jira/secure/attachment/12420325/script.patch
+Author: Owen O'Malley and Gary Murry
+Ref: YDH
+---
+ bin/hadoop                                         |   10 +++++++++-
+ .../content/xdocs/commands_manual.xml              |    9 +++++++++
+ 2 files changed, 18 insertions(+), 1 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index c7fc57b..058b1be 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -73,6 +73,8 @@ if [ $# = 0 ]; then
+   echo "  jar <jar>            run a jar file"
+   echo "  distcp <srcurl> <desturl> copy file or directories recursively"
+   echo "  archive -archiveName NAME -p <parent path> <src>* <dest> create a hadoop archive"
++  echo "  classpath            prints the class path needed to get the"
++  echo "                       Hadoop jar and the required libraries"
+   echo "  daemonlog            get/set the log level for each daemon"
+   echo " or"
+   echo "  CLASSNAME            run the class named CLASSNAME"
+@@ -178,7 +180,13 @@ fi
+ unset IFS
+ 
+ # figure out which class to run
+-if [ "$COMMAND" = "namenode" ] ; then
++if [ "$COMMAND" = "classpath" ] ; then
++  if $cygwin; then
++    CLASSPATH=`cygpath -p -w "$CLASSPATH"`
++  fi
++  echo $CLASSPATH
++  exit
++elif [ "$COMMAND" = "namenode" ] ; then
+   CLASS='org.apache.hadoop.hdfs.server.namenode.NameNode'
+   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_NAMENODE_OPTS"
+ elif [ "$COMMAND" = "secondarynamenode" ] ; then
+diff --git a/src/docs/src/documentation/content/xdocs/commands_manual.xml b/src/docs/src/documentation/content/xdocs/commands_manual.xml
+index 27a1caf..d17730f 100644
+--- a/src/docs/src/documentation/content/xdocs/commands_manual.xml
++++ b/src/docs/src/documentation/content/xdocs/commands_manual.xml
+@@ -409,6 +409,15 @@
+ 					 Runs the class named CLASSNAME.
+ 				</p>
+ 			</section>
++			<section>
++				<title> classpath </title>
++				<p>
++					Prints the class path needed to get the Hadoop jar and the required libraries.
++				</p>
++				<p>
++					<code>Usage: hadoop classpath</code>
++				</p>
++			</section>
+     </section>
+ 		<section>
+ 			<title> Administration Commands </title>
+-- 
+1.7.0.4
+

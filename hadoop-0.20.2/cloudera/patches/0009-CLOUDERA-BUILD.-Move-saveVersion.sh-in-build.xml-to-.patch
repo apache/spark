@@ -1,0 +1,104 @@
+From bf10e46e425395145dcc4b85db66d45cbf9797b0 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:21:45 -0800
+Subject: [PATCH 0009/1179] CLOUDERA-BUILD. Move saveVersion.sh in build.xml to ensure build
+
+Description:
+    This error is due to ant 1.7.1 not compiling package-info.java if the
+    timestamp of the output class directory is newer than the package-info
+    file itself. Since other compiles were happening after package-info.java
+    was generated, the build dir was newer and compilation was being
+    skipped.
+
+    Move cloudera hooks inside the package task of build.xml
+
+    Fixes an issue where the fair scheduler jar was not built before the
+    hooks were run, and therefore was not included in the target lib/
+    directory.
+
+Ref: CLOUDERA-436
+---
+ build.xml |   45 +++++++++++++++++++++------------------------
+ 1 files changed, 21 insertions(+), 24 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 9371663..5966d58 100644
+--- a/build.xml
++++ b/build.xml
+@@ -284,10 +284,7 @@
+       <mapper type="glob" from="*.template" to="*"/>
+     </copy>
+ 
+-    <exec executable="sh">
+-       <arg line="src/saveVersion.sh ${version}"/>
+-    </exec>
+-	
++
+    <exec executable="sh">
+        <arg line="src/fixFontsPath.sh ${src.docs.cn}"/>
+    </exec>
+@@ -399,7 +396,14 @@
+      package="org.apache.hadoop.hdfs.server.datanode"
+      webxml="${build.webapps}/datanode/WEB-INF/web.xml">
+     </jsp-compile>
+-
++    
++    <!-- generate package-info annotation file. This has to be done here
++      so that the timestamp of package-info.java is newer than the timestamp
++      of the output directory -->
++    <exec executable="sh">
++       <arg line="src/saveVersion.sh ${version}"/>
++    </exec>
++	
+     <!-- Compile Java files (excluding JSPs) checking warnings -->
+     <javac 
+      encoding="${build.encoding}" 
+@@ -1172,6 +1176,18 @@
+ 
+     <copy todir="${dist.dir}/" file="build.xml"/>
+ 
++    <!-- CLOUDERA HOOKS -->
++    <copy todir="${dist.dir}/lib">
++      <fileset dir="${build.dir}/contrib/fairscheduler" includes="*.jar"/>
++      <fileset dir="${build.dir}/contrib/scribe-log4j" includes="*.jar"/>
++      <fileset dir="src/contrib/scribe-log4j/lib" includes="*.jar"/>
++    </copy>
++
++    <copy todir="${dist.dir}/cloudera">
++      <fileset dir="cloudera" />
++    </copy>
++    <!-- END CLOUDERA HOOKS -->
++
+     <chmod perm="ugo+x" type="file" parallel="false">
+         <fileset dir="${dist.dir}/bin"/>
+     </chmod>
+@@ -1224,26 +1240,7 @@
+      </subant>  	
+   </target>
+ 
+-  <!-- ================================================================== -->
+-  <!-- Cloudera hooks                                                     -->
+-  <!-- ================================================================== -->
+-  <target name="cloudera.hooks" depends="cloudera.enable-contrib,cloudera.copy-cloudera-dir">
+-  </target>
+-
+-  <target name="cloudera.enable-contrib" description="enable contrib projects">
+-    <copy todir="${dist.dir}/lib">
+-      <fileset dir="${build.dir}/contrib/fairscheduler" includes="*.jar"/>
+-      <fileset dir="${build.dir}/contrib/scribe-log4j" includes="*.jar"/>
+-      <fileset dir="src/contrib/scribe-log4j/lib" includes="*.jar"/>
+-    </copy>
+-  </target>
+ 
+-  <target name="cloudera.copy-cloudera-dir" description="copy the cloudera/ dir into dist">
+-    <copy todir="${dist.dir}/cloudera">
+-      <fileset dir="cloudera" />
+-    </copy>
+-  </target>
+-	
+  <target name="test-c++-libhdfs" depends="compile-c++-libhdfs, compile-core" if="islibhdfs">
+     <delete dir="${test.libhdfs.dir}"/>
+     <mkdir dir="${test.libhdfs.dir}"/>
+-- 
+1.7.0.4
+

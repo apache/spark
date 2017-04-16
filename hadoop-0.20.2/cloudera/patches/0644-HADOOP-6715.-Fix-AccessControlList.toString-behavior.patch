@@ -1,0 +1,320 @@
+From 8a02b7518c90634ec256fa836757919f600fa0e9 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 7 May 2010 23:13:24 +0530
+Subject: [PATCH 0644/1179] HADOOP-6715. Fix AccessControlList.toString behavior when ACL is set to "*"
+
+Patch: https://issues.apache.org/jira/secure/attachment/12443982/6715.20S.6.patch
+Author: Ravi Gummadi
+Reason: Security
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/http/HttpServer.java    |    4 +-
+ .../security/authorize/AccessControlList.java      |   97 +++++++++++++++++---
+ src/mapred/org/apache/hadoop/mapred/JobStatus.java |    7 +-
+ .../org/apache/hadoop/mapred/JobTracker.java       |    1 -
+ src/test/org/apache/hadoop/mapred/TestJobACLs.java |    2 +-
+ .../org/apache/hadoop/mapred/TestJobHistory.java   |   15 ++-
+ .../security/authorize/TestAccessControlList.java  |   26 +++++
+ 7 files changed, 125 insertions(+), 27 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index d4ce47e..bf3ee17 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -652,8 +652,8 @@ public class HttpServer implements FilterContainer {
+       if (!adminsAcl.isUserAllowed(remoteUserUGI)) {
+         response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "User "
+             + remoteUser + " is unauthorized to access this page. "
+-            + "Only \"" + adminsAcl.toString()
+-            + "\" can access this page.");
++            + "AccessControlList for accessing this page : "
++            + adminsAcl.toString());
+         return false;
+       }
+     }
+diff --git a/src/core/org/apache/hadoop/security/authorize/AccessControlList.java b/src/core/org/apache/hadoop/security/authorize/AccessControlList.java
+index ada969d..fcbb307 100644
+--- a/src/core/org/apache/hadoop/security/authorize/AccessControlList.java
++++ b/src/core/org/apache/hadoop/security/authorize/AccessControlList.java
+@@ -17,18 +17,24 @@
+  */
+ package org.apache.hadoop.security.authorize;
+ 
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
+ import java.util.Set;
+ import java.util.TreeSet;
+ 
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+  * Class representing a configured access control list.
+  */
+-public class AccessControlList {
++public class AccessControlList implements Writable {
+   
+   // Indicates an ACL string that represents access to all users
+   public static final String WILDCARD_ACL_VALUE = "*";
++  private static final int INITIAL_CAPACITY = 256;
+ 
+   // Set of users who are granted access.
+   private Set<String> users;
+@@ -47,12 +53,18 @@ public class AccessControlList {
+    * @param aclString String representation of the ACL
+    */
+   public AccessControlList(String aclString) {
++    buildACL(aclString);
++  }
++
++  // build ACL from the given string
++  private void buildACL(String aclString) {
+     users = new TreeSet<String>();
+     groups = new TreeSet<String>();
+     if (aclString.contains(WILDCARD_ACL_VALUE) && 
+         aclString.trim().equals(WILDCARD_ACL_VALUE)) {
+       allAllowed = true;
+     } else {
++      allAllowed = false;
+       String[] userGroupStrings = aclString.split(" ", 2);
+       
+       if (userGroupStrings.length >= 1) {
+@@ -70,7 +82,7 @@ public class AccessControlList {
+       }
+     }
+   }
+-  
++
+   public boolean isAllAllowed() {
+     return allAllowed;
+   }
+@@ -119,28 +131,83 @@ public class AccessControlList {
+   
+   @Override
+   public String toString() {
+-    StringBuilder sb = new StringBuilder();
+-    boolean first = true;
+-    for(String user: users) {
+-      if (!first) {
+-        sb.append(",");
+-      } else {
+-        first = false;
++    String str = null;
++
++    if (allAllowed) {
++      str = "All users are allowed";
++    }
++    else if (users.isEmpty() && groups.isEmpty()) {
++      str = "No users are allowed";
++    }
++    else {
++      String usersStr = null;
++      String groupsStr = null;
++      if (!users.isEmpty()) {
++        usersStr = users.toString();
++      }
++      if (!groups.isEmpty()) {
++        groupsStr = groups.toString();
++      }
++
++      if (!users.isEmpty() && !groups.isEmpty()) {
++        str = "Users " + usersStr + " and members of the groups "
++            + groupsStr + " are allowed";
+       }
+-      sb.append(user);
++      else if (!users.isEmpty()) {
++        str = "Users " + usersStr + " are allowed";
++      }
++      else {// users is empty array and groups is nonempty
++        str = "Members of the groups "
++            + groupsStr + " are allowed";
++      }
++    }
++
++    return str;
++  }
++
++  // Serializes the AccessControlList object
++  public void write(DataOutput out) throws IOException {
++    StringBuilder sb = new StringBuilder(INITIAL_CAPACITY);
++    if (allAllowed) {
++      sb.append('*');
+     }
+-    if (!groups.isEmpty()) {
++    else {
++      sb.append(getUsersString());
+       sb.append(" ");
++      sb.append(getGroupsString());
+     }
+-    first = true;
+-    for(String group: groups) {
++    Text.writeString(out, sb.toString());
++  }
++
++  // Deserialize
++  public void readFields(DataInput in) throws IOException {
++    String aclString = Text.readString(in);
++    buildACL(aclString);
++  }
++
++  // Returns comma-separated concatenated single String of the set 'users'
++  private String getUsersString() {
++    return getString(users);
++  }
++
++  // Returns comma-separated concatenated single String of the set 'groups'
++  private String getGroupsString() {
++    return getString(groups);
++  }
++
++  // Returns comma-separated concatenated single String of all strings of
++  // the given set
++  private String getString(Set<String> strings) {
++    StringBuilder sb = new StringBuilder(INITIAL_CAPACITY);
++    boolean first = true;
++    for(String str: strings) {
+       if (!first) {
+         sb.append(",");
+       } else {
+         first = false;
+       }
+-      sb.append(group);
++      sb.append(str);
+     }
+-    return sb.toString();    
++    return sb.toString();
+   }
+ }
+\ No newline at end of file
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobStatus.java b/src/mapred/org/apache/hadoop/mapred/JobStatus.java
+index 6e87cda..0ecbab7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobStatus.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobStatus.java
+@@ -341,7 +341,7 @@ public class JobStatus implements Writable, Cloneable {
+     out.writeInt(jobACLs.size());
+     for (Entry<JobACL, AccessControlList> entry : jobACLs.entrySet()) {
+       WritableUtils.writeEnum(out, entry.getKey());
+-      Text.writeString(out, entry.getValue().toString());
++      entry.getValue().write(out);
+     }
+   }
+ 
+@@ -361,8 +361,9 @@ public class JobStatus implements Writable, Cloneable {
+     int numACLs = in.readInt();
+     for (int i = 0; i < numACLs; i++) {
+       JobACL aclType = WritableUtils.readEnum(in, JobACL.class);
+-      String acl = Text.readString(in);
+-      this.jobACLs.put(aclType, new AccessControlList(acl));
++      AccessControlList acl = new AccessControlList(" ");
++      acl.readFields(in);
++      this.jobACLs.put(aclType, acl);
+     }
+   }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index defa4c2..e5149d8 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -91,7 +91,6 @@ import org.apache.hadoop.security.RefreshUserMappingsProtocol;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+-import org.apache.hadoop.security.authorize.AccessControlList;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.ProxyUsers;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobACLs.java b/src/test/org/apache/hadoop/mapred/TestJobACLs.java
+index 04d4e74..d439b23 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobACLs.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobACLs.java
+@@ -374,7 +374,7 @@ public class TestJobACLs {
+ 
+     // Set the job up.
+     final JobConf myConf = mr.createJobConf();
+-    myConf.set(JobContext.JOB_ACL_VIEW_JOB, "user2");
++    myConf.set(JobContext.JOB_ACL_VIEW_JOB, "user2 group2");
+ 
+     // Submit the job as user1
+     RunningJob job = submitJobAsUser(myConf, jobSubmitter);
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistory.java b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+index d74aa53..0047da4 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistory.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+@@ -34,7 +34,6 @@ import junit.framework.TestCase;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.mapred.JobHistory.*;
+@@ -44,6 +43,8 @@ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.authorize.AccessControlList;
++
+ /**
+  * Tests the JobHistory files - to catch any changes to JobHistory that can
+  * cause issues for the execution of JobTracker.RecoveryManager, HistoryViewer.
+@@ -803,10 +804,14 @@ public class TestJobHistory extends TestCase {
+ 
+     // Also JobACLs should be correct
+     if (mr.getJobTrackerRunner().getJobTracker().areACLsEnabled()) {
+-      assertEquals(conf.get(JobACL.VIEW_JOB.getAclName()),
+-          jobInfo.getJobACLs().get(JobACL.VIEW_JOB).toString());
+-      assertEquals(conf.get(JobACL.MODIFY_JOB.getAclName()),
+-          jobInfo.getJobACLs().get(JobACL.MODIFY_JOB).toString());
++      AccessControlList acl = new AccessControlList(
++          conf.get(JobACL.VIEW_JOB.getAclName(), " "));
++      assertTrue(acl.toString().equals(
++          jobInfo.getJobACLs().get(JobACL.VIEW_JOB).toString()));
++      acl = new AccessControlList(
++          conf.get(JobACL.MODIFY_JOB.getAclName(), " "));
++      assertTrue(acl.toString().equals(
++          jobInfo.getJobACLs().get(JobACL.MODIFY_JOB).toString()));
+     }
+   }
+ 
+diff --git a/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java b/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java
+index 581e434..ea359c6 100644
+--- a/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java
++++ b/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java
+@@ -43,6 +43,32 @@ public class TestAccessControlList extends TestCase {
+     acl = new AccessControlList("*  ");
+     assertTrue(acl.isAllAllowed());
+   }
++
++  // check if AccessControlList.toString() works as expected
++  public void testToString() {
++    AccessControlList acl;
++
++    acl = new AccessControlList("*");
++    assertTrue(acl.toString().equals("All users are allowed"));
++
++    acl = new AccessControlList(" ");
++    assertTrue(acl.toString().equals("No users are allowed"));
++
++    acl = new AccessControlList("user1,user2");
++    assertTrue(acl.toString().equals("Users [user1, user2] are allowed"));
++
++    acl = new AccessControlList("user1,user2 ");// with space
++    assertTrue(acl.toString().equals("Users [user1, user2] are allowed"));
++
++    acl = new AccessControlList(" group1,group2");
++    assertTrue(acl.toString().equals(
++        "Members of the groups [group1, group2] are allowed"));
++
++    acl = new AccessControlList("user1,user2 group1,group2");
++    assertTrue(acl.toString().equals(
++        "Users [user1, user2] and " +
++        "members of the groups [group1, group2] are allowed"));
++  }
+   
+   public void testAccessControlList() throws Exception {
+     AccessControlList acl;
+-- 
+1.7.0.4
+

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+export NUM_OF_REDUCERS=$NUM_OF_REDUCERS_FOR_LARGE_JOB
+export INDIR=${VARINFLTEXT}
+Date=`date +%F-%H-%M-%S-%N`
+
+export OUTDIR=perf-out/stream-out-dir-large_$Date
+${HADOOP_HOME}/bin/hadoop dfs -rmr $OUTDIR
+
+
+${HADOOP_HOME}/bin/hadoop jar ${STREAM_JAR} -input $INDIR -output $OUTDIR -mapper cat -reducer cat -numReduceTasks $NUM_OF_REDUCERS
+

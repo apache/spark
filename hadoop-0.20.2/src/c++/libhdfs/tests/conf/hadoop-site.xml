@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="nutch-conf.xsl"?>
+
+<!-- DO NOT PUT ANY PROPERTY IN THIS FILE. INSTEAD USE -->
+<!-- core-site.xml, mapred-site.xml OR hdfs-site.xml -->
+<!-- This empty script is to avoid picking properties from  -->
+<!-- conf/hadoop-site.xml This would be removed once support  -->
+<!-- for hadoop-site.xml is removed.  -->
+
+<configuration>
+
+
+</configuration>

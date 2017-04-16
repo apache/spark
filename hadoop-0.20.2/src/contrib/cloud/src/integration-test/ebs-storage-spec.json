@@ -1,0 +1,30 @@
+{
+  "nn": [
+    {
+      "device": "/dev/sdj",
+      "mount_point": "/ebs1",
+      "size_gb": "7",
+      "snapshot_id": "snap-fe44bb97"
+    },
+    {
+      "device": "/dev/sdk",
+      "mount_point": "/ebs2",
+      "size_gb": "7",
+      "snapshot_id": "snap-fe44bb97"
+    }
+  ],
+  "dn": [
+    {
+      "device": "/dev/sdj",
+      "mount_point": "/ebs1",
+      "size_gb": "7",
+      "snapshot_id": "snap-fe44bb97"
+    },
+    {
+      "device": "/dev/sdk",
+      "mount_point": "/ebs2",
+      "size_gb": "7",
+      "snapshot_id": "snap-fe44bb97"
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+From cf08a128b87bbfae90babd61795599b3645d37a3 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:48:40 -0800
+Subject: [PATCH 0213/1179] HDFS-455, MAPREDUCE-1441, HADOOP-6534. Allow spaces in between comma-separated elements in directory list configurations.
+
+Description: Make NN and DN handle in a intuitive way comma-separated configuration strings
+
+The following configuration causes problems:<br/>
+&lt;property&gt;<br/>
+&lt;name&gt;dfs.data.dir&lt;/name&gt;<br/>
+&lt;value&gt;/mnt/hstore2/hdfs, /home/foo/dfs&lt;/value&gt; <br/>
+&lt;/property&gt;
+
+<p>The problem is that the space after the comma causes the second directory for storage to be " /home/foo/dfs" which is in a directory named &lt;SPACE&gt; which contains a sub-dir named "home" in the hadoop datanodes default directory. This will typically cause the user's home partition to fill, but will be very hard for the user to understand since a directory with a whitespace name is hard to understand.</p>
+
+<p>(ripped from <a href="http://issues.apache.org/jira/browse/HADOOP-2366" title="Space in the value for dfs.data.dir can cause great problems"><del>HADOOP-2366</del></a>)</p>
+
+<hr/>
+This fixes any configuration consisting of a comma-separated list of directories
+(e.g., dfs.data.dir, dfs.name.dir, fs.checkpoint.dir, mapred.local.dir, etc) so that
+the elements may also contain separating whitespace. Without this patch,
+setting mapred.local.dir to "/disk1, /disk2" would create a directory by the name
+" " in the user's home directory, or fail outright. The patch trims the
+directory
+names as they are fetched from the configuration.
+
+Reason: Configuration improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/fs/LocalDirAllocator.java    |    2 +-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    2 +-
+ .../hadoop/hdfs/server/namenode/FSImage.java       |    4 ++--
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    4 ++--
+ src/mapred/org/apache/hadoop/mapred/JobConf.java   |    2 +-
+ 5 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/LocalDirAllocator.java b/src/core/org/apache/hadoop/fs/LocalDirAllocator.java
+index 5d04d28..5e7e2ee 100644
+--- a/src/core/org/apache/hadoop/fs/LocalDirAllocator.java
++++ b/src/core/org/apache/hadoop/fs/LocalDirAllocator.java
+@@ -209,7 +209,7 @@ public class LocalDirAllocator {
+     private void confChanged(Configuration conf) throws IOException {
+       String newLocalDirs = conf.get(contextCfgItemName);
+       if (!newLocalDirs.equals(savedLocalDirs)) {
+-        localDirs = conf.getStrings(contextCfgItemName);
++        localDirs = conf.getTrimmedStrings(contextCfgItemName);
+         localFS = FileSystem.getLocal(conf);
+         int numDirs = localDirs.length;
+         ArrayList<String> dirs = new ArrayList<String>(numDirs);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 4c50a51..12b8cea 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -1258,7 +1258,7 @@ public class DataNode extends Configured
+           " anymore. RackID resolution is handled by the NameNode.");
+       System.exit(-1);
+     }
+-    String[] dataDirs = conf.getStrings("dfs.data.dir");
++    String[] dataDirs = conf.getTrimmedStrings("dfs.data.dir");
+     dnThreadName = "DataNode: [" +
+                         StringUtils.arrayToString(dataDirs) + "]";
+     return makeInstance(dataDirs, conf);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index 35e406d..cd6d27a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -1548,7 +1548,7 @@ public class FSImage extends Storage {
+ 
+   static Collection<File> getCheckpointDirs(Configuration conf,
+                                             String defaultName) {
+-    Collection<String> dirNames = conf.getStringCollection("fs.checkpoint.dir");
++    Collection<String> dirNames = conf.getTrimmedStringCollection("fs.checkpoint.dir");
+     if (dirNames.size() == 0 && defaultName != null) {
+       dirNames.add(defaultName);
+     }
+@@ -1562,7 +1562,7 @@ public class FSImage extends Storage {
+   static Collection<File> getCheckpointEditsDirs(Configuration conf,
+                                                  String defaultName) {
+     Collection<String> dirNames = 
+-                conf.getStringCollection("fs.checkpoint.edits.dir");
++                conf.getTrimmedStringCollection("fs.checkpoint.edits.dir");
+  if (dirNames.size() == 0 && defaultName != null) {
+    dirNames.add(defaultName);
+  }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index c83f0e9..be94486 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -349,7 +349,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   }
+ 
+   public static Collection<File> getNamespaceDirs(Configuration conf) {
+-    Collection<String> dirNames = conf.getStringCollection("dfs.name.dir");
++    Collection<String> dirNames = conf.getTrimmedStringCollection("dfs.name.dir");
+     if (dirNames.isEmpty())
+       dirNames.add("/tmp/hadoop/dfs/name");
+     Collection<File> dirs = new ArrayList<File>(dirNames.size());
+@@ -361,7 +361,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   
+   public static Collection<File> getNamespaceEditsDirs(Configuration conf) {
+     Collection<String> editsDirNames = 
+-            conf.getStringCollection("dfs.name.edits.dir");
++            conf.getTrimmedStringCollection("dfs.name.edits.dir");
+     if (editsDirNames.isEmpty())
+       editsDirNames.add("/tmp/hadoop/dfs/name");
+     Collection<File> dirs = new ArrayList<File>(editsDirNames.size());
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobConf.java b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+index 54784ed..65de522 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobConf.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+@@ -255,7 +255,7 @@ public class JobConf extends Configuration {
+   }
+ 
+   public String[] getLocalDirs() throws IOException {
+-    return getStrings("mapred.local.dir");
++    return getTrimmedStrings("mapred.local.dir");
+   }
+ 
+   public void deleteLocalFiles() throws IOException {
+-- 
+1.7.0.4
+

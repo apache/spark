@@ -1,0 +1,407 @@
+From 2d09f15358560a61169e64c488f5e6fa7aff1d7f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 23 Apr 2010 15:46:55 +0530
+Subject: [PATCH 0626/1179] MAPREDUCE-1397. Fix a possible NPE when a killTask command races with a JVM exit
+
+Patch: https://issues.apache.org/jira/secure/attachment/12442657/patch-1397-ydist.txt
+Author: Amareshwari Sriramadasu
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JvmManager.java       |   37 +++--
+ .../org/apache/hadoop/mapred/TaskRunner.java       |   21 ++-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   19 ++-
+ .../org/apache/hadoop/mapred/TestJvmManager.java   |  184 ++++++++++++++++++++
+ 4 files changed, 240 insertions(+), 21 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestJvmManager.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JvmManager.java b/src/mapred/org/apache/hadoop/mapred/JvmManager.java
+index 0506b74..b558012 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JvmManager.java
++++ b/src/mapred/org/apache/hadoop/mapred/JvmManager.java
+@@ -32,6 +32,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.mapred.TaskController.TaskControllerContext;
+ import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
++import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.mapreduce.server.tasktracker.JVMInfo;
+ import org.apache.hadoop.mapreduce.server.tasktracker.userlogs.JvmFinishedEvent;
+ import org.apache.hadoop.util.ProcessTree;
+@@ -42,9 +43,9 @@ class JvmManager {
+   public static final Log LOG =
+     LogFactory.getLog("org.apache.hadoop.mapred.JvmManager");
+ 
+-  JvmManagerForType mapJvmManager;
++  private JvmManagerForType mapJvmManager;
+ 
+-  JvmManagerForType reduceJvmManager;
++  private JvmManagerForType reduceJvmManager;
+   
+   public JvmEnv constructJvmEnv(List<String> setup, Vector<String>vargs,
+       File stdout,File stderr,long logSize, File workDir, 
+@@ -58,6 +59,16 @@ class JvmManager {
+     reduceJvmManager = new JvmManagerForType(tracker.getMaxCurrentReduceTasks(),
+         false, tracker);
+   }
++
++  //called from unit tests
++  JvmManagerForType getJvmManagerForType(TaskType type) {
++    if (type.equals(TaskType.MAP)) {
++      return mapJvmManager;
++    } else if (type.equals(TaskType.REDUCE)) {
++      return reduceJvmManager;
++    }
++    return null;
++  }
+   
+   /*
+    * Saves pid of the given taskJvm
+@@ -161,7 +172,7 @@ class JvmManager {
+           tracker.getTaskController()));
+   }
+ 
+-  private static class JvmManagerForType {
++  static class JvmManagerForType {
+     //Mapping from the JVM IDs to running Tasks
+     Map <JVMId,TaskRunner> jvmToRunningTask = 
+       new HashMap<JVMId, TaskRunner>();
+@@ -257,7 +268,7 @@ class JvmManager {
+     synchronized public void killJvm(JVMId jvmId) {
+       JvmRunner jvmRunner;
+       if ((jvmRunner = jvmIdToRunner.get(jvmId)) != null) {
+-        jvmRunner.kill();
++        killJvmRunner(jvmRunner);
+       }
+     }
+     
+@@ -270,10 +281,15 @@ class JvmManager {
+       List <JvmRunner> list = new ArrayList<JvmRunner>();
+       list.addAll(jvmIdToRunner.values());
+       for (JvmRunner jvm : list) {
+-        jvm.kill();
++        killJvmRunner(jvm);
+       }
+     }
+-    
++
++    private synchronized void killJvmRunner(JvmRunner jvmRunner) {
++      jvmRunner.kill();
++      removeJvm(jvmRunner.jvmId);
++    }
++
+     synchronized private void removeJvm(JVMId jvmId) {
+       jvmIdToRunner.remove(jvmId);
+       jvmIdToPid.remove(jvmId);
+@@ -334,7 +350,7 @@ class JvmManager {
+       if (spawnNewJvm) {
+         if (runnerToKill != null) {
+           LOG.info("Killing JVM: " + runnerToKill.jvmId);
+-          runnerToKill.kill();
++          killJvmRunner(runnerToKill);
+         }
+         spawnNewJvm(jobId, env, t);
+         return;
+@@ -396,7 +412,7 @@ class JvmManager {
+       }
+     }
+ 
+-    private class JvmRunner extends Thread {
++    class JvmRunner extends Thread {
+       JvmEnv env;
+       volatile boolean killed = false;
+       volatile int numTasksRan;
+@@ -459,9 +475,8 @@ class JvmManager {
+         }
+       }
+ 
+-      public void kill() {
++      synchronized void kill() {
+         if (!killed) {
+-          killed = true;
+           TaskController controller = tracker.getTaskController();
+           // Check inital context before issuing a kill to prevent situations
+           // where kill is issued before task is launched.
+@@ -477,7 +492,7 @@ class JvmManager {
+             LOG.info(String.format("JVM Not killed %s but just removed", jvmId
+                 .toString()));
+           }
+-          removeJvm(jvmId);
++          killed = true;
+         }
+       }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index d2c488d..237ba2e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -212,14 +212,7 @@ abstract class TaskRunner extends Thread {
+       errorInfo = getVMEnvironment(errorInfo, workDir, conf, env, taskid,
+                                    logSize);
+ 
+-      jvmManager.launchJvm(this, 
+-          jvmManager.constructJvmEnv(setup,vargs,stdout,stderr,logSize, 
+-              workDir, env, conf));
+-      synchronized (lock) {
+-        while (!done) {
+-          lock.wait();
+-        }
+-      }
++      launchJvmAndWait(setup, vargs, stdout, stderr, logSize, workDir, env);
+       tracker.getTaskTrackerInstrumentation().reportTaskEnd(t.getTaskID());
+       if (exitCodeSet) {
+         if (!killed && exitCode != 0) {
+@@ -263,6 +256,18 @@ abstract class TaskRunner extends Thread {
+     }
+   }
+ 
++  void launchJvmAndWait(List<String> setup, Vector<String> vargs, File stdout,
++      File stderr, long logSize, File workDir, Map<String, String> env)
++      throws InterruptedException {
++    jvmManager.launchJvm(this, jvmManager.constructJvmEnv(setup, vargs, stdout,
++        stderr, logSize, workDir, env, conf));
++    synchronized (lock) {
++      while (!done) {
++        lock.wait();
++      }
++    }
++  }
++
+   /**
+    * Prepare the log files for the task
+    * 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index ceba799..3041e00 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -264,7 +264,7 @@ public class TaskTracker
+   private MapEventsFetcherThread mapEventsFetcher;
+   int workerThreads;
+   CleanupQueue directoryCleanupThread;
+-  volatile JvmManager jvmManager;
++  private volatile JvmManager jvmManager;
+   
+   private TaskMemoryManagerThread taskMemoryManager;
+   private boolean taskMemoryManagerEnabled = true;
+@@ -1981,7 +1981,12 @@ public class TaskTracker
+   public JvmManager getJvmManagerInstance() {
+     return jvmManager;
+   }
+-  
++
++  // called from unit test  
++  void setJvmManagerInstance(JvmManager jvmManager) {
++    this.jvmManager = jvmManager;
++  }
++
+   private void addToTaskQueue(LaunchTaskAction action) {
+     if (action.getTask().isMapTask()) {
+       mapLauncher.addToTaskQueue(action);
+@@ -3611,6 +3616,16 @@ public class TaskTracker
+     return maxReduceSlots;
+   }
+ 
++  //called from unit test
++  synchronized void setMaxMapSlots(int mapSlots) {
++    maxMapSlots = mapSlots;
++  }
++
++  //called from unit test
++  synchronized void setMaxReduceSlots(int reduceSlots) {
++    maxReduceSlots = reduceSlots;
++  }
++
+   /**
+    * Is the TaskMemoryManager Enabled on this system?
+    * @return true if enabled, false otherwise.
+diff --git a/src/test/org/apache/hadoop/mapred/TestJvmManager.java b/src/test/org/apache/hadoop/mapred/TestJvmManager.java
+new file mode 100644
+index 0000000..625a191
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestJvmManager.java
+@@ -0,0 +1,184 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import java.io.BufferedReader;
++import java.io.File;
++import java.io.FileOutputStream;
++import java.io.FileReader;
++import java.io.IOException;
++import java.util.Vector;
++
++import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.mapred.JvmManager.JvmManagerForType;
++import org.apache.hadoop.mapred.JvmManager.JvmManagerForType.JvmRunner;
++import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
++import org.apache.hadoop.mapreduce.TaskType;
++import org.apache.hadoop.mapreduce.server.tasktracker.userlogs.UserLogManager;
++import org.junit.After;
++import static org.junit.Assert.*;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestJvmManager {
++  private static File TEST_DIR = new File(System.getProperty("test.build.data",
++      "/tmp"), TestJvmManager.class.getSimpleName());
++  private static int MAP_SLOTS = 1;
++  private static int REDUCE_SLOTS = 1;
++  private TaskTracker tt;
++  private JvmManager jvmManager;
++  private JobConf ttConf;
++
++  @Before
++  public void setUp() {
++    TEST_DIR.mkdirs();
++  }
++
++  @After
++  public void tearDown() throws IOException {
++    FileUtil.fullyDelete(TEST_DIR);
++  }
++
++  public TestJvmManager() throws Exception {
++    tt = new TaskTracker();
++    ttConf = new JobConf();
++    ttConf.setLong("mapred.tasktracker.tasks.sleeptime-before-sigkill", 2000);
++    tt.setConf(ttConf);
++    tt.setMaxMapSlots(MAP_SLOTS);
++    tt.setMaxReduceSlots(REDUCE_SLOTS);
++    tt.setTaskController(new DefaultTaskController());
++    jvmManager = new JvmManager(tt);
++    tt.setJvmManagerInstance(jvmManager);
++    tt.setUserLogManager(new UserLogManager(ttConf));
++  }
++
++  // write a shell script to execute the command.
++  private File writeScript(String fileName, String cmd, File pidFile) throws IOException {
++    File script = new File(TEST_DIR, fileName);
++    FileOutputStream out = new FileOutputStream(script);
++    // write pid into a file
++    out.write(("echo $$ >" + pidFile.toString() + ";").getBytes());
++    // ignore SIGTERM
++    out.write(("trap '' 15\n").getBytes());
++    // write the actual command it self.
++    out.write(cmd.getBytes());
++    out.close();
++    script.setExecutable(true);
++    return script;
++  }
++  
++  /**
++   * Tests the jvm kill from JvmRunner and JvmManager simultaneously.
++   * 
++   * Starts a process, which sleeps for 60 seconds, in a thread.
++   * Calls JvmRunner.kill() in a thread.
++   * Also calls JvmManager.taskKilled().
++   * Makes sure that the jvm is killed and JvmManager could launch another task
++   * properly.
++   * @throws Exception
++   */
++  @Test
++  public void testJvmKill() throws Exception {
++    JvmManagerForType mapJvmManager = jvmManager
++        .getJvmManagerForType(TaskType.MAP);
++    // launch a jvm
++    JobConf taskConf = new JobConf(ttConf);
++    TaskAttemptID attemptID = new TaskAttemptID("test", 0, true, 0, 0);
++    Task task = new MapTask(null, attemptID, 0, null, MAP_SLOTS);
++    task.setConf(taskConf);
++    TaskInProgress tip = tt.new TaskInProgress(task, taskConf);
++    File pidFile = new File(TEST_DIR, "pid");
++    final TaskRunner taskRunner = task.createRunner(tt, tip);
++    // launch a jvm which sleeps for 60 seconds
++    final Vector<String> vargs = new Vector<String>(2);
++    vargs.add(writeScript("SLEEP", "sleep 60\n", pidFile).getAbsolutePath());
++    final File workDir = new File(TEST_DIR, "work");
++    workDir.mkdir();
++    final File stdout = new File(TEST_DIR, "stdout");
++    final File stderr = new File(TEST_DIR, "stderr");
++
++    // launch the process and wait in a thread, till it finishes
++    Thread launcher = new Thread() {
++      public void run() {
++        try {
++          taskRunner.launchJvmAndWait(null, vargs, stdout, stderr, 100,
++              workDir, null);
++        } catch (InterruptedException e) {
++          e.printStackTrace();
++          return;
++        }
++      }
++    };
++    launcher.start();
++    // wait till the jvm is launched
++    // this loop waits for at most 1 second
++    for (int i = 0; i < 10; i++) {
++      if (pidFile.exists()) {
++        break;
++      }
++      UtilsForTests.waitFor(100);
++    }
++    // assert that the process is launched
++    assertTrue("pidFile is not present", pidFile.exists());
++    
++    // imitate Child code.
++    // set pid in jvmManager
++    BufferedReader in = new  BufferedReader(new FileReader(pidFile));
++    String pid = in.readLine();
++    in.close();
++    JVMId jvmid = mapJvmManager.runningTaskToJvm.get(taskRunner);
++    jvmManager.setPidToJvm(jvmid, pid);
++
++    // kill JvmRunner
++    final JvmRunner jvmRunner = mapJvmManager.jvmIdToRunner.get(jvmid);
++    Thread killer = new Thread() {
++      public void run() {
++        jvmRunner.kill();
++      }
++    };
++    killer.start();
++    
++    //wait for a while so that killer thread is started.
++    Thread.sleep(100);
++
++    // kill the jvm externally
++    taskRunner.kill();
++
++    assertTrue(jvmRunner.killed);
++
++    // launch another jvm and see it finishes properly
++    attemptID = new TaskAttemptID("test", 0, true, 0, 1);
++    task = new MapTask(null, attemptID, 0, null, MAP_SLOTS);
++    task.setConf(taskConf);
++    tip = tt.new TaskInProgress(task, taskConf);
++    TaskRunner taskRunner2 = task.createRunner(tt, tip);
++    // build dummy vargs to call ls
++    Vector<String> vargs2 = new Vector<String>(1);
++    vargs2.add(writeScript("LS", "ls", pidFile).getAbsolutePath());
++    File workDir2 = new File(TEST_DIR, "work2");
++    workDir.mkdir();
++    File stdout2 = new File(TEST_DIR, "stdout2");
++    File stderr2 = new File(TEST_DIR, "stderr2");
++    taskRunner2.launchJvmAndWait(null, vargs2, stdout2, stderr2, 100, workDir2,
++        null);
++    // join all the threads
++    killer.join();
++    jvmRunner.join();
++    launcher.join();
++  }
++}
+-- 
+1.7.0.4
+

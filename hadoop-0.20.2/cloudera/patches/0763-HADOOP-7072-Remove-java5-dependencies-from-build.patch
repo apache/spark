@@ -1,0 +1,252 @@
+From de6b20455e53435d6079b0ed9b0a005bc0c435ff Mon Sep 17 00:00:00 2001
+From: Konstantin Boudnik <cos@apache.org>
+Date: Tue, 11 Jan 2011 13:43:02 -0800
+Subject: [PATCH 0763/1179] HADOOP-7072 Remove java5 dependencies from build
+
+Description:
+Reason: test is affected.
+Author: cos
+Ref: CDH-2485
+---
+ build.xml                      |   10 +---------
+ cloudera/do-release-build      |    8 --------
+ src/docs/cn/forrest.properties |    9 ++++++---
+ src/docs/forrest.properties    |    9 ++++++---
+ src/test/bin/test-patch.sh     |   34 ++++++++++++++++------------------
+ 5 files changed, 29 insertions(+), 41 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 5ae11e7..d206ef4 100644
+--- a/build.xml
++++ b/build.xml
+@@ -1113,7 +1113,6 @@
+   <target name="docs" depends="forrest.check" description="Generate forrest-based documentation. To use, specify -Dforrest.home=&lt;base of Apache Forrest installation&gt; on the command line." if="forrest.home">
+     <exec dir="${docs.src}" executable="${forrest.home}/bin/forrest"
+ 	  failonerror="true">
+-      <env key="JAVA_HOME" value="${java5.home}"/>
+     </exec>
+     <copy todir="${build.docs}">
+       <fileset dir="${docs.src}/build/site/" />
+@@ -1134,7 +1133,6 @@
+         if="forrest.home">
+     <exec dir="${src.docs.cn}" executable="${forrest.home}/bin/forrest" failonerror="true">
+       <env key="LANG" value="en_US.utf8"/>
+-      <env key="JAVA_HOME" value="${java5.home}"/>
+     </exec>
+     <copy todir="${build.docs.cn}">
+       <fileset dir="${src.docs.cn}/build/site/" />
+@@ -1148,14 +1146,10 @@
+     <antcall target="changes-to-html"/>
+   </target>
+ 
+-  <target name="forrest.check" unless="forrest.home" depends="java5.check">
++  <target name="forrest.check" unless="forrest.home">
+     <fail message="'forrest.home' is not defined. Please pass -Dforrest.home=&lt;base of Apache Forrest installation&gt; to Ant on the command-line." />
+   </target>
+ 
+-  <target name="java5.check" unless="java5.home">
+-    <fail message="'java5.home' is not defined.  Forrest requires Java 5.  Please pass -Djava5.home=&lt;base of Java 5 distribution&gt; to Ant on the command-line." />
+-  </target>
+-	
+   <target name="javadoc-dev" description="Generate javadoc for hadoop developers">
+     <mkdir dir="${build.javadoc.dev}"/>
+     <javadoc
+@@ -1832,7 +1826,6 @@
+     <arg value="${findbugs.home}"/>
+     <arg value="${forrest.home}"/>
+     <arg value="${basedir}"/>
+-    <arg value="${java5.home}"/>
+   </exec>
+ </target>
+ 
+@@ -1855,7 +1848,6 @@
+     <arg value="${basedir}"/>
+     <arg value="${trigger.url}"/>
+     <arg value="${jira.passwd}"/>
+-    <arg value="${java5.home}"/>
+   </exec>
+ </target>
+ 	
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index b9fab0c..e458887 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -37,12 +37,6 @@ if ! $JAVA64_HOME/bin/java -d64 -version ; then
+   exit 1
+ fi
+ 
+-if ! [ -e $JAVA5_HOME/bin/java ]; then
+-  echo No JAVA5_HOME set. Forrest documentation requires Java 5 to be 1>&2
+-  echo installed. 1>&2
+-  exit 1
+-fi
+-
+ if ! [ -e $FORREST_HOME/bin/forrest ]; then
+   echo No FORREST_HOME set. Forrest documentation requires Forrest to be 1>&2
+   echo installed. 1>&2
+@@ -78,7 +72,6 @@ JAVA_HOME=$JAVA32_HOME \
+   -Dlibhdfs=true \
+   -Dcompile.native=true \
+   -Dcompile.c++=true \
+-  -Djava5.home=$JAVA5_HOME \
+   -Dforrest.home=$FORREST_HOME \
+   -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+   -propertyfile cloudera/build.properties \
+@@ -101,7 +94,6 @@ JAVA_HOME=$JAVA64_HOME \
+   -Dlibhdfs=true \
+   -Dcompile.native=true \
+   -Dcompile.c++=true \
+-  -Djava5.home=$JAVA5_HOME \
+   -Dforrest.home=$FORREST_HOME \
+   -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+   -propertyfile cloudera/build.properties \
+diff --git a/src/docs/cn/forrest.properties b/src/docs/cn/forrest.properties
+index 5754874..91c8f6a 100644
+--- a/src/docs/cn/forrest.properties
++++ b/src/docs/cn/forrest.properties
+@@ -68,10 +68,13 @@
+ #forrest.validate=true
+ #forrest.validate.xdocs=${forrest.validate}
+ #forrest.validate.skinconf=${forrest.validate}
+-#forrest.validate.sitemap=${forrest.validate}
+-#forrest.validate.stylesheets=${forrest.validate}
++# Workaround (HADOOP-7072) for http://issues.apache.org/jira/browse/FOR-984
++# Remove when forrest-0.9 is available
++forrest.validate.sitemap=false
++forrest.validate.stylesheets=false
++forrest.validate.skins.stylesheets=false
++# End of forrest-0.8 + JDK6 workaround
+ #forrest.validate.skins=${forrest.validate}
+-#forrest.validate.skins.stylesheets=${forrest.validate.skins}
+ 
+ # *.failonerror=(true|false) - stop when an XML file is invalid
+ #forrest.validate.failonerror=true
+diff --git a/src/docs/forrest.properties b/src/docs/forrest.properties
+index a814b3e..ba33d7c 100644
+--- a/src/docs/forrest.properties
++++ b/src/docs/forrest.properties
+@@ -68,10 +68,13 @@
+ #forrest.validate=true
+ #forrest.validate.xdocs=${forrest.validate}
+ #forrest.validate.skinconf=${forrest.validate}
+-#forrest.validate.sitemap=${forrest.validate}
+-#forrest.validate.stylesheets=${forrest.validate}
++# Workaround (HADOOP-7072) for http://issues.apache.org/jira/browse/FOR-984
++# Remove when forrest-0.9 is available
++forrest.validate.sitemap=false
++forrest.validate.stylesheets=false
++# End of forrest-0.8 + JDK6 workaround
+ #forrest.validate.skins=${forrest.validate}
+-#forrest.validate.skins.stylesheets=${forrest.validate.skins}
++forrest.validate.skins.stylesheets=false
+ 
+ # *.failonerror=(true|false) - stop when an XML file is invalid
+ #forrest.validate.failonerror=true
+diff --git a/src/test/bin/test-patch.sh b/src/test/bin/test-patch.sh
+index 7f36408..dacb930 100755
+--- a/src/test/bin/test-patch.sh
++++ b/src/test/bin/test-patch.sh
+@@ -12,8 +12,8 @@ parseArgs() {
+     HUDSON)
+       ### Set HUDSON to true to indicate that this script is being run by Hudson
+       HUDSON=true
+-      if [[ $# != 17 ]] ; then
+-        echo "ERROR: usage $0 HUDSON <PATCH_DIR> <SUPPORT_DIR> <PS_CMD> <WGET_CMD> <JIRACLI> <SVN_CMD> <GREP_CMD> <PATCH_CMD> <FINDBUGS_HOME> <FORREST_HOME> <ECLIPSE_HOME> <PYTHON_HOME> <WORKSPACE_BASEDIR> <TRIGGER_BUILD> <JIRA_PASSWD> <JAVA5_HOME> "
++      if [[ $# != 16 ]] ; then
++        echo "ERROR: usage $0 HUDSON <PATCH_DIR> <SUPPORT_DIR> <PS_CMD> <WGET_CMD> <JIRACLI> <SVN_CMD> <GREP_CMD> <PATCH_CMD> <FINDBUGS_HOME> <FORREST_HOME> <ECLIPSE_HOME> <PYTHON_HOME> <WORKSPACE_BASEDIR> <TRIGGER_BUILD> <JIRA_PASSWD> "
+         cleanupAndExit 0
+       fi
+       PATCH_DIR=$2
+@@ -31,7 +31,6 @@ parseArgs() {
+       BASEDIR=${14}
+       TRIGGER_BUILD_URL=${15}
+       JIRA_PASSWD=${16}
+-      JAVA5_HOME=${17}
+       ### Retrieve the defect number
+       if [ ! -e $PATCH_DIR/defectNum ] ; then
+         echo "Could not determine the patch to test.  Exiting."
+@@ -48,8 +47,8 @@ parseArgs() {
+     DEVELOPER)
+       ### Set HUDSON to false to indicate that this script is being run by a developer
+       HUDSON=false
+-      if [[ $# != 10 ]] ; then
+-        echo "ERROR: usage $0 DEVELOPER <PATCH_FILE> <SCRATCH_DIR> <SVN_CMD> <GREP_CMD> <PATCH_CMD> <FINDBUGS_HOME> <FORREST_HOME> <WORKSPACE_BASEDIR> <JAVA5_HOME>"
++      if [[ $# != 9 ]] ; then
++        echo "ERROR: usage $0 DEVELOPER <PATCH_FILE> <SCRATCH_DIR> <SVN_CMD> <GREP_CMD> <PATCH_CMD> <FINDBUGS_HOME> <FORREST_HOME> <WORKSPACE_BASEDIR>"
+         cleanupAndExit 0
+       fi
+       ### PATCH_FILE contains the location of the patchfile
+@@ -75,7 +74,6 @@ parseArgs() {
+       FINDBUGS_HOME=$7
+       FORREST_HOME=$8
+       BASEDIR=$9
+-      JAVA5_HOME=${10}
+       ### Obtain the patch filename to append it to the version number
+       defect=`basename $PATCH_FILE` 
+       ;;
+@@ -164,14 +162,14 @@ setup () {
+     ### echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -DHadoopPatchProcess= releaseaudit > $PATCH_DIR/trunkReleaseAuditWarnings.txt 2>&1"
+     ### $ANT_HOME/bin/ant -Dversion="${VERSION}" -DHadoopPatchProcess= releaseaudit > $PATCH_DIR/trunkReleaseAuditWarnings.txt 2>&1
+   ### fi
+-  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -Djavac.args="-Xlint -Xmaxwarns 1000" $ECLIPSE_PROPERTY -Djava5.home=${JAVA5_HOME} -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= clean tar > $PATCH_DIR/trunkJavacWarnings.txt 2>&1"
+-  $ANT_HOME/bin/ant -Dversion="${VERSION}" -Djavac.args="-Xlint -Xmaxwarns 1000" $ECLIPSE_PROPERTY -Djava5.home=${JAVA5_HOME} -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= clean tar > $PATCH_DIR/trunkJavacWarnings.txt 2>&1
++  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -Djavac.args="-Xlint -Xmaxwarns 1000" $ECLIPSE_PROPERTY -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= clean tar > $PATCH_DIR/trunkJavacWarnings.txt 2>&1"
++  $ANT_HOME/bin/ant -Dversion="${VERSION}" -Djavac.args="-Xlint -Xmaxwarns 1000" $ECLIPSE_PROPERTY -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= clean tar > $PATCH_DIR/trunkJavacWarnings.txt 2>&1
+   if [[ $? != 0 ]] ; then
+     echo "Trunk compilation is broken?"
+     cleanupAndExit 1
+   fi
+-  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -Dfindbugs.home=$FINDBUGS_HOME -Djava5.home=${JAVA5_HOME} -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= findbugs > /dev/null 2>&1"
+-  $ANT_HOME/bin/ant -Dversion="${VERSION}" -Dfindbugs.home=$FINDBUGS_HOME -Djava5.home=${JAVA5_HOME} -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= findbugs > /dev/null 2>&1
++  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -Dfindbugs.home=$FINDBUGS_HOME -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= findbugs > /dev/null 2>&1"
++  $ANT_HOME/bin/ant -Dversion="${VERSION}" -Dfindbugs.home=$FINDBUGS_HOME -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= findbugs > /dev/null 2>&1
+   if [[ $? != 0 ]] ; then
+     echo "Trunk findbugs is broken?"
+     cleanupAndExit 1
+@@ -307,8 +305,8 @@ checkJavacWarnings () {
+   echo "======================================================================"
+   echo ""
+   echo ""
+-  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -Djavac.args="-Xlint -Xmaxwarns 1000" $ECLIPSE_PROPERTY -Djava5.home=${JAVA5_HOME} -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= tar > $PATCH_DIR/patchJavacWarnings.txt 2>&1"
+-  $ANT_HOME/bin/ant -Dversion="${VERSION}" -Djavac.args="-Xlint -Xmaxwarns 1000" $ECLIPSE_PROPERTY -Djava5.home=${JAVA5_HOME} -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= tar > $PATCH_DIR/patchJavacWarnings.txt 2>&1
++  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -Djavac.args="-Xlint -Xmaxwarns 1000" $ECLIPSE_PROPERTY -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= tar > $PATCH_DIR/patchJavacWarnings.txt 2>&1"
++  $ANT_HOME/bin/ant -Dversion="${VERSION}" -Djavac.args="-Xlint -Xmaxwarns 1000" $ECLIPSE_PROPERTY -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= tar > $PATCH_DIR/patchJavacWarnings.txt 2>&1
+ 
+   ### Compare trunk and patch javac warning numbers
+   if [[ -f $PATCH_DIR/patchJavacWarnings.txt ]] ; then
+@@ -342,8 +340,8 @@ checkReleaseAuditWarnings () {
+   echo "======================================================================"
+   echo ""
+   echo ""
+-  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -Djava5.home=${JAVA5_HOME} -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= releaseaudit > $PATCH_DIR/patchReleaseAuditWarnings.txt 2>&1"
+-  $ANT_HOME/bin/ant -Dversion="${VERSION}" -Djava5.home=${JAVA5_HOME} -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= releaseaudit > $PATCH_DIR/patchReleaseAuditWarnings.txt 2>&1
++  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= releaseaudit > $PATCH_DIR/patchReleaseAuditWarnings.txt 2>&1"
++  $ANT_HOME/bin/ant -Dversion="${VERSION}" -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= releaseaudit > $PATCH_DIR/patchReleaseAuditWarnings.txt 2>&1
+ 
+   ### Compare trunk and patch release audit warning numbers
+   if [[ -f $PATCH_DIR/patchReleaseAuditWarnings.txt ]] ; then
+@@ -420,8 +418,8 @@ checkFindbugsWarnings () {
+   echo "======================================================================"
+   echo ""
+   echo ""
+-  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -Dfindbugs.home=$FINDBUGS_HOME -Djava5.home=${JAVA5_HOME} -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= findbugs"
+-  $ANT_HOME/bin/ant -Dversion="${VERSION}" -Dfindbugs.home=$FINDBUGS_HOME -Djava5.home=${JAVA5_HOME} -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= findbugs
++  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -Dfindbugs.home=$FINDBUGS_HOME -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= findbugs"
++  $ANT_HOME/bin/ant -Dversion="${VERSION}" -Dfindbugs.home=$FINDBUGS_HOME} -Dforrest.home=${FORREST_HOME} -DHadoopPatchProcess= findbugs
+   if [ $? != 0 ] ; then
+     JIRA_COMMENT="$JIRA_COMMENT
+ 
+@@ -475,8 +473,8 @@ runCoreTests () {
+   ### Kill any rogue build processes from the last attempt
+   $PS -auxwww | $GREP HadoopPatchProcess | /usr/bin/nawk '{print $2}' | /usr/bin/xargs -t -I {} /usr/bin/kill -9 {} > /dev/null
+ 
+-  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -DHadoopPatchProcess= -Dtest.junit.output.format=xml -Dtest.output=yes -Dcompile.c++=yes -Dforrest.home=$FORREST_HOME -Djava5.home=$JAVA5_HOME create-c++-configure docs tar test-core"
+-  $ANT_HOME/bin/ant -Dversion="${VERSION}" -DHadoopPatchProcess= -Dtest.junit.output.format=xml -Dtest.output=yes -Dcompile.c++=yes -Dforrest.home=$FORREST_HOME -Djava5.home=$JAVA5_HOME create-c++-configure docs tar test-core
++  echo "$ANT_HOME/bin/ant -Dversion="${VERSION}" -DHadoopPatchProcess= -Dtest.junit.output.format=xml -Dtest.output=yes -Dcompile.c++=yes -Dforrest.home=$FORREST_HOME create-c++-configure docs tar test-core"
++  $ANT_HOME/bin/ant -Dversion="${VERSION}" -DHadoopPatchProcess= -Dtest.junit.output.format=xml -Dtest.output=yes -Dcompile.c++=yes -Dforrest.home=$FORREST_HOME create-c++-configure docs tar test-core
+   if [[ $? != 0 ]] ; then
+     JIRA_COMMENT="$JIRA_COMMENT
+ 
+-- 
+1.7.0.4
+

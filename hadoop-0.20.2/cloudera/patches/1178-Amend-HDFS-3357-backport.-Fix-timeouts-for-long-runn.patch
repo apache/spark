@@ -1,0 +1,49 @@
+From 7a4b0841defc7dbe6feb41816669a43661c869cc Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 4 May 2012 14:08:13 -0700
+Subject: [PATCH 1178/1179] Amend HDFS-3357 backport. Fix timeouts for long running writers
+
+The previous backport set the read timeout for data xceviers to 60s (default).
+This broke writers which sat without sending data for longer than this period
+(e.g the HBase HLog). This does not appear to affect the trunk version of the
+patch because trunk clients send periodic heartbeat packets through the
+write pipeline.
+
+Reason: fix HBase crashing after previous HDFS-3357 backport
+Author: Todd Lipcon
+Ref: CDH-5662
+---
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index 4af6a1e..af9660c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -154,10 +154,9 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+           break;
+         }
+         
+-        // restore normal timeout
+-        if (opsProcessed != 0) {
+-          sin.setTimeout(datanode.socketTimeout);
+-        }
++        // restore normal timeout. To lessen risk of HDFS-3357 backport in CDH3,
++        // set to having no timeout, which was the prior behavior.
++        sin.setTimeout(0);
+         // Indentation is left alone here so that patches merge easier from 0.20.20x
+         
+       // Make sure the xciver count is not exceeded
+@@ -170,6 +169,9 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+       long startTime = DataNode.now();
+       switch ( op ) {
+       case DataTransferProtocol.OP_READ_BLOCK:
++        // set non-zero timeout, so that we don't wait forever for
++        // a writer to send a status code after reading a block
++        sin.setTimeout(datanode.socketTimeout);
+         readBlock( in );
+         datanode.myMetrics.readBlockOp.inc(DataNode.now() - startTime);
+         if (local)
+-- 
+1.7.0.4
+

@@ -1,0 +1,3 @@
+info threads
+backtrace
+quit

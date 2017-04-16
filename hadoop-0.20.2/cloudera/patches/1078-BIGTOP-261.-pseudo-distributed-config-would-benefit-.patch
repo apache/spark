@@ -1,0 +1,36 @@
+From ea81df1ff5de3b12df08e22eeffca29295914eae Mon Sep 17 00:00:00 2001
+From: Roman Shaposhnik <rvs@cloudera.com>
+Date: Wed, 16 Nov 2011 17:22:21 -0800
+Subject: [PATCH 1078/1179] BIGTOP-261. pseudo distributed config would benefit from dfs.safemode.extension set to 0 and dfs.safemode.min.datanodes set to 1
+
+Reason: Improvement
+Author: Roman Shaposhnik
+Ref: DISTRO-330
+---
+ example-confs/conf.pseudo/hdfs-site.xml |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/example-confs/conf.pseudo/hdfs-site.xml b/example-confs/conf.pseudo/hdfs-site.xml
+index 6947f91..991ed52 100644
+--- a/example-confs/conf.pseudo/hdfs-site.xml
++++ b/example-confs/conf.pseudo/hdfs-site.xml
+@@ -10,6 +10,16 @@
+      <name>dfs.permissions</name>
+      <value>false</value>
+   </property>
++  <!-- Immediately exit safemode as soon as one DataNode checks in. 
++       On a multi-node cluster, these configurations must be removed.  -->
++  <property>
++    <name>dfs.safemode.extension</name>
++    <value>0</value>
++  </property>
++  <property>
++     <name>dfs.safemode.min.datanodes</name>
++     <value>1</value>
++  </property>
+   <property>
+      <!-- specify this so that running 'hadoop namenode -format' formats the right dir -->
+      <name>dfs.name.dir</name>
+-- 
+1.7.0.4
+

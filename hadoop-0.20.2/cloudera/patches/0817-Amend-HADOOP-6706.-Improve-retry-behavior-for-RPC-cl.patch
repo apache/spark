@@ -1,0 +1,82 @@
+From 674795fc9a60d06dbea41bd9d5a133439822a62b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 10 Feb 2011 14:13:46 -0800
+Subject: [PATCH 0817/1179] Amend HADOOP-6706. Improve retry behavior for RPC clients
+
+Author: Kan Zhang
+Ref: CDH-2622
+---
+ src/core/org/apache/hadoop/ipc/Client.java |   31 +++++++++++++++++++++++----
+ 1 files changed, 26 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index 7244b6f..6e217ac 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -455,8 +455,30 @@ public class Client {
+     throws IOException, InterruptedException{
+       ugi.doAs(new PrivilegedExceptionAction<Object>() {
+         public Object run() throws IOException, InterruptedException {
+-          final short MAX_BACKOFF = 5000;
++          final short maxBackoff = 5000;
+           closeConnection();
++          disposeSasl();
++          //TODO: currRetries is overloaded here.For both kerberos and timeout 
++          //failures, currRetries is used to maintain the number of failures 
++          //seen so far. Should fix this to distinguish between the two.
++          //TODO: Refactor the method to remove duplicated code (e.g.,the logic
++          //inside "currRetries < maxRetries" could be factored out to apply
++          //to both SocketTimeoutException and Kerberos exception...
++          if (ex instanceof SocketTimeoutException) {
++            if (currRetries < maxRetries) {
++              LOG.warn("Encountered " + ex + " while trying to establish" +
++              		" SASL connection to the server. Will retry SASL connection"+
++              		" to server with principal " +
++                  serverPrincipal);
++              //we are sleeping with the Connection lock held but since this
++              //connection instance is being used for connecting to the server
++              //in question, it is okay
++              Thread.sleep((rand.nextInt(maxBackoff) + 1));
++              return null;
++            } else {
++              throw new IOException(ex);
++            }
++          }
+           if (shouldAuthenticateOverKrb()) {
+             if (currRetries < maxRetries) {
+               LOG.debug("Exception encountered while connecting to " +
+@@ -467,12 +489,11 @@ public class Client {
+               } else {
+                 UserGroupInformation.getLoginUser().reloginFromTicketCache();
+               }
+-              disposeSasl();
+               //have granularity of milliseconds
+               //we are sleeping with the Connection lock held but since this
+               //connection instance is being used for connecting to the server
+               //in question, it is okay
+-              Thread.sleep((rand.nextInt(MAX_BACKOFF) + 1));
++              Thread.sleep((rand.nextInt(maxBackoff) + 1));
+               return null;
+             } else {
+               String msg = "Couldn't setup connection for " + 
+@@ -505,7 +526,7 @@ public class Client {
+           LOG.debug("Connecting to "+server);
+         }
+         short numRetries = 0;
+-        final short MAX_RETRIES = 5;
++        final short maxRetries = 15;
+         Random rand = null;
+         while (true) {
+           setupConnection();
+@@ -534,7 +555,7 @@ public class Client {
+               if (rand == null) {
+                 rand = new Random();
+               }
+-              handleSaslConnectionFailure(numRetries++, MAX_RETRIES, ex, rand, 
++              handleSaslConnectionFailure(numRetries++, maxRetries, ex, rand,
+                    ticket);
+               continue;
+             }
+-- 
+1.7.0.4
+

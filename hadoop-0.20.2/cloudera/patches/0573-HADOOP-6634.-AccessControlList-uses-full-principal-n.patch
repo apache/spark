@@ -1,0 +1,130 @@
+From adbf650d942aff9d372289110672916fcb4574a7 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 19 Mar 2010 10:03:46 +0530
+Subject: [PATCH 0573/1179] HADOOP-6634. AccessControlList uses full-principal names to verify acls causing queue-acls to fail
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439238/HADOOP-6634-20100317-ydist.1.txt
+Author: Vinod K V
+Ref: CDH-648
+---
+ .../security/authorize/AccessControlList.java      |    2 +-
+ .../security/authorize/TestAccessControlList.java  |   78 ++++++++++++++++---
+ 2 files changed, 66 insertions(+), 14 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/authorize/AccessControlList.java b/src/core/org/apache/hadoop/security/authorize/AccessControlList.java
+index 5bed038..c63f42f 100644
+--- a/src/core/org/apache/hadoop/security/authorize/AccessControlList.java
++++ b/src/core/org/apache/hadoop/security/authorize/AccessControlList.java
+@@ -93,7 +93,7 @@ public class AccessControlList {
+   }
+ 
+   public boolean isUserAllowed(UserGroupInformation ugi) {
+-    if (allAllowed || users.contains(ugi.getUserName())) {
++    if (allAllowed || users.contains(ugi.getShortUserName())) {
+       return true;
+     } else {
+       for(String group: ugi.getGroupNames()) {
+diff --git a/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java b/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java
+index f1c018d..581e434 100644
+--- a/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java
++++ b/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.security.authorize;
+ import java.util.Iterator;
+ import java.util.Set;
+ 
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AccessControlList;
+ 
+ 
+@@ -77,19 +78,7 @@ public class TestAccessControlList extends TestCase {
+     assertEquals(groups.size(), 1);
+     assertEquals(groups.iterator().next(), "tardis");
+ 
+-    Iterator<String> iter;
+-    acl = new AccessControlList("drwho,joe tardis,users");
+-    users = acl.getUsers();
+-    assertEquals(users.size(), 2);
+-    iter = users.iterator();
+-    assertEquals(iter.next(), "drwho");
+-    assertEquals(iter.next(), "joe");
+-    groups = acl.getGroups();
+-    assertEquals(groups.size(), 2);
+-    iter = groups.iterator();
+-    assertEquals(iter.next(), "tardis");
+-    assertEquals(iter.next(), "users");
+-    
++    Iterator<String> iter;    
+     acl = new AccessControlList("drwho,joe tardis, users");
+     users = acl.getUsers();
+     assertEquals(users.size(), 2);
+@@ -102,4 +91,67 @@ public class TestAccessControlList extends TestCase {
+     assertEquals(iter.next(), "tardis");
+     assertEquals(iter.next(), "users");
+   }
++
++  /**
++   * Verify the method isUserAllowed()
++   */
++  public void testIsUserAllowed() {
++    AccessControlList acl;
++
++    UserGroupInformation drwho =
++        UserGroupInformation.createUserForTesting("drwho@APACHE.ORG",
++            new String[] { "aliens", "humanoids", "timelord" });
++    UserGroupInformation susan =
++        UserGroupInformation.createUserForTesting("susan@APACHE.ORG",
++            new String[] { "aliens", "humanoids", "timelord" });
++    UserGroupInformation barbara =
++        UserGroupInformation.createUserForTesting("barbara@APACHE.ORG",
++            new String[] { "humans", "teachers" });
++    UserGroupInformation ian =
++        UserGroupInformation.createUserForTesting("ian@APACHE.ORG",
++            new String[] { "humans", "teachers" });
++
++    acl = new AccessControlList("drwho humanoids");
++    assertUserAllowed(drwho, acl);
++    assertUserAllowed(susan, acl);
++    assertUserNotAllowed(barbara, acl);
++    assertUserNotAllowed(ian, acl);
++
++    acl = new AccessControlList("drwho");
++    assertUserAllowed(drwho, acl);
++    assertUserNotAllowed(susan, acl);
++    assertUserNotAllowed(barbara, acl);
++    assertUserNotAllowed(ian, acl);
++
++    acl = new AccessControlList("drwho ");
++    assertUserAllowed(drwho, acl);
++    assertUserNotAllowed(susan, acl);
++    assertUserNotAllowed(barbara, acl);
++    assertUserNotAllowed(ian, acl);
++
++    acl = new AccessControlList(" humanoids");
++    assertUserAllowed(drwho, acl);
++    assertUserAllowed(susan, acl);
++    assertUserNotAllowed(barbara, acl);
++    assertUserNotAllowed(ian, acl);
++
++    acl = new AccessControlList("drwho,ian aliens,teachers");
++    assertUserAllowed(drwho, acl);
++    assertUserAllowed(susan, acl);
++    assertUserAllowed(barbara, acl);
++    assertUserAllowed(ian, acl);
++  }
++
++  private void assertUserAllowed(UserGroupInformation ugi,
++      AccessControlList acl) {
++    assertTrue("User " + ugi + " is not granted the access-control!!",
++        acl.isUserAllowed(ugi));
++  }
++
++  private void assertUserNotAllowed(UserGroupInformation ugi,
++      AccessControlList acl) {
++    assertFalse("User " + ugi
++        + " is incorrectly granted the access-control!!",
++        acl.isUserAllowed(ugi));
++  }
+ }
+-- 
+1.7.0.4
+

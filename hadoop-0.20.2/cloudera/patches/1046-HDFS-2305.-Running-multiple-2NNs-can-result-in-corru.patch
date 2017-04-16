@@ -1,0 +1,446 @@
+From ea52f4e327fea44c37ff6f1c99619b254bf1f25e Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Tue, 13 Sep 2011 13:48:57 -0700
+Subject: [PATCH 1046/1179] HDFS-2305. Running multiple 2NNs can result in corrupt file system
+
+Reason: Bug
+Author: Aaron T. Myers
+Ref: CDH-2761
+---
+ src/core/org/apache/hadoop/io/MD5Hash.java         |   11 +++-
+ .../hdfs/server/namenode/GetImageServlet.java      |   40 +++++++---
+ .../hdfs/server/namenode/SecondaryNameNode.java    |   56 +++++++++++----
+ .../hdfs/server/namenode/TransferFsImage.java      |   29 +++++++-
+ .../hdfs/server/namenode/TestCheckpoint.java       |   77 +++++++++++++++++++-
+ 5 files changed, 181 insertions(+), 32 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/MD5Hash.java b/src/core/org/apache/hadoop/io/MD5Hash.java
+index a28c3ae..6e63332 100644
+--- a/src/core/org/apache/hadoop/io/MD5Hash.java
++++ b/src/core/org/apache/hadoop/io/MD5Hash.java
+@@ -88,12 +88,19 @@ public class MD5Hash implements WritableComparable<MD5Hash> {
+   public static MD5Hash digest(byte[] data) {
+     return digest(data, 0, data.length);
+   }
++  
++  /**
++   * Create a thread local MD5 digester
++   */
++  public static MessageDigest getDigester() {
++    return DIGESTER_FACTORY.get();
++  }
+ 
+   /** Construct a hash value for the content from the InputStream. */
+   public static MD5Hash digest(InputStream in) throws IOException {
+     final byte[] buffer = new byte[4*1024]; 
+ 
+-    final MessageDigest digester = DIGESTER_FACTORY.get();
++    final MessageDigest digester = getDigester();
+     for(int n; (n = in.read(buffer)) != -1; ) {
+       digester.update(buffer, 0, n);
+     }
+@@ -104,7 +111,7 @@ public class MD5Hash implements WritableComparable<MD5Hash> {
+   /** Construct a hash value for a byte array. */
+   public static MD5Hash digest(byte[] data, int start, int len) {
+     byte[] digest;
+-    MessageDigest digester = DIGESTER_FACTORY.get();
++    MessageDigest digester = getDigester();
+     digester.update(data, start, len);
+     digest = digester.digest();
+     return new MD5Hash(digest);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+index 8adf2ab..4a20ddb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+@@ -37,6 +37,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DFSConfigKeys;
++import org.apache.hadoop.io.MD5Hash;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.StringUtils;
+ 
+@@ -48,6 +49,13 @@ import org.apache.hadoop.util.StringUtils;
+ public class GetImageServlet extends HttpServlet {
+   private static final long serialVersionUID = -7669068179452648952L;
+   private static final Log LOG = LogFactory.getLog(GetImageServlet.class);
++
++  /**
++   * A lock object to prevent multiple 2NNs from simultaneously uploading
++   * fsimage snapshots.
++   */
++  private Object fsImageTransferLock = new Object();
++  
+   @SuppressWarnings("unchecked")
+   public void doGet(final HttpServletRequest request,
+                     final HttpServletResponse response
+@@ -84,18 +92,26 @@ public class GetImageServlet extends HttpServlet {
+             TransferFsImage.getFileServer(response.getOutputStream(),
+                                           nnImage.getFsEditName());
+           } else if (ff.putImage()) {
+-            // issue a HTTP get request to download the new fsimage 
+-            nnImage.validateCheckpointUpload(ff.getToken());
+-            reloginIfNecessary().doAs(new PrivilegedExceptionAction<Void>() {
+-              @Override
+-              public Void run() throws Exception {
+-                TransferFsImage.getFileClient(ff.getInfoServer(), "getimage=1", 
+-                    nnImage.getFsImageNameCheckpoint());
+-                return null;
+-              }
+-            });
+-
+-            nnImage.checkpointUploadDone();
++            synchronized (fsImageTransferLock) {
++              final MD5Hash expectedChecksum = ff.getNewChecksum();
++              // issue a HTTP get request to download the new fsimage 
++              nnImage.validateCheckpointUpload(ff.getToken());
++              reloginIfNecessary().doAs(new PrivilegedExceptionAction<Void>() {
++                @Override
++                public Void run() throws Exception {
++                  MD5Hash actualChecksum = TransferFsImage.getFileClient(ff.getInfoServer(),
++                      "getimage=1", nnImage.getFsImageNameCheckpoint(), true);
++                  LOG.info("Downloaded new fsimage with checksum: " + actualChecksum);
++                  if (!actualChecksum.equals(expectedChecksum)) {
++                    throw new IOException("Actual checksum of transferred fsimage: "
++                        + actualChecksum + " does not match expected checksum: "
++                        + expectedChecksum);
++                  }
++                  return null;
++                }
++              });
++              nnImage.checkpointUploadDone();
++            }
+           }
+           return null;
+         }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index 1c5ddd0..1eca544 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -18,10 +18,13 @@
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
+ import java.io.File;
++import java.io.FileInputStream;
+ import java.io.IOException;
+ import java.net.InetAddress;
+ import java.net.InetSocketAddress;
+ import java.net.URI;
++import java.security.DigestInputStream;
++import java.security.MessageDigest;
+ import java.security.PrivilegedAction;
+ import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+@@ -34,12 +37,13 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.hdfs.DFSConfigKeys;
+-import org.apache.hadoop.hdfs.DFSUtil;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.hdfs.server.common.InconsistentFSStateException;
++import static org.apache.hadoop.hdfs.protocol.FSConstants.BUFFER_SIZE;
+ import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
+ import org.apache.hadoop.http.HttpServer;
++import org.apache.hadoop.io.MD5Hash;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.metrics.jvm.JvmMetrics;
+@@ -361,7 +365,7 @@ public class SecondaryNameNode implements Runnable {
+           String fileid = "getimage=1";
+           File[] srcNames = checkpointImage.getImageFiles();
+           assert srcNames.length > 0 : "No checkpoint targets.";
+-          TransferFsImage.getFileClient(fsName, fileid, srcNames);
++          TransferFsImage.getFileClient(fsName, fileid, srcNames, false);
+           LOG.info("Downloaded file " + srcNames[0].getName() + " size " +
+                    srcNames[0].length() + " bytes.");
+ 
+@@ -369,7 +373,7 @@ public class SecondaryNameNode implements Runnable {
+           fileid = "getedit=1";
+           srcNames = checkpointImage.getEditsFiles();
+           assert srcNames.length > 0 : "No checkpoint targets.";
+-          TransferFsImage.getFileClient(fsName, fileid, srcNames);
++          TransferFsImage.getFileClient(fsName, fileid, srcNames, false);
+           LOG.info("Downloaded file " + srcNames[0].getName() + " size " +
+               srcNames[0].length() + " bytes.");
+ 
+@@ -394,9 +398,35 @@ public class SecondaryNameNode implements Runnable {
+ 
+     String fileid = "putimage=1&port=" + imagePort +
+       "&machine=" + externalAddress +
+-      "&token=" + sig.toString();
++      "&token=" + sig.toString() +
++      "&newChecksum=" + getNewChecksum();
+     LOG.info("Posted URL " + fsName + fileid);
+-    TransferFsImage.getFileClient(fsName, fileid, (File[])null);
++    TransferFsImage.getFileClient(fsName, fileid, (File[])null, false);
++  }
++
++  /**
++   * Calculate the MD5 hash of the newly-merged fsimage.
++   * @return the checksum of the newly-merged fsimage.
++   */
++  MD5Hash getNewChecksum() throws IOException {
++    DigestInputStream imageIn = null;
++    try {
++      MessageDigest digester = MD5Hash.getDigester();
++      imageIn = new DigestInputStream(
++          new FileInputStream(checkpointImage.getFsImageName()), digester);
++      byte[] in = new byte[BUFFER_SIZE];
++      int totalRead = 0;
++      int read = 0;
++      while ((read = imageIn.read(in)) > 0) {
++        totalRead += read;
++        LOG.debug("Computing fsimage checksum. Read " + totalRead + " bytes so far.");
++      }
++      return new MD5Hash(digester.digest());
++    } finally {
++      if (imageIn != null) {
++        imageIn.close();
++      }
++    }
+   }
+ 
+   /**
+@@ -426,7 +456,7 @@ public class SecondaryNameNode implements Runnable {
+     startCheckpoint();
+ 
+     // Tell the namenode to start logging transactions in a new edit file
+-    // Returns a token that would be used to upload the merged image.
++    // Returns a token that should be used to upload the merged image.
+     CheckpointSignature sig = (CheckpointSignature)namenode.rollEditLog();
+ 
+     // error simulation code for junit test
+@@ -435,13 +465,11 @@ public class SecondaryNameNode implements Runnable {
+                             "after creating edits.new");
+     }
+ 
+-    downloadCheckpointFiles(sig);   // Fetch fsimage and edits
+-    doMerge(sig);                   // Do the merge
+-  
+-    //
+-    // Upload the new image into the NameNode. Then tell the Namenode
+-    // to make this new uploaded image as the most current image.
+-    //
++    downloadCheckpointFiles(sig); // Fetch fsimage and edits
++    doMerge(sig);                 // Do the merge
++    
++    // Upload the new image into the NameNode, providing the new checksum for
++    // the image file.
+     putFSImage(sig);
+ 
+     // error simulation code for junit test
+@@ -450,6 +478,8 @@ public class SecondaryNameNode implements Runnable {
+                             "after uploading new image to NameNode");
+     }
+ 
++    // Then tell the Namenode to make this new uploaded image as the most
++    // current image.
+     namenode.rollFsImage();
+     checkpointImage.endCheckpoint();
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+index b1fc067..d22c54e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+@@ -19,6 +19,8 @@ package org.apache.hadoop.hdfs.server.namenode;
+ 
+ import java.io.*;
+ import java.net.*;
++import java.security.DigestInputStream;
++import java.security.MessageDigest;
+ import java.util.Iterator;
+ import java.util.Map;
+ import java.lang.Math;
+@@ -30,6 +32,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode.ErrorSimulator;
++import org.apache.hadoop.io.MD5Hash;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+@@ -46,6 +49,7 @@ class TransferFsImage implements FSConstants {
+   private int remoteport;
+   private String machineName;
+   private CheckpointSignature token;
++  private MD5Hash newChecksum = null;
+   
+   /**
+    * File downloader.
+@@ -63,6 +67,7 @@ class TransferFsImage implements FSConstants {
+     remoteport = 0;
+     machineName = null;
+     token = null;
++    newChecksum = null;
+ 
+     for (Iterator<String> it = pmap.keySet().iterator(); it.hasNext();) {
+       String key = it.next();
+@@ -78,6 +83,8 @@ class TransferFsImage implements FSConstants {
+         machineName = pmap.get("machine")[0];
+       } else if (key.equals("token")) { 
+         token = new CheckpointSignature(pmap.get("token")[0]);
++      } else if (key.equals("newChecksum")) { 
++        newChecksum = new MD5Hash(pmap.get("newChecksum")[0]);
+       }
+     }
+ 
+@@ -102,7 +109,15 @@ class TransferFsImage implements FSConstants {
+   CheckpointSignature getToken() {
+     return token;
+   }
+-
++  
++  /**
++   * Get the MD5 digest of the new image
++   * @return the MD5 digest of the new image
++   */
++  MD5Hash getNewChecksum() {
++    return newChecksum;
++  }
++  
+   String getInfoServer() throws IOException{
+     if (machineName == null || remoteport == 0) {
+       throw new IOException ("MachineName and port undefined");
+@@ -154,9 +169,11 @@ class TransferFsImage implements FSConstants {
+   /**
+    * Client-side Method to fetch file from a server
+    * Copies the response from the URL to a list of local files.
++   * 
++   * @Return a digest of the received file if getChecksum is true
+    */
+-  static void getFileClient(String fsName, String id, File[] localPath)
+-    throws IOException {
++  static MD5Hash getFileClient(String fsName, String id, File[] localPath,
++      boolean getChecksum) throws IOException {
+     byte[] buf = new byte[BUFFER_SIZE];
+     String proto = UserGroupInformation.isSecurityEnabled() ? "https://" : "http://";
+     
+@@ -181,6 +198,11 @@ class TransferFsImage implements FSConstants {
+     }
+     long received = 0;
+     InputStream stream = connection.getInputStream();
++    MessageDigest digester = null;
++    if (getChecksum) {
++      digester = MD5Hash.getDigester();
++      stream = new DigestInputStream(stream, digester);
++    }
+     FileOutputStream[] output = null;
+ 
+     try {
+@@ -216,5 +238,6 @@ class TransferFsImage implements FSConstants {
+                               advertisedSize);
+       }
+     }
++    return digester == null ? null : new MD5Hash(digester.digest());
+   }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
+index e32653b..1742ffc 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
+@@ -37,6 +37,7 @@ import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
+ import org.apache.hadoop.hdfs.server.common.Storage.StorageDirectory;
+ import org.apache.hadoop.hdfs.server.namenode.FSImage.NameNodeDirType;
+ import org.apache.hadoop.hdfs.tools.DFSAdmin;
++import org.apache.hadoop.io.MD5Hash;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FileUtil;
+@@ -351,14 +352,14 @@ public class TestCheckpoint extends TestCase {
+ 
+       try {
+         secondary.doCheckpoint();  // this should fail
+-        assertTrue(false);
++        fail();
+       } catch (IOException e) {
+       }
+       ErrorSimulator.clearErrorSimulation(0);
+       secondary.shutdown(); // secondary namenode crash!
+ 
+       // start new instance of secondary and verify that 
+-      // a new rollEditLog suceedes inspite of the fact that 
++      // a new rollEditLog succeeds in spite of the fact that 
+       // edits.new already exists.
+       //
+       secondary = startSecondaryNameNode(conf);
+@@ -826,4 +827,76 @@ public class TestCheckpoint extends TestCase {
+       if(cluster!= null) cluster.shutdown();
+     }
+   }
++
++  /**
++   * Test multiple 2NNs running, where the second 2NN reports the address of the
++   * first 2NN when doing the image upload to the NN. This case will happen when
++   * multiple 2NNs are started with the default configs, which has them report
++   * their address to the NN as being "127.0.0.1".
++   */
++  public void testMultipleSecondaryNameNodes() throws IOException {
++    MiniDFSCluster cluster = null;
++    FileSystem fs = null;
++    try {
++      Configuration conf = new Configuration();
++      cluster = new MiniDFSCluster(conf, 0, true, null);
++      cluster.waitActive();
++      fs = cluster.getFileSystem();
++      
++      Path testPath1 = new Path("/tmp/foo");
++      Path testPath2 = new Path("/tmp/bar");
++
++      assertTrue(fs.mkdirs(testPath1));
++      
++      // Start up a 2NN and do a checkpoint.
++      SecondaryNameNode snn1 = startSecondaryNameNode(conf);
++      snn1.doCheckpoint();
++      
++      assertTrue(testPath1 + " should still exist after good checkpoint",
++          fs.exists(testPath1));
++      assertTrue(fs.mkdirs(testPath2));
++      assertTrue(testPath2 + " should exist", fs.exists(testPath2));
++      
++      
++      // Simulate a checkpoint by a second 2NN, but which tells the NN to grab
++      // the new merged fsimage from the original 2NN.
++      NameNode namenode = cluster.getNameNode();
++      CheckpointSignature sig = (CheckpointSignature)namenode.rollEditLog();
++      
++      String fileid = "putimage=1&port=" +
++          SecondaryNameNode.getHttpAddress(conf).getPort() +
++          "&machine=" + SecondaryNameNode.getHttpAddress(conf).getHostName() +
++          "&token=" + sig.toString() +
++          "&newChecksum=" + MD5Hash.digest("this will be a bad checksum".getBytes());
++      
++      try {
++        TransferFsImage.getFileClient(NameNode.getInfoServer(conf), fileid,
++            (File[])null, false);
++        namenode.rollFsImage();
++        fail();
++      } catch (IOException e) {
++        // This is expected.
++        System.out.println("Got expected exception " + e);
++      }
++      
++      // The in-memory NN state should still be fine. We've only messed with the
++      // HDFS metadata on the local FS.
++      assertTrue(testPath1 + " should exist after bad checkpoint, before restart",
++          fs.exists(testPath1));
++      assertTrue(testPath2 + " should exist after bad checkpoint, before restart",
++          fs.exists(testPath2));
++      
++      cluster.restartNameNode();
++      
++      // After restarting the NN, it will read the HDFS metadata from disk.
++      // Things should still be good.
++      assertTrue(testPath1 + " should exist after bad checkpoint, after restart",
++          fs.exists(testPath1));
++      assertTrue(testPath2 + " should exist after bad checkpoint, after restart",
++          fs.exists(testPath2));
++    } finally {
++      if(fs != null) fs.close();
++      if(cluster!= null) cluster.shutdown();
++    }
++  }
+ }
+-- 
+1.7.0.4
+

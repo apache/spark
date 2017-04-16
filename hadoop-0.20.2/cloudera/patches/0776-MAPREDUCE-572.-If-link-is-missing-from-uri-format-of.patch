@@ -1,0 +1,211 @@
+From 2b0e1289ccbdb9c6837e4ab11fdf73fa8980571c Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Tue, 18 Jan 2011 13:33:40 -0800
+Subject: [PATCH 0776/1179] MAPREDUCE-572. If #link is missing from uri format of -cacheArchive then streaming does not throw error.
+
+Reason: bug fix
+Author: Amareshwari Sriramadasu
+Ref: CDH-2538
+---
+ .../apache/hadoop/filecache/DistributedCache.java  |   56 +++++-----
+ .../apache/hadoop/filecache/TestURIFragments.java  |  115 ++++++++++++++++++++
+ 2 files changed, 144 insertions(+), 27 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/filecache/TestURIFragments.java
+
+diff --git a/src/mapred/org/apache/hadoop/filecache/DistributedCache.java b/src/mapred/org/apache/hadoop/filecache/DistributedCache.java
+index a774cc9..90deb79 100644
+--- a/src/mapred/org/apache/hadoop/filecache/DistributedCache.java
++++ b/src/mapred/org/apache/hadoop/filecache/DistributedCache.java
+@@ -693,39 +693,41 @@ public class DistributedCache {
+    * @param uriFiles The uri array of urifiles
+    * @param uriArchives the uri array of uri archives
+    */
+-  public static boolean checkURIs(URI[]  uriFiles, URI[] uriArchives){
++  public static boolean checkURIs(URI[]  uriFiles, URI[] uriArchives) {
+     if ((uriFiles == null) && (uriArchives == null)){
+       return true;
+     }
+-    if (uriFiles != null){
+-      for (int i = 0; i < uriFiles.length; i++){
+-        String frag1 = uriFiles[i].getFragment();
+-        if (frag1 == null)
++    // check if fragment is null for any uri
++    // also check if there are any conflicts in fragment names
++    Set<String> fragments = new HashSet<String>();
++    
++    // iterate over file uris
++    if (uriFiles != null) {
++      for (int i = 0; i < uriFiles.length; i++) {
++        String fragment = uriFiles[i].getFragment();
++        if (fragment == null) {
+           return false;
+-        for (int j=i+1; j < uriFiles.length; j++){
+-          String frag2 = uriFiles[j].getFragment();
+-          if (frag2 == null)
+-            return false;
+-          if (frag1.equalsIgnoreCase(frag2))
+-            return false;
+         }
+-        if (uriArchives != null){
+-          for (int j = 0; j < uriArchives.length; j++){
+-            String frag2 = uriArchives[j].getFragment();
+-            if (frag2 == null){
+-              return false;
+-            }
+-            if (frag1.equalsIgnoreCase(frag2))
+-              return false;
+-            for (int k=j+1; k < uriArchives.length; k++){
+-              String frag3 = uriArchives[k].getFragment();
+-              if (frag3 == null)
+-                return false;
+-              if (frag2.equalsIgnoreCase(frag3))
+-                return false;
+-            }
+-          }
++        String lowerCaseFragment = fragment.toLowerCase();
++        if (fragments.contains(lowerCaseFragment)) {
++          return false;
++        }
++        fragments.add(lowerCaseFragment);
++      }
++    }
++    
++    // iterate over archive uris
++    if (uriArchives != null) {
++      for (int i = 0; i < uriArchives.length; i++) {
++        String fragment = uriArchives[i].getFragment();
++        if (fragment == null) {
++          return false;
++        }
++        String lowerCaseFragment = fragment.toLowerCase();
++        if (fragments.contains(lowerCaseFragment)) {
++          return false;
+         }
++        fragments.add(lowerCaseFragment);
+       }
+     }
+     return true;
+diff --git a/src/test/org/apache/hadoop/filecache/TestURIFragments.java b/src/test/org/apache/hadoop/filecache/TestURIFragments.java
+new file mode 100644
+index 0000000..ec0b292
+--- /dev/null
++++ b/src/test/org/apache/hadoop/filecache/TestURIFragments.java
+@@ -0,0 +1,115 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.filecache;
++
++import java.net.URI;
++import java.net.URISyntaxException;
++
++import static org.junit.Assert.*;
++import org.junit.Test;
++
++public class TestURIFragments {
++
++  /**
++   * Tests {@link TrackerDistributedCacheManager#checkURIs(URI[], URI[]).
++   */
++  @Test
++  public void testURIs() throws URISyntaxException {
++    assertTrue(DistributedCache.checkURIs(null, null));
++
++    // uris with no fragments
++    assertFalse(DistributedCache.checkURIs(new URI[] { new URI(
++        "file://foo/bar/myCacheFile.txt") }, null));
++    assertFalse(DistributedCache.checkURIs(null,
++        new URI[] { new URI("file://foo/bar/myCacheArchive.txt") }));
++    assertFalse(DistributedCache.checkURIs(new URI[] {
++        new URI("file://foo/bar/myCacheFile1.txt#file"),
++        new URI("file://foo/bar/myCacheFile2.txt") }, null));
++    assertFalse(DistributedCache.checkURIs(null, new URI[] {
++        new URI("file://foo/bar/myCacheArchive1.txt"),
++        new URI("file://foo/bar/myCacheArchive2.txt#archive") }));
++    assertFalse(DistributedCache.checkURIs(new URI[] { new URI(
++        "file://foo/bar/myCacheFile.txt") }, new URI[] { new URI(
++        "file://foo/bar/myCacheArchive.txt") }));
++
++    // conflicts in fragment names
++    assertFalse(DistributedCache.checkURIs(new URI[] {
++        new URI("file://foo/bar/myCacheFile1.txt#file"),
++        new URI("file://foo/bar/myCacheFile2.txt#file") }, null));
++    assertFalse(DistributedCache.checkURIs(null, new URI[] {
++        new URI("file://foo/bar/myCacheArchive1.txt#archive"),
++        new URI("file://foo/bar/myCacheArchive2.txt#archive") }));
++    assertFalse(DistributedCache.checkURIs(new URI[] { new URI(
++        "file://foo/bar/myCacheFile.txt#cache") }, new URI[] { new URI(
++        "file://foo/bar/myCacheArchive.txt#cache") }));
++    assertFalse(DistributedCache.checkURIs(new URI[] {
++        new URI("file://foo/bar/myCacheFile1.txt#file1"),
++        new URI("file://foo/bar/myCacheFile2.txt#file2") }, new URI[] {
++        new URI("file://foo/bar/myCacheArchive1.txt#archive"),
++        new URI("file://foo/bar/myCacheArchive2.txt#archive") }));
++    assertFalse(DistributedCache.checkURIs(new URI[] {
++        new URI("file://foo/bar/myCacheFile1.txt#file"),
++        new URI("file://foo/bar/myCacheFile2.txt#file") }, new URI[] {
++        new URI("file://foo/bar/myCacheArchive1.txt#archive1"),
++        new URI("file://foo/bar/myCacheArchive2.txt#archive2") }));
++    assertFalse(DistributedCache.checkURIs(new URI[] {
++        new URI("file://foo/bar/myCacheFile1.txt#file1"),
++        new URI("file://foo/bar/myCacheFile2.txt#cache") }, new URI[] {
++        new URI("file://foo/bar/myCacheArchive1.txt#cache"),
++        new URI("file://foo/bar/myCacheArchive2.txt#archive2") }));
++
++    // test ignore case
++    assertFalse(DistributedCache.checkURIs(new URI[] {
++        new URI("file://foo/bar/myCacheFile1.txt#file"),
++        new URI("file://foo/bar/myCacheFile2.txt#FILE") }, null));
++    assertFalse(DistributedCache.checkURIs(null, new URI[] {
++        new URI("file://foo/bar/myCacheArchive1.txt#archive"),
++        new URI("file://foo/bar/myCacheArchive2.txt#ARCHIVE") }));
++    assertFalse(DistributedCache.checkURIs(new URI[] { new URI(
++        "file://foo/bar/myCacheFile.txt#cache") }, new URI[] { new URI(
++        "file://foo/bar/myCacheArchive.txt#CACHE") }));
++    assertFalse(DistributedCache.checkURIs(new URI[] {
++        new URI("file://foo/bar/myCacheFile1.txt#file1"),
++        new URI("file://foo/bar/myCacheFile2.txt#file2") }, new URI[] {
++        new URI("file://foo/bar/myCacheArchive1.txt#ARCHIVE"),
++        new URI("file://foo/bar/myCacheArchive2.txt#archive") }));
++    assertFalse(DistributedCache.checkURIs(new URI[] {
++        new URI("file://foo/bar/myCacheFile1.txt#FILE"),
++        new URI("file://foo/bar/myCacheFile2.txt#file") }, new URI[] {
++        new URI("file://foo/bar/myCacheArchive1.txt#archive1"),
++        new URI("file://foo/bar/myCacheArchive2.txt#archive2") }));
++    assertFalse(DistributedCache.checkURIs(new URI[] {
++        new URI("file://foo/bar/myCacheFile1.txt#file1"),
++        new URI("file://foo/bar/myCacheFile2.txt#CACHE") }, new URI[] {
++        new URI("file://foo/bar/myCacheArchive1.txt#cache"),
++        new URI("file://foo/bar/myCacheArchive2.txt#archive2") }));
++
++    // allowed uri combinations
++    assertTrue(DistributedCache.checkURIs(new URI[] {
++        new URI("file://foo/bar/myCacheFile1.txt#file1"),
++        new URI("file://foo/bar/myCacheFile2.txt#file2") }, null));
++    assertTrue(DistributedCache.checkURIs(null, new URI[] {
++        new URI("file://foo/bar/myCacheArchive1.txt#archive1"),
++        new URI("file://foo/bar/myCacheArchive2.txt#archive2") }));
++    assertTrue(DistributedCache.checkURIs(new URI[] {
++        new URI("file://foo/bar/myCacheFile1.txt#file1"),
++        new URI("file://foo/bar/myCacheFile2.txt#file2") }, new URI[] {
++        new URI("file://foo/bar/myCacheArchive1.txt#archive1"),
++        new URI("file://foo/bar/myCacheArchive2.txt#archive2") }));
++  }
++}
+-- 
+1.7.0.4
+

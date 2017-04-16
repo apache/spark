@@ -1,0 +1,70 @@
+From 24e11c17d1aa460fc8ee318a773fb0d7cdd82523 Mon Sep 17 00:00:00 2001
+From: Patrick Hunt <phunt@cloudera.com>
+Date: Tue, 10 May 2011 20:18:44 +0000
+Subject: [PATCH 1160/1179] MAPREDUCE-2456. Log the reduce taskID and associated TaskTrackers with failed fetch notifications in the JobTracker log.
+
+Author: Jeffrey Naisbitt
+Reason: Improvement
+Ref: CDH-5019
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   14 +++++++++-----
+ .../org/apache/hadoop/mapred/JobTracker.java       |    8 +++++---
+ 2 files changed, 14 insertions(+), 8 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 6ba4cd0..aef270f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -3272,13 +3272,17 @@ public class JobInProgress {
+   
+   synchronized void fetchFailureNotification(TaskInProgress tip, 
+                                              TaskAttemptID mapTaskId, 
+-                                             String trackerName) {
++                                             String mapTrackerName,
++                                             TaskAttemptID reduceTaskId,
++                                             String reduceTrackerName) {
+     Integer fetchFailures = mapTaskIdToFetchFailuresMap.get(mapTaskId);
+     fetchFailures = (fetchFailures == null) ? 1 : (fetchFailures+1);
+     mapTaskIdToFetchFailuresMap.put(mapTaskId, fetchFailures);
+-    LOG.info("Failed fetch notification #" + fetchFailures + " for task " + 
+-            mapTaskId);
+-    
++    LOG.info("Failed fetch notification #" + fetchFailures + " for map task: "
++             + mapTaskId + " running on tracker: " + mapTrackerName
++             + " and reduce task: " + reduceTaskId + " running on tracker: "
++             + reduceTrackerName);
++
+     float failureRate = (float)fetchFailures / runningReduceTasks;
+     // declare faulty if fetch-failures >= max-allowed-failures
+     boolean isMapFaulty = failureRate >= MAX_ALLOWED_FETCH_FAILURES_PERCENT;
+@@ -3290,7 +3294,7 @@ public class JobInProgress {
+       failedTask(tip, mapTaskId, "Too many fetch-failures",                            
+                  (tip.isMapTask() ? TaskStatus.Phase.MAP : 
+                                     TaskStatus.Phase.REDUCE), 
+-                 TaskStatus.State.FAILED, trackerName);
++                 TaskStatus.State.FAILED, mapTrackerName);
+       
+       mapTaskIdToFetchFailuresMap.remove(mapTaskId);
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 33d93cc..41752a4 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -4585,9 +4585,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+             if (failedFetchTrackerName == null) {
+               failedFetchTrackerName = "Lost task tracker";
+             }
+-            failedFetchMap.getJob().fetchFailureNotification(failedFetchMap, 
+-                                                             mapTaskId, 
+-                                                             failedFetchTrackerName);
++            failedFetchMap.getJob().fetchFailureNotification(failedFetchMap,
++                                                             mapTaskId,
++                                                             failedFetchTrackerName,
++                                                             taskId,
++                                                             trackerName);
+           }
+         }
+       }
+-- 
+1.7.0.4
+

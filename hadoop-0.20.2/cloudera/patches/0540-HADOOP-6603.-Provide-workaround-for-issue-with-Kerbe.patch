@@ -1,0 +1,219 @@
+From 1c42a6fc1ed560fd31c0622ecb272e48a56d70a1 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 5 Mar 2010 18:42:28 -0800
+Subject: [PATCH 0540/1179] HADOOP-6603. Provide workaround for issue with Kerberos not resolving cross-realm principal
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437826/HADOOP-6603-Y20S-4.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ .../org/apache/hadoop/security/SecurityUtil.java   |  102 ++++++++++++++++++++
+ .../hdfs/server/namenode/TransferFsImage.java      |    4 +
+ .../hadoop/hdfs/tools/DelegationTokenFetcher.java  |    3 +
+ .../apache/hadoop/security/TestSecurityUtil.java   |   35 +++++++
+ 4 files changed, 144 insertions(+), 0 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/security/SecurityUtil.java
+ create mode 100644 src/test/org/apache/hadoop/security/TestSecurityUtil.java
+
+diff --git a/src/core/org/apache/hadoop/security/SecurityUtil.java b/src/core/org/apache/hadoop/security/SecurityUtil.java
+new file mode 100644
+index 0000000..d1e5ff1
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/SecurityUtil.java
+@@ -0,0 +1,102 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements. See the NOTICE file distributed with this
++ * work for additional information regarding copyright ownership. The ASF
++ * licenses this file to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ * 
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * 
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
++ * License for the specific language governing permissions and limitations under
++ * the License.
++ */
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++import java.net.URL;
++import java.security.AccessController;
++import java.util.Set;
++
++import javax.security.auth.Subject;
++import javax.security.auth.kerberos.KerberosTicket;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.security.UserGroupInformation;
++
++import sun.security.jgss.krb5.Krb5Util;
++import sun.security.krb5.Credentials;
++import sun.security.krb5.PrincipalName;
++
++public class SecurityUtil {
++  private static final Log LOG = LogFactory.getLog(SecurityUtil.class);
++
++  /**
++   * Find the original TGT within the current subject's credentials. Cross-realm
++   * TGT's of the form "krbtgt/TWO.COM@ONE.COM" may be present.
++   * 
++   * @return The TGT from the current subject
++   * @throws IOException
++   *           if TGT can't be found
++   */
++  private static KerberosTicket getTgtFromSubject() throws IOException {
++    Set<KerberosTicket> tickets = Subject.getSubject(
++        AccessController.getContext()).getPrivateCredentials(
++        KerberosTicket.class);
++    for (KerberosTicket t : tickets) {
++      if (isOriginalTGT(t.getServer().getName()))
++        return t;
++    }
++    throw new IOException("Failed to find TGT from current Subject");
++  }
++  
++  // Original TGT must be of form "krbtgt/FOO@FOO". Verify this
++  protected static boolean isOriginalTGT(String name) {
++    if(name == null) return false;
++    
++    String [] components = name.split("[/@]");
++
++    return components.length == 3 &&
++           "krbtgt".equals(components[0]) &&
++           components[1].equals(components[2]);
++  }
++
++  /**
++   * Explicitly pull the service ticket for the specified host.  This solves a
++   * problem with Java's Kerberos SSL problem where the client cannot 
++   * authenticate against a cross-realm service.  It is necessary for clients
++   * making kerberized https requests to call this method on the target URL
++   * to ensure that in a cross-realm environment the remote host will be 
++   * successfully authenticated.  
++   * 
++   * This method will be removed when the Java behavior is changed.
++   * 
++   * @param remoteHost Target URL the krb-https client will access
++   */
++  public static void fetchServiceTicket(URL remoteHost) throws IOException {
++    if(!UserGroupInformation.isSecurityEnabled())
++      return;
++    
++    String serviceName = "host/" + remoteHost.getHost();
++    LOG.debug("Fetching service ticket for host at: " + serviceName);
++    Credentials serviceCred = null;
++    try {
++      PrincipalName principal = new PrincipalName(serviceName,
++          PrincipalName.KRB_NT_SRV_HST);
++      serviceCred = Credentials.acquireServiceCreds(principal
++          .toString(), Krb5Util.ticketToCreds(getTgtFromSubject()));
++    } catch (Exception e) {
++      throw new IOException("Invalid service principal name: "
++          + serviceName, e);
++    }
++    if (serviceCred == null) {
++      throw new IOException("Can't get service ticket for " + serviceName);
++    }
++    Subject.getSubject(AccessController.getContext()).getPrivateCredentials()
++        .add(Krb5Util.credsToTicket(serviceCred));
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+index 0813d4d..133a7c0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+@@ -28,6 +28,7 @@ import javax.servlet.http.HttpServletRequest;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
++import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode.ErrorSimulator;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+@@ -166,6 +167,9 @@ class TransferFsImage implements FSConstants {
+     // open connection to remote server
+     //
+     URL url = new URL(str.toString());
++    
++    // Avoid Krb bug with cross-realm hosts
++    SecurityUtil.fetchServiceTicket(url);
+     URLConnection connection = url.openConnection();
+     long advertisedSize;
+     String contentLength = connection.getHeaderField(CONTENT_LENGTH);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java b/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
+index 1f77e05..6697790 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
+@@ -30,6 +30,7 @@ import java.security.PrivilegedExceptionAction;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.hdfs.DistributedFileSystem;
++import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.namenode.DelegationTokenServlet;
+ import org.apache.hadoop.io.Text;
+@@ -127,6 +128,7 @@ public class DelegationTokenFetcher {
+     ts.addToken(new Text(shortName), token);
+     ts.write(out);
+   }
++
+   /**
+    * Utility method to obtain a delegation token over http
+    * @param nnHttpAddr Namenode http addr, such as http://namenode:50070
+@@ -148,6 +150,7 @@ public class DelegationTokenFetcher {
+      }
+      System.out.println("Retrieving token from: " + url);
+      URL remoteURL = new URL(url.toString());
++     SecurityUtil.fetchServiceTicket(remoteURL);
+      URLConnection connection = remoteURL.openConnection();
+      
+      InputStream in = connection.getInputStream();
+diff --git a/src/test/org/apache/hadoop/security/TestSecurityUtil.java b/src/test/org/apache/hadoop/security/TestSecurityUtil.java
+new file mode 100644
+index 0000000..23e3974
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/TestSecurityUtil.java
+@@ -0,0 +1,35 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements. See the NOTICE file distributed with this
++ * work for additional information regarding copyright ownership. The ASF
++ * licenses this file to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ * 
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * 
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
++ * License for the specific language governing permissions and limitations under
++ * the License.
++ */
++package org.apache.hadoop.security;
++
++import static org.junit.Assert.*;
++import org.junit.Test;
++
++public class TestSecurityUtil {
++  @Test
++  public void isOriginalTGTReturnsCorrectValues() {
++    assertTrue(SecurityUtil.isOriginalTGT("krbtgt/foo@foo"));
++    assertTrue(SecurityUtil.isOriginalTGT("krbtgt/foo.bar.bat@foo.bar.bat"));
++    assertFalse(SecurityUtil.isOriginalTGT(null));
++    assertFalse(SecurityUtil.isOriginalTGT("blah"));
++    assertFalse(SecurityUtil.isOriginalTGT(""));
++    assertFalse(SecurityUtil.isOriginalTGT("krbtgt/hello"));
++    assertFalse(SecurityUtil.isOriginalTGT("/@"));
++    assertFalse(SecurityUtil.isOriginalTGT("this@is/notright"));
++    assertFalse(SecurityUtil.isOriginalTGT("krbtgt/foo@FOO"));
++  }
++}
+-- 
+1.7.0.4
+

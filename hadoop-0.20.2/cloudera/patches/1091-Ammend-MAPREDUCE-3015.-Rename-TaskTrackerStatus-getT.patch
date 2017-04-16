@@ -1,0 +1,62 @@
+From 99b2072558bb79eea211c1965a6c896750c850ea Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 27 Nov 2011 10:23:23 -0800
+Subject: [PATCH 1091/1179] Ammend MAPREDUCE-3015. Rename TaskTrackerStatus#getTaskFailures.
+
+Reason: JobTracker plugin compatibility
+Author: Eli Collins
+Ref: CDH-3307
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |    2 +-
+ .../apache/hadoop/mapred/TaskTrackerStatus.java    |    4 ++--
+ src/webapps/job/machines.jsp                       |    2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index e301d6a..33d93cc 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -5144,7 +5144,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           put("reduce_slots", redSlots);
+           put("reduce_slots_used", redSlots - tts.getAvailableReduceSlots());
+         }});
+-        put("failures", tts.getTaskFailures());
++        put("failures", tts.getFailures());
+         put("dir_failures", tts.getDirFailures());
+       }});
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java b/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
+index 4d6fa0e..d8aa7f7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTrackerStatus.java
+@@ -391,12 +391,12 @@ public class TaskTrackerStatus implements Writable {
+   public int getHttpPort() {
+     return httpPort;
+   }
+-    
++
+   /**
+    * Get the number of tasks that have failed on this tracker.
+    * @return The number of failed tasks
+    */
+-  public int getTaskFailures() {
++  public int getFailures() {
+     return taskFailures;
+   }
+ 
+diff --git a/src/webapps/job/machines.jsp b/src/webapps/job/machines.jsp
+index 4927562..5f413ec 100644
+--- a/src/webapps/job/machines.jsp
++++ b/src/webapps/job/machines.jsp
+@@ -85,7 +85,7 @@
+           it2.next();
+           numCurTasks++;
+         }
+-        int numTaskFailures = tt.getTaskFailures();
++        int numTaskFailures = tt.getFailures();
+         if (numTaskFailures > maxFailures) {
+           maxFailures = numTaskFailures;
+           failureKing = tt.getTrackerName();
+-- 
+1.7.0.4
+
