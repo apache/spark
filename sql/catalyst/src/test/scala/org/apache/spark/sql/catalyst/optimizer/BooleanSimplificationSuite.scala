@@ -146,8 +146,10 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   test("Complementation Laws") {
     checkCondition('a && !'a, LocalRelation(testRelation.output, Seq.empty))
+    checkCondition(!'a && 'a, LocalRelation(testRelation.output, Seq.empty))
 
     checkCondition('a || !'a, testRelation)
+    checkCondition(!'a || 'a, testRelation)
   }
 
   private val caseInsensitiveConf = new SimpleCatalystConf(false)
