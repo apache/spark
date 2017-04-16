@@ -314,6 +314,16 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
   }
 
+  test("serialize and deserialize arbitrary java list types") {
+    import java.util.ArrayList
+    val arrayListSerializer = serializerFor[ArrayList[Int]](BoundReference(
+      0, ObjectType(classOf[ArrayList[Int]]), nullable = false))
+    assert(arrayListSerializer.dataType.head.dataType ==
+      ArrayType(IntegerType, containsNull = false))
+    val arrayListDeserializer = deserializerFor[ArrayList[Int]]
+    assert(arrayListDeserializer.dataType == ObjectType(classOf[ArrayList[_]]))
+  }
+
   private val dataTypeForComplexData = dataTypeFor[ComplexData]
   private val typeOfComplexData = typeOf[ComplexData]
 
