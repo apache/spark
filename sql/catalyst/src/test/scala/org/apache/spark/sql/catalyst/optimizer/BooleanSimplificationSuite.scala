@@ -42,6 +42,12 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
 
+  private def checkCondition(input: Expression, expected: LogicalPlan): Unit = {
+    val plan = testRelation.where(input).analyze
+    val actual = Optimize.execute(plan)
+    comparePlans(actual, expected)
+  }
+
   private def checkCondition(input: Expression, expected: Expression): Unit = {
     val plan = testRelation.where(input).analyze
     val actual = Optimize.execute(plan)
@@ -136,6 +142,12 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     checkCondition(!(('a && 'b) || ('c && 'd)), (!'a || !'b) && (!'c || !'d))
 
     checkCondition(!(('a || 'b) && ('c || 'd)), (!'a && !'b) || (!'c && !'d))
+  }
+
+  test("Complementation Laws") {
+    checkCondition('a && !'a, LocalRelation(testRelation.output, Seq.empty))
+
+    checkCondition('a || !'a, testRelation)
   }
 
   private val caseInsensitiveConf = new SimpleCatalystConf(false)
