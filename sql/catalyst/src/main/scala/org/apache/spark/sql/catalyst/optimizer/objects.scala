@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.api.java.function.FilterFunction
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -109,10 +108,10 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
  */
 object EliminateMapObjects extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case _ @ DeserializeToObject(_ @ Invoke(
+    case _ @ DeserializeToObject(Invoke(
         MapObjects(_, _, _, Cast(LambdaVariable(_, _, dataType, _), castDataType, _),
            inputData, None, _),
-        funcName, returnType @ ObjectType(_), arguments, propagateNull, returnNullable),
+        funcName, returnType: ObjectType, arguments, propagateNull, returnNullable),
         outputObjAttr, child) if dataType == castDataType =>
       DeserializeToObject(Invoke(
         inputData, funcName, returnType, arguments, propagateNull, returnNullable),

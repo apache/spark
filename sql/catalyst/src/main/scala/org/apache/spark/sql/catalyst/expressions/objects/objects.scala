@@ -451,6 +451,8 @@ object MapObjects {
    * @param function The function applied on the collection elements.
    * @param inputData An expression that when evaluated returns a collection object.
    * @param elementType The data type of elements in the collection.
+   * @param elementNullable When false, indicating elements in the collection are always
+   *                        non-null value.
    * @param customCollectionCls Class of the resulting collection (returning ObjectType)
    *                            or None (returning ArrayType)
    */

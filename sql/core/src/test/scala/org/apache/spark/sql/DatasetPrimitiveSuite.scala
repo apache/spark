@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.execution.DeserializeToObjectExec
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types._
 
 case class IntClass(value: Int)
 
@@ -265,4 +264,5 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     import packageobject._
     checkDataset(Seq(PackageClass(1)).toDS(), PackageClass(1))
   }
+
 }
