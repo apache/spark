@@ -665,21 +665,22 @@ object CollectObjectsToMap {
    * @param collClass The type of the resulting collection.
    */
   def apply(
-             keyFunction: Expression => Expression,
-             keyInputData: Expression,
-             keyElementType: DataType,
-             valueFunction: Expression => Expression,
-             valueInputData: Expression,
-             valueElementType: DataType,
-             collClass: Class[_]): CollectObjectsToMap = {
-    val keyLoopValue = "CollectObjectsToMap_loopValue" + curId.getAndIncrement()
-    val keyLoopIsNull = "CollectObjectsToMap_loopIsNull" + curId.getAndIncrement()
+      keyFunction: Expression => Expression,
+      keyInputData: Expression,
+      keyElementType: DataType,
+      valueFunction: Expression => Expression,
+      valueInputData: Expression,
+      valueElementType: DataType,
+      collClass: Class[_]): CollectObjectsToMap = {
+    val id = curId.getAndIncrement()
+    val keyLoopValue = s"CollectObjectsToMap_keyLoopValue$id"
+    val keyLoopIsNull = s"CollectObjectsToMap_keyLoopIsNull$id"
     val keyLoopVar = LambdaVariable(keyLoopValue, keyLoopIsNull, keyElementType)
-    val valueLoopValue = "CollectObjectsToMap_loopValue" + curId.getAndIncrement()
-    val valueLoopIsNull = "CollectObjectsToMap_loopIsNull" + curId.getAndIncrement()
+    val valueLoopValue = s"CollectObjectsToMap_valueLoopValue$id"
+    val valueLoopIsNull = s"CollectObjectsToMap_valueLoopIsNull$id"
     val valueLoopVar = LambdaVariable(valueLoopValue, valueLoopIsNull, valueElementType)
-    val tupleLoopVar = "CollectObjectsToMap_loopValue" + curId.getAndIncrement()
-    val builderValue = "CollectObjectsToMap_builderValue" + curId.getAndIncrement()
+    val tupleLoopVar = s"CollectObjectsToMap_tupleLoopValue$id"
+    val builderValue = s"CollectObjectsToMap_builderValue$id"
     CollectObjectsToMap(
       keyLoopValue, keyLoopIsNull, keyElementType, keyFunction(keyLoopVar), keyInputData,
       valueLoopValue, valueLoopIsNull, valueElementType, valueFunction(valueLoopVar),
@@ -720,19 +721,19 @@ object CollectObjectsToMap {
  * @param builderValue The name of the builder variable used to construct the resulting collection.
  */
 case class CollectObjectsToMap private(
-                                   keyLoopValue: String,
-                                   keyLoopIsNull: String,
-                                   keyLoopVarDataType: DataType,
-                                   keyLambdaFunction: Expression,
-                                   keyInputData: Expression,
-                                   valueLoopValue: String,
-                                   valueLoopIsNull: String,
-                                   valueLoopVarDataType: DataType,
-                                   valueLambdaFunction: Expression,
-                                   valueInputData: Expression,
-                                   tupleLoopValue: String,
-                                   collClass: Class[_],
-                                   builderValue: String) extends Expression with NonSQLExpression {
+    keyLoopValue: String,
+    keyLoopIsNull: String,
+    keyLoopVarDataType: DataType,
+    keyLambdaFunction: Expression,
+    keyInputData: Expression,
+    valueLoopValue: String,
+    valueLoopIsNull: String,
+    valueLoopVarDataType: DataType,
+    valueLambdaFunction: Expression,
+    valueInputData: Expression,
+    tupleLoopValue: String,
+    collClass: Class[_],
+    builderValue: String) extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = keyInputData.nullable
 
