@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -385,6 +386,20 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFTwoListList")
 
     hiveContext.reset()
+  }
+
+  test("non-deterministic children of UDF") {
+    withUserDefinedFunction("testStringStringUDF" -> true, "testGenericUDFHash" -> true) {
+      // HiveSimpleUDF
+      sql(s"CREATE TEMPORARY FUNCTION testStringStringUDF AS '${classOf[UDFStringString].getName}'")
+      val df1 = sql("SELECT testStringStringUDF(rand(), \"hello\")")
+      assert(!df1.logicalPlan.asInstanceOf[Project].projectList.forall(_.deterministic))
+
+      // HiveGenericUDF
+      sql(s"CREATE TEMPORARY FUNCTION testGenericUDFHash AS '${classOf[GenericUDFHash].getName}'")
+      val df2 = sql("SELECT testGenericUDFHash(rand())")
+      assert(!df2.logicalPlan.asInstanceOf[Project].projectList.forall(_.deterministic))
+    }
   }
 
   test("Hive UDFs with insufficient number of input arguments should trigger an analysis error") {
