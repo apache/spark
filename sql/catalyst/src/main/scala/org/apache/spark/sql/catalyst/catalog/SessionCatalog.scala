@@ -22,6 +22,7 @@ import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.util.{Failure, Success, Try}
 
 import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
@@ -1202,15 +1203,25 @@ class SessionCatalog(
   def listFunctions(db: String, pattern: String): Seq[(FunctionIdentifier, String)] = {
     val dbName = formatDatabaseName(db)
     requireDbExists(dbName)
-    val dbFunctions = externalCatalog.listFunctions(dbName, pattern)
-      .map { f => FunctionIdentifier(f, Some(dbName)) }
-    val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)
-      .map { f => FunctionIdentifier(f) }
+    val dbFunctions = externalCatalog.listFunctions(dbName, pattern).map { f =>
+      FunctionIdentifier(f, Some(dbName)) }
+    val loadedFunctions =
+      StringUtils.filterPattern(functionRegistry.listFunction(), pattern).map { f =>
+        // In functionRegistry, function names are stored as an unquoted format.
+        Try(parser.parseFunctionIdentifier(f)) match {
+          case Success(e) => e
+          case Failure(_) =>
+            // The names of some built-in functions are not parsable by our parser, e.g., %
+            FunctionIdentifier(f)
+        }
+      }
     val functions = dbFunctions ++ loadedFunctions
+    // The session catalog caches some persistent functions in the FunctionRegistry
+    // so there can be duplicates.
     functions.map {
       case f if FunctionRegistry.functionSet.contains(f.funcName) => (f, "SYSTEM")
       case f => (f, "USER")
-    }
+    }.distinct
   }
 
 
