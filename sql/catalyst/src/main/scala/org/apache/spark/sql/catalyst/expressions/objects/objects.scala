@@ -465,7 +465,7 @@ object MapObjects {
     val id = curId.getAndIncrement()
     val loopValue = s"MapObjects_loopValue$id"
     val loopIsNull = s"MapObjects_loopIsNull$id"
-    val loopVar = LambdaVariable(loopValue, loopIsNull, elementType)
+    val loopVar = LambdaVariable(loopValue, loopIsNull, elementType, elementNullable)
     MapObjects(
       loopValue, loopIsNull, elementType, function(loopVar), inputData, customCollectionCls)
   }
