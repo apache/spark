@@ -1723,7 +1723,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-?????: catalyst outer join optimization should not throw npe") {
+  test("SPARK-20359: catalyst outer join optimization should not throw npe") {
     val df1 = Seq("a", "b", "c").toDF("x")
       .withColumn("y", udf{ (x: String) => x.substring(0, 1) + "!" }.apply($"x"))
     val df2 = Seq("a", "b").toDF("x1")
