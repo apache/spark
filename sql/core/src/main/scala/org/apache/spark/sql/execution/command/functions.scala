@@ -207,8 +207,6 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    // The session catalog caches some persistent functions in the FunctionRegistry
-    // so there can be duplicates.
-    functionNames.distinct.sorted.map(Row(_))
+    functionNames.sorted.map(Row(_))
   }
 }
