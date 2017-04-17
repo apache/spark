@@ -181,13 +181,13 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   }
 
   override def addTaskSetManager(manager: Schedulable, properties: Properties) {
-    var poolName = if (properties != null) {
+    val poolName = if (properties != null) {
         properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
       } else {
         DEFAULT_POOL_NAME
       }
     var parentPool = rootPool.getSchedulableByName(poolName)
-    if (parentPool == null && properties != null) {
+    if (parentPool == null) {
       // we will create a new pool that user has configured in app
       // instead of being defined in xml file
       parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
