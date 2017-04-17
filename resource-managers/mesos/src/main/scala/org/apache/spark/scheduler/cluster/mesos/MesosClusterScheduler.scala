@@ -386,7 +386,6 @@ private[spark] class MesosClusterScheduler(
     env.foreach { case (k, v) =>
       envBuilder.addVariables(Variable.newBuilder().setName(k).setValue(v))
     }
-
     envBuilder.build()
   }
 
@@ -464,7 +463,6 @@ private[spark] class MesosClusterScheduler(
     desc.conf.getOption("spark.executor.memory").foreach { v =>
       options ++= Seq("--executor-memory", v)
     }
-
     desc.conf.getOption("spark.cores.max").foreach { v =>
       options ++= Seq("--total-executor-cores", v)
     }
