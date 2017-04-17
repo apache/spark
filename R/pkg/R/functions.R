@@ -2438,12 +2438,12 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' from_json
 #'
 #' Parses a column containing a JSON string into a Column of \code{structType} with the specified
-#' \code{schema} or array of \code{structType} if \code{asJsonArray} is set to \code{TRUE}.
+#' \code{schema} or array of \code{structType} if \code{as.json.array} is set to \code{TRUE}.
 #' If the string is unparseable, the Column will contains the value NA.
 #'
 #' @param x Column containing the JSON string.
 #' @param schema a structType object to use as the schema to use when parsing the JSON string.
-#' @param asJsonArray indicating if input string is JSON array of objects or a single object.
+#' @param as.json.array indicating if input string is JSON array of objects or a single object.
 #' @param ... additional named properties to control how the json is parsed, accepts the same
 #'            options as the JSON data source.
 #'
@@ -2459,8 +2459,8 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #'}
 #' @note from_json since 2.2.0
 setMethod("from_json", signature(x = "Column", schema = "structType"),
-          function(x, schema, asJsonArray = FALSE, ...) {
-            if (asJsonArray) {
+          function(x, schema, as.json.array = FALSE, ...) {
+            if (as.json.array) {
               jschema <- callJStatic("org.apache.spark.sql.types.DataTypes",
                                      "createArrayType",
                                      schema$jobj)
