@@ -19,10 +19,11 @@ package org.apache.spark.rdd
 
 import java.io.{IOException, ObjectOutputStream}
 
-import scala.reflect.ClassTag
+import scala.reflect._
 
 import org.apache.spark._
-import org.apache.spark.util.Utils
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.{TaskCompletionListener, TaskFailureListener, Utils}
 
 private[spark]
 class CartesianPartition(
@@ -73,7 +74,61 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
     val currSplit = split.asInstanceOf[CartesianPartition]
     for (x <- rdd1.iterator(currSplit.s1, context);
-         y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
+         y <- getOrCache(rdd2, currSplit.s2, context, StorageLevel.MEMORY_AND_DISK))
+      yield (x, y)
+  }
+
+  private def getOrCache(
+      rdd: RDD[U],
+      partition: Partition,
+      context: TaskContext,
+      level: StorageLevel): Iterator[U] = {
+    if (rdd.getStorageLevel != StorageLevel.NONE) {
+      rdd.iterator(partition, context)
+    } else {
+      val blockId = RDDBlockId(rdd.id, partition.index)
+      var readCachedBlock = true
+      // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
+      val iterator = SparkEnv.get.blockManager.getOrElseUpdate(blockId, level, classTag[U], () => {
+        readCachedBlock = false
+        rdd.iterator(partition, context)
+      }, true) match {
+        case Left(blockResult) =>
+          if (readCachedBlock) {
+            val existingMetrics = context.taskMetrics().inputMetrics
+            existingMetrics.incBytesRead(blockResult.bytes)
+            new InterruptibleIterator[U](context, blockResult.data.asInstanceOf[Iterator[U]]) {
+              override def next(): U = {
+                existingMetrics.incRecordsRead(1)
+                delegate.next()
+              }
+            }
+          } else {
+            new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[U]])
+          }
+        case Right(iter) =>
+          new InterruptibleIterator(context, iter.asInstanceOf[Iterator[U]])
+      }
+
+      context.addTaskCompletionListener(new TaskCompletionListener{
+        override def onTaskCompletion(context: TaskContext): Unit = {
+          if (!readCachedBlock) {
+            SparkEnv.get.blockManager.removeBlock(blockId, false)
+          }
+        }
+      })
+
+      context.addTaskFailureListener(new TaskFailureListener{
+        override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
+          if (!readCachedBlock) {
+            SparkEnv.get.blockManager.removeBlock(blockId, false)
+          }
+        }
+      })
+
+      iterator
+    }
+
   }
 
   override def getDependencies: Seq[Dependency[_]] = List(
