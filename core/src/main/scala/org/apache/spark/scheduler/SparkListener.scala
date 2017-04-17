@@ -138,14 +138,14 @@ case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends
 /**
  * Periodic updates from executors.
  * @param execId executor id
- * @param executorMetrics metrics in executor level
  * @param accumUpdates sequence of (taskId, stageId, stageAttemptId, accumUpdates)
+ * @param executorMetrics keeps track of TransportMetrics for an executor Added in Spark 2.3.
  */
 @DeveloperApi
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
-    executorMetrics: ExecutorMetrics,
-    accumUpdates: Seq[(Long, Int, Int, Seq[AccumulableInfo])])
+    accumUpdates: Seq[(Long, Int, Int, Seq[AccumulableInfo])],
+    executorMetrics: Option[ExecutorMetrics])
   extends SparkListenerEvent
 
 @DeveloperApi

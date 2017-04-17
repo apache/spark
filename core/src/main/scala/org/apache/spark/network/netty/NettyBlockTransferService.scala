@@ -18,11 +18,11 @@
 package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
+import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
-import scala.tools.nsc.interpreter.JList
 
 import io.netty.buffer._
 

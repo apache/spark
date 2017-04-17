@@ -89,8 +89,8 @@ private[spark] class EventLoggingListener(
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
   private val executorIdToLatestMetrics = new HashMap[String, SparkListenerExecutorMetricsUpdate]
-  private val executorIdToModifiedMaxMetrics = new
-    HashMap[String, SparkListenerExecutorMetricsUpdate]
+  private val executorIdToModifiedMaxMetrics =
+    new HashMap[String, SparkListenerExecutorMetricsUpdate]
 
   /**
    * Creates the log file in the configured log directory.
@@ -242,7 +242,7 @@ private[spark] class EventLoggingListener(
     // We only track the executor metrics in each stage, so we drop the task metrics as they are
     // quite verbose
     val eventWithoutTaskMetrics = SparkListenerExecutorMetricsUpdate(
-      event.execId, event.executorMetrics, Seq.empty)
+      event.execId, Seq.empty, event.executorMetrics)
     executorIdToLatestMetrics(eventWithoutTaskMetrics.execId) = eventWithoutTaskMetrics
     updateModifiedMetrics(eventWithoutTaskMetrics)
   }
@@ -295,6 +295,9 @@ private[spark] class EventLoggingListener(
    * Does this event match the ID of an executor we are already tracking?
    * If no, start tracking metrics for this executor, starting at this event.
    * If yes, compare time stamps, and perhaps update using this event.
+   * Only do this if executorMetrics is present in the toBeModifiedEvent.
+   * If it is not - meaning we are processing historical data created
+   * without executorMetrics - simply cache the latestEvent
    * @param latestEvent the latest event received, used to update our map of stored metrics.
    */
   private def updateModifiedMetrics(latestEvent: SparkListenerExecutorMetricsUpdate): Unit = {
@@ -304,30 +307,36 @@ private[spark] class EventLoggingListener(
       case None =>
         executorIdToModifiedMaxMetrics(executorId) = latestEvent
       case Some(toBeModifiedEvent) =>
-        val toBeModifiedTransportMetrics = toBeModifiedEvent.executorMetrics.transportMetrics
-        val latestTransportMetrics = latestEvent.executorMetrics.transportMetrics
-        var timeStamp: Long = toBeModifiedTransportMetrics.timeStamp
+        if (toBeModifiedEvent.executorMetrics.isEmpty ||
+          latestEvent.executorMetrics.isEmpty) {
+          executorIdToModifiedMaxMetrics(executorId) == latestEvent
+        }
+        else {
+          val prevTransportMetrics = toBeModifiedEvent.executorMetrics.get.transportMetrics
+          val latestTransportMetrics = latestEvent.executorMetrics.get.transportMetrics
+          var timeStamp: Long = prevTransportMetrics.timeStamp
 
-        val onHeapSize = if
-            (latestTransportMetrics.onHeapSize > toBeModifiedTransportMetrics.onHeapSize) {
-          timeStamp = latestTransportMetrics.timeStamp
-          latestTransportMetrics.onHeapSize
-        } else {
-          toBeModifiedTransportMetrics.onHeapSize
+          val onHeapSize = if
+          (latestTransportMetrics.onHeapSize > prevTransportMetrics.onHeapSize) {
+            timeStamp = latestTransportMetrics.timeStamp
+            latestTransportMetrics.onHeapSize
+          } else {
+            prevTransportMetrics.onHeapSize
+          }
+          val offHeapSize =
+            if (latestTransportMetrics.offHeapSize > prevTransportMetrics.offHeapSize) {
+              timeStamp = latestTransportMetrics.timeStamp
+              latestTransportMetrics.offHeapSize
+            } else {
+              prevTransportMetrics.offHeapSize
+            }
+          val updatedExecMetrics = ExecutorMetrics(toBeModifiedEvent.executorMetrics.get.hostname,
+            toBeModifiedEvent.executorMetrics.get.port,
+            TransportMetrics(timeStamp, onHeapSize, offHeapSize))
+          val modifiedEvent = SparkListenerExecutorMetricsUpdate(
+            toBeModifiedEvent.execId, toBeModifiedEvent.accumUpdates, Some(updatedExecMetrics))
+          executorIdToModifiedMaxMetrics(executorId) = modifiedEvent
         }
-        val offHeapSize =
-            if (latestTransportMetrics.offHeapSize > toBeModifiedTransportMetrics.offHeapSize) {
-          timeStamp = latestTransportMetrics.timeStamp
-          latestTransportMetrics.offHeapSize
-        } else {
-          toBeModifiedTransportMetrics.offHeapSize
-        }
-        val modifiedExecMetrics = ExecutorMetrics(toBeModifiedEvent.executorMetrics.hostname,
-          toBeModifiedEvent.executorMetrics.port,
-          TransportMetrics(timeStamp, onHeapSize, offHeapSize))
-        val modifiedEvent = SparkListenerExecutorMetricsUpdate(
-          toBeModifiedEvent.execId, modifiedExecMetrics, toBeModifiedEvent.accumUpdates)
-        executorIdToModifiedMaxMetrics(executorId) = modifiedEvent
     }
   }
 }

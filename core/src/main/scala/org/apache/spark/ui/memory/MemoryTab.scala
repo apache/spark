@@ -57,16 +57,16 @@ class MemoryListener extends SparkListener {
     val executorMetrics = event.executorMetrics
     activeExecutorIdToMem
       .getOrElseUpdate(executorId, new MemoryUIInfo)
-      .updateMemUiInfo(executorMetrics)
+      .updateMemUiInfo(executorMetrics.get)
     activeStagesToMem.foreach { case (_, stageMemMetrics) =>
       // If executor is added in the stage running time, we also update the metrics for the
       // executor in {{activeStagesToMem}}
       if (!stageMemMetrics.contains(executorId)) {
         stageMemMetrics(executorId) = new MemoryUIInfo
       }
-      stageMemMetrics(executorId).updateMemUiInfo(executorMetrics)
+      stageMemMetrics(executorId).updateMemUiInfo(executorMetrics.get)
     }
-    latestExecIdToExecMetrics(executorId) = executorMetrics
+    latestExecIdToExecMetrics(executorId) = executorMetrics.get
   }
 
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {

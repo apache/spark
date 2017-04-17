@@ -237,9 +237,13 @@ private[spark] object JsonProtocol {
     val execId = metricsUpdate.execId
     val executorMetrics = metricsUpdate.executorMetrics
     val accumUpdates = metricsUpdate.accumUpdates
+    val metricsJson: JValue = executorMetrics match {
+      case Some(metrics) => executorMetricsToJson(metrics)
+      case None => "none"
+    }
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.metricsUpdate) ~
     ("Executor ID" -> execId) ~
-    ("Executor Metrics Updated" -> executorMetricsToJson(executorMetrics)) ~
+    ("Executor Metrics Updated" -> metricsJson) ~
     ("Metrics Updated" -> accumUpdates.map { case (taskId, stageId, stageAttemptId, updates) =>
       ("Task ID" -> taskId) ~
       ("Stage ID" -> stageId) ~
@@ -688,7 +692,7 @@ private[spark] object JsonProtocol {
         (json \ "Accumulator Updates").extract[List[JValue]].map(accumulableInfoFromJson)
       (taskId, stageId, stageAttemptId, updates)
     }
-    SparkListenerExecutorMetricsUpdate(execInfo, executorMetrics, accumUpdates)
+    SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates, Some(executorMetrics))
   }
 
   /** --------------------------------------------------------------------- *
