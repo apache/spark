@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Concat, Expression}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1482,5 +1482,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
     RepartitionByExpression(expressions, query, conf.numShufflePartitions)
+  }
+
+  /**
+   * Create a [[Concat]] expression for pipeline concatenation.
+   */
+  override def visitConcat(ctx: ConcatContext): Expression = {
+    val exprs = ctx.primaryExpression().asScala
+    Concat(expression(exprs.head) +: exprs.drop(1).map(expression))
   }
 }
