@@ -240,6 +240,12 @@ class SparkContext(object):
         if isinstance(threading.current_thread(), threading._MainThread):
             signal.signal(signal.SIGINT, signal_handler)
 
+    def __repr__(self):
+        return "<SparkContext master={master} appName={appName}>".format(
+            master=self.master,
+            appName=self.appName,
+        )
+
     def _repr_html_(self):
         return """
         <div>
