@@ -16,6 +16,9 @@
  */
 package org.apache.spark.deploy.rest.kubernetes
 
+import java.io.IOException
+import java.net.{InetSocketAddress, ProxySelector, SocketAddress, URI}
+import java.util.Collections
 import javax.net.ssl.{SSLContext, SSLSocketFactory, X509TrustManager}
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
@@ -24,12 +27,15 @@ import feign.{Client, Feign, Request, Response}
 import feign.Request.Options
 import feign.jackson.{JacksonDecoder, JacksonEncoder}
 import feign.jaxrs.JAXRSContract
+import io.fabric8.kubernetes.client.Config
 import okhttp3.OkHttpClient
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.status.api.v1.JacksonMessageWriter
 
-private[spark] object HttpClientUtil {
+private[spark] object HttpClientUtil extends Logging {
 
   def createClient[T: ClassTag](
       uris: Set[String],
@@ -42,6 +48,49 @@ private[spark] object HttpClientUtil {
     Option.apply(trustContext).foreach(context => {
       httpClientBuilder = httpClientBuilder.sslSocketFactory(sslSocketFactory, context)
     })
+    val uriObjects = uris.map(URI.create)
+    val httpUris = uriObjects.filter(uri => uri.getScheme == "http")
+    val httpsUris = uriObjects.filter(uri => uri.getScheme == "https")
+    val maybeAllProxy = Option.apply(System.getProperty(Config.KUBERNETES_ALL_PROXY))
+    val maybeHttpProxy = Option.apply(System.getProperty(Config.KUBERNETES_HTTP_PROXY))
+      .orElse(maybeAllProxy)
+      .map(uriStringToProxy)
+    val maybeHttpsProxy = Option.apply(System.getProperty(Config.KUBERNETES_HTTPS_PROXY))
+      .orElse(maybeAllProxy)
+      .map(uriStringToProxy)
+    val maybeNoProxy = Option.apply(System.getProperty(Config.KUBERNETES_NO_PROXY))
+      .map(_.split(","))
+      .toSeq
+      .flatten
+    val proxySelector = new ProxySelector {
+      override def select(uri: URI): java.util.List[java.net.Proxy] = {
+        val directProxy = java.net.Proxy.NO_PROXY
+        val resolvedProxy = maybeNoProxy.find( _ == uri.getHost)
+          .map( _ => directProxy)
+          .orElse(uri.getScheme match {
+            case "http" =>
+              logDebug(s"Looking up http proxies to route $uri")
+              maybeHttpProxy.filter { _ =>
+                matchingUriExists(uri, httpUris)
+              }
+            case "https" =>
+              logDebug(s"Looking up https proxies to route $uri")
+              maybeHttpsProxy.filter { _ =>
+                matchingUriExists(uri, httpsUris)
+              }
+            case _ => None
+        }).getOrElse(directProxy)
+        logDebug(s"Routing $uri through ${resolvedProxy.address()} with proxy" +
+          s" type ${resolvedProxy.`type`()}")
+        Collections.singletonList(resolvedProxy)
+      }
+
+      override def connectFailed(uri: URI, sa: SocketAddress, ioe: IOException) = {
+        throw new SparkException(s"Failed to connect to proxy through uri $uri," +
+          s" socket address: $sa", ioe)
+      }
+    }
+    httpClientBuilder = httpClientBuilder.proxySelector(proxySelector)
     val objectMapper = new ObjectMapper()
       .registerModule(new DefaultScalaModule)
       .setDateFormat(JacksonMessageWriter.makeISODateFormat)
@@ -65,5 +114,18 @@ private[spark] object HttpClientUtil {
       .options(new Options(connectTimeoutMillis, readTimeoutMillis))
       .retryer(target)
       .target(target)
+  }
+
+  private def matchingUriExists(uri: URI, httpUris: Set[URI]): Boolean = {
+    httpUris.exists(httpUri => {
+      httpUri.getScheme == uri.getScheme && httpUri.getHost == uri.getHost &&
+      httpUri.getPort == uri.getPort
+    })
+  }
+
+  private def uriStringToProxy(uriString: String): java.net.Proxy = {
+    val uriObject = URI.create(uriString)
+    new java.net.Proxy(java.net.Proxy.Type.HTTP,
+      new InetSocketAddress(uriObject.getHost, uriObject.getPort))
   }
 }
