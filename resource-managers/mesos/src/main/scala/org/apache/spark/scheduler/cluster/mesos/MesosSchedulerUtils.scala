@@ -442,11 +442,6 @@ trait MesosSchedulerUtils extends Logging {
 
   /**
    * The values of the non-zero ports to be used by the executor process.
-   * <<<<<<< HEAD
- *
-   * =======
-   *
-   * >>>>>>> 0a2cc42... [Mesosphere SPARK-126] Add Mesos Kerberos support
    *
    * @param conf the spark config to use
    * @return the ono-zero values of the ports

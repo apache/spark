@@ -26,15 +26,20 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
 
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
+import org.apache.hadoop.io.DataOutputBuffer
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.mesos.Protos.{Credentials => _, TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.mesos.config
+import org.apache.spark.deploy.security.ConfigurableCredentialManager
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 
@@ -55,7 +60,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     securityManager: SecurityManager)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with org.apache.mesos.Scheduler
-  with DelegationTokenBroadcaster
   with MesosSchedulerUtils {
 
   // Blacklist a slave after this many failures
@@ -161,7 +165,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override def start() {
+    if (UserGroupInformation.isSecurityEnabled) {
+      setUGITokens
+    }
+
     super.start()
+
     val driver = createSchedulerDriver(
       master,
       MesosCoarseGrainedSchedulerBackend.this,
@@ -176,10 +185,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
     unsetFrameworkID(sc)
     startScheduler(driver)
-
-    if (kerberosBackend != null) {
-      kerberosBackend.start()
-    }
   }
 
   def createCommand(offer: Offer, numCores: Int, taskId: String): CommandInfo = {
@@ -191,9 +196,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val prefixEnv = conf.getOption("spark.executor.extraLibraryPath").map { p =>
       Utils.libraryPathEnvPrefix(Seq(p))
     }.getOrElse("")
-
-    // Pass the krb5.conf to the scheduler
-    passKerberosConf(environment)
 
     environment.addVariables(
       Environment.Variable.newBuilder()
@@ -248,25 +250,37 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     command.build()
   }
 
-  override def broadcastDelegationTokens(tokens: Array[Byte]): Unit = {
-    // store new tokens locally for future executors
-    val initialTokensBuf = DatatypeConverter.printBase64Binary(tokens)
-    conf.set("spark.mesos.kerberos.hdfsDelegationTokens", initialTokensBuf)
+  /**
+   * Returns the user's credentials, with new delegation tokens added for all configured
+   * services.
+   */
+  private def getDelegationTokens: Credentials = {
+    logDebug(s"Retrieving delegation tokens.")
 
-    // send token to existing executors
-    logInfo("Sending UpdateDelegationTokens to all executors")
-    driverEndpoint.send(UpdateDelegationTokens(tokens))
+    val userCreds = UserGroupInformation.getCurrentUser.getCredentials
+    val numTokensBefore = userCreds.numberOfTokens
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val credentialManager = new ConfigurableCredentialManager(conf, hadoopConf)
+    credentialManager.obtainCredentials(hadoopConf, userCreds)
+
+    logDebug(s"Fetched ${userCreds.numberOfTokens - numTokensBefore} delegation token(s).")
+
+    userCreds
   }
 
-  val principal = conf.get("spark.yarn.principal", null)
-  var kerberosBackend: MesosKerberosHandler = null
-  if (principal != null) {
-    kerberosBackend = new MesosKerberosHandler(conf, principal, this)
+  /** Writes delegation tokens to spark.mesos.kerberos.ugiTokens */
+  private def setUGITokens: Unit = {
+    val userCreds = getDelegationTokens
 
-    // store tokens in spark property which is sent to the executors initially
-    val initialTokens = kerberosBackend.createHDFSDelegationTokens
-    val initialTokensBuf = DatatypeConverter.printBase64Binary(initialTokens)
-    conf.set("spark.mesos.kerberos.hdfsDelegationTokens", initialTokensBuf)
+    val byteStream = new java.io.ByteArrayOutputStream(1024 * 1024)
+    val dataStream = new java.io.DataOutputStream(byteStream)
+    userCreds.writeTokenStorageToStream(dataStream)
+    val credsBytes = byteStream.toByteArray
+
+    logDebug(s"Writing ${credsBytes.length} bytes to ${config.USER_CREDENTIALS.key}.")
+
+    val creds64 = DatatypeConverter.printBase64Binary(credsBytes)
+    conf.set(config.USER_CREDENTIALS, creds64)
   }
 
   protected def driverURL: String = {
@@ -621,9 +635,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
     // Close the mesos external shuffle client if used
     mesosExternalShuffleClient.foreach(_.close())
-    if (kerberosBackend != null) {
-      kerberosBackend.stop()
-    }
 
     if (schedulerDriver != null) {
       schedulerDriver.stop()

@@ -20,10 +20,8 @@ package org.apache.spark.deploy
 import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
-import java.nio.file.{Files, Paths}
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
-import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -32,6 +30,7 @@ import scala.util.Properties
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
 import org.apache.ivy.core.module.descriptor._
@@ -47,6 +46,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBibl
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util._
 
@@ -65,7 +65,7 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
-object SparkSubmit extends CommandLineUtils {
+object SparkSubmit extends CommandLineUtils with Logging {
 
   // Cluster managers
   private val YARN = 1
@@ -465,10 +465,6 @@ object SparkSubmit extends CommandLineUtils {
       OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.principal"),
       OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.keytab"),
 
-      // Mesos cluster only
-      OptionAssigner(args.principal, MESOS, CLUSTER),
-      OptionAssigner(args.keytab, MESOS, CLUSTER),
-
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.cores"),
@@ -574,35 +570,16 @@ object SparkSubmit extends CommandLineUtils {
       }
     }
 
-    if (clusterManager == MESOS && args.principal != null) {
-      sysProps.put("spark.yarn.principal", args.principal)
 
-      // set principal used to renew tokens. We use the job token for now
-      // because we have its keytab here and in the scheduler already.
-      sysProps.put("spark.hadoop.yarn.resourcemanager.principal", args.principal)
+    // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
+    // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos mode, we
+    // must trick it into thinking we're YARN.
+    if (clusterManager == MESOS && UserGroupInformation.isSecurityEnabled) {
+      val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
+      val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
 
-      if (!args.sparkProperties.contains("spark.mesos.kerberos.keytabBase64")) {
-        require(args.keytab != null, "Keytab must be specified when principal is specified.")
-        if (args.keytab != null && !new File(args.keytab).exists()) {
-          throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
-        }
-
-        val path: String = args.keytab
-        val key: String = s"spark.mesos.kerberos.keytabBase64"
-
-        // load keytab or tgt and pass to the driver via spark property
-        val bytes = Files.readAllBytes(Paths.get(path))
-        sysProps.put(key, DatatypeConverter.printBase64Binary(bytes))
-
-        // set auth mechanism to Kerberos and login locally if in CLIENT mode. In cluster mode
-        // no local Kerberos setup is necessary.
-        if (deployMode == CLIENT) {
-          val hadoopConf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
-          hadoopConf.set("hadoop.security.authentication", "Kerberos")
-          UserGroupInformation.setConfiguration(hadoopConf)
-          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
-        }
-      }
+      logDebug(s"Setting ${key} to ${shortUserName}.")
+      sysProps.put(key, shortUserName)
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
@@ -870,6 +847,7 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Represents a Maven Coordinate
+   *
    * @param groupId the groupId of the coordinate
    * @param artifactId the artifactId of the coordinate
    * @param version the version of the coordinate
@@ -881,6 +859,7 @@ private[spark] object SparkSubmitUtils {
 /**
  * Extracts maven coordinates from a comma-delimited string. Coordinates should be provided
  * in the format `groupId:artifactId:version` or `groupId/artifactId:version`.
+ *
  * @param coordinates Comma-delimited string of maven coordinates
  * @return Sequence of Maven coordinates
  */
@@ -911,6 +890,7 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Extracts maven coordinates from a comma-delimited string
+   *
    * @param defaultIvyUserDir The default user path for Ivy
    * @return A ChainResolver used by Ivy to search for and resolve dependencies.
    */
@@ -958,6 +938,7 @@ private[spark] object SparkSubmitUtils {
   /**
    * Output a comma-delimited list of paths for the downloaded jars to be added to the classpath
    * (will append to jars in SparkSubmit).
+   *
    * @param artifacts Sequence of dependencies that were resolved and retrieved
    * @param cacheDirectory directory where jars are cached
    * @return a comma-delimited list of paths for the dependencies
@@ -1010,6 +991,7 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Build Ivy Settings using options with default resolvers
+   *
    * @param remoteRepos Comma-delimited string of remote repositories other than maven central
    * @param ivyPath The path to the local ivy repository
    * @return An IvySettings object
@@ -1030,6 +1012,7 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Load Ivy settings from a given filename, using supplied resolvers
+   *
    * @param settingsFile Path to Ivy settings file
    * @param remoteRepos Comma-delimited string of remote repositories other than maven central
    * @param ivyPath The path to the local ivy repository
@@ -1095,6 +1078,7 @@ private[spark] object SparkSubmitUtils {
 
   /**
    * Resolves any dependencies that were supplied through maven coordinates
+   *
    * @param coordinates Comma-delimited string of maven coordinates
    * @param ivySettings An IvySettings containing resolvers to use
    * @param exclusions Exclusions to apply when resolving transitive dependencies

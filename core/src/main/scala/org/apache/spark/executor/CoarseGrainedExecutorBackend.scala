@@ -126,10 +126,6 @@ private[spark] class CoarseGrainedExecutorBackend(
           executor.stop()
         }
       }.start()
-
-    case UpdateDelegationTokens(tokens) =>
-      logInfo(s"Got UpdateDelegationTokens message with ${tokens.length} bytes")
-      CoarseGrainedExecutorBackend.addDelegationTokens(tokens, env.conf)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -181,11 +177,12 @@ private[spark] class CoarseGrainedExecutorBackend(
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
-  private def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
-    logInfo(s"Found delegation tokens of ${tokens.length} bytes")
+  private def addDelegationTokens(tokens: Array[Byte], driverConf: SparkConf) {
+    logInfo(s"Found delegation tokens of ${tokens.length} bytes.")
+
 
     // configure to use tokens for HDFS login
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(driverConf)
     hadoopConf.set("hadoop.security.authentication", "Token")
     UserGroupInformation.setConfiguration(hadoopConf)
 
@@ -242,8 +239,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
-      if (driverConf.contains("spark.mesos.kerberos.hdfsDelegationTokens")) {
-        val value = driverConf.get("spark.mesos.kerberos.hdfsDelegationTokens")
+      if (driverConf.contains("spark.mesos.kerberos.userCredentials")) {
+        val value = driverConf.get("spark.mesos.kerberos.userCredentials")
+        logInfo(s"token value=${value}")
         val tokens = DatatypeConverter.parseBase64Binary(value)
         addDelegationTokens(tokens, driverConf)
       }

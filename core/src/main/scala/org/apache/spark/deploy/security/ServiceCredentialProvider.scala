@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -44,6 +44,7 @@ trait ServiceCredentialProvider {
 
   /**
    * Obtain credentials for this service and get the time of the next renewal.
+   *
    * @param hadoopConf Configuration of current Hadoop Compatible system.
    * @param sparkConf Spark configuration.
    * @param creds Credentials to add tokens and security keys to.

@@ -18,8 +18,8 @@
 package org.apache.spark.deploy.yarn.security
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.deploy.security.HadoopFSCredentialProvider
 import org.scalatest.{Matchers, PrivateMethodTester}
-
 import org.apache.spark.{SparkException, SparkFunSuite}
 
 class HadoopFSCredentialProviderSuite
