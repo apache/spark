@@ -26,9 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
 
-import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.mesos.Protos.{Credentials => _, TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 
@@ -166,7 +164,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   override def start() {
     if (UserGroupInformation.isSecurityEnabled) {
-      setUGITokens
+      setUGITokens()
     }
 
     super.start()
@@ -269,7 +267,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   /** Writes delegation tokens to spark.mesos.kerberos.ugiTokens */
-  private def setUGITokens: Unit = {
+  private def setUGITokens(): Unit = {
     val userCreds = getDelegationTokens
 
     val byteStream = new java.io.ByteArrayOutputStream(1024 * 1024)

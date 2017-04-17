@@ -56,11 +56,6 @@ package object config {
       .stringConf
       .createOptional
 
-  private[spark] val KERBEROS_PRINCIPAL = ConfigBuilder("spark.mesos.kerberos.principal")
-    .doc("Kerberos principal.")
-    .stringConf
-    .createOptional
-
   private[spark] val USER_CREDENTIALS = ConfigBuilder("spark.mesos.kerberos.userCredentials")
     .doc("Base64 encoding of UGI tokens.")
     .stringConf

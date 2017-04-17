@@ -177,16 +177,18 @@ private[spark] class CoarseGrainedExecutorBackend(
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
-  private def addDelegationTokens(tokens: Array[Byte], driverConf: SparkConf) {
-    logInfo(s"Found delegation tokens of ${tokens.length} bytes.")
+  private def addMesosDelegationTokens(driverConf: SparkConf) {
+    val value = driverConf.get("spark.mesos.kerberos.userCredentials")
+    val tokens = DatatypeConverter.parseBase64Binary(value)
 
+    logDebug(s"Found delegation tokens of ${tokens.length} bytes.")
 
-    // configure to use tokens for HDFS login
+    // Use tokens for HDFS login.
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(driverConf)
     hadoopConf.set("hadoop.security.authentication", "Token")
     UserGroupInformation.setConfiguration(hadoopConf)
 
-    // decode tokens and add them to the credentials
+    // Decode tokens and add them to the current user's credentials.
     val creds = UserGroupInformation.getCurrentUser.getCredentials
     val tokensBuf = new java.io.ByteArrayInputStream(tokens)
     creds.readTokenStorageStream(new java.io.DataInputStream(tokensBuf))
@@ -240,10 +242,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       if (driverConf.contains("spark.mesos.kerberos.userCredentials")) {
-        val value = driverConf.get("spark.mesos.kerberos.userCredentials")
-        logInfo(s"token value=${value}")
-        val tokens = DatatypeConverter.parseBase64Binary(value)
-        addDelegationTokens(tokens, driverConf)
+        addMesosDelegationTokens(driverConf)
       }
 
       val env = SparkEnv.createExecutorEnv(

@@ -555,14 +555,4 @@ trait MesosSchedulerUtils extends Logging {
         driver.declineOffer(offer.getId)
     }
   }
-
-  // Pass the krb5.conf to the scheduler
-  def passKerberosConf(envBuilder: Environment.Builder): Unit = {
-    Option(System.getenv().getOrDefault("SPARK_MESOS_KRB5_CONF_BASE64", null)).foreach(krb5conf => {
-      logError(s"Passing ${krb5conf.length} bytes krb5.conf to sub-task")
-      envBuilder.addVariables(Environment.Variable.newBuilder().
-        setName("SPARK_MESOS_KRB5_CONF_BASE64").setValue(krb5conf).build()
-      )
-    })
-  }
 }
