@@ -39,6 +39,12 @@ from pyspark import shuffle
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
+try:
+    import raven
+    from raven.transport.http import HTTPTransport
+except ImportError:
+    raven = None
+
 
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
@@ -160,6 +166,24 @@ def read_udfs(pickleSer, infile, eval_type):
 
 
 def main(infile, outfile):
+    if raven:
+        sentry_kwargs = {
+            'environment': os.environ.get('SENTRY_ENVIRONMENT'),
+            'release': os.environ.get('SENTRY_RELEASE'),
+            'tags': os.environ.get('SENTRY_TAGS'),
+        }
+        sentry_kwargs = dict((key, value)
+                             for key, value in sentry_kwargs.items()
+                             if value)
+        if 'tags' in sentry_kwargs:
+            tags_list = sentry_kwargs['tags'].split(',')
+            all_tags = [item.split(':', 1) for item in tags_list]
+            good_tags = [item for item in all_tags if len(item) == 2]
+            sentry_kwargs['tags'] = dict(good_tags)
+        # use sync transport to ensure that error will get the Sentry before
+        # sys.exit(-1) will terminate the script.
+        raven_client = raven.Client(transport=HTTPTransport,
+                                    **sentry_kwargs)
     try:
         boot_time = time.time()
         split_index = read_int(infile)
@@ -228,6 +252,8 @@ def main(infile, outfile):
         else:
             process()
     except Exception:
+        if raven:
+            raven_client.captureException()
         try:
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
             write_with_length(traceback.format_exc().encode("utf-8"), outfile)
