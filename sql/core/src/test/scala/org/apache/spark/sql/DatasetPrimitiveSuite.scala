@@ -20,8 +20,6 @@ package org.apache.spark.sql
 import scala.collection.immutable.Queue
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.execution.DeserializeToObjectExec
 import org.apache.spark.sql.test.SharedSQLContext
 
 case class IntClass(value: Int)

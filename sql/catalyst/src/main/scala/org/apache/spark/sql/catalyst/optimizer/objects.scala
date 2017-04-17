@@ -104,20 +104,12 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
  *   1. Mapobject(e) where e is lambdavariable(), which means types for input output
  *      are primitive types
  *   2. no custom collection class specified
- * representation of data item.  For example back to back map operations.
+ *      representation of data item.  For example back to back map operations.
  */
 object EliminateMapObjects extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case _ @ DeserializeToObject(Invoke(
-        MapObjects(_, _, _, Cast(LambdaVariable(_, _, dataType, _), castDataType, _),
-          inputData, None),
-        funcName, returnType: ObjectType, arguments, propagateNull, returnNullable),
-        outputObjAttr, child) if dataType == castDataType =>
-      DeserializeToObject(Invoke(
-        inputData, funcName, returnType, arguments, propagateNull, returnNullable),
-        outputObjAttr, child)
-    case _ @ DeserializeToObject(Invoke(
-        MapObjects(_, _, _, LambdaVariable(_, _, dataType, _), inputData, None),
+    case DeserializeToObject(Invoke(
+        MapObjects(_, _, _, _ : LambdaVariable, inputData, None),
         funcName, returnType: ObjectType, arguments, propagateNull, returnNullable),
         outputObjAttr, child) =>
       DeserializeToObject(Invoke(
