@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
@@ -124,7 +125,15 @@ case class EliminateOuterJoin(conf: SQLConf) extends Rule[LogicalPlan] with Pred
     val emptyRow = new GenericInternalRow(attributes.length)
     val boundE = BindReferences.bindReference(e, attributes)
     if (boundE.find(_.isInstanceOf[Unevaluable]).isDefined) return false
-    val v = boundE.eval(emptyRow)
+    val v = try {
+      boundE.eval(emptyRow)
+    } catch {
+      case e: SparkException =>
+        e.getCause match {
+          case _: NullPointerException => true
+          case _ => throw e
+        }
+    }
     v == null || v == false
   }
 
