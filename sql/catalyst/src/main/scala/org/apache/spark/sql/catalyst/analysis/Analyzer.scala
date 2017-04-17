@@ -1240,7 +1240,7 @@ class Analyzer(
       }
 
       // Make sure a plan's expressions do not contain :
-      // 1. Aggregate expressions that has mixture of outer and local references.
+      // 1. Aggregate expressions that have mixture of outer and local references.
       // 2. Expressions containing outer references on plan nodes other than Filter.
       def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
         p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
