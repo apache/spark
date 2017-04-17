@@ -376,7 +376,7 @@ private[hive] class ClientWrapper(
     table.serdeProperties.foreach { case (k, v) => qlTable.setSerdeParam(k, v) }
 
     // set owner
-    qlTable.setOwner(conf.getUser)
+    qlTable.setOwner(state.getAuthenticator().getUserName())
     // set create time
     qlTable.setCreateTime((System.currentTimeMillis() / 1000).asInstanceOf[Int])
 
