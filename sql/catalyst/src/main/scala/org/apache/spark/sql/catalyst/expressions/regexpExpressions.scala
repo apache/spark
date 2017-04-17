@@ -92,7 +92,8 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
     See also:
       Use RLIKE to match with standard regular expressions.
 """)
-case class Like(left: Expression, right: Expression) extends StringRegexExpression {
+case class Like(left: Expression, right: Expression)
+  extends BinaryExpression with StringRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
 
