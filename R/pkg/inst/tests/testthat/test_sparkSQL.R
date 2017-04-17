@@ -3202,8 +3202,7 @@ test_that("dapply with bigint type", {
          },
          schema)
   result <- collect(df1)
-  resultString <- sprintf("%.10f", result$a[1])
-  expect_equal(resultString, "1380742793415240.0000000000")
+  expect_equal(result$a[1], 1380742793415240)
 })
 
 test_that("catalog APIs, listTables, listColumns, listFunctions", {
