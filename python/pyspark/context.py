@@ -249,15 +249,21 @@ class SparkContext(object):
     def _repr_html_(self):
         return """
         <div>
-            <p><b>Spark Context</b></p>
-            <ul>
-                <li>Spark <code>v{spark_version}</code></li>
-                <li><a href="{spark_ui_url}">Spark UI</a></li>
-            </ul>
+            <p><b>SparkContext</b></p>
+
+            <p><a href="{sc.uiWebUrl}">Spark UI</a></p>
+
+            <dl>
+              <dt>Version</dt>
+                <dd><code>v{sc.version}</code></dd>
+              <dt>Master</dt>
+                <dd><code>{sc.master}</code></dd>
+              <dt>AppName</dt>
+                <dd><code>{sc.appName}</code></dd>
+            </dl>
         </div>
         """.format(
-            spark_version=self.version,
-            spark_ui_url=self.uiWebUrl,
+            sc=self
         )
 
     def _initialize_context(self, jconf):

@@ -221,6 +221,9 @@ class SparkSession(object):
                 or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
 
+    def _repr_html_(self):
+        return self.sparkContext._repr_html_()
+
     @since(2.0)
     def newSession(self):
         """
