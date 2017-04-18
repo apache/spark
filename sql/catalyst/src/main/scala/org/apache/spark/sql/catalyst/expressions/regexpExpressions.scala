@@ -79,7 +79,7 @@ abstract class StringRegexExpression extends BinaryExpression
 
           _ matches any one character in the input (similar to . in posix regular expressions)
 
-          % matches zero ore more characters in the input (similar to .* in posix regular
+          % matches zero or more characters in the input (similar to .* in posix regular
           expressions)
 
         The escape character is '\'. If an escape character precedes a special symbol or another
