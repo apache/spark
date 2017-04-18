@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
@@ -144,7 +146,7 @@ class FileStreamSinkSuite extends StreamTest {
   }
 
   // This tests whether FileStreamSink works with aggregations. Specifically, it tests
-  // whether the the correct streaming QueryExecution (i.e. IncrementalExecution) is used to
+  // whether the correct streaming QueryExecution (i.e. IncrementalExecution) is used to
   // to execute the trigger for writing data to file sink. See SPARK-18440 for more details.
   test("writing with aggregation") {
 
@@ -221,7 +223,7 @@ class FileStreamSinkSuite extends StreamTest {
           df.writeStream.format("parquet").outputMode(mode).start(dir.getCanonicalPath)
         }
         Seq(mode, "not support").foreach { w =>
-          assert(e.getMessage.toLowerCase.contains(w))
+          assert(e.getMessage.toLowerCase(Locale.ROOT).contains(w))
         }
       }
 

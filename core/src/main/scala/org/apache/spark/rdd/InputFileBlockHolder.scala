@@ -41,9 +41,10 @@ private[spark] object InputFileBlockHolder {
    * The thread variable for the name of the current file being read. This is used by
    * the InputFileName function in Spark SQL.
    */
-  private[this] val inputBlock: ThreadLocal[FileBlock] = new ThreadLocal[FileBlock] {
-    override protected def initialValue(): FileBlock = new FileBlock
-  }
+  private[this] val inputBlock: InheritableThreadLocal[FileBlock] =
+    new InheritableThreadLocal[FileBlock] {
+      override protected def initialValue(): FileBlock = new FileBlock
+    }
 
   /**
    * Returns the holding file name or empty string if it is unknown.

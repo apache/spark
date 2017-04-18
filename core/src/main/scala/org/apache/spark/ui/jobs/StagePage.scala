@@ -142,7 +142,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val allAccumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
       val externalAccumulables = allAccumulables.values.filter { acc => !acc.internal }
-      val hasAccumulators = externalAccumulables.size > 0
+      val hasAccumulators = externalAccumulables.nonEmpty
 
       val summary =
         <div>
@@ -339,7 +339,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.metrics.isDefined)
 
       val summaryTable: Option[Seq[Node]] =
-        if (validTasks.size == 0) {
+        if (validTasks.isEmpty) {
           None
         }
         else {
@@ -786,8 +786,8 @@ private[ui] object StagePage {
       info: TaskInfo, metrics: TaskMetricsUIData, currentTime: Long): Long = {
     if (info.finished) {
       val totalExecutionTime = info.finishTime - info.launchTime
-      val executorOverhead = (metrics.executorDeserializeTime +
-        metrics.resultSerializationTime)
+      val executorOverhead = metrics.executorDeserializeTime +
+        metrics.resultSerializationTime
       math.max(
         0,
         totalExecutionTime - metrics.executorRunTime - executorOverhead -
@@ -872,7 +872,7 @@ private[ui] class TaskDataSource(
   // so that we can avoid creating duplicate contents during sorting the data
   private val data = tasks.map(taskRow).sorted(ordering(sortColumn, desc))
 
-  private var _slicedTaskIds: Set[Long] = null
+  private var _slicedTaskIds: Set[Long] = _
 
   override def dataSize: Int = data.size
 
@@ -887,10 +887,8 @@ private[ui] class TaskDataSource(
   private def taskRow(taskData: TaskUIData): TaskTableRowData = {
     val info = taskData.taskInfo
     val metrics = taskData.metrics
-    val duration = if (info.status == "RUNNING") info.timeRunning(currentTime)
-      else metrics.map(_.executorRunTime).getOrElse(1L)
-    val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
-      else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
+    val duration = taskData.taskDuration.getOrElse(1L)
+    val formatDuration = taskData.taskDuration.map(d => UIUtils.formatDuration(d)).getOrElse("")
     val schedulerDelay = metrics.map(getSchedulerDelay(info, _, currentTime)).getOrElse(0L)
     val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
     val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)

@@ -26,7 +26,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
 import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
-import org.apache.spark.ml.clustering.{LDA, LDAModel}
+import org.apache.spark.ml.clustering.{DistributedLDAModel, LDA, LDAModel}
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel, RegexTokenizer, StopWordsRemover}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.ParamPair
@@ -45,6 +45,13 @@ private[r] class LDAWrapper private (
   import LDAWrapper._
 
   private val lda: LDAModel = pipeline.stages.last.asInstanceOf[LDAModel]
+
+  // The following variables were called by R side code only when the LDA model is distributed
+  lazy private val distributedModel =
+    pipeline.stages.last.asInstanceOf[DistributedLDAModel]
+  lazy val trainingLogLikelihood: Double = distributedModel.trainingLogLikelihood
+  lazy val logPrior: Double = distributedModel.logPrior
+
   private val preprocessor: PipelineModel =
     new PipelineModel(s"${Identifiable.randomUID(pipeline.uid)}", pipeline.stages.dropRight(1))
 
@@ -122,6 +129,7 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
       .setK(k)
       .setMaxIter(maxIter)
       .setSubsamplingRate(subsamplingRate)
+      .setOptimizer(optimizer)
 
     val featureSchema = data.schema(features)
     val stages = featureSchema.dataType match {

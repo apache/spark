@@ -60,6 +60,7 @@ unsetHiveContext <- function() {
 
 # Tests for SparkSQL functions in SparkR
 
+filesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 sparkSession <- sparkR.session()
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
@@ -87,6 +88,13 @@ mockLinesComplexType <-
     "{\"c1\":[7, 8, 9], \"c2\":[\"g\", \"h\", \"i\"], \"c3\":[7.0, 8.0, 9.0]}")
 complexTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesComplexType, complexTypeJsonPath)
+
+# For test map type and struct type in DataFrame
+mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}",
+                      "{\"name\":\"Alice\",\"info\":{\"age\":20,\"height\":164.3}}",
+                      "{\"name\":\"David\",\"info\":{\"age\":60,\"height\":180}}")
+mapTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+writeLines(mockLinesMapType, mapTypeJsonPath)
 
 test_that("calling sparkRSQL.init returns existing SQL context", {
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
@@ -130,6 +138,59 @@ test_that("structType and structField", {
   expect_is(testSchema, "structType")
   expect_is(testSchema$fields()[[2]], "structField")
   expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
+})
+
+test_that("structField type strings", {
+  # positive cases
+  primitiveTypes <- list(byte = "ByteType",
+                         integer = "IntegerType",
+                         float = "FloatType",
+                         double = "DoubleType",
+                         string = "StringType",
+                         binary = "BinaryType",
+                         boolean = "BooleanType",
+                         timestamp = "TimestampType",
+                         date = "DateType")
+
+  complexTypes <- list("map<string,integer>" = "MapType(StringType,IntegerType,true)",
+                       "array<string>" = "ArrayType(StringType,true)",
+                       "struct<a:string>" = "StructType(StructField(a,StringType,true))")
+
+  typeList <- c(primitiveTypes, complexTypes)
+  typeStrings <- names(typeList)
+
+  for (i in seq_along(typeStrings)){
+    typeString <- typeStrings[i]
+    expected <- typeList[[i]]
+    testField <- structField("_col", typeString)
+    expect_is(testField, "structField")
+    expect_true(testField$nullable())
+    expect_equal(testField$dataType.toString(), expected)
+  }
+
+  # negative cases
+  primitiveErrors <- list(Byte = "Byte",
+                          INTEGER = "INTEGER",
+                          numeric = "numeric",
+                          character = "character",
+                          raw = "raw",
+                          logical = "logical")
+
+  complexErrors <- list("map<string, integer>" = " integer",
+                        "array<String>" = "String",
+                        "struct<a:string >" = "string ",
+                        "map <string,integer>" = "map <string,integer>",
+                        "array< string>" = " string",
+                        "struct<a: string>" = " string")
+
+  errorList <- c(primitiveErrors, complexErrors)
+  typeStrings <- names(errorList)
+
+  for (i in seq_along(typeStrings)){
+    typeString <- typeStrings[i]
+    expected <- paste0("Unsupported type for SparkDataframe: ", errorList[[i]])
+    expect_error(structField("_col", typeString), expected)
+  }
 })
 
 test_that("create DataFrame from RDD", {
@@ -196,11 +257,31 @@ test_that("create DataFrame from RDD", {
   expect_equal(dtypes(df), list(c("name", "string"), c("age", "int"), c("height", "float")))
   expect_equal(as.list(collect(where(df, df$name == "John"))),
                list(name = "John", age = 19L, height = 176.5))
+  expect_equal(getNumPartitions(df), 1)
+
+  df <- as.DataFrame(cars, numPartitions = 2)
+  expect_equal(getNumPartitions(df), 2)
+  df <- createDataFrame(cars, numPartitions = 3)
+  expect_equal(getNumPartitions(df), 3)
+  # validate limit by num of rows
+  df <- createDataFrame(cars, numPartitions = 60)
+  expect_equal(getNumPartitions(df), 50)
+  # validate when 1 < (length(coll) / numSlices) << length(coll)
+  df <- createDataFrame(cars, numPartitions = 20)
+  expect_equal(getNumPartitions(df), 20)
+
+  df <- as.DataFrame(data.frame(0))
+  expect_is(df, "SparkDataFrame")
+  df <- createDataFrame(list(list(1)))
+  expect_is(df, "SparkDataFrame")
+  df <- as.DataFrame(data.frame(0), numPartitions = 2)
+  # no data to partition, goes to 1
+  expect_equal(getNumPartitions(df), 1)
 
   setHiveContext(sc)
   sql("CREATE TABLE people (name string, age double, height float)")
   df <- read.df(jsonPathNa, "json", schema)
-  invisible(insertInto(df, "people"))
+  insertInto(df, "people")
   expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age,
                c(16))
   expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
@@ -213,7 +294,8 @@ test_that("createDataFrame uses files for large objects", {
   # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
   conf <- callJMethod(sparkSession, "conf")
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
-  df <- suppressWarnings(createDataFrame(iris))
+  df <- suppressWarnings(createDataFrame(iris, numPartitions = 3))
+  expect_equal(getNumPartitions(df), 3)
 
   # Resetting the conf back to default value
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
@@ -445,13 +527,6 @@ test_that("create DataFrame from a data.frame with complex types", {
   expect_equal(ldf$an_envir, collected$an_envir)
 })
 
-# For test map type and struct type in DataFrame
-mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}",
-                      "{\"name\":\"Alice\",\"info\":{\"age\":20,\"height\":164.3}}",
-                      "{\"name\":\"David\",\"info\":{\"age\":60,\"height\":180}}")
-mapTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-writeLines(mockLinesMapType, mapTypeJsonPath)
-
 test_that("Collect DataFrame with complex types", {
   # ArrayType
   df <- read.json(complexTypeJsonPath)
@@ -570,16 +645,20 @@ test_that("test tableNames and tables", {
   df <- read.json(jsonPath)
   createOrReplaceTempView(df, "table1")
   expect_equal(length(tableNames()), 1)
-  tables <- tables()
+  expect_equal(length(tableNames("default")), 1)
+  tables <- listTables()
   expect_equal(count(tables), 1)
+  expect_equal(count(tables()), count(tables))
+  expect_true("tableName" %in% colnames(tables()))
+  expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
 
   suppressWarnings(registerTempTable(df, "table2"))
-  tables <- tables()
+  tables <- listTables()
   expect_equal(count(tables), 2)
   suppressWarnings(dropTempTable("table1"))
   expect_true(dropTempView("table2"))
 
-  tables <- tables()
+  tables <- listTables()
   expect_equal(count(tables), 0)
 })
 
@@ -611,6 +690,9 @@ test_that("test cache, uncache and clearCache", {
   uncacheTable("table1")
   clearCache()
   expect_true(dropTempView("table1"))
+
+  expect_error(uncacheTable("foo"),
+      "Error in uncacheTable : no such table - Table or view 'foo' not found in database 'default'")
 })
 
 test_that("insertInto() on a registered table", {
@@ -704,7 +786,7 @@ test_that("objectFile() works with row serialization", {
   objectPath <- tempfile(pattern = "spark-test", fileext = ".tmp")
   df <- read.json(jsonPath)
   dfRDD <- toRDD(df)
-  saveAsObjectFile(coalesce(dfRDD, 1L), objectPath)
+  saveAsObjectFile(coalesceRDD(dfRDD, 1L), objectPath)
   objectIn <- objectFile(sc, objectPath)
 
   expect_is(objectIn, "RDD")
@@ -819,6 +901,17 @@ test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", 
   expect_true(is.data.frame(collect(df)))
 })
 
+test_that("setCheckpointDir(), checkpoint() on a DataFrame", {
+  checkpointDir <- file.path(tempdir(), "cproot")
+  expect_true(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+
+  setCheckpointDir(checkpointDir)
+  df <- read.json(jsonPath)
+  df <- checkpoint(df)
+  expect_is(df, "SparkDataFrame")
+  expect_false(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+})
+
 test_that("schema(), dtypes(), columns(), names() return the correct values/format", {
   df <- read.json(jsonPath)
   testSchema <- schema(df)
@@ -848,6 +941,14 @@ test_that("names() colnames() set the column names", {
   colnames(df) <- c("col3", "col4")
   expect_equal(names(df)[1], "col3")
 
+  expect_error(names(df) <- NULL, "Invalid column names.")
+  expect_error(names(df) <- c("sepal.length", "sepal_width"),
+               "Column names cannot contain the '.' symbol.")
+  expect_error(names(df) <- c(1, 2), "Invalid column names.")
+  expect_error(names(df) <- c("a"),
+               "Column names must have the same length as the number of columns in the dataset.")
+  expect_error(names(df) <- c("1", NA), "Column names cannot be NA.")
+
   expect_error(colnames(df) <- c("sepal.length", "sepal_width"),
                "Column names cannot contain the '.' symbol.")
   expect_error(colnames(df) <- c(1, 2), "Invalid column names.")
@@ -869,6 +970,12 @@ test_that("names() colnames() set the column names", {
   expect_equal(names(z)[3], "c")
   names(z)[3] <- "c2"
   expect_equal(names(z)[3], "c2")
+
+  # Test subset assignment
+  colnames(df)[1] <- "col5"
+  expect_equal(colnames(df)[1], "col5")
+  names(df)[2] <- "col6"
+  expect_equal(names(df)[2], "col6")
 })
 
 test_that("head() and first() return the correct data", {
@@ -986,6 +1093,18 @@ test_that("select operators", {
   expect_is(df[[2]], "Column")
   expect_is(df[["age"]], "Column")
 
+  expect_warning(df[[1:2]],
+                 "Subset index has length > 1. Only the first index is used.")
+  expect_is(suppressWarnings(df[[1:2]]), "Column")
+  expect_warning(df[[c("name", "age")]],
+                 "Subset index has length > 1. Only the first index is used.")
+  expect_is(suppressWarnings(df[[c("name", "age")]]), "Column")
+
+  expect_warning(df[[1:2]] <- df[[1]],
+                 "Subset index has length > 1. Only the first index is used.")
+  expect_warning(df[[c("name", "age")]] <- df[[1]],
+                 "Subset index has length > 1. Only the first index is used.")
+
   expect_is(df[, 1, drop = F], "SparkDataFrame")
   expect_equal(columns(df[, 1, drop = F]), c("name"))
   expect_equal(columns(df[, "age", drop = F]), c("age"))
@@ -1000,6 +1119,37 @@ test_that("select operators", {
   df$age2 <- df$age * 2
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
+  df$age2 <- df[["age"]] * 3
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == df$age * 3)), 2)
+
+  df$age2 <- 21
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 21)), 3)
+
+  df$age2 <- c(22)
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 22)), 3)
+
+  expect_error(df$age3 <- c(22, NA),
+              "value must be a Column, literal value as atomic in length of 1, or NULL")
+
+  df[["age2"]] <- 23
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 23)), 3)
+
+  df[[3]] <- 24
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 24)), 3)
+
+  df[[3]] <- df$age
+  expect_equal(count(where(df, df$age2 == df$age)), 2)
+
+  df[["age2"]] <- df[["name"]]
+  expect_equal(count(where(df, df$age2 == df$name)), 3)
+
+  expect_error(df[["age3"]] <- c(22, 23),
+              "value must be a Column, literal value as atomic in length of 1, or NULL")
 
   # Test parameter drop
   expect_equal(class(df[, 1]) == "SparkDataFrame", T)
@@ -1118,7 +1268,16 @@ test_that("column calculation", {
 
 test_that("test HiveContext", {
   setHiveContext(sc)
-  df <- createExternalTable("json", jsonPath, "json")
+
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("people", source = "json", schema = schema)
+  df <- read.df(jsonPathNa, "json", schema)
+  insertInto(df, "people")
+  expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age, c(16))
+  sql("DROP TABLE people")
+
+  df <- createTable("json", jsonPath, "json")
   expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
   df2 <- sql("select * from json")
@@ -1126,25 +1285,26 @@ test_that("test HiveContext", {
   expect_equal(count(df2), 3)
 
   jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "json2", "json", "append", path = jsonPath2))
+  saveAsTable(df, "json2", "json", "append", path = jsonPath2)
   df3 <- sql("select * from json2")
   expect_is(df3, "SparkDataFrame")
   expect_equal(count(df3), 3)
   unlink(jsonPath2)
 
   hivetestDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "hivetestbl", path = hivetestDataPath))
+  saveAsTable(df, "hivetestbl", path = hivetestDataPath)
   df4 <- sql("select * from hivetestbl")
   expect_is(df4, "SparkDataFrame")
   expect_equal(count(df4), 3)
   unlink(hivetestDataPath)
 
   parquetDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath))
+  saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath)
   df5 <- sql("select * from parquetest")
   expect_is(df5, "SparkDataFrame")
   expect_equal(count(df5), 3)
   unlink(parquetDataPath)
+
   unsetHiveContext()
 })
 
@@ -1176,7 +1336,8 @@ test_that("column functions", {
   c16 <- is.nan(c) + isnan(c) + isNaN(c)
   c17 <- cov(c, c1) + cov("c", "c1") + covar_samp(c, c1) + covar_samp("c", "c1")
   c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
-  c19 <- spark_partition_id()
+  c19 <- spark_partition_id() + coalesce(c) + coalesce(c1, c2, c3)
+  c20 <- to_timestamp(c) + to_timestamp(c, "yyyy") + to_date(c, "yyyy")
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1245,9 +1406,9 @@ test_that("column functions", {
 
   # Test first(), last()
   df <- read.json(jsonPath)
-  expect_equal(collect(select(df, first(df$age)))[[1]], NA)
+  expect_equal(collect(select(df, first(df$age)))[[1]], NA_real_)
   expect_equal(collect(select(df, first(df$age, TRUE)))[[1]], 30)
-  expect_equal(collect(select(df, first("age")))[[1]], NA)
+  expect_equal(collect(select(df, first("age")))[[1]], NA_real_)
   expect_equal(collect(select(df, first("age", TRUE)))[[1]], 30)
   expect_equal(collect(select(df, last(df$age)))[[1]], 19)
   expect_equal(collect(select(df, last(df$age, TRUE)))[[1]], 19)
@@ -1258,6 +1419,48 @@ test_that("column functions", {
   df <- createDataFrame(data.frame(x = c(2.5, 3.5)))
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
+
+  # Test to_json(), from_json()
+  df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+  j <- collect(select(df, alias(to_json(df$people), "json")))
+  expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
+
+  df <- read.json(mapTypeJsonPath)
+  j <- collect(select(df, alias(to_json(df$info), "json")))
+  expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
+  df <- as.DataFrame(j)
+  schema <- structType(structField("age", "integer"),
+                       structField("height", "double"))
+  s <- collect(select(df, alias(from_json(df$json, schema), "structcol")))
+  expect_equal(ncol(s), 1)
+  expect_equal(nrow(s), 3)
+  expect_is(s[[1]][[1]], "struct")
+  expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 } )))
+
+  # passing option
+  df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
+  schema2 <- structType(structField("date", "date"))
+  s <- collect(select(df, from_json(df$col, schema2)))
+  expect_equal(s[[1]][[1]], NA)
+  s <- collect(select(df, from_json(df$col, schema2, dateFormat = "dd/MM/yyyy")))
+  expect_is(s[[1]][[1]]$date, "Date")
+  expect_equal(as.character(s[[1]][[1]]$date), "2014-10-21")
+
+  # check for unparseable
+  df <- as.DataFrame(list(list("a" = "")))
+  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
+
+  # check if array type in string is correctly supported.
+  jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
+  df <- as.DataFrame(list(list("people" = jsonArr)))
+  schema <- structType(structField("name", "string"))
+  arr <- collect(select(df, alias(from_json(df$people, schema, as.json.array = TRUE), "arrcol")))
+  expect_equal(ncol(arr), 1)
+  expect_equal(nrow(arr), 1)
+  expect_is(arr[[1]][[1]], "list")
+  expect_equal(length(arr$arrcol[[1]]), 2)
+  expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
+  expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
 })
 
 test_that("column binary mathfunctions", {
@@ -1744,6 +1947,13 @@ test_that("union(), rbind(), except(), and intersect() on a DataFrame", {
   expect_equal(count(unioned2), 12)
   expect_equal(first(unioned2)$name, "Michael")
 
+  df3 <- df2
+  names(df3)[1] <- "newName"
+  expect_error(rbind(df, df3),
+               "Names of input data frames are different.")
+  expect_error(rbind(df, df2, df3),
+               "Names of input data frames are different.")
+
   excepted <- arrange(except(df, df2), desc(df$age))
   expect_is(unioned, "SparkDataFrame")
   expect_equal(count(excepted), 2)
@@ -1777,6 +1987,13 @@ test_that("withColumn() and withColumnRenamed()", {
   newDF <- withColumn(df, "age", df$age + 2)
   expect_equal(length(columns(newDF)), 2)
   expect_equal(first(filter(newDF, df$name != "Michael"))$age, 32)
+
+  newDF <- withColumn(df, "age", 18)
+  expect_equal(length(columns(newDF)), 2)
+  expect_equal(first(newDF)$age, 18)
+
+  expect_error(withColumn(df, "age", list("a")),
+              "Literal value must be atomic in length of 1")
 
   newDF2 <- withColumnRenamed(df, "age", "newerAge")
   expect_equal(length(columns(newDF2)), 2)
@@ -2154,11 +2371,19 @@ test_that("sampleBy() on a DataFrame", {
 })
 
 test_that("approxQuantile() on a DataFrame", {
-  l <- lapply(c(0:99), function(i) { i })
-  df <- createDataFrame(l, "key")
-  quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
-  expect_equal(quantiles[[1]], 50)
-  expect_equal(quantiles[[2]], 80)
+  l <- lapply(c(0:99), function(i) { list(i, 99 - i) })
+  df <- createDataFrame(l, list("a", "b"))
+  quantiles <- approxQuantile(df, "a", c(0.5, 0.8), 0.0)
+  expect_equal(quantiles, list(50, 80))
+  quantiles2 <- approxQuantile(df, c("a", "b"), c(0.5, 0.8), 0.0)
+  expect_equal(quantiles2[[1]], list(50, 80))
+  expect_equal(quantiles2[[2]], list(50, 80))
+
+  dfWithNA <- createDataFrame(data.frame(a = c(NA, 30, 19, 11, 28, 15),
+                                         b = c(-30, -19, NA, -11, -28, -15)))
+  quantiles3 <- approxQuantile(dfWithNA, c("a", "b"), c(0.5), 0.0)
+  expect_equal(quantiles3[[1]], list(28))
+  expect_equal(quantiles3[[2]], list(-15))
 })
 
 test_that("SQL error message is returned from JVM", {
@@ -2423,15 +2648,18 @@ test_that("repartition by columns on DataFrame", {
     ("Please, specify the number of partitions and/or a column\\(s\\)", retError), TRUE)
 
   # repartition by column and number of partitions
-  actual <- repartition(df, 3L, col = df$"a")
+  actual <- repartition(df, 3, col = df$"a")
 
-  # since we cannot access the number of partitions from dataframe, checking
-  # that at least the dimensions are identical
+  # Checking that at least the dimensions are identical
   expect_identical(dim(df), dim(actual))
+  expect_equal(getNumPartitions(actual), 3L)
 
   # repartition by number of partitions
   actual <- repartition(df, 13L)
   expect_identical(dim(df), dim(actual))
+  expect_equal(getNumPartitions(actual), 13L)
+
+  expect_equal(getNumPartitions(coalesce(actual, 1L)), 1L)
 
   # a test case with a column and dapply
   schema <-  structType(structField("a", "integer"), structField("avg", "double"))
@@ -2445,6 +2673,25 @@ test_that("repartition by columns on DataFrame", {
 
   # Number of partitions is equal to 2
   expect_equal(nrow(df1), 2)
+})
+
+test_that("coalesce, repartition, numPartitions", {
+  df <- as.DataFrame(cars, numPartitions = 5)
+  expect_equal(getNumPartitions(df), 5)
+  expect_equal(getNumPartitions(coalesce(df, 3)), 3)
+  expect_equal(getNumPartitions(coalesce(df, 6)), 5)
+
+  df1 <- coalesce(df, 3)
+  expect_equal(getNumPartitions(df1), 3)
+  expect_equal(getNumPartitions(coalesce(df1, 6)), 5)
+  expect_equal(getNumPartitions(coalesce(df1, 4)), 4)
+  expect_equal(getNumPartitions(coalesce(df1, 2)), 2)
+
+  df2 <- repartition(df1, 10)
+  expect_equal(getNumPartitions(df2), 10)
+  expect_equal(getNumPartitions(coalesce(df2, 13)), 10)
+  expect_equal(getNumPartitions(coalesce(df2, 7)), 7)
+  expect_equal(getNumPartitions(coalesce(df2, 3)), 3)
 })
 
 test_that("gapply() and gapplyCollect() on a DataFrame", {
@@ -2591,7 +2838,7 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
 
   # more tests for SPARK-16538
   createOrReplaceTempView(df, "table")
-  SparkR::tables()
+  SparkR::listTables()
   SparkR::sql("SELECT 1")
   suppressWarnings(SparkR::sql(sqlContext, "SELECT * FROM table"))
   suppressWarnings(SparkR::dropTempTable(sqlContext, "table"))
@@ -2679,9 +2926,9 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
                paste("source should be character, NULL or omitted. It is the datasource specified",
                      "in 'spark.sql.sources.default' configuration by default."))
   expect_error(write.df(df, path = c(3)),
-               "path should be charactor, NULL or omitted.")
+               "path should be character, NULL or omitted.")
   expect_error(write.df(df, mode = TRUE),
-               "mode should be charactor or omitted. It is 'error' by default.")
+               "mode should be character or omitted. It is 'error' by default.")
 })
 
 test_that("Call DataFrameWriter.load() API in Java without path and check argument types", {
@@ -2700,7 +2947,7 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
 
   # Arguments checking in R side.
   expect_error(read.df(path = c(3)),
-               "path should be charactor, NULL or omitted.")
+               "path should be character, NULL or omitted.")
   expect_error(read.df(jsonPath, source = c(1, 2)),
                paste("source should be character, NULL or omitted. It is the datasource specified",
                      "in 'spark.sql.sources.default' configuration by default."))
@@ -2709,9 +2956,133 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
                  "Unnamed arguments ignored: 2, 3, a.")
 })
 
+test_that("Collect on DataFrame when NAs exists at the top of a timestamp column", {
+  ldf <- data.frame(col1 = c(0, 1, 2),
+                   col2 = c(as.POSIXct("2017-01-01 00:00:01"),
+                            NA,
+                            as.POSIXct("2017-01-01 12:00:01")),
+                   col3 = c(as.POSIXlt("2016-01-01 00:59:59"),
+                            NA,
+                            as.POSIXlt("2016-01-01 12:01:01")))
+  sdf1 <- createDataFrame(ldf)
+  ldf1 <- collect(sdf1)
+  expect_equal(dtypes(sdf1), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf1$col1), "numeric")
+  expect_equal(class(ldf1$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf1$col3), c("POSIXct", "POSIXt"))
+
+  # Columns with NAs at the top
+  sdf2 <- filter(sdf1, "col1 > 1")
+  ldf2 <- collect(sdf2)
+  expect_equal(dtypes(sdf2), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf2$col1), "numeric")
+  expect_equal(class(ldf2$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf2$col3), c("POSIXct", "POSIXt"))
+
+  # Columns with only NAs, the type will also be cast to PRIMITIVE_TYPE
+  sdf3 <- filter(sdf1, "col1 == 0")
+  ldf3 <- collect(sdf3)
+  expect_equal(dtypes(sdf3), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf3$col1), "numeric")
+  expect_equal(class(ldf3$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
+})
+
+test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
+  expect_equal(currentDatabase(), "default")
+  expect_error(setCurrentDatabase("default"), NA)
+  expect_error(setCurrentDatabase("foo"),
+               "Error in setCurrentDatabase : analysis error - Database 'foo' does not exist")
+  dbs <- collect(listDatabases())
+  expect_equal(names(dbs), c("name", "description", "locationUri"))
+  expect_equal(dbs[[1]], "default")
+})
+
+test_that("catalog APIs, listTables, listColumns, listFunctions", {
+  tb <- listTables()
+  count <- count(tables())
+  expect_equal(nrow(tb), count)
+  expect_equal(colnames(tb), c("name", "database", "description", "tableType", "isTemporary"))
+
+  createOrReplaceTempView(as.DataFrame(cars), "cars")
+
+  tb <- listTables()
+  expect_equal(nrow(tb), count + 1)
+  tbs <- collect(tb)
+  expect_true(nrow(tbs[tbs$name == "cars", ]) > 0)
+  expect_error(listTables("bar"),
+               "Error in listTables : no such database - Database 'bar' not found")
+
+  c <- listColumns("cars")
+  expect_equal(nrow(c), 2)
+  expect_equal(colnames(c),
+               c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
+  expect_equal(collect(c)[[1]][[1]], "speed")
+  expect_error(listColumns("foo", "default"),
+       "Error in listColumns : analysis error - Table 'foo' does not exist in database 'default'")
+
+  f <- listFunctions()
+  expect_true(nrow(f) >= 200) # 250
+  expect_equal(colnames(f),
+               c("name", "database", "description", "className", "isTemporary"))
+  expect_equal(take(orderBy(f, "className"), 1)$className,
+               "org.apache.spark.sql.catalyst.expressions.Abs")
+  expect_error(listFunctions("foo_db"),
+               "Error in listFunctions : analysis error - Database 'foo_db' does not exist")
+
+  # recoverPartitions does not work with tempory view
+  expect_error(recoverPartitions("cars"),
+               "no such table - Table or view 'cars' not found in database 'default'")
+  expect_error(refreshTable("cars"), NA)
+  expect_error(refreshByPath("/"), NA)
+
+  dropTempView("cars")
+})
+
+compare_list <- function(list1, list2) {
+  # get testthat to show the diff by first making the 2 lists equal in length
+  expect_equal(length(list1), length(list2))
+  l <- max(length(list1), length(list2))
+  length(list1) <- l
+  length(list2) <- l
+  expect_equal(sort(list1, na.last = TRUE), sort(list2, na.last = TRUE))
+}
+
+# This should always be the **very last test** in this test file.
+test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
+  # Check that it is not creating any extra file.
+  # Does not check the tempdir which would be cleaned up after.
+  filesAfter <- list.files(path = sparkRDir, all.files = TRUE)
+
+  expect_true(length(sparkRFilesBefore) > 0)
+  # first, ensure derby.log is not there
+  expect_false("derby.log" %in% filesAfter)
+  # second, ensure only spark-warehouse is created when calling SparkSession, enableHiveSupport = F
+  # note: currently all other test files have enableHiveSupport = F, so we capture the list of files
+  # before creating a SparkSession with enableHiveSupport = T at the top of this test file
+  # (filesBefore). The test here is to compare that (filesBefore) against the list of files before
+  # any test is run in run-all.R (sparkRFilesBefore).
+  # sparkRWhitelistSQLDirs is also defined in run-all.R, and should contain only 2 whitelisted dirs,
+  # here allow the first value, spark-warehouse, in the diff, everything else should be exactly the
+  # same as before any test is run.
+  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRWhitelistSQLDirs[[1]]))
+  # third, ensure only spark-warehouse and metastore_db are created when enableHiveSupport = T
+  # note: as the note above, after running all tests in this file while enableHiveSupport = T, we
+  # check the list of files again. This time we allow both whitelisted dirs to be in the diff.
+  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRWhitelistSQLDirs))
+})
+
 unlink(parquetPath)
 unlink(orcPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
+unlink(complexTypeJsonPath)
+unlink(mapTypeJsonPath)
 
 sparkR.session.stop()

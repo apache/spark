@@ -317,12 +317,7 @@ JavaSparkContext jsc = ...
 // standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
 JavaDoubleRDD u = normalJavaRDD(jsc, 1000000L, 10);
 // Apply a transform to get a random double RDD following `N(1, 4)`.
-JavaDoubleRDD v = u.map(
-  new Function<Double, Double>() {
-    public Double call(Double x) {
-      return 1.0 + 2.0 * x;
-    }
-  });
+JavaDoubleRDD v = u.mapToDouble(x -> 1.0 + 2.0 * x);
 {% endhighlight %}
 </div>
 
@@ -354,7 +349,7 @@ v = u.map(lambda x: 1.0 + 2.0 * x)
 useful for visualizing empirical probability distributions without requiring assumptions about the
 particular distribution that the observed samples are drawn from. It computes an estimate of the
 probability density function of a random variables, evaluated at a given set of points. It achieves
-this estimate by expressing the PDF of the empirical distribution at a particular point as the the
+this estimate by expressing the PDF of the empirical distribution at a particular point as the
 mean of PDFs of normal distributions centered around each of the samples.
 
 <div class="codetabs">

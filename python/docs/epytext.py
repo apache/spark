@@ -9,6 +9,7 @@ RULES = (
     ('pyspark.rdd.RDD', 'RDD'),
 )
 
+
 def _convert_epytext(line):
     """
     >>> _convert_epytext("L{A}")
@@ -19,9 +20,11 @@ def _convert_epytext(line):
         line = re.sub(p, sub, line)
     return line
 
+
 def _process_docstring(app, what, name, obj, options, lines):
     for i in range(len(lines)):
         lines[i] = _convert_epytext(lines[i])
+
 
 def setup(app):
     app.connect("autodoc-process-docstring", _process_docstring)

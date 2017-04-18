@@ -114,7 +114,7 @@ set spark.sql.orderByOrdinal=false
 -- !query 9 schema
 struct<key:string,value:string>
 -- !query 9 output
-spark.sql.orderByOrdinal
+spark.sql.orderByOrdinal	false
 
 
 -- !query 10

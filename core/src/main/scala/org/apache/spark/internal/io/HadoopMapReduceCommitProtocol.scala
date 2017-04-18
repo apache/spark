@@ -99,7 +99,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   }
 
   private def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
-    // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
+    // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003-c000.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
     val split = taskContext.getTaskAttemptID.getTaskID.getId
@@ -113,11 +113,11 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     val taskAttemptId = new TaskAttemptID(taskId, 0)
 
     // Set up the configuration object
-    jobContext.getConfiguration.set("mapred.job.id", jobId.toString)
-    jobContext.getConfiguration.set("mapred.tip.id", taskAttemptId.getTaskID.toString)
-    jobContext.getConfiguration.set("mapred.task.id", taskAttemptId.toString)
-    jobContext.getConfiguration.setBoolean("mapred.task.is.map", true)
-    jobContext.getConfiguration.setInt("mapred.task.partition", 0)
+    jobContext.getConfiguration.set("mapreduce.job.id", jobId.toString)
+    jobContext.getConfiguration.set("mapreduce.task.id", taskAttemptId.getTaskID.toString)
+    jobContext.getConfiguration.set("mapreduce.task.attempt.id", taskAttemptId.toString)
+    jobContext.getConfiguration.setBoolean("mapreduce.task.ismap", true)
+    jobContext.getConfiguration.setInt("mapreduce.task.partition", 0)
 
     val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
     committer = setupCommitter(taskAttemptContext)
@@ -163,7 +163,4 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
       tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
     }
   }
-
-  /** Whether we are using a direct output committer */
-  def isDirectOutput(): Boolean = committer.getClass.getSimpleName.contains("Direct")
 }

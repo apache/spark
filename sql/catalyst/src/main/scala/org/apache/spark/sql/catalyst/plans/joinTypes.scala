@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object JoinType {
-  def apply(typ: String): JoinType = typ.toLowerCase.replace("_", "") match {
+  def apply(typ: String): JoinType = typ.toLowerCase(Locale.ROOT).replace("_", "") match {
     case "inner" => Inner
     case "outer" | "full" | "fullouter" => FullOuter
     case "leftouter" | "left" => LeftOuter

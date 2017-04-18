@@ -20,20 +20,29 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 
 import scala.collection.JavaConverters._
+import scala.language.postfixOps
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 
-
-class StreamingQueryStatusAndProgressSuite extends StreamTest {
+class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
+  implicit class EqualsIgnoreCRLF(source: String) {
+    def equalsIgnoreCRLF(target: String): Boolean = {
+      source.replaceAll("\r\n|\r|\n", System.lineSeparator) ===
+        target.replaceAll("\r\n|\r|\n", System.lineSeparator)
+    }
+  }
 
   test("StreamingQueryProgress - prettyJson") {
     val json1 = testProgress1.prettyJson
-    assert(json1 ===
+    assert(json1.equalsIgnoreCRLF(
       s"""
         |{
         |  "id" : "${testProgress1.id.toString}",
@@ -66,12 +75,12 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest {
         |    "description" : "sink"
         |  }
         |}
-      """.stripMargin.trim)
+      """.stripMargin.trim))
     assert(compact(parse(json1)) === testProgress1.json)
 
     val json2 = testProgress2.prettyJson
     assert(
-      json2 ===
+      json2.equalsIgnoreCRLF(
         s"""
          |{
          |  "id" : "${testProgress2.id.toString}",
@@ -96,7 +105,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest {
          |    "description" : "sink"
          |  }
          |}
-      """.stripMargin.trim)
+      """.stripMargin.trim))
     assert(compact(parse(json2)) === testProgress2.json)
   }
 
@@ -112,14 +121,14 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest {
 
   test("StreamingQueryStatus - prettyJson") {
     val json = testStatus.prettyJson
-    assert(json ===
+    assert(json.equalsIgnoreCRLF(
       """
         |{
         |  "message" : "active",
         |  "isDataAvailable" : true,
         |  "isTriggerActive" : false
         |}
-      """.stripMargin.trim)
+      """.stripMargin.trim))
   }
 
   test("StreamingQueryStatus - json") {
@@ -163,6 +172,41 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest {
       }
     } finally {
       query.stop()
+    }
+  }
+
+  test("SPARK-19378: Continue reporting stateOp metrics even if there is no active trigger") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10") {
+      val inputData = MemoryStream[Int]
+
+      val query = inputData.toDS().toDF("value")
+        .select('value)
+        .groupBy($"value")
+        .agg(count("*"))
+        .writeStream
+        .queryName("metric_continuity")
+        .format("memory")
+        .outputMode("complete")
+        .start()
+      try {
+        inputData.addData(1, 2)
+        query.processAllAvailable()
+
+        val progress = query.lastProgress
+        assert(progress.stateOperators.length > 0)
+        // Should emit new progresses every 10 ms, but we could be facing a slow Jenkins
+        eventually(timeout(1 minute)) {
+          val nextProgress = query.lastProgress
+          assert(nextProgress.timestamp !== progress.timestamp)
+          assert(nextProgress.numInputRows === 0)
+          assert(nextProgress.stateOperators.head.numRowsTotal === 2)
+          assert(nextProgress.stateOperators.head.numRowsUpdated === 0)
+        }
+      } finally {
+        query.stop()
+      }
     }
   }
 }

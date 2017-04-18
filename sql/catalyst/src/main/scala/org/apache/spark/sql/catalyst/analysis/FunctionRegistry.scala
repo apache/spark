@@ -64,6 +64,8 @@ trait FunctionRegistry {
   /** Clear all registered functions. */
   def clear(): Unit
 
+  /** Create a copy of this registry with identical functions as this registry. */
+  override def clone(): FunctionRegistry = throw new CloneNotSupportedException()
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -107,7 +109,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.clear()
   }
 
-  def copy(): SimpleFunctionRegistry = synchronized {
+  override def clone(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
       registry.registerFunction(name, info, builder)
@@ -150,6 +152,7 @@ object EmptyFunctionRegistry extends FunctionRegistry {
     throw new UnsupportedOperationException
   }
 
+  override def clone(): FunctionRegistry = this
 }
 
 
@@ -163,9 +166,11 @@ object FunctionRegistry {
     expression[Abs]("abs"),
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
+    expressionGeneratorOuter[Explode]("explode_outer"),
     expression[Greatest]("greatest"),
     expression[If]("if"),
     expression[Inline]("inline"),
+    expressionGeneratorOuter[Inline]("inline_outer"),
     expression[IsNaN]("isnan"),
     expression[IfNull]("ifnull"),
     expression[IsNull]("isnull"),
@@ -176,6 +181,7 @@ object FunctionRegistry {
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
     expression[PosExplode]("posexplode"),
+    expressionGeneratorOuter[PosExplode]("posexplode_outer"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
@@ -342,7 +348,8 @@ object FunctionRegistry {
     expression[CurrentTimestamp]("now"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
-    expression[ToDate]("to_date"),
+    expression[ParseToTimestamp]("to_timestamp"),
+    expression[ParseToDate]("to_date"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[TruncDate]("trunc"),
@@ -416,6 +423,10 @@ object FunctionRegistry {
     expression[BitwiseNot]("~"),
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
+
+    // json
+    expression[StructsToJson]("to_json"),
+    expression[JsonToStructs]("from_json"),
 
     // Cast aliases (SPARK-16730)
     castAlias("boolean", BooleanType),
@@ -507,5 +518,14 @@ object FunctionRegistry {
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }
+  }
+
+  private def expressionGeneratorOuter[T <: Generator : ClassTag](name: String)
+    : (String, (ExpressionInfo, FunctionBuilder)) = {
+    val (_, (info, generatorBuilder)) = expression[T](name)
+    val outerBuilder = (args: Seq[Expression]) => {
+      GeneratorOuter(generatorBuilder(args).asInstanceOf[Generator])
+    }
+    (name, (info, outerBuilder))
   }
 }

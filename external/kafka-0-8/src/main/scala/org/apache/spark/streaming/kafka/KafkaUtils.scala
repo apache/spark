@@ -20,7 +20,7 @@ package org.apache.spark.streaming.kafka
 import java.io.OutputStream
 import java.lang.{Integer => JInt, Long => JLong, Number => JNumber}
 import java.nio.charset.StandardCharsets
-import java.util.{List => JList, Map => JMap, Set => JSet}
+import java.util.{List => JList, Locale, Map => JMap, Set => JSet}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -206,7 +206,7 @@ object KafkaUtils {
       kafkaParams: Map[String, String],
       topics: Set[String]
     ): Map[TopicAndPartition, Long] = {
-    val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase)
+    val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase(Locale.ROOT))
     val result = for {
       topicPartitions <- kc.getPartitions(topics).right
       leaderOffsets <- (if (reset == Some("smallest")) {

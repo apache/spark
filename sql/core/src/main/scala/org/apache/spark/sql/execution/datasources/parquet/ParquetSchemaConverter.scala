@@ -51,22 +51,29 @@ import org.apache.spark.sql.types._
  *        and prior versions when converting a Catalyst [[StructType]] to a Parquet [[MessageType]].
  *        When set to false, use standard format defined in parquet-format spec.  This argument only
  *        affects Parquet write path.
+ * @param writeTimestampInMillis Whether to write timestamp values as INT64 annotated by logical
+ *        type TIMESTAMP_MILLIS.
+ *
  */
 private[parquet] class ParquetSchemaConverter(
     assumeBinaryIsString: Boolean = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
     assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
-    writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get) {
+    writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get,
+    writeTimestampInMillis: Boolean = SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
     assumeInt96IsTimestamp = conf.isParquetINT96AsTimestamp,
-    writeLegacyParquetFormat = conf.writeLegacyParquetFormat)
+    writeLegacyParquetFormat = conf.writeLegacyParquetFormat,
+    writeTimestampInMillis = conf.isParquetINT64AsTimestampMillis)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
     assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean,
     writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
-      SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get.toString).toBoolean)
+      SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get.toString).toBoolean,
+    writeTimestampInMillis = conf.get(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key).toBoolean)
+
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -158,7 +165,7 @@ private[parquet] class ParquetSchemaConverter(
           case INT_64 | null => LongType
           case DECIMAL => makeDecimalType(Decimal.MAX_LONG_DIGITS)
           case UINT_64 => typeNotSupported()
-          case TIMESTAMP_MILLIS => typeNotImplemented()
+          case TIMESTAMP_MILLIS => TimestampType
           case _ => illegalType()
         }
 
@@ -370,10 +377,16 @@ private[parquet] class ParquetSchemaConverter(
       // we may resort to microsecond precision in the future.
       //
       // For Parquet, we plan to write all `TimestampType` value as `TIMESTAMP_MICROS`, but it's
-      // currently not implemented yet because parquet-mr 1.7.0 (the version we're currently using)
-      // hasn't implemented `TIMESTAMP_MICROS` yet.
+      // currently not implemented yet because parquet-mr 1.8.1 (the version we're currently using)
+      // hasn't implemented `TIMESTAMP_MICROS` yet, however it supports TIMESTAMP_MILLIS. We will
+      // encode timestamp values as TIMESTAMP_MILLIS annotating INT64 if
+      // 'spark.sql.parquet.int64AsTimestampMillis' is set.
       //
       // TODO Converts `TIMESTAMP_MICROS` once parquet-mr implements that.
+
+      case TimestampType if writeTimestampInMillis =>
+        Types.primitive(INT64, repetition).as(TIMESTAMP_MILLIS).named(field.name)
+
       case TimestampType =>
         Types.primitive(INT96, repetition).named(field.name)
 
@@ -546,21 +559,8 @@ private[parquet] class ParquetSchemaConverter(
 private[parquet] object ParquetSchemaConverter {
   val SPARK_PARQUET_SCHEMA_NAME = "spark_schema"
 
-  // !! HACK ALERT !!
-  //
-  // PARQUET-363 & PARQUET-278: parquet-mr 1.8.1 doesn't allow constructing empty GroupType,
-  // which prevents us to avoid selecting any columns for queries like `SELECT COUNT(*) FROM t`.
-  // This issue has been fixed in parquet-mr 1.8.2-SNAPSHOT.
-  //
-  // To workaround this problem, here we first construct a `MessageType` with a single dummy
-  // field, and then remove the field to obtain an empty `MessageType`.
-  //
-  // TODO Reverts this change after upgrading parquet-mr to 1.8.2+
-  val EMPTY_MESSAGE = Types
-      .buildMessage()
-      .required(PrimitiveType.PrimitiveTypeName.INT32).named("dummy")
-      .named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
-  EMPTY_MESSAGE.getFields.clear()
+  val EMPTY_MESSAGE: MessageType =
+    Types.buildMessage().named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
 
   def checkFieldName(name: String): Unit = {
     // ,;{}()\n\t= and space are special characters in Parquet schema

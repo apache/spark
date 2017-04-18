@@ -173,7 +173,6 @@ case class Stack(children: Seq[Expression]) extends Generator {
     }
   }
 
-
   /**
    * Only support code generation when stack produces 50 rows or less.
    */
@@ -202,6 +201,22 @@ case class Stack(children: Seq[Expression]) extends Generator {
       s"this.${ev.value} = $wrapperClass$$.MODULE$$.make(this.$rowData);")
     ev.copy(code = code, isNull = "false")
   }
+}
+
+/**
+ * Wrapper around another generator to specify outer behavior. This is used to implement functions
+ * such as explode_outer. This expression gets replaced during analysis.
+ */
+case class GeneratorOuter(child: Generator) extends UnaryExpression with Generator {
+  final override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  override def elementSchema: StructType = child.elementSchema
+
+  override lazy val resolved: Boolean = false
 }
 
 /**

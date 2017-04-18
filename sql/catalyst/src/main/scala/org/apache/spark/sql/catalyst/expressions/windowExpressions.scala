@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -436,7 +438,6 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
   override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
-  override def supportsPartial: Boolean = false
   override lazy val mergeExpressions =
     throw new UnsupportedOperationException("Window Functions do not support merging.")
 }
@@ -517,7 +518,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
  * into the number of buckets); both variables are based on the size of the current partition.
  * During the calculation process the function keeps track of the current row number, the current
  * bucket number, and the row number at which the bucket will change (bucketThreshold). When the
- * current row number reaches bucket threshold, the bucket value is increased by one and the the
+ * current row number reaches bucket threshold, the bucket value is increased by one and the
  * threshold is increased by the bucket size (plus one extra if the current bucket is padded).
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
@@ -632,7 +633,7 @@ abstract class RankLike extends AggregateWindowFunction {
   override val updateExpressions = increaseRank +: increaseRowNumber +: children
   override val evaluateExpression: Expression = rank
 
-  override def sql: String = s"${prettyName.toUpperCase}()"
+  override def sql: String = s"${prettyName.toUpperCase(Locale.ROOT)}()"
 
   def withOrder(order: Seq[Expression]): RankLike
 }
@@ -696,7 +697,7 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
  *
- * @param children to base the rank on; a change in the value of one the children will trigger a
+ * @param children to base the rank on; a change in the value of one of the children will trigger a
  *                 change in rank. This is an internal parameter and will be assigned by the
  *                 Analyser.
  */

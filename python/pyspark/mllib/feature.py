@@ -274,11 +274,24 @@ class ChiSqSelectorModel(JavaVectorTransformer):
 class ChiSqSelector(object):
     """
     Creates a ChiSquared feature selector.
-    The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`.
-    `numTopFeatures` chooses a fixed number of top features according to a chi-squared test.
-    `percentile` is similar but chooses a fraction of all features instead of a fixed number.
-    `fpr` chooses all features whose p-value is below a threshold, thus controlling the false
-    positive rate of selection.
+    The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
+    `fdr`, `fwe`.
+
+     * `numTopFeatures` chooses a fixed number of top features according to a chi-squared test.
+
+     * `percentile` is similar but chooses a fraction of all features
+       instead of a fixed number.
+
+     * `fpr` chooses all features whose p-values are below a threshold,
+       thus controlling the false positive rate of selection.
+
+     * `fdr` uses the `Benjamini-Hochberg procedure <https://en.wikipedia.org/wiki/
+       False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure>`_
+       to choose all features whose false discovery rate is below a threshold.
+
+     * `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
+       1/numFeatures, thus controlling the family-wise error rate of selection.
+
     By default, the selection method is `numTopFeatures`, with the default number of top features
     set to 50.
 
@@ -305,11 +318,14 @@ class ChiSqSelector(object):
 
     .. versionadded:: 1.4.0
     """
-    def __init__(self, numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1, fpr=0.05):
+    def __init__(self, numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
+                 fdr=0.05, fwe=0.05):
         self.numTopFeatures = numTopFeatures
         self.selectorType = selectorType
         self.percentile = percentile
         self.fpr = fpr
+        self.fdr = fdr
+        self.fwe = fwe
 
     @since('2.1.0')
     def setNumTopFeatures(self, numTopFeatures):
@@ -338,11 +354,29 @@ class ChiSqSelector(object):
         self.fpr = float(fpr)
         return self
 
+    @since('2.2.0')
+    def setFdr(self, fdr):
+        """
+        set FDR [0.0, 1.0] for feature selection by FDR.
+        Only applicable when selectorType = "fdr".
+        """
+        self.fdr = float(fdr)
+        return self
+
+    @since('2.2.0')
+    def setFwe(self, fwe):
+        """
+        set FWE [0.0, 1.0] for feature selection by FWE.
+        Only applicable when selectorType = "fwe".
+        """
+        self.fwe = float(fwe)
+        return self
+
     @since('2.1.0')
     def setSelectorType(self, selectorType):
         """
         set the selector type of the ChisqSelector.
-        Supported options: "numTopFeatures" (default), "percentile", "fpr".
+        Supported options: "numTopFeatures" (default), "percentile", "fpr", "fdr", "fwe".
         """
         self.selectorType = str(selectorType)
         return self
@@ -358,7 +392,7 @@ class ChiSqSelector(object):
                      Apply feature discretizer before using this function.
         """
         jmodel = callMLlibFunc("fitChiSqSelector", self.selectorType, self.numTopFeatures,
-                               self.percentile, self.fpr, data)
+                               self.percentile, self.fpr, self.fdr, self.fwe, data)
         return ChiSqSelectorModel(jmodel)
 
 

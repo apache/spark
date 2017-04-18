@@ -93,7 +93,7 @@ abstract class ProbabilisticClassificationModel[
   /**
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
    * parameters:
-   *  - predicted labels as [[predictionCol]] of type [[Double]]
+   *  - predicted labels as [[predictionCol]] of type `Double`
    *  - raw predictions (confidences) as [[rawPredictionCol]] of type `Vector`
    *  - probability of each class as [[probabilityCol]] of type `Vector`.
    *
@@ -158,13 +158,15 @@ abstract class ProbabilisticClassificationModel[
    * doing the computation in-place.
    * These predictions are also called class conditional probabilities.
    *
-   * This internal method is used to implement [[transform()]] and output [[probabilityCol]].
+   * This internal method is used to implement `transform()` and output [[probabilityCol]].
    *
    * @return Estimated class conditional probabilities (modified input vector)
    */
   protected def raw2probabilityInPlace(rawPrediction: Vector): Vector
 
-  /** Non-in-place version of [[raw2probabilityInPlace()]] */
+  /**
+   * Non-in-place version of `raw2probabilityInPlace()`
+   */
   protected def raw2probability(rawPrediction: Vector): Vector = {
     val probs = rawPrediction.copy
     raw2probabilityInPlace(probs)
@@ -182,7 +184,7 @@ abstract class ProbabilisticClassificationModel[
    * Predict the probability of each class given the features.
    * These predictions are also called class conditional probabilities.
    *
-   * This internal method is used to implement [[transform()]] and output [[probabilityCol]].
+   * This internal method is used to implement `transform()` and output [[probabilityCol]].
    *
    * @return Estimated class conditional probabilities
    */

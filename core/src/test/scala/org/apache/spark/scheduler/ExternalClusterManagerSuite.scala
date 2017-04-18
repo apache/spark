@@ -73,12 +73,14 @@ private class DummySchedulerBackend extends SchedulerBackend {
 
 private class DummyTaskScheduler extends TaskScheduler {
   var initialized = false
-  override def rootPool: Pool = null
-  override def schedulingMode: SchedulingMode = SchedulingMode.NONE
+  override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
+  override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
   override def start(): Unit = {}
   override def stop(): Unit = {}
   override def submitTasks(taskSet: TaskSet): Unit = {}
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = {}
+  override def killTaskAttempt(
+    taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
   override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
   override def defaultParallelism(): Int = 2
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}

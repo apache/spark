@@ -30,8 +30,8 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SparkSession;
@@ -95,12 +95,7 @@ public class JavaApplySchemaSuite implements Serializable {
     personList.add(person2);
 
     JavaRDD<Row> rowRDD = jsc.parallelize(personList).map(
-      new Function<Person, Row>() {
-        @Override
-        public Row call(Person person) throws Exception {
-          return RowFactory.create(person.getName(), person.getAge());
-        }
-      });
+        person -> RowFactory.create(person.getName(), person.getAge()));
 
     List<StructField> fields = new ArrayList<>(2);
     fields.add(DataTypes.createStructField("name", DataTypes.StringType, false));
@@ -131,12 +126,7 @@ public class JavaApplySchemaSuite implements Serializable {
     personList.add(person2);
 
     JavaRDD<Row> rowRDD = jsc.parallelize(personList).map(
-        new Function<Person, Row>() {
-          @Override
-          public Row call(Person person) {
-            return RowFactory.create(person.getName(), person.getAge());
-          }
-        });
+        person -> RowFactory.create(person.getName(), person.getAge()));
 
     List<StructField> fields = new ArrayList<>(2);
     fields.add(DataTypes.createStructField("", DataTypes.StringType, false));
@@ -146,12 +136,7 @@ public class JavaApplySchemaSuite implements Serializable {
     Dataset<Row> df = spark.createDataFrame(rowRDD, schema);
     df.createOrReplaceTempView("people");
     List<String> actual = spark.sql("SELECT * FROM people").toJavaRDD()
-      .map(new Function<Row, String>() {
-        @Override
-        public String call(Row row) {
-          return row.getString(0) + "_" + row.get(1);
-        }
-      }).collect();
+      .map(row -> row.getString(0) + "_" + row.get(1)).collect();
 
     List<String> expected = new ArrayList<>(2);
     expected.add("Michael_29");
@@ -162,13 +147,13 @@ public class JavaApplySchemaSuite implements Serializable {
 
   @Test
   public void applySchemaToJSON() {
-    JavaRDD<String> jsonRDD = jsc.parallelize(Arrays.asList(
+    Dataset<String> jsonDS = spark.createDataset(Arrays.asList(
       "{\"string\":\"this is a simple string.\", \"integer\":10, \"long\":21474836470, " +
         "\"bigInteger\":92233720368547758070, \"double\":1.7976931348623157E308, " +
         "\"boolean\":true, \"null\":null}",
       "{\"string\":\"this is another simple string.\", \"integer\":11, \"long\":21474836469, " +
         "\"bigInteger\":92233720368547758069, \"double\":1.7976931348623157E305, " +
-        "\"boolean\":false, \"null\":null}"));
+        "\"boolean\":false, \"null\":null}"), Encoders.STRING());
     List<StructField> fields = new ArrayList<>(7);
     fields.add(DataTypes.createStructField("bigInteger", DataTypes.createDecimalType(20, 0),
       true));
@@ -199,14 +184,14 @@ public class JavaApplySchemaSuite implements Serializable {
         null,
         "this is another simple string."));
 
-    Dataset<Row> df1 = spark.read().json(jsonRDD);
+    Dataset<Row> df1 = spark.read().json(jsonDS);
     StructType actualSchema1 = df1.schema();
     Assert.assertEquals(expectedSchema, actualSchema1);
     df1.createOrReplaceTempView("jsonTable1");
     List<Row> actual1 = spark.sql("select * from jsonTable1").collectAsList();
     Assert.assertEquals(expectedResult, actual1);
 
-    Dataset<Row> df2 = spark.read().schema(expectedSchema).json(jsonRDD);
+    Dataset<Row> df2 = spark.read().schema(expectedSchema).json(jsonDS);
     StructType actualSchema2 = df2.schema();
     Assert.assertEquals(expectedSchema, actualSchema2);
     df2.createOrReplaceTempView("jsonTable2");

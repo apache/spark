@@ -286,6 +286,28 @@ setMethod("ceil",
             column(jc)
           })
 
+#' Returns the first column that is not NA
+#'
+#' Returns the first column that is not NA, or NA if all inputs are.
+#'
+#' @rdname coalesce
+#' @name coalesce
+#' @family normal_funcs
+#' @export
+#' @aliases coalesce,Column-method
+#' @examples \dontrun{coalesce(df$c, df$d, df$e)}
+#' @note coalesce(Column) since 2.1.1
+setMethod("coalesce",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "coalesce", jcols)
+            column(jc)
+          })
+
 #' Though scala functions has "col" function, we don't expose it in SparkR
 #' because we don't want to conflict with the "col" function in the R base
 #' package and we also have "column" function exported which is an alias of "col".
@@ -297,7 +319,7 @@ col <- function(x) {
 #' Returns a Column based on the given column name
 #'
 #' Returns a Column based on the given column name.
-#
+#'
 #' @param x Character column name.
 #'
 #' @rdname column
@@ -305,7 +327,7 @@ col <- function(x) {
 #' @family normal_funcs
 #' @export
 #' @aliases column,character-method
-#' @examples \dontrun{column(df)}
+#' @examples \dontrun{column("name")}
 #' @note column since 1.6.0
 setMethod("column",
           signature(x = "character"),
@@ -1730,21 +1752,119 @@ setMethod("toRadians",
 
 #' to_date
 #'
-#' Converts the column into DateType.
+#' Converts the column into a DateType. You may optionally specify a format
+#' according to the rules in:
+#' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
+#' If the string cannot be parsed according to the specified format (or default),
+#' the value of the column will be null.
+#' The default format is 'yyyy-MM-dd'.
 #'
-#' @param x Column to compute on.
+#' @param x Column to parse.
+#' @param format string to use to parse x Column to DateType. (optional)
 #'
 #' @rdname to_date
 #' @name to_date
 #' @family datetime_funcs
-#' @aliases to_date,Column-method
+#' @aliases to_date,Column,missing-method
 #' @export
-#' @examples \dontrun{to_date(df$c)}
-#' @note to_date since 1.5.0
+#' @examples
+#' \dontrun{
+#' to_date(df$c)
+#' to_date(df$c, 'yyyy-MM-dd')
+#' }
+#' @note to_date(Column) since 1.5.0
 setMethod("to_date",
-          signature(x = "Column"),
-          function(x) {
+          signature(x = "Column", format = "missing"),
+          function(x, format) {
             jc <- callJStatic("org.apache.spark.sql.functions", "to_date", x@jc)
+            column(jc)
+          })
+
+#' @rdname to_date
+#' @name to_date
+#' @family datetime_funcs
+#' @aliases to_date,Column,character-method
+#' @export
+#' @note to_date(Column, character) since 2.2.0
+setMethod("to_date",
+          signature(x = "Column", format = "character"),
+          function(x, format) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "to_date", x@jc, format)
+            column(jc)
+          })
+
+#' to_json
+#'
+#' Converts a column containing a \code{structType} or array of \code{structType} into a Column
+#' of JSON string. Resolving the Column can fail if an unsupported type is encountered.
+#'
+#' @param x Column containing the struct or array of the structs
+#' @param ... additional named properties to control how it is converted, accepts the same options
+#'            as the JSON data source.
+#'
+#' @family normal_funcs
+#' @rdname to_json
+#' @name to_json
+#' @aliases to_json,Column-method
+#' @export
+#' @examples
+#' \dontrun{
+#' # Converts a struct into a JSON object
+#' df <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
+#' select(df, to_json(df$d, dateFormat = 'dd/MM/yyyy'))
+#'
+#' # Converts an array of structs into a JSON array
+#' df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+#' select(df, to_json(df$people))
+#'}
+#' @note to_json since 2.2.0
+setMethod("to_json", signature(x = "Column"),
+          function(x, ...) {
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions", "to_json", x@jc, options)
+            column(jc)
+          })
+
+#' to_timestamp
+#'
+#' Converts the column into a TimestampType. You may optionally specify a format
+#' according to the rules in:
+#' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
+#' If the string cannot be parsed according to the specified format (or default),
+#' the value of the column will be null.
+#' The default format is 'yyyy-MM-dd HH:mm:ss'.
+#'
+#' @param x Column to parse.
+#' @param format string to use to parse x Column to DateType. (optional)
+#'
+#' @rdname to_timestamp
+#' @name to_timestamp
+#' @family datetime_funcs
+#' @aliases to_timestamp,Column,missing-method
+#' @export
+#' @examples
+#' \dontrun{
+#' to_timestamp(df$c)
+#' to_timestamp(df$c, 'yyyy-MM-dd')
+#' }
+#' @note to_timestamp(Column) since 2.2.0
+setMethod("to_timestamp",
+          signature(x = "Column", format = "missing"),
+          function(x, format) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "to_timestamp", x@jc)
+            column(jc)
+          })
+
+#' @rdname to_timestamp
+#' @name to_timestamp
+#' @family datetime_funcs
+#' @aliases to_timestamp,Column,character-method
+#' @export
+#' @note to_timestamp(Column, character) since 2.2.0
+setMethod("to_timestamp",
+          signature(x = "Column", format = "character"),
+          function(x, format) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "to_timestamp", x@jc, format)
             column(jc)
           })
 
@@ -2315,6 +2435,45 @@ setMethod("date_format", signature(y = "Column", x = "character"),
             column(jc)
           })
 
+#' from_json
+#'
+#' Parses a column containing a JSON string into a Column of \code{structType} with the specified
+#' \code{schema} or array of \code{structType} if \code{as.json.array} is set to \code{TRUE}.
+#' If the string is unparseable, the Column will contains the value NA.
+#'
+#' @param x Column containing the JSON string.
+#' @param schema a structType object to use as the schema to use when parsing the JSON string.
+#' @param as.json.array indicating if input string is JSON array of objects or a single object.
+#' @param ... additional named properties to control how the json is parsed, accepts the same
+#'            options as the JSON data source.
+#'
+#' @family normal_funcs
+#' @rdname from_json
+#' @name from_json
+#' @aliases from_json,Column,structType-method
+#' @export
+#' @examples
+#' \dontrun{
+#' schema <- structType(structField("name", "string"),
+#' select(df, from_json(df$value, schema, dateFormat = "dd/MM/yyyy"))
+#'}
+#' @note from_json since 2.2.0
+setMethod("from_json", signature(x = "Column", schema = "structType"),
+          function(x, schema, as.json.array = FALSE, ...) {
+            if (as.json.array) {
+              jschema <- callJStatic("org.apache.spark.sql.types.DataTypes",
+                                     "createArrayType",
+                                     schema$jobj)
+            } else {
+              jschema <- schema$jobj
+            }
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "from_json",
+                              x@jc, jschema, options)
+            column(jc)
+          })
+
 #' from_utc_timestamp
 #'
 #' Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
@@ -2473,8 +2632,8 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
 
 #' format_number
 #'
-#' Formats numeric column y to a format like '#,###,###.##', rounded to x decimal places,
-#' and returns the result as a string column.
+#' Formats numeric column y to a format like '#,###,###.##', rounded to x decimal places
+#' with HALF_EVEN round mode, and returns the result as a string column.
 #'
 #' If x is 0, the result has no decimal point or fractional part.
 #' If x < 0, the result will be null.
@@ -3150,7 +3309,8 @@ setMethod("cume_dist",
 #' The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
 #' sequence when there are ties. That is, if you were ranking a competition using dense_rank
 #' and had three people tie for second place, you would say that all three were in second
-#' place and that the next person came in third.
+#' place and that the next person came in third. Rank would give me sequential numbers, making
+#' the person that came in third place (after the ties) would register as coming in fifth.
 #'
 #' This is equivalent to the \code{DENSE_RANK} function in SQL.
 #'
@@ -3321,10 +3481,11 @@ setMethod("percent_rank",
 #'
 #' Window function: returns the rank of rows within a window partition.
 #'
-#' The difference between rank and denseRank is that denseRank leaves no gaps in ranking
-#' sequence when there are ties. That is, if you were ranking a competition using denseRank
+#' The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+#' sequence when there are ties. That is, if you were ranking a competition using dense_rank
 #' and had three people tie for second place, you would say that all three were in second
-#' place and that the next person came in third.
+#' place and that the next person came in third. Rank would give me sequential numbers, making
+#' the person that came in third place (after the ties) would register as coming in fifth.
 #'
 #' This is equivalent to the RANK function in SQL.
 #'
@@ -3387,7 +3548,7 @@ setMethod("row_number",
 
 #' array_contains
 #'
-#' Returns true if the array contain the value.
+#' Returns null if the array is null, true if the array contains the value, and false otherwise.
 #'
 #' @param x A Column
 #' @param value A value to be checked if contained in the column

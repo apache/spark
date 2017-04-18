@@ -28,10 +28,12 @@ object AttributeMap {
   }
 }
 
-class AttributeMap[A](baseMap: Map[ExprId, (Attribute, A)])
+class AttributeMap[A](val baseMap: Map[ExprId, (Attribute, A)])
   extends Map[Attribute, A] with Serializable {
 
   override def get(k: Attribute): Option[A] = baseMap.get(k.exprId).map(_._2)
+
+  override def contains(k: Attribute): Boolean = get(k).isDefined
 
   override def + [B1 >: A](kv: (Attribute, B1)): Map[Attribute, B1] = baseMap.values.toMap + kv
 

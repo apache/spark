@@ -29,9 +29,12 @@ class BisectingKMeansSuite
   final val k = 5
   @transient var dataset: Dataset[_] = _
 
+  @transient var sparseDataset: Dataset[_] = _
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
+    sparseDataset = KMeansSuite.generateSparseData(spark, 10, 1000, 42)
   }
 
   test("default parameters") {
@@ -44,11 +47,26 @@ class BisectingKMeansSuite
     assert(bkm.getMinDivisibleClusterSize === 1.0)
     val model = bkm.setMaxIter(1).fit(dataset)
 
-    // copied model must have the same parent
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(bkm, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
+  }
+
+  test("SPARK-16473: Verify Bisecting K-Means does not fail in edge case where" +
+    "one cluster is empty after split") {
+    val bkm = new BisectingKMeans()
+      .setK(k)
+      .setMinDivisibleClusterSize(4)
+      .setMaxIter(4)
+      .setSeed(123)
+
+    // Verify fit does not fail on very sparse data
+    val model = bkm.fit(sparseDataset)
+    val result = model.transform(sparseDataset)
+    val numClusters = result.select("prediction").distinct().collect().length
+    // Verify we hit the edge case
+    assert(numClusters < k && numClusters > 1)
   }
 
   test("setter/getter") {
@@ -119,8 +137,8 @@ class BisectingKMeansSuite
       assert(model.clusterCenters === model2.clusterCenters)
     }
     val bisectingKMeans = new BisectingKMeans()
-    testEstimatorAndModelReadWrite(
-      bisectingKMeans, dataset, BisectingKMeansSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(bisectingKMeans, dataset, BisectingKMeansSuite.allParamSettings,
+      BisectingKMeansSuite.allParamSettings, checkModelData)
   }
 }
 

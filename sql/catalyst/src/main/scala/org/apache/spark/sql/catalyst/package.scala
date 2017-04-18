@@ -28,5 +28,4 @@ package object catalyst {
    * 2.10.* builds.  See SI-6240 for more details.
    */
   protected[sql] object ScalaReflectionLock
-
 }

@@ -55,12 +55,12 @@ private[spark] class CredentialUpdater(
 
   /** Start the credential updater task */
   def start(): Unit = {
-    val startTime = sparkConf.get(CREDENTIALS_RENEWAL_TIME)
+    val startTime = sparkConf.get(CREDENTIALS_UPDATE_TIME)
     val remainingTime = startTime - System.currentTimeMillis()
     if (remainingTime <= 0) {
       credentialUpdater.schedule(credentialUpdaterRunnable, 1, TimeUnit.MINUTES)
     } else {
-      logInfo(s"Scheduling credentials refresh from HDFS in $remainingTime millis.")
+      logInfo(s"Scheduling credentials refresh from HDFS in $remainingTime ms.")
       credentialUpdater.schedule(credentialUpdaterRunnable, remainingTime, TimeUnit.MILLISECONDS)
     }
   }
@@ -81,8 +81,8 @@ private[spark] class CredentialUpdater(
             UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
             logInfo("Credentials updated from credentials file.")
 
-            val remainingTime = getTimeOfNextUpdateFromFileName(credentialsStatus.getPath)
-              - System.currentTimeMillis()
+            val remainingTime = (getTimeOfNextUpdateFromFileName(credentialsStatus.getPath)
+              - System.currentTimeMillis())
             if (remainingTime <= 0) TimeUnit.MINUTES.toMillis(1) else remainingTime
           } else {
             // If current credential file is older than expected, sleep 1 hour and check again.
@@ -100,6 +100,7 @@ private[spark] class CredentialUpdater(
         TimeUnit.HOURS.toMillis(1)
     }
 
+    logInfo(s"Scheduling credentials refresh from HDFS in $timeToNextUpdate ms.")
     credentialUpdater.schedule(
       credentialUpdaterRunnable, timeToNextUpdate, TimeUnit.MILLISECONDS)
   }

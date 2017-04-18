@@ -222,7 +222,7 @@ svmAlg.optimizer()
   .setNumIterations(200)
   .setRegParam(0.1)
   .setUpdater(new L1Updater());
-final SVMModel modelL1 = svmAlg.run(training.rdd());
+SVMModel modelL1 = svmAlg.run(training.rdd());
 {% endhighlight %}
 
 In order to run the above application, follow the instructions

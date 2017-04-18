@@ -26,11 +26,12 @@ sparkR.session(appName = "SparkR-ML-example")
 
 ############################ model read/write ##############################################
 # $example on:read_write$
-irisDF <- suppressWarnings(createDataFrame(iris))
+training <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
 # Fit a generalized linear model of family "gaussian" with spark.glm
-gaussianDF <- irisDF
-gaussianTestDF <- irisDF
-gaussianGLM <- spark.glm(gaussianDF, Sepal_Length ~ Sepal_Width + Species, family = "gaussian")
+df_list <- randomSplit(training, c(7,3), 2)
+gaussianDF <- df_list[[1]]
+gaussianTestDF <- df_list[[2]]
+gaussianGLM <- spark.glm(gaussianDF, label ~ features, family = "gaussian")
 
 # Save and then load a fitted MLlib model
 modelPath <- tempfile(pattern = "ml", fileext = ".tmp")
@@ -42,24 +43,23 @@ summary(gaussianGLM2)
 
 # Check model prediction
 gaussianPredictions <- predict(gaussianGLM2, gaussianTestDF)
-showDF(gaussianPredictions)
+head(gaussianPredictions)
 
 unlink(modelPath)
 # $example off:read_write$
 
 ############################ fit models with spark.lapply #####################################
 # Perform distributed training of multiple models with spark.lapply
-costs <- exp(seq(from = log(1), to = log(1000), length.out = 5))
-train <- function(cost) {
-  stopifnot(requireNamespace("e1071", quietly = TRUE))
-  model <- e1071::svm(Species ~ ., data = iris, cost = cost)
-  summary(model)
+algorithms <- c("Hartigan-Wong", "Lloyd", "MacQueen")
+train <- function(algorithm) {
+  model <- kmeans(x = iris[1:4], centers = 3, algorithm = algorithm)
+  model$withinss
 }
 
-model.summaries <- spark.lapply(costs, train)
+model.withinss <- spark.lapply(algorithms, train)
 
-# Print the summary of each model
-print(model.summaries)
+# Print the within-cluster sum of squares for each model
+print(model.withinss)
 
 # Stop the SparkSession now
 sparkR.session.stop()

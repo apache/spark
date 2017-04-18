@@ -93,7 +93,7 @@ public class ExternalShuffleBlockHandlerSuite {
 
     ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
     verify(callback, times(1)).onSuccess(response.capture());
-    verify(callback, never()).onFailure((Throwable) any());
+    verify(callback, never()).onFailure(any());
 
     StreamHandle handle =
       (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());

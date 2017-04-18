@@ -78,7 +78,7 @@ abstract class Gradient extends Serializable {
  *
  * for K classes multiclass classification problem.
  *
- * The model weights $w = (w_1, w_2, ..., w_{K-1})^T$ becomes a matrix which has dimension of
+ * The model weights \(w = (w_1, w_2, ..., w_{K-1})^T\) becomes a matrix which has dimension of
  * (K-1) * (N+1) if the intercepts are added. If the intercepts are not added, the dimension
  * will be (K-1) * N.
  *
@@ -93,9 +93,9 @@ abstract class Gradient extends Serializable {
  *    $$
  * </blockquote>
  *
- * where $\alpha(i) = 1$ if $i \ne 0$, and
- *       $\alpha(i) = 0$ if $i == 0$,
- *       $margins_i = x w_i$.
+ * where $\alpha(i) = 1$ if \(i \ne 0\), and
+ *       $\alpha(i) = 0$ if \(i == 0\),
+ *       \(margins_i = x w_i\).
  *
  * For optimization, we have to calculate the first derivative of the loss function, and
  * a simple calculation shows that
@@ -110,18 +110,19 @@ abstract class Gradient extends Serializable {
  *    $$
  * </blockquote>
  *
- * where $\delta_{i, j} = 1$ if $i == j$,
- *       $\delta_{i, j} = 0$ if $i != j$, and
+ * where $\delta_{i, j} = 1$ if \(i == j\),
+ *       $\delta_{i, j} = 0$ if \(i != j\), and
  *       multiplier =
  *         $\exp(margins_i) / (1 + \sum_k^{K-1} \exp(margins_i)) - (1-\alpha(y)\delta_{y, i+1})$
  *
  * If any of margins is larger than 709.78, the numerical computation of multiplier and loss
  * function will be suffered from arithmetic overflow. This issue occurs when there are outliers
  * in data which are far away from hyperplane, and this will cause the failing of training once
- * infinity / infinity is introduced. Note that this is only a concern when max(margins) &gt; 0.
+ * infinity / infinity is introduced. Note that this is only a concern when max(margins)
+ * {@literal >} 0.
  *
- * Fortunately, when max(margins) = maxMargin &gt; 0, the loss function and the multiplier can be
- * easily rewritten into the following equivalent numerically stable formula.
+ * Fortunately, when max(margins) = maxMargin {@literal >} 0, the loss function and the multiplier
+ * can be easily rewritten into the following equivalent numerically stable formula.
  *
  * <blockquote>
  *    $$
@@ -133,7 +134,7 @@ abstract class Gradient extends Serializable {
  *    \end{align}
  *    $$
  * </blockquote>
-
+ *
  * where sum = $\exp(-maxMargin) + \sum_i^{K-1}\exp(margins_i - maxMargin) - 1$.
  *
  * Note that each term, $(margins_i - maxMargin)$ in $\exp$ is smaller than zero; as a result,

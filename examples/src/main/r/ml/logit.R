@@ -40,7 +40,7 @@ summary(model)
 
 # Prediction
 predictions <- predict(model, test)
-showDF(predictions)
+head(predictions)
 # $example off:binomial$
 
 # Multinomial logistic regression
@@ -59,5 +59,7 @@ summary(model)
 
 # Prediction
 predictions <- predict(model, test)
-showDF(predictions)
+head(predictions)
 # $example off:multinomial$
+
+sparkR.session.stop()
