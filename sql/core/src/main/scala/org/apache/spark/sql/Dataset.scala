@@ -184,7 +184,7 @@ class Dataset[T] private[sql](
       case u @ Union(children) if children.forall(_.isInstanceOf[Command]) =>
         LocalRelation(u.output, queryExecution.executedPlan.executeCollect())
       case _ =>
-        queryExecution.analyzed
+        queryExecution.withCachedData
     }
   }
 
