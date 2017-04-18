@@ -24,6 +24,8 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.metadata.HiveFatalException
+import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.ql.plan.TableDesc
@@ -159,6 +161,7 @@ private[hive] object SparkHiveWriterContainer {
 
 private[spark] object SparkHiveDynamicPartitionWriterContainer {
   val SUCCESSFUL_JOB_OUTPUT_DIR_MARKER = "mapreduce.fileoutputcommitter.marksuccessfuljobs"
+  val DYNAMICPARTITIONMAXPARTSPERTASK = "hive.exec.max.dynamic.partitions.pernode"
 }
 
 private[spark] class SparkHiveDynamicPartitionWriterContainer(
@@ -211,6 +214,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     }
 
     val nonDynamicPartLen = row.numFields - dynamicPartColNames.length
+    val maxPartitions = conf.value.getInt(DYNAMICPARTITIONMAXPARTSPERTASK, 150)
     val dynamicPartPath = dynamicPartColNames.zipWithIndex.map { case (colName, i) =>
       val rawVal = row.get(nonDynamicPartLen + i, schema(colName).dataType)
       val string = if (rawVal == null) null else convertToHiveRawString(colName, rawVal)
@@ -224,6 +228,11 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     }.mkString
 
     def newWriter(): FileSinkOperator.RecordWriter = {
+      if (writers.size > maxPartitions) {
+        throw new HiveFatalException("%sMaximum was set to: %d".format(
+          ErrorMsg.DYNAMIC_PARTITIONS_TOO_MANY_PER_NODE_ERROR.getErrorCodedMsg, maxPartitions))
+      }
+
       val newFileSinkDesc = new FileSinkDesc(
         fileSinkConf.getDirName + dynamicPartPath,
         fileSinkConf.getTableInfo,
