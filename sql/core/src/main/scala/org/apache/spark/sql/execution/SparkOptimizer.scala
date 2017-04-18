@@ -30,9 +30,23 @@ class SparkOptimizer(
     experimentalMethods: ExperimentalMethods)
   extends Optimizer(catalog, conf) {
 
-  override def batches: Seq[Batch] = super.batches :+
+  override def batches: Seq[Batch] = (preOptimizationBatches ++ super.batches :+
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog, conf)) :+
     Batch("Extract Python UDF from Aggregate", Once, ExtractPythonUDFFromAggregate) :+
-    Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions) :+
+    Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions)) ++
+    postHocOptimizationBatches :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
+
+  /**
+   * Optimization batches that are executed before the regular optimization batches (also before
+   * the finish analysis batch).
+   */
+  def preOptimizationBatches: Seq[Batch] = Nil
+
+  /**
+   * Optimization batches that are executed after the regular optimization batches, but before the
+   * batch executing the [[ExperimentalMethods]] optimizer rules. This hook can be used to add
+   * custom optimizer batches to the Spark optimizer.
+   */
+   def postHocOptimizationBatches: Seq[Batch] = Nil
 }

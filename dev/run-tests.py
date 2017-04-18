@@ -344,6 +344,19 @@ def build_spark_sbt(hadoop_version):
     exec_sbt(profiles_and_goals)
 
 
+def build_spark_unidoc_sbt(hadoop_version):
+    set_title_and_block("Building Unidoc API Documentation", "BLOCK_DOCUMENTATION")
+    # Enable all of the profiles for the build:
+    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+    sbt_goals = ["unidoc"]
+    profiles_and_goals = build_profiles + sbt_goals
+
+    print("[info] Building Spark unidoc (w/Hive 1.2.1) using SBT with these arguments: ",
+          " ".join(profiles_and_goals))
+
+    exec_sbt(profiles_and_goals)
+
+
 def build_spark_assembly_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
@@ -352,6 +365,8 @@ def build_spark_assembly_sbt(hadoop_version):
     print("[info] Building Spark assembly (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
     exec_sbt(profiles_and_goals)
+    # Make sure that Java and Scala API documentation can be generated
+    build_spark_unidoc_sbt(hadoop_version)
 
 
 def build_apache_spark(build_tool, hadoop_version):

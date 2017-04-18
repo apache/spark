@@ -21,12 +21,14 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * Test basic expression parsing. If a type of expression is supported it should be tested here.
+ * Test basic expression parsing.
+ * If the type of an expression is supported it should be tested here.
  *
  * Please note that some of the expressions test don't have to be sound expressions, only their
  * structure needs to be valid. Unsound expressions should be caught by the Analyzer or
@@ -547,5 +549,12 @@ class ExpressionParserSuite extends PlanTest {
     // Function identifier contains countious backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
     assertEqual(complexName2.quotedString, UnresolvedAttribute("fo``o.ba``r"))
+  }
+
+  test("SPARK-19526 Support ignore nulls keywords for first and last") {
+    assertEqual("first(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
+    assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
+    assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
+    assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 }

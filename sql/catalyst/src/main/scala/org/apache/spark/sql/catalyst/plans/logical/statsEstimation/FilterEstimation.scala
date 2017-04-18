@@ -22,13 +22,14 @@ import scala.collection.mutable
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, Statistics}
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Logging {
+case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging {
 
   private val childStats = plan.child.stats(catalystConf)
 
@@ -104,11 +105,22 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         val percent2 = calculateFilterSelectivity(cond2, update = false).getOrElse(1.0)
         Some(percent1 + percent2 - (percent1 * percent2))
 
+      // Not-operator pushdown
       case Not(And(cond1, cond2)) =>
         calculateFilterSelectivity(Or(Not(cond1), Not(cond2)), update = false)
 
+      // Not-operator pushdown
       case Not(Or(cond1, cond2)) =>
         calculateFilterSelectivity(And(Not(cond1), Not(cond2)), update = false)
+
+      // Collapse two consecutive Not operators which could be generated after Not-operator pushdown
+      case Not(Not(cond)) =>
+        calculateFilterSelectivity(cond, update = false)
+
+      // The foldable Not has been processed in the ConstantFolding rule
+      // This is a top-down traversal. The Not could be pushed down by the above two cases.
+      case Not(l @ Literal(null, _)) =>
+        calculateSingleCondition(l, update = false)
 
       case Not(cond) =>
         calculateFilterSelectivity(cond, update = false) match {
@@ -134,13 +146,16 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    */
   def calculateSingleCondition(condition: Expression, update: Boolean): Option[Double] = {
     condition match {
+      case l: Literal =>
+        evaluateLiteral(l)
+
       // For evaluateBinary method, we assume the literal on the right side of an operator.
       // So we will change the order if not.
 
       // EqualTo/EqualNullSafe does not care about the order
-      case op @ Equality(ar: Attribute, l: Literal) =>
+      case Equality(ar: Attribute, l: Literal) =>
         evaluateEquality(ar, l, update)
-      case op @ Equality(l: Literal, ar: Attribute) =>
+      case Equality(l: Literal, ar: Attribute) =>
         evaluateEquality(ar, l, update)
 
       case op @ LessThan(ar: Attribute, l: Literal) =>
@@ -174,11 +189,32 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       case InSet(ar: Attribute, set) =>
         evaluateInSet(ar, set, update)
 
-      case IsNull(ar: Attribute) =>
+      // In current stage, we don't have advanced statistics such as sketches or histograms.
+      // As a result, some operator can't estimate `nullCount` accurately. E.g. left outer join
+      // estimation does not accurately update `nullCount` currently.
+      // So for IsNull and IsNotNull predicates, we only estimate them when the child is a leaf
+      // node, whose `nullCount` is accurate.
+      // This is a limitation due to lack of advanced stats. We should remove it in the future.
+      case IsNull(ar: Attribute) if plan.child.isInstanceOf[LeafNode] =>
         evaluateNullCheck(ar, isNull = true, update)
 
-      case IsNotNull(ar: Attribute) =>
+      case IsNotNull(ar: Attribute) if plan.child.isInstanceOf[LeafNode] =>
         evaluateNullCheck(ar, isNull = false, update)
+
+      case op @ Equality(attrLeft: Attribute, attrRight: Attribute) =>
+        evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
+
+      case op @ LessThan(attrLeft: Attribute, attrRight: Attribute) =>
+        evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
+
+      case op @ LessThanOrEqual(attrLeft: Attribute, attrRight: Attribute) =>
+        evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
+
+      case op @ GreaterThan(attrLeft: Attribute, attrRight: Attribute) =>
+        evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
+
+      case op @ GreaterThanOrEqual(attrLeft: Attribute, attrRight: Attribute) =>
+        evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
 
       case _ =>
         // TODO: it's difficult to support string operators without advanced statistics.
@@ -236,7 +272,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
   /**
    * Returns a percentage of rows meeting a binary comparison expression.
    *
-   * @param op a binary comparison operator uch as =, <, <=, >, >=
+   * @param op a binary comparison operator such as =, <, <=, >, >=
    * @param attr an Attribute (or a column)
    * @param literal a literal value (or constant)
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
@@ -337,6 +373,26 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
   }
 
   /**
+   * Returns a percentage of rows meeting a Literal expression.
+   * This method evaluates all the possible literal cases in Filter.
+   *
+   * FalseLiteral and TrueLiteral should be eliminated by optimizer, but null literal might be added
+   * by optimizer rule NullPropagation. For safety, we handle all the cases here.
+   *
+   * @param literal a literal value (or constant)
+   * @return an optional double value to show the percentage of rows meeting a given condition
+   */
+  def evaluateLiteral(literal: Literal): Option[Double] = {
+    literal match {
+      case Literal(null, _) => Some(0.0)
+      case FalseLiteral => Some(0.0)
+      case TrueLiteral => Some(1.0)
+      // Ideally, we should not hit the following branch
+      case _ => None
+    }
+  }
+
+  /**
    * Returns a percentage of rows meeting "IN" operator expression.
    * This method evaluates the equality predicate for all data types.
    *
@@ -407,7 +463,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * Returns a percentage of rows meeting a binary comparison expression.
    * This method evaluate expression for Numeric/Date/Timestamp/Boolean columns.
    *
-   * @param op a binary comparison operator uch as =, <, <=, >, >=
+   * @param op a binary comparison operator such as =, <, <=, >, >=
    * @param attr an Attribute (or a column)
    * @param literal a literal value (or constant)
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
@@ -503,6 +559,220 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
           colStat.copy(distinctCount = newNdv, min = newMin, max = newMax, nullCount = 0)
 
         colStatsMap(attr) = newStats
+      }
+    }
+
+    Some(percent.toDouble)
+  }
+
+  /**
+   * Returns a percentage of rows meeting a binary comparison expression containing two columns.
+   * In SQL queries, we also see predicate expressions involving two columns
+   * such as "column-1 (op) column-2" where column-1 and column-2 belong to same table.
+   * Note that, if column-1 and column-2 belong to different tables, then it is a join
+   * operator's work, NOT a filter operator's work.
+   *
+   * @param op a binary comparison operator, including =, <=>, <, <=, >, >=
+   * @param attrLeft the left Attribute (or a column)
+   * @param attrRight the right Attribute (or a column)
+   * @param update a boolean flag to specify if we need to update ColumnStat of the given columns
+   *               for subsequent conditions
+   * @return an optional double value to show the percentage of rows meeting a given condition
+   */
+  def evaluateBinaryForTwoColumns(
+      op: BinaryComparison,
+      attrLeft: Attribute,
+      attrRight: Attribute,
+      update: Boolean): Option[Double] = {
+
+    if (!colStatsMap.contains(attrLeft)) {
+      logDebug("[CBO] No statistics for " + attrLeft)
+      return None
+    }
+    if (!colStatsMap.contains(attrRight)) {
+      logDebug("[CBO] No statistics for " + attrRight)
+      return None
+    }
+
+    attrLeft.dataType match {
+      case StringType | BinaryType =>
+        // TODO: It is difficult to support other binary comparisons for String/Binary
+        // type without min/max and advanced statistics like histogram.
+        logDebug("[CBO] No range comparison statistics for String/Binary type " + attrLeft)
+        return None
+      case _ =>
+    }
+
+    val colStatLeft = colStatsMap(attrLeft)
+    val statsRangeLeft = Range(colStatLeft.min, colStatLeft.max, attrLeft.dataType)
+      .asInstanceOf[NumericRange]
+    val maxLeft = BigDecimal(statsRangeLeft.max)
+    val minLeft = BigDecimal(statsRangeLeft.min)
+
+    val colStatRight = colStatsMap(attrRight)
+    val statsRangeRight = Range(colStatRight.min, colStatRight.max, attrRight.dataType)
+      .asInstanceOf[NumericRange]
+    val maxRight = BigDecimal(statsRangeRight.max)
+    val minRight = BigDecimal(statsRangeRight.min)
+
+    // determine the overlapping degree between predicate range and column's range
+    val allNotNull = (colStatLeft.nullCount == 0) && (colStatRight.nullCount == 0)
+    val (noOverlap: Boolean, completeOverlap: Boolean) = op match {
+      // Left < Right or Left <= Right
+      // - no overlap:
+      //      minRight           maxRight     minLeft       maxLeft
+      // --------+------------------+------------+-------------+------->
+      // - complete overlap: (If null values exists, we set it to partial overlap.)
+      //      minLeft            maxLeft      minRight      maxRight
+      // --------+------------------+------------+-------------+------->
+      case _: LessThan =>
+        (minLeft >= maxRight, (maxLeft < minRight) && allNotNull)
+      case _: LessThanOrEqual =>
+        (minLeft > maxRight, (maxLeft <= minRight) && allNotNull)
+
+      // Left > Right or Left >= Right
+      // - no overlap:
+      //      minLeft            maxLeft      minRight      maxRight
+      // --------+------------------+------------+-------------+------->
+      // - complete overlap: (If null values exists, we set it to partial overlap.)
+      //      minRight           maxRight     minLeft       maxLeft
+      // --------+------------------+------------+-------------+------->
+      case _: GreaterThan =>
+        (maxLeft <= minRight, (minLeft > maxRight) && allNotNull)
+      case _: GreaterThanOrEqual =>
+        (maxLeft < minRight, (minLeft >= maxRight) && allNotNull)
+
+      // Left = Right or Left <=> Right
+      // - no overlap:
+      //      minLeft            maxLeft      minRight      maxRight
+      // --------+------------------+------------+-------------+------->
+      //      minRight           maxRight     minLeft       maxLeft
+      // --------+------------------+------------+-------------+------->
+      // - complete overlap:
+      //      minLeft            maxLeft
+      //      minRight           maxRight
+      // --------+------------------+------->
+      case _: EqualTo =>
+        ((maxLeft < minRight) || (maxRight < minLeft),
+          (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
+          && (colStatLeft.distinctCount == colStatRight.distinctCount)
+        )
+      case _: EqualNullSafe =>
+        // For null-safe equality, we use a very restrictive condition to evaluate its overlap.
+        // If null values exists, we set it to partial overlap.
+        (((maxLeft < minRight) || (maxRight < minLeft)) && allNotNull,
+          (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
+            && (colStatLeft.distinctCount == colStatRight.distinctCount)
+        )
+    }
+
+    var percent = BigDecimal(1.0)
+    if (noOverlap) {
+      percent = 0.0
+    } else if (completeOverlap) {
+      percent = 1.0
+    } else {
+      // For partial overlap, we use an empirical value 1/3 as suggested by the book
+      // "Database Systems, the complete book".
+      percent = 1.0 / 3.0
+
+      if (update) {
+        // Need to adjust new min/max after the filter condition is applied
+
+        val ndvLeft = BigDecimal(colStatLeft.distinctCount)
+        var newNdvLeft = (ndvLeft * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
+        if (newNdvLeft < 1) newNdvLeft = 1
+        val ndvRight = BigDecimal(colStatRight.distinctCount)
+        var newNdvRight = (ndvRight * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
+        if (newNdvRight < 1) newNdvRight = 1
+
+        var newMaxLeft = colStatLeft.max
+        var newMinLeft = colStatLeft.min
+        var newMaxRight = colStatRight.max
+        var newMinRight = colStatRight.min
+
+        op match {
+          case _: LessThan | _: LessThanOrEqual =>
+            // the left side should be less than the right side.
+            // If not, we need to adjust it to narrow the range.
+            // Left < Right or Left <= Right
+            //      minRight     <     minLeft
+            // --------+******************+------->
+            //              filtered      ^
+            //                            |
+            //                        newMinRight
+            //
+            //      maxRight     <     maxLeft
+            // --------+******************+------->
+            //         ^    filtered
+            //         |
+            //     newMaxLeft
+            if (minLeft > minRight) newMinRight = colStatLeft.min
+            if (maxLeft > maxRight) newMaxLeft = colStatRight.max
+
+          case _: GreaterThan | _: GreaterThanOrEqual =>
+            // the left side should be greater than the right side.
+            // If not, we need to adjust it to narrow the range.
+            // Left > Right or Left >= Right
+            //      minLeft     <      minRight
+            // --------+******************+------->
+            //              filtered      ^
+            //                            |
+            //                        newMinLeft
+            //
+            //      maxLeft     <      maxRight
+            // --------+******************+------->
+            //         ^    filtered
+            //         |
+            //     newMaxRight
+            if (minLeft < minRight) newMinLeft = colStatRight.min
+            if (maxLeft < maxRight) newMaxRight = colStatLeft.max
+
+          case _: EqualTo | _: EqualNullSafe =>
+            // need to set new min to the larger min value, and
+            // set the new max to the smaller max value.
+            // Left = Right or Left <=> Right
+            //      minLeft     <      minRight
+            // --------+******************+------->
+            //              filtered      ^
+            //                            |
+            //                        newMinLeft
+            //
+            //      minRight    <=     minLeft
+            // --------+******************+------->
+            //              filtered      ^
+            //                            |
+            //                        newMinRight
+            //
+            //      maxLeft     <      maxRight
+            // --------+******************+------->
+            //         ^    filtered
+            //         |
+            //     newMaxRight
+            //
+            //      maxRight    <=     maxLeft
+            // --------+******************+------->
+            //         ^    filtered
+            //         |
+            //     newMaxLeft
+          if (minLeft < minRight) {
+            newMinLeft = colStatRight.min
+          } else {
+            newMinRight = colStatLeft.min
+          }
+          if (maxLeft < maxRight) {
+            newMaxRight = colStatLeft.max
+          } else {
+            newMaxLeft = colStatRight.max
+          }
+        }
+
+        val newStatsLeft = colStatLeft.copy(distinctCount = newNdvLeft, min = newMinLeft,
+          max = newMaxLeft)
+        colStatsMap(attrLeft) = newStatsLeft
+        val newStatsRight = colStatRight.copy(distinctCount = newNdvRight, min = newMinRight,
+          max = newMaxRight)
+        colStatsMap(attrRight) = newStatsRight
       }
     }
 
