@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Expression, PredicateHelper}
-import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike}
+import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical.{BinaryNode, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -47,7 +47,7 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
       }
       // After reordering is finished, convert OrderedJoin back to Join
       result transformDown {
-        case oj: OrderedJoin => oj.join
+        case OrderedJoin(left, right, jt, cond) => Join(left, right, jt, cond)
       }
     }
   }
@@ -87,22 +87,24 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
   }
 
   private def replaceWithOrderedJoin(plan: LogicalPlan): LogicalPlan = plan match {
-    case j @ Join(left, right, _: InnerLike, Some(cond)) =>
+    case j @ Join(left, right, jt: InnerLike, Some(cond)) =>
       val replacedLeft = replaceWithOrderedJoin(left)
       val replacedRight = replaceWithOrderedJoin(right)
-      OrderedJoin(j.copy(left = replacedLeft, right = replacedRight))
+      OrderedJoin(replacedLeft, replacedRight, jt, Some(cond))
     case p @ Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond))) =>
       p.copy(child = replaceWithOrderedJoin(j))
     case _ =>
       plan
   }
+}
 
-  /** This is a wrapper class for a join node that has been ordered. */
-  private case class OrderedJoin(join: Join) extends BinaryNode {
-    override def left: LogicalPlan = join.left
-    override def right: LogicalPlan = join.right
-    override def output: Seq[Attribute] = join.output
-  }
+/** This is a mimic class for a join node that has been ordered. */
+case class OrderedJoin(
+    left: LogicalPlan,
+    right: LogicalPlan,
+    joinType: JoinType,
+    condition: Option[Expression]) extends BinaryNode {
+  override def output: Seq[Attribute] = left.output ++ right.output
 }
 
 /**
