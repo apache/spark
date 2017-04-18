@@ -346,6 +346,91 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(!log2.exists())
   }
 
+  test("SPARK-18716: log cleaner for limited space usage") {
+    val maxAge = TimeUnit.SECONDS.toMillis(20)
+    val clock = new ManualClock(maxAge / 2)
+    val conf = createTestConf()
+      .set("spark.history.fs.cleaner.cleanType", "space")
+      .set("space.history.fs.cleaner.maxSpace", "10M")
+    val provider = new FsHistoryProvider(conf, clock)
+
+    val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
+    writeFile(log1, true, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
+      // Here, we simulated a `SparkListenerExecutorRemoved` event that occupies 2MB to create
+      // a same size event log file.
+      SparkListenerExecutorRemoved(0L, "executor", createReason(2 * 1024 * 1024)),
+      SparkListenerApplicationEnd(2L)
+    )
+    log1.setLastModified(1000L)
+    log1.length()
+
+    val log2 = newLogFile("app1", Some("attempt2"), inProgress = false)
+    writeFile(log2, true, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2")),
+      // Here, we simulated a `SparkListenerExecutorRemoved` event that occupies 2MB to create
+      // a same size event log file.
+      SparkListenerExecutorRemoved(0L, "executor", createReason(2 * 1024 * 1024)),
+      SparkListenerApplicationEnd(4L)
+    )
+    log2.setLastModified(2000L)
+
+    val log3 = newLogFile("app2", Some("attempt1"), inProgress = true)
+    writeFile(log3, true, None,
+      SparkListenerApplicationStart("app2", Some("app2"), 5L, "test", Some("attempt1")),
+      // Here, we simulated a `SparkListenerExecutorRemoved` event that occupies 4MB to create
+      // a same size event log file.
+      SparkListenerExecutorRemoved(0L, "executor", createReason(4 * 1024 * 1024)),
+      SparkListenerApplicationEnd(6L)
+    )
+    log3.setLastModified(5000L)
+
+    updateAndCheck(provider) { list =>
+      list.size should be (2)
+    }
+    assert(log1.exists())
+    assert(log2.exists())
+    assert(log3.exists())
+
+    val log4 = newLogFile("app3", Some("attempt1"), inProgress = false)
+    writeFile(log4, true, None,
+      SparkListenerApplicationStart("app3", Some("app3"), 7L, "test", Some("attempt1")),
+      // Here, we simulated a `SparkListenerExecutorRemoved` event that occupies 3MB to create
+      // a same size event log file.
+      SparkListenerExecutorRemoved(0L, "executor", createReason(3 * 1024 * 1024)),
+      SparkListenerApplicationEnd(8L)
+    )
+    log4.setLastModified(7000L)
+
+    updateAndCheck(provider) { list =>
+      list.size should be (3)
+    }
+    assert(!log1.exists())
+    assert(log2.exists())
+    assert(log3.exists())
+    assert(log4.exists())
+
+    val log5 = newLogFile("app4", Some("attempt1"), inProgress = true)
+    writeFile(log5, true, None,
+      SparkListenerApplicationStart("app4", Some("app4"), 9L, "test", Some("attempt1")),
+      // Here, we simulated a `SparkListenerExecutorRemoved` event that occupies 5MB to create
+      // a same size event log file.
+      SparkListenerExecutorRemoved(0L, "executor", createReason(5 * 1024 * 1024)),
+      SparkListenerApplicationEnd(10L)
+    )
+    log5.setLastModified(9000L)
+
+    updateAndCheck(provider) { list =>
+      list.size should be (2)
+    }
+    assert(!log1.exists())
+    assert(!log2.exists())
+    assert(!log3.exists())
+    assert(log4.exists())
+    assert(log5.exists())
+
+  }
+
   test("Event log copy") {
     val provider = new FsHistoryProvider(createTestConf())
     val logs = (1 to 2).map { i =>
@@ -606,6 +691,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     } {
       writer.close()
     }
+  }
+
+  private def createReason(length: Int): String = {
+    val sb = new StringBuilder
+    for (i <- 0 to length) {
+      sb.append('*')
+    }
+    sb.toString()
   }
 
   private def createEmptyFile(file: File) = {

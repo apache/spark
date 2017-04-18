@@ -27,7 +27,7 @@ import scala.xml.Node
 
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
@@ -551,13 +551,32 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private[history] def cleanLogs(): Unit = {
     try {
+      // CleanType:
+      // 1. age (default): Job history files older than `spark.history.fs.cleaner.maxAge` will be
+      // deleted.
+      // 2. space: Job history files can only use `space.history.fs.cleaner.maxSpace` size of
+      // external storage space. The excess part of job history files will be deleted, oldest file
+      // first.
+      val cleanType = conf.get("spark.history.fs.cleaner.cleanType", "age")
       val maxAge = conf.getTimeAsSeconds("spark.history.fs.cleaner.maxAge", "7d") * 1000
+      val maxSpace = conf.getSizeAsBytes("space.history.fs.cleaner.maxSpace", "100G")
+      var spaceUsed = 0L
 
       val now = clock.getTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
       def shouldClean(attempt: FsApplicationAttemptInfo): Boolean = {
-        now - attempt.lastUpdated > maxAge
+        cleanType match {
+          case "age" =>
+            now - attempt.lastUpdated > maxAge
+          case "space" =>
+            spaceUsed += fs.getContentSummary(new Path(s"$logDir/${attempt.logPath}")).getLength
+            spaceUsed >= maxSpace
+          case s: String =>
+            logWarning(s"'spark.history.fs.cleaner.cleanType' can only be set as 'age' or " +
+              s"'space', but invalid $s was set, and replaced as 'age' mode.")
+            now - attempt.lastUpdated > maxAge
+        }
       }
 
       // Scan all logs from the log directory.
