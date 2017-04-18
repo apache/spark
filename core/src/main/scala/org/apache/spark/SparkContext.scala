@@ -193,7 +193,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * ------------------------------------------------------------------------------------- */
 
   private var _conf: SparkConf = _
-  private var _eventLogDir: Option[URI] = None
+  private var _eventLogDir: Option[String] = None
   private var _eventLogCodec: Option[String] = None
   private var _env: SparkEnv = _
   private var _jobProgressListener: JobProgressListener = _
@@ -236,7 +236,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def appName: String = _conf.get("spark.app.name")
 
   private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
-  private[spark] def eventLogDir: Option[URI] = _eventLogDir
+  private[spark] def eventLogDir: Option[String] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
   def isLocal: Boolean = Utils.isLocalMaster(_conf)
@@ -405,9 +405,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _eventLogDir =
       if (isEventLogEnabled) {
-        val unresolvedDir = conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR)
-          .stripSuffix("/")
-        Some(Utils.resolveURI(unresolvedDir))
+        Some(conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR).stripSuffix("/"))
       } else {
         None
       }
