@@ -48,7 +48,7 @@ private[spark] trait AppStatusPlugin {
    */
   def setupListeners(
       conf: SparkConf,
-      store: KVStore,
+      store: ElementTrackingStore,
       addListenerFn: SparkListener => Unit,
       live: Boolean): Unit
 

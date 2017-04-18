@@ -18,6 +18,7 @@
 package org.apache.spark.status
 
 import java.util.Date
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.HashMap
 
@@ -40,8 +41,8 @@ private[spark] abstract class LiveEntity {
 
   var lastWriteTime = 0L
 
-  def write(store: KVStore, now: Long): Unit = {
-    store.write(doUpdate())
+  def write(store: ElementTrackingStore, now: Long, checkTriggers: Boolean = false): Unit = {
+    store.write(doUpdate(), checkTriggers || lastWriteTime == 0L)
     lastWriteTime = now
   }
 
@@ -402,6 +403,10 @@ private class LiveStage extends LiveEntity {
   val metrics = new MetricsTracker()
 
   val executorSummaries = new HashMap[String, LiveExecutorStageSummary]()
+
+  // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
+  @volatile var cleaning = false
+  var savedTasks = new AtomicInteger(0)
 
   def executorSummary(executorId: String): LiveExecutorStageSummary = {
     executorSummaries.getOrElseUpdate(executorId,

@@ -93,9 +93,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   // To limit the total memory usage of JobProgressListener, we only track information for a fixed
   // number of non-active jobs and stages (there is no limit for active jobs and stages):
 
-  val retainedStages = conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
-  val retainedJobs = conf.getInt("spark.ui.retainedJobs", SparkUI.DEFAULT_RETAINED_JOBS)
-  val retainedTasks = conf.get(UI_RETAINED_TASKS)
+  val retainedStages = conf.getInt("spark.ui.retainedStages", 1000)
+  val retainedJobs = conf.getInt("spark.ui.retainedJobs", 1000)
+  val retainedTasks = conf.getInt("spark.ui.retainedTasks", 100000)
 
   // We can test for memory leaks by ensuring that collections that track non-active jobs and
   // stages do not grow without bound and that collections for active jobs/stages eventually become
