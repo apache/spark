@@ -69,13 +69,15 @@ private[deploy] class HadoopFSCredentialProvider
     nextRenewalDate
   }
 
-  def getTokenRenewalInterval(hadoopConf: Configuration, sparkConf: SparkConf): Option[Long] = None
+  protected def getTokenRenewalInterval(
+    hadoopConf: Configuration,
+    sparkConf: SparkConf): Option[Long] = None
 
-  def getTokenRenewer(hadoopConf: Configuration): String = {
+  protected def getTokenRenewer(hadoopConf: Configuration): String = {
     UserGroupInformation.getCurrentUser.getShortUserName
   }
 
-  def hadoopFSsToAccess(hadoopConf: Configuration, sparkConf: SparkConf): Set[Path] = {
+  protected def hadoopFSsToAccess(hadoopConf: Configuration, sparkConf: SparkConf): Set[Path] = {
     Set(FileSystem.get(hadoopConf).getHomeDirectory)
   }
 }
