@@ -472,15 +472,19 @@ identifierComment
     ;
 
 relationPrimary
-    : tableIdentifier sample? (AS? strictIdentifier)?                                        #tableName
-    | '(' queryNoWith ')' sample? (AS? strictIdentifier)?                                    #aliasedQuery
-    | '(' relation ')' sample? (AS? strictIdentifier)?                                       #aliasedRelation
-    | inlineTable                                                                            #inlineTableDefault2
-    | identifier '(' (expression (',' expression)*)? ')' (AS? identifier identifierList?)?   #tableValuedFunction
+    : tableIdentifier sample? (AS? strictIdentifier)?                 #tableName
+    | '(' queryNoWith ')' sample? (AS? strictIdentifier)?             #aliasedQuery
+    | '(' relation ')' sample? (AS? strictIdentifier)?                #aliasedRelation
+    | inlineTable                                                     #inlineTableDefault2
+    | identifier '(' (expression (',' expression)*)? ')' tableAlias   #tableValuedFunction
     ;
 
 inlineTable
-    : VALUES expression (',' expression)*  (AS? identifier identifierList?)?
+    : VALUES expression (',' expression)*  tableAlias
+    ;
+
+tableAlias
+    : (AS? identifier identifierList?)?
     ;
 
 rowFormat
