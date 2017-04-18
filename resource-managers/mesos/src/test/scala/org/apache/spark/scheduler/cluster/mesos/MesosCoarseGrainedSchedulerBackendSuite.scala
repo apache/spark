@@ -37,7 +37,7 @@ import org.apache.spark.deploy.mesos.config
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor, RetrieveSparkAppConfig, SparkAppConfig}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RetrieveSparkAppConfig, SparkAppConfig}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.mesos.Utils._
 
@@ -91,7 +91,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos supports killing and relaunching tasks with executors") {
     init()
-    
+
     // launches a task on a valid offer
     val minMem = backend.executorMemory(sc) + 1024
     val minCpu = 4
@@ -468,7 +468,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
   test("mesos sets task name to spark.app.name") {
-    setBackend()
+    init()
 
     val offers = List(Resources(backend.executorMemory(sc), 1))
     offerResources(offers)
@@ -480,7 +480,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos sets configurable labels on tasks") {
     val taskLabelsString = "mesos:test,label:test"
-    setBackend(Map(
+    init(Map(
       "spark.mesos.task.labels" -> taskLabelsString
     ))
 
@@ -503,7 +503,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos ignored invalid labels and sets configurable labels on tasks") {
     val taskLabelsString = "mesos:test,label:test,incorrect:label:here"
-    setBackend(Map(
+    init(Map(
       "spark.mesos.task.labels" -> taskLabelsString
     ))
 
@@ -635,7 +635,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
         frameworkId: Option[String] = None): SchedulerDriver = driver
 
       override protected def getShuffleClient(): MesosExternalShuffleClient = externalShuffleClient
-      
+
       // override to avoid race condition with the driver thread on `mesosDriver`
       override def startScheduler(newDriver: SchedulerDriver): Unit = {}
 

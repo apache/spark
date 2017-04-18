@@ -20,9 +20,11 @@ package org.apache.spark.deploy.yarn.security
 import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.ConfigurableCredentialManager
