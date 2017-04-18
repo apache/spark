@@ -106,16 +106,6 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
  *      representation of data item.  For example back to back map operations.
  */
 object EliminateMapObjects extends Rule[LogicalPlan] {
-/*
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case DeserializeToObject(Invoke(
-      MapObjects(_, _, _, _ : LambdaVariable, inputData, None),
-      funcName, returnType: ObjectType, arguments, propagateNull, returnNullable),
-      outputObjAttr, child) =>
-    DeserializeToObject(Invoke(
-      inputData, funcName, returnType, arguments, propagateNull, returnNullable),
-      outputObjAttr, child)
-*/
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
      case MapObjects(_, _, _, LambdaVariable(_, _, _, false), inputData, None) => inputData
   }
