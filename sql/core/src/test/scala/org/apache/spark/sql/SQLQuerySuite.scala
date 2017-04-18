@@ -26,6 +26,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2605,5 +2606,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     } catch {
       case ae: AnalysisException => assert(ae.plan == null && ae.getMessage == ae.getSimpleMessage)
     }
+  }
+
+  test("SPARK-20281 Print the identical range parameters of SparkContext and SQL in EXPLAIN") {
+    def explainStr(df: DataFrame): String = {
+      val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+      val sparkPlan = spark.sessionState.executePlan(explain).executedPlan
+      sparkPlan.executeCollect().map(_.getString(0).trim).headOption.getOrElse("")
+    }
+    val scRange = sqlContext.range(10)
+    val sqlRange = sqlContext.sql("SELECT * FROM range(10)")
+    assert(explainStr(scRange) === explainStr(sqlRange))
   }
 }
