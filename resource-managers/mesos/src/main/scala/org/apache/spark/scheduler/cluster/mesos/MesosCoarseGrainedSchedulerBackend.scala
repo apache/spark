@@ -55,7 +55,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     master: String,
-    securityManager: SecurityManager)
+    securityManager: SecurityManager,
+    mesosSecurityManager: MesosSecurityManager)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with org.apache.mesos.Scheduler
   with MesosSchedulerUtils {
@@ -163,8 +164,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override def start() {
-    if (UserGroupInformation.isSecurityEnabled) {
-      setUGITokens()
+    if (mesosSecurityManager.isSecurityEnabled()) {
+      mesosSecurityManager.setUGITokens(conf)
     }
 
     super.start()
@@ -248,38 +249,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     command.build()
   }
 
-  /**
-   * Returns the user's credentials, with new delegation tokens added for all configured
-   * services.
-   */
-  private def getDelegationTokens: Credentials = {
-    logDebug(s"Retrieving delegation tokens.")
-
-    val userCreds = UserGroupInformation.getCurrentUser.getCredentials
-    val numTokensBefore = userCreds.numberOfTokens
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    val credentialManager = new ConfigurableCredentialManager(conf, hadoopConf)
-    credentialManager.obtainCredentials(hadoopConf, userCreds)
-
-    logDebug(s"Fetched ${userCreds.numberOfTokens - numTokensBefore} delegation token(s).")
-
-    userCreds
-  }
-
-  /** Writes delegation tokens to spark.mesos.kerberos.ugiTokens */
-  private def setUGITokens(): Unit = {
-    val userCreds = getDelegationTokens
-
-    val byteStream = new java.io.ByteArrayOutputStream(1024 * 1024)
-    val dataStream = new java.io.DataOutputStream(byteStream)
-    userCreds.writeTokenStorageToStream(dataStream)
-    val credsBytes = byteStream.toByteArray
-
-    logDebug(s"Writing ${credsBytes.length} bytes to ${config.USER_CREDENTIALS.key}.")
-
-    val creds64 = DatatypeConverter.printBase64Binary(credsBytes)
-    conf.set(config.USER_CREDENTIALS, creds64)
-  }
 
   protected def driverURL: String = {
     if (conf.contains("spark.testing")) {
