@@ -42,7 +42,7 @@ private[mesos] class MesosSecurityManager extends Logging {
     userCreds.writeTokenStorageToStream(dataStream)
     val credsBytes = byteStream.toByteArray
 
-    logDebug(s"Writing ${credsBytes.length} bytes to ${config.USER_CREDENTIALS.key}.")
+    logInfo(s"Writing ${credsBytes.length} bytes to ${config.USER_CREDENTIALS.key}.")
 
     val creds64 = DatatypeConverter.printBase64Binary(credsBytes)
     conf.set(config.USER_CREDENTIALS, creds64)
@@ -53,8 +53,6 @@ private[mesos] class MesosSecurityManager extends Logging {
    * services.
    */
   private def getDelegationTokens(conf: SparkConf): Credentials = {
-    logDebug(s"Retrieving delegation tokens.")
-
     val userCreds = UserGroupInformation.getCurrentUser.getCredentials
     val numTokensBefore = userCreds.numberOfTokens
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
