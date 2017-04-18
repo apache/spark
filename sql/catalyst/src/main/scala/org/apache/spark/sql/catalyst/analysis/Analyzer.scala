@@ -162,6 +162,10 @@ class Analyzer(
       HandleNullInputsForUDF),
     Batch("FixNullability", Once,
       FixNullability),
+    Batch("ResolveAggAliasInGroupBy", Once,
+      ResolveAggAliasInGroupBy),
+    Batch("ResolveTimeZone", Once,
+      ResolveTimeZone),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -837,20 +841,6 @@ class Analyzer(
         } else {
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
-
-      // If grouping keys have unresolved expressions, we need to replace them with resolved one
-      // in SELECT clauses.
-      case agg @ Aggregate(groups, aggs, child)
-          if conf.groupByAliasesEnabled && child.resolved && aggs.forall(_.resolved) &&
-            groups.exists(!_.resolved) =>
-        agg.copy(groupingExpressions = groups.map {
-            case u: UnresolvedAttribute =>
-              aggs.find(ne => resolver(ne.name, u.name)).map {
-                case Alias(e, _) => e
-                case e => e
-              }.getOrElse(u)
-            case e => e
-          })
 
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
@@ -2378,6 +2368,42 @@ class Analyzer(
 
         case UpCast(child, dataType, walkedTypePath) => Cast(child, dataType.asNullable)
       }
+    }
+  }
+
+  /**
+   * Replace unresolved expressions in grouping keys with resolved ones in SELECT clauses.
+   */
+  object ResolveAggAliasInGroupBy extends Rule[LogicalPlan] {
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case agg @ Aggregate(groups, aggs, child)
+          if conf.groupByAliasesEnabled && child.resolved && groups.exists(!_.resolved) =>
+        agg.copy(groupingExpressions = groups.map {
+          case u: UnresolvedAttribute =>
+            aggs.find(ne => resolver(ne.name, u.name)).map {
+              case Alias(e, _) => e
+              case e => e
+            }.getOrElse(u)
+          case e => e
+        })
+    }
+  }
+
+  /**
+   * Replace [[TimeZoneAwareExpression]] without [[TimeZone]] by its copy with session local
+   * time zone.
+   */
+  object ResolveTimeZone extends Rule[LogicalPlan] {
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
+      case e: TimeZoneAwareExpression if e.timeZoneId.isEmpty =>
+        e.withTimeZone(conf.sessionLocalTimeZone)
+      // Casts could be added in the subquery plan through the rule TypeCoercion while coercing
+      // the types between the value expression and list query expression of IN expression.
+      // We need to subject the subquery plan through ResolveTimeZone again to setup timezone
+      // information for time zone aware expressions.
+      case e: ListQuery => e.withNewPlan(apply(e.plan))
     }
   }
 }
