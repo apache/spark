@@ -26,8 +26,12 @@ import os
 import sys
 
 from pyspark.sql import SparkSession
-from pyspark.ml.param import Params
-from pyspark.mllib.linalg import *
+
+if 'numpy' in sys.modules:
+    from pyspark.ml.param import Params
+    from pyspark.mllib.linalg import *
+else:
+    print("Skipping pyspark ml import tests, missing numpy")
 
 if sys.version >= "3":
     from io import StringIO
