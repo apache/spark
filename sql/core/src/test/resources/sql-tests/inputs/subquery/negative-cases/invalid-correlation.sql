@@ -31,9 +31,9 @@ AND    t2b = (SELECT max(avg)
 -- Invalid due to the column t2b not part of the output from table t2.
 SELECT *
 FROM   t1
-WHERE  t1a in (SELECT   min(t2a)
+WHERE  t1a IN (SELECT   min(t2a)
                FROM     t2
-               GROUP by t2c
+               GROUP BY t2c
                HAVING   t2c IN (SELECT   max(t3c)
                                 FROM     t3
                                 GROUP BY t3b

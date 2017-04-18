@@ -1222,7 +1222,7 @@ class Analyzer(
                 s"""
                    |Found an aggregate expression in a correlated predicate that has both
                    |outer and local references, which is not supported yet.
-                   |Aggregate expression: ${a.sql},
+                   |Aggregate expression: ${SubExprUtils.stripOuterReference(a).sql},
                    |Outer references: ${outer.map(_.sql).mkString(", ")},
                    |Local references: ${local.map(_.sql).mkString(", ")}.
                  """.stripMargin.replace("\n", " ").trim()
