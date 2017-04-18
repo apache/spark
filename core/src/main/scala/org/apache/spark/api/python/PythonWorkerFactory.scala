@@ -69,7 +69,7 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
         val dirId = hash % localDirs.length
         Utils.createTempDir(localDirs(dirId).getAbsolutePath, "conda").getAbsolutePath
       }
-      condaEnvManager.create(envDir, condaPackages)
+      condaEnvManager.create(envDir, condaPackages, instructions.channels)
     }
   }
 

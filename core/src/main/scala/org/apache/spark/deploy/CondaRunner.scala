@@ -34,9 +34,11 @@ abstract class CondaRunner extends Logging {
 
     if (CondaEnvironmentManager.isConfigured(sparkConf)) {
       val condaBootstrapDeps = sparkConf.get(CONDA_BOOTSTRAP_PACKAGES)
+      val condaChannelUrls = sparkConf.get(CONDA_CHANNEL_URLS)
       val condaBaseDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), "conda").getAbsolutePath
       val condaEnvironmentManager = CondaEnvironmentManager.fromConf(sparkConf)
-      val environment = condaEnvironmentManager.create(condaBaseDir, condaBootstrapDeps)
+      val environment = condaEnvironmentManager
+        .create(condaBaseDir, condaBootstrapDeps, condaChannelUrls)
 
       // Save this as a global in order for SparkContext to be able to access it later, in case we
       // are shelling out, but providing a bridge back into this JVM.
