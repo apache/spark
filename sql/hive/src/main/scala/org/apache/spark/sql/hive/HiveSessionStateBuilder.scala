@@ -102,7 +102,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         experimentalMethods.extraStrategies ++
           extraPlanningStrategies ++ Seq(
           FileSourceStrategy,
-          DataSourceStrategy,
+          DataSourceStrategy(conf),
           SpecialLimits,
           InMemoryScans,
           HiveTableScans,
