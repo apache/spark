@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.math.MathContext
+import java.net.{MalformedURLException, URL}
 import java.sql.Timestamp
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -2605,5 +2606,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     } catch {
       case ae: AnalysisException => assert(ae.plan == null && ae.getMessage == ae.getSimpleMessage)
     }
+  }
+
+  test("SPARK-12868: Allow adding jars from hdfs ") {
+    val jarFromHdfs = "hdfs://doesnotmatter/test.jar"
+    val jarFromInvalidFs = "fffs://doesnotmatter/test.jar"
+
+    // if 'hdfs' is not supported, MalformedURLException will be thrown
+    new URL(jarFromHdfs)
+    var exceptionThrown: Boolean = false
+    try {
+      new URL(jarFromInvalidFs)
+    } catch {
+      case e: MalformedURLException => exceptionThrown = true
+    }
+    assert(exceptionThrown === true)
   }
 }

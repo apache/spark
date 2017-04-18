@@ -47,7 +47,7 @@ import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, FileUtil, FsUrlStreamHandlerFactory, Path}
+import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
@@ -2778,27 +2778,5 @@ private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.Ou
     System.arraycopy(buffer, pos, nonCircularBuffer, 0, buffer.length - pos)
     System.arraycopy(buffer, 0, nonCircularBuffer, buffer.length - pos, pos)
     new String(nonCircularBuffer, StandardCharsets.UTF_8)
-  }
-}
-
-
-/**
- * Factory for URL stream handlers. It relies on 'protocol' to choose the appropriate
- * UrlStreamHandlerFactory to create URLStreamHandler. Add new 'if' branches in
- * 'createURLStreamHandler' like 'hdfsHandler' to support more protocols.
- */
-private[spark] class SparkUrlStreamHandlerFactory extends URLStreamHandlerFactory {
-  private var hdfsHandler : URLStreamHandler = _
-
-  def createURLStreamHandler(protocol: String): URLStreamHandler = {
-    if (protocol.compareToIgnoreCase("hdfs") == 0) {
-      if (hdfsHandler == null) {
-        hdfsHandler = new FsUrlStreamHandlerFactory(SparkHadoopUtil.get.conf)
-          .createURLStreamHandler(protocol)
-      }
-      hdfsHandler
-    } else {
-      null
-    }
   }
 }

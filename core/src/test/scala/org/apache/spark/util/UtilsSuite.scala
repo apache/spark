@@ -20,7 +20,7 @@ package org.apache.spark.util
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
   FileOutputStream, PrintStream}
 import java.lang.{Double => JDouble, Float => JFloat}
-import java.net._
+import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
 import java.text.DecimalFormatSymbols
@@ -1020,20 +1020,5 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     // Assert that secret information got redacted while the regular property remained the same
     secretKeys.foreach { key => assert(redactedConf(key) === Utils.REDACTION_REPLACEMENT_TEXT) }
     assert(redactedConf("spark.regular.property") === "not_a_secret")
-  }
-
-  test("SparkUrlStreamHandlerFactory") {
-    URL.setURLStreamHandlerFactory(new SparkUrlStreamHandlerFactory())
-
-    // if 'hdfs' is not supported, MalformedURLException will be thrown
-    new URL("hdfs://docs.oracle.com/test.jar")
-
-    var exceptionThrown: Boolean = false
-    try {
-      new URL("fffs://doesnotmatter")
-    } catch {
-      case e: MalformedURLException => exceptionThrown = true
-    }
-    assert(exceptionThrown === true)
   }
 }

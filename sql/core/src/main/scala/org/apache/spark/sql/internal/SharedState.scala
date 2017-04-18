@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.util.{MutableURLClassLoader, SparkUrlStreamHandlerFactory, Utils}
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 
 /**
@@ -149,8 +150,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 }
 
 object SharedState {
-
-  URL.setURLStreamHandlerFactory(new SparkUrlStreamHandlerFactory())
+  URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
 
