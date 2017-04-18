@@ -59,19 +59,21 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
    * A TVF maps argument lists to resolver functions that accept those arguments. Using a map
    * here allows for function overloading.
    */
-  private type TVF = Map[ArgumentList, Seq[Any] => LogicalPlan]
+  private type TVF = Map[ArgumentList, (UnresolvedTableValuedFunction, Seq[Any]) => LogicalPlan]
 
   /**
    * TVF builder.
    */
-  private def tvf(args: (String, DataType)*)(pf: PartialFunction[Seq[Any], LogicalPlan])
-      : (ArgumentList, Seq[Any] => LogicalPlan) = {
+  private def tvf(args: (String, DataType)*)(
+      pf: PartialFunction[(UnresolvedTableValuedFunction, Seq[Any]), LogicalPlan])
+      : (ArgumentList, (UnresolvedTableValuedFunction, Seq[Any]) => LogicalPlan) = {
+    val failAnalysis: PartialFunction[(UnresolvedTableValuedFunction, Seq[Any]), LogicalPlan] = {
+      case (pf: UnresolvedTableValuedFunction, args: Seq[Any]) =>
+        throw new IllegalArgumentException(
+          "Invalid arguments for resolved function: " + args.mkString(", "))
+    }
     (ArgumentList(args: _*),
-     pf orElse {
-       case args =>
-         throw new IllegalArgumentException(
-           "Invalid arguments for resolved function: " + args.mkString(", "))
-     })
+      (tvf: UnresolvedTableValuedFunction, args: Seq[Any]) => pf.orElse(failAnalysis)(tvf, args))
   }
 
   /**
@@ -80,28 +82,43 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
   private val builtinFunctions: Map[String, TVF] = Map(
     "range" -> Map(
       /* range(end) */
-      tvf("end" -> LongType) { case Seq(end: Long) =>
-        Range(0, end, 1, None)
+      tvf("end" -> LongType) { case (tvf, args @ Seq(end: Long)) =>
+        validateInputDimension(tvf, 1)
+        Range(0, end, 1, None, tvf.outputNames.headOption)
       },
 
       /* range(start, end) */
-      tvf("start" -> LongType, "end" -> LongType) { case Seq(start: Long, end: Long) =>
-        Range(start, end, 1, None)
+      tvf("start" -> LongType, "end" -> LongType) {
+        case (tvf, args @ Seq(start: Long, end: Long)) =>
+          validateInputDimension(tvf, 1)
+          Range(start, end, 1, None, tvf.outputNames.headOption)
       },
 
       /* range(start, end, step) */
       tvf("start" -> LongType, "end" -> LongType, "step" -> LongType) {
-        case Seq(start: Long, end: Long, step: Long) =>
-          Range(start, end, step, None)
+        case (tvf, args @ Seq(start: Long, end: Long, step: Long)) =>
+          validateInputDimension(tvf, 1)
+          Range(start, end, step, None, tvf.outputNames.headOption)
       },
 
       /* range(start, end, step, numPartitions) */
       tvf("start" -> LongType, "end" -> LongType, "step" -> LongType,
           "numPartitions" -> IntegerType) {
-        case Seq(start: Long, end: Long, step: Long, numPartitions: Int) =>
-          Range(start, end, step, Some(numPartitions))
+        case (tvf, args @ Seq(start: Long, end: Long, step: Long, numPartitions: Int)) =>
+          validateInputDimension(tvf, 1)
+          Range(start, end, step, Some(numPartitions), tvf.outputNames.headOption)
       })
   )
+
+  private def validateInputDimension(tvf: UnresolvedTableValuedFunction, expectedNumCols: Int)
+    : Unit = {
+    if (tvf.outputNames.nonEmpty) {
+      val numCols = tvf.outputNames.size
+      if (numCols != expectedNumCols) {
+        tvf.failAnalysis(s"expected $expectedNumCols columns but found $numCols columns")
+      }
+    }
+  }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
@@ -110,7 +127,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
           val resolved = tvf.flatMap { case (argList, resolver) =>
             argList.implicitCast(u.functionArgs) match {
               case Some(casted) =>
-                Some(resolver(casted.map(_.eval())))
+                Some(resolver(u, casted.map(_.eval())))
               case _ =>
                 None
             }

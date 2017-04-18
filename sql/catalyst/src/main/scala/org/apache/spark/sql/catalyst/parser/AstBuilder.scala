@@ -687,7 +687,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
       : LogicalPlan = withOrigin(ctx) {
-    UnresolvedTableValuedFunction(ctx.identifier.getText, ctx.expression.asScala.map(expression))
+    val (tvfName, aliasNameOption) = ctx.identifier.asScala.map(_.getText) match {
+      case Seq(funcName, aliasName) => (funcName, Some(aliasName))
+      case Seq(funcName) => (funcName, None)
+    }
+    val outputNames = if (ctx.identifierList != null) {
+      visitIdentifierList(ctx.identifierList)
+    } else {
+      Seq.empty
+    }
+    val plan = UnresolvedTableValuedFunction(
+      tvfName, ctx.expression.asScala.map(expression), outputNames)
+    aliasNameOption match {
+      case Some(aliasName) => SubqueryAlias(aliasName, plan)
+      case _ => plan
+    }
   }
 
   /**
