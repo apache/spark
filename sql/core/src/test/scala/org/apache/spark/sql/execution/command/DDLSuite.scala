@@ -2299,20 +2299,17 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     test(s"basic DDL using locale tr - caseSensitive $caseSensitive") {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
         withLocale("tr") {
-          val dbName = "DaTaBaSeI"
+          val dbName = "DaTaBaSe_I"
           withDatabase(dbName) {
             sql(s"CREATE DATABASE $dbName")
             sql(s"USE $dbName")
 
-            val tabName = "tAbI"
+            val tabName = "tAb_I"
             withTable(tabName) {
-              sql(s"CREATE TABLE $tabName(c1 int) USING PARQUET")
+              sql(s"CREATE TABLE $tabName(col_I int) USING PARQUET")
               sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1")
-              checkAnswer(sql(s"SELECT c1 FROM $tabName"), Row(1) :: Nil)
-              sql(s"DROP TABLE $tabName")
+              checkAnswer(sql(s"SELECT col_I FROM $tabName"), Row(1) :: Nil)
             }
-
-            sql(s"DROP DATABASE $dbName")
           }
         }
       }
