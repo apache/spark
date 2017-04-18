@@ -25,7 +25,6 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.ConfigurableCredentialManager
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
@@ -55,7 +54,7 @@ import org.apache.spark.util.ThreadUtils
 private[yarn] class AMCredentialRenewer(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
-    credentialManager: ConfigurableCredentialManager) extends Logging {
+    credentialManager: YARNConfigurableCredentialManager) extends Logging {
 
   private var lastCredentialsFileSuffix = 0
 

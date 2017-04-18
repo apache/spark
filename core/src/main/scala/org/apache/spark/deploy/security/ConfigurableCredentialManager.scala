@@ -41,15 +41,17 @@ import org.apache.spark.util.Utils
  * For example, Hive's credential provider [[HiveCredentialProvider]] can be enabled/disabled by
  * the configuration spark.yarn.security.credentials.hive.enabled.
  */
-private[spark] final class ConfigurableCredentialManager(
+private[spark] class ConfigurableCredentialManager(
     sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
   private val deprecatedProviderEnabledConfig = "spark.yarn.security.tokens.%s.enabled"
   private val providerEnabledConfig = "spark.yarn.security.credentials.%s.enabled"
 
   // Maintain all the registered credential providers
-  private val credentialProviders = {
-    val providers = ServiceLoader.load(classOf[ServiceCredentialProvider],
-      Utils.getContextOrSparkClassLoader).asScala
+  private val credentialProviders = getCredentialProviders()
+  logDebug(s"Using the following credential providers: ${credentialProviders.keys.mkString(", ")}.")
+
+  private def getCredentialProviders(): Map[String, ServiceCredentialProvider] = {
+    val providers = loadCredentialProviders
 
     // Filter out credentials in which spark.yarn.security.credentials.{service}.enabled is false.
     providers.filter { p =>
@@ -64,9 +66,12 @@ private[spark] final class ConfigurableCredentialManager(
     }.map { p => (p.serviceName, p) }.toMap
   }
 
-  logDebug(s"Using the following credential providers: ${credentialProviders.keys.mkString(", ")}.")
+  protected def loadCredentialProviders: List[ServiceCredentialProvider] = {
+    ServiceLoader.load(classOf[ServiceCredentialProvider], Utils.getContextOrSparkClassLoader)
+      .asScala.toList
+  }
 
-  /**
+    /**
    * Get credential provider for the specified service.
    */
   def getServiceCredentialProvider(service: String): Option[ServiceCredentialProvider] = {
@@ -76,6 +81,7 @@ private[spark] final class ConfigurableCredentialManager(
   /**
    * Writes delegation tokens to creds.  Delegation tokens are fetched from all registered
    * providers.
+   *
    * @return nearest time of next renewal, Long.MaxValue if all the credentials aren't renewable,
    *         otherwise the nearest renewal time of any credentials will be returned.
    */
