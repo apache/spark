@@ -100,10 +100,9 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
 
 /**
  * Removes MapObjects when the following conditions are satisfied
- *   1. Mapobject(e) where e is lambdavariable(), which means types for input output
- *      are primitive types
- *   2. no custom collection class specified
- *      representation of data item.  For example back to back map operations.
+ *   1. Mapobject(... lambdavariable(..., false) ...), which means types for input and output
+ *      are primitive types with non-nullable
+ *   2. no custom collection class specified representation of data item.
  */
 object EliminateMapObjects extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
