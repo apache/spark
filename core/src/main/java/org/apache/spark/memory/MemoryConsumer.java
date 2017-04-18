@@ -45,7 +45,7 @@ public abstract class MemoryConsumer {
   /**
    * Returns the size of used memory in bytes.
    */
-  long getUsed() {
+  protected long getUsed() {
     return used;
   }
 
@@ -129,5 +129,22 @@ public abstract class MemoryConsumer {
   protected void freePage(MemoryBlock page) {
     used -= page.size();
     taskMemoryManager.freePage(page, this);
+  }
+
+  /**
+   * Allocates a heap memory of `size`.
+   */
+  public long acquireOnHeapMemory(long size) {
+    long granted = taskMemoryManager.acquireExecutionMemory(size, MemoryMode.ON_HEAP, this);
+    used += granted;
+    return granted;
+  }
+
+  /**
+   * Release N bytes of heap memory.
+   */
+  public void freeOnHeapMemory(long size) {
+    taskMemoryManager.releaseExecutionMemory(size, MemoryMode.ON_HEAP, this);
+    used -= size;
   }
 }
