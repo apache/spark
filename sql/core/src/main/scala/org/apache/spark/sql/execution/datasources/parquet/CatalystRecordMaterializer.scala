@@ -30,10 +30,13 @@ import org.apache.spark.sql.types.StructType
  * @param catalystSchema Catalyst schema of the rows to be constructed
  */
 private[parquet] class CatalystRecordMaterializer(
-    parquetSchema: MessageType, catalystSchema: StructType)
+    parquetSchema: MessageType,
+    catalystSchema: StructType,
+    schemaConverter: CatalystSchemaConverter)
   extends RecordMaterializer[InternalRow] {
 
-  private val rootConverter = new CatalystRowConverter(parquetSchema, catalystSchema, NoopUpdater)
+  private val rootConverter =
+    new CatalystRowConverter(schemaConverter, parquetSchema, catalystSchema, NoopUpdater)
 
   override def getCurrentRecord: InternalRow = rootConverter.currentRecord
 
