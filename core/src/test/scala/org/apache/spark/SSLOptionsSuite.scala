@@ -22,6 +22,8 @@ import javax.net.ssl.SSLContext
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.util.SparkConfWithEnv
+
 class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("test resolving property file as spark conf ") {
@@ -131,6 +133,20 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(opts.keyPassword === Some("password"))
     assert(opts.protocol === Some("SSLv3"))
     assert(opts.enabledAlgorithms === Set("ABC", "DEF"))
+  }
+
+  test("read passwords from environment") {
+    val key = "spark.ssl.ui.keyStorePassword"
+    val env = Map("SPARK_SSL_UI_KEYSTOREPASSWORD" -> "passFromEnv")
+    val conf = new SparkConfWithEnv(env)
+    conf.set(key, "passFromConf")
+
+    val key2 = "spark.ssl.trustStorePassword"
+    conf.set(key2, "pass2FromConf")
+
+    assert(SSLOptions.getFromEnv(conf, key) === Some("passFromEnv"))
+    assert(SSLOptions.getFromEnv(conf, key2) === Some("pass2FromConf"))
+    assert(SSLOptions.getFromEnv(conf, "spark.ssl.keyStorePassword") === None)
   }
 
 }
