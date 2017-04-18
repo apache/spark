@@ -414,6 +414,8 @@ case class MapObjects private(
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val javaType = ctx.javaType(dataType)
     val elementJavaType = ctx.javaType(loopVar.dataType)
+    ctx.addMutableState("boolean", loopVar.isNull, "")
+    ctx.addMutableState(elementJavaType, loopVar.value, "")
     val genInputData = inputData.gen(ctx)
     val genFunction = lambdaFunction.gen(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -434,9 +436,9 @@ case class MapObjects private(
     }
 
     val loopNullCheck = if (primitiveElement) {
-      s"boolean ${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
+      s"${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
     } else {
-      s"boolean ${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
+      s"${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
     }
 
     s"""
@@ -452,7 +454,7 @@ case class MapObjects private(
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
-          $elementJavaType ${loopVar.value} =
+          ${loopVar.value} =
             ($elementJavaType)${genInputData.value}${itemAccessor(loopIndex)};
           $loopNullCheck
 
