@@ -77,4 +77,11 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.fpm.FPGrowt
 {% include_example python/ml/fpgrowth_example.py %}
 </div>
 
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.fpGrowth.html) for more details.
+
+{% include_example r/ml/fpm.R %}
+</div>
+
 </div>
