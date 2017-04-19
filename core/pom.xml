@@ -369,7 +369,6 @@
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
-
     </dependency>
     <dependency>
       <groupId>org.apache.thrift</groupId>
