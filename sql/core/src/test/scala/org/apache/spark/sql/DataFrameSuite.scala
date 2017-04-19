@@ -1731,7 +1731,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .join(df2, df1("x") === df2("x1"), "left_outer")
       .filter($"x1".isNotNull || !$"y".isin("a!"))
       .count
-  } 
+  }
 
   test("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
     val N = 400
