@@ -451,6 +451,8 @@ object MapObjects {
    * @param function The function applied on the collection elements.
    * @param inputData An expression that when evaluated returns a collection object.
    * @param elementType The data type of elements in the collection.
+   * @param elementNullable When false, indicating elements in the collection are always
+   *                        non-null value.
    * @param customCollectionCls Class of the resulting collection (returning ObjectType)
    *                            or None (returning ArrayType)
    */
@@ -458,11 +460,12 @@ object MapObjects {
       function: Expression => Expression,
       inputData: Expression,
       elementType: DataType,
+      elementNullable: Boolean = true,
       customCollectionCls: Option[Class[_]] = None): MapObjects = {
     val id = curId.getAndIncrement()
     val loopValue = s"MapObjects_loopValue$id"
     val loopIsNull = s"MapObjects_loopIsNull$id"
-    val loopVar = LambdaVariable(loopValue, loopIsNull, elementType)
+    val loopVar = LambdaVariable(loopValue, loopIsNull, elementType, elementNullable)
     MapObjects(
       loopValue, loopIsNull, elementType, function(loopVar), inputData, customCollectionCls)
   }
