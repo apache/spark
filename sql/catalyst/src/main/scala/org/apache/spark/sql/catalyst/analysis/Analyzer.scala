@@ -136,6 +136,7 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveOrdinalInOrderByAndGroupBy ::
+      ResolveAggAliasInGroupBy ::
       ResolveMissingReferences ::
       ExtractGenerator ::
       ResolveGenerate ::
@@ -162,8 +163,6 @@ class Analyzer(
       HandleNullInputsForUDF),
     Batch("FixNullability", Once,
       FixNullability),
-    Batch("ResolveAggAliasInGroupBy", Once,
-      ResolveAggAliasInGroupBy),
     Batch("ResolveTimeZone", Once,
       ResolveTimeZone),
     Batch("Subquery", Once,
@@ -997,6 +996,31 @@ class Analyzer(
           case o => o
         }
         Aggregate(newGroups, aggs, child)
+    }
+  }
+
+  /**
+   * Replace unresolved expressions in grouping keys with resolved ones in SELECT clauses.
+   */
+  object ResolveAggAliasInGroupBy extends Rule[LogicalPlan] {
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case agg @ Aggregate(groups, aggs, child)
+          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+            groups.exists(!_.resolved) =>
+        agg.copy(groupingExpressions = groups.map {
+          case u: UnresolvedAttribute =>
+            val resolvedAgg = aggs.find(ne => resolver(ne.name, u.name))
+            // Check if no aggregate function exists in GROUP BY
+            resolvedAgg.foreach {
+              case Alias(e, _) if ResolveAggregateFunctions.containsAggregate(e) =>
+                throw new AnalysisException(
+                  s"Aggregate function `$e` is not allowed in GROUP BY")
+              case _ =>
+            }
+            resolvedAgg.getOrElse(u)
+          case e => e
+        })
     }
   }
 
@@ -2368,30 +2392,6 @@ class Analyzer(
 
         case UpCast(child, dataType, walkedTypePath) => Cast(child, dataType.asNullable)
       }
-    }
-  }
-
-  /**
-   * Replace unresolved expressions in grouping keys with resolved ones in SELECT clauses.
-   */
-  object ResolveAggAliasInGroupBy extends Rule[LogicalPlan] {
-
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case agg @ Aggregate(groups, aggs, child)
-          if conf.groupByAliases && child.resolved && groups.exists(!_.resolved) =>
-        agg.copy(groupingExpressions = groups.map {
-          case u: UnresolvedAttribute =>
-            val resolvedAgg = aggs.find(ne => resolver(ne.name, u.name))
-            // Check if no aggregate function exists in GROUP BY
-            resolvedAgg.foreach { case Alias(expr, _) =>
-              if (expr.isInstanceOf[AggregateExpression]) {
-                throw new AnalysisException(
-                  s"Aggregate function `$expr` is not allowed in GROUP BY")
-              }
-            }
-            resolvedAgg.getOrElse(u)
-          case e => e
-        })
     }
   }
 
