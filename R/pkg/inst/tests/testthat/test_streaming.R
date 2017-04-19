@@ -131,7 +131,7 @@ test_that("Terminated by error", {
   expect_error(q <- write.stream(counts, "memory", queryName = "people4", outputMode = "complete"),
                NA)
 
-  expect_error(awaitTermination(q, 1),
+  expect_error(awaitTermination(q, 5 * 1000),
                paste0(".*(awaitTermination : streaming query error - Invalid value '-1' for option",
                       " 'maxFilesPerTrigger', must be a positive integer).*"))
 
