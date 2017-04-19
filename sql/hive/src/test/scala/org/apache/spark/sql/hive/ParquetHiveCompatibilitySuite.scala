@@ -259,8 +259,8 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
   }
 
   val desiredTimestampStrings = Seq(
-    "2015-12-31 23:50:59.123",
     "2015-12-31 22:49:59.123",
+    "2015-12-31 23:50:59.123",
     "2016-01-01 00:39:59.123",
     "2016-01-01 01:29:59.123"
   )
@@ -286,13 +286,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
   }
 
   private def createRawData(spark: SparkSession): Dataset[(String, Timestamp)] = {
-    val originalTsStrings = Seq(
-      "2015-12-31 22:49:59.123",
-      "2015-12-31 23:50:59.123",
-      "2016-01-01 00:39:59.123",
-      "2016-01-01 01:29:59.123"
-    )
-    val rowRdd = spark.sparkContext.parallelize(originalTsStrings, 1).map(Row(_))
+    val rowRdd = spark.sparkContext.parallelize(desiredTimestampStrings, 1).map(Row(_))
     val schema = StructType(Seq(
       StructField("display", StringType, true)
     ))
@@ -300,9 +294,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
     // this will get the millis corresponding to the display time given the current *session*
     // timezone.
     import spark.implicits._
-    df.withColumn("ts", expr("cast(display as timestamp)")).map { row =>
-      (row.getAs[String](0), row.getAs[Timestamp](1))
-    }
+    df.withColumn("ts", expr("cast(display as timestamp)")).as[(String, Timestamp)]
   }
 
   private def testWriteTablesWithTimezone(
@@ -349,15 +341,20 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
         // values in the parquet file.
         val onDiskLocation = spark.sessionState.catalog
           .getTableMetadata(TableIdentifier(s"insert_$baseTable")).location.getPath
-        val readFromDisk = spark.read.parquet(onDiskLocation).collect()
-        val storageTzId = explicitTz.getOrElse(sessionTzId)
-        readFromDisk.foreach { row =>
-          val displayTime = row.getAs[String](0)
-          val millis = row.getAs[Timestamp](1).getTime()
-          val expectedMillis = timestampTimezoneToMillis((displayTime, storageTzId))
-          assert(expectedMillis === millis, s"Display time '$displayTime' was stored incorrectly " +
-            s"with sessionTz = ${sessionTzOpt}; Got $millis, expected $expectedMillis " +
-            s"(delta = ${millis - expectedMillis})")
+        // we test reading the data back with and without the vectorized reader, to make sure we
+        // haven't broken reading parquet from non-hive tables, with both readers.
+        Seq(false, true).foreach { vectorized =>
+          spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized)
+          val readFromDisk = spark.read.parquet(onDiskLocation).collect()
+          val storageTzId = explicitTz.getOrElse(sessionTzId)
+          readFromDisk.foreach { row =>
+            val displayTime = row.getAs[String](0)
+            val millis = row.getAs[Timestamp](1).getTime()
+            val expectedMillis = timestampTimezoneToMillis((displayTime, storageTzId))
+            assert(expectedMillis === millis, s"Display time '$displayTime' was stored " +
+              s"incorrectly with sessionTz = ${sessionTzOpt}; Got $millis, expected " +
+              s"$expectedMillis (delta = ${millis - expectedMillis})")
+          }
         }
       }
     }
@@ -401,65 +398,69 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
             options = options
           )
           Seq(false, true).foreach { vectorized =>
-            withSQLConf((SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized.toString)) {
-              withClue(s"vectorized = $vectorized;") {
-                val sessionTz = sessionTzOpt.getOrElse(TimeZone.getDefault().getID())
-                val collectedFromExternal =
-                  spark.sql(s"select display, ts from external_$baseTable").collect()
-                collectedFromExternal.foreach { row =>
-                  val displayTime = row.getAs[String](0)
-                  val millis = row.getAs[Timestamp](1).getTime()
-                  val expectedMillis = timestampTimezoneToMillis((displayTime, sessionTz))
-                  val delta = millis - expectedMillis
-                  val deltaHours = delta / (1000L * 60 * 60)
-                  assert(millis === expectedMillis, s"Display time '$displayTime' did not have " +
-                    s"correct millis: was $millis, expected $expectedMillis; delta = $delta " +
-                    s"($deltaHours hours)")
-                }
+            withClue(s"vectorized = $vectorized;") {
+              spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, vectorized)
+              val sessionTz = sessionTzOpt.getOrElse(TimeZone.getDefault().getID())
+              val query = s"select display, cast(ts as string) as ts_as_string, ts " +
+                s"from external_$baseTable"
+              val collectedFromExternal = spark.sql(query).collect()
+              collectedFromExternal.foreach { row =>
+                val displayTime = row.getAs[String](0)
+                // the timestamp should still display the same, despite the changes in timezones
+                assert(displayTime === row.getAs[String](1).toString())
+                // we'll also check that the millis behind the timestamp has the appropriate
+                // adjustments.
+                val millis = row.getAs[Timestamp](2).getTime()
+                val expectedMillis = timestampTimezoneToMillis((displayTime, sessionTz))
+                val delta = millis - expectedMillis
+                val deltaHours = delta / (1000L * 60 * 60)
+                assert(millis === expectedMillis, s"Display time '$displayTime' did not have " +
+                  s"correct millis: was $millis, expected $expectedMillis; delta = $delta " +
+                  s"($deltaHours hours)")
+              }
 
-                // Now test that the behavior is still correct even with a filter which could get
-                // pushed down into parquet.  We don't need extra handling for pushed down
-                // predicates because (a) in ParquetFilters, we ignore TimestampType and (b) parquet
-                // does not read statistics from int96 fields, as they are unsigned.  See
-                // scalastyle:off line.size.limit
-                // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L419
-                // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L348
-                // scalastyle:on line.size.limit
-                //
-                // Just to be defensive in case anything ever changes in parquet, this test checks
-                // the assumption on column stats, and also the end-to-end behavior.
+              // Now test that the behavior is still correct even with a filter which could get
+              // pushed down into parquet.  We don't need extra handling for pushed down
+              // predicates because (a) in ParquetFilters, we ignore TimestampType and (b) parquet
+              // does not read statistics from int96 fields, as they are unsigned.  See
+              // scalastyle:off line.size.limit
+              // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L419
+              // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L348
+              // scalastyle:on line.size.limit
+              //
+              // Just to be defensive in case anything ever changes in parquet, this test checks
+              // the assumption on column stats, and also the end-to-end behavior.
 
-                val hadoopConf = sparkContext.hadoopConfiguration
-                val fs = FileSystem.get(hadoopConf)
-                val parts = fs.listStatus(new Path(path.getCanonicalPath))
-                  .filter(_.getPath().getName().endsWith(".parquet"))
-                // grab the meta data from the parquet file.  The next section of asserts just make
-                // sure the test is configured correctly.
-                assert(parts.size == 1)
-                val oneFooter = ParquetFileReader.readFooter(hadoopConf, parts.head.getPath)
-                assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 2)
-                assert(oneFooter.getFileMetaData.getSchema.getColumns.get(1).getType() ===
-                  PrimitiveTypeName.INT96)
-                val oneBlockMeta = oneFooter.getBlocks().get(0)
-                val oneBlockColumnMeta = oneBlockMeta.getColumns().get(1)
-                val columnStats = oneBlockColumnMeta.getStatistics
-                // This is the important assert.  Column stats are written, but they are ignored
-                // when the data is read back as mentioned above, b/c int96 is unsigned.  This
-                // assert makes sure this holds even if we change parquet versions (if eg. there
-                // were ever statistics even on unsigned columns).
-                assert(columnStats.isEmpty)
+              val hadoopConf = sparkContext.hadoopConfiguration
+              val fs = FileSystem.get(hadoopConf)
+              val parts = fs.listStatus(new Path(path.getCanonicalPath))
+                .filter(_.getPath().getName().endsWith(".parquet"))
+              // grab the meta data from the parquet file.  The next section of asserts just make
+              // sure the test is configured correctly.
+              assert(parts.size == 1)
+              val oneFooter = ParquetFileReader.readFooter(hadoopConf, parts.head.getPath)
+              assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 2)
+              assert(oneFooter.getFileMetaData.getSchema.getColumns.get(1).getType() ===
+                PrimitiveTypeName.INT96)
+              val oneBlockMeta = oneFooter.getBlocks().get(0)
+              val oneBlockColumnMeta = oneBlockMeta.getColumns().get(1)
+              val columnStats = oneBlockColumnMeta.getStatistics
+              // This is the important assert.  Column stats are written, but they are ignored
+              // when the data is read back as mentioned above, b/c int96 is unsigned.  This
+              // assert makes sure this holds even if we change parquet versions (if eg. there
+              // were ever statistics even on unsigned columns).
+              assert(columnStats.isEmpty)
 
-                // These queries should return the entire dataset, but if the predicates were
-                // applied to the raw values in parquet, they would incorrectly filter data out.
-                Seq(
-                  ">" -> "2015-12-31 22:00:00",
-                  "<" -> "2016-01-01 02:00:00"
-                ).foreach { case (comparison, value) =>
-                  val query =
-                    s"select ts from external_$baseTable where ts $comparison '$value'"
-                  val countWithFilter = spark.sql(query).count()
-                  assert(countWithFilter === 4, query)
-                }
+              // These queries should return the entire dataset, but if the predicates were
+              // applied to the raw values in parquet, they would incorrectly filter data out.
+              Seq(
+                ">" -> "2015-12-31 22:00:00",
+                "<" -> "2016-01-01 02:00:00"
+              ).foreach { case (comparison, value) =>
+                val query =
+                  s"select ts from external_$baseTable where ts $comparison '$value'"
+                val countWithFilter = spark.sql(query).count()
+                assert(countWithFilter === 4, query)
               }
             }
           }

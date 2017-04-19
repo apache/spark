@@ -106,7 +106,7 @@ public class VectorizedColumnReader {
     String sessionTzString =
         conf == null ? null : conf.get(SQLConf.SESSION_LOCAL_TIMEZONE().key());
     if (sessionTzString == null || sessionTzString.isEmpty()) {
-      sessionTz = TimeZone.getDefault();
+      sessionTz = DateTimeUtils.defaultTimeZone();
     } else {
       sessionTz = TimeZone.getTimeZone(sessionTzString);
     }

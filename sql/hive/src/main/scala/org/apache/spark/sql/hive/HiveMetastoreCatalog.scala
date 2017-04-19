@@ -176,7 +176,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             // We don't support hive bucketed tables, only ones we write out.
             bucketSpec = None,
             fileFormat = fileFormat,
-            options = options)(sparkSession = sparkSession)
+            options = options ++ getStorageTzOptions(relation))(sparkSession = sparkSession)
           val created = LogicalRelation(fsRelation, updatedTable)
           tableRelationCache.put(tableIdentifier, created)
           created
@@ -194,15 +194,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           fileFormatClass,
           None)
         val logicalRelation = cached.getOrElse {
-          // We add the timezone to the relation options, which automatically gets injected into
-          // the hadoopConf for the Parquet Converters
-          val storageTzKey = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
-          val storageTz = relation.tableMeta.properties.getOrElse(storageTzKey, "")
-          val sessionTz = sparkSession.sessionState.conf.sessionLocalTimeZone
-          val extraTzOptions = Map(
-            storageTzKey -> storageTz,
-            SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTz
-          )
           val (dataSchema, updatedTable) = inferIfNeeded(relation, options, fileFormat)
           val created =
             LogicalRelation(
@@ -212,7 +203,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 userSpecifiedSchema = Option(dataSchema),
                 // We don't support hive bucketed tables, only ones we write out.
                 bucketSpec = None,
-                options = options ++ extraTzOptions,
+                options = options ++ getStorageTzOptions(relation),
                 className = fileType).resolveRelation(),
               table = updatedTable)
 
@@ -231,6 +222,17 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       case (a1, a2) => a1.withExprId(a2.exprId)
     }
     result.copy(output = newOutput)
+  }
+
+  private def getStorageTzOptions(relation: CatalogRelation): Map[String, String] = {
+    // We add the table timezone to the relation options, which automatically gets injected into the
+    // hadoopConf for the Parquet Converters
+    val storageTzKey = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
+    val storageTz = relation.tableMeta.properties.getOrElse(storageTzKey, "")
+    val sessionTz = sparkSession.sessionState.conf.sessionLocalTimeZone
+    Map(
+      storageTzKey -> storageTz
+    )
   }
 
   private def inferIfNeeded(

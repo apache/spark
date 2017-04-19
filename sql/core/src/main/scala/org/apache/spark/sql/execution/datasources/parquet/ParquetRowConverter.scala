@@ -267,13 +267,11 @@ private[parquet] class ParquetRowConverter(
       case TimestampType =>
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
         // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
-        val sessionTz = TimeZone.getTimeZone(hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key))
+        val sessionTsString = hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)
+        val sessionTz = Option(sessionTsString).map(TimeZone.getTimeZone(_))
+          .getOrElse(DateTimeUtils.defaultTimeZone())
         val storageTzString = hadoopConf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
-        val storageTz = if (storageTzString == null) {
-          sessionTz
-        } else {
-          TimeZone.getTimeZone(storageTzString)
-        }
+        val storageTz = Option(storageTzString).map(TimeZone.getTimeZone(_)).getOrElse(sessionTz)
         new ParquetPrimitiveConverter(updater) {
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
