@@ -31,6 +31,7 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
+import org.apache.spark.internal.io.SparkHadoopWriter
 import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -175,13 +176,13 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter))
     // The non-authorized committer fails
     outputCommitCoordinator.taskCompleted(
-      stage, partition, attemptNumber = nonAuthorizedCommitter, reason = TaskKilled)
+      stage, partition, attemptNumber = nonAuthorizedCommitter, reason = TaskKilled("test"))
     // New tasks should still not be able to commit because the authorized committer has not failed
     assert(
       !outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 1))
     // The authorized committer now fails, clearing the lock
     outputCommitCoordinator.taskCompleted(
-      stage, partition, attemptNumber = authorizedCommitter, reason = TaskKilled)
+      stage, partition, attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
     // A new task should now be allowed to become the authorized committer
     assert(
       outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 2))
@@ -194,6 +195,17 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     val rdd = sc.parallelize(Seq(1), 1)
     sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).callCanCommitMultipleTimes _,
        0 until rdd.partitions.size)
+  }
+
+  test("SPARK-19631: Do not allow failed attempts to be authorized for committing") {
+    val stage: Int = 1
+    val partition: Int = 1
+    val failedAttempt: Int = 0
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    outputCommitCoordinator.taskCompleted(stage, partition, attemptNumber = failedAttempt,
+      reason = ExecutorLostFailure("0", exitCausedByApp = true, None))
+    assert(!outputCommitCoordinator.canCommit(stage, partition, failedAttempt))
+    assert(outputCommitCoordinator.canCommit(stage, partition, failedAttempt + 1))
   }
 }
 

@@ -291,7 +291,7 @@ setMethod("unpersistRDD",
 #' @rdname checkpoint-methods
 #' @aliases checkpoint,RDD-method
 #' @noRd
-setMethod("checkpoint",
+setMethod("checkpointRDD",
           signature(x = "RDD"),
           function(x) {
             jrdd <- getJRDD(x)

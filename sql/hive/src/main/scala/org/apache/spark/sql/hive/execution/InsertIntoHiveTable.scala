@@ -148,9 +148,16 @@ case class InsertIntoHiveTable(
     // We have to follow the Hive behavior here, to avoid troubles. For example, if we create
     // staging directory under the table director for Hive prior to 1.1, the staging directory will
     // be removed by Hive when Hive is trying to empty the table directory.
-    if (hiveVersion == v12 || hiveVersion == v13 || hiveVersion == v14 || hiveVersion == v1_0) {
+    val hiveVersionsUsingOldExternalTempPath: Set[HiveVersion] = Set(v12, v13, v14, v1_0)
+    val hiveVersionsUsingNewExternalTempPath: Set[HiveVersion] = Set(v1_1, v1_2, v2_0, v2_1)
+
+    // Ensure all the supported versions are considered here.
+    assert(hiveVersionsUsingNewExternalTempPath ++ hiveVersionsUsingOldExternalTempPath ==
+      allSupportedHiveVersions)
+
+    if (hiveVersionsUsingOldExternalTempPath.contains(hiveVersion)) {
       oldVersionExternalTempPath(path, hadoopConf, scratchDir)
-    } else if (hiveVersion == v1_1 || hiveVersion == v1_2) {
+    } else if (hiveVersionsUsingNewExternalTempPath.contains(hiveVersion)) {
       newVersionExternalTempPath(path, hadoopConf, stagingDir)
     } else {
       throw new IllegalStateException("Unsupported hive version: " + hiveVersion.fullVersion)
@@ -386,8 +393,8 @@ case class InsertIntoHiveTable(
         logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
     }
 
-    // Invalidate the cache.
-    sparkSession.catalog.uncacheTable(table.qualifiedName)
+    // un-cache this table.
+    sparkSession.catalog.uncacheTable(table.identifier.quotedString)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,

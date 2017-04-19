@@ -86,7 +86,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   /**
    * A catalog that interacts with external systems.
    */
-  val externalCatalog: ExternalCatalog =
+  lazy val externalCatalog: ExternalCatalog =
     SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
       SharedState.externalCatalogClassName(sparkContext.conf),
       sparkContext.conf,
@@ -95,7 +95,10 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   // Create the default database if it doesn't exist.
   {
     val defaultDbDefinition = CatalogDatabase(
-      SessionCatalog.DEFAULT_DATABASE, "default database", warehousePath, Map())
+      SessionCatalog.DEFAULT_DATABASE,
+      "default database",
+      CatalogUtils.stringToURI(warehousePath),
+      Map())
     // Initialize default database if it doesn't exist
     if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {
       // There may be another Spark application creating default database at the same time, here we

@@ -66,7 +66,6 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
         memKey = "SPARK_DAEMON_MEMORY";
         break;
       case "org.apache.spark.executor.CoarseGrainedExecutorBackend":
-        javaOptsKeys.add("SPARK_JAVA_OPTS");
         javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
         memKey = "SPARK_EXECUTOR_MEMORY";
         break;
@@ -84,7 +83,6 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
         memKey = "SPARK_DAEMON_MEMORY";
         break;
       default:
-        javaOptsKeys.add("SPARK_JAVA_OPTS");
         memKey = "SPARK_DRIVER_MEMORY";
         break;
     }

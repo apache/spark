@@ -17,19 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.{ServiceConfigurationError, ServiceLoader}
+import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
-import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -106,10 +105,13 @@ case class DataSource(
    *     be any further inference in any triggers.
    *
    * @param format the file format object for this DataSource
+   * @param fileStatusCache the shared cache for file statuses to speed up listing
    * @return A pair of the data schema (excluding partition columns) and the schema of the partition
    *         columns.
    */
-  private def getOrInferFileFormatSchema(format: FileFormat): (StructType, StructType) = {
+  private def getOrInferFileFormatSchema(
+      format: FileFormat,
+      fileStatusCache: FileStatusCache = NoopCache): (StructType, StructType) = {
     // the operations below are expensive therefore try not to do them if we don't need to, e.g.,
     // in streaming mode, we have already inferred and registered partition columns, we will
     // never have to materialize the lazy val below
@@ -122,7 +124,7 @@ case class DataSource(
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
-      new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
+      new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
     }
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
@@ -354,7 +356,8 @@ case class DataSource(
           globPath
         }.toArray
 
-        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format)
+        val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format, fileStatusCache)
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
             catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
@@ -364,7 +367,8 @@ case class DataSource(
             catalogTable.get,
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
         } else {
-          new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(partitionSchema))
+          new InMemoryFileIndex(
+            sparkSession, globbedPaths, options, Some(partitionSchema), fileStatusCache)
         }
 
         HadoopFsRelation(
@@ -534,15 +538,16 @@ object DataSource {
                 // Found the data source using fully qualified path
                 dataSource
               case Failure(error) =>
-                if (provider1.toLowerCase == "orc" ||
+                if (provider1.toLowerCase(Locale.ROOT) == "orc" ||
                   provider1.startsWith("org.apache.spark.sql.hive.orc")) {
                   throw new AnalysisException(
                     "The ORC data source must be used with Hive support enabled")
-                } else if (provider1.toLowerCase == "avro" ||
+                } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
                   provider1 == "com.databricks.spark.avro") {
                   throw new AnalysisException(
-                    s"Failed to find data source: ${provider1.toLowerCase}. Please find an Avro " +
-                      "package at http://spark.apache.org/third-party-projects.html")
+                    s"Failed to find data source: ${provider1.toLowerCase(Locale.ROOT)}. " +
+                    "Please find an Avro package at " +
+                    "http://spark.apache.org/third-party-projects.html")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider1. Please find packages at " +
@@ -591,7 +596,8 @@ object DataSource {
    */
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
     val path = CaseInsensitiveMap(options).get("path")
-    val optionsWithoutPath = options.filterKeys(_.toLowerCase != "path")
-    CatalogStorageFormat.empty.copy(locationUri = path, properties = optionsWithoutPath)
+    val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
+    CatalogStorageFormat.empty.copy(
+      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath)
   }
 }

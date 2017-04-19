@@ -175,8 +175,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
           reader.close()
           serializerManager.dataDeserializeStream(
             generateBlockId(),
-            new ChunkedByteBuffer(bytes).toInputStream(),
-            maybeEncrypted = false)(ClassTag.Any).toList
+            new ChunkedByteBuffer(bytes).toInputStream())(ClassTag.Any).toList
         }
         loggedData shouldEqual data
       }
@@ -357,7 +356,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     }
 
     def dataToByteBuffer(b: Seq[String]) =
-      serializerManager.dataSerialize(generateBlockId, b.iterator, allowEncryption = false)
+      serializerManager.dataSerialize(generateBlockId, b.iterator)
 
     val blocks = data.grouped(10).toSeq
 

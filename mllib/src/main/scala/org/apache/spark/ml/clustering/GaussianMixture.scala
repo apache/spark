@@ -580,10 +580,10 @@ private class ExpectationAggregator(
   private val k: Int = bcWeights.value.length
   private var totalCnt: Long = 0L
   private var newLogLikelihood: Double = 0.0
-  private val newWeights: Array[Double] = new Array[Double](k)
-  private val newMeans: Array[DenseVector] = Array.fill(k)(
+  private lazy val newWeights: Array[Double] = new Array[Double](k)
+  private lazy val newMeans: Array[DenseVector] = Array.fill(k)(
     new DenseVector(Array.fill[Double](numFeatures)(0.0)))
-  private val newCovs: Array[DenseVector] = Array.fill(k)(
+  private lazy val newCovs: Array[DenseVector] = Array.fill(k)(
     new DenseVector(Array.fill[Double](numFeatures * (numFeatures + 1) / 2)(0.0)))
 
   @transient private lazy val oldGaussians = {

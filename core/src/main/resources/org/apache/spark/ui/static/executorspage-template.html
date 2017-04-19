@@ -24,7 +24,15 @@ limitations under the License.
         <th></th>
         <th>RDD Blocks</th>
         <th><span data-toggle="tooltip"
-                  title="Memory used / total available memory for storage of data like RDD partitions cached in memory. ">Storage Memory</span>
+                  title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">Storage Memory</span>
+        </th>
+        <th class="on_heap_memory">
+          <span data-toggle="tooltip"
+                title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">On Heap Storage Memory</span>
+        </th>
+        <th class="off_heap_memory">
+          <span data-toggle="tooltip"
+                title="Memory used / total available memory for off heap storage of data like RDD partitions cached in memory.">Off Heap Storage Memory</span>
         </th>
         <th>Disk Used</th>
         <th>Cores</th>
@@ -73,6 +81,14 @@ limitations under the License.
             <span data-toggle="tooltip" data-placement="top"
                   title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">
               Storage Memory</span></th>
+          <th class="on_heap_memory">
+            <span data-toggle="tooltip" data-placement="top"
+                  title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">
+              On Heap Storage Memory</span></th>
+          <th class="off_heap_memory">
+            <span data-toggle="tooltip"
+                  title="Memory used / total available memory for off heap storage of data like RDD partitions cached in memory.">
+              Off Heap Storage Memory</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Disk Used">Disk Used</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Cores">Cores</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Active Tasks">Active Tasks</span></th>

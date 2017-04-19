@@ -22,11 +22,11 @@ import org.antlr.v4.runtime.misc.ParseCancellationException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Base SQL parsing infrastructure.
@@ -47,6 +47,19 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   /** Creates TableIdentifier for a given SQL string. */
   override def parseTableIdentifier(sqlText: String): TableIdentifier = parse(sqlText) { parser =>
     astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
+  }
+
+  /** Creates FunctionIdentifier for a given SQL string. */
+  def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = parse(sqlText) { parser =>
+    astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
+  }
+
+  /**
+   * Creates StructType for a given SQL string, which is a comma separated list of field
+   * definitions which will preserve the correct Hive metadata.
+   */
+  override def parseTableSchema(sqlText: String): StructType = parse(sqlText) { parser =>
+    StructType(astBuilder.visitColTypeList(parser.colTypeList()))
   }
 
   /** Creates LogicalPlan for a given SQL string. */

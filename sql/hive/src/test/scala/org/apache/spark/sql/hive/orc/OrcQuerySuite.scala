@@ -33,6 +33,7 @@ import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.Utils
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -284,7 +285,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       val queryOutput = selfJoin.queryExecution.analyzed.output
 
       assertResult(4, "Field count mismatches")(queryOutput.size)
-      assertResult(2, "Duplicated expression ID in query plan:\n $selfJoin") {
+      assertResult(2, s"Duplicated expression ID in query plan:\n $selfJoin") {
         queryOutput.filter(_.name == "_1").map(_.exprId).size
       }
 
@@ -293,7 +294,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("nested data - struct with array field") {
-    val data = (1 to 10).map(i => Tuple1((i, Seq("val_$i"))))
+    val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
     withOrcTable(data, "t") {
       checkAnswer(sql("SELECT `_1`.`_2`[0] FROM t"), data.map {
         case Tuple1((_, Seq(string))) => Row(string)
@@ -302,7 +303,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("nested data - array of struct") {
-    val data = (1 to 10).map(i => Tuple1(Seq(i -> "val_$i")))
+    val data = (1 to 10).map(i => Tuple1(Seq(i -> s"val_$i")))
     withOrcTable(data, "t") {
       checkAnswer(sql("SELECT `_1`[0].`_2` FROM t"), data.map {
         case Tuple1(Seq((_, string))) => Row(string)
@@ -611,4 +612,12 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       }
     }
   }
+
+   test("read from multiple orc input paths") {
+     val path1 = Utils.createTempDir()
+     val path2 = Utils.createTempDir()
+     makeOrcFile((1 to 10).map(Tuple1.apply), path1)
+     makeOrcFile((1 to 10).map(Tuple1.apply), path2)
+     assertResult(20)(read.orc(path1.getCanonicalPath, path2.getCanonicalPath).count())
+   }
 }

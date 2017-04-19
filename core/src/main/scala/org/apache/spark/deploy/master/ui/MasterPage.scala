@@ -76,7 +76,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Node", "Submitted Time",
+    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Executor", "Submitted Time",
       "User", "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)

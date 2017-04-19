@@ -133,9 +133,6 @@ setMethod("schema",
 #'
 #' Print the logical and physical Catalyst plans to the console for debugging.
 #'
-#' @param x a SparkDataFrame.
-#' @param extended Logical. If extended is FALSE, explain() only prints the physical plan.
-#' @param ... further arguments to be passed to or from other methods.
 #' @family SparkDataFrame functions
 #' @aliases explain,SparkDataFrame-method
 #' @rdname explain
@@ -280,7 +277,7 @@ setMethod("dtypes",
 
 #' Column Names of SparkDataFrame
 #'
-#' Return all column names as a list.
+#' Return a vector of column names.
 #'
 #' @param x a SparkDataFrame.
 #'
@@ -338,7 +335,7 @@ setMethod("colnames",
           })
 
 #' @param value a character vector. Must have the same length as the number
-#'              of columns in the SparkDataFrame.
+#'              of columns to be renamed.
 #' @rdname columns
 #' @aliases colnames<-,SparkDataFrame-method
 #' @name colnames<-
@@ -560,7 +557,7 @@ setMethod("insertInto",
             jmode <- convertToJSaveMode(ifelse(overwrite, "overwrite", "append"))
             write <- callJMethod(x@sdf, "write")
             write <- callJMethod(write, "mode", jmode)
-            callJMethod(write, "insertInto", tableName)
+            invisible(callJMethod(write, "insertInto", tableName))
           })
 
 #' Cache
@@ -2642,6 +2639,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #'
 #' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame
 #' and another SparkDataFrame. This is equivalent to \code{UNION ALL} in SQL.
+#' Input SparkDataFrames can have different schemas (names and data types).
 #'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #'
@@ -2685,7 +2683,8 @@ setMethod("unionAll",
 
 #' Union two or more SparkDataFrames
 #'
-#' Union two or more SparkDataFrames. This is equivalent to \code{UNION ALL} in SQL.
+#' Union two or more SparkDataFrames by row. As in R's \code{rbind}, this method
+#' requires that the input SparkDataFrames have the same column names.
 #'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #'
@@ -2709,6 +2708,10 @@ setMethod("unionAll",
 setMethod("rbind",
           signature(... = "SparkDataFrame"),
           function(x, ..., deparse.level = 1) {
+            nm <- lapply(list(x, ...), names)
+            if (length(unique(nm)) != 1) {
+              stop("Names of input data frames are different.")
+            }
             if (nargs() == 3) {
               union(x, ...)
             } else {
@@ -2815,14 +2818,14 @@ setMethod("write.df",
           signature(df = "SparkDataFrame"),
           function(df, path = NULL, source = NULL, mode = "error", ...) {
             if (!is.null(path) && !is.character(path)) {
-              stop("path should be charactor, NULL or omitted.")
+              stop("path should be character, NULL or omitted.")
             }
             if (!is.null(source) && !is.character(source)) {
               stop("source should be character, NULL or omitted. It is the datasource specified ",
                    "in 'spark.sql.sources.default' configuration by default.")
             }
             if (!is.character(mode)) {
-              stop("mode should be charactor or omitted. It is 'error' by default.")
+              stop("mode should be character or omitted. It is 'error' by default.")
             }
             if (is.null(source)) {
               source <- getDefaultSqlSource()
@@ -2891,7 +2894,7 @@ setMethod("saveAsTable",
             write <- callJMethod(write, "format", source)
             write <- callJMethod(write, "mode", jmode)
             write <- callJMethod(write, "options", options)
-            callJMethod(write, "saveAsTable", tableName)
+            invisible(callJMethod(write, "saveAsTable", tableName))
           })
 
 #' summary
@@ -3037,7 +3040,7 @@ setMethod("fillna",
           signature(x = "SparkDataFrame"),
           function(x, value, cols = NULL) {
             if (!(class(value) %in% c("integer", "numeric", "character", "list"))) {
-              stop("value should be an integer, numeric, charactor or named list.")
+              stop("value should be an integer, numeric, character or named list.")
             }
 
             if (class(value) == "list") {
@@ -3049,7 +3052,7 @@ setMethod("fillna",
               # Check each item in the named list is of valid type
               lapply(value, function(v) {
                 if (!(class(v) %in% c("integer", "numeric", "character"))) {
-                  stop("Each item in value should be an integer, numeric or charactor.")
+                  stop("Each item in value should be an integer, numeric or character.")
                 }
               })
 
@@ -3508,4 +3511,134 @@ setMethod("getNumPartitions",
           signature(x = "SparkDataFrame"),
           function(x) {
             callJMethod(callJMethod(x@sdf, "rdd"), "getNumPartitions")
+          })
+
+#' isStreaming
+#'
+#' Returns TRUE if this SparkDataFrame contains one or more sources that continuously return data
+#' as it arrives.
+#'
+#' @param x A SparkDataFrame
+#' @return TRUE if this SparkDataFrame is from a streaming source
+#' @family SparkDataFrame functions
+#' @aliases isStreaming,SparkDataFrame-method
+#' @rdname isStreaming
+#' @name isStreaming
+#' @seealso \link{read.stream} \link{write.stream}
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df <- read.stream("socket", host = "localhost", port = 9999)
+#' isStreaming(df)
+#' }
+#' @note isStreaming since 2.2.0
+#' @note experimental
+setMethod("isStreaming",
+          signature(x = "SparkDataFrame"),
+          function(x) {
+            callJMethod(x@sdf, "isStreaming")
+          })
+
+#' Write the streaming SparkDataFrame to a data source.
+#'
+#' The data source is specified by the \code{source} and a set of options (...).
+#' If \code{source} is not specified, the default data source configured by
+#' spark.sql.sources.default will be used.
+#'
+#' Additionally, \code{outputMode} specifies how data of a streaming SparkDataFrame is written to a
+#' output data source. There are three modes:
+#' \itemize{
+#'   \item append: Only the new rows in the streaming SparkDataFrame will be written out. This
+#'                 output mode can be only be used in queries that do not contain any aggregation.
+#'   \item complete: All the rows in the streaming SparkDataFrame will be written out every time
+#'                   there are some updates. This output mode can only be used in queries that
+#'                   contain aggregations.
+#'   \item update: Only the rows that were updated in the streaming SparkDataFrame will be written
+#'                 out every time there are some updates. If the query doesn't contain aggregations,
+#'                 it will be equivalent to \code{append} mode.
+#' }
+#'
+#' @param df a streaming SparkDataFrame.
+#' @param source a name for external data source.
+#' @param outputMode one of 'append', 'complete', 'update'.
+#' @param ... additional argument(s) passed to the method.
+#'
+#' @family SparkDataFrame functions
+#' @seealso \link{read.stream}
+#' @aliases write.stream,SparkDataFrame-method
+#' @rdname write.stream
+#' @name write.stream
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df <- read.stream("socket", host = "localhost", port = 9999)
+#' isStreaming(df)
+#' wordCounts <- count(group_by(df, "value"))
+#'
+#' # console
+#' q <- write.stream(wordCounts, "console", outputMode = "complete")
+#' # text stream
+#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp")
+#' # memory stream
+#' q <- write.stream(wordCounts, "memory", queryName = "outs", outputMode = "complete")
+#' head(sql("SELECT * from outs"))
+#' queryName(q)
+#'
+#' stopQuery(q)
+#' }
+#' @note write.stream since 2.2.0
+#' @note experimental
+setMethod("write.stream",
+          signature(df = "SparkDataFrame"),
+          function(df, source = NULL, outputMode = NULL, ...) {
+            if (!is.null(source) && !is.character(source)) {
+              stop("source should be character, NULL or omitted. It is the data source specified ",
+                   "in 'spark.sql.sources.default' configuration by default.")
+            }
+            if (!is.null(outputMode) && !is.character(outputMode)) {
+              stop("outputMode should be character or omitted.")
+            }
+            if (is.null(source)) {
+              source <- getDefaultSqlSource()
+            }
+            options <- varargsToStrEnv(...)
+            write <- handledCallJMethod(df@sdf, "writeStream")
+            write <- callJMethod(write, "format", source)
+            if (!is.null(outputMode)) {
+              write <- callJMethod(write, "outputMode", outputMode)
+            }
+            write <- callJMethod(write, "options", options)
+            ssq <- handledCallJMethod(write, "start")
+            streamingQuery(ssq)
+          })
+
+#' checkpoint
+#'
+#' Returns a checkpointed version of this SparkDataFrame. Checkpointing can be used to truncate the
+#' logical plan, which is especially useful in iterative algorithms where the plan may grow
+#' exponentially. It will be saved to files inside the checkpoint directory set with
+#' \code{setCheckpointDir}
+#'
+#' @param x A SparkDataFrame
+#' @param eager whether to checkpoint this SparkDataFrame immediately
+#' @return a new checkpointed SparkDataFrame
+#' @family SparkDataFrame functions
+#' @aliases checkpoint,SparkDataFrame-method
+#' @rdname checkpoint
+#' @name checkpoint
+#' @seealso \link{setCheckpointDir}
+#' @export
+#' @examples
+#'\dontrun{
+#' setCheckpointDir("/checkpoint")
+#' df <- checkpoint(df)
+#' }
+#' @note checkpoint since 2.2.0
+setMethod("checkpoint",
+          signature(x = "SparkDataFrame"),
+          function(x, eager = TRUE) {
+            df <- callJMethod(x@sdf, "checkpoint", as.logical(eager))
+            dataFrame(df)
           })
