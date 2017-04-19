@@ -520,17 +520,19 @@ private[spark] class BlockManagerInfo(
         blockStatus = BlockStatus(storageLevel, memSize = memSize, diskSize = 0)
         _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
-        val originalMemSize = if (_blocks.containsKey(blockId)) _blocks.get(blockId).memSize else 0
-        if(memSize >= originalMemSize){
-          logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
-            blockId, blockManagerId.hostPort, Utils.bytesToString(memSize - originalMemSize),
-            Utils.bytesToString(_remainingMem)))
+        val originalMemSize = if (_blocks.containsKey(blockId)) {
+          _blocks.get(blockId).memSize
+        }  else {
+          0
         }
-        else{
-          logInfo("Removed %s in memory on %s (size: %s, free: %s)".format(
-            blockId, blockManagerId.hostPort, Utils.bytesToString(originalMemSize - memSize),
-            Utils.bytesToString(_remainingMem)))
+        val (addedOrRemoved, size) = if (memSize >= originalMemSize) {
+          ("Added", memSize - originalMemSize)
+        } else {
+          ("Removed", originalMemSize - memSize)
         }
+        logInfo("%s %s in memory on %s (size: %s, free: %s)".format(
+          addedOrRemoved, blockId, blockManagerId.hostPort, Utils.bytesToString(size),
+          Utils.bytesToString(_remainingMem)))
       }
       if (storageLevel.useDisk) {
         blockStatus = BlockStatus(storageLevel, memSize = 0, diskSize = diskSize)
