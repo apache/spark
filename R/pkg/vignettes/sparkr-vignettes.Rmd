@@ -505,6 +505,10 @@ SparkR supports the following machine learning models and algorithms.
 
 * Alternating Least Squares (ALS)
 
+#### Frequent Pattern Mining
+
+* FP-growth
+
 #### Statistics
 
 * Kolmogorov-Smirnov Test
@@ -707,7 +711,7 @@ summary(tweedieGLM1)
 ```
 We can try other distributions in the tweedie family, for example, a compound Poisson distribution with a log link:
 ```{r}
-tweedieGLM2 <- spark.glm(carsDF, mpg ~ wt + hp, family = "tweedie", 
+tweedieGLM2 <- spark.glm(carsDF, mpg ~ wt + hp, family = "tweedie",
                          var.power = 1.2, link.power = 0.0)
 summary(tweedieGLM2)
 ```
@@ -904,6 +908,37 @@ Make predictions.
 ```{r}
 predicted <- predict(model, df)
 head(predicted)
+```
+
+#### FP-growth
+
+`spark.fpGrowth` executes FP-growth algorithm to mine frequent itemsets on a `SparkDataFrame`. `itemsCol` should be an array of values.
+
+```{r}
+df <- selectExpr(createDataFrame(data.frame(rawItems = c(
+  "T,R,U", "T,S", "V,R", "R,U,T,V", "R,S", "V,S,U", "U,R", "S,T", "V,R", "V,U,S",
+  "T,V,U", "R,V", "T,S", "T,S", "S,T", "S,U", "T,R", "V,R", "S,V", "T,S,U"
+))), "split(rawItems, ',') AS items")
+
+fpm <- spark.fpGrowth(df, minSupport = 0.2, minConfidence = 0.5)
+```
+
+`spark.freqItemsets` method can be used to retrieve a `SparkDataFrame` with the frequent itemsets.
+
+```{r}
+head(spark.freqItemsets(fpm))
+```
+
+`spark.associationRules` returns a `SparkDataFrame` with the association rules.
+
+```{r}
+head(spark.associationRules(fpm))
+```
+
+We can make predictions based on the `antecedent`.
+
+```{r}
+head(predict(fpm, df))
 ```
 
 #### Kolmogorov-Smirnov Test
