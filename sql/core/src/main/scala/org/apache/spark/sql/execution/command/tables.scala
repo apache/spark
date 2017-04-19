@@ -20,13 +20,11 @@ package org.apache.spark.sql.execution.command
 import java.io.File
 import java.net.URI
 import java.nio.file.FileSystems
-import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 import scala.util.Try
 
-import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -506,11 +504,11 @@ case class DescribeTableCommand(
   override val output: Seq[Attribute] = Seq(
     // Column names are based on Hive.
     AttributeReference("col_name", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "name of the column").build())(),
+      metadata = new MetadataBuilder().putString("comment", "name of the column").build())(),
     AttributeReference("data_type", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "data type of the column").build())(),
+      metadata = new MetadataBuilder().putString("comment", "data type of the column").build())(),
     AttributeReference("comment", StringType, nullable = true,
-      new MetadataBuilder().putString("comment", "comment of the column").build())()
+      metadata = new MetadataBuilder().putString("comment", "comment of the column").build())()
   )
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
