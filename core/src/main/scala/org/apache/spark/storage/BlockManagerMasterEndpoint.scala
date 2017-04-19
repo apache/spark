@@ -516,29 +516,24 @@ private[spark] class BlockManagerInfo(
        * They can be both larger than 0, when a block is dropped from memory to disk.
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */
       var blockStatus: BlockStatus = null
+      val addOrUpdate = if (_blocks.containsKey(blockId)) {
+        "Added"
+      } else {
+        "Updated"
+      }
       if (storageLevel.useMemory) {
         blockStatus = BlockStatus(storageLevel, memSize = memSize, diskSize = 0)
         _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
-        val originalMemSize = if (_blocks.containsKey(blockId)) {
-          _blocks.get(blockId).memSize
-        }  else {
-          0
-        }
-        val (addedOrRemoved, size) = if (memSize >= originalMemSize) {
-          ("Added", memSize - originalMemSize)
-        } else {
-          ("Removed", originalMemSize - memSize)
-        }
         logInfo("%s %s in memory on %s (size: %s, free: %s)".format(
-          addedOrRemoved, blockId, blockManagerId.hostPort, Utils.bytesToString(size),
+          addOrUpdate, blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
           Utils.bytesToString(_remainingMem)))
       }
       if (storageLevel.useDisk) {
         blockStatus = BlockStatus(storageLevel, memSize = 0, diskSize = diskSize)
         _blocks.put(blockId, blockStatus)
-        logInfo("Added %s on disk on %s (size: %s)".format(
-          blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
+        logInfo("%s %s on disk on %s (size: %s)".format(
+          addOrUpdate, blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
       }
       if (!blockId.isBroadcast && blockStatus.isCached) {
         _cachedBlocks += blockId
