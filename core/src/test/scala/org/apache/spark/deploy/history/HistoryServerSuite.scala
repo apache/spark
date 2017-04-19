@@ -209,7 +209,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   }
 
   // Test that the files are downloaded correctly, and validate them.
-  def doDownloadTest(appId: String, attemptId: Option[Int]): Unit = {
+  def doDownloadTest(appId: String, attemptId: Option[Int], user: String = null): Unit = {
 
     val url = attemptId match {
       case Some(id) =>
@@ -218,8 +218,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         new URL(s"${generateURL(s"applications/$appId")}/logs")
     }
 
-    val (code, inputStream, error) = HistoryServerSuite.connectAndGetInputStream(url)
-    code should be (HttpServletResponse.SC_OK)
+    val headers = if (user != null) Seq(FakeAuthFilter.FAKE_HTTP_USER -> user) else Nil
+    val (code, inputStream, error) = HistoryServerSuite.connectAndGetInputStream(url, headers)
+    if (code != HttpServletResponse.SC_OK) {
+      throw new IllegalStateException(
+        s"Return code $code is not equal to ${HttpServletResponse.SC_OK}")
+    }
+
     inputStream should not be None
     error should be (None)
 
@@ -565,8 +570,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     assert(jobcount === getNumJobs("/jobs"))
 
     // no need to retain the test dir now the tests complete
-    logDir.deleteOnExit();
-
+    logDir.deleteOnExit()
   }
 
   test("ui and api authorization checks") {
@@ -599,6 +603,36 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         val sc = TestUtils.httpResponseCode(new URL(url), headers = headers)
         assert(sc === expectedCode, s"Unexpected status code $sc for $url (user = $user)")
       }
+    }
+  }
+
+  test("acls with downloading files") {
+    val admin = "root"
+    val owner = "irashid"
+    val other = "alice"
+    val appId = "local-1430917381535"
+
+    stop()
+    init("spark.ui.filters" -> classOf[FakeAuthFilter].getName(),
+      "spark.history.ui.acls.enable" -> "true",
+      "spark.history.ui.admin.acls" -> admin)
+
+    doDownloadTest(appId, None, admin)
+    doDownloadTest(appId, None, owner)
+    intercept[IllegalStateException](doDownloadTest(appId, None, other)).getMessage should be (
+      s"Return code ${HttpServletResponse.SC_FORBIDDEN} is not " +
+        s"equal to ${HttpServletResponse.SC_OK}")
+
+    (1 to 2).foreach { attemptId => doDownloadTest(appId, Some(attemptId), admin) }
+    (1 to 2).foreach { attemptId => doDownloadTest(appId, Some(attemptId), owner) }
+    // Should throw exception, since user "alice" has no permission to access file, so it will
+    // return as an empty file.
+    (1 to 2).foreach { attemptId =>
+      val exception = intercept[IllegalStateException](
+        doDownloadTest(appId, Some(attemptId), other))
+      exception.getMessage should be (
+        s"Return code ${HttpServletResponse.SC_FORBIDDEN} is not " +
+          s"equal to ${HttpServletResponse.SC_OK}")
     }
   }
 
@@ -649,9 +683,11 @@ object HistoryServerSuite {
     (code, inString, errString)
   }
 
-  def connectAndGetInputStream(url: URL): (Int, Option[InputStream], Option[String]) = {
+  def connectAndGetInputStream(url: URL,
+      headers: Seq[(String, String)] = Nil): (Int, Option[InputStream], Option[String]) = {
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
     connection.setRequestMethod("GET")
+    headers.foreach { case (k, v) => connection.setRequestProperty(k, v) }
     connection.connect()
     val code = connection.getResponseCode()
     val inStream = try {
