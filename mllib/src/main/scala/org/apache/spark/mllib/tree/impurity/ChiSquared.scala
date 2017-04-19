@@ -158,5 +158,6 @@ private[spark] class ChiSquaredCalculator(stats: Array[Double]) extends Impurity
     if (cnt == 0) 0 else (stats(lbl) / cnt)
   }
 
+  /** output in a string format */
   override def toString: String = s"ChiSquaredCalculator(stats = [${stats.mkString(", ")}])"
 }
