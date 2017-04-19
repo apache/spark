@@ -196,6 +196,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val NO_UNESCAPED_SQL_STRING = buildConf("spark.sql.noUnescapedStringLiteral")
+    .internal()
+    .doc("Since Spark 2.0, we use unescaped SQL string for string literals including regex. " +
+      "It is different than 1.6 behavior. Enabling this config can use no unescaped SQL string " +
+      "literals and mitigate migration problem.")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
          "otherwise the schema is picked from the summary file or a random data file " +
@@ -910,6 +918,8 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+
+  def noUnescapedStringLiteral: Boolean = getConf(NO_UNESCAPED_SQL_STRING)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

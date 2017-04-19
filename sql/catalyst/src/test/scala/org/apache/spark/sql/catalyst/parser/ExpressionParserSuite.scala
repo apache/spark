@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -39,12 +40,17 @@ class ExpressionParserSuite extends PlanTest {
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
 
-  def assertEqual(sqlCommand: String, e: Expression): Unit = {
-    compareExpressions(parseExpression(sqlCommand), e)
+  val defaultParser = CatalystSqlParser
+
+  def assertEqual(
+      sqlCommand: String,
+      e: Expression,
+      parser: ParserInterface = defaultParser): Unit = {
+    compareExpressions(parser.parseExpression(sqlCommand), e)
   }
 
   def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](parseExpression(sqlCommand))
+    val e = intercept[ParseException](defaultParser.parseExpression(sqlCommand))
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
@@ -101,7 +107,7 @@ class ExpressionParserSuite extends PlanTest {
   test("long binary logical expressions") {
     def testVeryBinaryExpression(op: String, clazz: Class[_]): Unit = {
       val sql = (1 to 1000).map(x => s"$x == $x").mkString(op)
-      val e = parseExpression(sql)
+      val e = defaultParser.parseExpression(sql)
       assert(e.collect { case _: EqualTo => true }.size === 1000)
       assert(e.collect { case x if clazz.isInstance(x) => true }.size === 999)
     }
@@ -158,6 +164,15 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a not rlike 'pattern%'", !('a rlike "pattern%"))
     assertEqual("a regexp 'pattern%'", 'a rlike "pattern%")
     assertEqual("a not regexp 'pattern%'", !('a rlike "pattern%"))
+  }
+
+  test("like expressions with NO_UNESCAPED_SQL_STRING") {
+    val conf = new SQLConf()
+    conf.setConfString("spark.sql.noUnescapedStringLiteral", "true")
+    val parser = new CatalystSqlParser(conf)
+    assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
+    assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
+    assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n", parser)
   }
 
   test("is null expressions") {
@@ -445,6 +460,44 @@ class ExpressionParserSuite extends PlanTest {
 
     // Unicode
     assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'", "World :)")
+  }
+
+  test("strings with NO_UNESCAPED_SQL_STRING") {
+    val conf = new SQLConf()
+    conf.setConfString("spark.sql.noUnescapedStringLiteral", "true")
+    val parser = new CatalystSqlParser(conf)
+
+    // Single Strings.
+    assertEqual("\"hello\"", "hello", parser)
+    assertEqual("'hello'", "hello", parser)
+
+    // Multi-Strings.
+    assertEqual("\"hello\" 'world'", "helloworld", parser)
+    assertEqual("'hello' \" \" 'world'", "hello world", parser)
+
+    assertEqual("'pattern%'", "pattern%", parser)
+    assertEqual("'no-pattern\\%'", "no-pattern\\%", parser)
+    assertEqual("'pattern\\\\%'", "pattern\\\\%", parser)
+    assertEqual("'pattern\\\\\\%'", "pattern\\\\\\%", parser)
+
+    // Escaped characters.
+    assertEqual("'\0'", "\u0000", parser) // ASCII NUL (X'00')
+
+    // Note: Single quote follows 1.6 parsing behavior when NO_UNESCAPED_SQL_STRING is enabled.
+    val e = intercept[ParseException](parser.parseExpression("'\''"))
+    assert(e.message.contains("extraneous input '''"))
+
+    assertEqual("'\"'", "\"", parser)     // Double quote
+    assertEqual("'\b'", "\b", parser)     // Backspace
+    assertEqual("'\n'", "\n", parser)     // Newline
+    assertEqual("'\r'", "\r", parser)     // Carriage return
+    assertEqual("'\t'", "\t", parser)     // Tab character
+
+    // Octals
+    assertEqual("'\110\145\154\154\157\041'", "Hello!", parser)
+
+    // Unicode
+    assertEqual("'\u0057\u006F\u0072\u006C\u0064\u0020\u003A\u0029'", "World :)", parser)
   }
 
   test("intervals") {

@@ -68,6 +68,11 @@ object ParserUtils {
   /** Convert a string node into a string. */
   def string(node: TerminalNode): String = unescapeSQLString(node.getText)
 
+  /** Convert a string node into a string without unescaping. */
+  def stringWithoutUnescape(node: TerminalNode): String = {
+    node.getText.slice(1, node.getText.size - 1)
+  }
+
   /** Get the origin (line and position) of the token. */
   def position(token: Token): Origin = {
     val opt = Option(token)
