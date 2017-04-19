@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.graphx.util.PeriodicGraphCheckpointer
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.PeriodicRDDCheckpointer
+import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 
 /**
  * Implements a Pregel-like bulk-synchronous message-passing API.

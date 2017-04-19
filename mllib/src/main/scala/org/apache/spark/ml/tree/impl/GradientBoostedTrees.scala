@@ -26,8 +26,8 @@ import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostin
 import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.PeriodicRDDCheckpointer
 
 
 private[spark] object GradientBoostedTrees extends Logging {
