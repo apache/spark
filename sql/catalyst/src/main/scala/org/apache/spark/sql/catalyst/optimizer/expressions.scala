@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -367,6 +368,8 @@ case class NullPropagation(conf: SQLConf) extends Rule[LogicalPlan] {
 
       case EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case EqualNullSafe(l, Literal(null, _)) => IsNull(l)
+
+      case AssertNotNull(c, _) if !c.nullable => c
 
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
