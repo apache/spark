@@ -18,21 +18,18 @@
 package org.apache.spark
 
 /**
- * A client that SparkSubmit uses to launch spark Application.
- * This is currently supported only in YARN mode.
+ * An interface that can be implemented by applications launched by SparkSubmit
+ * which exposes the Spark job configuration explicitly.
  */
 private[spark] trait SparkApp {
   this: Singleton =>
 
   /**
-   * The Client should implement this as entry method to provide application,
-   * spark conf and system configuration.
+   * Method executed by SparkSubmit to run the application.
    *
    * @param args    - all arguments for SparkApp.
    * @param conf    - Spark Configuration.
    */
-  def sparkMain(
-    args: Array[String],
-    conf: Map[String, String]): Unit
+  def sparkMain(args: Array[String], conf: Map[String, String]): Unit
 
 }

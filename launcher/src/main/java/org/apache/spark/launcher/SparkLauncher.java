@@ -558,6 +558,8 @@ public class SparkLauncher {
    */
   public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
     if (launchAsThread) {
+      checkArgument(builder.childEnv.isEmpty(),
+        "Environment variables are not supported while launching as Thread");
       return startApplicationAsThread(listeners);
     }
     return startApplicationAsChildProc(listeners);

@@ -57,8 +57,10 @@ class SparkSubmitRunner implements Runnable {
       }
       Object argsObj = args.toArray(new String[args.size()]);
       main.invoke(null, argsObj);
-    } catch (IllegalAccessException|InvocationTargetException|ClassNotFoundException|NoSuchMethodException illEx) {
-      throw new RuntimeException(illEx);
+    } catch (RuntimeException runtimeException) {
+      throw runtimeException;
+    }  catch (Exception exception){
+      throw new RuntimeException(exception);
     }
   }
 }

@@ -69,7 +69,7 @@
  *         .setMainClass("my.spark.app.Main")
  *         .setMaster("yarn")
  *         .setDeployMode("cluster")
- *         .autoShutdown()
+ *         .autoShutdown(true)
  *         .launchAsThread(true)
  *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")
  *         .startApplication();
