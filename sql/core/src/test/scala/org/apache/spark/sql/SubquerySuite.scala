@@ -819,8 +819,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Seq((1, 1), (2, 0)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq[(Int, Array[Int])]((1, Array(1, 2)), (2, Array(-1, -3)))
         .toDF("c1", "arr_c2").createTempView("t2")
-      Seq[(Int, Array[Int])]((1, Array(1, 2)), (2, Array(-1, -3)))
-        .toDF("c1", "arr_c2").createTempView("t3")
       checkAnswer(
         sql(
           """
@@ -835,10 +833,10 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         sql(
           """
             | select c1
-            | from t3
+            | from t2
             | where exists (select *
-            |               from t2 lateral view explode(t3.arr_c2) q as c2
-            |               where t3.c1 = t2.c1)
+            |               from t1 lateral view explode(t2.arr_c2) q as c2
+            |               where t1.c1 = t2.c1)
           """.stripMargin)
       }
       assert(msg1.getMessage.contains(
