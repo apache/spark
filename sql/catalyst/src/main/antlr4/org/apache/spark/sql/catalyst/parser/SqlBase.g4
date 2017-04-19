@@ -532,7 +532,9 @@ predicate
     : NOT? kind=BETWEEN lower=valueExpression AND upper=valueExpression
     | NOT? kind=IN '(' expression (',' expression)* ')'
     | NOT? kind=IN '(' query ')'
-    | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
+    | NOT? kind=LIKE pattern=valueExpression
+    | NOT? kind=RLIKE regex=regexString
+    | NOT? kind=RLIKE pattern=valueExpression
     | IS NOT? kind=NULL
     ;
 
@@ -574,6 +576,10 @@ constant
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | STRING+                                                                                  #stringLiteral
+    ;
+
+regexString
+    : STRING+                                                                                  #regexPattern
     ;
 
 comparisonOperator

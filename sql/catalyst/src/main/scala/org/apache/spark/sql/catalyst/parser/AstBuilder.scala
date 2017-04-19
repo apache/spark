@@ -954,7 +954,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.LIKE =>
         invertIfNotDefined(Like(e, expression(ctx.pattern)))
       case SqlBaseParser.RLIKE =>
-        invertIfNotDefined(RLike(e, expression(ctx.pattern)))
+        if (ctx.pattern != null) {
+          invertIfNotDefined(RLike(e, expression(ctx.pattern)))
+        } else {
+          invertIfNotDefined(RLike(e, expression(ctx.regex)))
+        }
       case SqlBaseParser.NULL if ctx.NOT != null =>
         IsNotNull(e)
       case SqlBaseParser.NULL =>
@@ -1396,6 +1400,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
     Literal(createString(ctx))
+  }
+
+  override def visitRegexPattern(ctx: RegexPatternContext): Literal = withOrigin(ctx) {
+    Literal(ctx.STRING().asScala.map(regexString).mkString)
   }
 
   /**
