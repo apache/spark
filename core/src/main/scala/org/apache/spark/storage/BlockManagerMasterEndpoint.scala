@@ -536,7 +536,6 @@ private[spark] class BlockManagerInfo(
             blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
             Utils.bytesToString(_remainingMem)))
         }
-
       }
       if (storageLevel.useDisk) {
         blockStatus = BlockStatus(storageLevel, memSize = 0, diskSize = diskSize)
