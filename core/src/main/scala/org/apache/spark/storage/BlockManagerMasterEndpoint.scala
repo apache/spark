@@ -497,11 +497,17 @@ private[spark] class BlockManagerInfo(
 
     updateLastSeenMs()
 
+    var blockExists = false
+    var originalMemSize: Long = 0
+    var originalDiskSize: Long = 0
+
     if (_blocks.containsKey(blockId)) {
       // The block exists on the slave already.
       val blockStatus: BlockStatus = _blocks.get(blockId)
       val originalLevel: StorageLevel = blockStatus.storageLevel
-      val originalMemSize: Long = blockStatus.memSize
+      originalMemSize = blockStatus.memSize
+      originalDiskSize = blockStatus.diskSize
+      blockExists = true
 
       if (originalLevel.useMemory) {
         _remainingMem += originalMemSize
@@ -516,24 +522,33 @@ private[spark] class BlockManagerInfo(
        * They can be both larger than 0, when a block is dropped from memory to disk.
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */
       var blockStatus: BlockStatus = null
-      val addOrUpdate = if (_blocks.containsKey(blockId)) {
-        "Added"
-      } else {
-        "Updated"
-      }
+
       if (storageLevel.useMemory) {
         blockStatus = BlockStatus(storageLevel, memSize = memSize, diskSize = 0)
         _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
-        logInfo("%s %s in memory on %s (size: %s, free: %s)".format(
-          addOrUpdate, blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
-          Utils.bytesToString(_remainingMem)))
+        if (blockExists) {
+          logInfo("Updated %s in memory on %s (current size: %s, original size %s, free: %s)".format(
+            blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
+            Utils.bytesToString(originalMemSize),Utils.bytesToString(_remainingMem)))
+        } else {
+          logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
+            blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
+            Utils.bytesToString(_remainingMem)))
+        }
+
       }
       if (storageLevel.useDisk) {
         blockStatus = BlockStatus(storageLevel, memSize = 0, diskSize = diskSize)
         _blocks.put(blockId, blockStatus)
-        logInfo("%s %s on disk on %s (size: %s)".format(
-          addOrUpdate, blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
+        if (blockExists) {
+          logInfo("Updated %s on disk on %s (current size: %s, original size %s)".format(
+            blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize),
+            Utils.bytesToString(originalDiskSize)))
+        } else {
+          logInfo("Added %s on disk on %s (size: %s)".format(
+            blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
+        }
       }
       if (!blockId.isBroadcast && blockStatus.isCached) {
         _cachedBlocks += blockId
