@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -42,8 +43,12 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
 
+  val testRelationWithData = LocalRelation.fromExternalRows(
+    testRelation.output, Seq(Row(1, 2, 3, "abc"))
+  )
+
   private def checkCondition(input: Expression, expected: LogicalPlan): Unit = {
-    val plan = testRelation.where(input).analyze
+    val plan = testRelationWithData.where(input).analyze
     val actual = Optimize.execute(plan)
     comparePlans(actual, expected)
   }
@@ -168,10 +173,10 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
   }
 
   test("Complementation Laws") {
-    checkCondition('a && !'a, LocalRelation(testRelation.output, Seq.empty))
-    checkCondition(!'a && 'a, LocalRelation(testRelation.output, Seq.empty))
+    checkCondition('a && !'a, testRelation)
+    checkCondition(!'a && 'a, testRelation)
 
-    checkCondition('a || !'a, testRelation)
-    checkCondition(!'a || 'a, testRelation)
+    checkCondition('a || !'a, testRelationWithData)
+    checkCondition(!'a || 'a, testRelationWithData)
   }
 }
