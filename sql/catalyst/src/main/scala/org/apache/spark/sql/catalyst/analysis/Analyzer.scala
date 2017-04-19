@@ -2378,13 +2378,9 @@ class Analyzer(
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case agg @ Aggregate(groups, aggs, child)
-          if conf.groupByAliasesEnabled && child.resolved && groups.exists(!_.resolved) =>
+          if conf.groupByAliases && child.resolved && groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = groups.map {
-          case u: UnresolvedAttribute =>
-            aggs.find(ne => resolver(ne.name, u.name)).map {
-              case Alias(e, _) => e
-              case e => e
-            }.getOrElse(u)
+          case u: UnresolvedAttribute => aggs.find(ne => resolver(ne.name, u.name)).getOrElse(u)
           case e => e
         })
     }

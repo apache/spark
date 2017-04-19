@@ -421,7 +421,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val GROUP_BY_ALIASES_ENABLED = buildConf("spark.sql.groupByAliasesEnabled")
+  val GROUP_BY_ALIASES = buildConf("spark.sql.groupByAliases")
     .doc("When true, aliases in a select list can be used in group by clauses. When false, " +
       "an analysis exception is thrown in the case.")
     .booleanConf
@@ -1009,7 +1009,7 @@ class SQLConf extends Serializable with Logging {
 
   def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
-  def groupByAliasesEnabled: Boolean = getConf(GROUP_BY_ALIASES_ENABLED)
+  def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
