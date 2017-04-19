@@ -35,6 +35,7 @@
     <build.testJarPhase>none</build.testJarPhase>
     <build.copyDependenciesPhase>none</build.copyDependenciesPhase>
     <hadoop.version>2.8.0-palantir3</hadoop.version>
+    <curator.version>2.7.1</curator.version>
   </properties>
 
   <dependencyManagement>
