@@ -2380,7 +2380,16 @@ class Analyzer(
       case agg @ Aggregate(groups, aggs, child)
           if conf.groupByAliases && child.resolved && groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = groups.map {
-          case u: UnresolvedAttribute => aggs.find(ne => resolver(ne.name, u.name)).getOrElse(u)
+          case u: UnresolvedAttribute =>
+            val resolvedAgg = aggs.find(ne => resolver(ne.name, u.name))
+            // Check if no aggregate function exists in GROUP BY
+            resolvedAgg.foreach { case Alias(expr, _) =>
+              if (expr.isInstanceOf[AggregateExpression]) {
+                throw new AnalysisException(
+                  s"Aggregate function `$expr` is not allowed in GROUP BY")
+              }
+            }
+            resolvedAgg.getOrElse(u)
           case e => e
         })
     }

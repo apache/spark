@@ -39,6 +39,9 @@ SELECT COUNT(DISTINCT b), COUNT(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS
 -- Aliases in SELECT could be used in GROUP BY
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k;
 
+-- Aggregate functions cannot be used in GROUP BY
+SELECT COUNT(b) AS k FROM testData GROUP BY k;
+
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW testDataHasSameNameWithAlias AS SELECT * FROM VALUES
 (1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v);
