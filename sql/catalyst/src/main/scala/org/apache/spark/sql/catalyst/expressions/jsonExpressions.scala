@@ -149,7 +149,7 @@ case class GetJsonObject(json: Expression, path: Expression)
 
     if (parsed.isDefined) {
       try {
-        Utils.tryWithResource(jsonFactory.createParser(jsonStr.getBytes)) { parser =>
+        Utils.tryWithResource(jsonFactory.createParser(jsonStr.toString)) { parser =>
           val output = new ByteArrayOutputStream()
           val matched = Utils.tryWithResource(
             jsonFactory.createGenerator(output, JsonEncoding.UTF8)) { generator =>
@@ -393,7 +393,7 @@ case class JsonTuple(children: Seq[Expression])
     }
 
     try {
-      Utils.tryWithResource(jsonFactory.createParser(json.getBytes)) {
+      Utils.tryWithResource(jsonFactory.createParser(json.toString)) {
         parser => parseRow(parser, input)
       }
     } catch {
