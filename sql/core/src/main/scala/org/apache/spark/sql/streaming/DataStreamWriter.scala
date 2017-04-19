@@ -285,7 +285,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         extraOptions.get("queryName"),
         extraOptions.get("checkpointLocation"),
         df,
-        dataSource.createSink(outputMode),
+        dataSource.createSink(df.schema, outputMode),
         outputMode,
         useTempCheckpointLocation = useTempCheckpointLocation,
         recoverFromCheckpointLocation = recoverFromCheckpointLocation,

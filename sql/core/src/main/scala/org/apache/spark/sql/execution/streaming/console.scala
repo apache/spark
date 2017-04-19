@@ -21,6 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StructType
 
 class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
   // Number of rows to display, by default 20 rows
@@ -53,6 +54,7 @@ class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
 
 class ConsoleSinkProvider extends StreamSinkProvider with DataSourceRegister {
   def createSink(
+      schema: StructType,
       sqlContext: SQLContext,
       parameters: Map[String, String],
       partitionColumns: Seq[String],

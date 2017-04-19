@@ -57,6 +57,7 @@ class BlockingSource extends StreamSourceProvider with StreamSinkProvider {
   }
 
   override def createSink(
+      schema: StructType,
       spark: SQLContext,
       parameters: Map[String, String],
       partitionColumns: Seq[String],

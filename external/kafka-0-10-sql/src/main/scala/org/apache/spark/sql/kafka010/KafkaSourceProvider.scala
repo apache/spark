@@ -148,6 +148,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   override def createSink(
+      schema: StructType,
       sqlContext: SQLContext,
       parameters: Map[String, String],
       partitionColumns: Seq[String],
