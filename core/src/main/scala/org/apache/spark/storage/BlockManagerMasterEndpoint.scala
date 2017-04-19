@@ -497,11 +497,12 @@ private[spark] class BlockManagerInfo(
 
     updateLastSeenMs()
 
+    var originalMemSize: Long = 0
     if (_blocks.containsKey(blockId)) {
       // The block exists on the slave already.
       val blockStatus: BlockStatus = _blocks.get(blockId)
       val originalLevel: StorageLevel = blockStatus.storageLevel
-      val originalMemSize: Long = blockStatus.memSize
+      originalMemSize = blockStatus.memSize
 
       if (originalLevel.useMemory) {
         _remainingMem += originalMemSize
@@ -520,9 +521,16 @@ private[spark] class BlockManagerInfo(
         blockStatus = BlockStatus(storageLevel, memSize = memSize, diskSize = 0)
         _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
-        logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
-          blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
-          Utils.bytesToString(_remainingMem)))
+        if((memSize-originalMemSize) >= 0){
+          logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
+            blockId, blockManagerId.hostPort, Utils.bytesToString(memSize-originalMemSize),
+            Utils.bytesToString(_remainingMem)))
+        }
+        else{
+          logInfo("Removed %s in memory on %s (size: %s, free: %s)".format(
+            blockId, blockManagerId.hostPort, Utils.bytesToString(originalMemSize-memSize),
+            Utils.bytesToString(_remainingMem)))
+        }
       }
       if (storageLevel.useDisk) {
         blockStatus = BlockStatus(storageLevel, memSize = 0, diskSize = diskSize)
