@@ -537,5 +537,10 @@ class PlanParserSuite extends PlanTest {
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a"),
       Hint("MAPJOIN", Seq("t"), table("t").where(Literal(true)).groupBy('a)('a)).orderBy('a.asc))
+
+    comparePlans(
+      parsePlan("SELECT a FROM (SELECT /*+ NO_COLLAPSE */ * FROM t) t1"),
+      SubqueryAlias("t1", Hint("NO_COLLAPSE", Seq.empty, table("t").select(star())))
+        .select('a))
   }
 }

@@ -433,6 +433,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
+      case NoCollapseHint(child) => planLater(child) :: Nil
       case _ => Nil
     }
   }

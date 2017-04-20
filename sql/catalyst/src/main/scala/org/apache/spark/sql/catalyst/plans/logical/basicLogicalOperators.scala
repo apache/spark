@@ -387,6 +387,13 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
 }
 
 /**
+ * A hint for the optimizer that we should not merge two projections.
+ */
+case class NoCollapseHint(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
  * A general hint for the child. This node will be eliminated post analysis.
  * A pair of (name, parameters).
  */
