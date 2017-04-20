@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.test
 
-import scala.concurrent.duration._
-
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.internal.SQLConf
+
 
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
-trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach with Eventually {
+trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
 
   protected val sparkConf = new SparkConf()
 
@@ -85,10 +84,6 @@ trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach with Eventua
 
   protected override def afterEach(): Unit = {
     super.afterEach()
-    // files can be closed from other threads, so wait a bit
-    // normally this doesn't take more than 1s
-    eventually(timeout(10.seconds)) {
-      DebugFilesystem.assertNoOpenStreams()
-    }
+    DebugFilesystem.assertNoOpenStreams()
   }
 }
