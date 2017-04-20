@@ -31,12 +31,8 @@ import org.apache.spark.SparkFunSuite
 class SparkHadoopUtilSuite extends SparkFunSuite with Matchers {
   test("check file permission") {
     import FsAction._
-    val user = UserGroupInformation.getCurrentUser.getShortUserName
-    val groups = UserGroupInformation.getCurrentUser.getGroupNames
-    require(!groups.isEmpty)
-
-    val testUser = user + "-" + Random.nextInt(100)
-    val testGroups = groups.map { g => g + "-" + Random.nextInt(100) }
+    val testUser = s"user-${Random.nextInt(100)}"
+    val testGroups = Array(s"group-${Random.nextInt(100)}")
     val testUgi = UserGroupInformation.createUserForTesting(testUser, testGroups)
 
     testUgi.doAs(new PrivilegedExceptionAction[Void] {
@@ -53,12 +49,8 @@ class SparkHadoopUtilSuite extends SparkFunSuite with Matchers {
         sparkHadoopUtil.checkAccessPermission(status, READ) should be(false)
         sparkHadoopUtil.checkAccessPermission(status, WRITE) should be(false)
 
-        var otherUser = "test"
-        var otherGroup = "test"
-        while (otherUser == testUser || testGroups.contains(otherGroup)) {
-          otherUser = s"test-${Random.nextInt(100)}"
-          otherGroup = s"test-${Random.nextInt(100)}"
-        }
+        val otherUser = s"test-${Random.nextInt(100)}"
+        val otherGroup = s"test-${Random.nextInt(100)}"
 
         // If file is owned by user's group and user's group has access permission
         status = fileStatus(otherUser, testGroups.head, NONE, READ_WRITE, NONE)
