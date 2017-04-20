@@ -2778,7 +2778,7 @@ class Dataset[T] private[sql](
    * Wrap a Dataset action to track all Spark jobs in the body so that we can connect them with
    * an execution.
    */
-  private[sql] def withNewExecutionId[U](body: => U): U = {
+  private def withNewExecutionId[U](body: => U): U = {
     SQLExecution.withNewExecutionId(sparkSession, queryExecution)(body)
   }
 
