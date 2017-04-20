@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveTimeZone}
+import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlanner
@@ -78,7 +78,6 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       RelationConversions(conf, catalog) +:
       PreprocessTableCreation(session) +:
       PreprocessTableInsertion(conf) +:
-      ResolveTimeZone(conf) +:
       DataSourceAnalysis(conf) +:
       HiveAnalysis +:
       customPostHocResolutionRules
