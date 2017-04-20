@@ -540,10 +540,24 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  // Launches one task that will run forever. Once the SparkListener detects the task has
+  testCancellingTasks("that raise interrupted exception on cancel") {
+    Thread.sleep(9999999)
+  }
+
+  // SPARK-20217 should not fail stage if task throws non-interrupted exception
+  testCancellingTasks("that raise runtime exception on cancel") {
+    try {
+      Thread.sleep(9999999)
+    } catch {
+      case t: Throwable =>
+        throw new RuntimeException("killed")
+    }
+  }
+
+  // Launches one task that will block forever. Once the SparkListener detects the task has
   // started, kill and re-schedule it. The second run of the task will complete immediately.
   // If this test times out, then the first version of the task wasn't killed successfully.
-  test("Killing tasks") {
+  def testCancellingTasks(desc: String)(blockFn: => Unit): Unit = test(s"Killing tasks $desc") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 
     SparkContextSuite.isTaskStarted = false
@@ -572,13 +586,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         // first attempt will hang
         if (!SparkContextSuite.isTaskStarted) {
           SparkContextSuite.isTaskStarted = true
-          try {
-            Thread.sleep(9999999)
-          } catch {
-            case t: Throwable =>
-              // SPARK-20217 should not fail stage if task throws non-interrupted exception
-              throw new RuntimeException("killed")
-          }
+          blockFn
         }
         // second attempt succeeds immediately
       }
