@@ -401,4 +401,152 @@ class MesosFineGrainedSchedulerBackendSuite
       r.getName.equals("cpus") && r.getScalar.getValue.equals(1.0) && r.getRole.equals("prod")
     })
   }
+
+  test("Mesos should decline offers under unavailability") {
+    val conf = new SparkConf
+    conf.set("spark.mesos.driver.webui.url", "http://webui")
+    conf.set("spark.app.name", "name1")
+    conf.set("spark.mesos.unavailabilityThreshold", "3000")
+
+    val listenerBus = mock[LiveListenerBus]
+    listenerBus.post(
+      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+
+    val sc = mock[SparkContext]
+    when(sc.executorMemory).thenReturn(100)
+    when(sc.getSparkHome()).thenReturn(Option("/path"))
+    when(sc.executorEnvs).thenReturn(new mutable.HashMap[String, String])
+    when(sc.conf).thenReturn(conf)
+    when(sc.listenerBus).thenReturn(listenerBus)
+
+    val taskScheduler = mock[TaskSchedulerImpl]
+    val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
+
+    val currentTime = (System.currentTimeMillis() + 2*1000) * 1000000
+    val unavailability = Unavailability.newBuilder()
+    unavailability.setStart(TimeInfo.newBuilder().setNanoseconds(currentTime)).build()
+
+    val id = 1
+    val builder = Offer.newBuilder()
+    builder.addResourcesBuilder()
+      .setName("mem")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Scalar.newBuilder().setValue(500))
+    builder.addResourcesBuilder()
+      .setName("cpus")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Scalar.newBuilder().setValue(4))
+    builder.setUnavailability(unavailability)
+
+    val offer = builder.setId(OfferID.newBuilder().setValue(s"o${id.toString}").build())
+      .setFrameworkId(FrameworkID.newBuilder().setValue("f1"))
+      .setSlaveId(SlaveID.newBuilder().setValue(s"s${id.toString}"))
+      .setHostname(s"host${id.toString}").build()
+
+    val mesosOffers = new java.util.ArrayList[Offer]
+    mesosOffers.add(offer)
+
+    val expectedWorkerOffers = Vector[WorkerOffer]()
+
+    when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq()))
+
+    val capture = ArgumentCaptor.forClass(classOf[Collection[TaskInfo]])
+    when(
+      driver.launchTasks(
+        Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+        capture.capture(),
+        any(classOf[Filters])
+      )
+    ).thenReturn(Status.valueOf(1))
+
+    val backend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master")
+    backend.resourceOffers(driver, mesosOffers)
+
+    verify(driver, times(1)).declineOffer(Matchers.eq(offer.getId), anyObject[Filters])
+  }
+
+  test("Mesos should accept offers not under unavailability") {
+
+    val conf = new SparkConf
+    conf.set("spark.mesos.driver.webui.url", "http://webui")
+    conf.set("spark.app.name", "name1")
+    conf.set("spark.mesos.unavailabilityThreshold", "10")
+
+    val listenerBus = mock[LiveListenerBus]
+    listenerBus.post(
+      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+
+    val sc = mock[SparkContext]
+    when(sc.executorMemory).thenReturn(100)
+    when(sc.getSparkHome()).thenReturn(Option("/path"))
+    when(sc.executorEnvs).thenReturn(new mutable.HashMap[String, String])
+    when(sc.conf).thenReturn(conf)
+    when(sc.listenerBus).thenReturn(listenerBus)
+
+    val taskScheduler = mock[TaskSchedulerImpl]
+    val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
+
+    val currentTime = (System.currentTimeMillis() + 2*1000) * 1000000
+    val unavailability = Unavailability.newBuilder()
+    unavailability.setStart(TimeInfo.newBuilder().setNanoseconds(currentTime)).build()
+
+    val id = 1
+    val builder = Offer.newBuilder()
+    builder.addResourcesBuilder()
+      .setName("mem")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Scalar.newBuilder().setValue(500))
+    builder.addResourcesBuilder()
+      .setName("cpus")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Scalar.newBuilder().setValue(4))
+    builder.setUnavailability(unavailability)
+
+    val offer = builder.setId(OfferID.newBuilder().setValue(s"o${id.toString}").build())
+      .setFrameworkId(FrameworkID.newBuilder().setValue("f1"))
+      .setSlaveId(SlaveID.newBuilder().setValue(s"s${id.toString}"))
+      .setHostname(s"host${id.toString}").build()
+
+    val mesosOffers = new java.util.ArrayList[Offer]
+    mesosOffers.add(offer)
+
+    val expectedWorkerOffers = Vector[WorkerOffer](WorkerOffer(
+      mesosOffers.get(0).getSlaveId.getValue,
+      mesosOffers.get(0).getHostname,
+      3
+    ))
+
+    val taskDesc = new TaskDescription(
+      taskId = 1L,
+      attemptNumber = 0,
+      executorId = "s1",
+      name = "n1",
+      index = 0,
+      addedFiles = mutable.Map.empty[String, Long],
+      addedJars = mutable.Map.empty[String, Long],
+      properties = new Properties(),
+      ByteBuffer.wrap(new Array[Byte](0)))
+    when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
+    when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
+
+    val capture = ArgumentCaptor.forClass(classOf[Collection[TaskInfo]])
+    when(
+      driver.launchTasks(
+        Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+        capture.capture(),
+        any(classOf[Filters])
+      )
+    ).thenReturn(Status.valueOf(1))
+
+    val backend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master")
+    backend.resourceOffers(driver, mesosOffers)
+
+    verify(driver, times(1)).launchTasks(
+      Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+      capture.capture(),
+      any(classOf[Filters])
+    )
+  }
 }
