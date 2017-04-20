@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.linalg.BLAS._
+import org.apache.spark.ml.optim.LBFGSB
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -178,6 +179,62 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
     }
   }
 
+  /**
+   * The lower bound of coefficients if fitting under bound constrained optimization.
+   * The bound vector size must be equal with the number of features in training dataset,
+   * otherwise, it throws exception.
+   *
+   * @group param
+   */
+  @Since("2.2.0")
+  val lowerBoundOfCoefficients: Param[Matrix] = new Param(this, "lowerBoundOfCoefficients",
+    "The lower bound of coefficients if fitting under bound constrained optimization.")
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getLowerBoundOfCoefficients: Matrix = $(lowerBoundOfCoefficients)
+
+  /**
+   * The upper bound of coefficients if fitting under bound constrained optimization.
+   * The bound vector size must be equal with the number of features in training dataset,
+   * otherwise, it throws exception.
+   *
+   * @group param
+   */
+  @Since("2.2.0")
+  val upperBoundOfCoefficients: Param[Matrix] = new Param(this, "upperBoundOfCoefficients",
+    "The upper bound of coefficients if fitting under bound constrained optimization.")
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getUpperBoundOfCoefficients: Matrix = $(upperBoundOfCoefficients)
+
+  /**
+   * The lower bound of coefficients if fitting under bound constrained optimization.
+   * The bound vector size must be equal with the number of features in training dataset,
+   * otherwise, it throws exception.
+   *
+   * @group param
+   */
+  @Since("2.2.0")
+  val lowerBoundOfIntercept: Param[Vector] = new Param(this, "lowerBoundOfIntercept",
+    "The lower bound of intercept if fitting under bound constrained optimization.")
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getLowerBoundOfIntercept: Vector = $(lowerBoundOfIntercept)
+
+  /**
+   * The upper bound of coefficients if fitting under bound constrained optimization.
+   * The bound vector size must be equal with the number of features in training dataset,
+   * otherwise, it throws exception.
+   *
+   * @group param
+   */
+  @Since("2.2.0")
+  val upperBoundOfIntercept: Param[Vector] = new Param(this, "upperBoundOfIntercept",
+    "The upper bound of coefficients if fitting under bound constrained optimization.")
+
   override protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
@@ -312,6 +369,43 @@ class LogisticRegression @Since("1.2.0") (
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
+  /**
+   * Set the lower bound of coefficients if fitting under bound constrained optimization.
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setLowerBoundOfCoefficients(value: Matrix): this.type = set(lowerBoundOfCoefficients, value)
+
+  /**
+   * Set the upper bound of coefficients if fitting under bound constrained optimization.
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setUpperBoundOfCoefficients(value: Matrix): this.type = set(upperBoundOfCoefficients, value)
+
+  /**
+   * Set the lower bound of intercepts if fitting under bound constrained optimization.
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setLowerBoundOfIntercept(value: Vector): this.type = set(lowerBoundOfIntercept, value)
+
+  /**
+   * Set the upper bound of intercepts if fitting under bound constrained optimization.
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setUpperBoundOfIntercept(value: Vector): this.type = set(upperBoundOfIntercept, value)
+
+  private def usingBoundConstrainedOptimization: Boolean = {
+    isSet(lowerBoundOfCoefficients) || isSet(upperBoundOfCoefficients) ||
+      isSet(lowerBoundOfIntercept) || isSet(upperBoundOfIntercept)
+  }
+
   private var optInitialModel: Option[LogisticRegressionModel] = None
 
   private[spark] def setInitialModel(model: LogisticRegressionModel): this.type = {
@@ -434,8 +528,33 @@ class LogisticRegression @Since("1.2.0") (
           $(standardization), bcFeaturesStd, regParamL2, multinomial = isMultinomial,
           $(aggregationDepth))
 
+        val numCoeffs = numFeaturesPlusIntercept * numCoefficientSets
+        val lowerBound = new Array[Double](numCoeffs)
+        val upperBound = new Array[Double](numCoeffs)
+
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
-          new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
+          // Check params interaction is valid if fitting under bound constrained optimization.
+          if (usingBoundConstrainedOptimization) {
+            var i = 0
+            while (i < numCoeffs) {
+              val coefficientSetIndex = i % numCoefficientSets
+              val featureIndex = i / numCoefficientSets
+              if (featureIndex < numFeatures) {
+                lowerBound(i) = $(lowerBoundOfCoefficients)(
+                  coefficientSetIndex, featureIndex) * featuresStd(featureIndex)
+                upperBound(i) = $(upperBoundOfCoefficients)(
+                  coefficientSetIndex, featureIndex) * featuresStd(featureIndex)
+              } else {
+                lowerBound(i) = $(lowerBoundOfIntercept)(coefficientSetIndex)
+                upperBound(i) = $(upperBoundOfIntercept)(coefficientSetIndex)
+              }
+              i += 1
+            }
+            new LBFGSB(BDV[Double](lowerBound), BDV[Double](upperBound),
+              $(maxIter), 10, $(tol))
+          } else {
+            new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
+          }
         } else {
           val standardizationParam = $(standardization)
           def regParamL1Fun = (index: Int) => {
@@ -544,6 +663,21 @@ class LogisticRegression @Since("1.2.0") (
            */
           initialCoefWithInterceptMatrix.update(0, numFeatures,
             math.log(histogram(1) / histogram(0)))
+        }
+
+        if (usingBoundConstrainedOptimization) {
+          // Make sure all initial values locate in the corresponding bound.
+          var i = 0
+          while (i < numCoeffs) {
+            val initialCoefWithInterceptArray =
+              initialCoefWithInterceptMatrix.asInstanceOf[DenseMatrix].values
+            if (initialCoefWithInterceptArray(i) < lowerBound(i)) {
+              initialCoefWithInterceptArray(i) = lowerBound(i)
+            } else if (initialCoefWithInterceptArray(i) > upperBound(i)) {
+              initialCoefWithInterceptArray(i) = upperBound(i)
+            }
+            i += 1
+          }
         }
 
         val states = optimizer.iterations(new CachedDiffFunction(costFun),

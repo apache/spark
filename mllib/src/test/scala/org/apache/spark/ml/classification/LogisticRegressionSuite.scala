@@ -610,6 +610,50 @@ class LogisticRegressionSuite
     assert(model2.coefficients ~= coefficientsR relTol 1E-3)
   }
 
+  test("binary logistic regression with intercept without regularization with bound") {
+    val lowerBoundOfCoefficients = Matrices.dense(1, 4, Array.fill(4)(Double.NegativeInfinity))
+    val upperBoundOfCoefficients = Matrices.dense(1, 4, Array(1.0, 0.0, 1.0, 0.0))
+    val lowerBoundOfIntercept = Vectors.dense(Double.NegativeInfinity)
+    val upperBoundOfIntercept = Vectors.dense(1.0)
+
+    val trainer1 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(0.0)
+      .setFitIntercept(true)
+      .setStandardization(true)
+      .setWeightCol("weight")
+
+    val trainer2 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(0.0)
+      .setFitIntercept(true)
+      .setStandardization(false)
+      .setWeightCol("weight")
+
+
+    val model1 = trainer1.fit(binaryDataset)
+    val model2 = trainer2.fit(binaryDataset)
+
+    val coefficientsExpected = Vectors.dense(0.06079437, 0.0, -0.26351059, -0.59102199)
+    val interceptExpected = 1.0
+
+    assert(model1.intercept ~== interceptExpected relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsExpected relTol 1E-3)
+
+    // Without regularization, with or without standardization will converge to the same solution.
+    assert(model2.intercept ~== interceptExpected relTol 1E-3)
+    assert(model2.coefficients ~= coefficientsExpected relTol 1E-3)
+
+    println(model1.interceptVector)
+    println(model1.coefficientMatrix)
+  }
+
   test("binary logistic regression without intercept without regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(false).setStandardization(true)
       .setWeightCol("weight")
@@ -648,6 +692,50 @@ class LogisticRegressionSuite
     // Without regularization, with or without standardization should converge to the same solution.
     assert(model2.intercept ~== 0.0 relTol 1E-3)
     assert(model2.coefficients ~= coefficientsR relTol 1E-2)
+  }
+
+  test("binary logistic regression without intercept without regularization with bound") {
+    val lowerBoundOfCoefficients = Matrices.dense(1, 4, Array.fill(4)(Double.NegativeInfinity))
+    val upperBoundOfCoefficients = Matrices.dense(1, 4, Array(1.0, 0.0, 1.0, 0.0))
+    val lowerBoundOfIntercept = Vectors.dense(Double.NegativeInfinity)
+    val upperBoundOfIntercept = Vectors.dense(0.0)
+
+    val trainer1 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(0.0)
+      .setFitIntercept(true)
+      .setStandardization(true)
+      .setWeightCol("weight")
+
+    val trainer2 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(0.0)
+      .setFitIntercept(true)
+      .setStandardization(false)
+      .setWeightCol("weight")
+
+
+    val model1 = trainer1.fit(binaryDataset)
+    val model2 = trainer2.fit(binaryDataset)
+
+    val coefficientsExpected = Vectors.dense(0.20847553, 0.0, -0.24240289, -0.55568071)
+    val interceptExpected = 0.0
+
+    assert(model1.intercept ~== interceptExpected relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsExpected relTol 1E-3)
+
+    // Without regularization, with or without standardization will converge to the same solution.
+    assert(model2.intercept ~== interceptExpected relTol 1E-3)
+    assert(model2.coefficients ~= coefficientsExpected relTol 1E-3)
+
+    println(model1.interceptVector)
+    println(model1.coefficientMatrix)
   }
 
   test("binary logistic regression with intercept with L1 regularization") {
@@ -815,6 +903,50 @@ class LogisticRegressionSuite
     assert(model2.coefficients ~= coefficientsR relTol 1E-3)
   }
 
+  test("binary logistic regression with intercept with L2 regularization with bound") {
+    val lowerBoundOfCoefficients = Matrices.dense(1, 4, Array.fill(4)(Double.NegativeInfinity))
+    val upperBoundOfCoefficients = Matrices.dense(1, 4, Array(1.0, 0.0, 1.0, 0.0))
+    val lowerBoundOfIntercept = Vectors.dense(Double.NegativeInfinity)
+    val upperBoundOfIntercept = Vectors.dense(1.0)
+
+    val trainer1 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(1.37)
+      .setFitIntercept(true)
+      .setStandardization(true)
+      .setWeightCol("weight")
+
+    val trainer2 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(1.37)
+      .setFitIntercept(true)
+      .setStandardization(false)
+      .setWeightCol("weight")
+
+
+    val model1 = trainer1.fit(binaryDataset)
+    val model2 = trainer2.fit(binaryDataset)
+
+    val coefficientsExpectedStd = Vectors.dense(-0.06985003, 0.0, -0.04794278, -0.10168595)
+    val interceptExpectedStd = 0.457501411067
+    val coefficientsExpected = Vectors.dense(-0.0494524, 0.0, -0.11360797, -0.06313577)
+    val interceptExpected = 0.537229668794
+
+    assert(model1.intercept ~== interceptExpectedStd relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsExpectedStd relTol 1E-3)
+    assert(model2.intercept ~== interceptExpected relTol 1E-3)
+    assert(model2.coefficients ~= coefficientsExpected relTol 1E-3)
+
+    println(model1.interceptVector)
+    println(model1.coefficientMatrix)
+  }
+
   test("binary logistic regression without intercept with L2 regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.0).setRegParam(1.37).setStandardization(true).setWeightCol("weight")
@@ -862,6 +994,50 @@ class LogisticRegressionSuite
     assert(model1.coefficients ~= coefficientsRStd relTol 1E-2)
     assert(model2.intercept ~== 0.0 absTol 1E-3)
     assert(model2.coefficients ~= coefficientsR relTol 1E-2)
+  }
+
+  test("binary logistic regression without intercept with L2 regularization with bound") {
+    val lowerBoundOfCoefficients = Matrices.dense(1, 4, Array.fill(4)(Double.NegativeInfinity))
+    val upperBoundOfCoefficients = Matrices.dense(1, 4, Array(1.0, 0.0, 1.0, 0.0))
+    val lowerBoundOfIntercept = Vectors.dense(Double.NegativeInfinity)
+    val upperBoundOfIntercept = Vectors.dense(0.0)
+
+    val trainer1 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(1.37)
+      .setFitIntercept(false)
+      .setStandardization(true)
+      .setWeightCol("weight")
+
+    val trainer2 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(1.37)
+      .setFitIntercept(false)
+      .setStandardization(false)
+      .setWeightCol("weight")
+
+
+    val model1 = trainer1.fit(binaryDataset)
+    val model2 = trainer2.fit(binaryDataset)
+
+    val coefficientsExpectedStd = Vectors.dense(-0.00796538, 0.0, -0.0394228, -0.0873314)
+    val interceptExpectedStd = 0.0
+    val coefficientsExpected = Vectors.dense(0.01105972, 0.0, -0.08574949, -0.05079558)
+    val interceptExpected = 0.0
+
+    assert(model1.intercept ~== interceptExpectedStd relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsExpectedStd relTol 1E-3)
+    assert(model2.intercept ~== interceptExpected relTol 1E-3)
+    assert(model2.coefficients ~= coefficientsExpected relTol 1E-3)
+
+    println(model1.interceptVector)
+    println(model1.coefficientMatrix)
   }
 
   test("binary logistic regression with intercept with ElasticNet regularization") {
@@ -1084,7 +1260,6 @@ class LogisticRegressionSuite
   }
 
   test("multinomial logistic regression with intercept without regularization") {
-
     val trainer1 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(0.0).setRegParam(0.0).setStandardization(true).setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(true)
@@ -1150,6 +1325,55 @@ class LogisticRegressionSuite
     assert(model2.coefficientMatrix.toArray.sum ~== 0.0 absTol eps)
     assert(model2.interceptVector ~== interceptsR relTol 0.05)
     assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
+  }
+
+  test("multinomial logistic regression with intercept without regularization with bound") {
+    val lowerBoundOfCoefficients = Matrices.dense(3, 4, Array.fill(12)(1.0))
+    val upperBoundOfCoefficients = Matrices.dense(3, 4, Array.fill(12)(Double.PositiveInfinity))
+    //println(upperBoundOfCoefficients.toString)
+    val lowerBoundOfIntercept = Vectors.dense(Array.fill(3)(1.0))
+    val upperBoundOfIntercept = Vectors.dense(Array.fill(3)(Double.PositiveInfinity))
+
+    val trainer1 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(0.1)
+      .setFitIntercept(false)
+      .setStandardization(true)
+      .setWeightCol("weight")
+    val trainer2 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setFitIntercept(true)
+      .setStandardization(false)
+      .setWeightCol("weight")
+
+    val model1 = trainer1.fit(multinomialDataset)
+    val model2 = trainer2.fit(multinomialDataset)
+
+    val coefficientsR = new DenseMatrix(3, 4, Array(
+      0.24337896, -0.05916156, 0.14446790, 0.35976165,
+      -0.3443375, 0.9181331, -0.2283959, -0.4388066,
+      0.10095851, -0.85897154, 0.08392798, 0.07904499), isTransposed = true)
+    val interceptsR = Vectors.dense(-2.10320093, 0.3394473, 1.76375361)
+
+//    assert(model1.coefficientMatrix ~== coefficientsR relTol 0.05)
+//    assert(model1.coefficientMatrix.toArray.sum ~== 0.0 absTol eps)
+//    assert(model1.interceptVector ~== interceptsR relTol 0.05)
+//    assert(model1.interceptVector.toArray.sum ~== 0.0 absTol eps)
+//    assert(model2.coefficientMatrix ~== coefficientsR relTol 0.05)
+//    assert(model2.coefficientMatrix.toArray.sum ~== 0.0 absTol eps)
+//    assert(model2.interceptVector ~== interceptsR relTol 0.05)
+//    assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
+
+    println(model1.coefficientMatrix)
+    println(model1.interceptVector)
+//    println(model2.coefficientMatrix)
+//    println(model2.interceptVector)
   }
 
   test("multinomial logistic regression without intercept without regularization") {
@@ -1518,6 +1742,58 @@ class LogisticRegressionSuite
     assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
   }
 
+  test("multinomial logistic regression with intercept with L2 regularization with bound") {
+    val lowerBoundOfCoefficients = Matrices.dense(3, 4, Array.fill(12)(0.0))
+    val upperBoundOfCoefficients = Matrices.dense(3, 4, Array.fill(12)(Double.PositiveInfinity))
+    val lowerBoundOfIntercept = Vectors.dense(Array.fill(3)(-1.0))
+    val upperBoundOfIntercept = Vectors.dense(Array.fill(3)(Double.PositiveInfinity))
+
+    val trainer1 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(0.1)
+      .setFitIntercept(true)
+      .setStandardization(true)
+      .setWeightCol("weight")
+    val trainer2 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(0.1)
+      .setFitIntercept(true)
+      .setStandardization(false)
+      .setWeightCol("weight")
+
+    val model1 = trainer1.fit(multinomialDataset)
+    val model2 = trainer2.fit(multinomialDataset)
+
+    val coefficientsRStd = new DenseMatrix(3, 4, Array(
+      0.27446021, 0.3360843, 0.17186227, 0.39433004,
+      0.0, 0.90133432, 0.0, 0.0,
+      0.16817738, 0.0, 0.12477519, 0.18348274), isTransposed = true)
+    val interceptsRStd = Vectors.dense(-0.96087807, -0.18741934, 1.14829742)
+    val coefficientsR = new DenseMatrix(3, 4, Array(
+      0.22593153, 0.0699333, 0.25431396, 0.30213221,
+      0.0, 0.33192605, 0.0, 0.0,
+      0.13021025, 0.0, 0.19567947, 0.1210859), isTransposed = true)
+    val interceptsR = Vectors.dense(-0.95808577, 0.66507105, 0.29301472)
+
+    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.001)
+    assert(model1.interceptVector ~== interceptsRStd relTol 0.05)
+    assert(model1.interceptVector.toArray.sum ~== 0.0 absTol eps)
+    assert(model2.coefficientMatrix ~== coefficientsR relTol 0.05)
+    assert(model2.interceptVector ~== interceptsR relTol 0.05)
+    assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
+
+    println(model1.coefficientMatrix)
+    println(model1.interceptVector)
+    println(model2.coefficientMatrix)
+    println(model2.interceptVector)
+  }
+
   test("multinomial logistic regression without intercept with L2 regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.0).setRegParam(0.1).setStandardization(true).setWeightCol("weight")
@@ -1613,6 +1889,58 @@ class LogisticRegressionSuite
     assert(model2.coefficientMatrix ~== coefficientsR absTol 0.01)
     assert(model2.interceptVector.toArray === Array.fill(3)(0.0))
     assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
+  }
+
+  test("multinomial logistic regression without intercept with L2 regularization with bound") {
+    val lowerBoundOfCoefficients = Matrices.dense(3, 4, Array.fill(12)(0.0))
+    val upperBoundOfCoefficients = Matrices.dense(3, 4, Array.fill(12)(Double.PositiveInfinity))
+    val lowerBoundOfIntercept = Vectors.dense(Array.fill(3)(0.0))
+    val upperBoundOfIntercept = Vectors.dense(Array.fill(3)(Double.PositiveInfinity))
+
+    val trainer1 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(0.1)
+      .setFitIntercept(false)
+      .setStandardization(true)
+      .setWeightCol("weight")
+    val trainer2 = new LogisticRegression()
+      .setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+      .setUpperBoundOfCoefficients(upperBoundOfCoefficients)
+      .setLowerBoundOfIntercept(lowerBoundOfIntercept)
+      .setUpperBoundOfIntercept(upperBoundOfIntercept)
+      .setRegParam(0.1)
+      .setFitIntercept(false)
+      .setStandardization(false)
+      .setWeightCol("weight")
+
+    val model1 = trainer1.fit(multinomialDataset)
+    val model2 = trainer2.fit(multinomialDataset)
+
+//    val coefficientsRStd = new DenseMatrix(3, 4, Array(
+//      0.27446021, 0.3360843, 0.17186227, 0.39433004,
+//      0.0, 0.90133432, 0.0, 0.0,
+//      0.16817738, 0.0, 0.12477519, 0.18348274), isTransposed = true)
+//    val interceptsRStd = Vectors.dense(-0.96087807, -0.18741934, 1.14829742)
+//    val coefficientsR = new DenseMatrix(3, 4, Array(
+//      0.22593153, 0.0699333, 0.25431396, 0.30213221,
+//      0.0, 0.33192605, 0.0, 0.0,
+//      0.13021025, 0.0, 0.19567947, 0.1210859), isTransposed = true)
+//    val interceptsR = Vectors.dense(-0.95808577, 0.66507105, 0.29301472)
+
+//    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.001)
+//    assert(model1.interceptVector ~== interceptsRStd relTol 0.05)
+//    assert(model1.interceptVector.toArray.sum ~== 0.0 absTol eps)
+//    assert(model2.coefficientMatrix ~== coefficientsR relTol 0.05)
+//    assert(model2.interceptVector ~== interceptsR relTol 0.05)
+//    assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
+
+    println(model1.coefficientMatrix)
+    println(model1.interceptVector)
+    println(model2.coefficientMatrix)
+    println(model2.interceptVector)
   }
 
   test("multinomial logistic regression with intercept with elasticnet regularization") {
