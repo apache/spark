@@ -22,7 +22,7 @@ import java.util.ServiceLoader
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.security.Credentials
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -37,14 +37,19 @@ import org.apache.spark.util.Utils
  * interface and put into resources/META-INF/services to be loaded by ServiceLoader.
  *
  * Also each credential provider is controlled by
- * spark.yarn.security.credentials.{service}.enabled, it will not be loaded in if set to false.
+ * spark.security.credentials.{service}.enabled, it will not be loaded in if set to false.
  * For example, Hive's credential provider [[HiveCredentialProvider]] can be enabled/disabled by
- * the configuration spark.yarn.security.credentials.hive.enabled.
+ * the configuration spark.security.credentials.hive.enabled.
  */
 private[spark] class ConfigurableCredentialManager(
-    sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
-  private val deprecatedProviderEnabledConfig = "spark.yarn.security.tokens.%s.enabled"
-  private val providerEnabledConfig = "spark.yarn.security.credentials.%s.enabled"
+    sparkConf: SparkConf,
+    hadoopConf: Configuration)
+  extends Logging {
+
+  private val deprecatedProviderEnabledConfigs = List(
+    "spark.yarn.security.tokens.%s.enabled",
+    "spark.yarn.security.credentials.%s.enabled")
+  private val providerEnabledConfig = "spark.security.credentials.%s.enabled"
 
   // Maintain all the registered credential providers
   private val credentialProviders = getCredentialProviders()
@@ -53,16 +58,30 @@ private[spark] class ConfigurableCredentialManager(
   private def getCredentialProviders(): Map[String, ServiceCredentialProvider] = {
     val providers = loadCredentialProviders
 
-    // Filter out credentials in which spark.yarn.security.credentials.{service}.enabled is false.
+    // Filter out credentials in which spark.security.credentials.{service}.enabled is false.
     providers.filter { p =>
-      sparkConf.getOption(providerEnabledConfig.format(p.serviceName))
-        .orElse {
-          sparkConf.getOption(deprecatedProviderEnabledConfig.format(p.serviceName)).map { c =>
-            logWarning(s"${deprecatedProviderEnabledConfig.format(p.serviceName)} is deprecated, " +
-              s"using ${providerEnabledConfig.format(p.serviceName)} instead")
-            c
-          }
-        }.map(_.toBoolean).getOrElse(true)
+
+      val key = providerEnabledConfig.format(p)
+
+      deprecatedProviderEnabledConfigs.foreach { pattern =>
+        val deprecatedKey = pattern.format(p.serviceName)
+        if (sparkConf.contains(deprecatedKey)) {
+          logWarning(s"${deprecatedKey} is deprecated, using ${key} instead")
+        }
+      }
+
+      val isEnabledDeprecated = deprecatedProviderEnabledConfigs.forall { pattern =>
+        sparkConf
+          .getOption(pattern.format(p.serviceName))
+          .map(_.toBoolean)
+          .getOrElse(true)
+      }
+
+      sparkConf
+        .getOption(key)
+        .map(_.toBoolean)
+        .getOrElse(isEnabledDeprecated)
+
     }.map { p => (p.serviceName, p) }.toMap
   }
 
@@ -71,7 +90,7 @@ private[spark] class ConfigurableCredentialManager(
       .asScala.toList
   }
 
-    /**
+  /**
    * Get credential provider for the specified service.
    */
   def getServiceCredentialProvider(service: String): Option[ServiceCredentialProvider] = {
@@ -96,4 +115,18 @@ private[spark] class ConfigurableCredentialManager(
       }
     }.foldLeft(Long.MaxValue)(math.min)
   }
+
+  /**
+   * Returns a copy of the current user's credentials, augmented with new delegation tokens.
+   */
+  def obtainUserCredentials: Credentials = {
+    val userCreds = UserGroupInformation.getCurrentUser.getCredentials
+    val numTokensBefore = userCreds.numberOfTokens
+    obtainCredentials(hadoopConf, userCreds)
+
+    logDebug(s"Fetched ${userCreds.numberOfTokens - numTokensBefore} delegation token(s).")
+
+    userCreds
+  }
+
 }

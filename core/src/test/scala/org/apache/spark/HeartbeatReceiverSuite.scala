@@ -268,7 +268,7 @@ private class FakeSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     rpcEnv: RpcEnv,
     clusterManagerEndpoint: RpcEndpointRef)
-  extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
+  extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv, None) {
 
   protected override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
     clusterManagerEndpoint.ask[Boolean](

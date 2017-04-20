@@ -38,7 +38,7 @@ import org.apache.spark.util.{RpcUtils, ThreadUtils}
 private[spark] abstract class YarnSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv, None) {
 
   override val minRegisteredRatio =
     if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {

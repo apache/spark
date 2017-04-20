@@ -55,9 +55,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     master: String,
-    securityManager: SecurityManager,
-    mesosSecurityManager: MesosSecurityManager)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
+    securityManager: SecurityManager)
+  extends CoarseGrainedSchedulerBackend(
+    scheduler,
+    sc.env.rpcEnv,
+    Option(new ConfigurableCredentialManager(
+      sc.conf,
+      SparkHadoopUtil.get.newConfiguration(sc.conf))))
   with org.apache.mesos.Scheduler
   with MesosSchedulerUtils {
 
@@ -164,10 +168,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override def start() {
-    if (mesosSecurityManager.isSecurityEnabled()) {
-      mesosSecurityManager.setUGITokens(conf)
-    }
-
     super.start()
 
     val driver = createSchedulerDriver(

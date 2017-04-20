@@ -21,7 +21,6 @@ import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
-import javax.xml.bind.DatatypeConverter
 
 import scala.collection.mutable
 import scala.util.{Failure, Success}
@@ -32,6 +31,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.CredentialsSerializer
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
@@ -177,21 +177,12 @@ private[spark] class CoarseGrainedExecutorBackend(
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
-  private def addMesosDelegationTokens(driverConf: SparkConf) {
-    val value = driverConf.get("spark.mesos.kerberos.userCredentials")
-    val tokens = DatatypeConverter.parseBase64Binary(value)
+  private def addDelegationTokens(tokenBytes: Array[Byte], driverConf: SparkConf) {
+    val creds = new CredentialsSerializer().deserializeTokens(tokenBytes)
 
-    logDebug(s"Found delegation tokens of ${tokens.length} bytes.")
+    logInfo(s"Adding ${creds.numberOfTokens()} tokens and ${creds.numberOfSecretKeys()} secret" +
+      s"keys to the current user's credentials.")
 
-    // Use tokens for HDFS login.
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(driverConf)
-    hadoopConf.set("hadoop.security.authentication", "Token")
-    UserGroupInformation.setConfiguration(hadoopConf)
-
-    // Decode tokens and add them to the current user's credentials.
-    val creds = UserGroupInformation.getCurrentUser.getCredentials
-    val tokensBuf = new java.io.ByteArrayInputStream(tokens)
-    creds.readTokenStorageStream(new java.io.DataInputStream(tokensBuf))
     UserGroupInformation.getCurrentUser.addCredentials(creds)
   }
 
@@ -241,9 +232,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
-      if (driverConf.contains("spark.mesos.kerberos.userCredentials")) {
-        addMesosDelegationTokens(driverConf)
-      }
+      cfg.ugiTokens.foreach(addDelegationTokens(_, driverConf))
 
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, port, cores, cfg.ioEncryptionKey, isLocal = false)

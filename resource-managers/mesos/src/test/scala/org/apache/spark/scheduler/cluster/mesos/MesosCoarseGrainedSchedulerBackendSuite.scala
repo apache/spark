@@ -53,7 +53,6 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   private var backend: MesosCoarseGrainedSchedulerBackend = _
   private var externalShuffleClient: MesosExternalShuffleClient = _
   private var driverEndpoint: RpcEndpointRef = _
-  private var security: MesosSecurityManager = _
   @volatile private var stopCalled = false
 
   // All 'requests' to the scheduler run immediately on the same thread, so
@@ -314,10 +313,9 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
 
     val securityManager = mock[SecurityManager]
-    val security = new MesosSecurityManager
 
     val backend = new MesosCoarseGrainedSchedulerBackend(
-      taskScheduler, sc, "master", securityManager, security) {
+      taskScheduler, sc, "master", securityManager) {
       override protected def createSchedulerDriver(
           masterUrl: String,
           scheduler: Scheduler,
@@ -616,13 +614,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     externalShuffleClient = mock[MesosExternalShuffleClient]
 
-    security = spy(new MesosSecurityManager)
-    when(security.isSecurityEnabled).thenReturn(true)
-
     val securityManager = mock[SecurityManager]
 
     backend = new MesosCoarseGrainedSchedulerBackend(
-      taskScheduler, sc, "master", securityManager, security) {
+      taskScheduler, sc, "master", securityManager) {
       override protected def createSchedulerDriver(
         masterUrl: String,
         scheduler: Scheduler,

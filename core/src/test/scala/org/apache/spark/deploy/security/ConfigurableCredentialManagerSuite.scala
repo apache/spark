@@ -35,13 +35,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
     sparkConf = new SparkConf()
     hadoopConf = new Configuration()
-    System.setProperty("SPARK_YARN_MODE", "true")
-  }
-
-  override def afterAll(): Unit = {
-    System.clearProperty("SPARK_YARN_MODE")
-
-    super.afterAll()
   }
 
   test("Correctly load default credential providers") {

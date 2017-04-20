@@ -48,8 +48,7 @@ private[spark] class MesosClusterManager extends ExternalClusterManager {
         scheduler.asInstanceOf[TaskSchedulerImpl],
         sc,
         mesosUrl,
-        sc.env.securityManager,
-        new MesosSecurityManager)
+        sc.env.securityManager)
     } else {
       new MesosFineGrainedSchedulerBackend(
         scheduler.asInstanceOf[TaskSchedulerImpl],
