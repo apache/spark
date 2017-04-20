@@ -29,7 +29,9 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
 
-  protected def sparkConf = new SparkConf()
+  protected def sparkConf = {
+    new SparkConf().set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
+  }
 
   /**
    * The [[TestSparkSession]] to use for all tests in this suite.
@@ -50,8 +52,7 @@ trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   protected def createSparkSession: TestSparkSession = {
-    new TestSparkSession(
-      sparkConf.set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName))
+    new TestSparkSession(sparkConf)
   }
 
   /**
