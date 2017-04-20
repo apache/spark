@@ -733,7 +733,7 @@ class LogisticRegression @Since("1.2.0") (
           if (isIntercept) interceptVec.toArray(classIndex) = value
         }
 
-        if ($(regParam) == 0.0 && isMultinomial) {
+        if ($(regParam) == 0.0 && isMultinomial && !usingBoundConstrainedOptimization) {
           /*
             When no regularization is applied, the multinomial coefficients lack identifiability
             because we do not use a pivot class. We can add any constant value to the coefficients
@@ -754,7 +754,7 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         // center the intercepts when using multinomial algorithm
-        if ($(fitIntercept) && isMultinomial) {
+        if ($(fitIntercept) && isMultinomial && !usingBoundConstrainedOptimization) {
           val interceptArray = interceptVec.toArray
           val interceptMean = interceptArray.sum / interceptArray.length
           (0 until interceptVec.size).foreach { i => interceptArray(i) -= interceptMean }
