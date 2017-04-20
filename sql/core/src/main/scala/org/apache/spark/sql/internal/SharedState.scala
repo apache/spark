@@ -149,8 +149,13 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   }
 }
 
-object SharedState {
-  URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+object SharedState extends Logging {
+  try {
+    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+  } catch {
+    case e: Error =>
+      logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
+  }
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
 
