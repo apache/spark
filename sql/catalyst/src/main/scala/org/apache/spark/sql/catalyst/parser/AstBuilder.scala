@@ -215,9 +215,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   protected def visitNonOptionalPartitionSpec(
       ctx: PartitionSpecContext): Map[String, String] = withOrigin(ctx) {
-    visitPartitionSpec(ctx).mapValues(_.orNull).map(identity)
+    visitPartitionSpec(ctx).map(_ match {
+      case (key, value) =>
+        (key, value.getOrElse(throw new ParseException(s"Found empty key '$key'.", ctx)))
+    })
   }
-
   /**
    * Convert a constant of any type into a string. This is typically used in DDL commands, and its
    * main purpose is to prevent slight differences due to back to back conversions i.e.:
