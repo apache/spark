@@ -487,7 +487,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
-  test("no filter puwhdown for nested field access") {
+  test("no filter pushdown for nested field access") {
     val table = createTable(
       files = Seq("file1" -> 1),
       format = classOf[TestFileFormatWithNestedSchema].getName)
