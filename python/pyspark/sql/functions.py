@@ -468,7 +468,7 @@ def nanvl(col1, col2):
 
 @since(2.2)
 def no_collapse(df):
-    """Marks a DataFrame as small enough for use in broadcast joins."""
+    """Marks a DataFrame as non-collapsible."""
 
     sc = SparkContext._active_spark_context
     return DataFrame(sc._jvm.functions.no_collapse(df._jdf), df.sql_ctx)

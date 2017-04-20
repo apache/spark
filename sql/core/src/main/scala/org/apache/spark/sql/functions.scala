@@ -19,9 +19,10 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 import scala.util.control.NonFatal
+
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
@@ -1006,33 +1007,33 @@ object functions {
   def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
 
   /**
-    * Marks a DataFrame as small enough for use in broadcast joins.
-    *
-    * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
-    * {{{
-    *   // left and right are DataFrames
-    *   left.join(broadcast(right), "joinKey")
-    * }}}
-    *
-    * @group normal_funcs
-    * @since 1.5.0
-    */
+   * Marks a DataFrame as small enough for use in broadcast joins.
+   *
+   * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
+   * {{{
+   *   // left and right are DataFrames
+   *   left.join(broadcast(right), "joinKey")
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 1.5.0
+   */
   def broadcast[T](df: Dataset[T]): Dataset[T] = {
     Dataset[T](df.sparkSession, BroadcastHint(df.logicalPlan))(df.exprEnc)
   }
 
   /**
-    * Marks a DataFrame as small enough for use in broadcast joins.
-    *
-    * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
-    * {{{
-    *   // left and right are DataFrames
-    *   left.join(broadcast(right), "joinKey")
-    * }}}
-    *
-    * @group normal_funcs
-    * @since 1.5.0
-    */
+   * Marks a DataFrame as non-collapsible.
+   *
+   * For example:
+   * {{{
+    *  df1 = no_collapse(df.select((df.col("qty") * lit(10).alias("c1")))
+   *   df2 = df1.select(col("c1") + lit(1)), col("c1") + lit(2)))
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 2.2.0
+   */
   def no_collapse[T](df: Dataset[T]): Dataset[T] = {
     Dataset[T](df.sparkSession, NoCollapseHint(df.logicalPlan))(df.exprEnc)
   }
