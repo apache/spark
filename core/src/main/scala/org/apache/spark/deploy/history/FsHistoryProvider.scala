@@ -27,7 +27,8 @@ import scala.xml.Node
 
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
@@ -318,21 +319,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // scan for modified applications, replay and merge them
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
-          try {
-            val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
-            !entry.isDirectory() &&
-              // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
-              // reading a garbage file is safe, but we would log an error which can be scary to
-              // the end-user.
-              !entry.getPath().getName().startsWith(".") &&
-              prevFileSize < entry.getLen()
-          } catch {
-            case e: AccessControlException =>
-              // Do not use "logInfo" since these messages can get pretty noisy if printed on
-              // every poll.
-              logDebug(s"No permission to read $entry, ignoring.")
-              false
-          }
+          val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
+          !entry.isDirectory() &&
+            // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
+            // reading a garbage file is safe, but we would log an error which can be scary to
+            // the end-user.
+            !entry.getPath().getName().startsWith(".") &&
+            prevFileSize < entry.getLen() &&
+            SparkHadoopUtil.get.checkAccessPermission(entry, FsAction.READ)
         }
         .flatMap { entry => Some(entry) }
         .sortWith { case (entry1, entry2) =>
@@ -445,7 +439,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   /**
    * Replay the log files in the list and merge the list of old applications with new ones
    */
-  private def mergeApplicationListing(fileStatus: FileStatus): Unit = {
+  protected def mergeApplicationListing(fileStatus: FileStatus): Unit = {
     val newAttempts = try {
       val eventsFilter: ReplayEventsFilter = { eventString =>
         eventString.startsWith(APPL_START_EVENT_PREFIX) ||
