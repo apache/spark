@@ -815,28 +815,28 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   // Generate operator
   test("Correlated subqueries in LATERAL VIEW") {
-    withTempView("t1", "t2", "t3") {
+    withTempView("t1", "t2") {
       Seq((1, 1), (2, 0)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq[(Int, Array[Int])]((1, Array(1, 2)), (2, Array(-1, -3)))
         .toDF("c1", "arr_c2").createTempView("t2")
       checkAnswer(
         sql(
           """
-          | select c2
-          | from t1
-          | where exists (select *
-          |               from t2 lateral view explode(arr_c2) q as c2
-                          where t1.c1 = t2.c1)""".stripMargin),
+          | SELECT c2
+          | FROM t1
+          | WHERE EXISTS (SELECT *
+          |               FROM t2 LATERAL VIEW explode(arr_c2) q AS c2
+                          WHERE t1.c1 = t2.c1)""".stripMargin),
         Row(1) :: Row(0) :: Nil)
 
       val msg1 = intercept[AnalysisException] {
         sql(
           """
-            | select c1
-            | from t2
-            | where exists (select *
-            |               from t1 lateral view explode(t2.arr_c2) q as c2
-            |               where t1.c1 = t2.c1)
+            | SELECT c1
+            | FROM t2
+            | WHERE EXISTS (SELECT *
+            |               FROM t1 LATERAL VIEW explode(t2.arr_c2) q AS c2
+            |               WHERE t1.c1 = t2.c1)
           """.stripMargin)
       }
       assert(msg1.getMessage.contains(
