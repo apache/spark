@@ -320,7 +320,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
    * this is part of test 'Enabling/disabling ignoreCorruptFiles' but run in a loop
    * to increase the chance of failure
     */
-  test("SPARK-20407 ParquetQuerySuite 'Enabling/disabling ignoreCorruptFiles' flaky test") {
+  ignore("SPARK-20407 ParquetQuerySuite 'Enabling/disabling ignoreCorruptFiles' flaky test") {
     def testIgnoreCorruptFiles(): Unit = {
       withTempDir { dir =>
         val basePath = dir.getCanonicalPath
