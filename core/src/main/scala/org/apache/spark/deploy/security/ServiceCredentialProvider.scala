@@ -19,13 +19,14 @@ package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.InterfaceStability
 
 /**
  * A credential provider for a service. User must implement this if they need to access a
  * secure service from Spark.
  */
+@InterfaceStability.Unstable
 trait ServiceCredentialProvider {
 
   /**
