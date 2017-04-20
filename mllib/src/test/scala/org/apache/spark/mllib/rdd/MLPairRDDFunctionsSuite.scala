@@ -22,10 +22,25 @@ import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class MLPairRDDFunctionsSuite extends SparkFunSuite with MLlibTestSparkContext {
+  val sourceArray = Array(
+    (1, 7), (1, 3), (1, 6), (1, 1), (1, 2), (1, -1),
+    (3, 2), (3, 7), (5, 1), (3, 5)
+  )
+
   test("topByKey") {
-    val topMap = sc.parallelize(Array((1, 7), (1, 3), (1, 6), (1, 1), (1, 2), (3, 2), (3, 7), (5,
-      1), (3, 5)), 2)
+    val topMap = sc.parallelize(sourceArray, 2)
       .topByKey(5)
+      .collectAsMap()
+
+    assert(topMap.size === 3)
+    assert(topMap(1) === Array(7, 6, 3, 2, 1))
+    assert(topMap(3) === Array(7, 5, 2))
+    assert(topMap(5) === Array(1))
+  }
+
+  test("topByKeyUsingBuckets") {
+    val topMap = sc.parallelize(sourceArray, 2)
+      .topByKey(5, 10)
       .collectAsMap()
 
     assert(topMap.size === 3)
