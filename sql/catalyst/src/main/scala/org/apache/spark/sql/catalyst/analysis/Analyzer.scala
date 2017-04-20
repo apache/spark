@@ -727,7 +727,7 @@ class Analyzer(
       case p if !p.childrenResolved => p
       // Replace the index with the related attribute for ORDER BY,
       // which is a 1-base position of the projection list.
-      case s @ Sort(orders, global, child)
+      case Sort(orders, global, child)
         if orders.exists(_.child.isInstanceOf[UnresolvedOrdinal]) =>
         val newOrders = orders map {
           case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering) =>
@@ -744,17 +744,11 @@ class Analyzer(
 
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
-      case a @ Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
+      case Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
         groups.exists(_.isInstanceOf[UnresolvedOrdinal]) =>
         val newGroups = groups.map {
-          case ordinal @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
-            aggs(index - 1) match {
-              case e if ResolveAggregateFunctions.containsAggregate(e) =>
-                ordinal.failAnalysis(
-                  s"GROUP BY position $index is an aggregate function, and " +
-                    "aggregate functions are not allowed in GROUP BY")
-              case o => o
-            }
+          case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
+            aggs(index - 1)
           case ordinal @ UnresolvedOrdinal(index) =>
             ordinal.failAnalysis(
               s"GROUP BY position $index is not in select list " +
