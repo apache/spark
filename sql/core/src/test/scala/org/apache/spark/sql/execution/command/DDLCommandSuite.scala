@@ -832,6 +832,14 @@ class DDLCommandSuite extends PlanTest {
     assert(e.contains("Found duplicate keys 'a'"))
   }
 
+  test("empty values in non-optional partition specs") {
+    val e = intercept[ParseException] {
+      parser.parsePlan(
+        "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
+    }.getMessage
+    assert(e.contains("Found empty key 'b'"))
+  }
+
   test("drop table") {
     val tableName1 = "db.tab"
     val tableName2 = "tab"
