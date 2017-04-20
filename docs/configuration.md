@@ -213,6 +213,15 @@ of the most common options to set are:
     and typically can have up to 50 characters.
   </td>
 </tr>
+<tr>
+  <td><code>spark.driver.supervise</code></td>
+  <td>false</td>
+  <td>
+    If value set true, restarts the driver on failure, make sure that
+    the driver is automatically restarted if it fails with non-zero exit code.
+    Only in Spark standalone or Mesos with cluster deploy mode.
+  </td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
