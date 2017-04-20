@@ -3652,3 +3652,56 @@ setMethod("posexplode",
             jc <- callJStatic("org.apache.spark.sql.functions", "posexplode", x@jc)
             column(jc)
           })
+
+#' create_array
+#'
+#' Creates a new array column. The input columns must all have the same data type.
+#'
+#' @param x Column to compute on
+#' @param ... additional Column(s).
+#'
+#' @family normal_funcs
+#' @rdname create_array
+#' @name create_array
+#' @aliases create_array,Column-method
+#' @export
+#' @examples \dontrun{create_array(df$x, df$y, df$z)}
+#' @note create_array since 2.3.0
+setMethod("create_array",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "array", jcols)
+            column(jc)
+          })
+
+#' create_map
+#'
+#' Creates a new map column. The input columns must be grouped as key-value pairs,
+#' e.g. (key1, value1, key2, value2, ...).
+#' The key columns must all have the same data type, and can't be null.
+#' The value columns must all have the same data type.
+#'
+#' @param x Column to compute on
+#' @param ... additional Column(s).
+#'
+#' @family normal_funcs
+#' @rdname create_map
+#' @name create_map
+#' @aliases create_map,Column-method
+#' @export
+#' @examples \dontrun{create_map(lit("x"), lit(1.0), lit("y"), lit(-1.0))}
+#' @note create_map since 2.3.0
+setMethod("create_map",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "map", jcols)
+            column(jc)
+          })

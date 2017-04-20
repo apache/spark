@@ -942,6 +942,14 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
+#' @rdname create_array
+#' @export
+setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
+
+#' @rdname create_map
+#' @export
+setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
+
 #' @rdname hash
 #' @export
 setGeneric("hash", function(x, ...) { standardGeneric("hash") })
