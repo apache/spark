@@ -431,6 +431,8 @@ object FunctionRegistry {
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),
 
+    // cast
+    expression[Cast]("cast"),
     // Cast aliases (SPARK-16730)
     castAlias("boolean", BooleanType),
     castAlias("tinyint", ByteType),
