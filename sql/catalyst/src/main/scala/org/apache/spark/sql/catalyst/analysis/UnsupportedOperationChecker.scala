@@ -267,7 +267,7 @@ object UnsupportedOperationChecker {
           throwError("Limits are not supported on streaming DataFrames/Datasets")
 
         case Sort(_, _, _) if !containsCompleteData(subPlan) =>
-          throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on" +
+          throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on " +
             "aggregated DataFrame/Dataset in Complete output mode")
 
         case Sample(_, _, _, _, child) if child.isStreaming =>
