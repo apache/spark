@@ -538,4 +538,11 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Seq(Row(3, 0, 0.0, 1, 5.0), Row(2, 1, 4.0, 0, 0.0))
     )
   }
+
+  test("aggregate function in GROUP BY") {
+    val e = intercept[AnalysisException] {
+      testData.groupBy(sum($"key")).count()
+    }
+    assert(e.message.contains("aggregate functions are not allowed in GROUP BY"))
+  }
 }

@@ -122,7 +122,7 @@ select a, b, sum(b) from data group by 3
 struct<>
 -- !query 11 output
 org.apache.spark.sql.AnalysisException
-GROUP BY position 3 is an aggregate function, and aggregate functions are not allowed in GROUP BY; line 1 pos 39
+aggregate functions are not allowed in GROUP BY, but found sum(CAST(data.`b` AS BIGINT));
 
 
 -- !query 12
@@ -131,7 +131,7 @@ select a, b, sum(b) + 2 from data group by 3
 struct<>
 -- !query 12 output
 org.apache.spark.sql.AnalysisException
-GROUP BY position 3 is an aggregate function, and aggregate functions are not allowed in GROUP BY; line 1 pos 43
+aggregate functions are not allowed in GROUP BY, but found (sum(CAST(data.`b` AS BIGINT)) + CAST(2 AS BIGINT));
 
 
 -- !query 13
