@@ -577,6 +577,16 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         }
       }
     }
+
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> false.toString) {
+      withTempPath { path =>
+        Seq("apple", null).toDF("col.dots").write.parquet(path.getAbsolutePath)
+        // This checks record-by-record filtering in Parquet's filter2.
+        val num = stripSparkFilter(
+          spark.read.parquet(path.getAbsolutePath).where("`col.dots` IS NULL")).count()
+        assert(num == 1)
+      }
+    }
   }
 }
 
