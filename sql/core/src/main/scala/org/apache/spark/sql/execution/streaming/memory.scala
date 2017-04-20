@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -196,11 +197,15 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
       logDebug(s"Committing batch $batchId to $this")
       outputMode match {
         case Append | Update =>
-          val rows = AddedData(batchId, data.collect())
+          val rows = SQLExecution.nested(data.sparkSession) {
+            AddedData(batchId, data.collect())
+          }
           synchronized { batches += rows }
 
         case Complete =>
-          val rows = AddedData(batchId, data.collect())
+          val rows = SQLExecution.nested(data.sparkSession) {
+            AddedData(batchId, data.collect())
+          }
           synchronized {
             batches.clear()
             batches += rows
