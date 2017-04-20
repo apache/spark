@@ -1461,6 +1461,23 @@ test_that("column functions", {
   expect_equal(length(arr$arrcol[[1]]), 2)
   expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
   expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
+
+  # Test create_array() and create_map()
+  df <- as.DataFrame(data.frame(
+    x = c(1.0, 2.0), y = c(-1.0, 3.0), z = c(-2.0, 5.0)
+  ))
+
+  arrs <- collect(select(df, create_array(df$x, df$y, df$z)))
+  expect_equal(arrs[, 1], list(list(1, -1, -2), list(2, 3, 5)))
+
+  maps <- collect(select(
+    df, create_map(lit("x"), df$x, lit("y"), df$y, lit("z"), df$z)))
+
+  expect_equal(
+    maps[, 1],
+    lapply(
+      list(list(x = 1, y = -1, z = -2), list(x = 2, y = 3,  z = 5)),
+      as.environment))
 })
 
 test_that("column binary mathfunctions", {
