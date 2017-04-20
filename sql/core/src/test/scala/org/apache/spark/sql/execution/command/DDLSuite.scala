@@ -2295,5 +2295,24 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         }
       }
     }
+
+    test(s"basic DDL using locale tr - caseSensitive $caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
+        withLocale("tr") {
+          val dbName = "DaTaBaSe_I"
+          withDatabase(dbName) {
+            sql(s"CREATE DATABASE $dbName")
+            sql(s"USE $dbName")
+
+            val tabName = "tAb_I"
+            withTable(tabName) {
+              sql(s"CREATE TABLE $tabName(col_I int) USING PARQUET")
+              sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1")
+              checkAnswer(sql(s"SELECT col_I FROM $tabName"), Row(1) :: Nil)
+            }
+          }
+        }
+      }
+    }
   }
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.test
 import java.io.File
 import java.net.URI
 import java.nio.file.Files
-import java.util.UUID
+import java.util.{Locale, UUID}
 
 import scala.language.implicitConversions
 import scala.util.control.NonFatal
@@ -225,6 +225,32 @@ private[sql] trait SQLTestUtils
         spark.sql(s"USE ${DEFAULT_DATABASE}")
       }
       spark.sql(s"DROP DATABASE $dbName CASCADE")
+    }
+  }
+
+  /**
+   * Drops database `dbName` after calling `f`.
+   */
+  protected def withDatabase(dbNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      dbNames.foreach { name =>
+        spark.sql(s"DROP DATABASE IF EXISTS $name")
+      }
+    }
+  }
+
+  /**
+   * Enables Locale `language` before executing `f`, then switches back to the default locale of JVM
+   * after `f` returns.
+   */
+  protected def withLocale(language: String)(f: => Unit): Unit = {
+    val originalLocale = Locale.getDefault
+    try {
+      // Add Locale setting
+      Locale.setDefault(new Locale(language))
+      f
+    } finally {
+      Locale.setDefault(originalLocale)
     }
   }
 
