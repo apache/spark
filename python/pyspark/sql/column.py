@@ -290,10 +290,10 @@ class Column(object):
     """
 
     contains = _bin_op("contains")
-    rlike = _bin_op("rlike", _rlike_doc)
-    like = _bin_op("like", _like_doc)
-    startswith = _bin_op("startsWith", _startswith_doc)
-    endswith = _bin_op("endsWith", _endswith_doc)
+    rlike = ignore_unicode_prefix(_bin_op("rlike", _rlike_doc))
+    like = ignore_unicode_prefix(_bin_op("like", _like_doc))
+    startswith = ignore_unicode_prefix(_bin_op("startsWith", _startswith_doc))
+    endswith = ignore_unicode_prefix(_bin_op("endsWith", _endswith_doc))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -361,8 +361,8 @@ class Column(object):
     [Row(height=80, name=u'Tom')]
     """
 
-    isNull = _unary_op("isNull", _isNull_doc)
-    isNotNull = _unary_op("isNotNull", _isNotNull_doc)
+    isNull = ignore_unicode_prefix(_unary_op("isNull", _isNull_doc))
+    isNotNull = ignore_unicode_prefix(_unary_op("isNotNull", _isNotNull_doc))
 
     @since(1.3)
     def alias(self, *alias, **kwargs):
