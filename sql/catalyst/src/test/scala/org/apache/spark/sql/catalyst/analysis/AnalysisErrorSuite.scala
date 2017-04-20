@@ -221,6 +221,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     "cannot resolve" :: "'`b`'" :: "given input columns" :: "[a, c, a3]" :: Nil)
 
   errorTest(
+    "sorting by unsupported column types",
+    listRelation.orderBy('list.asc),
+    "sorting" :: "type" :: "array<int>" :: Nil)
+
+  errorTest(
     "non-boolean filters",
     testRelation.where(Literal(1)),
     "filter" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
