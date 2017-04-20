@@ -17,11 +17,14 @@
 
 package org.apache.spark.deploy.history
 
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipOutputStream
 
 import scala.xml.Node
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFirehoseListener}
+import org.apache.spark.metrics.source.Source
+import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 
 private[spark] case class ApplicationAttemptInfo(
@@ -74,6 +77,8 @@ private[history] case class LoadedAppUI(
 
 private[history] abstract class ApplicationHistoryProvider {
 
+  private val started = new AtomicBoolean(false)
+
   /**
    * Returns the count of application event logs that the provider is currently still processing.
    * History Server UI can use this to indicate to a user that the application listing on the UI
@@ -96,6 +101,19 @@ private[history] abstract class ApplicationHistoryProvider {
    */
   def getLastUpdatedTime(): Long = {
     return 0;
+  }
+
+  /**
+   * Bind to the History Server: threads should be started here; exceptions may be raised
+   * Start the provider: threads should be started here; exceptions may be raised
+   * if the history provider cannot be started.
+   * The base implementation contains a re-entrancy check and should
+   * be invoked first.
+   * @return the metric information for registration
+   */
+  def start(): Option[Source] = {
+    require(!started.getAndSet(true), "History provider already started")
+    None
   }
 
   /**
@@ -144,4 +162,16 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return html text to display when the application list is empty
    */
   def getEmptyListingHtml(): Seq[Node] = Seq.empty
+}
+
+/**
+ * A simple counter of events.
+ * There is no concurrency support here: all events must come in sequentially.
+ */
+private[history] class EventCountListener extends SparkFirehoseListener {
+  var eventCount = 0L
+
+  override def onEvent(event: SparkListenerEvent): Unit = {
+    eventCount += 1
+  }
 }

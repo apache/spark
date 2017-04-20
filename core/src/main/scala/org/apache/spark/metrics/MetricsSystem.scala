@@ -211,6 +211,8 @@ private[spark] class MetricsSystem private (
       }
     }
   }
+
+  private[spark] def getMetricRegistry(): MetricRegistry = registry
 }
 
 private[spark] object MetricsSystem {
