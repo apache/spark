@@ -514,7 +514,7 @@ class SparkSession private(
   @Experimental
   @InterfaceStability.Evolving
   def range(start: Long, end: Long): Dataset[java.lang.Long] = {
-    range(start, end, step = 1)
+    range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
   }
 
   /**
@@ -527,7 +527,7 @@ class SparkSession private(
   @Experimental
   @InterfaceStability.Evolving
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
-    new Dataset(self, Range(start, end, step, None), Encoders.LONG)
+    range(start, end, step, numPartitions = sparkContext.defaultParallelism)
   }
 
   /**
