@@ -20,16 +20,20 @@ package org.apache.spark.scheduler.cluster
 import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.concurrent.Future
-
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.deploy.{ApplicationDescription, Command}
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
+import org.apache.spark.deploy.security.{AMCredentialRenewer, ConfigurableCredentialManager}
+import org.apache.spark.deploy.{ApplicationDescription, Command, SparkHadoopUtil}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.BOOTSTRAP_TOKENS
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.concurrent.Future
 
 /**
  * A [[SchedulerBackend]] implementation for Spark's standalone cluster manager.
@@ -56,7 +60,71 @@ private[spark] class StandaloneSchedulerBackend(
   private val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
   private val totalExpectedCores = maxCores.getOrElse(0)
 
+
+  private var loginFromKeytab = false
+  private var principal: String = null
+  private var keytab: String = null
+  private var credentials: Credentials = null
+
+  private var credentialRenewer: AMCredentialRenewer = _
+
+
+  def setupCredentials(): Unit = {
+    loginFromKeytab = conf.contains(PRINCIPAL.key)
+    if (loginFromKeytab) {
+      principal = conf.get(PRINCIPAL).get
+      keytab = conf.get(KEYTAB).orNull
+    }
+    // Defensive copy of the credentials
+    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
+  }
+
+
   override def start() {
+
+    setupCredentials()
+
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val credentialManager = new ConfigurableCredentialManager(conf, hadoopConf)
+
+    // Merge credentials obtained from registered providers
+    val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(hadoopConf, credentials)
+
+    if (credentials != null) {
+      logDebug(SparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+    }
+
+    // If we use principal and keytab to login, also credentials can be renewed some time
+    // after current time, we should pass the next renewal and updating time to credential
+    // renewer and updater.
+
+    if (loginFromKeytab && nearestTimeOfNextRenewal > System.currentTimeMillis() &&
+      nearestTimeOfNextRenewal != Long.MaxValue) {
+
+      // Valid renewal time is 75% of next renewal time, and the valid update time will be
+      // slightly later then renewal time (80% of next renewal time). This is to make sure
+      // credentials are renewed and updated before expired.
+      val currTime = System.currentTimeMillis()
+      val renewalTime = (nearestTimeOfNextRenewal - currTime) * 0.75 + currTime
+      val updateTime = (nearestTimeOfNextRenewal - currTime) * 0.8 + currTime
+
+      logInfo(s"Setting credential renewal time: ${renewalTime.toLong} ms,"
+        + s" update time ${updateTime.toLong} ms")
+
+      conf.set(CREDENTIALS_RENEWAL_TIME, renewalTime.toLong)
+      conf.set(CREDENTIALS_UPDATE_TIME, updateTime.toLong)
+    }
+
+    // If the credentials file config is present, we must periodically renew tokens. So create
+    // a new AMDelegationTokenRenewer
+    if (conf.contains(CREDENTIALS_FILE_PATH.key)) {
+      // If a principal and keytab have been set, use that to create new credentials for executors
+      // periodically
+      credentialRenewer = credentialManager.credentialRenewer()
+      credentialRenewer.scheduleLoginFromKeytab()
+    }
+    // NOTE we don't need an updater since the above accomplishes it already
+
     super.start()
     launcherBackend.connect()
 
@@ -89,11 +157,23 @@ private[spark] class StandaloneSchedulerBackend(
         Nil
       }
 
+    // Propagate security tokens to executors
+    val bootstrap = if (credentials.getAllTokens.size() > 0) {
+      val bootstrapCredentials = Utils.base64EncodedValue { dob =>
+        credentials.writeTokenStorageToStream(dob)
+      }
+
+      logInfo("Security tokens will be sent to executors")
+      Map(BOOTSTRAP_TOKENS -> bootstrapCredentials)
+    } else Map.empty[String, String]
+
+    val executorEnv = sc.executorEnvs.toMap ++ bootstrap
+
     // Start executors with a few necessary configs for registering with the scheduler
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
-      args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
+      args, executorEnv, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val webUrl = sc.ui.map(_.webUrl).getOrElse("")
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
     // If we're using dynamic allocation, set our initial executor limit to 0 for now.

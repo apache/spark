@@ -15,18 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import java.util.ServiceLoader
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
-
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
+
+import scala.collection.JavaConverters._
 
 /**
  * A ConfigurableCredentialManager to manage all the registered credential providers and offer
@@ -41,7 +40,7 @@ import org.apache.spark.util.Utils
  * For example, Hive's credential provider [[HiveCredentialProvider]] can be enabled/disabled by
  * the configuration spark.yarn.security.credentials.hive.enabled.
  */
-private[yarn] final class ConfigurableCredentialManager(
+private[spark] final class ConfigurableCredentialManager(
     sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
   private val deprecatedProviderEnabledConfig = "spark.yarn.security.tokens.%s.enabled"
   private val providerEnabledConfig = "spark.yarn.security.credentials.%s.enabled"

@@ -17,23 +17,28 @@
 
 package org.apache.spark.deploy.rest
 
-import java.io.{DataOutputStream, FileNotFoundException}
+import java.io.{DataOutputStream, File, FileInputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
 import java.nio.charset.StandardCharsets
+import java.util.UUID
 import java.util.concurrent.TimeoutException
 import javax.servlet.http.HttpServletResponse
 
+import com.fasterxml.jackson.core.JsonProcessingException
+import org.apache.commons.codec.binary.Base64
+import org.apache.commons.io
+import org.apache.hadoop.io.DataOutputBuffer
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.BOOTSTRAP_TOKENS
+import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkException, SPARK_VERSION => sparkVersion}
+
 import scala.collection.mutable
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 import scala.io.Source
 import scala.util.control.NonFatal
-
-import com.fasterxml.jackson.core.JsonProcessingException
-
-import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf, SparkException}
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
 
 /**
  * A client that submits applications to a [[RestSubmissionServer]].
@@ -182,6 +187,38 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     message.appArgs = appArgs
     message.sparkProperties = sparkProperties
     message.environmentVariables = environmentVariables
+
+    def uti(fn: DataOutputBuffer => Unit): String = {
+      val dob = new DataOutputBuffer
+      fn(dob)
+      dob.close()
+      new String(Base64.encodeBase64(dob.getData))
+    }
+
+    // Propagate kerberos credentials if necessary
+    if (sparkProperties.contains(PRINCIPAL.key)) {
+      val principal = sparkProperties.get(PRINCIPAL.key).get
+      val keytab = sparkProperties.get(KEYTAB.key).orNull
+      require(keytab != null, "Keytab must be specified when principal is specified.")
+      logInfo("Attempting to login to the Kerberos" +
+        s" using principal: $principal and keytab: $keytab")
+      val f = new File(keytab)
+      // Generate a file name that can be used for the keytab file, that does not conflict
+      // with any user file.
+      val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
+
+      logInfo("To enable the driver to login from keytab, credentials are are being copied" +
+        " to the Master inside the CreateSubmissionRequest")
+
+      val keytabContent = Utils.base64EncodedValue { dob =>
+        io.IOUtils.copy(new FileInputStream(f), dob)
+      }
+
+      message.environmentVariables += BOOTSTRAP_TOKENS -> keytabContent
+      // overwrite with localized version
+      message.sparkProperties += KEYTAB.key -> keytabFileName
+    }
+
     message.validate()
     message
   }

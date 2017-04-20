@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
-import org.scalatest.{Matchers, PrivateMethodTester}
-
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.scalatest.{Matchers, PrivateMethodTester}
 
 class HadoopFSCredentialProviderSuite
     extends SparkFunSuite

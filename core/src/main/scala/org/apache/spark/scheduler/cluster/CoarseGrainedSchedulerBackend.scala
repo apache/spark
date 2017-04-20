@@ -639,4 +639,5 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
 private[spark] object CoarseGrainedSchedulerBackend {
   val ENDPOINT_NAME = "CoarseGrainedScheduler"
+  val BOOTSTRAP_TOKENS = "SPARK_BOOTSTRAP_TOKENS"
 }

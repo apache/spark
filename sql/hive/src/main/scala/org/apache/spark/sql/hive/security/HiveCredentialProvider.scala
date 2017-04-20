@@ -15,25 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.sql.hive.security
 
 import java.lang.reflect.UndeclaredThrowableException
 import java.security.PrivilegedExceptionAction
 
-import scala.reflect.runtime.universe
-import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
-
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.security.ServiceCredentialProvider
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[security] class HiveCredentialProvider extends ServiceCredentialProvider with Logging {
+import scala.reflect.runtime.universe
+import scala.util.control.NonFatal
+
+private[spark] class HiveCredentialProvider extends ServiceCredentialProvider with Logging {
 
   override def serviceName: String = "hive"
 
