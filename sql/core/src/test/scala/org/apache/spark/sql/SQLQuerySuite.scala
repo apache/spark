@@ -2607,15 +2607,4 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       case ae: AnalysisException => assert(ae.plan == null && ae.getMessage == ae.getSimpleMessage)
     }
   }
-
-  test("SPARK-20281 Print the identical range parameters of SparkContext and SQL in EXPLAIN") {
-    def explainStr(df: DataFrame): String = {
-      val explain = ExplainCommand(df.queryExecution.logical, extended = false)
-      val sparkPlan = spark.sessionState.executePlan(explain).executedPlan
-      sparkPlan.executeCollect().map(_.getString(0).trim).headOption.getOrElse("")
-    }
-    val scRange = sqlContext.range(10)
-    val sqlRange = sqlContext.sql("SELECT * FROM range(10)")
-    assert(explainStr(scRange) === explainStr(sqlRange))
-  }
 }
