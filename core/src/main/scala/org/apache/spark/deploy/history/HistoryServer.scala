@@ -303,8 +303,8 @@ object HistoryServer extends Logging {
     }
 
     if (config.getBoolean("spark.acls.enable", config.getBoolean("spark.ui.acls.enable", false))) {
-      logInfo(s"Either spark.acls.enable or spark.ui.acles.enable is configured, clearing it and " +
-        s"only honor spark.history.ui.acl.enable")
+      logInfo(s"Either spark.acls.enable or spark.ui.acls.enable is configured, clearing it and " +
+        s"only using spark.history.ui.acl.enable")
       config.set("spark.acls.enable", "false")
       config.set("spark.ui.acls.enable", "false")
     }

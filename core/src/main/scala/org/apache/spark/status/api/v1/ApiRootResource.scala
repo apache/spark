@@ -185,7 +185,7 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   def getEventLogs(
       @PathParam("appId") appId: String): EventLogDownloadResource = {
     try {
-      // withSparkUI will throw NotFoundException if attemptId is existed for this application.
+      // withSparkUI will throw NotFoundException if attemptId exists for this application.
       // So we need to try again with attempt id "1".
       withSparkUI(appId, None) { _ =>
         new EventLogDownloadResource(uiRoot, appId, None)
