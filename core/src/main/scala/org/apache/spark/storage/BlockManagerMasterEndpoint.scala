@@ -529,25 +529,25 @@ private[spark] class BlockManagerInfo(
         _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
         if (blockExists) {
-          logInfo("Updated %s in memory on %s (current size: %s, original size %s, free: %s)".format(
-            blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
-            Utils.bytesToString(originalMemSize),Utils.bytesToString(_remainingMem)))
+          logInfo(s"Updated $blockId in memory on ${blockManagerId.hostPort}" +
+            s" (current size: ${Utils.bytesToString(memSize)}," +
+            s" original size: ${Utils.bytesToString(originalMemSize)}," +
+            s" free: ${Utils.bytesToString(_remainingMem)})")
         } else {
-          logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
-            blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
-            Utils.bytesToString(_remainingMem)))
+          logInfo(s"Added $blockId in memory on ${blockManagerId.hostPort}" +
+            s" (size: ${Utils.bytesToString(memSize)}, free: ${Utils.bytesToString(_remainingMem)})")
         }
       }
       if (storageLevel.useDisk) {
         blockStatus = BlockStatus(storageLevel, memSize = 0, diskSize = diskSize)
         _blocks.put(blockId, blockStatus)
         if (blockExists) {
-          logInfo("Updated %s on disk on %s (current size: %s, original size %s)".format(
-            blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize),
-            Utils.bytesToString(originalDiskSize)))
+          logInfo(s"Updated $blockId on disk on ${blockManagerId.hostPort}" +
+            s" (current size: ${Utils.bytesToString(diskSize)}," +
+            s" original size: ${Utils.bytesToString(originalDiskSize)})")
         } else {
-          logInfo("Added %s on disk on %s (size: %s)".format(
-            blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
+          logInfo(s"Added $blockId on disk on ${blockManagerId.hostPort}" +
+            s" (size: ${Utils.bytesToString(diskSize)})")
         }
       }
       if (!blockId.isBroadcast && blockStatus.isCached) {
@@ -558,13 +558,12 @@ private[spark] class BlockManagerInfo(
       _blocks.remove(blockId)
       _cachedBlocks -= blockId
       if (originalLevel.useMemory) {
-        logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
-          blockId, blockManagerId.hostPort, Utils.bytesToString(originalMemSize),
-          Utils.bytesToString(_remainingMem)))
+        logInfo(s"Removed $blockId on ${blockManagerId.hostPort} in memory" +
+          s" (size: ${Utils.bytesToString(originalMemSize)}, free: ${Utils.bytesToString(_remainingMem)})")
       }
       if (originalLevel.useDisk) {
-        logInfo("Removed %s on %s on disk (size: %s)".format(
-          blockId, blockManagerId.hostPort, Utils.bytesToString(originalDiskSize)))
+        logInfo(s"Removed $blockId on ${blockManagerId.hostPort} on disk" +
+          s" (size: ${Utils.bytesToString(originalDiskSize)})")
       }
     }
   }
