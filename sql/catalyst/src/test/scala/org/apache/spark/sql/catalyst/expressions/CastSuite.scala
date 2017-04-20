@@ -597,35 +597,25 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     {
-      val ret = cast(
-        map_notNull,
-        MapType(StringType, IntegerType, valueContainsNull = true))
+      val ret = cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = true))
       assert(ret.resolved === true)
       checkEvaluation(ret, Map("a" -> 123, "b" -> null, "c" -> null))
     }
     {
-      val ret = cast(
-        map_notNull,
-        MapType(StringType, IntegerType, valueContainsNull = false))
+      val ret = cast(map_notNull, MapType(StringType, IntegerType, valueContainsNull = false))
       assert(ret.resolved === false)
     }
     {
-      val ret = cast(
-        map_notNull,
-        MapType(StringType, BooleanType, valueContainsNull = true))
+      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = true))
       assert(ret.resolved === true)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false))
     }
     {
-      val ret = cast(
-        map_notNull,
-        MapType(StringType, BooleanType, valueContainsNull = false))
+      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
       assert(ret.resolved === false)
     }
     {
-      val ret = cast(
-        map_notNull,
-        MapType(IntegerType, StringType, valueContainsNull = true))
+      val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
       assert(ret.resolved === false)
     }
 
