@@ -1744,4 +1744,3 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     df.filter(filter).count
   }
 }
-

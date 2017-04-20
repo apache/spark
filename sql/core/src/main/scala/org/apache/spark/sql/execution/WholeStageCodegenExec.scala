@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.util.Locale
 
-import org.codehaus.janino.JaninoRuntimeException
-
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
