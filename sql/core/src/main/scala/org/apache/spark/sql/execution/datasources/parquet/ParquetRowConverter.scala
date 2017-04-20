@@ -275,8 +275,8 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
-            val timestamp = ParquetRowConverter.binaryToSQLTimestamp(value, fromTz = sessionTz,
-              toTz = storageTz)
+            val timestamp = ParquetRowConverter.binaryToSQLTimestamp(value, sessionTz = sessionTz,
+              storageTz = storageTz)
             updater.setLong(timestamp)
           }
         }
@@ -684,10 +684,19 @@ private[parquet] object ParquetRowConverter {
    * The timestamp is really meant to be interpreted as a "floating time", but since we
    * actually store it as micros since epoch, why we have to apply a conversion when timezones
    * change.
+   *
    * @param binary
+   * @param sessionTz the session timezone.  This will be used to determine how to display the time,
+    *                  and compute functions on the timestamp which involve a timezone, eg. extract
+    *                  the hour.
+   * @param storageTz the timezone which was used to store the timestamp.  This should come from the
+    *                  timestamp table property, or else assume its the same as the sessionTz
    * @return
    */
-  def binaryToSQLTimestamp(binary: Binary, fromTz: TimeZone, toTz: TimeZone): SQLTimestamp = {
+  def binaryToSQLTimestamp(
+      binary: Binary,
+      sessionTz: TimeZone,
+      storageTz: TimeZone): SQLTimestamp = {
     assert(binary.length() == 12, s"Timestamps (with nanoseconds) are expected to be stored in" +
       s" 12-byte long binaries. Found a ${binary.length()}-byte binary instead.")
     val buffer = binary.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
@@ -695,8 +704,8 @@ private[parquet] object ParquetRowConverter {
     val julianDay = buffer.getInt
     val utcEpochMicros = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
     // avoid expensive time logic if possible.
-    if (fromTz.getID() != toTz.getID()) {
-      DateTimeUtils.convertTz(utcEpochMicros, fromTz, toTz)
+    if (sessionTz.getID() != storageTz.getID()) {
+      DateTimeUtils.convertTz(utcEpochMicros, sessionTz, storageTz)
     } else {
       utcEpochMicros
     }
