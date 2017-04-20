@@ -462,34 +462,53 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     })
   }
 
-  private[this] def cast(from: DataType, to: DataType): Any => Any = to match {
-    case dt if dt == from => identity[Any]
-    case StringType => castToString(from)
-    case BinaryType => castToBinary(from)
-    case DateType => castToDate(from)
-    case decimal: DecimalType => castToDecimal(from, decimal)
-    case TimestampType => castToTimestamp(from)
-    case CalendarIntervalType => castToInterval(from)
-    case BooleanType => castToBoolean(from)
-    case ByteType => castToByte(from)
-    case ShortType => castToShort(from)
-    case IntegerType => castToInt(from)
-    case FloatType => castToFloat(from)
-    case LongType => castToLong(from)
-    case DoubleType => castToDouble(from)
-    case array: ArrayType => castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
-    case map: MapType => castMap(from.asInstanceOf[MapType], map)
-    case struct: StructType => castStruct(from.asInstanceOf[StructType], struct)
-    case udt: UserDefinedType[_]
-      if udt.userClass == from.asInstanceOf[UserDefinedType[_]].userClass =>
-      identity[Any]
-    case _: UserDefinedType[_] =>
-      throw new SparkException(s"Cannot cast $from to $to.")
+  private[this] def cast(from: DataType, to: DataType): Any => Any = {
+    // If the cast does not change the structure, then we don't really need to cast anything.
+    // We can return what the children return. Same thing should happen in the codegen path.
+    if (DataType.equalsStructurally(from, to)) {
+      identity
+    } else {
+      to match {
+        case dt if dt == from => identity[Any]
+        case StringType => castToString(from)
+        case BinaryType => castToBinary(from)
+        case DateType => castToDate(from)
+        case decimal: DecimalType => castToDecimal(from, decimal)
+        case TimestampType => castToTimestamp(from)
+        case CalendarIntervalType => castToInterval(from)
+        case BooleanType => castToBoolean(from)
+        case ByteType => castToByte(from)
+        case ShortType => castToShort(from)
+        case IntegerType => castToInt(from)
+        case FloatType => castToFloat(from)
+        case LongType => castToLong(from)
+        case DoubleType => castToDouble(from)
+        case array: ArrayType =>
+          castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
+        case map: MapType => castMap(from.asInstanceOf[MapType], map)
+        case struct: StructType => castStruct(from.asInstanceOf[StructType], struct)
+        case udt: UserDefinedType[_]
+          if udt.userClass == from.asInstanceOf[UserDefinedType[_]].userClass =>
+          identity[Any]
+        case _: UserDefinedType[_] =>
+          throw new SparkException(s"Cannot cast $from to $to.")
+      }
+    }
   }
 
   private[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
 
   protected override def nullSafeEval(input: Any): Any = cast(input)
+
+  override def genCode(ctx: CodegenContext): ExprCode = {
+    // If the cast does not change the structure, then we don't really need to cast anything.
+    // We can return what the children return. Same thing should happen in the interpreted path.
+    if (DataType.equalsStructurally(child.dataType, dataType)) {
+      child.genCode(ctx)
+    } else {
+      super.genCode(ctx)
+    }
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)

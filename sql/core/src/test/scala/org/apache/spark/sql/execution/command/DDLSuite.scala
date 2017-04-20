@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 import java.net.URI
+import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
@@ -67,18 +68,6 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
       tracksPartitionsInCatalog = true)
-  }
-
-  test("desc table for parquet data source table using in-memory catalog") {
-    val tabName = "tab1"
-    withTable(tabName) {
-      sql(s"CREATE TABLE $tabName(a int comment 'test') USING parquet ")
-
-      checkAnswer(
-        sql(s"DESC $tabName").select("col_name", "data_type", "comment"),
-        Row("a", "int", "test")
-      )
-    }
   }
 
   test("alter table: set location (datasource table)") {
@@ -202,7 +191,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql(query)
     }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
   }
 
   private def maybeWrapException[T](expectException: Boolean)(body: => T): Unit = {
@@ -617,12 +606,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val message = intercept[AnalysisException] {
       sql(s"DROP DATABASE $dbName RESTRICT")
     }.getMessage
-    // TODO: Unify the exception.
-    if (isUsingHiveMetastore) {
-      assert(message.contains(s"Database $dbName is not empty. One or more tables exist"))
-    } else {
-      assert(message.contains(s"Database '$dbName' is not empty. One or more tables exist"))
-    }
+    assert(message.contains(s"Database $dbName is not empty. One or more tables exist"))
+
 
     catalog.dropTable(tableIdent1, ignoreIfNotExists = false, purge = false)
 
@@ -703,21 +688,28 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("create temporary view using") {
-    val csvFile =
-      Thread.currentThread().getContextClassLoader.getResource("test-data/cars.csv").toString
-    withView("testview") {
-      sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
-        "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
-        s"OPTIONS (PATH '$csvFile')")
+    // when we test the HiveCatalogedDDLSuite, it will failed because the csvFile path above
+    // starts with 'jar:', and it is an illegal parameter for Path, so here we copy it
+    // to a temp file by withResourceTempPath
+    withResourceTempPath("test-data/cars.csv") { tmpFile =>
+      withView("testview") {
+        sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
+          "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
+          s"OPTIONS (PATH '$tmpFile')")
 
-      checkAnswer(
-        sql("select c1, c2 from testview order by c1 limit 1"),
+        checkAnswer(
+          sql("select c1, c2 from testview order by c1 limit 1"),
           Row("1997", "Ford") :: Nil)
 
-      // Fails if creating a new view with the same name
-      intercept[TempTableAlreadyExistsException] {
-        sql(s"CREATE TEMPORARY VIEW testview USING " +
-          s"org.apache.spark.sql.execution.datasources.csv.CSVFileFormat OPTIONS (PATH '$csvFile')")
+        // Fails if creating a new view with the same name
+        intercept[TempTableAlreadyExistsException] {
+          sql(
+            s"""
+               |CREATE TEMPORARY VIEW testview
+               |USING org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+               |OPTIONS (PATH '$tmpFile')
+             """.stripMargin)
+        }
       }
     }
   }
@@ -975,40 +967,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("alter table: rename partition") {
     testRenamePartitions(isDatasourceTable = false)
-  }
-
-  test("show table extended") {
-    withTempView("show1a", "show2b") {
-      sql(
-        """
-         |CREATE TEMPORARY VIEW show1a
-         |USING org.apache.spark.sql.sources.DDLScanSource
-         |OPTIONS (
-         |  From '1',
-         |  To '10',
-         |  Table 'test1'
-         |
-         |)
-        """.stripMargin)
-      sql(
-        """
-         |CREATE TEMPORARY VIEW show2b
-         |USING org.apache.spark.sql.sources.DDLScanSource
-         |OPTIONS (
-         |  From '1',
-         |  To '10',
-         |  Table 'test1'
-         |)
-        """.stripMargin)
-      assert(
-        sql("SHOW TABLE EXTENDED LIKE 'show*'").count() >= 2)
-      assert(
-        sql("SHOW TABLE EXTENDED LIKE 'show*'").schema ==
-          StructType(StructField("database", StringType, false) ::
-            StructField("tableName", StringType, false) ::
-            StructField("isTemporary", BooleanType, false) ::
-            StructField("information", StringType, false) :: Nil))
-    }
   }
 
   test("show databases") {
@@ -1856,7 +1814,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         withTable(tabName) {
           sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
           val message = intercept[AnalysisException] {
-            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase}")
+            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
           }.getMessage
           assert(message.contains("SHOW COLUMNS with conflicting databases"))
         }
@@ -2213,6 +2171,147 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
         assert(table.location.toString.startsWith("file:/"))
+      }
+    }
+  }
+
+  val supportedNativeFileFormatsForAlterTableAddColumns = Seq("parquet", "json", "csv")
+
+  supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
+    test(s"alter datasource table add columns - $provider") {
+      withTable("t1") {
+        sql(s"CREATE TABLE t1 (c1 int) USING $provider")
+        sql("INSERT INTO t1 VALUES (1)")
+        sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
+        checkAnswer(
+          spark.table("t1"),
+          Seq(Row(1, null))
+        )
+        checkAnswer(
+          sql("SELECT * FROM t1 WHERE c2 is null"),
+          Seq(Row(1, null))
+        )
+
+        sql("INSERT INTO t1 VALUES (3, 2)")
+        checkAnswer(
+          sql("SELECT * FROM t1 WHERE c2 = 2"),
+          Seq(Row(3, 2))
+        )
+      }
+    }
+  }
+
+  supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
+    test(s"alter datasource table add columns - partitioned - $provider") {
+      withTable("t1") {
+        sql(s"CREATE TABLE t1 (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
+        sql("INSERT INTO t1 PARTITION(c2 = 2) VALUES (1)")
+        sql("ALTER TABLE t1 ADD COLUMNS (c3 int)")
+        checkAnswer(
+          spark.table("t1"),
+          Seq(Row(1, null, 2))
+        )
+        checkAnswer(
+          sql("SELECT * FROM t1 WHERE c3 is null"),
+          Seq(Row(1, null, 2))
+        )
+        sql("INSERT INTO t1 PARTITION(c2 =1) VALUES (2, 3)")
+        checkAnswer(
+          sql("SELECT * FROM t1 WHERE c3 = 3"),
+          Seq(Row(2, 3, 1))
+        )
+        checkAnswer(
+          sql("SELECT * FROM t1 WHERE c2 = 1"),
+          Seq(Row(2, 3, 1))
+        )
+      }
+    }
+  }
+
+  test("alter datasource table add columns - text format not supported") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c1 int) USING text")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
+      }.getMessage
+      assert(e.contains("ALTER ADD COLUMNS does not support datasource table with type"))
+    }
+  }
+
+  test("alter table add columns -- not support temp view") {
+    withTempView("tmp_v") {
+      sql("CREATE TEMPORARY VIEW tmp_v AS SELECT 1 AS c1, 2 AS c2")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
+      }
+      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
+    }
+  }
+
+  test("alter table add columns -- not support view") {
+    withView("v1") {
+      sql("CREATE VIEW v1 AS SELECT 1 AS c1, 2 AS c2")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
+      }
+      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
+    }
+  }
+
+  test("alter table add columns with existing column name") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c1 int) USING PARQUET")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t1 ADD COLUMNS (c1 string)")
+      }.getMessage
+      assert(e.contains("Found duplicate column(s)"))
+    }
+  }
+
+  Seq(true, false).foreach { caseSensitive =>
+    test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
+        withTable("t1") {
+          sql("CREATE TABLE t1 (c1 int) USING PARQUET")
+          if (!caseSensitive) {
+            val e = intercept[AnalysisException] {
+              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            }.getMessage
+            assert(e.contains("Found duplicate column(s)"))
+          } else {
+            if (isUsingHiveMetastore) {
+              // hive catalog will still complains that c1 is duplicate column name because hive
+              // identifiers are case insensitive.
+              val e = intercept[AnalysisException] {
+                sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+              }.getMessage
+              assert(e.contains("HiveException"))
+            } else {
+              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+              assert(spark.table("t1").schema
+                .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
+            }
+          }
+        }
+      }
+    }
+
+    test(s"basic DDL using locale tr - caseSensitive $caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
+        withLocale("tr") {
+          val dbName = "DaTaBaSe_I"
+          withDatabase(dbName) {
+            sql(s"CREATE DATABASE $dbName")
+            sql(s"USE $dbName")
+
+            val tabName = "tAb_I"
+            withTable(tabName) {
+              sql(s"CREATE TABLE $tabName(col_I int) USING PARQUET")
+              sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1")
+              checkAnswer(sql(s"SELECT col_I FROM $tabName"), Row(1) :: Nil)
+            }
+          }
+        }
       }
     }
   }

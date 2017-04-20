@@ -148,6 +148,17 @@ class SparkSubmitSuite
     appArgs.childArgs should be (Seq("--master", "local", "some", "--weird", "args"))
   }
 
+  test("print the right queue name") {
+    val clArgs = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "--conf", "spark.yarn.queue=thequeue",
+      "userjar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.queue should be ("thequeue")
+    appArgs.toString should include ("thequeue")
+  }
+
   test("specify deploy mode through configuration") {
     val clArgs = Seq(
       "--master", "yarn",
@@ -213,7 +224,12 @@ class SparkSubmitSuite
     childArgsStr should include ("--arg arg1 --arg arg2")
     childArgsStr should include regex ("--jar .*thejar.jar")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
-    classpath should have length (0)
+
+    // In yarn cluster mode, also adding jars to classpath
+    classpath(0) should endWith ("thejar.jar")
+    classpath(1) should endWith ("one.jar")
+    classpath(2) should endWith ("two.jar")
+    classpath(3) should endWith ("three.jar")
 
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.driver.memory") should be ("4g")

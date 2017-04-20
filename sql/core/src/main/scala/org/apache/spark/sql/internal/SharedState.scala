@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.Locale
+
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
@@ -115,7 +116,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
     // System preserved database should not exists in metastore. However it's hard to guarantee it
     // for every session, because case-sensitivity differs. Here we always lowercase it to make our
     // life easier.
-    val globalTempDB = sparkContext.conf.get(GLOBAL_TEMP_DATABASE).toLowerCase
+    val globalTempDB = sparkContext.conf.get(GLOBAL_TEMP_DATABASE).toLowerCase(Locale.ROOT)
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw new SparkException(
         s"$globalTempDB is a system preserved database, please rename your existing database " +

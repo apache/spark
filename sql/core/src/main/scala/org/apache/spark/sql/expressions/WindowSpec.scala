@@ -86,7 +86,7 @@ class WindowSpec private[sql](
    * after the current row.
    *
    * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
-   * and `[Window.currentRow` to specify special boundary values, rather than using integral
+   * and `Window.currentRow` to specify special boundary values, rather than using integral
    * values directly.
    *
    * A row based boundary is based on the position of the row within the partition.
@@ -99,9 +99,9 @@ class WindowSpec private[sql](
    *   import org.apache.spark.sql.expressions.Window
    *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
    *     .toDF("id", "category")
-   *   df.withColumn("sum",
-   *       sum('id) over Window.partitionBy('category).orderBy('id).rowsBetween(0,1))
-   *     .show()
+   *   val byCategoryOrderedById =
+   *     Window.partitionBy('category).orderBy('id).rowsBetween(Window.currentRow, 1)
+   *   df.withColumn("sum", sum('id) over byCategoryOrderedById).show()
    *
    *   +---+--------+---+
    *   | id|category|sum|
@@ -118,7 +118,7 @@ class WindowSpec private[sql](
    * @param start boundary start, inclusive. The frame is unbounded if this is
    *              the minimum long value (`Window.unboundedPreceding`).
    * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  (`Window.unboundedFollowing`).
+   *            maximum long value (`Window.unboundedFollowing`).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rowsBetween.
@@ -134,7 +134,7 @@ class WindowSpec private[sql](
    * current row.
    *
    * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
-   * and `[Window.currentRow` to specify special boundary values, rather than using integral
+   * and `Window.currentRow` to specify special boundary values, rather than using integral
    * values directly.
    *
    * A range based boundary is based on the actual value of the ORDER BY
@@ -150,9 +150,9 @@ class WindowSpec private[sql](
    *   import org.apache.spark.sql.expressions.Window
    *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
    *     .toDF("id", "category")
-   *   df.withColumn("sum",
-   *       sum('id) over Window.partitionBy('category).orderBy('id).rangeBetween(0,1))
-   *     .show()
+   *   val byCategoryOrderedById =
+   *     Window.partitionBy('category).orderBy('id).rangeBetween(Window.currentRow, 1)
+   *   df.withColumn("sum", sum('id) over byCategoryOrderedById).show()
    *
    *   +---+--------+---+
    *   | id|category|sum|
@@ -169,7 +169,7 @@ class WindowSpec private[sql](
    * @param start boundary start, inclusive. The frame is unbounded if this is
    *              the minimum long value (`Window.unboundedPreceding`).
    * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  (`Window.unboundedFollowing`).
+   *            maximum long value (`Window.unboundedFollowing`).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rangeBetween.

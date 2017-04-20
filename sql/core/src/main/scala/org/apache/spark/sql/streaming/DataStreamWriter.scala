@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
@@ -145,6 +147,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds an output option for the underlying data source.
    *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
+   *
    * @since 2.0.0
    */
   def option(key: String, value: String): DataStreamWriter[T] = {
@@ -176,6 +184,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
+   *
    * @since 2.0.0
    */
   def options(options: scala.collection.Map[String, String]): DataStreamWriter[T] = {
@@ -185,6 +199,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Adds output options for the underlying data source.
+   *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
@@ -212,7 +232,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   def start(): StreamingQuery = {
-    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "write files of Hive data source directly.")
     }
@@ -359,7 +379,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private var outputMode: OutputMode = OutputMode.Append
 
-  private var trigger: Trigger = ProcessingTime(0L)
+  private var trigger: Trigger = Trigger.ProcessingTime(0L)
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 

@@ -73,10 +73,10 @@ case class AnalyzeColumnCommand(
     val relation = sparkSession.table(tableIdent).logicalPlan
     // Resolve the column names and dedup using AttributeSet
     val resolver = sparkSession.sessionState.conf.resolver
-    val attributesToAnalyze = AttributeSet(columnNames.map { col =>
+    val attributesToAnalyze = columnNames.map { col =>
       val exprOption = relation.output.find(attr => resolver(attr.name, col))
       exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
-    }).toSeq
+    }
 
     // Make sure the column types are supported for stats gathering.
     attributesToAnalyze.foreach { attr =>
@@ -99,8 +99,8 @@ case class AnalyzeColumnCommand(
     val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation)).head()
 
     val rowCount = statsRow.getLong(0)
-    val columnStats = attributesToAnalyze.zipWithIndex.map { case (expr, i) =>
-      (expr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1)))
+    val columnStats = attributesToAnalyze.zipWithIndex.map { case (attr, i) =>
+      (attr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1), attr))
     }.toMap
     (rowCount, columnStats)
   }
