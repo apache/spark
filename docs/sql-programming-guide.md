@@ -571,7 +571,7 @@ be created by calling the `table` method on a `SparkSession` with the name of th
 For file-based data source, e.g. text, parquet, json, etc. you can specify a custom table path via the
 `path` option, e.g. `df.write.option("path", "/some/path").saveAsTable("t")`. When the table is dropped,
 the custom table path will not be removed and the table data is still there. If no custom table path is
-specifed, Spark will write data to a default table path under the warehouse directory. When the table is
+specified, Spark will write data to a default table path under the warehouse directory. When the table is
 dropped, the default table path will be removed too.
 
 Starting from Spark 2.1, persistent datasource tables have per-partition metadata stored in the Hive metastore. This brings several benefits:
