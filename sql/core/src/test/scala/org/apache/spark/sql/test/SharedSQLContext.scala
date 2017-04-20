@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
 
-  protected val sparkConf = new SparkConf()
+  protected def sparkConf = new SparkConf()
 
   /**
    * The [[TestSparkSession]] to use for all tests in this suite.
