@@ -130,7 +130,7 @@ private[spark] class ConfigurableCredentialManager(
       }
     }.foldLeft(Long.MaxValue)(math.min)
   }
-  
+
   /**
    * Returns a copy of the current user's credentials, augmented with new delegation tokens.
    */

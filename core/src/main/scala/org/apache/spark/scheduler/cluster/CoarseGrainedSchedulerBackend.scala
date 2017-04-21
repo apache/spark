@@ -23,11 +23,9 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
-
-import org.apache.hadoop.security.UserGroupInformation
+import scala.concurrent.duration.Duration
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
-import org.apache.spark.deploy.security.{ConfigurableCredentialManager, CredentialsSerializer}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
@@ -44,10 +42,7 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
  * (spark.deploy.*).
  */
 private[spark]
-class CoarseGrainedSchedulerBackend(
-  scheduler: TaskSchedulerImpl,
-  val rpcEnv: RpcEnv,
-  credentialManager: Option[ConfigurableCredentialManager])
+class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
   extends ExecutorAllocationClient with SchedulerBackend with Logging
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
@@ -96,15 +91,6 @@ class CoarseGrainedSchedulerBackend(
 
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
-
-  // Hadoop delegation tokens to send executors.
-  private val userTokens = if (UserGroupInformation.isSecurityEnabled) {
-    credentialManager.map { manager =>
-      new CredentialsSerializer().serializeTokens(manager.obtainUserCredentials)
-    }
-  } else {
-    None
-  }
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -230,11 +216,8 @@ class CoarseGrainedSchedulerBackend(
         context.reply(true)
 
       case RetrieveSparkAppConfig =>
-        val reply = SparkAppConfig(
-          sparkProperties,
-          SparkEnv.get.securityManager.getIOEncryptionKey(),
-          userTokens
-        )
+        val reply = SparkAppConfig(sparkProperties,
+          SparkEnv.get.securityManager.getIOEncryptionKey())
         context.reply(reply)
     }
 

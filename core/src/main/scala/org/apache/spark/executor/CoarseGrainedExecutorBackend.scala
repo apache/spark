@@ -26,12 +26,9 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.CredentialsSerializer
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
@@ -177,15 +174,6 @@ private[spark] class CoarseGrainedExecutorBackend(
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
-  private def addDelegationTokens(tokenBytes: Array[Byte], driverConf: SparkConf) {
-    val creds = new CredentialsSerializer().deserializeTokens(tokenBytes)
-
-    logInfo(s"Adding ${creds.numberOfTokens()} tokens and ${creds.numberOfSecretKeys()} secret" +
-      s"keys to the current user's credentials.")
-
-    UserGroupInformation.getCurrentUser.addCredentials(creds)
-  }
-
   private def run(
       driverUrl: String,
       executorId: String,
@@ -231,8 +219,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.get("spark.yarn.credentials.file"))
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
-
-      cfg.ugiTokens.foreach(addDelegationTokens(_, driverConf))
 
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, port, cores, cfg.ioEncryptionKey, isLocal = false)

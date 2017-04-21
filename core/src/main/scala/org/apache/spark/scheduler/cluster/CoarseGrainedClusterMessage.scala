@@ -19,8 +19,6 @@ package org.apache.spark.scheduler.cluster
 
 import java.nio.ByteBuffer
 
-import org.apache.hadoop.security.Credentials
-
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.ExecutorLossReason
@@ -34,8 +32,7 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class SparkAppConfig(
       sparkProperties: Seq[(String, String)],
-      ioEncryptionKey: Option[Array[Byte]],
-      ugiTokens: Option[Array[Byte]])
+      ioEncryptionKey: Option[Array[Byte]])
     extends CoarseGrainedClusterMessage
 
   case object RetrieveLastAllocatedExecutorId extends CoarseGrainedClusterMessage
