@@ -147,21 +147,21 @@ class SessionCatalog(
 
   private def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new NoSuchDatabaseException(db)
+      throw AnalysisException.noSuchDatabase(db)
     }
   }
 
   private def requireTableExists(name: TableIdentifier): Unit = {
     if (!tableExists(name)) {
       val db = name.database.getOrElse(currentDb)
-      throw new NoSuchTableException(db = db, table = name.table)
+      throw AnalysisException.noSuchTable(db, name.table)
     }
   }
 
   private def requireTableNotExists(name: TableIdentifier): Unit = {
     if (tableExists(name)) {
       val db = name.database.getOrElse(currentDb)
-      throw new TableAlreadyExistsException(db = db, table = name.table)
+      throw AnalysisException.tableAlreadyExists(db, name.table)
     }
   }
 
@@ -366,7 +366,7 @@ class SessionCatalog(
   /**
    * Retrieve the metadata of an existing permanent table/view. If no database is specified,
    * assume the table/view is in the current database. If the specified table/view is not found
-   * in the database then a [[NoSuchTableException]] is thrown.
+   * in the database then a [[AnalysisException]] is thrown.
    */
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
@@ -391,7 +391,7 @@ class SessionCatalog(
   /**
    * Load files stored in given path into an existing metastore table.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
+   * If the specified table is not found in the database then a [[AnalysisException]] is thrown.
    */
   def loadTable(
       name: TableIdentifier,
@@ -408,7 +408,7 @@ class SessionCatalog(
   /**
    * Load files stored in given path into the partition of an existing metastore table.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
+   * If the specified table is not found in the database then a [[AnalysisException]] is thrown.
    */
   def loadPartition(
       name: TableIdentifier,
@@ -446,7 +446,7 @@ class SessionCatalog(
       overrideIfExists: Boolean): Unit = synchronized {
     val table = formatTableName(name)
     if (tempTables.contains(table) && !overrideIfExists) {
-      throw new TempTableAlreadyExistsException(name)
+      throw AnalysisException.tempTableAlreadyExists(name)
     }
     tempTables.put(table, tableDefinition)
   }
@@ -545,7 +545,7 @@ class SessionCatalog(
           tableType = CatalogTableType.VIEW,
           storage = CatalogStorageFormat.empty,
           schema = plan.output.toStructType)
-      }.getOrElse(throw new NoSuchTableException(globalTempViewManager.database, table))
+      }.getOrElse(throw AnalysisException.noSuchTable(globalTempViewManager.database, table))
     } else {
       getTableMetadata(name)
     }
@@ -613,7 +613,7 @@ class SessionCatalog(
     if (db == globalTempViewManager.database) {
       val viewExists = globalTempViewManager.remove(table)
       if (!viewExists && !ignoreIfNotExists) {
-        throw new NoSuchTableException(globalTempViewManager.database, table)
+        throw AnalysisException.noSuchTable(globalTempViewManager.database, table)
       }
     } else {
       if (name.database.isDefined || !tempTables.contains(table)) {
@@ -623,7 +623,7 @@ class SessionCatalog(
         if (tableExists(TableIdentifier(table, Option(db)))) {
           externalCatalog.dropTable(db, table, ignoreIfNotExists = true, purge = purge)
         } else if (!ignoreIfNotExists) {
-          throw new NoSuchTableException(db = db, table = table)
+          throw AnalysisException.noSuchTable(db, table)
         }
       } else {
         tempTables.remove(table)
@@ -653,7 +653,7 @@ class SessionCatalog(
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
           SubqueryAlias(table, viewDef)
-        }.getOrElse(throw new NoSuchTableException(db, table))
+        }.getOrElse(throw AnalysisException.noSuchTable(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
         if (metadata.tableType == CatalogTableType.VIEW) {
@@ -993,7 +993,7 @@ class SessionCatalog(
     if (!functionExists(identifier)) {
       externalCatalog.createFunction(db, newFuncDefinition)
     } else if (!ignoreIfExists) {
-      throw new FunctionAlreadyExistsException(db = db, func = identifier.toString)
+      throw AnalysisException.functionAlreadyExists(db, identifier.toString)
     }
   }
 
@@ -1016,7 +1016,7 @@ class SessionCatalog(
       }
       externalCatalog.dropFunction(db, name.funcName)
     } else if (!ignoreIfNotExists) {
-      throw new NoSuchFunctionException(db = db, func = identifier.toString)
+      throw AnalysisException.noSuchFunction(db, identifier.toString)
     }
   }
 
@@ -1086,7 +1086,7 @@ class SessionCatalog(
    */
   def dropTempFunction(name: String, ignoreIfNotExists: Boolean): Unit = {
     if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
-      throw new NoSuchTempFunctionException(name)
+      throw AnalysisException.noSuchTempFunction(name)
     }
   }
 
@@ -1106,7 +1106,7 @@ class SessionCatalog(
   }
 
   protected def failFunctionLookup(name: String): Nothing = {
-    throw new NoSuchFunctionException(db = currentDb, func = name)
+    throw AnalysisException.noSuchFunction(currentDb, name)
   }
 
   /**
@@ -1175,7 +1175,6 @@ class SessionCatalog(
       externalCatalog.getFunction(currentDb, name.funcName)
     } catch {
       case e: AnalysisException => failFunctionLookup(name.funcName)
-      case e: NoSuchPermanentFunctionException => failFunctionLookup(name.funcName)
     }
     loadFunctionResources(catalogFunction.resources)
     // Please note that qualifiedName is provided by the user. However,

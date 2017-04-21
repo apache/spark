@@ -25,7 +25,6 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
@@ -1197,10 +1196,10 @@ class HiveDDLSuite
           s"CREATE INDEX $indexName ON TABLE $tabName (a) AS 'COMPACT' WITH DEFERRED REBUILD")
         val indexTabName =
           spark.sessionState.catalog.listTables("default", s"*$indexName*").head.table
-        intercept[TableAlreadyExistsException] {
+        intercept[AnalysisException] {
           sql(s"CREATE TABLE $indexTabName(b int)")
         }
-        intercept[TableAlreadyExistsException] {
+        intercept[AnalysisException] {
           sql(s"ALTER TABLE $tabName RENAME TO $indexTabName")
         }
 
@@ -1346,7 +1345,7 @@ class HiveDDLSuite
       assert(spark.table("partTable").count() == data.count())
 
       // throw exception if no partition is matched for the given non-partial partition spec.
-      intercept[NoSuchPartitionException] {
+      intercept[AnalysisException] {
         sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
       }
 

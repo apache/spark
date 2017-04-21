@@ -21,9 +21,9 @@ import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -119,7 +119,7 @@ case class DescribeFunctionCommand(
             "When `expr1` = `expr2`, returns `expr3`; " +
             "when `expr1` = `expr4`, return `expr5`; else return `expr6`.") :: Nil
       case _ =>
-        try {
+        if (sparkSession.sessionState.catalog.functionExists(functionName)) {
           val info = sparkSession.sessionState.catalog.lookupFunctionInfo(functionName)
           val name = if (info.getDb != null) info.getDb + "." + info.getName else info.getName
           val result =
@@ -133,8 +133,8 @@ case class DescribeFunctionCommand(
           } else {
             result
           }
-        } catch {
-          case _: NoSuchFunctionException => Seq(Row(s"Function: $functionName not found."))
+        } else {
+          Seq(Row(s"Function: $functionName not found."))
         }
     }
   }

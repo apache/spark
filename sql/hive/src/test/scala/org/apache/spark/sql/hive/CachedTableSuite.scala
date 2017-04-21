@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
@@ -103,11 +102,11 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("uncache of nonexistant tables") {
     // make sure table doesn't exist
-    intercept[NoSuchTableException](spark.table("nonexistantTable"))
-    intercept[NoSuchTableException] {
+    intercept[AnalysisException](spark.table("nonexistantTable"))
+    intercept[AnalysisException] {
       spark.catalog.uncacheTable("nonexistantTable")
     }
-    intercept[NoSuchTableException] {
+    intercept[AnalysisException] {
       sql("UNCACHE TABLE nonexistantTable")
     }
     sql("UNCACHE TABLE IF EXISTS nonexistantTable")

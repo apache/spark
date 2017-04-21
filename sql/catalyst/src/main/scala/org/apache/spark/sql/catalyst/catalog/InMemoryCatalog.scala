@@ -68,7 +68,7 @@ class InMemoryCatalog(
 
   private def requireTableNotExists(db: String, table: String): Unit = {
     if (tableExists(db, table)) {
-      throw new TableAlreadyExistsException(db = db, table = table)
+      throw AnalysisException.tableAlreadyExists(db, table)
     }
   }
 
@@ -76,9 +76,9 @@ class InMemoryCatalog(
       db: String,
       table: String,
       specs: Seq[TablePartitionSpec]): Unit = {
-    specs.foreach { s =>
-      if (!partitionExists(db, table, s)) {
-        throw new NoSuchPartitionException(db = db, table = table, spec = s)
+    specs.foreach { spec =>
+      if (!partitionExists(db, table, spec)) {
+        throw AnalysisException.noSuchPartition(db, table, spec)
       }
     }
   }
@@ -87,9 +87,9 @@ class InMemoryCatalog(
       db: String,
       table: String,
       specs: Seq[TablePartitionSpec]): Unit = {
-    specs.foreach { s =>
-      if (partitionExists(db, table, s)) {
-        throw new PartitionAlreadyExistsException(db = db, table = table, spec = s)
+    specs.foreach { spec =>
+      if (partitionExists(db, table, spec)) {
+        throw AnalysisException.partitionAlreadyExists(db, table, spec)
       }
     }
   }
@@ -103,7 +103,7 @@ class InMemoryCatalog(
       ignoreIfExists: Boolean): Unit = synchronized {
     if (catalog.contains(dbDefinition.name)) {
       if (!ignoreIfExists) {
-        throw new DatabaseAlreadyExistsException(dbDefinition.name)
+        throw AnalysisException.databaseAlreadyExists(dbDefinition.name)
       }
     } else {
       try {
@@ -147,7 +147,7 @@ class InMemoryCatalog(
       catalog.remove(db)
     } else {
       if (!ignoreIfNotExists) {
-        throw new NoSuchDatabaseException(db)
+        throw AnalysisException.noSuchDatabase(db)
       }
     }
   }
@@ -189,7 +189,7 @@ class InMemoryCatalog(
     val table = tableDefinition.identifier.table
     if (tableExists(db, table)) {
       if (!ignoreIfExists) {
-        throw new TableAlreadyExistsException(db = db, table = table)
+        throw AnalysisException.tableAlreadyExists(db, table)
       }
     } else {
       // Set the default table location if this is a managed table and its location is not
@@ -259,7 +259,7 @@ class InMemoryCatalog(
       catalog(db).tables.remove(table)
     } else {
       if (!ignoreIfNotExists) {
-        throw new NoSuchTableException(db = db, table = table)
+        throw AnalysisException.noSuchTable(db, table)
       }
     }
   }
@@ -374,7 +374,7 @@ class InMemoryCatalog(
     if (!ignoreIfExists) {
       val dupSpecs = parts.collect { case p if existingParts.contains(p.spec) => p.spec }
       if (dupSpecs.nonEmpty) {
-        throw new PartitionsAlreadyExistException(db = db, table = table, specs = dupSpecs)
+        throw AnalysisException.partitionsAlreadyExists(db, table, dupSpecs)
       }
     }
 
@@ -415,7 +415,7 @@ class InMemoryCatalog(
     if (!ignoreIfNotExists) {
       val missingSpecs = partSpecs.collect { case s if !existingParts.contains(s) => s }
       if (missingSpecs.nonEmpty) {
-        throw new NoSuchPartitionsException(db = db, table = table, specs = missingSpecs)
+        throw AnalysisException.noSuchPartitions(db, table, missingSpecs)
       }
     }
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * @since 1.3.0
  */
 @InterfaceStability.Stable
-class AnalysisException protected[sql] (
+class AnalysisException(
     val message: String,
     val line: Option[Int] = None,
     val startPosition: Option[Int] = None,
@@ -53,5 +54,115 @@ class AnalysisException protected[sql] (
     val lineAnnotation = line.map(l => s" line $l").getOrElse("")
     val positionAnnotation = startPosition.map(p => s" pos $p").getOrElse("")
     s"$message;$lineAnnotation$positionAnnotation"
+  }
+}
+
+object AnalysisException {
+  /**
+   * Create a no such database analysis exception.
+   */
+  def noSuchDatabase(db: String): AnalysisException = {
+    new AnalysisException(s"Database '$db' not found")
+  }
+
+  /**
+   * Create a database already exists analysis exception.
+   */
+  def databaseAlreadyExists(db: String): AnalysisException = {
+    new AnalysisException(s"Database '$db' already exists")
+  }
+
+  /**
+   * Create a no such table analysis exception.
+   */
+  def noSuchTable(db: String, table: String): AnalysisException = {
+    new AnalysisException(s"Table or view '$table' not found in database '$db'")
+  }
+
+  /**
+   * Create a table already exists analysis exception.
+   */
+  def tableAlreadyExists(db: String, table: String): AnalysisException = {
+    new AnalysisException(s"Table or view '$table' already exists in database '$db'")
+  }
+
+  /**
+   * Create a temporary table already exists analysis exception.
+   */
+  def tempTableAlreadyExists(table: String): AnalysisException = {
+    new AnalysisException(s"Temporary table '$table' already exists")
+  }
+
+  /**
+   * Create a no such partition analysis exception.
+   */
+  def noSuchPartition(db: String, table: String, spec: TablePartitionSpec): AnalysisException = {
+    new AnalysisException(
+      s"Partition not found in table '$table' database '$db':\n" + spec.mkString("\n"))
+  }
+
+  /**
+   * Create a partition already exists analysis exception.
+   */
+  def partitionAlreadyExists(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec): AnalysisException = {
+    new AnalysisException(
+      s"Partition already exists in table '$table' database '$db':\n" + spec.mkString("\n"))
+  }
+
+  /**
+   * Create a no such partitions analysis exception.
+   */
+  def noSuchPartitions(
+      db: String,
+      table: String,
+      specs: Seq[TablePartitionSpec]): AnalysisException = {
+    new AnalysisException(
+      s"The following partitions not found in table '$table' database '$db':\n"
+        + specs.mkString("\n===\n"))
+  }
+
+  /**
+   * Create a partitions already exists analysis exception.
+   */
+  def partitionsAlreadyExists(
+      db: String,
+      table: String,
+      specs: Seq[TablePartitionSpec]): AnalysisException = {
+    new AnalysisException(
+      s"The following partitions already exists in table '$table' database '$db':\n"
+        + specs.mkString("\n===\n"))
+  }
+
+  /**
+   * Create a no such function exception.
+   */
+  def noSuchFunction(db: String, func: String): AnalysisException = {
+    new AnalysisException(
+      s"Undefined function: '$func'. This function is neither a registered temporary " +
+        s"function nor a permanent function registered in the database '$db'.")
+  }
+
+  /**
+   * Create a function already exists analysis exception.
+   */
+  def functionAlreadyExists(db: String, func: String): AnalysisException = {
+    new AnalysisException(s"Function '$func' already exists in database '$db'")
+  }
+
+  /**
+   * Create a no such permanent function exception.
+   */
+  def noSuchPermanentFunction(db: String, func: String): AnalysisException = {
+    new AnalysisException(s"Function '$func' not found in database '$db'")
+  }
+
+  /**
+   * Create a no such temporary function exception.
+   */
+  def noSuchTempFunction(func: String): AnalysisException = {
+    new AnalysisException(s"Temporary function '$func' not found")
   }
 }

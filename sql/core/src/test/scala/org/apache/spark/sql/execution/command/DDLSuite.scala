@@ -26,7 +26,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
@@ -702,7 +702,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           Row("1997", "Ford") :: Nil)
 
         // Fails if creating a new view with the same name
-        intercept[TempTableAlreadyExistsException] {
+        intercept[AnalysisException] {
           sql(
             s"""
                |CREATE TEMPORARY VIEW testview
@@ -793,10 +793,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       spark.range(10).createOrReplaceTempView("tab1")
       sql("ALTER TABLE tab1 RENAME TO tab2")
       checkAnswer(spark.table("tab2"), spark.range(10).toDF())
-      intercept[NoSuchTableException] { spark.table("tab1") }
+      intercept[AnalysisException] { spark.table("tab1") }
       sql("ALTER VIEW tab2 RENAME TO tab1")
       checkAnswer(spark.table("tab1"), spark.range(10).toDF())
-      intercept[NoSuchTableException] { spark.table("tab2") }
+      intercept[AnalysisException] { spark.table("tab2") }
     }
   }
 
@@ -1435,12 +1435,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       Set(Map("a" -> "10", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
 
     // table to alter does not exist
-    intercept[NoSuchTableException] {
+    intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist PARTITION (c='3') RENAME TO PARTITION (c='333')")
     }
 
     // partition to rename does not exist
-    intercept[NoSuchPartitionException] {
+    intercept[AnalysisException] {
       sql("ALTER TABLE tab1 PARTITION (a='not_found', b='1') RENAME TO PARTITION (a='1', b='2')")
     }
 
@@ -1679,7 +1679,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(spark.table("partTable").count() == data.count())
 
       // throw exception if no partition is matched for the given non-partial partition spec.
-      intercept[NoSuchPartitionException] {
+      intercept[AnalysisException] {
         sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
       }
 
@@ -1717,7 +1717,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   test("block creating duplicate temp table") {
     withView("t_temp") {
       sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
-      val e = intercept[TempTableAlreadyExistsException] {
+      val e = intercept[AnalysisException] {
         sql("CREATE TEMPORARY TABLE t_temp (c3 int, c4 string) USING JSON")
       }.getMessage
       assert(e.contains("Temporary table 't_temp' already exists"))
@@ -1732,7 +1732,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
         sql(s"CREATE TABLE my_ext_tab using parquet LOCATION '${tempDir.toURI}'")
         sql(s"CREATE VIEW my_view AS SELECT 1")
-        intercept[NoSuchTableException] {
+        intercept[AnalysisException] {
           sql("TRUNCATE TABLE my_temp_tab")
         }
         assertUnsupported("TRUNCATE TABLE my_ext_tab")

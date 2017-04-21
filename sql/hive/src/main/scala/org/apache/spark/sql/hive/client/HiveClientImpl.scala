@@ -41,7 +41,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -312,7 +311,7 @@ private[hive] class HiveClientImpl(
     if (databaseExists(databaseName)) {
       state.setCurrentDatabase(databaseName)
     } else {
-      throw new NoSuchDatabaseException(databaseName)
+      throw AnalysisException.noSuchDatabase(databaseName)
     }
   }
 
@@ -352,7 +351,7 @@ private[hive] class HiveClientImpl(
         description = d.getDescription,
         locationUri = CatalogUtils.stringToURI(d.getLocationUri),
         properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
-    }.getOrElse(throw new NoSuchDatabaseException(dbName))
+    }.getOrElse(throw AnalysisException.noSuchDatabase(dbName))
   }
 
   override def databaseExists(dbName: String): Boolean = withHiveState {
@@ -529,7 +528,7 @@ private[hive] class HiveClientImpl(
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
       val hivePart = getPartitionOption(catalogTable, oldSpec)
         .map { p => toHivePartition(p.copy(spec = newSpec), hiveTable) }
-        .getOrElse { throw new NoSuchPartitionException(db, table, oldSpec) }
+        .getOrElse { throw AnalysisException.noSuchPartition(db, table, oldSpec) }
       client.renamePartition(hiveTable, oldSpec.asJava, hivePart)
     }
   }

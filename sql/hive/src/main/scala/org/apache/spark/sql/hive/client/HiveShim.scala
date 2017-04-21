@@ -41,7 +41,6 @@ import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
@@ -422,15 +421,15 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   }
 
   def dropFunction(hive: Hive, db: String, name: String): Unit = {
-    throw new NoSuchPermanentFunctionException(db, name)
+    throw AnalysisException.noSuchPermanentFunction(db, name)
   }
 
   def renameFunction(hive: Hive, db: String, oldName: String, newName: String): Unit = {
-    throw new NoSuchPermanentFunctionException(db, oldName)
+    throw AnalysisException.noSuchPermanentFunction(db, oldName)
   }
 
   def alterFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
-    throw new NoSuchPermanentFunctionException(db, func.identifier.funcName)
+    throw AnalysisException.noSuchPermanentFunction(db, func.identifier.funcName)
   }
 
   def getFunctionOption(hive: Hive, db: String, name: String): Option[CatalogFunction] = {
@@ -529,7 +528,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
   override def renameFunction(hive: Hive, db: String, oldName: String, newName: String): Unit = {
     val catalogFunc = getFunctionOption(hive, db, oldName)
-      .getOrElse(throw new NoSuchPermanentFunctionException(db, oldName))
+      .getOrElse(throw AnalysisException.noSuchPermanentFunction(db, oldName))
       .copy(identifier = FunctionIdentifier(newName, Some(db)))
     val hiveFunc = toHiveFunction(catalogFunc, db)
     hive.alterFunction(db, oldName, hiveFunc)
