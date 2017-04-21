@@ -19,10 +19,9 @@ package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.security.Credentials
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
 import org.scalatest.{BeforeAndAfter, Matchers}
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
@@ -43,10 +42,11 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     credentialManager.getServiceCredentialProvider("hadoopfs") should not be (None)
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
     credentialManager.getServiceCredentialProvider("hive") should not be (None)
+    credentialManager.getServiceCredentialProvider("bogus") should be (None)
   }
 
   test("disable hive credential provider") {
-    sparkConf.set("spark.yarn.security.credentials.hive.enabled", "false")
+    sparkConf.set("spark.security.credentials.hive.enabled", "false")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
 
     credentialManager.getServiceCredentialProvider("hadoopfs") should not be (None)
@@ -56,7 +56,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
   test("using deprecated configurations") {
     sparkConf.set("spark.yarn.security.tokens.hadoopfs.enabled", "false")
-    sparkConf.set("spark.yarn.security.tokens.hive.enabled", "false")
+    sparkConf.set("spark.yarn.security.credentials.hive.enabled", "false")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
 
     credentialManager.getServiceCredentialProvider("hadoopfs") should be (None)
@@ -75,6 +75,14 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     val tokens = creds.getAllTokens
     tokens.size() should be (1)
     tokens.iterator().next().getService should be (new Text("test"))
+  }
+
+  test("verify obtaining user credentials") {
+    credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
+
+    val initNumTokens = UserGroupInformation.getCurrentUser.getCredentials.numberOfTokens
+    val creds = credentialManager.obtainUserCredentials
+    creds.numberOfTokens() should be (initNumTokens + 1)
   }
 
   test("verify getting credential renewal info") {

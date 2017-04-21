@@ -98,7 +98,7 @@ private[spark] class ConfigurableCredentialManager(
       .getOrElse(isEnabledDeprecated)
   }
 
-  protected def loadCredentialProviders: List[ServiceCredentialProvider] = {
+  private def loadCredentialProviders: List[ServiceCredentialProvider] = {
     ServiceLoader.load(classOf[ServiceCredentialProvider], Utils.getContextOrSparkClassLoader)
       .asScala.toList
   }
