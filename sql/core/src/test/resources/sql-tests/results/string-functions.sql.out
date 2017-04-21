@@ -23,6 +23,6 @@ requirement failed: format_string() should take at least 1 argument; line 1 pos 
 -- !query 2
 select 'a' || 'b' || 'c'
 -- !query 2 schema
-struct<concat(a, concat(b, c)):string>
+struct<concat(a, b, c):string>
 -- !query 2 output
 abc

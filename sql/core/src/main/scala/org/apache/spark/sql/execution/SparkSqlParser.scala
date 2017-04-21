@@ -1483,16 +1483,4 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       query: LogicalPlan): LogicalPlan = {
     RepartitionByExpression(expressions, query, conf.numShufflePartitions)
   }
-
-  /**
-   * Create a [[Concat]] expression for pipeline concatenation.
-   */
-  override def visitConcat(ctx: ConcatContext): Expression = {
-    if (ctx.primaryExpression().size > 1) {
-      val exprs = ctx.primaryExpression().asScala
-      Concat(exprs.map(expression))
-    } else {
-      expression(ctx.primaryExpression(0))
-    }
-  }
 }
