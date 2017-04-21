@@ -217,9 +217,8 @@ of the most common options to set are:
   <td><code>spark.driver.supervise</code></td>
   <td>false</td>
   <td>
-    If value set true, restarts the driver on failure, make sure that
-    the driver is automatically restarted if it fails with non-zero exit code.
-    Only in Spark standalone or Mesos with cluster deploy mode.
+    If true, restarts the driver automatically if it fails with a non-zero exit status.
+    Only has effect in Spark standalone mode or Mesos cluster deploy mode.
   </td>
 </tr>
 </table>
