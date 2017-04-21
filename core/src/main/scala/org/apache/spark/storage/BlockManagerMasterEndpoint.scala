@@ -497,18 +497,17 @@ private[spark] class BlockManagerInfo(
 
     updateLastSeenMs()
 
-    var blockExists = false
+    val blockExists = _blocks.containsKey(blockId)
     var originalMemSize: Long = 0
     var originalDiskSize: Long = 0
     var originalLevel: StorageLevel = StorageLevel.NONE
 
-    if (_blocks.containsKey(blockId)) {
+    if (blockExists) {
       // The block exists on the slave already.
       val blockStatus: BlockStatus = _blocks.get(blockId)
       originalLevel = blockStatus.storageLevel
       originalMemSize = blockStatus.memSize
       originalDiskSize = blockStatus.diskSize
-      blockExists = true
 
       if (originalLevel.useMemory) {
         _remainingMem += originalMemSize
@@ -534,7 +533,8 @@ private[spark] class BlockManagerInfo(
             s" free: ${Utils.bytesToString(_remainingMem)})")
         } else {
           logInfo(s"Added $blockId in memory on ${blockManagerId.hostPort}" +
-            s" (size: ${Utils.bytesToString(memSize)}, free: ${Utils.bytesToString(_remainingMem)})")
+            s" (size: ${Utils.bytesToString(memSize)}," +
+            s" free: ${Utils.bytesToString(_remainingMem)})")
         }
       }
       if (storageLevel.useDisk) {
@@ -558,7 +558,8 @@ private[spark] class BlockManagerInfo(
       _cachedBlocks -= blockId
       if (originalLevel.useMemory) {
         logInfo(s"Removed $blockId on ${blockManagerId.hostPort} in memory" +
-          s" (size: ${Utils.bytesToString(originalMemSize)}, free: ${Utils.bytesToString(_remainingMem)})")
+          s" (size: ${Utils.bytesToString(originalMemSize)}," +
+          s" free: ${Utils.bytesToString(_remainingMem)})")
       }
       if (originalLevel.useDisk) {
         logInfo(s"Removed $blockId on ${blockManagerId.hostPort} on disk" +
