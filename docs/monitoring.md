@@ -27,8 +27,8 @@ in the UI to persisted storage.
 
 ## Viewing After the Fact
 
-If Spark is run on Mesos or YARN, it is still possible to construct the UI of an
-application through Spark's history server, provided that the application's event logs exist.
+It is still possible to construct the UI of an application through Spark's history server, 
+provided that the application's event logs exist.
 You can start the history server by executing:
 
     ./sbin/start-history-server.sh
