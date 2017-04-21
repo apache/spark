@@ -3705,3 +3705,43 @@ setMethod("create_map",
             jc <- callJStatic("org.apache.spark.sql.functions", "map", jcols)
             column(jc)
           })
+
+#' collect_list
+#'
+#' Creates a list of objects with duplicates.
+#'
+#' @param x Column to compute on
+#'
+#' @rdname collect_list
+#' @name collect_list
+#' @family agg_funcs
+#' @aliases collect_list,Column-method
+#' @export
+#' @examples \dontrun{collect_list(df$x)}
+#' @note collect_list since 2.3.0
+setMethod("collect_list",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "collect_list", x@jc)
+            column(jc)
+          })
+
+#' collect_set
+#'
+#' Creates a list of objects with duplicate elements eliminated.
+#'
+#' @param x Column to compute on
+#'
+#' @rdname collect_set
+#' @name collect_set
+#' @family agg_funcs
+#' @aliases collect_set,Column-method
+#' @export
+#' @examples \dontrun{collect_set(df$x)}
+#' @note collect_set since 2.3.0
+setMethod("collect_set",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "collect_set", x@jc)
+            column(jc)
+          })

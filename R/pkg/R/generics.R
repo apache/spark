@@ -918,6 +918,14 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 #' @export
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
+#' @rdname collect_list
+#' @export
+setGeneric("collect_list", function(x) { standardGeneric("collect_list") })
+
+#' @rdname collect_set
+#' @export
+setGeneric("collect_set", function(x) { standardGeneric("collect_set") })
+
 #' @rdname column
 #' @export
 setGeneric("column", function(x) { standardGeneric("column") })
@@ -1357,6 +1365,7 @@ setGeneric("window", function(x, ...) { standardGeneric("window") })
 #' @rdname year
 #' @export
 setGeneric("year", function(x) { standardGeneric("year") })
+
 
 ###################### Spark.ML Methods ##########################
 
