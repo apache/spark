@@ -16,21 +16,50 @@
  */
 package org.apache.spark.deploy.rest.kubernetes.v2
 
+import java.io.FileInputStream
+import java.security.{KeyStore, SecureRandom}
+import javax.net.ssl.{SSLContext, TrustManagerFactory, X509TrustManager}
+
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.jackson.JacksonConverterFactory
 import retrofit2.converter.scalars.ScalarsConverterFactory
 
+import org.apache.spark.SSLOptions
+import org.apache.spark.util.Utils
+
 private[spark] object RetrofitUtils {
 
   private val OBJECT_MAPPER = new ObjectMapper().registerModule(new DefaultScalaModule)
+  private val SECURE_RANDOM = new SecureRandom()
 
-  def createRetrofitClient[T](baseUrl: String, serviceType: Class[T]): T = {
+  def createRetrofitClient[T](baseUrl: String, serviceType: Class[T], sslOptions: SSLOptions): T = {
+    val okHttpClientBuilder = new OkHttpClient.Builder()
+    sslOptions.trustStore.foreach { trustStoreFile =>
+      require(trustStoreFile.isFile, s"TrustStore provided at ${trustStoreFile.getAbsolutePath}"
+        + " does not exist, or is not a file.")
+      val trustStoreType = sslOptions.trustStoreType.getOrElse(KeyStore.getDefaultType)
+      val trustStore = KeyStore.getInstance(trustStoreType)
+      val trustStorePassword = sslOptions.trustStorePassword.map(_.toCharArray).orNull
+      Utils.tryWithResource(new FileInputStream(trustStoreFile)) {
+        trustStore.load(_, trustStorePassword)
+      }
+      val trustManagerFactory = TrustManagerFactory.getInstance(
+        TrustManagerFactory.getDefaultAlgorithm)
+      trustManagerFactory.init(trustStore)
+      val trustManagers = trustManagerFactory.getTrustManagers
+      val sslContext = SSLContext.getInstance("TLSv1.2")
+      sslContext.init(null, trustManagers, SECURE_RANDOM)
+      okHttpClientBuilder.sslSocketFactory(sslContext.getSocketFactory,
+        trustManagers(0).asInstanceOf[X509TrustManager])
+    }
     new Retrofit.Builder()
       .baseUrl(baseUrl)
       .addConverterFactory(ScalarsConverterFactory.create())
       .addConverterFactory(JacksonConverterFactory.create(OBJECT_MAPPER))
+      .client(okHttpClientBuilder.build())
       .build()
       .create(serviceType)
   }

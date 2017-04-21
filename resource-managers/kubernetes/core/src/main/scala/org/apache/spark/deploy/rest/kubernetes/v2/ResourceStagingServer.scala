@@ -16,19 +16,32 @@
  */
 package org.apache.spark.deploy.rest.kubernetes.v2
 
+import java.io.{File, FileInputStream}
+import java.util.Properties
+
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.eclipse.jetty.server.{Server, ServerConnector}
+import com.google.common.collect.Maps
+import org.eclipse.jetty.http.HttpVersion
+import org.eclipse.jetty.server.{HttpConfiguration, HttpConnectionFactory, Server, ServerConnector, SslConnectionFactory}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
-import org.eclipse.jetty.util.thread.QueuedThreadPool
+import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
 import org.glassfish.jersey.media.multipart.MultiPartFeature
 import org.glassfish.jersey.server.ResourceConfig
 import org.glassfish.jersey.servlet.ServletContainer
+import scala.collection.JavaConverters._
+
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.kubernetes.config._
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{ConfigReader, SparkConfigProvider}
+import org.apache.spark.util.Utils
 
 private[spark] class ResourceStagingServer(
     port: Int,
-    serviceInstance: ResourceStagingService) {
+    serviceInstance: ResourceStagingService,
+    sslOptionsProvider: ResourceStagingServerSslOptionsProvider) extends Logging {
 
   private var jettyServer: Option[Server] = None
 
@@ -45,17 +58,72 @@ private[spark] class ResourceStagingServer(
     contextHandler.setContextPath("/api/")
     contextHandler.addServlet(servletHolder, "/*")
     threadPool.setDaemon(true)
+    val resolvedConnectionFactories = sslOptionsProvider.getSslOptions
+      .createJettySslContextFactory()
+      .map(sslFactory => {
+        val sslConnectionFactory = new SslConnectionFactory(
+          sslFactory, HttpVersion.HTTP_1_1.asString())
+        val rawHttpConfiguration = new HttpConfiguration()
+        rawHttpConfiguration.setSecureScheme("https")
+        rawHttpConfiguration.setSecurePort(port)
+        val rawHttpConnectionFactory = new HttpConnectionFactory(rawHttpConfiguration)
+        Array(sslConnectionFactory, rawHttpConnectionFactory)
+      }).getOrElse(Array(new HttpConnectionFactory()))
     val server = new Server(threadPool)
-    val connector = new ServerConnector(server)
+    val connector = new ServerConnector(
+      server,
+      null,
+      // Call this full constructor to set this, which forces daemon threads:
+      new ScheduledExecutorScheduler("DependencyServer-Executor", true),
+      null,
+      -1,
+      -1,
+      resolvedConnectionFactories: _*)
     connector.setPort(port)
     server.addConnector(connector)
     server.setHandler(contextHandler)
     server.start()
     jettyServer = Some(server)
+    logInfo(s"Resource staging server started on port $port.")
   }
+
+  def join(): Unit = jettyServer.foreach(_.join())
 
   def stop(): Unit = synchronized {
     jettyServer.foreach(_.stop())
     jettyServer = None
+  }
+}
+
+object ResourceStagingServer {
+  def main(args: Array[String]): Unit = {
+    val sparkConf = new SparkConf(true)
+    if (args.nonEmpty) {
+      val propertiesFile = new File(args(0))
+      if (!propertiesFile.isFile) {
+        throw new IllegalArgumentException(s"Server properties file given at" +
+          s" ${propertiesFile.getAbsoluteFile} does not exist or is not a file.")
+      }
+      val properties = new Properties
+      Utils.tryWithResource(new FileInputStream(propertiesFile))(properties.load)
+      val propertiesMap = Maps.fromProperties(properties)
+      val configReader = new ConfigReader(new SparkConfigProvider(propertiesMap))
+      propertiesMap.asScala.keys.foreach { key =>
+        configReader.get(key).foreach(sparkConf.set(key, _))
+      }
+    }
+    val dependenciesRootDir = Utils.createTempDir(namePrefix = "local-application-dependencies")
+    val serviceInstance = new ResourceStagingServiceImpl(dependenciesRootDir)
+    val sslOptionsProvider = new ResourceStagingServerSslOptionsProviderImpl(sparkConf)
+    val server = new ResourceStagingServer(
+      port = sparkConf.get(RESOURCE_STAGING_SERVER_PORT),
+      serviceInstance = serviceInstance,
+      sslOptionsProvider = sslOptionsProvider)
+    server.start()
+    try {
+      server.join()
+    } finally {
+      server.stop()
+    }
   }
 }
