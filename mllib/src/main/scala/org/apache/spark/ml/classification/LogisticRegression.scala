@@ -531,6 +531,10 @@ class LogisticRegression @Since("1.2.0") (
         val numCoeffs = numFeaturesPlusIntercept * numCoefficientSets
         val lowerBound = new Array[Double](numCoeffs)
         val upperBound = new Array[Double](numCoeffs)
+        val isSetLowerBoundOfCoefficients = isSet(lowerBoundOfCoefficients)
+        val isSetUpperBoundOfCoefficients = isSet(upperBoundOfCoefficients)
+        val isSetLowerBoundOfIntercept = isSet(lowerBoundOfIntercept)
+        val isSetUpperBoundOfIntercept = isSet(upperBoundOfIntercept)
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           // Check params interaction is valid if fitting under bound constrained optimization.
@@ -540,13 +544,21 @@ class LogisticRegression @Since("1.2.0") (
               val coefficientSetIndex = i % numCoefficientSets
               val featureIndex = i / numCoefficientSets
               if (featureIndex < numFeatures) {
-                lowerBound(i) = $(lowerBoundOfCoefficients)(
-                  coefficientSetIndex, featureIndex) * featuresStd(featureIndex)
-                upperBound(i) = $(upperBoundOfCoefficients)(
-                  coefficientSetIndex, featureIndex) * featuresStd(featureIndex)
+                if (isSetLowerBoundOfCoefficients) {
+                  lowerBound(i) = $(lowerBoundOfCoefficients)(
+                    coefficientSetIndex, featureIndex) * featuresStd(featureIndex)
+                }
+                if (isSetUpperBoundOfCoefficients) {
+                  upperBound(i) = $(upperBoundOfCoefficients)(
+                    coefficientSetIndex, featureIndex) * featuresStd(featureIndex)
+                }
               } else {
-                lowerBound(i) = $(lowerBoundOfIntercept)(coefficientSetIndex)
-                upperBound(i) = $(upperBoundOfIntercept)(coefficientSetIndex)
+                if (isSetLowerBoundOfIntercept) {
+                  lowerBound(i) = $(lowerBoundOfIntercept)(coefficientSetIndex)
+                }
+                if (isSetUpperBoundOfIntercept) {
+                  upperBound(i) = $(upperBoundOfIntercept)(coefficientSetIndex)
+                }
               }
               i += 1
             }
