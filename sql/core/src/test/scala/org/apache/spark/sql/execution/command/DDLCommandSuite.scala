@@ -530,13 +530,13 @@ class DDLCommandSuite extends PlanTest {
       """.stripMargin
     val sql4 =
       """
-       |ALTER TABLE table_name PARTITION (test, dt='2008-08-08',
+       |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08',
        |country='us') SET SERDE 'org.apache.class' WITH SERDEPROPERTIES ('columns'='foo,bar',
        |'field.delim' = ',')
       """.stripMargin
     val sql5 =
       """
-       |ALTER TABLE table_name PARTITION (test, dt='2008-08-08',
+       |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08',
        |country='us') SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
       """.stripMargin
     val parsed1 = parser.parsePlan(sql1)
@@ -558,12 +558,12 @@ class DDLCommandSuite extends PlanTest {
       tableIdent,
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> null, "dt" -> "2008-08-08", "country" -> "us")))
+      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
     val expected5 = AlterTableSerDePropertiesCommand(
       tableIdent,
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> null, "dt" -> "2008-08-08", "country" -> "us")))
+      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
@@ -837,7 +837,7 @@ class DDLCommandSuite extends PlanTest {
       parser.parsePlan(
         "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
     }.getMessage
-    assert(e.contains("Found empty key 'b'"))
+    assert(e.contains("Found an empty partition key 'b'"))
   }
 
   test("drop table") {

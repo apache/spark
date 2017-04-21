@@ -214,9 +214,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a partition specification map without optional values.
    */
   protected def visitNonOptionalPartitionSpec(
-    ctx: PartitionSpecContext): Map[String, String] = withOrigin(ctx) {
+      ctx: PartitionSpecContext): Map[String, String] = withOrigin(ctx) {
     visitPartitionSpec(ctx).map {
-      case (key, None) => throw new ParseException(s"Found empty key '$key'.", ctx)
+      case (key, None) => throw new ParseException(s"Found an empty partition key '$key'.", ctx)
       case (key, Some(value)) => key -> value
     }
   }
