@@ -90,6 +90,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       originalDataFrame: DataFrame): Unit = {
     // This test verifies parts of the plan. Disable whole stage codegen.
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val strategy = DataSourceStrategy(spark.sessionState.conf)
       val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
       val BucketSpec(numBuckets, bucketColumnNames, _) = bucketSpec
       // Limit: bucket pruning only works when the bucket column has one and only one column
@@ -98,7 +99,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       val bucketColumn = bucketedDataFrame.schema.toAttributes(bucketColumnIndex)
       val matchedBuckets = new BitSet(numBuckets)
       bucketValues.foreach { value =>
-        matchedBuckets.set(DataSourceStrategy.getBucketId(bucketColumn, numBuckets, value))
+        matchedBuckets.set(strategy.getBucketId(bucketColumn, numBuckets, value))
       }
 
       // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
