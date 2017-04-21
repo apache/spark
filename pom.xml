@@ -137,6 +137,7 @@
     <parquet.version>1.8.1</parquet.version>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <feign.version>8.18.0</feign.version>
+    <retrofit.version>2.2.0</retrofit.version>
     <bouncycastle.version>1.54</bouncycastle.version>
     <jetty.version>9.2.16.v20160414</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
@@ -326,6 +327,21 @@
         <groupId>com.netflix.feign</groupId>
         <artifactId>feign-jaxrs</artifactId>
         <version>${feign.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.retrofit2</groupId>
+        <artifactId>retrofit</artifactId>
+        <version>${retrofit.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.retrofit2</groupId>
+        <artifactId>converter-jackson</artifactId>
+        <version>${retrofit.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.retrofit2</groupId>
+        <artifactId>converter-scalars</artifactId>
+        <version>${retrofit.version}</version>
       </dependency>
       <dependency>
         <groupId>org.bouncycastle</groupId>
@@ -684,6 +700,11 @@
       <dependency>
         <groupId>org.glassfish.jersey</groupId>
         <artifactId>jersey-client</artifactId>
+        <version>${jersey.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jersey.media</groupId>
+        <artifactId>jersey-media-multipart</artifactId>
         <version>${jersey.version}</version>
       </dependency>
       <dependency>
