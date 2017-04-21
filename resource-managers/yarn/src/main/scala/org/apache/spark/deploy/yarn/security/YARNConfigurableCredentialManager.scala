@@ -22,6 +22,7 @@ import java.util.ServiceLoader
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.security.ConfigurableCredentialManager
@@ -32,20 +33,45 @@ import org.apache.spark.util.Utils
  * deprecated [[org.apache.spark.deploy.yarn.security.ServiceCredentialProvider]].
  */
 private[yarn] class YARNConfigurableCredentialManager(
-  sparkConf: SparkConf,
-  hadoopConf: Configuration)
-  extends ConfigurableCredentialManager(sparkConf, hadoopConf) {
+    sparkConf: SparkConf,
+    hadoopConf: Configuration)
+    extends ConfigurableCredentialManager(
+      sparkConf,
+      hadoopConf,
+      new YARNHadoopAccessManager(hadoopConf, sparkConf)) {
 
-  override def loadCredentialProviders:
-    List[org.apache.spark.deploy.security.ServiceCredentialProvider] = {
-    val superProviders = super.loadCredentialProviders
-    val yarnProviders = ServiceLoader.load(
+  private val deprecatedCredentialProviders = getDeprecatedCredentialProviders
+
+  def getDeprecatedCredentialProviders:
+    Map[String, org.apache.spark.deploy.yarn.security.ServiceCredentialProvider] = {
+    val deprecatedProviders = loadDeprecatedCredentialProviders
+
+    deprecatedProviders.
+      filter(p => isServiceEnabled(p.serviceName))
+      .map(p => (p.serviceName, p))
+      .toMap
+  }
+
+  def loadDeprecatedCredentialProviders:
+    List[org.apache.spark.deploy.yarn.security.ServiceCredentialProvider] = {
+    ServiceLoader.load(
       classOf[org.apache.spark.deploy.yarn.security.ServiceCredentialProvider],
       Utils.getContextOrSparkClassLoader)
       .asScala
       .toList
-
-    superProviders ++ yarnProviders
   }
 
+  override def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Long = {
+    val superInterval = super.obtainCredentials(hadoopConf, creds)
+
+    deprecatedCredentialProviders.values.flatMap { provider =>
+      if (provider.credentialsRequired(hadoopConf)) {
+        provider.obtainCredentials(hadoopConf, sparkConf, creds)
+      } else {
+        logDebug(s"Service ${provider.serviceName} does not require a token." +
+          s" Check your configuration to see if security is disabled or not.")
+        None
+      }
+    }.foldLeft(superInterval)(math.min)
+  }
 }

@@ -96,7 +96,10 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
     val hiveCredentialProvider = new HiveCredentialProvider()
     val credentials = new Credentials()
-    hiveCredentialProvider.obtainCredentials(hadoopConf, sparkConf, credentials)
+    hiveCredentialProvider.obtainCredentials(
+      hadoopConf,
+      new DefaultHadoopAccessManager(hadoopConf),
+      credentials)
 
     credentials.getAllTokens.size() should be (0)
   }
@@ -107,7 +110,10 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
     val hbaseTokenProvider = new HBaseCredentialProvider()
     val creds = new Credentials()
-    hbaseTokenProvider.obtainCredentials(hadoopConf, sparkConf, creds)
+    hbaseTokenProvider.obtainCredentials(
+      hadoopConf,
+      new DefaultHadoopAccessManager(hadoopConf),
+      creds)
 
     creds.getAllTokens.size should be (0)
   }
@@ -123,7 +129,7 @@ class TestCredentialProvider extends ServiceCredentialProvider {
 
   override def obtainCredentials(
       hadoopConf: Configuration,
-      sparkConf: SparkConf,
+      hadoopAccessManager: HadoopAccessManager,
       creds: Credentials): Option[Long] = {
     if (creds == null) {
       // Guard out other unit test failures.

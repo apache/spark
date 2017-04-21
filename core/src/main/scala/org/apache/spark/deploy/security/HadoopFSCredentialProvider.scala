@@ -20,11 +20,9 @@ package org.apache.spark.deploy.security
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
-import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 
 private[deploy] class HadoopFSCredentialProvider
@@ -38,12 +36,13 @@ private[deploy] class HadoopFSCredentialProvider
 
   override def obtainCredentials(
       hadoopConf: Configuration,
-      sparkConf: SparkConf,
+      hadoopAccessManager: HadoopAccessManager,
       creds: Credentials): Option[Long] = {
+
     // NameNode to access, used to get tokens from different FileSystems
     val tmpCreds = new Credentials()
-    val tokenRenewer = getTokenRenewer(hadoopConf)
-    hadoopFSsToAccess(hadoopConf, sparkConf).foreach { dst =>
+    val tokenRenewer = hadoopAccessManager.getTokenRenewer
+    hadoopAccessManager.hadoopFSsToAccess.foreach { dst =>
       val dstFs = dst.getFileSystem(hadoopConf)
       logInfo("getting token for: " + dst)
       dstFs.addDelegationTokens(tokenRenewer, tmpCreds)
@@ -51,7 +50,7 @@ private[deploy] class HadoopFSCredentialProvider
 
     // Get the token renewal interval if it is not set. It will only be called once.
     if (tokenRenewalInterval == null) {
-      tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, sparkConf)
+      tokenRenewalInterval = hadoopAccessManager.getTokenRenewalInterval
     }
 
     // Get the time of next renewal.
@@ -67,17 +66,5 @@ private[deploy] class HadoopFSCredentialProvider
 
     creds.addAll(tmpCreds)
     nextRenewalDate
-  }
-
-  protected def getTokenRenewalInterval(
-    hadoopConf: Configuration,
-    sparkConf: SparkConf): Option[Long] = None
-
-  protected def getTokenRenewer(hadoopConf: Configuration): String = {
-    UserGroupInformation.getCurrentUser.getShortUserName
-  }
-
-  protected def hadoopFSsToAccess(hadoopConf: Configuration, sparkConf: SparkConf): Set[Path] = {
-    Set(FileSystem.get(hadoopConf).getHomeDirectory)
   }
 }

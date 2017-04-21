@@ -59,9 +59,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(
     scheduler,
     sc.env.rpcEnv,
-    Option(new ConfigurableCredentialManager(
-      sc.conf,
-      SparkHadoopUtil.get.newConfiguration(sc.conf))))
+    Option(new ConfigurableCredentialManager(sc.conf)))
   with org.apache.mesos.Scheduler
   with MesosSchedulerUtils {
 

@@ -21,7 +21,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.{Matchers, PrivateMethodTester}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.deploy.yarn.security.YARNHadoopFSCredentialProvider
+import org.apache.spark.deploy.yarn.security.YARNHadoopAccessManager
 
 class YARNHadoopFSCredentialProviderSuite
     extends SparkFunSuite
@@ -30,17 +30,17 @@ class YARNHadoopFSCredentialProviderSuite
   private val _getTokenRenewer = PrivateMethod[String]('getTokenRenewer)
 
   private def getTokenRenewer(
-      fsCredentialProvider: YARNHadoopFSCredentialProvider, conf: Configuration): String = {
+      fsCredentialProvider: YARNHadoopAccessManager, conf: Configuration): String = {
     fsCredentialProvider invokePrivate _getTokenRenewer(conf)
   }
 
-  private var hadoopFsCredentialProvider: YARNHadoopFSCredentialProvider = null
+  private var hadoopFsCredentialProvider: YARNHadoopAccessManager = null
 
   override def beforeAll() {
     super.beforeAll()
 
     if (hadoopFsCredentialProvider == null) {
-      hadoopFsCredentialProvider = new YARNHadoopFSCredentialProvider()
+      hadoopFsCredentialProvider = new YARNHadoopAccessManager()
     }
   }
 

@@ -34,7 +34,7 @@ private[security] class HBaseCredentialProvider extends ServiceCredentialProvide
 
   override def obtainCredentials(
       hadoopConf: Configuration,
-      sparkConf: SparkConf,
+      hadoopAccessManager: HadoopAccessManager,
       creds: Credentials): Option[Long] = {
     try {
       val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)

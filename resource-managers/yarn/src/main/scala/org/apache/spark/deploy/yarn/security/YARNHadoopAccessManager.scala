@@ -28,14 +28,17 @@ import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.security.HadoopFSCredentialProvider
+import org.apache.spark.deploy.security.{HadoopAccessManager}
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
-class YARNHadoopFSCredentialProvider extends HadoopFSCredentialProvider {
+private[yarn] class YARNHadoopAccessManager(
+    hadoopConf: Configuration,
+    sparkConf: SparkConf) extends HadoopAccessManager with Logging {
 
-  override def getTokenRenewer(conf: Configuration): String = {
-    val delegTokenRenewer = Master.getMasterPrincipal(conf)
+  def getTokenRenewer: String = {
+    val delegTokenRenewer = Master.getMasterPrincipal(hadoopConf)
     logDebug("delegation token renewer is: " + delegTokenRenewer)
     if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
       val errorMessage = "Can't get Master Kerberos principal for use as renewer"
@@ -46,20 +49,19 @@ class YARNHadoopFSCredentialProvider extends HadoopFSCredentialProvider {
     delegTokenRenewer
   }
 
-  override def hadoopFSsToAccess(hadoopConf: Configuration, sparkConf: SparkConf): Set[Path] = {
+  def hadoopFSsToAccess: Set[Path] = {
     sparkConf.get(FILESYSTEMS_TO_ACCESS).map(new Path(_)).toSet +
       sparkConf.get(STAGING_DIR).map(new Path(_))
         .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory)
   }
 
-  override def getTokenRenewalInterval(
-    hadoopConf: Configuration, sparkConf: SparkConf): Option[Long] = {
+  def getTokenRenewalInterval: Option[Long] = {
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in
     // user as renewer.
     sparkConf.get(PRINCIPAL).flatMap { renewer =>
       val creds = new Credentials()
-      hadoopFSsToAccess(hadoopConf, sparkConf).foreach { dst =>
+      hadoopFSsToAccess.foreach { dst =>
         val dstFs = dst.getFileSystem(hadoopConf)
         dstFs.addDelegationTokens(renewer, creds)
       }

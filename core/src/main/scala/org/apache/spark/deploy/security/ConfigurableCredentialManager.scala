@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -43,7 +44,8 @@ import org.apache.spark.util.Utils
  */
 private[spark] class ConfigurableCredentialManager(
     sparkConf: SparkConf,
-    hadoopConf: Configuration)
+    hadoopConf: Configuration,
+    hadoopAccessManager: HadoopAccessManager)
   extends Logging {
 
   private val deprecatedProviderEnabledConfigs = List(
@@ -52,37 +54,48 @@ private[spark] class ConfigurableCredentialManager(
   private val providerEnabledConfig = "spark.security.credentials.%s.enabled"
 
   // Maintain all the registered credential providers
-  private val credentialProviders = getCredentialProviders()
+  private val credentialProviders = getCredentialProviders
   logDebug(s"Using the following credential providers: ${credentialProviders.keys.mkString(", ")}.")
+
+  def this(sparkConf: SparkConf, hadoopConf: Configuration) {
+    this(sparkConf, hadoopConf, new DefaultHadoopAccessManager(hadoopConf))
+  }
+
+  def this(sparkConf: SparkConf) {
+    this(sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
+  }
 
   private def getCredentialProviders(): Map[String, ServiceCredentialProvider] = {
     val providers = loadCredentialProviders
 
     // Filter out credentials in which spark.security.credentials.{service}.enabled is false.
-    providers.filter { p =>
+    providers
+      .filter(p => isServiceEnabled(p.serviceName))
+      .map(p => (p.serviceName, p))
+      .toMap
+  }
 
-      val key = providerEnabledConfig.format(p)
+  protected def isServiceEnabled(serviceName: String): Boolean = {
+    val key = providerEnabledConfig.format(serviceName)
 
-      deprecatedProviderEnabledConfigs.foreach { pattern =>
-        val deprecatedKey = pattern.format(p.serviceName)
-        if (sparkConf.contains(deprecatedKey)) {
-          logWarning(s"${deprecatedKey} is deprecated, using ${key} instead")
-        }
+    deprecatedProviderEnabledConfigs.foreach { pattern =>
+      val deprecatedKey = pattern.format(serviceName)
+      if (sparkConf.contains(deprecatedKey)) {
+        logWarning(s"${deprecatedKey} is deprecated, using ${key} instead")
       }
+    }
 
-      val isEnabledDeprecated = deprecatedProviderEnabledConfigs.forall { pattern =>
-        sparkConf
-          .getOption(pattern.format(p.serviceName))
-          .map(_.toBoolean)
-          .getOrElse(true)
-      }
-
+    val isEnabledDeprecated = deprecatedProviderEnabledConfigs.forall { pattern =>
       sparkConf
-        .getOption(key)
+        .getOption(pattern.format(serviceName))
         .map(_.toBoolean)
-        .getOrElse(isEnabledDeprecated)
+        .getOrElse(true)
+    }
 
-    }.map { p => (p.serviceName, p) }.toMap
+    sparkConf
+      .getOption(key)
+      .map(_.toBoolean)
+      .getOrElse(isEnabledDeprecated)
   }
 
   protected def loadCredentialProviders: List[ServiceCredentialProvider] = {
@@ -104,10 +117,12 @@ private[spark] class ConfigurableCredentialManager(
    * @return nearest time of next renewal, Long.MaxValue if all the credentials aren't renewable,
    *         otherwise the nearest renewal time of any credentials will be returned.
    */
-  def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Long = {
+  def obtainCredentials(
+    hadoopConf: Configuration,
+    creds: Credentials): Long = {
     credentialProviders.values.flatMap { provider =>
       if (provider.credentialsRequired(hadoopConf)) {
-        provider.obtainCredentials(hadoopConf, sparkConf, creds)
+        provider.obtainCredentials(hadoopConf, hadoopAccessManager, creds)
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")
@@ -115,7 +130,7 @@ private[spark] class ConfigurableCredentialManager(
       }
     }.foldLeft(Long.MaxValue)(math.min)
   }
-
+  
   /**
    * Returns a copy of the current user's credentials, augmented with new delegation tokens.
    */
@@ -128,5 +143,4 @@ private[spark] class ConfigurableCredentialManager(
 
     userCreds
   }
-
 }

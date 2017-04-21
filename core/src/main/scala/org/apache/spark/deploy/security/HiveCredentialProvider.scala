@@ -62,7 +62,7 @@ private[security] class HiveCredentialProvider extends ServiceCredentialProvider
 
   override def obtainCredentials(
       hadoopConf: Configuration,
-      sparkConf: SparkConf,
+      hadoopAccessManager: HadoopAccessManager,
       creds: Credentials): Option[Long] = {
     val conf = hiveConf(hadoopConf)
 

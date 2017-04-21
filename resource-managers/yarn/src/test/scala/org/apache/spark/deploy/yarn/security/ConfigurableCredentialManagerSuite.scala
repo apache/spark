@@ -42,13 +42,12 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     super.afterAll()
   }
 
-  test("Correctly load YARNHadoopFSCredentialProvider") {
+  test("Correctly load ") {
     credentialManager = new YARNConfigurableCredentialManager(sparkConf, hadoopConf)
 
     assert(credentialManager
       .getServiceCredentialProvider("hadoopfs")
       .get
-      .isInstanceOf[YARNHadoopFSCredentialProvider])
+      .isInstanceOf[YARNHadoopAccessManager])
   }
-
 }
