@@ -141,13 +141,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // Databases
   // --------------------------------------------------------------------------
 
-  override def createDatabase(
+  override protected def doCreateDatabase(
       dbDefinition: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withClient {
     client.createDatabase(dbDefinition, ignoreIfExists)
   }
 
-  override def dropDatabase(
+  override protected def doDropDatabase(
       db: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withClient {
@@ -194,7 +194,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // Tables
   // --------------------------------------------------------------------------
 
-  override def createTable(
+  override protected def doCreateTable(
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = withClient {
     assert(tableDefinition.identifier.database.isDefined)
@@ -456,7 +456,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  override def dropTable(
+  override protected def doDropTable(
       db: String,
       table: String,
       ignoreIfNotExists: Boolean,
@@ -465,7 +465,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.dropTable(db, table, ignoreIfNotExists, purge)
   }
 
-  override def renameTable(db: String, oldName: String, newName: String): Unit = withClient {
+  override protected def doRenameTable(
+      db: String,
+      oldName: String,
+      newName: String): Unit = withClient {
     val rawTable = getRawTable(db, oldName)
 
     // Note that Hive serde tables don't use path option in storage properties to store the value
@@ -1056,7 +1059,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // Functions
   // --------------------------------------------------------------------------
 
-  override def createFunction(
+  override protected def doCreateFunction(
       db: String,
       funcDefinition: CatalogFunction): Unit = withClient {
     requireDbExists(db)
@@ -1069,12 +1072,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.createFunction(db, funcDefinition.copy(identifier = functionIdentifier))
   }
 
-  override def dropFunction(db: String, name: String): Unit = withClient {
+  override protected def doDropFunction(db: String, name: String): Unit = withClient {
     requireFunctionExists(db, name)
     client.dropFunction(db, name)
   }
 
-  override def renameFunction(db: String, oldName: String, newName: String): Unit = withClient {
+  override protected def doRenameFunction(
+      db: String,
+      oldName: String,
+      newName: String): Unit = withClient {
     requireFunctionExists(db, oldName)
     requireFunctionNotExists(db, newName)
     client.renameFunction(db, oldName, newName)

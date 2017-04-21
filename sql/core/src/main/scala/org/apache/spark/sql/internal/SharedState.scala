@@ -109,6 +109,13 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
     }
   }
 
+  // Make sure we propagate external catalog events to the spark listener bus
+  externalCatalog.addListener(new ExternalCatalogEventListener {
+    override def onEvent(event: ExternalCatalogEvent): Unit = {
+      sparkContext.listenerBus.post(event)
+    }
+  })
+
   /**
    * A manager for global temporary views.
    */
