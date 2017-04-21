@@ -138,6 +138,7 @@
     <okhttp3.version>3.8.0</okhttp3.version>
     <okhttp.version>2.7.5</okhttp.version>
     <okio.version>1.13.0</okio.version>
+    <retrofit.version>2.2.0</retrofit.version>
     <bouncycastle.version>1.54</bouncycastle.version>
     <jetty.version>9.4.5.v20170502</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
@@ -368,6 +369,21 @@
         <groupId>com.netflix.feign</groupId>
         <artifactId>feign-jaxrs</artifactId>
         <version>${feign.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.retrofit2</groupId>
+        <artifactId>retrofit</artifactId>
+        <version>${retrofit.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.retrofit2</groupId>
+        <artifactId>converter-jackson</artifactId>
+        <version>${retrofit.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.retrofit2</groupId>
+        <artifactId>converter-scalars</artifactId>
+        <version>${retrofit.version}</version>
       </dependency>
       <dependency>
         <groupId>org.bouncycastle</groupId>
@@ -824,6 +840,11 @@
         <groupId>javax.activation</groupId>
         <artifactId>activation</artifactId>
         <version>${javax-activation.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jersey.media</groupId>
+        <artifactId>jersey-media-multipart</artifactId>
+        <version>${jersey.version}</version>
       </dependency>
       <dependency>
         <groupId>javax.ws.rs</groupId>
