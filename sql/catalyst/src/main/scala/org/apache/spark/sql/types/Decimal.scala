@@ -132,8 +132,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
-   * Set this Decimal to the given BigInteger value. Will have precision 38 and scale 0
-   * if value is fit into long value range. Otherwise, use BigDecimal
+   * If the value is not in the range of long, convert it to BigDecimal and
+   * the precision and scale are based on the converted value.
    *
    * This code avoids BigDecimal object allocation as possible to improve runtime efficiency
    */
