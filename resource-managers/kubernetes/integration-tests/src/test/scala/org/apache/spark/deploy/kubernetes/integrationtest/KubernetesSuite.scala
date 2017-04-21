@@ -35,14 +35,13 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkSubmit
-import org.apache.spark.deploy.kubernetes.Client
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.deploy.kubernetes.integrationtest.docker.SparkDockerImageBuilder
 import org.apache.spark.deploy.kubernetes.integrationtest.minikube.Minikube
 import org.apache.spark.deploy.kubernetes.integrationtest.restapis.SparkRestApiV1
 import org.apache.spark.deploy.kubernetes.integrationtest.sslutil.SSLUtils
-import org.apache.spark.deploy.rest.kubernetes.ExternalSuppliedUrisDriverServiceManager
+import org.apache.spark.deploy.kubernetes.submit.v1.{Client, ExternalSuppliedUrisDriverServiceManager}
 import org.apache.spark.status.api.v1.{ApplicationStatus, StageStatus}
 import org.apache.spark.util.Utils
 

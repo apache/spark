@@ -19,7 +19,7 @@ package org.apache.spark.deploy.kubernetes
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion}
-import org.apache.spark.deploy.rest.kubernetes.NodePortUrisDriverServiceManager
+import org.apache.spark.deploy.kubernetes.submit.v1.NodePortUrisDriverServiceManager
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 

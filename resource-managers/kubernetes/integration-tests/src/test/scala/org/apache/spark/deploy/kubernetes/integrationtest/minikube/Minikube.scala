@@ -27,7 +27,7 @@ import io.fabric8.kubernetes.client.internal.SSLUtils
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import org.apache.spark.deploy.rest.kubernetes.HttpClientUtil
+import org.apache.spark.deploy.rest.kubernetes.v1.HttpClientUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 

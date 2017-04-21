@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.kubernetes
+package org.apache.spark.deploy.kubernetes.submit.v1
 
 import java.io.File
 import java.security.SecureRandom
@@ -32,8 +32,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.rest.{AppResource, ContainerAppResource, KubernetesCreateSubmissionRequest, KubernetesCredentials, RemoteAppResource, UploadedAppResource}
-import org.apache.spark.deploy.rest.kubernetes._
+import org.apache.spark.deploy.rest.kubernetes.v1.{AppResource, ContainerAppResource, HttpClientUtil, KubernetesCreateSubmissionRequest, KubernetesCredentials, KubernetesFileUtils, KubernetesSparkRestApi, RemoteAppResource, UploadedAppResource}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 

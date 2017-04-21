@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.rest.kubernetes
+package org.apache.spark.deploy.rest.kubernetes.v1
 
 import feign.{Request, RequestTemplate, RetryableException, Retryer, Target}
 import scala.reflect.ClassTag

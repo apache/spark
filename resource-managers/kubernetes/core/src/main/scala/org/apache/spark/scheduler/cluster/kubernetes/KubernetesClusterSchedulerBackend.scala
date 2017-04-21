@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.deploy.kubernetes.KubernetesClientBuilder
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.rpc.RpcEndpointAddress
