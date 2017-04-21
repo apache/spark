@@ -17,16 +17,17 @@
 
 package org.apache.spark.ml.optim
 
-import breeze.linalg.{DenseVector => BDV, Vector}
-import breeze.optimize.{DiffFunction, FirstOrderException, LBFGSB => BreezeLBFGSB, StrongWolfeLineSearch}
 import scala.math._
 
-class BoundStrongWolfeLineSearch(maxZoomIter: Int, maxLineSearchIter: Int)
+import breeze.linalg.{DenseVector => BDV, Vector}
+import breeze.optimize.{DiffFunction, FirstOrderException, LBFGSB => BreezeLBFGSB, StrongWolfeLineSearch}
+
+private[ml] class BoundStrongWolfeLineSearch(maxZoomIter: Int, maxLineSearchIter: Int)
     extends StrongWolfeLineSearch(maxZoomIter, maxLineSearchIter) {
 
   def minimizeWithBound(f: DiffFunction[Double], init: Double, bound: Double): Double = {
 
-    require(init > 0 && init <= bound, "bound should >= init stepsize")
+    require(init > 0 && init <= bound, "bound should >= initial step size")
 
     def phi(t: Double): Bracket = {
       val (pval, pdd) = f.calculate(t)
@@ -64,19 +65,14 @@ class BoundStrongWolfeLineSearch(maxZoomIter: Int, maxLineSearchIter: Int)
 
         // Evaluate objective at t, and build bracket
         val c = phi(t)
-        //logger.debug("ZOOM:\n c: " + c + " \n l: " + low + " \nr: " + hi)
         logger.info("Line search t: " + t + " fval: " + c.fval +
           " rhs: " + (fval + c1 * c.t * dd) + " cdd: " + c.dd)
-
-        ///////////////
-        /// Update left or right bracket, or both
 
         if (c.fval > fval + c1 * c.t * dd || c.fval >= low.fval) {
           // "Sufficient decrease" condition not satisfied by c. Shrink interval at right
           hi = c
           logger.debug("hi=c")
         } else {
-
           // Zoom exit condition is the "curvature" condition
           // Essentially that the directional derivative is large enough
           if (abs(c.dd) <= c2 * abs(dd)) {
@@ -154,7 +150,7 @@ class BoundStrongWolfeLineSearch(maxZoomIter: Int, maxLineSearchIter: Int)
   }
 }
 
-class LBFGSB(
+private[ml] class LBFGSB(
     lowerBounds: BDV[Double],
     upperBounds: BDV[Double],
     maxIter: Int = 100,
