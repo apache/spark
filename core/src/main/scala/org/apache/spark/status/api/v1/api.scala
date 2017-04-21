@@ -76,10 +76,13 @@ class ExecutorSummary private[spark](
     val isBlacklisted: Boolean,
     val maxMemory: Long,
     val executorLogs: Map[String, String],
-    val usedOnHeapStorageMemory: Option[Long],
-    val usedOffHeapStorageMemory: Option[Long],
-    val totalOnHeapStorageMemory: Option[Long],
-    val totalOffHeapStorageMemory: Option[Long])
+    val memoryMetrics: Option[MemoryMetrics])
+
+class MemoryMetrics private[spark](
+    val usedOnHeapStorageMemory: Long,
+    val usedOffHeapStorageMemory: Long,
+    val totalOnHeapStorageMemory: Long,
+    val totalOffHeapStorageMemory: Long)
 
 class JobData private[spark](
     val jobId: Int,

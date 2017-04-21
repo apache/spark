@@ -253,10 +253,14 @@ $(document).ready(function () {
             var deadTotalBlacklisted = 0;
 
             response.forEach(function (exec) {
-                exec.usedOnHeapStorageMemory = exec.hasOwnProperty('usedOnHeapStorageMemory') ? exec.usedOnHeapStorageMemory : 0;
-                exec.totalOnHeapStorageMemory = exec.hasOwnProperty('totalOnHeapStorageMemory') ? exec.totalOnHeapStorageMemory : 0;
-                exec.usedOffHeapStorageMemory = exec.hasOwnProperty('usedOffHeapStorageMemory') ? exec.usedOffHeapStorageMemory : 0;
-                exec.totalOffHeapStorageMemory = exec.hasOwnProperty('totalOffHeapStorageMemory') ? exec.totalOffHeapStorageMemory : 0;
+                var memoryMetrics = {
+                    usedOnHeapStorageMemory: 0,
+                    usedOffHeapStorageMemory: 0,
+                    totalOnHeapStorageMemory: 0,
+                    totalOffHeapStorageMemory: 0
+                };
+
+                exec.memoryMetrics = exec.hasOwnProperty('memoryMetrics') ? exec.memoryMetrics : memoryMetrics;
             });
 
             response.forEach(function (exec) {
@@ -264,10 +268,10 @@ $(document).ready(function () {
                 allRDDBlocks += exec.rddBlocks;
                 allMemoryUsed += exec.memoryUsed;
                 allMaxMemory += exec.maxMemory;
-                allOnHeapMemoryUsed += exec.usedOnHeapStorageMemory;
-                allOnHeapMaxMemory += exec.totalOnHeapStorageMemory;
-                allOffHeapMemoryUsed += exec.usedOffHeapStorageMemory;
-                allOffHeapMaxMemory += exec.totalOffHeapStorageMemory;
+                allOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                allOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                allOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                allOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                 allDiskUsed += exec.diskUsed;
                 allTotalCores += exec.totalCores;
                 allMaxTasks += exec.maxTasks;
@@ -286,10 +290,10 @@ $(document).ready(function () {
                     activeRDDBlocks += exec.rddBlocks;
                     activeMemoryUsed += exec.memoryUsed;
                     activeMaxMemory += exec.maxMemory;
-                    activeOnHeapMemoryUsed += exec.usedOnHeapStorageMemory;
-                    activeOnHeapMaxMemory += exec.totalOnHeapStorageMemory;
-                    activeOffHeapMemoryUsed += exec.usedOffHeapStorageMemory;
-                    activeOffHeapMaxMemory += exec.totalOffHeapStorageMemory;
+                    activeOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                    activeOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                    activeOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                    activeOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                     activeDiskUsed += exec.diskUsed;
                     activeTotalCores += exec.totalCores;
                     activeMaxTasks += exec.maxTasks;
@@ -308,10 +312,10 @@ $(document).ready(function () {
                     deadRDDBlocks += exec.rddBlocks;
                     deadMemoryUsed += exec.memoryUsed;
                     deadMaxMemory += exec.maxMemory;
-                    deadOnHeapMemoryUsed += exec.usedOnHeapStorageMemory;
-                    deadOnHeapMaxMemory += exec.totalOnHeapStorageMemory;
-                    deadOffHeapMemoryUsed += exec.usedOffHeapStorageMemory;
-                    deadOffHeapMaxMemory += exec.totalOffHeapStorageMemory;
+                    deadOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                    deadOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                    deadOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                    deadOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                     deadDiskUsed += exec.diskUsed;
                     deadTotalCores += exec.totalCores;
                     deadMaxTasks += exec.maxTasks;
@@ -431,10 +435,10 @@ $(document).ready(function () {
                         {
                             data: function (row, type) {
                                 if (type !== 'display')
-                                    return row.usedOnHeapStorageMemory;
+                                    return row.memoryMetrics.usedOnHeapStorageMemory;
                                 else
-                                    return (formatBytes(row.usedOnHeapStorageMemory, type) + ' / ' +
-                                        formatBytes(row.totalOnHeapStorageMemory, type));
+                                    return (formatBytes(row.memoryMetrics.usedOnHeapStorageMemory, type) + ' / ' +
+                                        formatBytes(row.memoryMetrics.totalOnHeapStorageMemory, type));
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 $(nTd).addClass('on_heap_memory')
@@ -443,10 +447,10 @@ $(document).ready(function () {
                         {
                             data: function (row, type) {
                                 if (type !== 'display')
-                                    return row.usedOffHeapStorageMemory;
+                                    return row.memoryMetrics.usedOffHeapStorageMemory;
                                 else
-                                    return (formatBytes(row.usedOffHeapStorageMemory, type) + ' / ' +
-                                        formatBytes(row.totalOffHeapStorageMemory, type));
+                                    return (formatBytes(row.memoryMetrics.usedOffHeapStorageMemory, type) + ' / ' +
+                                        formatBytes(row.memoryMetrics.totalOffHeapStorageMemory, type));
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 $(nTd).addClass('off_heap_memory')
