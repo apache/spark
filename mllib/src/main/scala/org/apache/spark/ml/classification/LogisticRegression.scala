@@ -609,9 +609,14 @@ class LogisticRegression @Since("1.2.0") (
             Friedman, et al. "Regularization Paths for Generalized Linear Models via
               Coordinate Descent," https://core.ac.uk/download/files/153/6287975.pdf
            */
-          val denseValues = denseCoefficientMatrix.values
-          val coefficientMean = denseValues.sum / denseValues.length
-          denseCoefficientMatrix.update(_ - coefficientMean)
+          val centers = Array.fill(numFeatures)(0.0)
+          denseCoefficientMatrix.foreachActive { case (i, j, v) =>
+            centers(j) += v
+          }
+          centers.transform(_ / numCoefficientSets)
+          denseCoefficientMatrix.foreachActive { case (i, j, v) =>
+            denseCoefficientMatrix.update(i, j, v - centers(j))
+          }
         }
 
         // center the intercepts when using multinomial algorithm
