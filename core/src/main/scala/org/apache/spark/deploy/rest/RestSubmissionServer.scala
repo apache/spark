@@ -214,15 +214,15 @@ private[rest] abstract class KillRequestServlet extends RestServlet {
   protected override def doPost(
       request: HttpServletRequest,
       response: HttpServletResponse): Unit = {
-    val submissionId = parseSubmissionId(request.getPathInfo)
-    val responseMessage = submissionId.map(handleKill).getOrElse {
+    val submissionIds = parseSubmissionId(request.getPathInfo)
+    val responseMessage = submissionIds.map(handleKill).getOrElse {
       response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
       handleError("Submission ID is missing in kill request.")
     }
     sendResponse(responseMessage, response)
   }
 
-  protected def handleKill(submissionId: String): KillSubmissionResponse
+  protected def handleKill(submissionIds: String): KillSubmissionResponse
 }
 
 /**

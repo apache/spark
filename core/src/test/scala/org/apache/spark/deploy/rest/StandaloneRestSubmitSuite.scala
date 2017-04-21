@@ -607,8 +607,8 @@ private class FaultyStandaloneRestServer(
 
   /** A faulty servlet that produces invalid responses. */
   class InvalidKillServlet extends StandaloneKillRequestServlet(masterEndpoint, masterConf) {
-    protected override def handleKill(submissionId: String): KillSubmissionResponse = {
-      val k = super.handleKill(submissionId)
+    protected override def handleKill(submissionIds: String): KillSubmissionResponse = {
+      val k = super.handleKill(submissionIds)
       k.submissionId = null
       k
     }
