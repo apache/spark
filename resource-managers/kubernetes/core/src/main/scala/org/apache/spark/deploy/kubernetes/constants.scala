@@ -68,6 +68,7 @@ package object constants {
   private[spark] val ENV_EXECUTOR_MEMORY = "SPARK_EXECUTOR_MEMORY"
   private[spark] val ENV_APPLICATION_ID = "SPARK_APPLICATION_ID"
   private[spark] val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
+  private[spark] val ENV_EXECUTOR_POD_IP = "SPARK_EXECUTOR_POD_IP"
   private[spark] val ENV_DRIVER_MEMORY = "SPARK_DRIVER_MEMORY"
 
   // Annotation keys

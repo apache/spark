@@ -10,7 +10,7 @@ currently limited and not well-tested. This should not be used in production env
 
 * You must have a running Kubernetes cluster with access configured to it using [kubectl](https://kubernetes.io/docs/user-guide/prereqs/). If you do not already have a working Kubernetes cluster, you may setup a test cluster on your local machine using [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
 * You must have appropriate permissions to create and list [pods](https://kubernetes.io/docs/user-guide/pods/), [nodes](https://kubernetes.io/docs/admin/node/) and [services](https://kubernetes.io/docs/user-guide/services/) in your cluster. You can verify that you can list these resources by running `kubectl get nodes`, `kubectl get pods` and `kubectl get svc` which should give you a list of nodes, pods and services (if any) respectively.
-* You must [build Spark with Kubernetes support](../resource-managers/kubernetes/README.md#building-spark-with-kubernetes-support) from source.
+* You must have a spark distribution with Kubernetes support. This may be obtained from the [release tarball](https://github.com/apache-spark-on-k8s/spark/releases) or by [building Spark with Kubernetes support](../resource-managers/kubernetes/README.md#building-spark-with-kubernetes-support).
 
 ## Driver & Executor Images
 
@@ -24,11 +24,11 @@ If you wish to use pre-built docker images, you may use the images published in 
 <tr><th>Component</th><th>Image</th></tr>
 <tr>
   <td>Spark Driver Image</td>
-  <td><code>kubespark/spark-driver:v2.1.0-k8s-support-0.1.0-alpha.1</code></td>
+  <td><code>kubespark/spark-driver:v2.1.0-kubernetes-0.1.0-rc1</code></td>
 </tr>
 <tr>
   <td>Spark Executor Image</td>
-  <td><code>kubespark/spark-executor:v2.1.0-k8s-support-0.1.0-alpha.1</code></td>
+  <td><code>kubespark/spark-executor:v2.1.0-kubernetes-0.1.0-rc1</code></td>
 </tr>
 </table>
 
@@ -57,8 +57,8 @@ are set up as described above:
       --kubernetes-namespace default \
       --conf spark.executor.instances=5 \
       --conf spark.app.name=spark-pi \
-      --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.1.0-k8s-support-0.1.0-alpha.1 \
-      --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.1.0-k8s-support-0.1.0-alpha.1 \
+      --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.1.0-kubernetes-0.1.0-rc1 \
+      --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.1.0-kubernetes-0.1.0-rc1 \
       examples/jars/spark_examples_2.11-2.2.0.jar
 
 The Spark master, specified either via passing the `--master` command line argument to `spark-submit` or by setting
@@ -108,8 +108,8 @@ If our local proxy were listening on port 8001, we would have our submission loo
       --kubernetes-namespace default \
       --conf spark.executor.instances=5 \
       --conf spark.app.name=spark-pi \
-      --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.1.0-k8s-support-0.1.0-alpha.1 \
-      --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.1.0-k8s-support-0.1.0-alpha.1 \
+      --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.1.0-kubernetes-0.1.0-rc1 \
+      --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.1.0-kubernetes-0.1.0-rc1 \
       examples/jars/spark_examples_2.11-2.2.0.jar
 
 Communication between Spark and Kubernetes clusters is performed using the fabric8 kubernetes-client library.
