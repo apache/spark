@@ -577,9 +577,15 @@ class SessionCatalog(
       requireDbExists(db)
       if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
         requireTableExists(TableIdentifier(oldTableName, Some(db)))
-        requireTableNotExists(TableIdentifier(newTableName, Some(db)))
+        val newTableIdentifier = TableIdentifier(newTableName, Some(db))
+        requireTableNotExists(newTableIdentifier)
         validateName(newTableName)
-        externalCatalog.renameTable(db, oldTableName, newTableName)
+        val tableDefinition = externalCatalog.getTable(db, oldTableName)
+        val newTableDefinition = tableDefinition.copy(
+          identifier = newTableIdentifier,
+          storage =
+            tableDefinition.storage.copy(locationUri = Some(defaultTablePath(newTableIdentifier))))
+        externalCatalog.alterTable(tableDefinition, Some(newTableDefinition))
       } else {
         if (newName.database.isDefined) {
           throw new AnalysisException(

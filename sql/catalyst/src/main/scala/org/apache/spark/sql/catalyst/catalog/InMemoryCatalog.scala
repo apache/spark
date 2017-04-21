@@ -264,40 +264,45 @@ class InMemoryCatalog(
     }
   }
 
-  override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
-    requireTableExists(db, oldName)
-    requireTableNotExists(db, newName)
-    val oldDesc = catalog(db).tables(oldName)
-    oldDesc.table = oldDesc.table.copy(identifier = TableIdentifier(newName, Some(db)))
-
-    if (oldDesc.table.tableType == CatalogTableType.MANAGED) {
-      assert(oldDesc.table.storage.locationUri.isDefined,
-        "Managed table should always have table location, as we will assign a default location " +
-          "to it if it doesn't have one.")
-      val oldDir = new Path(oldDesc.table.location)
-      val newDir = new Path(new Path(catalog(db).db.locationUri), newName)
-      try {
-        val fs = oldDir.getFileSystem(hadoopConfig)
-        fs.rename(oldDir, newDir)
-      } catch {
-        case e: IOException =>
-          throw new SparkException(s"Unable to rename table $oldName to $newName as failed " +
-            s"to rename its directory $oldDir", e)
-      }
-      oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri))
-    }
-
-    catalog(db).tables.put(newName, oldDesc)
-    catalog(db).tables.remove(oldName)
-  }
-
-  override def alterTable(tableDefinition: CatalogTable): Unit = synchronized {
+  override def alterTable(
+      tableDefinition: CatalogTable,
+      newNameTable: Option[CatalogTable]): Unit = synchronized {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
-    catalog(db).tables(tableDefinition.identifier.table).table = tableDefinition
-  }
 
+    if (newNameTable.isEmpty
+      || newNameTable.get.identifier.table == tableDefinition.identifier.table) {
+      catalog(db).tables(tableDefinition.identifier.table).table = tableDefinition
+    } else {
+      val oldName = tableDefinition.identifier.table
+      val newName = newNameTable.get.identifier.table
+      requireTableNotExists(db, newName)
+      val oldDesc = catalog(db).tables(oldName)
+      oldDesc.table = oldDesc.table.copy(identifier = TableIdentifier(newName, Some(db)))
+
+      if (oldDesc.table.tableType == CatalogTableType.MANAGED) {
+        assert(oldDesc.table.storage.locationUri.isDefined,
+          "Managed table should always have table location, as we will assign a default location " +
+            "to it if it doesn't have one.")
+        val oldDir = new Path(oldDesc.table.location)
+        val newDir = new Path(newNameTable.get.location)
+
+        try {
+          val fs = oldDir.getFileSystem(hadoopConfig)
+          fs.rename(oldDir, newDir)
+        } catch {
+          case e: IOException =>
+            throw new SparkException(s"Unable to rename table $oldName to $newName" +
+              s" as failed to rename its directory $oldDir", e)
+        }
+        oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri))
+      }
+
+      catalog(db).tables.put(newName, oldDesc)
+      catalog(db).tables.remove(oldName)
+    }
+  }
   override def alterTableSchema(
       db: String,
       table: String,
