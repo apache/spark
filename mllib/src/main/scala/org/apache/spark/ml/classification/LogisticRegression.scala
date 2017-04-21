@@ -181,8 +181,9 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * The lower bound of coefficients if fitting under bound constrained optimization.
-   * The bound vector size must be equal with the number of features in training dataset,
-   * otherwise, it throws exception.
+   * The bound matrix must be compatible with the shape (1, number of features) for binomial
+   * regression, or (number of classes, number of features) for multinomial regression.
+   * Otherwise, it throws exception.
    *
    * @group param
    */
@@ -196,8 +197,9 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * The upper bound of coefficients if fitting under bound constrained optimization.
-   * The bound vector size must be equal with the number of features in training dataset,
-   * otherwise, it throws exception.
+   * The bound matrix must be compatible with the shape (1, number of features) for binomial
+   * regression, or (number of classes, number of features) for multinomial regression.
+   * Otherwise, it throws exception.
    *
    * @group param
    */
@@ -211,8 +213,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * The lower bound of coefficients if fitting under bound constrained optimization.
-   * The bound vector size must be equal with the number of features in training dataset,
-   * otherwise, it throws exception.
+   * The bound vector size must be equal with 1 for binomial regression, or the number
+   * of classes for multinomial regression. Otherwise, it throws exception.
    *
    * @group param
    */
@@ -226,8 +228,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * The upper bound of coefficients if fitting under bound constrained optimization.
-   * The bound vector size must be equal with the number of features in training dataset,
-   * otherwise, it throws exception.
+   * The bound vector size must be equal with 1 for binomial regression, or the number
+   * of classes for multinomial regression. Otherwise, it throws exception.
    *
    * @group param
    */
@@ -529,16 +531,17 @@ class LogisticRegression @Since("1.2.0") (
           $(aggregationDepth))
 
         val numCoeffs = numFeaturesPlusIntercept * numCoefficientSets
-        val lowerBound = new Array[Double](numCoeffs)
-        val upperBound = new Array[Double](numCoeffs)
         val isSetLowerBoundOfCoefficients = isSet(lowerBoundOfCoefficients)
         val isSetUpperBoundOfCoefficients = isSet(upperBoundOfCoefficients)
         val isSetLowerBoundOfIntercept = isSet(lowerBoundOfIntercept)
         val isSetUpperBoundOfIntercept = isSet(upperBoundOfIntercept)
+        var lowerBound: Array[Double] = null
+        var upperBound: Array[Double] = null
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
-          // Check params interaction is valid if fitting under bound constrained optimization.
           if (usingBoundConstrainedOptimization) {
+            lowerBound = Array.fill[Double](numCoeffs)(Double.NegativeInfinity)
+            upperBound = Array.fill[Double](numCoeffs)(Double.PositiveInfinity)
             var i = 0
             while (i < numCoeffs) {
               val coefficientSetIndex = i % numCoefficientSets
@@ -562,8 +565,7 @@ class LogisticRegression @Since("1.2.0") (
               }
               i += 1
             }
-            new LBFGSB(BDV[Double](lowerBound), BDV[Double](upperBound),
-              $(maxIter), 10, $(tol))
+            new LBFGSB(BDV[Double](lowerBound), BDV[Double](upperBound), $(maxIter), 10, $(tol))
           } else {
             new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
           }
