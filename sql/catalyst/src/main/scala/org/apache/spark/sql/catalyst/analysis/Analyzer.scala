@@ -150,6 +150,7 @@ class Analyzer(
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables(conf) ::
+      ResolveTimeZone(conf) ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
@@ -161,8 +162,6 @@ class Analyzer(
       HandleNullInputsForUDF),
     Batch("FixNullability", Once,
       FixNullability),
-    Batch("ResolveTimeZone", Once,
-      ResolveTimeZone),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -2366,23 +2365,6 @@ class Analyzer(
 
         case UpCast(child, dataType, walkedTypePath) => Cast(child, dataType.asNullable)
       }
-    }
-  }
-
-  /**
-   * Replace [[TimeZoneAwareExpression]] without timezone id by its copy with session local
-   * time zone.
-   */
-  object ResolveTimeZone extends Rule[LogicalPlan] {
-
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
-      case e: TimeZoneAwareExpression if e.timeZoneId.isEmpty =>
-        e.withTimeZone(conf.sessionLocalTimeZone)
-      // Casts could be added in the subquery plan through the rule TypeCoercion while coercing
-      // the types between the value expression and list query expression of IN expression.
-      // We need to subject the subquery plan through ResolveTimeZone again to setup timezone
-      // information for time zone aware expressions.
-      case e: ListQuery => e.withNewPlan(apply(e.plan))
     }
   }
 }
