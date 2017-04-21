@@ -21,10 +21,9 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 
 /**
  * :: Experimental ::
- * Class for calculating [[https://en.wikipedia.org/wiki/Chi-squared_test chi-squared]]
- * during binary classification.
+ * Class for calculating Chi Squared as a split quality metric during binary classification.
  */
-@Since("2.0.0")
+@Since("2.2.0")
 @Experimental
 object ChiSquared extends Impurity {
   private object CSTest extends org.apache.commons.math3.stat.inference.ChiSquareTest()
