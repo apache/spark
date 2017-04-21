@@ -1732,4 +1732,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .filter($"x1".isNotNull || !$"y".isin("a!"))
       .count
   }
+
+  test("SPARK-20430 Initialize Range parameters in a deriver side") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      checkAnswer(sql("SELECT * FROM range(3)"), Row(0) :: Row(1) :: Row(2) :: Nil)
+    }
+  }
 }
