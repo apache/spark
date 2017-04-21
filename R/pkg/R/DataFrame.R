@@ -3642,3 +3642,56 @@ setMethod("checkpoint",
             df <- callJMethod(x@sdf, "checkpoint", as.logical(eager))
             dataFrame(df)
           })
+
+
+#' cube
+#'
+#' Create a multi-dimensional cube for the SparkDataFrame using the specified columns.
+#'
+#' @param x a SparkDataFrame.
+#' @param ... variable(s) (character names(s) or Column(s)) to group on.
+#' @return A GroupedData.
+#' @family SparkDataFrame functions
+#' @aliases cube,SparkDataFrame-method
+#' @rdname cube
+#' @name cube
+#' @export
+#' @examples
+#' \dontrun{
+#'
+#' }
+#' @note cube since 2.3.0
+setMethod("cube",
+          signature(x = "SparkDataFrame"),
+          function(x, ...) {
+            cols <- list(...)
+            jcol <- lapply(cols, function(x) if (is.character(x)) column(x)@jc else x@jc)
+            sgd <- callJMethod(x@sdf, "cube", jcol)
+            groupedData(sgd)
+          })
+
+#' rollup
+#'
+#' Create a multi-dimensional rollup for the SparkDataFrame using the specified columns.
+#'
+#' @param x a SparkDataFrame.
+#' @param ... variable(s) (character names(s) or Column(s)) to group on.
+#' @return A GroupedData.
+#' @family SparkDataFrame functions
+#' @aliases rollup,SparkDataFrame-method
+#' @rdname rollup
+#' @name rollup
+#' @export
+#' @examples
+#' \dontrun{
+#'
+#' }
+#' @note rollup since 2.3.0
+setMethod("rollup",
+          signature(x = "SparkDataFrame"),
+          function(x, ...) {
+            cols <- list(...)
+            jcol <- lapply(cols, function(x) if (is.character(x)) column(x)@jc else x@jc)
+            sgd <- callJMethod(x@sdf, "rollup", jcol)
+            groupedData(sgd)
+          })
