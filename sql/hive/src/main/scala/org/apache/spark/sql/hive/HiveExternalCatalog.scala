@@ -53,7 +53,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * All public methods must be synchronized for thread-safety.
  */
 private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configuration)
-  extends ExternalCatalog with Logging {
+  extends ExternalCatalog(conf, hadoopConf) with Logging {
 
   import CatalogTypes.TablePartitionSpec
   import HiveExternalCatalog._
@@ -137,6 +137,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
+  protected override def warehousePath: String = conf.get(WAREHOUSE_PATH)
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -170,7 +171,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.alterDatabase(dbDefinition)
   }
 
-  override def getDatabase(db: String): CatalogDatabase = withClient {
+  protected override def getDatabaseInternal(db: String): CatalogDatabase = withClient {
     client.getDatabase(db)
   }
 
