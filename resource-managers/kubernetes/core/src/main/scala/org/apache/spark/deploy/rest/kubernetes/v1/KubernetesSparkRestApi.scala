@@ -14,12 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.rest.kubernetes
+package org.apache.spark.deploy.rest.kubernetes.v1
 
 import javax.ws.rs.{Consumes, GET, Path, POST, Produces}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KubernetesCreateSubmissionRequest, PingResponse}
+import org.apache.spark.deploy.rest.CreateSubmissionResponse
 
 @Path("/v1/submissions/")
 trait KubernetesSparkRestApi {

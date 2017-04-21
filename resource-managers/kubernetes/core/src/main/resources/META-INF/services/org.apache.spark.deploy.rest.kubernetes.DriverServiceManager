@@ -1,2 +1,0 @@
-org.apache.spark.deploy.rest.kubernetes.ExternalSuppliedUrisDriverServiceManager
-org.apache.spark.deploy.rest.kubernetes.NodePortUrisDriverServiceManager

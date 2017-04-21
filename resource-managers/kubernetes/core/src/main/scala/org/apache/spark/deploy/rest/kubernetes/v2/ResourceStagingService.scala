@@ -22,7 +22,7 @@ import javax.ws.rs.core.{MediaType, StreamingOutput}
 
 import org.glassfish.jersey.media.multipart.FormDataParam
 
-import org.apache.spark.deploy.rest.KubernetesCredentials
+import org.apache.spark.deploy.rest.kubernetes.v1.KubernetesCredentials
 
 /**
  * Service that receives application data that can be retrieved later on. This is primarily used

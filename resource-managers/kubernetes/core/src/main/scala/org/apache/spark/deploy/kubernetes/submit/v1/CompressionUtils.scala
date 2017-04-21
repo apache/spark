@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.rest.kubernetes
+package org.apache.spark.deploy.kubernetes.submit.v1
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
@@ -26,7 +26,7 @@ import org.apache.commons.compress.utils.CharsetNames
 import org.apache.commons.io.IOUtils
 import scala.collection.mutable
 
-import org.apache.spark.deploy.rest.TarGzippedData
+import org.apache.spark.deploy.rest.kubernetes.v1.TarGzippedData
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ByteBufferOutputStream, Utils}
 

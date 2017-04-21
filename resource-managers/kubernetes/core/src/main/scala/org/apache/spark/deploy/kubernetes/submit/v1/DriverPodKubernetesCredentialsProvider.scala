@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.kubernetes
+package org.apache.spark.deploy.kubernetes.submit.v1
 
 import java.io.File
 
@@ -22,7 +22,7 @@ import com.google.common.io.{BaseEncoding, Files}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.config._
-import org.apache.spark.deploy.rest.KubernetesCredentials
+import org.apache.spark.deploy.rest.kubernetes.v1.KubernetesCredentials
 import org.apache.spark.internal.config.OptionalConfigEntry
 
 private[spark] class DriverPodKubernetesCredentialsProvider(sparkConf: SparkConf) {

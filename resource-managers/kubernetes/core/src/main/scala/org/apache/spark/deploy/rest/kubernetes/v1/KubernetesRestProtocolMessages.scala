@@ -14,11 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.rest
+package org.apache.spark.deploy.rest.kubernetes.v1
 
-import com.fasterxml.jackson.annotation.{JsonSubTypes, JsonTypeInfo}
+import com.fasterxml.jackson.annotation.{JsonIgnore, JsonSubTypes, JsonTypeInfo}
 
 import org.apache.spark.SPARK_VERSION
+import org.apache.spark.deploy.rest.{SubmitRestProtocolRequest, SubmitRestProtocolResponse}
+import org.apache.spark.util.Utils
 
 case class KubernetesCredentials(
     oauthToken: Option[String],
@@ -35,6 +37,9 @@ case class KubernetesCreateSubmissionRequest(
     driverPodKubernetesCredentials: KubernetesCredentials,
     uploadedJarsBase64Contents: TarGzippedData,
     uploadedFilesBase64Contents: TarGzippedData) extends SubmitRestProtocolRequest {
+  @JsonIgnore
+  override val messageType: String = s"kubernetes.v1.${Utils.getFormattedClassName(this)}"
+  override val action = messageType
   message = "create"
   clientSparkVersion = SPARK_VERSION
 }
@@ -68,5 +73,8 @@ class PingResponse extends SubmitRestProtocolResponse {
   val text = "pong"
   message = "pong"
   serverSparkVersion = SPARK_VERSION
+  @JsonIgnore
+  override val messageType: String = s"kubernetes.v1.${Utils.getFormattedClassName(this)}"
+  override val action: String = messageType
 }
 

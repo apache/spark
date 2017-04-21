@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.kubernetes
+package org.apache.spark.deploy.kubernetes.submit.v1
 
 import java.io.{File, FileInputStream}
 import java.security.{KeyStore, SecureRandom}
@@ -29,7 +29,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SecurityManager => SparkSecurityManager, SparkConf, SparkException, SSLOptions}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.rest.kubernetes.{KubernetesFileUtils, PemsToKeyStoreConverter}
+import org.apache.spark.deploy.rest.kubernetes.v1.{KubernetesFileUtils, PemsToKeyStoreConverter}
 import org.apache.spark.util.Utils
 
 /**
