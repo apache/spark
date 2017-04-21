@@ -237,6 +237,10 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   val upperBoundOfIntercept: Param[Vector] = new Param(this, "upperBoundOfIntercept",
     "The upper bound of coefficients if fitting under bound constrained optimization.")
 
+  /** @group getParam */
+  @Since("2.2.0")
+  def getUpperBoundOfIntercept: Vector = $(upperBoundOfIntercept)
+
   override protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
@@ -275,6 +279,9 @@ class LogisticRegression @Since("1.2.0") (
    * For alpha = 1, it is an L1 penalty.
    * For alpha in (0,1), the penalty is a combination of L1 and L2.
    * Default is 0.0 which is an L2 penalty.
+   *
+   * Note: Fitting under bound constrained optimization only supports L2 regularization,
+   * so throws exception if this param is non-zero value.
    *
    * @group setParam
    */
@@ -408,6 +415,39 @@ class LogisticRegression @Since("1.2.0") (
       isSet(lowerBoundOfIntercept) || isSet(upperBoundOfIntercept)
   }
 
+  private def assertBoundConstrainedOptimizationParamsValid(
+      numCoefficientSets: Int,
+      numFeatures: Int): Unit = {
+    if (isSet(lowerBoundOfCoefficients)) {
+      require($(lowerBoundOfCoefficients).numRows == numCoefficientSets &&
+        $(lowerBoundOfCoefficients).numCols == numFeatures)
+    }
+    if (isSet(upperBoundOfCoefficients)) {
+      require($(upperBoundOfCoefficients).numRows == numCoefficientSets &&
+        $(upperBoundOfCoefficients).numCols == numFeatures)
+    }
+    if (isSet(lowerBoundOfIntercept)) {
+      require($(lowerBoundOfIntercept).size == numCoefficientSets)
+    }
+    if (isSet(upperBoundOfIntercept)) {
+      require($(upperBoundOfIntercept).size == numCoefficientSets)
+    }
+    if (isSet(lowerBoundOfCoefficients) && isSet(upperBoundOfCoefficients)) {
+      require($(lowerBoundOfCoefficients).toArray.zip($(upperBoundOfCoefficients).toArray)
+        .forall(x => x._1 <= x._2), "LowerBoundOfCoefficients should always " +
+        "less than or equal to upperBoundOfCoefficients, but found: " +
+        s"lowerBoundOfCoefficients = $getLowerBoundOfCoefficients, " +
+        s"upperBoundOfCoefficients = $getUpperBoundOfCoefficients.")
+    }
+    if (isSet(lowerBoundOfIntercept) && isSet(upperBoundOfIntercept)) {
+      require($(lowerBoundOfIntercept).toArray.zip($(upperBoundOfIntercept).toArray)
+        .forall(x => x._1 <= x._2), "LowerBoundOfIntercept should always " +
+        "less than or equal to upperBoundOfIntercept, but found: " +
+        s"lowerBoundOfIntercept = $getLowerBoundOfIntercept, " +
+        s"upperBoundOfIntercept = $getUpperBoundOfIntercept.")
+    }
+  }
+
   private var optInitialModel: Option[LogisticRegressionModel] = None
 
   private[spark] def setInitialModel(model: LogisticRegressionModel): this.type = {
@@ -418,6 +458,18 @@ class LogisticRegression @Since("1.2.0") (
   override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     train(dataset, handlePersistence)
+  }
+
+  @Since("2.2.0")
+  override def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    if (usingBoundConstrainedOptimization) {
+      require($(elasticNetParam) == 0.0, "Fitting under bound constrained optimization only " +
+        s"supports L2 regularization, but got elasticNetParam = $getElasticNetParam.")
+    }
+    super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
 
   protected[spark] def train(
@@ -473,6 +525,11 @@ class LogisticRegression @Since("1.2.0") (
       case other => throw new IllegalArgumentException(s"Unsupported family: $other")
     }
     val numCoefficientSets = if (isMultinomial) numClasses else 1
+
+    // Check params interaction is valid if fitting under bound constrained optimization.
+    if (usingBoundConstrainedOptimization) {
+      assertBoundConstrainedOptimizationParamsValid(numCoefficientSets, numFeatures)
+    }
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +

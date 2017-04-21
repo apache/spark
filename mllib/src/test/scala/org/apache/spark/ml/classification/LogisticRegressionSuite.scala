@@ -150,6 +150,35 @@ class LogisticRegressionSuite
     assert(!model.hasSummary)
   }
 
+  test("logistic regression: illegal params") {
+    val lowerBoundOfCoefficients = Matrices.dense(1, 4, Array(1.0, 0.0, 1.0, 0.0))
+    val upperBoundOfCoefficients1 = Matrices.dense(1, 4, Array(0.0, 1.0, 1.0, 0.0))
+    val upperBoundOfCoefficients2 = Matrices.dense(1, 3, Array(1.0, 0.0, 1.0))
+
+    val lr = new LogisticRegression().setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+
+    // Work well when only set bound in one side.
+    lr.fit(binaryDataset)
+
+    withClue("bound constrained optimization only supports L2 regularization") {
+      intercept[IllegalArgumentException] {
+        lr.setElasticNetParam(1.0).fit(binaryDataset)
+      }
+    }
+
+    withClue("lowerBoundOfCoefficients should less than or equal to upperBoundOfCoefficients") {
+      intercept[IllegalArgumentException] {
+        lr.setUpperBoundOfCoefficients(upperBoundOfCoefficients1).fit(binaryDataset)
+      }
+    }
+
+    withClue("the coefficients bound matrix mismatched with shape (1, number of features)") {
+      intercept[IllegalArgumentException] {
+        lr.setUpperBoundOfCoefficients(upperBoundOfCoefficients2).fit(binaryDataset)
+      }
+    }
+  }
+
   test("empty probabilityCol") {
     val lr = new LogisticRegression().setProbabilityCol("")
     val model = lr.fit(smallBinaryDataset)
