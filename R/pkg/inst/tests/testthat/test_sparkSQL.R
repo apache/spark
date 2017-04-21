@@ -1731,6 +1731,28 @@ test_that("group by, agg functions", {
   expect_true(abs(sd(1:2) - 0.7071068) < 1e-6)
   expect_true(abs(var(1:5, 1:5) - 2.5) < 1e-6)
 
+  # Test collect_list and collect_set
+  gd3_collections_local <- collect(
+    agg(gd3, collect_set(df8$age), collect_list(df8$age))
+  )
+
+  expect_equal(
+    unlist(gd3_collections_local[gd3_collections_local$name == "Andy", 2]),
+    c(30)
+  )
+
+  expect_equal(
+    unlist(gd3_collections_local[gd3_collections_local$name == "Andy", 3]),
+    c(30, 30)
+  )
+
+  expect_equal(
+    sort(unlist(
+      gd3_collections_local[gd3_collections_local$name == "Justin", 3]
+    )),
+    c(1, 19)
+  )
+
   unlink(jsonPath2)
   unlink(jsonPath3)
 })
