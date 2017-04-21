@@ -23,10 +23,11 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.google.common.io.ByteStreams
 import okhttp3.{RequestBody, ResponseBody}
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfter
 import retrofit2.Call
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SSLOptions}
+import org.apache.spark.deploy.kubernetes.SSLUtils
 import org.apache.spark.deploy.rest.kubernetes.v1.KubernetesCredentials
 import org.apache.spark.util.Utils
 
@@ -39,30 +40,53 @@ import org.apache.spark.util.Utils
  * we've configured the Jetty server correctly and that the endpoints reached over HTTP can
  * receive streamed uploads and can stream downloads.
  */
-class ResourceStagingServerSuite extends SparkFunSuite with BeforeAndAfterAll {
+class ResourceStagingServerSuite extends SparkFunSuite with BeforeAndAfter {
+  private val OBJECT_MAPPER = new ObjectMapper().registerModule(new DefaultScalaModule)
 
   private val serverPort = new ServerSocket(0).getLocalPort
   private val serviceImpl = new ResourceStagingServiceImpl(Utils.createTempDir())
-  private val server = new ResourceStagingServer(serverPort, serviceImpl)
-  private val OBJECT_MAPPER = new ObjectMapper().registerModule(new DefaultScalaModule)
+  private val sslOptionsProvider = new SettableReferenceSslOptionsProvider()
+  private val server = new ResourceStagingServer(serverPort, serviceImpl, sslOptionsProvider)
 
-  override def beforeAll(): Unit = {
-    server.start()
-  }
-
-  override def afterAll(): Unit = {
+  after {
     server.stop()
   }
 
   test("Accept file and jar uploads and downloads") {
-    val retrofitService = RetrofitUtils.createRetrofitClient(s"http://localhost:$serverPort/",
-      classOf[ResourceStagingServiceRetrofit])
+    server.start()
+    runUploadAndDownload(SSLOptions())
+  }
+
+  test("Enable SSL on the server") {
+    val (keyStore, trustStore) = SSLUtils.generateKeyStoreTrustStorePair(
+      ipAddress = "127.0.0.1",
+      keyStorePassword = "keyStore",
+      keyPassword = "key",
+      trustStorePassword = "trustStore")
+    val sslOptions = SSLOptions(
+      enabled = true,
+      keyStore = Some(keyStore),
+      keyStorePassword = Some("keyStore"),
+      keyPassword = Some("key"),
+      trustStore = Some(trustStore),
+      trustStorePassword = Some("trustStore"))
+    sslOptionsProvider.setOptions(sslOptions)
+    server.start()
+    runUploadAndDownload(sslOptions)
+  }
+
+  private def runUploadAndDownload(sslOptions: SSLOptions): Unit = {
+    val scheme = if (sslOptions.enabled) "https" else "http"
+    val retrofitService = RetrofitUtils.createRetrofitClient(
+      s"$scheme://127.0.0.1:$serverPort/",
+      classOf[ResourceStagingServiceRetrofit],
+      sslOptions)
     val resourcesBytes = Array[Byte](1, 2, 3, 4)
     val labels = Map("label1" -> "label1Value", "label2" -> "label2value")
     val namespace = "namespace"
     val labelsJson = OBJECT_MAPPER.writer().writeValueAsString(labels)
     val resourcesRequestBody = RequestBody.create(
-        okhttp3.MediaType.parse(MediaType.MULTIPART_FORM_DATA), resourcesBytes)
+      okhttp3.MediaType.parse(MediaType.MULTIPART_FORM_DATA), resourcesBytes)
     val labelsRequestBody = RequestBody.create(
       okhttp3.MediaType.parse(MediaType.APPLICATION_JSON), labelsJson)
     val namespaceRequestBody = RequestBody.create(
@@ -95,5 +119,14 @@ class ResourceStagingServerSuite extends SparkFunSuite with BeforeAndAfterAll {
     val downloadedBytes = ByteStreams.toByteArray(responseBody.byteStream())
     assert(downloadedBytes.toSeq === bytes)
   }
+}
 
+private class SettableReferenceSslOptionsProvider extends ResourceStagingServerSslOptionsProvider {
+  private var options = SSLOptions()
+
+  def setOptions(newOptions: SSLOptions): Unit = {
+    this.options = newOptions
+  }
+
+  override def getSslOptions: SSLOptions = options
 }

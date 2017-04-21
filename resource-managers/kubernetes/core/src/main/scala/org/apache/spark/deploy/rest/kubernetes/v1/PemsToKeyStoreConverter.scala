@@ -60,11 +60,12 @@ private[spark] object PemsToKeyStoreConverter {
       privateKey,
       keyPassword.map(_.toCharArray).orNull,
       certificates)
-    val keyStoreOutputPath = Paths.get(s"keystore-${UUID.randomUUID()}.$resolvedKeyStoreType")
-    Utils.tryWithResource(new FileOutputStream(keyStoreOutputPath.toFile)) { storeStream =>
+    val keyStoreDir = Utils.createTempDir("temp-keystores")
+    val keyStoreFile = new File(keyStoreDir, s"keystore-${UUID.randomUUID()}.$resolvedKeyStoreType")
+    Utils.tryWithResource(new FileOutputStream(keyStoreFile)) { storeStream =>
       keyStore.store(storeStream, keyStorePassword.map(_.toCharArray).orNull)
     }
-    keyStoreOutputPath.toFile
+    keyStoreFile
   }
 
   def convertCertPemToTrustStore(
