@@ -1489,6 +1489,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitConcat(ctx: ConcatContext): Expression = {
     val exprs = ctx.primaryExpression().asScala
-    Concat(expression(exprs.head) +: exprs.drop(1).map(expression))
+    Concat(exprs.map(expression))
   }
 }
