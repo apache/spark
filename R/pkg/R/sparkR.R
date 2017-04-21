@@ -144,11 +144,21 @@ sparkR.sparkContext <- function(
   sparkJars = "",
   sparkPackages = "") {
 
-  if (exists(".sparkRjsc", envir = .sparkREnv)) {
-    cat(paste("Re-using existing Spark Context.",
-              "Call sparkR.session.stop() or restart R to create a new Spark Context\n"))
-    return(get(".sparkRjsc", envir = .sparkREnv))
-  }
+  tryCatch({
+    sparkRjsc <- NA
+    if (exists(".sparkRjsc", envir = .sparkREnv)) {
+      sparkRjsc <- get(".sparkRjsc", envir = .sparkREnv)
+      return(sparkRjsc)
+    }
+  },
+  error = function(err) {
+    # ignore error
+  },
+  finally = {
+    if (!is.na(sparkRjsc)) 
+      cat(paste("Re-using existing Spark Context.",
+                "Call sparkR.session.stop() or restart R to create a new Spark Context\n"))
+  }) 
 
   jars <- processSparkJars(sparkJars)
   packages <- processSparkPackages(sparkPackages)
@@ -402,9 +412,16 @@ sparkR.session <- function(
        sparkJars, sparkPackages)
     stopifnot(exists(".sparkRjsc", envir = .sparkREnv))
   }
-
-  if (exists(".sparkRsession", envir = .sparkREnv)) {
-    sparkSession <- get(".sparkRsession", envir = .sparkREnv)
+  
+  tryCatch({
+    if (exists(".sparkRsession", envir = .sparkREnv)) 
+      sparkSession <- get(".sparkRsession", envir = .sparkREnv)
+  },
+  error = function(cond) {
+    # ignore error
+  })
+  
+  if (exists("sparkSession")) {
     # Apply config to Spark Context and Spark Session if already there
     # Cannot change enableHiveSupport
     callJStatic("org.apache.spark.sql.api.r.SQLUtils",
