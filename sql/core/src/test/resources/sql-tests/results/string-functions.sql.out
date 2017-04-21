@@ -3,26 +3,26 @@
 
 
 -- !query 0
-select 'a' || 'b' || 'c'
--- !query 0 schema
-struct<concat(a, concat(b, c)):string>
--- !query 0 output
-abc
-
-
--- !query 1
 select concat_ws()
--- !query 1 schema
+-- !query 0 schema
 struct<>
--- !query 1 output
+-- !query 0 output
 org.apache.spark.sql.AnalysisException
 requirement failed: concat_ws requires at least one argument.; line 1 pos 7
 
 
--- !query 2
+-- !query 1
 select format_string()
--- !query 2 schema
+-- !query 1 schema
 struct<>
--- !query 2 output
+-- !query 1 output
 org.apache.spark.sql.AnalysisException
 requirement failed: format_string() should take at least 1 argument; line 1 pos 7
+
+
+-- !query 2
+select 'a' || 'b' || 'c'
+-- !query 2 schema
+struct<concat(a, concat(b, c)):string>
+-- !query 2 output
+abc
