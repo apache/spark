@@ -538,7 +538,7 @@ predicate
     ;
 
 valueExpression
-    : primaryExpression                                                                      #valueExpressionDefault
+    : builtinOpExpression                                                                    #valueExpressionDefault
     | operator=(MINUS | PLUS | TILDE) valueExpression                                        #arithmeticUnary
     | left=valueExpression operator=(ASTERISK | SLASH | PERCENT | DIV) right=valueExpression #arithmeticBinary
     | left=valueExpression operator=(PLUS | MINUS) right=valueExpression                     #arithmeticBinary
@@ -546,6 +546,10 @@ valueExpression
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
     | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
     | left=valueExpression comparisonOperator right=valueExpression                          #comparison
+    ;
+
+builtinOpExpression
+    : primaryExpression (CONCAT_PIPE primaryExpression)*                                       #concat
     ;
 
 primaryExpression
@@ -562,7 +566,6 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? namedExpression (',' namedExpression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | primaryExpression (CONCAT_PIPE primaryExpression)+                                       #concat
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference

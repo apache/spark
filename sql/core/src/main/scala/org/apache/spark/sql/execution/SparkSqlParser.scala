@@ -1488,7 +1488,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * Create a [[Concat]] expression for pipeline concatenation.
    */
   override def visitConcat(ctx: ConcatContext): Expression = {
-    val exprs = ctx.primaryExpression().asScala
-    Concat(exprs.map(expression))
+    if (ctx.primaryExpression().size > 1) {
+      val exprs = ctx.primaryExpression().asScala
+      Concat(exprs.map(expression))
+    } else {
+      expression(ctx.primaryExpression(0))
+    }
   }
 }
