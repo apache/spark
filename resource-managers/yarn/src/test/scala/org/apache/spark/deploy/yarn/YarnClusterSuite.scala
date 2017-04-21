@@ -91,7 +91,14 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     |
     |    status = open(sys.argv[1],'w')
     |
-    |    numpy_multiply = lambda x: numpy.multiply(x, mod1.func() * mod2.func())
+    |    # Addict exists only in external-conda-forge, not anaconda
+    |    sc.addCondaChannel("https://conda.anaconda.org/conda-forge")
+    |    sc.addCondaPackages('addict=1.0.0')
+    |
+    |    def numpy_multiply(x):
+    |        # Ensure package from non-base channel is installed
+    |        import addict
+    |        numpy.multiply(x, mod1.func() * mod2.func())
     |
     |    rdd = sc.parallelize(range(10)).map(numpy_multiply)
     |    cnt = rdd.count()
