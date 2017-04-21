@@ -102,4 +102,4 @@ EXPLAIN select * from RaNgE(2)
 struct<plan:string>
 -- !query 8 output
 == Physical Plan ==
-*Range (0, 2, step=1, splits=None)
+*Range (0, 2, step=1, splits=2)

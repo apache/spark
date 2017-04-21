@@ -332,6 +332,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   extends LeafExecNode with CodegenSupport {
 
   def start: Long = range.start
+  def end: Long = range.end
   def step: Long = range.step
   def numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
   def numElements: BigInt = range.numElements
@@ -538,7 +539,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       }
   }
 
-  override def simpleString: String = range.simpleString
+  override def simpleString: String = s"Range ($start, $end, step=$step, splits=$numSlices)"
 }
 
 /**
