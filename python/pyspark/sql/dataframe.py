@@ -290,13 +290,15 @@ class DataFrame(object):
         return self._jdf.isStreaming()
 
     @since(1.3)
-    def show(self, n=20, truncate=True):
+    def show(self, n=20, truncate=True, extendedMode=False):
         """Prints the first ``n`` rows to the console.
 
         :param n: Number of rows to show.
         :param truncate: If set to True, truncate strings longer than 20 chars by default.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
+        :param extendedMode: Enable expanded table formatting mode to print a column data
+            per line.
 
         >>> df
         DataFrame[age: int, name: string]
@@ -314,11 +316,18 @@ class DataFrame(object):
         |  2| Ali|
         |  5| Bob|
         +---+----+
+        >>> df.show(extendedMode=True)
+        -RECORD 0-----
+         age  | 2
+         name | Alice
+        -RECORD 1-----
+         age  | 5
+         name | Bob
         """
         if isinstance(truncate, bool) and truncate:
-            print(self._jdf.showString(n, 20))
+            print(self._jdf.showString(n, 20, extendedMode))
         else:
-            print(self._jdf.showString(n, int(truncate)))
+            print(self._jdf.showString(n, int(truncate), extendedMode))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
