@@ -18,53 +18,32 @@
 package org.apache.spark.deploy.yarn.security
 
 import org.apache.hadoop.conf.Configuration
-import org.scalatest.{Matchers, PrivateMethodTester}
+import org.scalatest.Matchers
 
-import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.deploy.yarn.security.YARNHadoopAccessManager
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
-class YARNHadoopFSCredentialProviderSuite
-    extends SparkFunSuite
-    with PrivateMethodTester
-    with Matchers {
-  private val _getTokenRenewer = PrivateMethod[String]('getTokenRenewer)
-
-  private def getTokenRenewer(
-      fsCredentialProvider: YARNHadoopAccessManager, conf: Configuration): String = {
-    fsCredentialProvider invokePrivate _getTokenRenewer(conf)
-  }
-
-  private var hadoopFsCredentialProvider: YARNHadoopAccessManager = null
-
-  override def beforeAll() {
-    super.beforeAll()
-
-    if (hadoopFsCredentialProvider == null) {
-      hadoopFsCredentialProvider = new YARNHadoopAccessManager()
-    }
-  }
-
-  override def afterAll() {
-    if (hadoopFsCredentialProvider != null) {
-      hadoopFsCredentialProvider = null
-    }
-
-    super.afterAll()
-  }
+class YARNHadoopAccessManagerSuite extends SparkFunSuite with Matchers {
 
   test("check token renewer") {
     val hadoopConf = new Configuration()
     hadoopConf.set("yarn.resourcemanager.address", "myrm:8033")
     hadoopConf.set("yarn.resourcemanager.principal", "yarn/myrm:8032@SPARKTEST.COM")
-    val renewer = getTokenRenewer(hadoopFsCredentialProvider, hadoopConf)
+
+    val sparkConf = new SparkConf()
+    val yarnHadoopAccessManager = new YARNHadoopAccessManager(hadoopConf, sparkConf)
+
+    val renewer = yarnHadoopAccessManager.getTokenRenewer
     renewer should be ("yarn/myrm:8032@SPARKTEST.COM")
   }
 
   test("check token renewer default") {
     val hadoopConf = new Configuration()
+    val sparkConf = new SparkConf()
+    val yarnHadoopAccessManager = new YARNHadoopAccessManager(hadoopConf, sparkConf)
+
     val caught =
       intercept[SparkException] {
-        getTokenRenewer(hadoopFsCredentialProvider, hadoopConf)
+        yarnHadoopAccessManager.getTokenRenewer
       }
     assert(caught.getMessage === "Can't get Master Kerberos principal for use as renewer")
   }

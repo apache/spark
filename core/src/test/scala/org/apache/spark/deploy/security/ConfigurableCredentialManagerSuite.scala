@@ -17,11 +17,13 @@
 
 package org.apache.spark.deploy.security
 
+import org.scalatest.{BeforeAndAfter, Matchers}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
-import org.scalatest.{BeforeAndAfter, Matchers}
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
@@ -136,9 +138,9 @@ class TestCredentialProvider extends ServiceCredentialProvider {
   override def credentialsRequired(conf: Configuration): Boolean = true
 
   override def obtainCredentials(
-      hadoopConf: Configuration,
-      hadoopAccessManager: HadoopAccessManager,
-      creds: Credentials): Option[Long] = {
+    hadoopConf: Configuration,
+    hadoopAccessManager: HadoopAccessManager,
+    creds: Credentials): Option[Long] = {
     if (creds == null) {
       // Guard out other unit test failures.
       return None

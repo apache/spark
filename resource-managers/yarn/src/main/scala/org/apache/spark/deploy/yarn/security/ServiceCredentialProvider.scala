@@ -53,9 +53,9 @@ trait ServiceCredentialProvider {
    *         renewal, otherwise None should be returned.
    */
   def obtainCredentials(
-    hadoopConf: Configuration,
-    sparkConf: SparkConf,
-    creds: Credentials): Option[Long]
+      hadoopConf: Configuration,
+      sparkConf: SparkConf,
+      creds: Credentials): Option[Long]
 }
 
 

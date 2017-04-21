@@ -20,8 +20,9 @@ package org.apache.spark.deploy.security
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-/** [[HadoopAccessManager]] returns information related to how Hadoop delegation tokens should be
- *  fetched.
+/**
+ * Methods in [[HadoopAccessManager]] return scheduler-specific information related to how Hadoop
+ * delegation tokens should be fetched.
  */
 private[spark] trait HadoopAccessManager {
 

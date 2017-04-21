@@ -18,12 +18,15 @@
 package org.apache.spark.deploy.yarn.security
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.Credentials
+import org.apache.hadoop.security.token.Token
 import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.security.ConfigurableCredentialManager
 
-class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
+class YARNConfigurableCredentialManagerSuite
+    extends SparkFunSuite with Matchers with BeforeAndAfter {
   private var credentialManager: YARNConfigurableCredentialManager = null
   private var sparkConf: SparkConf = null
   private var hadoopConf: Configuration = null
@@ -33,21 +36,39 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
     sparkConf = new SparkConf()
     hadoopConf = new Configuration()
-    System.setProperty("SPARK_YARN_MODE", "true")
   }
 
-  override def afterAll(): Unit = {
-    System.clearProperty("SPARK_YARN_MODE")
-
-    super.afterAll()
-  }
-
-  test("Correctly load ") {
+  test("Correctly loads deprecated credential providers") {
     credentialManager = new YARNConfigurableCredentialManager(sparkConf, hadoopConf)
 
-    assert(credentialManager
-      .getServiceCredentialProvider("hadoopfs")
-      .get
-      .isInstanceOf[YARNHadoopAccessManager])
+    credentialManager.deprecatedCredentialProviders.get("yarn-test") should not be (None)
+  }
+}
+
+class YARNTestCredentialProvider extends ServiceCredentialProvider {
+  val tokenRenewalInterval = 86400 * 1000L
+  var timeOfNextTokenRenewal = 0L
+
+  override def serviceName: String = "yarn-test"
+
+  override def credentialsRequired(conf: Configuration): Boolean = true
+
+  override def obtainCredentials(
+    hadoopConf: Configuration,
+    sparkConf: SparkConf,
+    creds: Credentials): Option[Long] = {
+    if (creds == null) {
+      // Guard out other unit test failures.
+      return None
+    }
+
+    val emptyToken = new Token()
+    emptyToken.setService(new Text(serviceName))
+    creds.addToken(emptyToken.getService, emptyToken)
+
+    val currTime = System.currentTimeMillis()
+    timeOfNextTokenRenewal = (currTime - currTime % tokenRenewalInterval) + tokenRenewalInterval
+
+    Some(timeOfNextTokenRenewal)
   }
 }

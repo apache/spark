@@ -40,7 +40,7 @@ private[yarn] class YARNConfigurableCredentialManager(
       hadoopConf,
       new YARNHadoopAccessManager(hadoopConf, sparkConf)) {
 
-  private val deprecatedCredentialProviders = getDeprecatedCredentialProviders
+  val deprecatedCredentialProviders = getDeprecatedCredentialProviders
 
   def getDeprecatedCredentialProviders:
     Map[String, org.apache.spark.deploy.yarn.security.ServiceCredentialProvider] = {
