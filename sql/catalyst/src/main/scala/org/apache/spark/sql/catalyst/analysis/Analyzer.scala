@@ -636,16 +636,11 @@ class Analyzer(
         defaultDatabase: Option[String] = None): LogicalPlan = {
       val tableIdentWithDb = u.tableIdentifier.copy(
         database = u.tableIdentifier.database.orElse(defaultDatabase))
-      if (!tableIdentWithDb.database.exists(catalog.databaseExists)) {
-        // Note that if the database is not defined, it is possible we are looking up a temp view.
-        u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}, the " +
-          s"database doesn't exsits.")
+      try {
+        catalog.lookupRelation(tableIdentWithDb)
+      } catch {
+        case a: AnalysisException => throw a.withPlan(u)
       }
-      if (!catalog.tableExists(tableIdentWithDb)) {
-        // If the database is defined and that database is not found, throw an AnalysisException.
-        u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}")
-      }
-      catalog.lookupRelation(tableIdentWithDb)
     }
 
     // If the database part is specified, and we support running SQL directly on files, and

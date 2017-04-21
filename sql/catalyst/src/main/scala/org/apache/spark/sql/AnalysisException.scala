@@ -37,8 +37,19 @@ class AnalysisException(
     val cause: Option[Throwable] = None)
   extends Exception(message, cause.orNull) with Serializable {
 
+  def withPlan(plan: LogicalPlan): AnalysisException = {
+    withPosition(plan.origin.line, plan.origin.startPosition, Option(plan))
+  }
+
   def withPosition(line: Option[Int], startPosition: Option[Int]): AnalysisException = {
-    val newException = new AnalysisException(message, line, startPosition)
+    withPosition(line, startPosition, None)
+  }
+
+  private def withPosition(
+      line: Option[Int],
+      startPosition: Option[Int],
+      plan: Option[LogicalPlan]): AnalysisException = {
+    val newException = new AnalysisException(message, line, startPosition, plan)
     newException.setStackTrace(getStackTrace)
     newException
   }

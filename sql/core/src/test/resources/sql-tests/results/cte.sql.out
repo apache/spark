@@ -24,7 +24,7 @@ WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 struct<>
 -- !query 2 output
 org.apache.spark.sql.AnalysisException
-Table or view not found: s; line 1 pos 25
+Table or view 's' not found in database 'default'; line 1 pos 25
 
 
 -- !query 3
@@ -43,7 +43,7 @@ WITH s1 AS (SELECT 1 FROM s2), s2 AS (SELECT 1 FROM s1) SELECT * FROM s1, s2
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
-Table or view not found: s2; line 1 pos 26
+Table or view 's2' not found in database 'default'; line 1 pos 26
 
 
 -- !query 5

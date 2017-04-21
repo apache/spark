@@ -93,7 +93,7 @@ SHOW COLUMNS IN badtable FROM showdb
 -- !query 10 schema
 struct<>
 -- !query 10 output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+org.apache.spark.sql.AnalysisException
 Table or view 'badtable' not found in database 'showdb';
 
 
@@ -129,7 +129,7 @@ SHOW COLUMNS IN showdb.showcolumn3
 -- !query 14 schema
 struct<>
 -- !query 14 output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+org.apache.spark.sql.AnalysisException
 Table or view 'showcolumn3' not found in database 'showdb';
 
 
@@ -138,7 +138,7 @@ SHOW COLUMNS IN showcolumn3 FROM showdb
 -- !query 15 schema
 struct<>
 -- !query 15 output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+org.apache.spark.sql.AnalysisException
 Table or view 'showcolumn3' not found in database 'showdb';
 
 
@@ -147,7 +147,7 @@ SHOW COLUMNS IN showcolumn4
 -- !query 16 schema
 struct<>
 -- !query 16 output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+org.apache.spark.sql.AnalysisException
 Table or view 'showcolumn4' not found in database 'showdb';
 
 

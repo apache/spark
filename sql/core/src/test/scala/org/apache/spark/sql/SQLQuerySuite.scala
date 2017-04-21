@@ -1651,7 +1651,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     var e = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    assert(e.message.contains("Table or view not found"))
+    assert(e.message.contains("Table or view 'in_valid_table' not found"))
 
     e = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()

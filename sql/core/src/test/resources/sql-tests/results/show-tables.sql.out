@@ -196,7 +196,7 @@ SHOW TABLE EXTENDED LIKE 'show_t*' PARTITION(c='Us', d=1)
 -- !query 16 schema
 struct<>
 -- !query 16 output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+org.apache.spark.sql.AnalysisException
 Table or view 'show_t*' not found in database 'showdb';
 
 
@@ -223,7 +223,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Ch', d=1)
 -- !query 19 schema
 struct<>
 -- !query 19 output
-org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
+org.apache.spark.sql.AnalysisException
 Partition not found in table 'show_t1' database 'showdb':
 c -> Ch
 d -> 1;

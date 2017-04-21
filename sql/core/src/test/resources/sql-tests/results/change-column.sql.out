@@ -256,7 +256,7 @@ ALTER TABLE temp_view CHANGE a a INT COMMENT 'this is column a'
 -- !query 25 schema
 struct<>
 -- !query 25 output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+org.apache.spark.sql.AnalysisException
 Table or view 'temp_view' not found in database 'default';
 
 
@@ -273,7 +273,7 @@ ALTER TABLE global_temp.global_temp_view CHANGE a a INT COMMENT 'this is column 
 -- !query 27 schema
 struct<>
 -- !query 27 output
-org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
+org.apache.spark.sql.AnalysisException
 Database 'global_temp' not found;
 
 

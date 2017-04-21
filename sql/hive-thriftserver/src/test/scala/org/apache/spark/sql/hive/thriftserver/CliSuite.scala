@@ -232,7 +232,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
       "select * from nonexistent_table;"
-        -> "Error in query: Table or view not found: nonexistent_table;"
+        -> "Error in query: Table or view 'nonexistent_table' not found"
     )
   }
 
