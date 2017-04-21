@@ -822,12 +822,25 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         sql(
           """
-          | select c2
-          | from t1
-          | where exists (select *
-          |               from t2 lateral view explode(arr_c2) q as c2
-                          where t1.c1 = t2.c1)""".stripMargin),
+          | SELECT c2
+          | FROM t1
+          | WHERE EXISTS (SELECT *
+          |               FROM t2 LATERAL VIEW explode(arr_c2) q AS c2
+                          WHERE t1.c1 = t2.c1)""".stripMargin),
         Row(1) :: Row(0) :: Nil)
+
+      val msg1 = intercept[AnalysisException] {
+        sql(
+          """
+            | SELECT c1
+            | FROM t2
+            | WHERE EXISTS (SELECT *
+            |               FROM t1 LATERAL VIEW explode(t2.arr_c2) q AS c2
+            |               WHERE t1.c1 = t2.c1)
+          """.stripMargin)
+      }
+      assert(msg1.getMessage.contains(
+        "Expressions referencing the outer query are not supported outside of WHERE/HAVING"))
     }
   }
 
