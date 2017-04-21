@@ -69,14 +69,14 @@ class SparkSessionExtensions {
   private[this] val resolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
 
   /**
-   * Build the analyzer resolution [[Rule]]s using the given [[SparkSession]].
+   * Build the analyzer resolution `Rule`s using the given [[SparkSession]].
    */
   private[sql] def buildResolutionRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
     resolutionRuleBuilders.map(_.apply(session))
   }
 
   /**
-   * Inject an analyzer resolution [[Rule]] builder into the [[SparkSession]]. These analyzer
+   * Inject an analyzer resolution `Rule` builder into the [[SparkSession]]. These analyzer
    * rules will be executed as part of the resolution phase of analysis.
    */
   def injectResolutionRule(builder: RuleBuilder): Unit = {
@@ -86,14 +86,14 @@ class SparkSessionExtensions {
   private[this] val postHocResolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
 
   /**
-   * Build the analyzer post-hoc resolution [[Rule]]s using the given [[SparkSession]].
+   * Build the analyzer post-hoc resolution `Rule`s using the given [[SparkSession]].
    */
   private[sql] def buildPostHocResolutionRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
     postHocResolutionRuleBuilders.map(_.apply(session))
   }
 
   /**
-   * Inject an analyzer [[Rule]] builder into the [[SparkSession]]. These analyzer
+   * Inject an analyzer `Rule` builder into the [[SparkSession]]. These analyzer
    * rules will be executed after resolution.
    */
   def injectPostHocResolutionRule(builder: RuleBuilder): Unit = {
@@ -103,14 +103,14 @@ class SparkSessionExtensions {
   private[this] val checkRuleBuilders = mutable.Buffer.empty[CheckRuleBuilder]
 
   /**
-   * Build the check analysis [[Rule]]s using the given [[SparkSession]].
+   * Build the check analysis `Rule`s using the given [[SparkSession]].
    */
   private[sql] def buildCheckRules(session: SparkSession): Seq[LogicalPlan => Unit] = {
     checkRuleBuilders.map(_.apply(session))
   }
 
   /**
-   * Inject an check analysis [[Rule]] builder into the [[SparkSession]]. The injected rules will
+   * Inject an check analysis `Rule` builder into the [[SparkSession]]. The injected rules will
    * be executed after the analysis phase. A check analysis rule is used to detect problems with a
    * LogicalPlan and should throw an exception when a problem is found.
    */
@@ -125,7 +125,7 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject an optimizer [[Rule]] builder into the [[SparkSession]]. The injected rules will be
+   * Inject an optimizer `Rule` builder into the [[SparkSession]]. The injected rules will be
    * executed during the operator optimization batch. An optimizer rule is used to improve the
    * quality of an analyzed logical plan; these rules should never modify the result of the
    * LogicalPlan.
@@ -141,8 +141,8 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject a planner [[Strategy]] builder into the [[SparkSession]]. The injected strategy will
-   * be used to convert a [[LogicalPlan]] into a executable
+   * Inject a planner `Strategy` builder into the [[SparkSession]]. The injected strategy will
+   * be used to convert a `LogicalPlan` into a executable
    * [[org.apache.spark.sql.execution.SparkPlan]].
    */
   def injectPlannerStrategy(builder: StrategyBuilder): Unit = {
