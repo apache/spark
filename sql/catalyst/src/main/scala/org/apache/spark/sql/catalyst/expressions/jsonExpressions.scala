@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.{ByteArrayOutputStream, CharArrayWriter, StringWriter}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, CharArrayWriter, InputStreamReader, StringWriter}
 
 import scala.util.parsing.combinator.RegexParsers
 
@@ -149,7 +149,8 @@ case class GetJsonObject(json: Expression, path: Expression)
 
     if (parsed.isDefined) {
       try {
-        Utils.tryWithResource(jsonFactory.createParser(jsonStr.toString)) { parser =>
+        Utils.tryWithResource(jsonFactory.createParser(new InputStreamReader(
+            new ByteArrayInputStream(jsonStr.getBytes), "UTF-8"))) { parser =>
           val output = new ByteArrayOutputStream()
           val matched = Utils.tryWithResource(
             jsonFactory.createGenerator(output, JsonEncoding.UTF8)) { generator =>
@@ -393,7 +394,8 @@ case class JsonTuple(children: Seq[Expression])
     }
 
     try {
-      Utils.tryWithResource(jsonFactory.createParser(json.toString)) {
+      Utils.tryWithResource(jsonFactory.createParser(new InputStreamReader(
+          new ByteArrayInputStream(json.getBytes), "UTF-8"))) {
         parser => parseRow(parser, input)
       }
     } catch {
