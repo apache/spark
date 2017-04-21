@@ -79,14 +79,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     tokens.iterator().next().getService should be (new Text("test"))
   }
 
-  test("verify obtaining user credentials") {
-    credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
-
-    val initNumTokens = UserGroupInformation.getCurrentUser.getCredentials.numberOfTokens
-    val creds = credentialManager.obtainUserCredentials
-    creds.numberOfTokens() should be (initNumTokens + 1)
-  }
-
   test("verify getting credential renewal info") {
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
     val creds = new Credentials()

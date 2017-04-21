@@ -130,17 +130,4 @@ private[spark] class ConfigurableCredentialManager(
       }
     }.foldLeft(Long.MaxValue)(math.min)
   }
-
-  /**
-   * Returns a copy of the current user's credentials, augmented with new delegation tokens.
-   */
-  def obtainUserCredentials: Credentials = {
-    val userCreds = UserGroupInformation.getCurrentUser.getCredentials
-    val numTokensBefore = userCreds.numberOfTokens
-    obtainCredentials(hadoopConf, userCreds)
-
-    logDebug(s"Fetched ${userCreds.numberOfTokens - numTokensBefore} delegation token(s).")
-
-    userCreds
-  }
 }
