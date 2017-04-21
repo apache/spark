@@ -87,7 +87,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
-      //stripXSS is called first to remove suspicious characters used in XSS attacks
+      // stripXSS is called first to remove suspicious characters used in XSS attacks
       val parameterId = UIUtils.stripXSS(request.getParameter("id"))
       require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 

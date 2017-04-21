@@ -33,7 +33,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
   private val supportedLogTypes = Set("stderr", "stdout")
   private val defaultBytes = 100 * 1024
 
-  //stripXSS is called first to remove suspicious characters used in XSS attacks
+  // stripXSS is called first to remove suspicious characters used in XSS attacks
   def renderLog(request: HttpServletRequest): String = {
     val appId = Option(UIUtils.stripXSS(request.getParameter("appId")))
     val executorId = Option(UIUtils.stripXSS(request.getParameter("executorId")))
@@ -56,7 +56,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     pre + logText
   }
 
-  //stripXSS is called first to remove suspicious characters used in XSS attacks
+  // stripXSS is called first to remove suspicious characters used in XSS attacks
   def render(request: HttpServletRequest): Seq[Node] = {
     val appId = Option(UIUtils.stripXSS(request.getParameter("appId")))
     val executorId = Option(UIUtils.stripXSS(request.getParameter("executorId")))

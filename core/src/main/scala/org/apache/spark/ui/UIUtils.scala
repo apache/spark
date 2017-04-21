@@ -536,19 +536,17 @@ private[spark] object UIUtils extends Logging {
    * https://www.owasp.org/index.php/XSS_Filter_Evasion_Cheat_Sheet and
    * https://www.owasp.org/index.php/Testing_for_Reflected_Cross_site_scripting_(OTG-INPVAL-001)
    */
-  def stripXSS(url: String): String = {
-    var strippedXSSUrl = url
-    if (strippedXSSUrl != null) {
+  def stripXSS(requestParameter: String): String = {
+    var requestParameterStripped = requestParameter
+    if (requestParameterStripped != null) {
       // Avoid null characters or single quote
-      strippedXSSUrl = strippedXSSUrl.replaceAll("(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)", "")
-      strippedXSSUrl = StringEscapeUtils.escapeHtml4(strippedXSSUrl)
+      requestParameterStripped = requestParameterStripped.replaceAll("(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)", "")
+      requestParameterStripped = StringEscapeUtils.escapeHtml4(requestParameterStripped)
     }
-    strippedXSSUrl
+    requestParameterStripped
   }
 
-  def stripXSSMap(url: Array[String]): Array[String] = {
-    var strippedXSSUrl = url
-    strippedXSSUrl.foreach(stripXSS(_))
-    strippedXSSUrl
+  def stripXSSArray(requestParameter: Array[String]): Array[String] = {
+    requestParameter.map(stripXSS)
   }
 }

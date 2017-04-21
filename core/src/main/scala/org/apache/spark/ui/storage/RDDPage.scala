@@ -31,7 +31,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    //stripXSS is called first to remove suspicious characters used in XSS attacks
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
     val parameterId = UIUtils.stripXSS(request.getParameter("id"))
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 

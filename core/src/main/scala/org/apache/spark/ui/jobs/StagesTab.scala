@@ -39,7 +39,7 @@ private[ui] class StagesTab(parent: SparkUI) extends SparkUITab(parent, "stages"
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
-      //stripXSS is called first to remove suspicious characters used in XSS attacks
+      // stripXSS is called first to remove suspicious characters used in XSS attacks
       val stageId = Option(UIUtils.stripXSS(request.getParameter("id"))).map(_.toInt)
       stageId.foreach { id =>
         if (progressListener.activeStages.contains(id)) {

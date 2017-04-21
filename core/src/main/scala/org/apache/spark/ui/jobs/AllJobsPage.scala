@@ -220,15 +220,15 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       jobTag: String,
       jobs: Seq[JobUIData],
       killEnabled: Boolean): Seq[Node] = {
-    //stripXSS is called to remove suspicious characters used in XSS attacks
-    val allParameters = request.getParameterMap.asScala.toMap.mapValues(UIUtils.stripXSSMap(_))
+    // stripXSS is called to remove suspicious characters used in XSS attacks
+    val allParameters = request.getParameterMap.asScala.toMap.mapValues(UIUtils.stripXSSArray(_))
     val parameterOtherTable = allParameters.filterNot(_._1.startsWith(jobTag))
       .map(para => para._1 + "=" + para._2(0))
 
     val someJobHasJobGroup = jobs.exists(_.jobGroup.isDefined)
     val jobIdTitle = if (someJobHasJobGroup) "Job Id (Job Group)" else "Job Id"
 
-    //stripXSS is called first to remove suspicious characters used in XSS attacks
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
     val parameterJobPage = UIUtils.stripXSS(request.getParameter(jobTag + ".page"))
     val parameterJobSortColumn = UIUtils.stripXSS(request.getParameter(jobTag + ".sort"))
     val parameterJobSortDesc = UIUtils.stripXSS(request.getParameter(jobTag + ".desc"))

@@ -26,7 +26,7 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    //stripXSS is called first to remove suspicious characters used in XSS attacks
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
     val requestedIncomplete =
       Option(UIUtils.stripXSS(request.getParameter("showIncomplete"))).getOrElse("false").toBoolean
 

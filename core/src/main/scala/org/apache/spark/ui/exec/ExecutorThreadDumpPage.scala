@@ -28,7 +28,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
 
   private val sc = parent.sc
 
-  //stripXSS is called first to remove suspicious characters used in XSS attacks
+  // stripXSS is called first to remove suspicious characters used in XSS attacks
   def render(request: HttpServletRequest): Seq[Node] = {
     val executorId = Option(UIUtils.stripXSS(request.getParameter("executorId"))).map { executorId =>
       UIUtils.decodeURLParameter(executorId)
