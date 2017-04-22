@@ -3745,3 +3745,55 @@ setMethod("collect_set",
             jc <- callJStatic("org.apache.spark.sql.functions", "collect_set", x@jc)
             column(jc)
           })
+
+#' split_string
+#'
+#' Splits string on regular expression.
+#'
+#' @param x Column to compute on
+#' @param pattern Java regular expression
+#'
+#' @rdname split_string
+#' @family string_funcs
+#' @aliases split_string,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- read.text("README.md")
+#'
+#' head(select(split_string(df$value, "\\s+")))
+#' }
+#' @note split_string 2.3.0
+#' @note equivalent to \code{split} SQL function
+setMethod("split_string",
+          signature(x = "Column", pattern = "character"),
+          function(x, pattern) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "split", x@jc, pattern)
+            column(jc)
+          })
+
+#' repeat_string
+#'
+#' Repeats string n times.
+#'
+#' @param x Column to compute on
+#' @param n Number of repetitions
+#'
+#' @rdname repeat_string
+#' @family string_funcs
+#' @aliases repeat_string,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFame(data.frame(
+#'   text = c("foo", "bar")
+#' ))
+#'
+#' head(select(repeat_string(df$text, 3)))
+#' }
+#' @note repeat_string 2.3.0
+#' @note equivalent to \code{repeat} SQL function
+setMethod("repeat_string",
+          signature(x = "Column", n = "numeric"),
+          function(x, n) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "repeat", x@jc, as.integer(n))
+            column(jc)
+          })

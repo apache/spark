@@ -1546,6 +1546,40 @@ test_that("string operators", {
   expect_equal(collect(select(df3, substring_index(df3$a, ".", 2)))[1, 1], "a.b")
   expect_equal(collect(select(df3, substring_index(df3$a, ".", -3)))[1, 1], "b.c.d")
   expect_equal(collect(select(df3, translate(df3$a, "bc", "12")))[1, 1], "a.1.2.d")
+
+  l4 <- list(list(a = "a.b@c.d   1\\b"))
+  df4 <- createDataFrame(l4)
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\s+")))[1, 1],
+    list(list("a.b@c.d", "1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\.")))[1, 1],
+    list(list("a", "b@c", "d   1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "@")))[1, 1],
+    list(list("a.b", "c.d   1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\\\")))[1, 1],
+    list(list("a.b@c.d   1", "b"))
+  )
+
+  l5 <- list(list(a = "abc"))
+  df5 <- createDataFrame(l5)
+  expect_equal(
+    collect(select(df5, repeat_string(df5$a, 1L)))[1, 1],
+    "abc"
+  )
+  expect_equal(
+    collect(select(df5, repeat_string(df5$a, 3)))[1, 1],
+    "abcabcabc"
+  )
+  expect_equal(
+    collect(select(df5, repeat_string(df5$a, -1)))[1, 1],
+    ""
+  )
 })
 
 test_that("date functions on a DataFrame", {
