@@ -1802,7 +1802,7 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
 
   expected_cube <- data.frame(
     year = c(rep(NA, 4), rep(2016, 4), rep(2017, 4)),
-    department = rep(c(NA, "management", "rnd", "sales"), times=3),
+    department = rep(c(NA, "management", "rnd", "sales"), times = 3),
     total_salary = c(
       120000, # Total
       10000 + 22000, 15000 + 32000, 20000 + 21000, # Department only
@@ -1844,7 +1844,7 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
 
   expected_rollup <- data.frame(
     year = c(NA, rep(2016, 4), rep(2017, 4)),
-    department = c(NA, rep(c(NA, "management", "rnd", "sales"), times=2)),
+    department = c(NA, rep(c(NA, "management", "rnd", "sales"), times = 2)),
     total_salary = c(
       120000, # Total
       20000 + 15000 + 10000, # 2016
