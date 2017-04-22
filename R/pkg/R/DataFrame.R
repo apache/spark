@@ -3658,7 +3658,8 @@ setMethod("checkpoint",
 #' @export
 #' @examples
 #' \dontrun{
-#'
+#' df <- createDataFrame(mtcars)
+#' mean(cube(df, "cyl", "gear", "am"), "mpg")
 #' }
 #' @note cube since 2.3.0
 setMethod("cube",
@@ -3684,7 +3685,8 @@ setMethod("cube",
 #' @export
 #' @examples
 #' \dontrun{
-#'
+#' df <- createDataFrame(mtcars)
+#' mean(rollup(df, "cyl", "gear", "am"), "mpg")
 #' }
 #' @note rollup since 2.3.0
 setMethod("rollup",
