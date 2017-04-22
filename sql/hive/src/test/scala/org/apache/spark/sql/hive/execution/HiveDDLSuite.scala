@@ -1198,7 +1198,7 @@ class HiveDDLSuite
         val indexTabName =
           spark.sessionState.catalog.listTables("default", s"*$indexName*").head.table
 
-        // For non-indexed tables, listTables and getTable APIs should still work
+        // Even if index tables exist, listTables and getTable APIs should still work
         checkAnswer(
           spark.catalog.listTables().toDF(),
           Row(indexTabName, "default", null, null, false) ::
