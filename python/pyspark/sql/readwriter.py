@@ -106,7 +106,7 @@ class DataFrameReader(OptionUtils):
         elif isinstance(schema, basestring):
             self._jreader = self._jreader.schema(schema)
         else:
-            raise TypeError("schema should be StructType")
+            raise TypeError("schema should be StructType or string")
         return self
 
     @since(1.5)
