@@ -708,9 +708,8 @@ messages remaining.
 > messaging function.  These constraints allow additional optimization within GraphX.
 
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
-of its implementation (note: to avoid stackOverflowError due to long lineage chains, graph and 
-messages are periodically checkpoint and the checkpoint interval is set by
-"spark.graphx.pregel.checkpointInterval", it can be disable by set as -1):
+of its implementation (note: to avoid stackOverflowError due to long lineage chains, pregel support periodcally
+checkpoint graph and messages by setting "spark.graphx.pregel.checkpointInterval"):
 
 {% highlight scala %}
 class GraphOps[VD, ED] {
@@ -726,7 +725,7 @@ class GraphOps[VD, ED] {
     var g = mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) ).cache()
 
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)    
+    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
     var activeMessages = messages.count()
     // Loop until no messages remain or maxIterations is achieved
     var i = 0
@@ -735,8 +734,8 @@ class GraphOps[VD, ED] {
       g = g.joinVertices(messages)(vprog).cache()
       val oldMessages = messages
       // Send new messages, skipping edges where neither side received a message. We must cache
-      // and periodic checkpoint messages so it can be materialized on the next line, and avoid
-      // to have a long lineage chain.
+      // messages so it can be materialized on the next line, allowing us to uncache the previous
+      // iteration.
       messages = GraphXUtils.mapReduceTriplets(
         g, sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
       activeMessages = messages.count()

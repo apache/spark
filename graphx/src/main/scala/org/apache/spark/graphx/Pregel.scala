@@ -126,7 +126,7 @@ object Pregel extends Logging {
       s" but got ${maxIterations}")
 
     val checkpointInterval = graph.vertices.sparkContext.getConf
-      .getInt("spark.graphx.pregel.checkpointInterval", 10)
+      .getInt("spark.graphx.pregel.checkpointInterval", -1)
     var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg))
     val graphCheckpointer = new PeriodicGraphCheckpointer[VD, ED](
       checkpointInterval, graph.vertices.sparkContext)
@@ -150,8 +150,8 @@ object Pregel extends Logging {
 
       val oldMessages = messages
       // Send new messages, skipping edges where neither side received a message. We must cache
-      // and periodic checkpoint messages so it can be materialized on the next line, and avoid
-      // to have a long lineage chain.
+      // messages so it can be materialized on the next line, allowing us to uncache the previous
+      // iteration.
       messages = GraphXUtils.mapReduceTriplets(
         g, sendMsg, mergeMsg, Some((oldMessages, activeDirection)))
       // The call to count() materializes `messages` and the vertices of `g`. This hides oldMessages
