@@ -1203,10 +1203,6 @@ class HiveDDLSuite
           spark.catalog.listTables().toDF(),
           Row(indexTabName, "default", null, null, false) ::
             Row(tabName, "default", null, "MANAGED", false) :: Nil)
-        checkAnswer(
-          spark.catalog.listTables().toDF(),
-          Row(indexTabName, "default", null, null, false) ::
-            Row(tabName, "default", null, "MANAGED", false) :: Nil)
         assert(spark.catalog.getTable("default", indexTabName).name === indexTabName)
 
         intercept[TableAlreadyExistsException] {
