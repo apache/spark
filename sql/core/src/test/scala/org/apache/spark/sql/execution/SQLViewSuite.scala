@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSQLContext
@@ -160,7 +159,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   private def assertNoSuchTable(query: String): Unit = {
-    intercept[NoSuchTableException] {
+    intercept[AnalysisException] {
       sql(query)
     }
   }
@@ -196,16 +195,16 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assertInvalidReference("CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM table_not_exist345")
 
     // A column that does not exist
-    intercept[AnalysisException] {
-      sql("CREATE OR REPLACE VIEW myabcdview AS SELECT random1234 FROM jt").collect()
-    }
+    assertInvalid("CREATE OR REPLACE VIEW myabcdview AS SELECT random1234 FROM jt")
   }
 
   private def assertInvalidReference(query: String): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(query)
-    }.getMessage
-    assert(e.contains("Table or view not found"))
+    assertInvalid(query, "Table or view", "not found")
+  }
+
+  private def assertInvalid(query: String, msgs: String*): Unit = {
+    val e = intercept[AnalysisException](sql(query)).getMessage
+    msgs.foreach(msg => assert(e.contains(msg)))
   }
 
 
@@ -529,7 +528,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           }
         }
       }
-      assertInvalidReference("SELECT * FROM view1")
+      assertInvalid("SELECT * FROM view1", "Database", "not found")
 
       // Fail if the referenced table is invalid.
       withTable("table2") {

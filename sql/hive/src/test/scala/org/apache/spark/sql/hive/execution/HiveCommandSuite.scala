@@ -23,7 +23,6 @@ import com.google.common.io.Files
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -127,7 +126,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("show tblproperties for datasource table - errors") {
-    val message1 = intercept[NoSuchTableException] {
+    val message1 = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES badtable")
     }.getMessage
     assert(message1.contains("Table or view 'badtable' not found in database 'default'"))
@@ -405,7 +404,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
          |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
       // An empty sequence of row is returned for session temporary table.
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_temp")
       }
 

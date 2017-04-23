@@ -34,7 +34,6 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
@@ -204,7 +203,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     verifyTableProperties(tableDefinition)
 
     if (tableExists(db, table) && !ignoreIfExists) {
-      throw new TableAlreadyExistsException(db = db, table = table)
+      throw AnalysisException.tableAlreadyExists(db, table)
     }
 
     if (tableDefinition.tableType == VIEW) {

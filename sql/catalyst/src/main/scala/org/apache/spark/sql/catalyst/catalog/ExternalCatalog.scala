@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ListenerBus
@@ -29,7 +29,7 @@ import org.apache.spark.util.ListenerBus
  * can be accessed in multiple threads. This is an external catalog because it is expected to
  * interact with external systems.
  *
- * Implementations should throw [[NoSuchDatabaseException]] when databases don't exist.
+ * Implementations should throw an [[AnalysisException]] when databases don't exist.
  */
 abstract class ExternalCatalog
   extends ListenerBus[ExternalCatalogEventListener, ExternalCatalogEvent] {
@@ -37,25 +37,25 @@ abstract class ExternalCatalog
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new NoSuchDatabaseException(db)
+      throw AnalysisException.noSuchDatabase(db)
     }
   }
 
   protected def requireTableExists(db: String, table: String): Unit = {
     if (!tableExists(db, table)) {
-      throw new NoSuchTableException(db = db, table = table)
+      throw AnalysisException.noSuchTable(db, table)
     }
   }
 
   protected def requireFunctionExists(db: String, funcName: String): Unit = {
     if (!functionExists(db, funcName)) {
-      throw new NoSuchFunctionException(db = db, func = funcName)
+      throw AnalysisException.noSuchFunction(db, funcName)
     }
   }
 
   protected def requireFunctionNotExists(db: String, funcName: String): Unit = {
     if (functionExists(db, funcName)) {
-      throw new FunctionAlreadyExistsException(db = db, func = funcName)
+      throw AnalysisException.functionAlreadyExists(db, funcName)
     }
   }
 

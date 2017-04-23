@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
 
-import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -69,9 +69,11 @@ private[hive] trait HiveClient {
   /** Return whether a table/view with the specified name exists. */
   def tableExists(dbName: String, tableName: String): Boolean
 
-  /** Returns the specified table, or throws [[NoSuchTableException]]. */
+  /** Returns the specified table, or throws [[AnalysisException]]. */
   final def getTable(dbName: String, tableName: String): CatalogTable = {
-    getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))
+    getTableOption(dbName, tableName).getOrElse {
+      throw AnalysisException.noSuchTable(dbName, tableName)
+    }
   }
 
   /** Returns the metadata for the specified table or None if it doesn't exist. */
@@ -144,13 +146,13 @@ private[hive] trait HiveClient {
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit
 
-  /** Returns the specified partition, or throws [[NoSuchPartitionException]]. */
+  /** Returns the specified partition, or throws [[AnalysisException]]. */
   final def getPartition(
       dbName: String,
       tableName: String,
       spec: TablePartitionSpec): CatalogTablePartition = {
     getPartitionOption(dbName, tableName, spec).getOrElse {
-      throw new NoSuchPartitionException(dbName, tableName, spec)
+      throw AnalysisException.noSuchPartition(dbName, tableName, spec)
     }
   }
 
@@ -241,7 +243,7 @@ private[hive] trait HiveClient {
 
   /** Return an existing function in the database, assuming it exists. */
   final def getFunction(db: String, name: String): CatalogFunction = {
-    getFunctionOption(db, name).getOrElse(throw new NoSuchPermanentFunctionException(db, name))
+    getFunctionOption(db, name).getOrElse(throw AnalysisException.noSuchPermanentFunction(db, name))
   }
 
   /** Return an existing function in the database, or None if it doesn't exist. */

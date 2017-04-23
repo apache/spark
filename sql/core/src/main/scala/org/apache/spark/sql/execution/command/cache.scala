@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -59,7 +58,7 @@ case class UncacheTableCommand(
     try {
       sparkSession.catalog.uncacheTable(tableId)
     } catch {
-      case _: NoSuchTableException if ifExists => // don't throw
+      case _: AnalysisException if ifExists => // don't throw
     }
     Seq.empty[Row]
   }

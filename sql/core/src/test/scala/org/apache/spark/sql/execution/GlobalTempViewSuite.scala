@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.Table
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -39,18 +38,18 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
 
     // If there is no database in table name, we should try local temp view first, if not found,
     // try table/view in current database, which is "default" in this case. So we expect
-    // NoSuchTableException here.
-    intercept[NoSuchTableException](spark.table("src"))
+    // AnalysisException here.
+    intercept[AnalysisException](spark.table("src"))
 
     // Use qualified name to refer to the global temp view explicitly.
     checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
 
     // Table name without database will never refer to a global temp view.
-    intercept[NoSuchTableException](sql("DROP VIEW src"))
+    intercept[AnalysisException](sql("DROP VIEW src"))
 
     sql(s"DROP VIEW $globalTempDB.src")
     // The global temp view should be dropped successfully.
-    intercept[NoSuchTableException](spark.table(s"$globalTempDB.src"))
+    intercept[AnalysisException](spark.table(s"$globalTempDB.src"))
 
     // We can also use Dataset API to create global temp view
     Seq(1 -> "a").toDF("i", "j").createGlobalTempView("src")
@@ -58,7 +57,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
 
     // Use qualified name to rename a global temp view.
     sql(s"ALTER VIEW $globalTempDB.src RENAME TO src2")
-    intercept[NoSuchTableException](spark.table(s"$globalTempDB.src"))
+    intercept[AnalysisException](spark.table(s"$globalTempDB.src"))
     checkAnswer(spark.table(s"$globalTempDB.src2"), Row(1, "a"))
 
     // Use qualified name to alter a global temp view.
@@ -67,7 +66,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
 
     // We can also use Catalog API to drop global temp view
     spark.catalog.dropGlobalTempView("src2")
-    intercept[NoSuchTableException](spark.table(s"$globalTempDB.src2"))
+    intercept[AnalysisException](spark.table(s"$globalTempDB.src2"))
   }
 
   test("global temp view is shared among all sessions") {

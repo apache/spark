@@ -30,7 +30,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPermanentFunctionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -171,7 +170,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: getDatabase") {
       // No exception should be thrown
       client.getDatabase("default")
-      intercept[NoSuchDatabaseException](client.getDatabase("nonexist"))
+      intercept[AnalysisException](client.getDatabase("nonexist"))
     }
 
     test(s"$version: databaseExists") {
@@ -438,7 +437,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: renameFunction") {
       if (version == "0.12") {
         // Hive 0.12 doesn't allow customized permanent functions
-        intercept[NoSuchPermanentFunctionException] {
+        intercept[AnalysisException] {
           client.renameFunction("default", "func1", "func2")
         }
       } else {
@@ -451,7 +450,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val functionClass = "org.apache.spark.MyFunc2"
       if (version == "0.12") {
         // Hive 0.12 doesn't allow customized permanent functions
-        intercept[NoSuchPermanentFunctionException] {
+        intercept[AnalysisException] {
           client.alterFunction("default", function("func2", functionClass))
         }
       } else {
@@ -462,7 +461,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: getFunction") {
       if (version == "0.12") {
         // Hive 0.12 doesn't allow customized permanent functions
-        intercept[NoSuchPermanentFunctionException] {
+        intercept[AnalysisException] {
           client.getFunction("default", "func2")
         }
       } else {
@@ -494,7 +493,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: dropFunction") {
       if (version == "0.12") {
         // Hive 0.12 doesn't support creating permanent functions
-        intercept[NoSuchPermanentFunctionException] {
+        intercept[AnalysisException] {
           client.dropFunction("default", "func2")
         }
       } else {

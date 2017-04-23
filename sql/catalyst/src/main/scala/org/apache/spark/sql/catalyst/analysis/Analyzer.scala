@@ -638,13 +638,7 @@ class Analyzer(
       try {
         catalog.lookupRelation(tableIdentWithDb)
       } catch {
-        case _: NoSuchTableException =>
-          u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}")
-        // If the database is defined and that database is not found, throw an AnalysisException.
-        // Note that if the database is not defined, it is possible we are looking up a temp view.
-        case e: NoSuchDatabaseException =>
-          u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}, the " +
-            s"database ${e.db} doesn't exsits.")
+        case a: AnalysisException => throw a.withPlan(u)
       }
     }
 
@@ -1121,7 +1115,9 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
       case f: UnresolvedFunction if !catalog.functionExists(f.name) =>
         withPosition(f) {
-          throw new NoSuchFunctionException(f.name.database.getOrElse("default"), f.name.funcName)
+          throw AnalysisException.noSuchFunction(
+            f.name.database.getOrElse("default"),
+            f.name.funcName)
         }
     }
   }

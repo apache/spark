@@ -116,7 +116,7 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("get database should throw exception when the database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.getDatabaseMetadata("db_that_does_not_exist")
       }
     }
@@ -178,7 +178,7 @@ abstract class SessionCatalogSuite extends PlanTest {
         assert(e.contains(
           "org.apache.hadoop.hive.metastore.api.NoSuchObjectException: db_that_does_not_exist"))
       } else {
-        intercept[NoSuchDatabaseException] {
+        intercept[AnalysisException] {
           catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = false, cascade = false)
         }
       }
@@ -191,7 +191,7 @@ abstract class SessionCatalogSuite extends PlanTest {
       catalog.setCurrentDatabase("db1")
       assert(catalog.getCurrentDatabase == "db1")
       catalog.dropDatabase("db1", ignoreIfNotExists = false, cascade = true)
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.createTable(newTable("tbl1", "db1"), ignoreIfExists = false)
       }
       catalog.setCurrentDatabase("default")
@@ -217,7 +217,7 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("alter database should throw exception when the database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.alterDatabase(newDb("unknown_db"))
       }
     }
@@ -228,7 +228,7 @@ abstract class SessionCatalogSuite extends PlanTest {
       assert(catalog.getCurrentDatabase == "default")
       catalog.setCurrentDatabase("db2")
       assert(catalog.getCurrentDatabase == "db2")
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.setCurrentDatabase("deebo")
       }
       catalog.createDatabase(newDb("deebo"), ignoreIfExists = false)
@@ -266,14 +266,14 @@ abstract class SessionCatalogSuite extends PlanTest {
   test("create table when database does not exist") {
     withBasicCatalog { catalog =>
       // Creating table in non-existent database should always fail
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.createTable(newTable("tbl1", "does_not_exist"), ignoreIfExists = false)
       }
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.createTable(newTable("tbl1", "does_not_exist"), ignoreIfExists = true)
       }
       // Table already exists
-      intercept[TableAlreadyExistsException] {
+      intercept[AnalysisException] {
         catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
       }
       catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = true)
@@ -290,7 +290,7 @@ abstract class SessionCatalogSuite extends PlanTest {
       assert(catalog.getTempView("tbl2") == Option(tempTable2))
       assert(catalog.getTempView("tbl3").isEmpty)
       // Temporary table already exists
-      intercept[TempTableAlreadyExistsException] {
+      intercept[AnalysisException] {
         catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
       }
       // Temporary table already exists but we override it
@@ -315,15 +315,15 @@ abstract class SessionCatalogSuite extends PlanTest {
   test("drop table when database/table does not exist") {
     withBasicCatalog { catalog =>
       // Should always throw exception when the database does not exist
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = false,
           purge = false)
       }
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true,
           purge = false)
       }
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = false,
           purge = false)
       }
@@ -373,7 +373,7 @@ abstract class SessionCatalogSuite extends PlanTest {
           TableIdentifier("tblone", Some("db2")), TableIdentifier("tblones", Some("db1")))
       }
       // The new table already exists
-      intercept[TableAlreadyExistsException] {
+      intercept[AnalysisException] {
         catalog.renameTable(
           TableIdentifier("tblone", Some("db2")),
           TableIdentifier("table_two"))
@@ -390,10 +390,10 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("rename table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.renameTable(TableIdentifier("tbl1", Some("unknown_db")), TableIdentifier("tbl2"))
       }
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.renameTable(TableIdentifier("unknown_table", Some("db2")), TableIdentifier("tbl2"))
       }
     }
@@ -439,10 +439,10 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("alter table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.alterTable(newTable("tbl1", "unknown_db"))
       }
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.alterTable(newTable("unknown_table", "db2"))
       }
     }
@@ -489,10 +489,10 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("get table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.getTableMetadata(TableIdentifier("tbl1", Some("unknown_db")))
       }
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.getTableMetadata(TableIdentifier("unknown_table", Some("db2")))
       }
     }
@@ -503,7 +503,7 @@ abstract class SessionCatalogSuite extends PlanTest {
       assert(catalog.getTableMetadataOption(TableIdentifier("tbl1", Some("db2")))
         == Option(catalog.externalCatalog.getTable("db2", "tbl1")))
       assert(catalog.getTableMetadataOption(TableIdentifier("unknown_table", Some("db2"))).isEmpty)
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.getTableMetadataOption(TableIdentifier("tbl1", Some("unknown_db")))
       }
     }
@@ -569,11 +569,11 @@ abstract class SessionCatalogSuite extends PlanTest {
   test("getTempViewOrPermanentTableMetadata on temporary views") {
     withBasicCatalog { catalog =>
       val tempTable = Range(1, 10, 2, 10)
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1"))
       }.getMessage
 
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
       }.getMessage
 
@@ -583,7 +583,7 @@ abstract class SessionCatalogSuite extends PlanTest {
       assert(catalog.getTempViewOrPermanentTableMetadata(
         TableIdentifier("view1")).schema(0).name == "id")
 
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
       }.getMessage
     }
@@ -601,7 +601,7 @@ abstract class SessionCatalogSuite extends PlanTest {
           TableIdentifier("tbl4"),
           TableIdentifier("tbl1", Some("db2")),
           TableIdentifier("tbl2", Some("db2"))))
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.listTables("unknown_db")
       }
     }
@@ -621,7 +621,7 @@ abstract class SessionCatalogSuite extends PlanTest {
           TableIdentifier("tbl2", Some("db2"))))
       assert(catalog.listTables("db2", "*1").toSet ==
         Set(TableIdentifier("tbl1"), TableIdentifier("tbl1", Some("db2"))))
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.listTables("unknown_db", "*")
       }
     }
@@ -650,11 +650,11 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("create partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.createPartitions(
           TableIdentifier("tbl1", Some("unknown_db")), Seq(), ignoreIfExists = false)
       }
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.createPartitions(
           TableIdentifier("does_not_exist", Some("db2")), Seq(), ignoreIfExists = false)
       }
@@ -743,7 +743,7 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("drop partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.dropPartitions(
           TableIdentifier("tbl1", Some("unknown_db")),
           Seq(),
@@ -751,7 +751,7 @@ abstract class SessionCatalogSuite extends PlanTest {
           purge = false,
           retainData = false)
       }
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.dropPartitions(
           TableIdentifier("does_not_exist", Some("db2")),
           Seq(),
@@ -837,10 +837,10 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("get partition when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.getPartition(TableIdentifier("tbl1", Some("unknown_db")), part1.spec)
       }
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.getPartition(TableIdentifier("does_not_exist", Some("db2")), part1.spec)
       }
     }
@@ -904,11 +904,11 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("rename partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.renamePartitions(
           TableIdentifier("tbl1", Some("unknown_db")), Seq(part1.spec), Seq(part2.spec))
       }
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.renamePartitions(
           TableIdentifier("does_not_exist", Some("db2")), Seq(part1.spec), Seq(part2.spec))
       }
@@ -981,10 +981,10 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("alter partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.alterPartitions(TableIdentifier("tbl1", Some("unknown_db")), Seq(part1))
       }
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.alterPartitions(TableIdentifier("does_not_exist", Some("db2")), Seq(part1))
       }
     }
@@ -1097,10 +1097,10 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("list partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.listPartitions(TableIdentifier("tbl1", Some("unknown_db")))
       }
-      intercept[NoSuchTableException] {
+      intercept[AnalysisException] {
         catalog.listPartitions(TableIdentifier("does_not_exist", Some("db2")))
       }
     }
@@ -1142,7 +1142,7 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("create function when database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.createFunction(
           newFunc("func5", Some("does_not_exist")), ignoreIfExists = false)
       }
@@ -1151,7 +1151,7 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("create function that already exists") {
     withBasicCatalog { catalog =>
-      intercept[FunctionAlreadyExistsException] {
+      intercept[AnalysisException] {
         catalog.createFunction(newFunc("func1", Some("db2")), ignoreIfExists = false)
       }
       catalog.createFunction(newFunc("func1", Some("db2")), ignoreIfExists = true)
@@ -1170,7 +1170,7 @@ abstract class SessionCatalogSuite extends PlanTest {
       assert(catalog.lookupFunction(FunctionIdentifier("temp1"), arguments) === Literal(1))
       assert(catalog.lookupFunction(FunctionIdentifier("temp2"), arguments) === Literal(3))
       // Temporary function does not exist.
-      intercept[NoSuchFunctionException] {
+      intercept[AnalysisException] {
         catalog.lookupFunction(FunctionIdentifier("temp3"), arguments)
       }
       val tempFunc3 = (e: Seq[Expression]) => Literal(e.size)
@@ -1232,11 +1232,11 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("drop function when database/function does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.dropFunction(
           FunctionIdentifier("something", Some("unknown_db")), ignoreIfNotExists = false)
       }
-      intercept[NoSuchFunctionException] {
+      intercept[AnalysisException] {
         catalog.dropFunction(FunctionIdentifier("does_not_exist"), ignoreIfNotExists = false)
       }
       catalog.dropFunction(FunctionIdentifier("does_not_exist"), ignoreIfNotExists = true)
@@ -1251,10 +1251,10 @@ abstract class SessionCatalogSuite extends PlanTest {
       val arguments = Seq(Literal(1), Literal(2), Literal(3))
       assert(catalog.lookupFunction(FunctionIdentifier("func1"), arguments) === Literal(1))
       catalog.dropTempFunction("func1", ignoreIfNotExists = false)
-      intercept[NoSuchFunctionException] {
+      intercept[AnalysisException] {
         catalog.lookupFunction(FunctionIdentifier("func1"), arguments)
       }
-      intercept[NoSuchTempFunctionException] {
+      intercept[AnalysisException] {
         catalog.dropTempFunction("func1", ignoreIfNotExists = false)
       }
       catalog.dropTempFunction("func1", ignoreIfNotExists = true)
@@ -1275,10 +1275,10 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("get function when database/function does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.getFunctionMetadata(FunctionIdentifier("func1", Some("unknown_db")))
       }
-      intercept[NoSuchFunctionException] {
+      intercept[AnalysisException] {
         catalog.getFunctionMetadata(FunctionIdentifier("does_not_exist", Some("db2")))
       }
     }
@@ -1292,7 +1292,7 @@ abstract class SessionCatalogSuite extends PlanTest {
       assert(catalog.lookupFunction(
         FunctionIdentifier("func1"), Seq(Literal(1), Literal(2), Literal(3))) == Literal(1))
       catalog.dropTempFunction("func1", ignoreIfNotExists = false)
-      intercept[NoSuchFunctionException] {
+      intercept[AnalysisException] {
         catalog.lookupFunction(FunctionIdentifier("func1"), Seq(Literal(1), Literal(2), Literal(3)))
       }
     }
@@ -1326,7 +1326,7 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("list functions when database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[AnalysisException] {
         catalog.listFunctions("unknown_db", "func*")
       }
     }
