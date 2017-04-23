@@ -23,6 +23,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
+import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
@@ -148,15 +149,18 @@ class StreamExecution(
       "logicalPlan must be initialized in StreamExecutionThread " +
         s"but the current thread was ${Thread.currentThread}")
     var nextSourceId = 0L
+    val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingExecutionRelation]()
     val _logicalPlan = analyzedPlan.transform {
-      case StreamingRelation(dataSource, _, output) =>
-        // Materialize source to avoid creating it in every batch
-        val metadataPath = s"$checkpointRoot/sources/$nextSourceId"
-        val source = dataSource.createSource(metadataPath)
-        nextSourceId += 1
-        // We still need to use the previous `output` instead of `source.schema` as attributes in
-        // "df.logicalPlan" has already used attributes of the previous `output`.
-        StreamingExecutionRelation(source, output)
+      case streamingRelation@StreamingRelation(dataSource, _, output) =>
+        toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
+          // Materialize source to avoid creating it in every batch
+          val metadataPath = s"$checkpointRoot/sources/$nextSourceId"
+          val source = dataSource.createSource(metadataPath)
+          nextSourceId += 1
+          // We still need to use the previous `output` instead of `source.schema` as attributes in
+          // "df.logicalPlan" has already used attributes of the previous `output`.
+          StreamingExecutionRelation(source, output)
+        })
     }
     sources = _logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
     uniqueSources = sources.distinct
