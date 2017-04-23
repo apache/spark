@@ -83,7 +83,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
               <strong>Executor Memory:</strong>
               {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
             </li>
-            <li><strong>Submit Date:</strong> {app.submitDate}</li>
+            <li><strong>Submit Date:</strong> {UIUtils.formatDate(app.submitDate)}</li>
             <li><strong>State:</strong> {app.state}</li>
             {
               if (!app.isFinished) {

@@ -252,7 +252,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     }
     <tr>
       <td>{driver.id} {killLink}</td>
-      <td>{driver.submitDate}</td>
+      <td>{UIUtils.formatDate(driver.submitDate)}</td>
       <td>{driver.worker.map(w =>
         if (w.isAlive()) {
           <a href={UIUtils.makeHref(parent.master.reverseProxy, w.id, w.webUiAddress)}>

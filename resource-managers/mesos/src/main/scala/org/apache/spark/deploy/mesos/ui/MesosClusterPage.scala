@@ -68,7 +68,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
     val id = submission.submissionId
     <tr>
       <td><a href={s"driver?id=$id"}>{id}</a></td>
-      <td>{submission.submissionDate}</td>
+      <td>{UIUtils.formatDate(submission.submissionDate)}</td>
       <td>{submission.command.mainClass}</td>
       <td>cpus: {submission.cores}, mem: {submission.mem}</td>
     </tr>
@@ -88,10 +88,10 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
     <tr>
       <td><a href={s"driver?id=$id"}>{id}</a></td>
       {historyCol}
-      <td>{state.driverDescription.submissionDate}</td>
+      <td>{UIUtils.formatDate(state.driverDescription.submissionDate)}</td>
       <td>{state.driverDescription.command.mainClass}</td>
       <td>cpus: {state.driverDescription.cores}, mem: {state.driverDescription.mem}</td>
-      <td>{state.startDate}</td>
+      <td>{UIUtils.formatDate(state.startDate)}</td>
       <td>{state.slaveId.getValue}</td>
       <td>{stateString(state.mesosTaskStatus)}</td>
     </tr>
@@ -101,7 +101,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
     val id = submission.submissionId
     <tr>
       <td><a href={s"driver?id=$id"}>{id}</a></td>
-      <td>{submission.submissionDate}</td>
+      <td>{UIUtils.formatDate(submission.submissionDate)}</td>
       <td>{submission.command.mainClass}</td>
       <td>{submission.retryState.get.lastFailureStatus}</td>
       <td>{submission.retryState.get.nextRetry}</td>
