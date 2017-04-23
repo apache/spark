@@ -101,7 +101,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
       </tr>
       <tr>
         <td>Launch Time</td>
-        <td>{state.startDate}</td>
+        <td>{UIUtils.formatDate(state.startDate)}</td>
       </tr>
       <tr>
         <td>Finish Time</td>
@@ -154,7 +154,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
       <td>Memory</td><td>{driver.mem}</td>
     </tr>
     <tr>
-      <td>Submitted</td><td>{driver.submissionDate}</td>
+      <td>Submitted</td><td>{UIUtils.formatDate(driver.submissionDate)}</td>
     </tr>
     <tr>
       <td>Supervise</td><td>{driver.supervise}</td>
