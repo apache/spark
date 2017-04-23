@@ -637,8 +637,7 @@ setGeneric("sample",
 
 #' @rdname rollup
 #' @export
-setGeneric("rollup",
-           function(x, ...) { standardGeneric("rollup") })
+setGeneric("rollup", function(x, ...) { standardGeneric("rollup") })
 
 #' @rdname sample
 #' @export
