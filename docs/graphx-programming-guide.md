@@ -709,7 +709,8 @@ messages remaining.
 
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
 of its implementation (note: to avoid stackOverflowError due to long lineage chains, pregel support periodcally
-checkpoint graph and messages by setting "spark.graphx.pregel.checkpointInterval"):
+checkpoint graph and messages by setting "spark.graphx.pregel.checkpointInterval" to a positive number,
+say 10. And set checkpoint directory as well using SparkContext.setCheckpointDir(directory: String)):
 
 {% highlight scala %}
 class GraphOps[VD, ED] {
