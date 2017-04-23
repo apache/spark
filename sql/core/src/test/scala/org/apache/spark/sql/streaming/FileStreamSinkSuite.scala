@@ -19,10 +19,12 @@ package org.apache.spark.sql.streaming
 
 import java.util.Locale
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.streaming.{MemoryStream, MetadataLogFileIndex}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -138,6 +140,41 @@ class FileStreamSinkSuite extends StreamTest {
         assert(!filesToBeRead.map(_.filePath).exists(_.contains("/id=3/")))
         assert(filesToBeRead.map(_.partitionValues).distinct.size === 2)
       }
+    } finally {
+      if (query != null) {
+        query.stop()
+      }
+    }
+  }
+
+  test("partitioned writing and batch reading with 'basePath'") {
+    val inputData = MemoryStream[Int]
+    val ds = inputData.toDS()
+
+    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+
+    var query: StreamingQuery = null
+
+    try {
+      query =
+        ds.map(i => (i, -i, i * 1000))
+          .toDF("id1", "id2", "value")
+          .writeStream
+          .partitionBy("id1", "id2")
+          .option("checkpointLocation", checkpointDir)
+          .format("parquet")
+          .start(outputDir)
+
+      inputData.addData(1, 2, 3)
+      failAfter(streamingTimeout) {
+        query.processAllAvailable()
+      }
+
+      val readIn = spark.read.option("basePath", outputDir).parquet(s"$outputDir/*/*")
+      checkDatasetUnorderly(
+        readIn.as[(Int, Int, Int)],
+        (1000, 1, -1), (2000, 2, -2), (3000, 3, -3))
     } finally {
       if (query != null) {
         query.stop()
@@ -265,5 +302,22 @@ class FileStreamSinkSuite extends StreamTest {
         query.stop()
       }
     }
+  }
+
+  test("FileStreamSink.ancestorIsMetadataDirectory()") {
+    def assertAncestorIsMetadataDirectory(path: String): Unit =
+      assert(FileStreamSink.ancestorIsMetadataDirectory(new Path(path)))
+    def assertAncestorIsNotMetadataDirectory(path: String): Unit =
+      assert(!FileStreamSink.ancestorIsMetadataDirectory(new Path(path)))
+
+    assertAncestorIsMetadataDirectory(s"/${FileStreamSink.metadataDir}")
+    assertAncestorIsMetadataDirectory(s"/${FileStreamSink.metadataDir}/")
+    assertAncestorIsMetadataDirectory(s"/a/${FileStreamSink.metadataDir}")
+    assertAncestorIsMetadataDirectory(s"/a/${FileStreamSink.metadataDir}/")
+    assertAncestorIsMetadataDirectory(s"/a/b/${FileStreamSink.metadataDir}/c")
+    assertAncestorIsMetadataDirectory(s"/a/b/${FileStreamSink.metadataDir}/c/")
+
+    assertAncestorIsNotMetadataDirectory(s"/a/b/c")
+    assertAncestorIsNotMetadataDirectory(s"/a/b/c/${FileStreamSink.metadataDir}extra")
   }
 }

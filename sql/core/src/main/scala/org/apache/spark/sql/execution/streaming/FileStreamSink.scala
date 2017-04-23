@@ -53,6 +53,29 @@ object FileStreamSink extends Logging {
       case _ => false
     }
   }
+
+  /**
+   * Returns true if the path is the metadata dir or its ancestor is the metadata dir.
+   * E.g.:
+   *  - ancestorIsMetadataDirectory(/.../_spark_metadata) => true
+   *  - ancestorIsMetadataDirectory(/.../_spark_metadata/0) => true
+   *  - ancestorIsMetadataDirectory(/a/b/c) => false
+   */
+  def ancestorIsMetadataDirectory(path: Path): Boolean = {
+    require(path.isAbsolute, s"$path is required to be absolute")
+    var currentPath = path
+    var finished = false
+    while (!finished) {
+      if (currentPath.getName == FileStreamSink.metadataDir) {
+        return true
+      } else if (currentPath.getParent != null) {
+        currentPath = currentPath.getParent
+      } else {
+        finished = true
+      }
+    }
+    return false
+  }
 }
 
 /**
