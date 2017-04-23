@@ -114,16 +114,15 @@ class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
   testPruning("SELECT * FROM oneToTenPruned", "a", "b")
   testPruning("SELECT a, b FROM oneToTenPruned", "a", "b")
   testPruning("SELECT b, a FROM oneToTenPruned", "b", "a")
-  testPruning("SELECT b, b FROM oneToTenPruned", "b")
+  testPruning("SELECT b, b FROM oneToTenPruned", "b", "b")
+  testPruning("SELECT b as alias_b, b FROM oneToTenPruned", "b")
   testPruning("SELECT a FROM oneToTenPruned", "a")
   testPruning("SELECT b FROM oneToTenPruned", "b")
 
   def testPruning(sqlString: String, expectedColumns: String*): Unit = {
     test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
-
       // These tests check a particular plan, disable whole stage codegen.
-      spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, false)
-      try {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
         val queryExecution = sql(sqlString).queryExecution
         val rawPlan = queryExecution.executedPlan.collect {
           case p: execution.DataSourceScanExec => p
@@ -144,9 +143,6 @@ class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
         if (rawOutput.numFields != expectedColumns.size) {
           fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
         }
-      } finally {
-        spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }
   }
