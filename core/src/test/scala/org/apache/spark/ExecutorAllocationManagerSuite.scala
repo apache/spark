@@ -863,9 +863,6 @@ class ExecutorAllocationManagerSuite
     assert(!initializing(manager))
     manager.reset()
     assert(!initializing(manager))
-    sc.listenerBus.postToAll(SparkListenerStageCompleted(stageInfo))
-    manager.reset()
-    assert(initializing(manager))
   }
 
   test("reset the state of allocation manager") {
