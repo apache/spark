@@ -3649,7 +3649,7 @@ setMethod("checkpoint",
 #' Create a multi-dimensional cube for the SparkDataFrame using the specified columns.
 #'
 #' @param x a SparkDataFrame.
-#' @param ... variable(s) (character names(s) or Column(s)) to group on.
+#' @param ... character name(s) or Column(s) to group on.
 #' @return A GroupedData.
 #' @family SparkDataFrame functions
 #' @aliases cube,SparkDataFrame-method
@@ -3676,7 +3676,7 @@ setMethod("cube",
 #' Create a multi-dimensional rollup for the SparkDataFrame using the specified columns.
 #'
 #' @param x a SparkDataFrame.
-#' @param ... variable(s) (character names(s) or Column(s)) to group on.
+#' @param ... character name(s) or Column(s) to group on.
 #' @return A GroupedData.
 #' @family SparkDataFrame functions
 #' @aliases rollup,SparkDataFrame-method
