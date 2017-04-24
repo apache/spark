@@ -166,7 +166,9 @@ class Analyzer(
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
-      CleanupAliases)
+      CleanupAliases),
+    Batch("CleanupWatermark", Once,
+      CleanupStreamingWatermarksForBatchQuery)
   )
 
   /**
@@ -2406,6 +2408,16 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
 object EliminateUnions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Union(children) if children.size == 1 => children.head
+  }
+}
+
+/**
+ * Removes [[EventTimeWatermark]] from a batch query plan, as the streaming watermark should not
+ * affect any batch query in any way.
+ */
+object CleanupStreamingWatermarksForBatchQuery extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case EventTimeWatermark(_, _, child) if !child.isStreaming => child
   }
 }
 
