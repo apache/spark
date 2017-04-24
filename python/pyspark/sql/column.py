@@ -196,7 +196,6 @@ class Column(object):
     >>> df3.select(df3.a.bitwiseOR(df3.b)).collect()
     [Row((a | b)=235)]
     """
-
     _bitwiseAND_doc = """
     Compute bitwise AND of this expression with another expression.
 
@@ -208,7 +207,6 @@ class Column(object):
     >>> df3.select(df3.a.bitwiseAND(df3.b)).collect()
     [Row((a & b)=10)]
     """
-
     _bitwiseXOR_doc = """
     Compute bitwise XOR of this expression with another expression.
 
@@ -220,6 +218,7 @@ class Column(object):
     >>> df3.select(df3.a.bitwiseXOR(df3.b)).collect()
     [Row((a ^ b)=225)]
     """
+
     bitwiseOR = _bin_op("bitwiseOR", _bitwiseOR_doc)
     bitwiseAND = _bin_op("bitwiseAND", _bitwiseAND_doc)
     bitwiseXOR = _bin_op("bitwiseXOR", _bitwiseXOR_doc)
