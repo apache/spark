@@ -424,6 +424,21 @@ class Dataset[T] private[sql](
   // scalastyle:on println
 
   /**
+   * Prints the codegen to the console for debugging purposes.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  def explainCodegen(): Unit = {
+    val explain = ExplainCommand(queryExecution.logical, codegen = true)
+    sparkSession.executePlan(explain).executedPlan.executeCollect().foreach {
+      // scalastyle:off println
+      r => println(r.getString(0))
+      // scalastyle:on println
+    }
+  }
+
+  /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
    *
    * @group basic
