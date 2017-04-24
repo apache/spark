@@ -105,6 +105,11 @@
         <artifactId>spark-dist_${scala.binary.version}-hadoop-palantir</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-dist</artifactId>
+        <version>${project.version}-hadoop-${hadoop.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
