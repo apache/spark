@@ -17,17 +17,17 @@
 
 package org.apache.spark.mllib.recommendation
 
-import java.io.IOException
-import java.lang.{Integer => JavaInteger}
-
-import scala.collection.mutable
-
+import breeze.linalg.min
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
+import java.io.IOException
+import java.lang.{Integer => JavaInteger}
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
+import scala.collection.mutable
+import scala.collection.mutable.PriorityQueue
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
@@ -277,17 +277,23 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
     val srcBlocks = blockify(rank, srcFeatures)
     val dstBlocks = blockify(rank, dstFeatures)
     val ratings = srcBlocks.cartesian(dstBlocks).flatMap {
-      case ((srcIds, srcFactors), (dstIds, dstFactors)) =>
-        val m = srcIds.length
-        val n = dstIds.length
-        val ratings = srcFactors.transpose.multiply(dstFactors)
-        val output = new Array[(Int, (Int, Double))](m * n)
-        var k = 0
-        ratings.foreachActive { (i, j, r) =>
-          output(k) = (srcIds(i), (dstIds(j), r))
-          k += 1
-        }
-        output.toSeq
+      case (users, items) =>
+      val m = users.size
+      val n = min(items.size, num)
+      val output = new Array[(Int, (Int, Double))](m * n)
+      var j = 0
+      users.foreach (user => {
+          def order(a: (Int, Double)) = a._2
+          val pq: PriorityQueue[(Int, Double)] = PriorityQueue()(Ordering.by(order))
+          items.foreach (item => {
+              val rate = blas.ddot(rank, user._2, 1, item._2, 1)
+              pq.enqueue((item._1, rate))
+            })
+          for(i <- 0 to n-1)
+            output(j + i) = (user._1, pq.dequeue())
+          j += n
+      })
+      output.toSeq
     }
     ratings.topByKey(num)(Ordering.by(_._2))
   }
@@ -297,23 +303,10 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
    */
   private def blockify(
       rank: Int,
-      features: RDD[(Int, Array[Double])]): RDD[(Array[Int], DenseMatrix)] = {
+      features: RDD[(Int, Array[Double])]): RDD[Seq[(Int, Array[Double])]] = {
     val blockSize = 4096 // TODO: tune the block size
-    val blockStorage = rank * blockSize
     features.mapPartitions { iter =>
-      iter.grouped(blockSize).map { grouped =>
-        val ids = mutable.ArrayBuilder.make[Int]
-        ids.sizeHint(blockSize)
-        val factors = mutable.ArrayBuilder.make[Double]
-        factors.sizeHint(blockStorage)
-        var i = 0
-        grouped.foreach { case (id, factor) =>
-          ids += id
-          factors ++= factor
-          i += 1
-        }
-        (ids.result(), new DenseMatrix(rank, i, factors.result()))
-      }
+      iter.grouped(blockSize)
     }
   }
 
