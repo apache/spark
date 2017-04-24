@@ -621,7 +621,7 @@ methods for creating DStreams from files as input sources.
 For reading data from files on any file system compatible with the HDFS API (that is, HDFS, S3, NFS, etc.), a DStream can be created as
 via `StreamingContext.fileStream[KeyClass, ValueClass, InputFormatClass]`.
 
-File streams do not require running a receiver, hence does not require allocating cores.
+File streams do not require running a receiver so there is no need to allocate any cores for receiving file data.
 
 For simple text files, the easiest method is `StreamingContext.textFileStream(dataDirectory)`.
 
@@ -685,7 +685,7 @@ Spark Streaming will monitor the directory `dataDirectory` and process any files
      to fix the timestamp is a way to have the file picked up in a later window, even if its contents have not changed.
 
 
-##### Streaming to FileSystems vs Object stores
+##### Using Object Stores as a source of data
 {:.no_toc}
 
 "Full" Filesystems such as HDFS tend to set the modification time on their files as soon
@@ -711,7 +711,6 @@ that writing directly into a destination directory is the appropriate strategy f
 streaming data via the chosen object store.
 
 For more details on this topic, consult the [Hadoop Filesystem Specification](https://hadoop.apache.org/docs/stable2/hadoop-project-dist/hadoop-common/filesystem/introduction.html).
-
 
 #### Streams based on Custom Receivers
 {:.no_toc}
