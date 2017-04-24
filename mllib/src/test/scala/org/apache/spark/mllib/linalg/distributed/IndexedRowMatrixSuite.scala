@@ -117,19 +117,23 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("toBlockMatrix sparse backing") {
     val sparseData = Seq(
-      (2L, Vectors.sparse(3, Seq((0, 4.0))))
+      (7L, Vectors.sparse(6, Seq((0, 4.0))))
     ).map(x => IndexedRow(x._1, x._2))
 
-    val idxRowMatSparse = new IndexedRowMatrix(sc.parallelize(sparseData), m, n)
+    // Gonna make m and n larger here so the matrices can easily be completely sparse:
+    val m = 8
+    val n = 6
+
+    val idxRowMatSparse = new IndexedRowMatrix(sc.parallelize(sparseData))
 
     // Tests when n % colsPerBlock != 0
-    val blockMat = idxRowMatSparse.toBlockMatrix(2, 2)
+    val blockMat = idxRowMatSparse.toBlockMatrix(4, 4)
     assert(blockMat.numRows() === m)
     assert(blockMat.numCols() === n)
     assert(blockMat.toBreeze() === idxRowMatSparse.toBreeze())
 
     // Tests when m % rowsPerBlock != 0
-    val blockMat2 = idxRowMatSparse.toBlockMatrix(3, 1)
+    val blockMat2 = idxRowMatSparse.toBlockMatrix(3, 3)
     assert(blockMat2.numRows() === m)
     assert(blockMat2.numCols() === n)
     assert(blockMat2.toBreeze() === idxRowMatSparse.toBreeze())
