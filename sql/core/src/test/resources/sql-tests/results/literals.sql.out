@@ -140,30 +140,6 @@ struct<9223372036854775808:decimal(19,0),-9223372036854775809:decimal(19,0)>
 9223372036854775808	-9223372036854775809
 
 
--- !query 15
-select 1234567890123456789012345678901234567890
--- !query 15 schema
-struct<>
--- !query 15 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-DecimalType can only support precision up to 38
-== SQL ==
-select 1234567890123456789012345678901234567890
-
-
--- !query 16
-select 1234567890123456789012345678901234567890.0
--- !query 16 schema
-struct<>
--- !query 16 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-DecimalType can only support precision up to 38
-== SQL ==
-select 1234567890123456789012345678901234567890.0
-
-
 -- !query 17
 select 1D, 1.2D, 1e10, 1.5e5, .10D, 0.10D, .1e5, .9e+2, 0.9e+2, 900e-1, 9.e+1
 -- !query 17 schema
@@ -248,16 +224,6 @@ select 'pattern%', 'no-pattern\%', 'pattern\\%', 'pattern\\\%'
 struct<pattern%:string,no-pattern\%:string,pattern\%:string,pattern\\%:string>
 -- !query 26 output
 pattern%	no-pattern\%	pattern\%	pattern\\%
-
-
--- !query 27
-select '\'', '"', '\n', '\r', '\t', 'Z'
--- !query 27 schema
-struct<':string,":string,
-:string,:string,	:string,Z:string>
--- !query 27 output
-'	"	
-				Z
 
 
 -- !query 28
@@ -364,14 +330,6 @@ Literals of type 'GEO' are currently not supported.(line 1, pos 7)
 == SQL ==
 select GEO '(10,-6)'
 -------^^^
-
-
--- !query 38
-select 90912830918230182310293801923652346786BD, 123.0E-28BD, 123.08BD
--- !query 38 schema
-struct<90912830918230182310293801923652346786:decimal(38,0),1.230E-26:decimal(29,29),123.08:decimal(5,2)>
--- !query 38 output
-90912830918230182310293801923652346786	0.0000000000000000000000000123	123.08
 
 
 -- !query 39

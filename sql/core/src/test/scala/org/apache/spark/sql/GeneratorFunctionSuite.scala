@@ -37,7 +37,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
 
     // Various column types
     checkAnswer(df.selectExpr("stack(3, 1, 1.1, 'a', 2, 2.2, 'b', 3, 3.3, 'c')"),
-      Row(1, 1.1, "a") :: Row(2, 2.2, "b") :: Row(3, 3.3, "c") :: Nil)
+      Row(1, BigDecimal(1.1), "a") :: Row(2, BigDecimal(2.2), "b") ::
+        Row(3, BigDecimal(3.3), "c") :: Nil)
 
     // Repeat generation at every input row
     checkAnswer(spark.range(2).selectExpr("stack(2, 1, 2, 3)"),
