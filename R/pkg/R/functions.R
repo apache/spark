@@ -3750,6 +3750,8 @@ setMethod("collect_set",
 #'
 #' Splits string on regular expression.
 #'
+#' Equivalent to \code{split} SQL function
+#'
 #' @param x Column to compute on
 #' @param pattern Java regular expression
 #'
@@ -3763,7 +3765,6 @@ setMethod("collect_set",
 #' head(select(df, split_string(df$value, "\\s+")))
 #' }
 #' @note split_string 2.3.0
-#' @note equivalent to \code{split} SQL function
 setMethod("split_string",
           signature(x = "Column", pattern = "character"),
           function(x, pattern) {
@@ -3774,6 +3775,8 @@ setMethod("split_string",
 #' repeat_string
 #'
 #' Repeats string n times.
+#'
+#' Equivalent to \code{repeat} SQL function
 #'
 #' @param x Column to compute on
 #' @param n Number of repetitions
@@ -3790,7 +3793,6 @@ setMethod("split_string",
 #' head(select(repeat_string(df$text, 3)))
 #' }
 #' @note repeat_string 2.3.0
-#' @note equivalent to \code{repeat} SQL function
 setMethod("repeat_string",
           signature(x = "Column", n = "numeric"),
           function(x, n) {
