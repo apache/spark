@@ -17,6 +17,8 @@
 
 package org.apache.spark.api.r
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+
 import org.apache.spark.SparkFunSuite
 
 class RBackendSuite extends SparkFunSuite {
@@ -27,5 +29,22 @@ class RBackendSuite extends SparkFunSuite {
     backend.close()
     assert(tracker.get(id) === None)
     assert(tracker.size === 0)
+  }
+
+  test("read and write bigint in the buffer") {
+    val bos = new ByteArrayOutputStream()
+    val dos = new DataOutputStream(bos)
+    val tracker = new JVMObjectTracker
+    SerDe.writeObject(dos, 1380742793415240L.asInstanceOf[Object],
+      tracker)
+    val buf = bos.toByteArray
+    val bis = new ByteArrayInputStream(buf)
+    val dis = new DataInputStream(bis)
+    val data = SerDe.readObject(dis, tracker)
+    assert(data.asInstanceOf[Double] === 1380742793415240L)
+    bos.close()
+    bis.close()
+    dos.close()
+    dis.close()
   }
 }
