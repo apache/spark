@@ -3794,6 +3794,6 @@ setMethod("split_string",
 setMethod("repeat_string",
           signature(x = "Column", n = "numeric"),
           function(x, n) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "repeat", x@jc, as.integer(n))
+            jc <- callJStatic("org.apache.spark.sql.functions", "repeat", x@jc, numToInt(n))
             column(jc)
           })
