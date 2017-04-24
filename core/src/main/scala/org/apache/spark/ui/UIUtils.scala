@@ -35,6 +35,8 @@ private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
+  val NEWLINE_AND_SINGLE_QUOTE_REGEX = "(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)"
+
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue(): SimpleDateFormat =
@@ -537,13 +539,12 @@ private[spark] object UIUtils extends Logging {
    * https://www.owasp.org/index.php/Testing_for_Reflected_Cross_site_scripting_(OTG-INPVAL-001)
    */
   def stripXSS(requestParameter: String): String = {
-    var requestParameterStripped = requestParameter
-    if (requestParameterStripped != null) {
-      // Avoid null characters or single quote
-      requestParameterStripped = requestParameterStripped.replaceAll("(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)", "")
-      requestParameterStripped = StringEscapeUtils.escapeHtml4(requestParameterStripped)
-    }
-    requestParameterStripped
+    if (requestParameter == null) {
+      null
+    } else {
+      // Remove new lines and single quotes, followed by escaping HTML version 4.0
+      StringEscapeUtils.escapeHtml4(
+        requestParameter.replaceAll(NEWLINE_AND_SINGLE_QUOTE_REGEX, ""))
   }
 
   def stripXSSArray(requestParameter: Array[String]): Array[String] = {
