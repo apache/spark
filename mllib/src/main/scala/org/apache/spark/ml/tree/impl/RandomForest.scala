@@ -222,8 +222,7 @@ private[spark] object RandomForest extends Logging {
       logInfo("Merge children with same prediction:")
 
       // merge the pair of leaves if possible.
-      val mergeCounts = topNodes
-        .map(LearningNode.mergeChildrenWithSamePrediction)
+      val mergeCounts = topNodes.map(LearningNode.mergeChildrenWithSamePrediction)
 
       val mergeCountsOfTreesInfo: String = mergeCounts
         .zipWithIndex

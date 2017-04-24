@@ -372,7 +372,7 @@ private[tree] object LearningNode {
       }
     }
 
-   val (_, mergeCounts) = checkAndMerge(node)
+    val (_, mergeCounts) = checkAndMerge(node)
 
     mergeCounts
   }
