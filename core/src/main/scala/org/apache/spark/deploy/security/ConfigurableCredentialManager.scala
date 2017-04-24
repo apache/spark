@@ -22,7 +22,7 @@ import java.util.ServiceLoader
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
