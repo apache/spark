@@ -1832,6 +1832,12 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
     12
   )
 
+  # cube without columns should result in a single aggregate
+  expect_equal(
+    collect(agg(cube(df), expr("sum(salary) as total_salary"))),
+    data.frame(total_salary = 120000)
+  )
+
   actual_rollup <- collect(
     orderBy(
       agg(
@@ -1869,6 +1875,12 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
   expect_equal(
     count(sum(rollup(df, df$year, df$department), "salary")),
     9
+  )
+
+  # rollup without columns should result in a single aggregate
+  expect_equal(
+    collect(agg(rollup(df), expr("sum(salary) as total_salary"))),
+    data.frame(total_salary = 120000)
   )
 })
 
