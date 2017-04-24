@@ -3666,7 +3666,7 @@ setMethod("cube",
           signature(x = "SparkDataFrame"),
           function(x, ...) {
             cols <- list(...)
-            jcol <- lapply(cols, function(x) if (is.character(x)) column(x)@jc else x@jc)
+            jcol <- lapply(cols, function(x) if (class(x) == "Column") x@jc else column(x)@jc)
             sgd <- callJMethod(x@sdf, "cube", jcol)
             groupedData(sgd)
           })
@@ -3693,7 +3693,7 @@ setMethod("rollup",
           signature(x = "SparkDataFrame"),
           function(x, ...) {
             cols <- list(...)
-            jcol <- lapply(cols, function(x) if (is.character(x)) column(x)@jc else x@jc)
+            jcol <- lapply(cols, function(x) if (class(x) == "Column") x@jc else column(x)@jc)
             sgd <- callJMethod(x@sdf, "rollup", jcol)
             groupedData(sgd)
           })
