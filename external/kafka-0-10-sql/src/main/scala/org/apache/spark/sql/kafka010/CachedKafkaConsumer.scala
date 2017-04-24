@@ -35,7 +35,7 @@ import org.apache.spark.sql.kafka010.KafkaSource._
  * Underlying consumer is not threadsafe, so neither is this,
  * but processing the same topicpartition and group id in multiple threads is usually bad anyway.
  */
-private[kafka010] case class CachedKafkaConsumer private(
+private[kafka010] case class CachedKafkaConsumer(
     topicPartition: TopicPartition,
     kafkaParams: ju.Map[String, Object]) extends Logging {
   import CachedKafkaConsumer._
@@ -276,7 +276,7 @@ private[kafka010] case class CachedKafkaConsumer private(
     reportDataLoss0(failOnDataLoss, finalMessage, cause)
   }
 
-  private def close(): Unit = consumer.close()
+  def close(): Unit = consumer.close()
 
   private def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $groupId $topicPartition $offset")
@@ -371,7 +371,7 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
 
     // If this is reattempt at running the task, then invalidate cache and start with
     // a new consumer
-    if (TaskContext.get != null && TaskContext.get.attemptNumber > 1) {
+    if (TaskContext.get != null && TaskContext.get.attemptNumber >= 1) {
       removeKafkaConsumer(topic, partition, kafkaParams)
       val consumer = new CachedKafkaConsumer(topicPartition, kafkaParams)
       consumer.inuse = true
