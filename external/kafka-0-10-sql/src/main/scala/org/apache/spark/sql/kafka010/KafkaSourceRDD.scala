@@ -130,7 +130,7 @@ private[kafka010] class KafkaSourceRDD(
       if (!reuseKafkaConsumer) {
         // If we can't reuse CachedKafkaConsumers, creating a new CachedKafkaConsumer. As here we
         // uses `assign`, we don't need to worry about the "group.id" conflicts.
-        new CachedKafkaConsumer(new TopicPartition(topic, kafkaPartition), executorKafkaParams)
+        CachedKafkaConsumer.createUncached(topic, kafkaPartition, executorKafkaParams)
       } else {
         CachedKafkaConsumer.getOrCreate(topic, kafkaPartition, executorKafkaParams)
       }

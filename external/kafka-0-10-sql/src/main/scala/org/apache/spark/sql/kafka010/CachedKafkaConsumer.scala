@@ -35,7 +35,7 @@ import org.apache.spark.sql.kafka010.KafkaSource._
  * Underlying consumer is not threadsafe, so neither is this,
  * but processing the same topicpartition and group id in multiple threads is usually bad anyway.
  */
-private[kafka010] case class CachedKafkaConsumer(
+private[kafka010] case class CachedKafkaConsumer private(
     topicPartition: TopicPartition,
     kafkaParams: ju.Map[String, Object]) extends Logging {
   import CachedKafkaConsumer._
@@ -385,6 +385,14 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
       consumer.inuse = true
       consumer
     }
+  }
+
+  /** Create an [[CachedKafkaConsumer]] but don't put it into cache. */
+  def createUncached(
+      topic: String,
+      partition: Int,
+      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer = {
+    new CachedKafkaConsumer(new TopicPartition(topic, partition), kafkaParams)
   }
 
   private def reportDataLoss0(
