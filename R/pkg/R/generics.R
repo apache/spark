@@ -1192,6 +1192,10 @@ setGeneric("regexp_extract", function(x, pattern, idx) { standardGeneric("regexp
 setGeneric("regexp_replace",
            function(x, pattern, replacement) { standardGeneric("regexp_replace") })
 
+#' @rdname repeat_string
+#' @export
+setGeneric("repeat_string", function(x, n) { standardGeneric("repeat_string") })
+
 #' @rdname reverse
 #' @export
 setGeneric("reverse", function(x) { standardGeneric("reverse") })
@@ -1256,6 +1260,10 @@ setGeneric("skewness", function(x) { standardGeneric("skewness") })
 #' @rdname sort_array
 #' @export
 setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array") })
+
+#' @rdname split_string
+#' @export
+setGeneric("split_string", function(x, pattern) { standardGeneric("split_string") })
 
 #' @rdname soundex
 #' @export
