@@ -3760,7 +3760,7 @@ setMethod("collect_set",
 #' @examples \dontrun{
 #' df <- read.text("README.md")
 #'
-#' head(select(split_string(df$value, "\\s+")))
+#' head(select(df, split_string(df$value, "\\s+")))
 #' }
 #' @note split_string 2.3.0
 #' @note equivalent to \code{split} SQL function
