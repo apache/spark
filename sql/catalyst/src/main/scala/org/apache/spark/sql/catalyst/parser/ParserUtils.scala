@@ -69,7 +69,9 @@ object ParserUtils {
   def string(node: TerminalNode): String = unescapeSQLString(node.getText)
 
   /** Convert a string node to a regex string. */
-  def regexString(node: TerminalNode): String = unescapeSQLString(node.getText, isRegex = true)
+  def regexString(node: TerminalNode): String = {
+    node.getText.slice(1, node.getText.size - 1)
+  }
 
   /** Get the origin (line and position) of the token. */
   def position(token: Token): Origin = {
@@ -100,7 +102,7 @@ object ParserUtils {
   }
 
   /** Unescape baskslash-escaped string enclosed by quotes. */
-  def unescapeSQLString(b: String, isRegex: Boolean = false): String = {
+  def unescapeSQLString(b: String): String = {
     var enclosure: Character = null
     val sb = new StringBuilder(b.length())
 
@@ -132,7 +134,7 @@ object ParserUtils {
         }
       } else if (enclosure == currentChar) {
         enclosure = null
-      } else if (currentChar == '\\' && !isRegex) {
+      } else if (currentChar == '\\') {
 
         if ((i + 6 < strLength) && b.charAt(i + 1) == 'u') {
           // \u0000 style character literals.
