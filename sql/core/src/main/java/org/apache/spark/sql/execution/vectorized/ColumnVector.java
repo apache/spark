@@ -25,10 +25,12 @@ import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -64,10 +66,14 @@ public abstract class ColumnVector implements AutoCloseable {
    * in number of elements, not number of bytes.
    */
   public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
+    return allocate(capacity, type, mode, false);
+  }
+
+  public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode, boolean useUnsafeArrayData) {
     if (mode == MemoryMode.OFF_HEAP) {
       return new OffHeapColumnVector(capacity, type);
     } else {
-      return new OnHeapColumnVector(capacity, type);
+      return new OnHeapColumnVector(capacity, type, useUnsafeArrayData);
     }
   }
 
@@ -556,10 +562,32 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the array at rowid.
    */
-  public final Array getArray(int rowId) {
-    resultArray.length = getArrayLength(rowId);
-    resultArray.offset = getArrayOffset(rowId);
-    return resultArray;
+  public abstract UnsafeArrayData getUnsafeArray(int rowId);
+
+  public final ArrayData getArray(int rowId) {
+    if (!useUnsafeArrayData) {
+      resultArray.length = getArrayLength(rowId);
+      resultArray.offset = getArrayOffset(rowId);
+      return resultArray;
+    } else {
+      return getUnsafeArray(rowId);
+    }
+  }
+
+  public final int putArray(int rowId, ArrayData array) {
+    if (!useUnsafeArrayData) {
+      throw new UnsupportedOperationException();
+    }
+    UnsafeArrayData unsafeArray = (UnsafeArrayData)array;
+    Object baseObjects = unsafeArray.getBaseObject();
+    long offset = unsafeArray.getBaseOffset();
+    int length = unsafeArray.getSizeInBytes();
+    if (offset > Integer.MAX_VALUE) {
+      throw new UnsupportedOperationException(
+        "Cannot put this array to ColumnVector as it's too big.");
+    }
+    putArray(rowId, baseObjects, (int) offset, length);
+    return length;
   }
 
   /**
@@ -570,6 +598,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Sets the value at rowId to `value`.
    */
+  public abstract void putArray(int rowId, Object value, int offset, int count);
   public abstract int putByteArray(int rowId, byte[] value, int offset, int count);
   public final int putByteArray(int rowId, byte[] value) {
     return putByteArray(rowId, value, 0, value.length);
@@ -579,7 +608,9 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   private Array getByteArray(int rowId) {
-    Array array = getArray(rowId);
+    resultArray.length = getArrayLength(rowId);
+    resultArray.offset = getArrayOffset(rowId);
+    Array array = resultArray;
     array.data.loadBytes(array);
     return array;
   }
@@ -884,7 +915,9 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns true if this column is an array.
    */
-  public final boolean isArray() { return resultArray != null; }
+  public final boolean isArray() {
+    return (resultArray != null) || (type instanceof ArrayType);
+  }
 
   /**
    * Marks this column as being constant.
@@ -901,6 +934,8 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   @VisibleForTesting
   protected int MAX_CAPACITY = Integer.MAX_VALUE;
+
+  protected boolean useUnsafeArrayData;
 
   /**
    * Data type for this column.
@@ -999,10 +1034,19 @@ public abstract class ColumnVector implements AutoCloseable {
    * type.
    */
   protected ColumnVector(int capacity, DataType type, MemoryMode memMode) {
+    this(capacity, type, memMode, false);
+  }
+
+  protected ColumnVector(int capacity, DataType type, MemoryMode memMode, boolean useUnsafeArrayData) {
     this.capacity = capacity;
     this.type = type;
+    this.useUnsafeArrayData = useUnsafeArrayData;
 
-    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
+    if (useUnsafeArrayData && type instanceof ArrayType) {
+      this.childColumns = null;
+      this.resultArray = null;
+      this.resultStruct = null;
+    } else if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
         || DecimalType.isByteArrayDecimalType(type)) {
       DataType childType;
       int childCapacity = capacity;

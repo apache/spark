@@ -20,6 +20,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
@@ -403,6 +404,16 @@ public final class OffHeapColumnVector extends ColumnVector {
     assert(offset >= 0 && offset + length <= childColumns[0].capacity);
     Platform.putInt(null, lengthData + 4 * rowId, length);
     Platform.putInt(null, offsetData + 4 * rowId, offset);
+  }
+
+  @Override
+  public void putArray(int rowId, Object src, int offset, int length) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public UnsafeArrayData getUnsafeArray(int rowId) {
+    throw new UnsupportedOperationException();
   }
 
   @Override

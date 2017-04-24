@@ -21,6 +21,7 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
@@ -48,13 +49,23 @@ public final class OnHeapColumnVector extends ColumnVector {
   private double[] doubleData;
 
   // Only set if type is Array.
+  /**
+   * When `useUnsafeArrayData` is true, data[] keeps UnsafeArray.baseObject for all rows
+   * a pair of offset & lengths for each row are stored into arrayOffsets[] & arrayLength[]
+   */
+  private byte[] data;
+  private int dataOffset;
   private int[] arrayLengths;
   private int[] arrayOffsets;
 
-  protected OnHeapColumnVector(int capacity, DataType type) {
-    super(capacity, type, MemoryMode.ON_HEAP);
+  protected OnHeapColumnVector(int capacity, DataType type, boolean useUnsafeArrayData) {
+    super(capacity, type, MemoryMode.ON_HEAP, useUnsafeArrayData);
     reserveInternal(capacity);
     reset();
+  }
+
+  protected OnHeapColumnVector(int capacity, DataType type) {
+    this(capacity, type, false);
   }
 
   @Override
@@ -386,6 +397,39 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
+  public void putArray(int rowId, Object src, int offset, int length) {
+    if (arrayLengths.length < rowId) {
+      int newCapacity = Math.min(MAX_CAPACITY, arrayLengths.length * 2);
+      int[] newLengths = new int[newCapacity];
+      int[] newOffsets = new int[newCapacity];
+      if (arrayLengths != null) {
+        System.arraycopy(arrayLengths, 0, newLengths, 0, arrayLengths.length);
+        System.arraycopy(arrayOffsets, 0, newOffsets, 0, arrayLengths.length);
+        arrayLengths = newLengths;
+        arrayOffsets = newOffsets;
+      }
+    }
+    putArray(rowId, dataOffset, length);
+    if (data.length < dataOffset + length) {
+      int newCapacity = (int) Math.min(MAX_CAPACITY, (dataOffset + length) * 2L);
+      byte[] newData = new byte[newCapacity];
+      System.arraycopy(data, 0, newData,0, dataOffset);
+      data = newData;
+    }
+    Platform.copyMemory(src, offset, data, Platform.BOOLEAN_ARRAY_OFFSET + dataOffset, length);
+    dataOffset += length;
+  }
+
+  @Override
+  public UnsafeArrayData getUnsafeArray(int rowId) {
+    int offset = getArrayOffset(rowId);
+    int length = getArrayLength(rowId);
+    UnsafeArrayData array = new UnsafeArrayData();
+    array.pointTo(data, Platform.BYTE_ARRAY_OFFSET + offset, length);
+    return array;
+  }
+
+  @Override
   public void loadBytes(ColumnVector.Array array) {
     array.byteArray = byteData;
     array.byteArrayOffset = array.offset;
@@ -406,7 +450,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
+    if (isArray() || DecimalType.isByteArrayDecimalType(type)) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
       if (this.arrayLengths != null) {
@@ -415,6 +459,15 @@ public final class OnHeapColumnVector extends ColumnVector {
       }
       arrayLengths = newLengths;
       arrayOffsets = newOffsets;
+      if (useUnsafeArrayData) {
+        DataType et = ((ArrayType)type).elementType();
+        if (data == null || data.length < newCapacity) {
+          int length = newCapacity * et.defaultSize() + UnsafeArrayData.calculateHeaderPortionInBytes(newCapacity);
+          byte[] newData = new byte[length];
+          if (data != null) System.arraycopy(data, 0, newData, 0, dataOffset);
+          data = newData;
+        }
+      }
     } else if (type instanceof BooleanType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];
