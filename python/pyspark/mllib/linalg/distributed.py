@@ -369,12 +369,14 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("computePrincipalComponents", k)
 
+    @since('2.2.0')
     def multiply(self, matrix):
         """
-        Multiplies the given RowMatrix with another matrix.
+        Multiply this matrix by a local dense matrix on the right.
 
-        :param matrix: Matrix to multiply with.
-        :returns: RowMatrix
+        :param matrix: a local dense matrix whose number of rows must match the number of columns
+        of this matrix
+        :returns: :py:class:`RowMatrix`
 
         >>> rm = RowMatrix(sc.parallelize([[0, 1], [2, 3]]))
         >>> rm.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
@@ -699,12 +701,14 @@ class IndexedRowMatrix(DistributedMatrix):
             "computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)
 
+    @since('2.2.0')
     def multiply(self, matrix):
         """
-        Multiplies the given IndexedRowMatrix with another matrix.
+        Multiply this matrix by a local dense matrix on the right.
 
-        :param matrix: Matrix to multiply with.
-        :returns: IndexedRowMatrix
+        :param matrix: a local dense matrix whose number of rows must match the number of columns
+        of this matrix
+        :returns: :py:class:`IndexedRowMatrix`
 
         >>> mat = IndexedRowMatrix(sc.parallelize([(0, (0, 1)), (1, (2, 3))]))
         >>> mat.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
