@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.recommendation
 
-import breeze.linalg.min
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import java.io.IOException
@@ -279,7 +278,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
     val ratings = srcBlocks.cartesian(dstBlocks).flatMap {
       case (users, items) =>
       val m = users.size
-      val n = min(items.size, num)
+      val n = math.min(items.size, num)
       val output = new Array[(Int, (Int, Double))](m * n)
       var j = 0
       users.foreach (user => {
