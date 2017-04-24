@@ -176,7 +176,7 @@ object MemoryListenerSuite extends SparkFunSuite {
   def createExecutorMetricsUpdateEvent(
       execId: String,
       executorMetrics: ExecutorMetrics): SparkListenerExecutorMetricsUpdate = {
-    SparkListenerExecutorMetricsUpdate(execId, executorMetrics, Seq.empty)
+    SparkListenerExecutorMetricsUpdate(execId, Seq.empty, Some(executorMetrics))
   }
 
   def createExecutorMetrics(

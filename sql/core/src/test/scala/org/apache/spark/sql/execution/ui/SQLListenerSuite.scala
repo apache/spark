@@ -139,11 +139,14 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
 
     assert(listener.getExecutionMetrics(0).isEmpty)
 
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", null, Seq(
-      // (task id, stage id, stage attempt, accum updates)
-      (0L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo)),
-      (1L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo))
-    )))
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(
+      "",
+      Seq(
+        // (task id, stage id, stage attempt, accum updates)
+        (0L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo)),
+        (1L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo))),
+      None
+    ))
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
 

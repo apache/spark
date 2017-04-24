@@ -258,10 +258,10 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
         event: SparkListenerExecutorMetricsUpdate): Unit = {
       val execMetrics = event.executorMetrics
       assert(execId === event.execId)
-      assert(metricsDetails._1 === execMetrics.hostname)
-      assert(metricsDetails._2 === execMetrics.transportMetrics.timeStamp)
-      assert(metricsDetails._3 === execMetrics.transportMetrics.onHeapSize)
-      assert(metricsDetails._4 === execMetrics.transportMetrics.offHeapSize)
+      assert(metricsDetails._1 === execMetrics.get.hostname)
+      assert(metricsDetails._2 === execMetrics.get.transportMetrics.timeStamp)
+      assert(metricsDetails._3 === execMetrics.get.transportMetrics.onHeapSize)
+      assert(metricsDetails._4 === execMetrics.get.transportMetrics.offHeapSize)
     }
   }
 
