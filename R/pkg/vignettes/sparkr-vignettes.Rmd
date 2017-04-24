@@ -308,7 +308,7 @@ numCyl <- summarize(groupBy(carsDF, carsDF$cyl), count = n(carsDF$cyl))
 head(numCyl)
 ```
 
-`groupBy` can be replaced with `cube` or `rollup` to compute subtotals across multiple dimensions.
+Use `cube` or `rollup` to compute subtotals across multiple dimensions.
 
 ```{r}
 mean(cube(carsDF, "cyl", "gear", "am"), "mpg")
