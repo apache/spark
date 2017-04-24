@@ -408,7 +408,7 @@ class ALSModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Returns top `numUsers` users recommended for each item, for all items.
 
-        :param numItems: max number of recommendations for each item
+        :param numUsers: max number of recommendations for each item
         :return: a DataFrame of (itemCol, recommendations), where recommendations are
                  stored as an array of (userCol, rating) Rows.
         """
