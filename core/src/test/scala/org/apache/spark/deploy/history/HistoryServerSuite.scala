@@ -26,7 +26,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpSe
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import com.codahale.metrics.Counter
+import com.codahale.metrics.{Counter, Gauge}
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -43,6 +43,7 @@ import org.scalatest.mock.MockitoSugar
 import org.scalatest.selenium.WebBrowser
 
 import org.apache.spark._
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.util.{ResetSystemProperties, Utils}
@@ -419,15 +420,33 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server.initialize()
     server.bind()
     val port = server.boundPort
-    val metrics = server.cacheMetrics
+    val cacheMetrics = server.cacheMetrics
+    val historyMetrics = server.historyMetrics
+    val providerMetrics = server.providerMetrics.get.asInstanceOf[HistoryMetricSource]
 
-    // assert that a metric has a value; if not dump the whole metrics instance
-    def assertMetric(name: String, counter: Counter, expected: Long): Unit = {
-      val actual = counter.getCount
-      if (actual != expected) {
+    // assert that a metric counter evaluates as expected; if not dump the whole metrics instance
+    def assertCounterEvaluates(
+        source: Source,
+        name: String,
+        counter: Counter,
+        evaluation: (Long => Boolean)): Unit = {
+      val value = counter.getCount
+      if (!evaluation(value)) {
         // this is here because Scalatest loses stack depth
-        fail(s"Wrong $name value - expected $expected but got $actual" +
-            s" in metrics\n$metrics")
+        fail(s"Wrong $name value: $value in metrics\n$source")
+      }
+    }
+
+    // assert that a long metric gauge evaluates as expected; if not dump the whole metrics instance
+    def assertGaugeEvaluates(
+        source: Source,
+        name: String,
+        gauge: Gauge[Long],
+        evaluation: (Long => Boolean)): Unit = {
+      val value = gauge.getValue
+      if (!evaluation(value)) {
+        // this is here because Scalatest loses stack depth
+        fail(s"Wrong $name value: $value in metrics\n$source")
       }
     }
 
@@ -441,7 +460,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       new URL(s"http://localhost:$port/api/v1/applications/$appId$suffix")
     }
 
-    val historyServerRoot = new URL(s"http://localhost:$port/")
+    // check that a dynamically calculated average returns 0 and not a division by zero error.
+    val replayTime = "appui.event.replay.time"
+    assertGaugeEvaluates(providerMetrics, replayTime,
+      providerMetrics.getLongGauge(replayTime).get, _ == 0)
 
     // start initial job
     val d = sc.parallelize(1 to 10)
@@ -516,7 +538,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     getNumJobs("") should be (1)
     getNumJobs("/jobs") should be (1)
     getNumJobsRestful() should be (1)
-    assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
+    assertCounterEvaluates(cacheMetrics, "lookup count",
+      cacheMetrics.lookupCount, _ > 1)
 
     // dump state before the next bit of test, which is where update
     // checking really gets stressed
@@ -563,6 +586,24 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     listApplications(false) should not contain(appId)
 
     assert(jobcount === getNumJobs("/jobs"))
+
+    // print out the metrics. This forces a run through all the counters and gauges
+    // the evaluation is done outside the log statement to guarantee that the evaluation
+    // always takes place
+    val metricsDump = s"$historyMetrics\n$providerMetrics\n$cacheMetrics"
+    logInfo(s"Metrics:\n$metricsDump")
+    // make some assertions about internal state of providers via the metrics
+    val loadcount = "appui.load.count"
+    assert(metricsDump.contains(loadcount),
+      s"No $loadcount in metrics dump <$metricsDump>")
+    assertCounterEvaluates(providerMetrics, loadcount,
+      providerMetrics.getCounter(loadcount).get, _ > 0)
+    assertGaugeEvaluates(providerMetrics, replayTime,
+      providerMetrics.getLongGauge(replayTime).get, _ > 0)
+
+    val evictionCount = cacheMetrics.fullname("eviction.count")
+    assert(metricsDump.contains(evictionCount),
+      s"No $evictionCount in metrics dump <$metricsDump>")
 
     // no need to retain the test dir now the tests complete
     logDir.deleteOnExit()
