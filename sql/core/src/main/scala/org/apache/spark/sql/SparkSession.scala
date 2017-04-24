@@ -377,7 +377,10 @@ class SparkSession private(
     val attrSeq = getSchema(beanClass)
     val beanInfo = Introspector.getBeanInfo(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
-    Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
+    // XXX [[Iterator.toSeq]] creates a closure over non-serializable
+    //     [[java.util.ListIterator]] which on Scala 2.10 could break
+    //     closure serialization.
+    Dataset.ofRows(self, LocalRelation(attrSeq, rows.toList))
   }
 
   /**

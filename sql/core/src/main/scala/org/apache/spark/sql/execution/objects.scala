@@ -87,8 +87,14 @@ case class DeserializeToObjectExec(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
+    // XXX make sure we never pull [[this]] into closure serialization.
+    //     This is to fix the non-serializability of [[Iterator]]
+    //     which is created in [[SparkSession.createDataFrame]] while
+    //     running [[JavaMultilayerPerceptronClassifierSuite]].
+    val localChild = child
+    val localDeserializer = deserializer
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val projection = GenerateSafeProjection.generate(deserializer :: Nil, child.output)
+      val projection = GenerateSafeProjection.generate(localDeserializer :: Nil, localChild.output)
       projection.initialize(index)
       iter.map(projection)
     }
