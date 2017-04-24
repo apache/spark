@@ -382,7 +382,7 @@ class Column(object):
 
     # order
     _asc_doc = """
-    Returns a sort expression based on the descending order of the given column name
+    Returns a sort expression based on the ascending order of the given column name
 
     >>> from pyspark.sql import Row
     >>> df2 = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
