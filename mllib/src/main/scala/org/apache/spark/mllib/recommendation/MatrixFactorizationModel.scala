@@ -56,7 +56,8 @@ import org.apache.spark.storage.StorageLevel
 class MatrixFactorizationModel @Since("0.8.0") (
     @Since("0.8.0") val rank: Int,
     @Since("0.8.0") val userFeatures: RDD[(Int, Array[Double])],
-    @Since("0.8.0") val productFeatures: RDD[(Int, Array[Double])])
+    @Since("0.8.0") val productFeatures: RDD[(Int, Array[Double])],
+    @Since("2.3.0") var blockSize: Int = 4096)
   extends Saveable with Serializable with Logging {
 
   require(rank > 0)
@@ -216,7 +217,8 @@ class MatrixFactorizationModel @Since("0.8.0") (
    */
   @Since("1.4.0")
   def recommendProductsForUsers(num: Int): RDD[(Int, Array[Rating])] = {
-    MatrixFactorizationModel.recommendForAll(rank, userFeatures, productFeatures, num).map {
+    MatrixFactorizationModel.recommendForAll(rank, userFeatures, productFeatures, num, blockSize)
+      .map {
       case (user, top) =>
         val ratings = top.map { case (product, rating) => Rating(user, product, rating) }
         (user, ratings)
@@ -234,11 +236,19 @@ class MatrixFactorizationModel @Since("0.8.0") (
    */
   @Since("1.4.0")
   def recommendUsersForProducts(num: Int): RDD[(Int, Array[Rating])] = {
-    MatrixFactorizationModel.recommendForAll(rank, productFeatures, userFeatures, num).map {
+    MatrixFactorizationModel.recommendForAll(rank, productFeatures, userFeatures, num, blockSize)
+      .map {
       case (product, top) =>
         val ratings = top.map { case (user, rating) => Rating(user, product, rating) }
         (product, ratings)
     }
+  }
+
+  /** Sets blockSize, which will be used for recommendForAll. */
+  @Since("2.3.0")
+  def setBlockSize(blockSize: Int): this.type = {
+    this.blockSize = blockSize
+    this
   }
 }
 
