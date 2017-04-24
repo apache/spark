@@ -273,9 +273,10 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       rank: Int,
       srcFeatures: RDD[(Int, Array[Double])],
       dstFeatures: RDD[(Int, Array[Double])],
-      num: Int): RDD[(Int, Array[(Int, Double)])] = {
-    val srcBlocks = blockify(rank, srcFeatures)
-    val dstBlocks = blockify(rank, dstFeatures)
+      num: Int,
+      blockSize: Int = 4096): RDD[(Int, Array[(Int, Double)])] = {
+    val srcBlocks = blockify(rank, srcFeatures, blockSize)
+    val dstBlocks = blockify(rank, dstFeatures, blockSize)
     val ratings = srcBlocks.cartesian(dstBlocks).flatMap {
       case ((srcIds, srcFactors), (dstIds, dstFactors)) =>
         val m = srcIds.length
@@ -297,8 +298,8 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
    */
   private def blockify(
       rank: Int,
-      features: RDD[(Int, Array[Double])]): RDD[(Array[Int], DenseMatrix)] = {
-    val blockSize = 4096 // TODO: tune the block size
+      features: RDD[(Int, Array[Double])],
+      blockSize: Int): RDD[(Array[Int], DenseMatrix)] = {
     val blockStorage = rank * blockSize
     features.mapPartitions { iter =>
       iter.grouped(blockSize).map { grouped =>
