@@ -715,7 +715,7 @@ class LinearRegressionSuite
       assert(modelNoPredictionColFieldNames.exists(s => s.startsWith("prediction_")))
 
       // Residuals in [[LinearRegressionResults]] should equal those manually computed
-      val expectedResiduals = datasetWithDenseFeature.select("features", "label")
+      datasetWithDenseFeature.select("features", "label")
         .rdd
         .map { case Row(features: DenseVector, label: Double) =>
           val prediction =
