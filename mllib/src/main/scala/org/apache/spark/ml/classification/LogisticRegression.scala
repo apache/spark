@@ -1571,9 +1571,6 @@ private class LogisticAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
-        s" Expecting $numFeatures but got ${features.size}.")
-      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
 
@@ -1596,8 +1593,6 @@ private class LogisticAggregator(
    * @return This LogisticAggregator object.
    */
   def merge(other: LogisticAggregator): this.type = {
-    require(numFeatures == other.numFeatures, s"Dimensions mismatch when merging with another " +
-      s"LogisticAggregator. Expecting $numFeatures but got ${other.numFeatures}.")
 
     if (other.weightSum != 0.0) {
       weightSum += other.weightSum
