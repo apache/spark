@@ -3763,6 +3763,9 @@ setMethod("collect_set",
 #' df <- read.text("README.md")
 #'
 #' head(select(df, split_string(df$value, "\\s+")))
+#'
+#' # This is equivalent to the following SQL expression
+#' head(selectExpr(df, "split(value, '\\\\s+')"))
 #' }
 #' @note split_string 2.3.0
 setMethod("split_string",
@@ -3786,11 +3789,12 @@ setMethod("split_string",
 #' @aliases repeat_string,Column-method
 #' @export
 #' @examples \dontrun{
-#' df <- createDataFame(data.frame(
-#'   text = c("foo", "bar")
-#' ))
+#' df <- read.text("README.md")
 #'
-#' head(select(repeat_string(df$text, 3)))
+#' first(select(df, repeat_string(df$value, 3)))
+#'
+#' # This is equivalent to the following SQL expression
+#' first(selectExpr(df, "repeat(value, 3)"))
 #' }
 #' @note repeat_string 2.3.0
 setMethod("repeat_string",
