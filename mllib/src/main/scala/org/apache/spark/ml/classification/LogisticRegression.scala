@@ -1576,13 +1576,11 @@ private class LogisticRegressionTrainingSummaryImpl(
     @Since("1.5.0") val objectiveHistory: Array[Double])
   extends LogisticRegressionSummaryImpl(
     predictions, probabilityCol, predictionCol, labelCol, featuresCol)
-  with LogisticRegressionTrainingSummary {
-
-}
+  with LogisticRegressionTrainingSummary
 
 /**
  * :: Experimental ::
- * Multiclass Logistic regression results for a given model.
+ * Multiclass logistic regression results for a given model.
  *
  * @param predictions dataframe output by the model's `transform` method.
  * @param probabilityCol field in "predictions" which gives the probability of
