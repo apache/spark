@@ -1729,7 +1729,7 @@ class Dataset[T] private[sql](
     // ordering deterministic. Note that MapTypes cannot be sorted and are explicitly pruned out
     // from the sort order.
     val sortOrder = logicalPlan.output
-      .filterNot(_.dataType.existsRecursively(dt => dt.isInstanceOf[MapType]))
+      .filter(attr => RowOrdering.isOrderable(attr.dataType))
       .map(SortOrder(_, Ascending))
     val plan = if (sortOrder.nonEmpty) {
       Sort(sortOrder, global = false, logicalPlan)
