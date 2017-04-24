@@ -375,7 +375,7 @@ class RowMatrix(DistributedMatrix):
         Multiply this matrix by a local dense matrix on the right.
 
         :param matrix: a local dense matrix whose number of rows must match the number of columns
-        of this matrix
+                       of this matrix
         :returns: :py:class:`RowMatrix`
 
         >>> rm = RowMatrix(sc.parallelize([[0, 1], [2, 3]]))
@@ -707,7 +707,7 @@ class IndexedRowMatrix(DistributedMatrix):
         Multiply this matrix by a local dense matrix on the right.
 
         :param matrix: a local dense matrix whose number of rows must match the number of columns
-        of this matrix
+                       of this matrix
         :returns: :py:class:`IndexedRowMatrix`
 
         >>> mat = IndexedRowMatrix(sc.parallelize([(0, (0, 1)), (1, (2, 3))]))
