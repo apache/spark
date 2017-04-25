@@ -284,6 +284,14 @@ class Column(object):
         raise TypeError("Column is not iterable")
 
     # string methods
+    _contains_doc = """
+    Contains the other element. Returns a boolean :class:`Column` based on a string match.
+
+    :param other: string in line
+
+    >>> df.filter(df.name.contains('o')).collect()
+    [Row(age=5, name=u'Bob')]
+    """
     _rlike_doc = """
     SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
     match.
@@ -322,14 +330,6 @@ class Column(object):
     [Row(age=2, name=u'Alice')]
     >>> df.filter(df.name.endswith('ice$')).collect()
     []
-    """
-    _contains_doc = """
-    Contains the other element. Returns a boolean :class:`Column` based on a string match.
-
-    :param other: string in line
-
-    >>> df.filter(df.name.contains('o')).collect()
-    [Row(age=5, name=u'Bob')]
     """
 
     contains = ignore_unicode_prefix(_bin_op("contains", _contains_doc))
