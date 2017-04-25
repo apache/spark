@@ -590,6 +590,8 @@ class StreamExecution(
    * @param sparkSessionToRunBatch Isolated [[SparkSession]] to run this batch with.
    */
   private def runBatch(sparkSessionToRunBatch: SparkSession): Unit = {
+    sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString)
+
     // Request unprocessed data from all sources.
     newData = reportTimeTaken("getBatch") {
       availableOffsets.flatMap {
@@ -825,6 +827,9 @@ class StreamExecution(
     }
   }
 
+  private def getBatchDescriptionString: String = {
+    Option(name).map(_ + " ").getOrElse("") + s"[batch = $currentBatchId, id = $id, runId = $runId]"
+  }
 }
 
 
