@@ -2619,11 +2619,11 @@ private[spark] object Utils extends Logging {
     // arbitrary property contained the term 'password', we may redact the value from the UI and
     // logs. In order to work around it, user would have to make the spark.redaction.regex property
     // more specific.
-    kvs.map { kv =>
-      redactionPattern.findFirstIn(kv._1)
-        .orElse(redactionPattern.findFirstIn(kv._2))
-        .map { _ => (kv._1, REDACTION_REPLACEMENT_TEXT) }
-        .getOrElse(kv)
+    kvs.map { case (key, value) =>
+      redactionPattern.findFirstIn(key)
+        .orElse(redactionPattern.findFirstIn(value))
+        .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
+        .getOrElse((key, value))
     }
   }
 

@@ -428,10 +428,10 @@ class SparkSubmitSuite
         "--conf", "spark.hadoop.fs.defaultFS=unsupported://example.com",
         unusedJar.toString)
       runSparkSubmit(args)
-      val listStatuses = fileSystem.listStatus(testDirPath)
-      val logData = EventLoggingListener.openEventLog(listStatuses.last.getPath, fileSystem)
-      Source.fromInputStream(logData).getLines().foreach {
-        line => assert(!line.contains("secret_password"))
+      val listStatus = fileSystem.listStatus(testDirPath)
+      val logData = EventLoggingListener.openEventLog(listStatus.last.getPath, fileSystem)
+      Source.fromInputStream(logData).getLines().foreach { line =>
+        assert(!line.contains("secret_password"))
       }
     } finally {
       Utils.deleteRecursively(testDir)
