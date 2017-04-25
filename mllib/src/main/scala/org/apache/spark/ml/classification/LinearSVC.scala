@@ -510,7 +510,7 @@ private class LinearSVCAggregator(
    * @return This LinearSVCAggregator object.
    */
   def merge(other: LinearSVCAggregator): this.type = {
-    
+
     if (other.weightSum != 0.0) {
       weightSum += other.weightSum
       lossSum += other.lossSum
