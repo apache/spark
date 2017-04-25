@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Try to replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
@@ -222,12 +223,10 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
   }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
-    val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-      schema.map(_.name)
-    } else {
-      schema.map(_.name.toLowerCase)
-    }
-    checkDuplication(columnNames, "table definition of " + table.identifier)
+    SchemaUtils.checkSchemaColumnNameDuplication(
+      schema,
+      "table definition of " + table.identifier,
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val normalizedPartCols = normalizePartitionColumns(schema, table)
     val normalizedBucketSpec = normalizeBucketSpec(schema, table)
@@ -253,7 +252,10 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       partCols = table.partitionColumnNames,
       resolver = sparkSession.sessionState.conf.resolver)
 
-    checkDuplication(normalizedPartitionCols, "partition")
+    SchemaUtils.checkColumnNameDuplication(
+      normalizedPartitionCols,
+      "partition",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
       if (DDLUtils.isHiveTable(table)) {
@@ -283,8 +285,16 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
           tableCols = schema.map(_.name),
           bucketSpec = bucketSpec,
           resolver = sparkSession.sessionState.conf.resolver)
-        checkDuplication(normalizedBucketSpec.bucketColumnNames, "bucket")
-        checkDuplication(normalizedBucketSpec.sortColumnNames, "sort")
+
+        val caseSensitiveAnalysis = sparkSession.sessionState.conf.caseSensitiveAnalysis
+        SchemaUtils.checkColumnNameDuplication(
+          normalizedBucketSpec.bucketColumnNames,
+          "bucket",
+          caseSensitiveAnalysis)
+        SchemaUtils.checkColumnNameDuplication(
+          normalizedBucketSpec.sortColumnNames,
+          "sort",
+          caseSensitiveAnalysis)
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
           case dt if RowOrdering.isOrderable(dt) => // OK
@@ -294,15 +304,6 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         Some(normalizedBucketSpec)
 
       case None => None
-    }
-  }
-
-  private def checkDuplication(colNames: Seq[String], colType: String): Unit = {
-    if (colNames.distinct.length != colNames.length) {
-      val duplicateColumns = colNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => x
-      }
-      failAnalysis(s"Found duplicate column(s) in $colType: ${duplicateColumns.mkString(", ")}")
     }
   }
 

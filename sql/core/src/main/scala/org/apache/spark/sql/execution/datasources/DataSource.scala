@@ -188,6 +188,9 @@ case class DataSource(
       (dataSchema ++ partitionSchema).map(_.name), "in the data schema and the partition schema",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
+    SchemaUtils.checkSchemaColumnNameDuplication(
+      dataSchema, "datasource", sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
     (dataSchema, partitionSchema)
   }
 
@@ -333,6 +336,9 @@ case class DataSource(
             s"Unable to infer schema for $format at ${fileCatalog.allFiles().mkString(",")}. " +
                 "It must be specified manually")
         }
+
+        SchemaUtils.checkSchemaColumnNameDuplication(
+          dataSchema, "datasource", sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
         HadoopFsRelation(
           fileCatalog,

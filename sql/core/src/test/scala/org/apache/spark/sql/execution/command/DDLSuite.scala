@@ -439,13 +439,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, a string) USING json")
     }
-    assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
+    assert(e.message == """Found duplicate column(s) in table definition of `tbl`: "a"""")
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val e2 = intercept[AnalysisException] {
         sql("CREATE TABLE tbl(a int, A string) USING json")
       }
-      assert(e2.message == "Found duplicate column(s) in table definition of `tbl`: a")
+      assert(e2.message == """Found duplicate column(s) in table definition of `tbl`: "a"""")
     }
   }
 
@@ -469,14 +469,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) USING json PARTITIONED BY (a, a)")
     }
-    assert(e.message == "Found duplicate column(s) in partition: a")
+    assert(e.message == """Found duplicate column(s) in partition: "a"""")
   }
 
   test("create table - column repeated in bucket columns") {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) USING json CLUSTERED BY (a, a) INTO 4 BUCKETS")
     }
-    assert(e.message == "Found duplicate column(s) in bucket: a")
+    assert(e.message == """Found duplicate column(s) in bucket: "a"""")
   }
 
   test("Refresh table after changing the data source table partitioning") {

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Legacy catalog for interacting with the Hive metastore.
@@ -248,6 +249,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           if (inferenceMode == INFER_AND_SAVE) {
             updateCatalogSchema(relation.tableMeta.identifier, schema)
           }
+
+          SchemaUtils.checkSchemaColumnNameDuplication(
+            schema, "hive serde table", sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
           (schema, relation.tableMeta.copy(schema = schema))
         case None =>
           logWarning(s"Unable to infer schema for table $tableName from file format " +
