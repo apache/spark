@@ -1321,7 +1321,7 @@ setMethod("toRDD",
 #' Groups the SparkDataFrame using the specified columns, so we can run aggregation on them.
 #'
 #' @param x a SparkDataFrame.
-#' @param ...  character name(s) or Column(s) to group on.
+#' @param ... character name(s) or Column(s) to group on.
 #' @return A GroupedData.
 #' @family SparkDataFrame functions
 #' @aliases groupBy,SparkDataFrame-method
@@ -3644,12 +3644,11 @@ setMethod("checkpoint",
             dataFrame(df)
           })
 
-
 #' cube
 #'
 #' Create a multi-dimensional cube for the SparkDataFrame using the specified columns.
 #'
-#' If grouping expression is missing `cube` creates a single global aggregate and is equivalent to
+#' If grouping expression is missing \code{cube} creates a single global aggregate and is equivalent to
 #' direct application of \link{agg}.
 #'
 #' @param x a SparkDataFrame.
@@ -3684,7 +3683,7 @@ setMethod("cube",
 #'
 #' Create a multi-dimensional rollup for the SparkDataFrame using the specified columns.
 #'
-#' If grouping expression is missing `rollup` creates a single global aggregate and is equivalent to
+#' If grouping expression is missing \code{rollup} creates a single global aggregate and is equivalent to
 #' direct application of \link{agg}.
 #'
 #' @param x a SparkDataFrame.
