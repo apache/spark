@@ -74,61 +74,56 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
     val currSplit = split.asInstanceOf[CartesianPartition]
     for (x <- rdd1.iterator(currSplit.s1, context);
-         y <- getOrCache(rdd2, currSplit.s2, context, StorageLevel.MEMORY_AND_DISK))
+         y <- getOrCacheBlock(rdd2, currSplit.s2, context, StorageLevel.MEMORY_AND_DISK))
       yield (x, y)
   }
 
-  private def getOrCache(
+  private def getOrCacheBlock(
       rdd: RDD[U],
       partition: Partition,
       context: TaskContext,
       level: StorageLevel): Iterator[U] = {
-    if (rdd.getStorageLevel != StorageLevel.NONE) {
+    val blockId = RDDBlockId(rdd.id, partition.index)
+    var readCachedBlock = true
+    // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
+    val iterator = SparkEnv.get.blockManager.getOrElseUpdate(blockId, level, classTag[U], () => {
+      readCachedBlock = false
       rdd.iterator(partition, context)
-    } else {
-      val blockId = RDDBlockId(rdd.id, partition.index)
-      var readCachedBlock = true
-      // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
-      val iterator = SparkEnv.get.blockManager.getOrElseUpdate(blockId, level, classTag[U], () => {
-        readCachedBlock = false
-        rdd.iterator(partition, context)
-      }, true) match {
-        case Left(blockResult) =>
-          if (readCachedBlock) {
-            val existingMetrics = context.taskMetrics().inputMetrics
-            existingMetrics.incBytesRead(blockResult.bytes)
-            new InterruptibleIterator[U](context, blockResult.data.asInstanceOf[Iterator[U]]) {
-              override def next(): U = {
-                existingMetrics.incRecordsRead(1)
-                delegate.next()
-              }
+    }, true) match {
+      case Left(blockResult) =>
+        if (readCachedBlock) {
+          val existingMetrics = context.taskMetrics().inputMetrics
+          existingMetrics.incBytesRead(blockResult.bytes)
+          new InterruptibleIterator[U](context, blockResult.data.asInstanceOf[Iterator[U]]) {
+            override def next(): U = {
+              existingMetrics.incRecordsRead(1)
+              delegate.next()
             }
-          } else {
-            new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[U]])
           }
-        case Right(iter) =>
-          new InterruptibleIterator(context, iter.asInstanceOf[Iterator[U]])
-      }
-
-      context.addTaskCompletionListener(new TaskCompletionListener{
-        override def onTaskCompletion(context: TaskContext): Unit = {
-          if (!readCachedBlock) {
-            SparkEnv.get.blockManager.removeBlock(blockId, false)
-          }
+        } else {
+          new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[U]])
         }
-      })
-
-      context.addTaskFailureListener(new TaskFailureListener{
-        override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-          if (!readCachedBlock) {
-            SparkEnv.get.blockManager.removeBlock(blockId, false)
-          }
-        }
-      })
-
-      iterator
+      case Right(iter) =>
+        new InterruptibleIterator(context, iter.asInstanceOf[Iterator[U]])
     }
 
+    context.addTaskCompletionListener(new TaskCompletionListener{
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        if (!readCachedBlock) {
+          SparkEnv.get.blockManager.removeBlock(blockId, false)
+        }
+      }
+    })
+
+    context.addTaskFailureListener(new TaskFailureListener{
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
+        if (!readCachedBlock) {
+          SparkEnv.get.blockManager.removeBlock(blockId, false)
+        }
+      }
+    })
+
+    iterator
   }
 
   override def getDependencies: Seq[Dependency[_]] = List(

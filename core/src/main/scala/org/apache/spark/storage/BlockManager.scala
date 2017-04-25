@@ -679,7 +679,7 @@ private[spark] class BlockManager(
   }
 
   def get[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
-    getAndCache(blockId, false, StorageLevel.NONE)
+    getOrCacheRemote(blockId, false, StorageLevel.NONE)
   }
 
   /**
@@ -689,7 +689,7 @@ private[spark] class BlockManager(
    * any locks if the block was fetched from a remote block manager. The read lock will
    * automatically be freed once the result's `data` iterator is fully consumed.
    */
-  def getAndCache[T: ClassTag](
+  def getOrCacheRemote[T: ClassTag](
       blockId: BlockId,
       cacheRemote: Boolean,
       storageLevel: StorageLevel): Option[BlockResult] = {
@@ -756,7 +756,7 @@ private[spark] class BlockManager(
       cacheRemote: Boolean = false): Either[BlockResult, Iterator[T]] = {
     // Attempt to read the block from local or remote storage. If it's present, then we don't need
     // to go through the local-get-or-put path.
-    getAndCache[T](blockId, cacheRemote, level)(classTag) match {
+    getOrCacheRemote[T](blockId, cacheRemote, level)(classTag) match {
       case Some(block) =>
         return Left(block)
       case _ =>
