@@ -144,21 +144,27 @@ class StreamSuite extends StreamTest {
   test("Within the same streaming query, one StreamingRelation should only be transformed to one " +
     "StreamingExecutionRelation") {
     val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
-    val query =
-      df.union(df)
-        .writeStream
-        .format("memory")
-        .queryName("memory")
-        .start()
-        .asInstanceOf[StreamingQueryWrapper]
-        .streamingQuery
-    val executionRelations =
-      query
-        .logicalPlan
-        .collect { case ser: StreamingExecutionRelation => ser }
-    assert(executionRelations.size == 2)
-    assert(executionRelations.distinct.size == 1)
-    query.stop()
+    var query: StreamExecution = null
+    try {
+      query =
+        df.union(df)
+          .writeStream
+          .format("memory")
+          .queryName("memory")
+          .start()
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+      val executionRelations =
+        query
+          .logicalPlan
+          .collect { case ser: StreamingExecutionRelation => ser }
+      assert(executionRelations.size === 2)
+      assert(executionRelations.distinct.size === 1)
+    } finally {
+      if (query != null) {
+        query.stop()
+      }
+    }
   }
 
   test("unsupported queries") {
