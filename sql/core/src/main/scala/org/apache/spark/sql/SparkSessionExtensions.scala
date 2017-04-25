@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  *     .master("...")
  *     .conf("...", true)
  *     .withExtensions { extensions =>
- *       extensions.injectAnalyzerRule { session =>
+ *       extensions.injectResolutionRule { session =>
  *         ...
  *       }
  *       extensions.injectParser { (session, parser) =>

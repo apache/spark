@@ -854,7 +854,7 @@ object SparkSession {
      * Inject extensions into the [[SparkSession]]. This allows a user to add Analyzer rules,
      * Optimizer rules, Planning Strategies or a customized parser.
      *
-     * @since 2.3.0
+     * @since 2.2.0
      */
     def withExtensions(f: SparkSessionExtensions => Unit): Builder = {
       f(extensions)
