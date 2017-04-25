@@ -1337,6 +1337,7 @@ setMethod("toRDD",
 #'   agg(groupBy(df, "department", "gender"), salary="avg", "age" -> "max")
 #' }
 #' @note groupBy since 1.4.0
+#' @seealso \link{agg}, \link{cube}, \link{rollup}
 setMethod("groupBy",
            signature(x = "SparkDataFrame"),
            function(x, ...) {
@@ -3669,6 +3670,7 @@ setMethod("checkpoint",
 #' agg(carsDF, mean(carsDF$mpg))
 #' }
 #' @note cube since 2.3.0
+#' @seealso \link{agg}, \link{groupBy}, \link{rollup}
 setMethod("cube",
           signature(x = "SparkDataFrame"),
           function(x, ...) {
@@ -3703,6 +3705,7 @@ setMethod("cube",
 #' agg(carsDF, mean(carsDF$mpg))
 #' }
 #' @note rollup since 2.3.0
+#' @seealso \link{agg}, \link{cube}, \link{groupBy}
 setMethod("rollup",
           signature(x = "SparkDataFrame"),
           function(x, ...) {
