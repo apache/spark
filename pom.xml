@@ -184,7 +184,7 @@
     <paranamer.version>2.6</paranamer.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.0.0</commons-crypto.version>
-    <arrow.version>0.2.0</arrow.version>
+    <arrow.version>0.2.1-SNAPSHOT</arrow.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>

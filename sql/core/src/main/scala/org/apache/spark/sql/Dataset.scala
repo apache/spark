@@ -2776,10 +2776,9 @@ class Dataset[T] private[sql](
    * Collect a Dataset as ArrowPayload byte arrays and serve to PySpark.
    */
   private[sql] def collectAsArrowToPython(): Int = {
-    val payloadRdd = toArrowPayloadBytes()
-    val payloadByteArrays = payloadRdd.collect()
     withNewExecutionId {
-      PythonRDD.serveIterator(payloadByteArrays.iterator, "serve-Arrow")
+      val iter = toArrowPayload.collect().iterator.map(_.batchBytes)
+      PythonRDD.serveIterator(iter, "serve-Arrow")
     }
   }
 
@@ -2866,14 +2865,10 @@ class Dataset[T] private[sql](
   }
 
   /** Convert to an RDD of ArrowPayload byte arrays */
-  private[sql] def toArrowPayloadBytes(): RDD[Array[Byte]] = {
+  private[sql] def toArrowPayload: RDD[ArrowPayload] = {
     val schema_captured = this.schema
     queryExecution.toRdd.mapPartitionsInternal { iter =>
-      val converter = new ArrowConverters
-      val payload = converter.interalRowIterToPayload(iter, schema_captured)
-      val payloadBytes = ArrowConverters.payloadToByteArray(payload, schema_captured)
-      converter.close()
-      Iterator(payloadBytes)
+      ArrowConverters.toPayloadIterator(iter, schema_captured)
     }
   }
 }

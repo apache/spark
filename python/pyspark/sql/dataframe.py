@@ -1661,7 +1661,7 @@ class DataFrame(object):
             try:
                 import pyarrow
                 tables = self._collectAsArrow()
-                table = pyarrow.table.concat_tables(tables)
+                table = pyarrow.concat_tables(tables)
                 return table.to_pandas()
             except ImportError as e:
                 raise ImportError("%s\n%s" % (e.message, self.toPandas.__doc__))
