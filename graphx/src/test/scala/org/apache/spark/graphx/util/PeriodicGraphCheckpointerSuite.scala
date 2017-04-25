@@ -15,77 +15,81 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.impl
+package org.apache.spark.graphx.util
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
-import org.apache.spark.graphx.{Edge, Graph}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.graphx.{Edge, Graph, LocalSparkContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 
-class PeriodicGraphCheckpointerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class PeriodicGraphCheckpointerSuite extends SparkFunSuite with LocalSparkContext {
 
   import PeriodicGraphCheckpointerSuite._
 
   test("Persisting") {
     var graphsToCheck = Seq.empty[GraphToCheck]
 
-    val graph1 = createGraph(sc)
-    val checkpointer =
-      new PeriodicGraphCheckpointer[Double, Double](10, graph1.vertices.sparkContext)
-    checkpointer.update(graph1)
-    graphsToCheck = graphsToCheck :+ GraphToCheck(graph1, 1)
-    checkPersistence(graphsToCheck, 1)
+    withSpark { sc =>
+      val graph1 = createGraph(sc)
+      val checkpointer =
+        new PeriodicGraphCheckpointer[Double, Double](10, graph1.vertices.sparkContext)
+      checkpointer.update(graph1)
+      graphsToCheck = graphsToCheck :+ GraphToCheck(graph1, 1)
+      checkPersistence(graphsToCheck, 1)
 
-    var iteration = 2
-    while (iteration < 9) {
-      val graph = createGraph(sc)
-      checkpointer.update(graph)
-      graphsToCheck = graphsToCheck :+ GraphToCheck(graph, iteration)
-      checkPersistence(graphsToCheck, iteration)
-      iteration += 1
+      var iteration = 2
+      while (iteration < 9) {
+        val graph = createGraph(sc)
+        checkpointer.update(graph)
+        graphsToCheck = graphsToCheck :+ GraphToCheck(graph, iteration)
+        checkPersistence(graphsToCheck, iteration)
+        iteration += 1
+      }
     }
   }
 
   test("Checkpointing") {
-    val tempDir = Utils.createTempDir()
-    val path = tempDir.toURI.toString
-    val checkpointInterval = 2
-    var graphsToCheck = Seq.empty[GraphToCheck]
-    sc.setCheckpointDir(path)
-    val graph1 = createGraph(sc)
-    val checkpointer = new PeriodicGraphCheckpointer[Double, Double](
-      checkpointInterval, graph1.vertices.sparkContext)
-    checkpointer.update(graph1)
-    graph1.edges.count()
-    graph1.vertices.count()
-    graphsToCheck = graphsToCheck :+ GraphToCheck(graph1, 1)
-    checkCheckpoint(graphsToCheck, 1, checkpointInterval)
+    withSpark { sc =>
+      val tempDir = Utils.createTempDir()
+      val path = tempDir.toURI.toString
+      val checkpointInterval = 2
+      var graphsToCheck = Seq.empty[GraphToCheck]
+      sc.setCheckpointDir(path)
+      val graph1 = createGraph(sc)
+      val checkpointer = new PeriodicGraphCheckpointer[Double, Double](
+        checkpointInterval, graph1.vertices.sparkContext)
+      checkpointer.update(graph1)
+      graph1.edges.count()
+      graph1.vertices.count()
+      graphsToCheck = graphsToCheck :+ GraphToCheck(graph1, 1)
+      checkCheckpoint(graphsToCheck, 1, checkpointInterval)
 
-    var iteration = 2
-    while (iteration < 9) {
-      val graph = createGraph(sc)
-      checkpointer.update(graph)
-      graph.vertices.count()
-      graph.edges.count()
-      graphsToCheck = graphsToCheck :+ GraphToCheck(graph, iteration)
-      checkCheckpoint(graphsToCheck, iteration, checkpointInterval)
-      iteration += 1
+      var iteration = 2
+      while (iteration < 9) {
+        val graph = createGraph(sc)
+        checkpointer.update(graph)
+        graph.vertices.count()
+        graph.edges.count()
+        graphsToCheck = graphsToCheck :+ GraphToCheck(graph, iteration)
+        checkCheckpoint(graphsToCheck, iteration, checkpointInterval)
+        iteration += 1
+      }
+
+      checkpointer.deleteAllCheckpoints()
+      graphsToCheck.foreach { graph =>
+        confirmCheckpointRemoved(graph.graph)
+      }
+
+      Utils.deleteRecursively(tempDir)
     }
-
-    checkpointer.deleteAllCheckpoints()
-    graphsToCheck.foreach { graph =>
-      confirmCheckpointRemoved(graph.graph)
-    }
-
-    Utils.deleteRecursively(tempDir)
   }
 }
 
 private object PeriodicGraphCheckpointerSuite {
+  private val defaultStorageLevel = StorageLevel.MEMORY_ONLY_SER
 
   case class GraphToCheck(graph: Graph[Double, Double], gIndex: Int)
 
@@ -96,7 +100,8 @@ private object PeriodicGraphCheckpointerSuite {
     Edge[Double](3, 4, 0))
 
   def createGraph(sc: SparkContext): Graph[Double, Double] = {
-    Graph.fromEdges[Double, Double](sc.parallelize(edges), 0)
+    Graph.fromEdges[Double, Double](
+      sc.parallelize(edges), 0, defaultStorageLevel, defaultStorageLevel)
   }
 
   def checkPersistence(graphs: Seq[GraphToCheck], iteration: Int): Unit = {
@@ -116,8 +121,8 @@ private object PeriodicGraphCheckpointerSuite {
         assert(graph.vertices.getStorageLevel == StorageLevel.NONE)
         assert(graph.edges.getStorageLevel == StorageLevel.NONE)
       } else {
-        assert(graph.vertices.getStorageLevel != StorageLevel.NONE)
-        assert(graph.edges.getStorageLevel != StorageLevel.NONE)
+        assert(graph.vertices.getStorageLevel == defaultStorageLevel)
+        assert(graph.edges.getStorageLevel == defaultStorageLevel)
       }
     } catch {
       case _: AssertionError =>

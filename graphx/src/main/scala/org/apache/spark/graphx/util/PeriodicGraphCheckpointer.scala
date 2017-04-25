@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.impl
+package org.apache.spark.graphx.util
 
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx.Graph
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.PeriodicCheckpointer
 
 
 /**
@@ -74,9 +75,8 @@ import org.apache.spark.storage.StorageLevel
  * @tparam VD  Vertex descriptor type
  * @tparam ED  Edge descriptor type
  *
- * TODO: Move this out of MLlib?
  */
-private[mllib] class PeriodicGraphCheckpointer[VD, ED](
+private[spark] class PeriodicGraphCheckpointer[VD, ED](
     checkpointInterval: Int,
     sc: SparkContext)
   extends PeriodicCheckpointer[Graph[VD, ED]](checkpointInterval, sc) {
@@ -87,10 +87,13 @@ private[mllib] class PeriodicGraphCheckpointer[VD, ED](
 
   override protected def persist(data: Graph[VD, ED]): Unit = {
     if (data.vertices.getStorageLevel == StorageLevel.NONE) {
-      data.vertices.persist()
+      /* We need to use cache because persist does not honor the default storage level requested
+       * when constructing the graph. Only cache does that.
+       */
+      data.vertices.cache()
     }
     if (data.edges.getStorageLevel == StorageLevel.NONE) {
-      data.edges.persist()
+      data.edges.cache()
     }
   }
 
