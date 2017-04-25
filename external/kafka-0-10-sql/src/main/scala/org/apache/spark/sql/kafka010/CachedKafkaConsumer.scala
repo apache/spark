@@ -63,7 +63,7 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   case class AvailableOffsetRange(earliest: Long, latest: Long)
 
-  private def runUninterruptiblyIfPossiable[T](body: => T): T = Thread.currentThread match {
+  private def runUninterruptiblyIfPossible[T](body: => T): T = Thread.currentThread match {
     case ut: UninterruptibleThread =>
       ut.runUninterruptibly(body)
     case _ =>
@@ -76,7 +76,7 @@ private[kafka010] case class CachedKafkaConsumer private(
    * Return the available offset range of the current partition. It's a pair of the earliest offset
    * and the latest offset.
    */
-  def getAvailableOffsetRange(): AvailableOffsetRange = runUninterruptiblyIfPossiable {
+  def getAvailableOffsetRange(): AvailableOffsetRange = runUninterruptiblyIfPossible {
     consumer.seekToBeginning(Set(topicPartition).asJava)
     val earliestOffset = consumer.position(topicPartition)
     consumer.seekToEnd(Set(topicPartition).asJava)
@@ -103,7 +103,7 @@ private[kafka010] case class CachedKafkaConsumer private(
       untilOffset: Long,
       pollTimeoutMs: Long,
       failOnDataLoss: Boolean):
-    ConsumerRecord[Array[Byte], Array[Byte]] = runUninterruptiblyIfPossiable {
+    ConsumerRecord[Array[Byte], Array[Byte]] = runUninterruptiblyIfPossible {
     require(offset < untilOffset,
       s"offset must always be less than untilOffset [offset: $offset, untilOffset: $untilOffset]")
     logDebug(s"Get $groupId $topicPartition nextOffset $nextOffsetInFetchedData requested $offset")
