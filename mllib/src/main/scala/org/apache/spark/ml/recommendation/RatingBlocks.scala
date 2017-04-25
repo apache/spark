@@ -31,7 +31,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet}
 
 @DeveloperApi
-private[recommendation] final case class RatingBlocks[ID](
+private[recommendation] final case class RatingBlocks[ID] private (
   userIn: RDD[(Int, InBlock[ID])],
   userOut: RDD[(Int, OutBlock)],
   itemIn: RDD[(Int, InBlock[ID])],
