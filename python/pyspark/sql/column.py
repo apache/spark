@@ -364,6 +364,22 @@ class Column(object):
     isNull = ignore_unicode_prefix(_unary_op("isNull", _isNull_doc))
     isNotNull = ignore_unicode_prefix(_unary_op("isNotNull", _isNotNull_doc))
 
+    def isNotDistinctFrom(self, col):
+        """
+        A boolean expression that evaluates to true if this expression equals the given expression
+        or both expressions have a value of null.
+
+        :param col: other expression to compare too
+        
+        >>> data = [(10, 20), (30, 30), (40, None), (None, None)]
+        >>> df2 = sc.parallelize(data).toDF("c1", "c2")
+        >>> df2.where(df2["c1"].isNotDistinctFrom(df2["c2"]).collect())
+        [Row(c1=30, c2=30), Row(c1=None, c2=None)]        
+        """
+        jc = col._jc if isinstance(col, Column) else col
+        njc = getattr(self._jc, "eqNullSafe")(jc)
+        return Column(njc)
+
     @since(1.3)
     def alias(self, *alias, **kwargs):
         """
