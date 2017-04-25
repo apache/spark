@@ -310,8 +310,6 @@ test_that("spark.mlp", {
   expect_equal(summary$numOfOutputs, 3)
   expect_equal(summary$layers, c(4, 3))
   expect_equal(length(summary$weights), 15)
-  expect_equal(head(summary$weights, 5), list(-0.5793153, -4.652961, 6.216155, -6.649478,
-               -10.51147), tolerance = 1e-3)
 })
 
 test_that("spark.naiveBayes", {
