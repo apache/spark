@@ -1321,7 +1321,7 @@ setMethod("toRDD",
 #' Groups the SparkDataFrame using the specified columns, so we can run aggregation on them.
 #'
 #' @param x a SparkDataFrame.
-#' @param ... variable(s) (character names(s) or Column(s)) to group on.
+#' @param ...  character name(s) or Column(s) to group on.
 #' @return A GroupedData.
 #' @family SparkDataFrame functions
 #' @aliases groupBy,SparkDataFrame-method
