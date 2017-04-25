@@ -1060,6 +1060,14 @@ class HiveDDLSuite
           s"CREATE INDEX $indexName ON TABLE $tabName (a) AS 'COMPACT' WITH DEFERRED REBUILD")
         val indexTabName =
           spark.sessionState.catalog.listTables("default", s"*$indexName*").head.table
+
+        // Even if index tables exist, listTables and getTable APIs should still work
+        checkAnswer(
+          spark.catalog.listTables().toDF(),
+          Row(indexTabName, "default", null, null, false) ::
+            Row(tabName, "default", null, "MANAGED", false) :: Nil)
+        assert(spark.catalog.getTable("default", indexTabName).name === indexTabName)
+
         intercept[TableAlreadyExistsException] {
           sql(s"CREATE TABLE $indexTabName(b int)")
         }
