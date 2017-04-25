@@ -232,7 +232,7 @@ Once installed, the `docker` service needs to be started, if not already running
 On Linux, this can be done by `sudo service docker start`.
 
     ./build/mvn install -DskipTests
-    ./build/mvn -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
+    ./build/mvn test -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
 
 or
 
