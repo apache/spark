@@ -637,7 +637,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "correlationoptimizer10",
     "correlationoptimizer11",
     "correlationoptimizer13",
-    "correlationoptimizer14",
+    //"correlationoptimizer14",
     "correlationoptimizer15",
     "correlationoptimizer6",
     "correlationoptimizer7",
