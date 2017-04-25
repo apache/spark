@@ -570,9 +570,14 @@ private[deploy] class Worker(
       finishedApps -= id
       appDirectories.remove(id).foreach { dirList =>
         logInfo(s"Cleaning up local directories for application $id")
-        dirList.foreach { dir =>
-          Utils.deleteRecursively(new File(dir))
-        }
+        concurrent.future {
+          dirList.foreach { dir =>
+            Utils.deleteRecursively(new File(dir))
+          }
+        }(cleanupThreadExecutor).onFailure {
+          case e: Throwable =>
+            logError("App dir cleanup failed: " + e.getMessage, e)
+        }(cleanupThreadExecutor)
       }
       shuffleService.applicationRemoved(id)
     }
