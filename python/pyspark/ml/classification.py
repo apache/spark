@@ -190,9 +190,9 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> blor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
     >>> blorModel = blor.fit(bdf)
     >>> blorModel.coefficients
-    DenseVector([5.5...])
+    DenseVector([5.4...])
     >>> blorModel.intercept
-    -2.68...
+    -2.63...
     >>> mdf = sc.parallelize([
     ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
     ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], [])),
@@ -200,12 +200,10 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> mlor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight",
     ...     family="multinomial")
     >>> mlorModel = mlor.fit(mdf)
-    >>> print(mlorModel.coefficientMatrix)
-    DenseMatrix([[-2.3...],
-                 [ 0.2...],
-                 [ 2.1... ]])
+    >>> mlorModel.coefficientMatrix
+    DenseMatrix(3, 1, [-2.3..., 0.2..., 2.1...], 1)
     >>> mlorModel.interceptVector
-    DenseVector([2.0..., 0.8..., -2.8...])
+    DenseVector([2.1..., 0.6..., -2.8...])
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
     >>> result = blorModel.transform(test0).head()
     >>> result.prediction
@@ -213,7 +211,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> result.probability
     DenseVector([0.99..., 0.00...])
     >>> result.rawPrediction
-    DenseVector([8.22..., -8.22...])
+    DenseVector([8.12..., -8.12...])
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
     >>> blorModel.transform(test1).head().prediction
     1.0
@@ -1490,9 +1488,9 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
     >>> [x.coefficients for x in model.models]
-    [DenseVector([3.3925, 1.8785]), DenseVector([-4.3016, -6.3163]), DenseVector([-4.5855, 6.1785])]
+    [DenseVector([4.9791, 2.426]), DenseVector([-4.1198, -5.9326]), DenseVector([-3.314, 5.2423])]
     >>> [x.intercept for x in model.models]
-    [-3.64747..., 2.55078..., -1.10165...]
+    [-5.06544..., 2.30341..., -1.29133...]
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0))]).toDF()
     >>> model.transform(test0).head().prediction
     1.0

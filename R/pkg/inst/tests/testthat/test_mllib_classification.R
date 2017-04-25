@@ -288,18 +288,18 @@ test_that("spark.mlp", {
     c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 10),
-               c("1.0", "1.0", "1.0", "1.0", "2.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
+               c("1.0", "1.0", "2.0", "1.0", "2.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
 
   model <- spark.mlp(df, label ~ features, layers = c(4, 3), maxIter = 2, initialWeights =
     c(0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 5.0, 5.0, 5.0, 5.0, 9.0, 9.0, 9.0, 9.0, 9.0))
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 10),
-               c("1.0", "1.0", "1.0", "1.0", "2.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
+               c("1.0", "1.0", "2.0", "1.0", "2.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
 
   model <- spark.mlp(df, label ~ features, layers = c(4, 3), maxIter = 2)
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 10),
-               c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "0.0", "2.0", "1.0", "0.0"))
+               c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "0.0", "0.0", "1.0", "0.0"))
 
   # Test formula works well
   df <- suppressWarnings(createDataFrame(iris))
@@ -310,8 +310,8 @@ test_that("spark.mlp", {
   expect_equal(summary$numOfOutputs, 3)
   expect_equal(summary$layers, c(4, 3))
   expect_equal(length(summary$weights), 15)
-  expect_equal(head(summary$weights, 5), list(-1.1957257, -5.2693685, 7.4489734, -6.3751413,
-               -10.2376130), tolerance = 1e-6)
+  expect_equal(head(summary$weights, 5), list(-0.5793153, -4.652961, 6.216155, -6.649478,
+               -10.51147), tolerance = 1e-3)
 })
 
 test_that("spark.naiveBayes", {
