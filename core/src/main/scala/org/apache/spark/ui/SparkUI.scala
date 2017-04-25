@@ -141,7 +141,6 @@ private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
   def appName: String = parent.appName
 
   def appSparkVersion: String = parent.appSparkVersion
-
 }
 
 private[spark] object SparkUI {

@@ -59,7 +59,7 @@ private[spark] class ApplicationEventListener extends SparkListener {
     }
   }
 
-  override def onOtherEvent(event:SparkListenerEvent):Unit = event match {
+  override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(sparkVersion) =>
       appSparkVersion = Some(sparkVersion)
     case _ =>
