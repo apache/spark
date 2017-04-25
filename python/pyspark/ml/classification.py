@@ -200,17 +200,17 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> mlor = LogisticRegression(regParam=0.1, elasticNetParam=1.0, family="multinomial")
     >>> mlorModel = mlor.fit(mdf)
     >>> mlorModel.coefficientMatrix
-    SparseMatrix(3, 4, [0, 1, 2, 3], [3, 2, 1], [1.875..., -2.752..., -0.503...], 1)
+    SparseMatrix(3, 4, [0, 1, 2, 3], [3, 2, 1], [1.87..., -2.75..., -0.50...], 1)
     >>> mlorModel.interceptVector
-    DenseVector([0.047..., -0.423..., 0.375...])
+    DenseVector([0.04..., -0.42..., 0.37...])
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 1.0))]).toDF()
     >>> result = blorModel.transform(test0).head()
     >>> result.prediction
     1.0
     >>> result.probability
-    DenseVector([0.028..., 0.972...])
+    DenseVector([0.02..., 0.97...])
     >>> result.rawPrediction
-    DenseVector([-3.547..., 3.547...])
+    DenseVector([-3.54..., 3.54...])
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
     >>> blorModel.transform(test1).head().prediction
     1.0
@@ -1485,13 +1485,13 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
     >>> model.models[0].coefficients
-    DenseVector([0.515..., -1.089..., 3.468..., 4.246...])
+    DenseVector([0.5..., -1.0..., 3.4..., 4.2...])
     >>> model.models[1].coefficients
-    DenseVector([-2.128..., 3.128..., -2.681..., -2.344...])
+    DenseVector([-2.1..., 3.1..., -2.6..., -2.3...])
     >>> model.models[2].coefficients
-    DenseVector([0.306..., -3.421..., 1.046..., -1.138...])
+    DenseVector([0.3..., -3.4..., 1.0..., -1.1...])
     >>> [x.intercept for x in model.models]
-    [-2.738..., -2.564..., -1.324...]
+    [-2.7..., -2.5..., -1.3...]
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0, 1.0, 1.0))]).toDF()
     >>> model.transform(test0).head().prediction
     0.0
