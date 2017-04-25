@@ -306,7 +306,7 @@ private[spark] object TaskMetrics extends Logging {
   def fromAccumulators(accums: Seq[AccumulatorV2[_, _]]): TaskMetrics = {
     val tm = new TaskMetrics
     for (acc <- accums) {
-      val name = AccumulatorContext.get(acc.id).flatMap(_.name)
+      val name = acc.name
       if (name.isDefined && tm.nameToAccums.contains(name.get)) {
         val tmAcc = tm.nameToAccums(name.get).asInstanceOf[AccumulatorV2[Any, Any]]
         tmAcc.metadata = acc.metadata
