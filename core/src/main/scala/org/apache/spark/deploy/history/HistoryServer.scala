@@ -269,7 +269,7 @@ object HistoryServer extends Logging {
     Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
-    val securityManager = new SecurityManager(conf)
+    val securityManager = createSecurityManager(conf)
 
     val providerName = conf.getOption("spark.history.provider")
       .getOrElse(classOf[FsHistoryProvider].getName())
@@ -287,6 +287,24 @@ object HistoryServer extends Logging {
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
+  }
+
+  /**
+   * Create a security manager.
+   * This turns off security in the SecurityManager, so that the History Server can start
+   * in a Spark cluster where security is enabled.
+   * @param config configuration for the SecurityManager constructor
+   * @return the security manager for use in constructing the History Server.
+   */
+  private[history] def createSecurityManager(config: SparkConf): SecurityManager = {
+    if (config.getBoolean("spark.acls.enable", config.getBoolean("spark.ui.acls.enable", false))) {
+      logInfo("Either spark.acls.enable or spark.ui.acls.enable is configured, clearing it and " +
+        "only using spark.history.ui.acl.enable")
+      config.set("spark.acls.enable", "false")
+      config.set("spark.ui.acls.enable", "false")
+    }
+
+    new SecurityManager(config)
   }
 
   def initSecurity() {
