@@ -284,22 +284,11 @@ test_that("spark.mlp", {
                c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
 
   # test initialWeights
-  model <- spark.mlp(df, label ~ features, layers = c(4, 3), maxIter = 2, initialWeights =
+  model <- spark.mlp(df, label ~ features, layers = c(4, 3), initialWeights =
     c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 10),
-               c("1.0", "1.0", "2.0", "1.0", "2.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
-
-  model <- spark.mlp(df, label ~ features, layers = c(4, 3), maxIter = 2, initialWeights =
-    c(0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 5.0, 5.0, 5.0, 5.0, 9.0, 9.0, 9.0, 9.0, 9.0))
-  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
-  expect_equal(head(mlpPredictions$prediction, 10),
-               c("1.0", "1.0", "2.0", "1.0", "2.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
-
-  model <- spark.mlp(df, label ~ features, layers = c(4, 3), maxIter = 2)
-  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
-  expect_equal(head(mlpPredictions$prediction, 10),
-               c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "0.0", "0.0", "1.0", "0.0"))
+               c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
 
   # Test formula works well
   df <- suppressWarnings(createDataFrame(iris))
