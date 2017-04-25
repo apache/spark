@@ -33,8 +33,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SecurityManager, SPARK_VERSION => sparkVersion, SparkConf, SparkException, SSLOptions}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.kubernetes.CompressionUtils
 import org.apache.spark.deploy.kubernetes.config._
-import org.apache.spark.deploy.kubernetes.submit.v1.CompressionUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.internal.config.OptionalConfigEntry
 import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}

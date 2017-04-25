@@ -19,11 +19,13 @@ package org.apache.spark.deploy.kubernetes
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion}
+import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.deploy.kubernetes.submit.v1.NodePortUrisDriverServiceManager
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 
-package object config {
+package object config extends Logging {
 
   private[spark] val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
@@ -321,4 +323,107 @@ package object config {
       .doc("File containing the key password for the Kubernetes dependency server.")
       .stringConf
       .createOptional
+
+  private[spark] val RESOURCE_STAGING_SERVER_SSL_ENABLED =
+    ConfigBuilder("spark.ssl.kubernetes.resourceStagingServer.enabled")
+      .doc("Whether or not to use SSL when communicating with the dependency server.")
+      .booleanConf
+      .createOptional
+  private[spark] val RESOURCE_STAGING_SERVER_TRUSTSTORE_FILE =
+    ConfigBuilder("spark.ssl.kubernetes.resourceStagingServer.trustStore")
+      .doc("File containing the trustStore to communicate with the Kubernetes dependency server.")
+      .stringConf
+      .createOptional
+  private[spark] val RESOURCE_STAGING_SERVER_TRUSTSTORE_PASSWORD =
+    ConfigBuilder("spark.ssl.kubernetes.resourceStagingServer.trustStorePassword")
+      .doc("Password for the trustStore for talking to the dependency server.")
+      .stringConf
+      .createOptional
+  private[spark] val RESOURCE_STAGING_SERVER_TRUSTSTORE_TYPE =
+    ConfigBuilder("spark.ssl.kubernetes.resourceStagingServer.trustStoreType")
+      .doc("Type of trustStore for communicating with the dependency server.")
+      .stringConf
+      .createOptional
+
+  // Driver and Init-Container parameters for submission v2
+  private[spark] val RESOURCE_STAGING_SERVER_URI =
+    ConfigBuilder("spark.kubernetes.resourceStagingServer.uri")
+      .doc("Base URI for the Spark resource staging server")
+      .stringConf
+      .createOptional
+
+  private[spark] val INIT_CONTAINER_DOWNLOAD_JARS_RESOURCE_IDENTIFIER =
+    ConfigBuilder("spark.kubernetes.driver.initcontainer.downloadJarsResourceIdentifier")
+      .doc("Identifier for the jars tarball that was uploaded to the staging service.")
+      .internal()
+      .stringConf
+      .createOptional
+
+  private[spark] val INIT_CONTAINER_DOWNLOAD_JARS_SECRET_LOCATION =
+    ConfigBuilder("spark.kubernetes.driver.initcontainer.downloadJarsSecretLocation")
+      .doc("Location of the application secret to use when the init-container contacts the" +
+        " resource staging server to download jars.")
+      .internal()
+      .stringConf
+      .createWithDefault(INIT_CONTAINER_DOWNLOAD_JARS_SECRET_PATH)
+
+  private[spark] val INIT_CONTAINER_DOWNLOAD_FILES_RESOURCE_IDENTIFIER =
+    ConfigBuilder("spark.kubernetes.driver.initcontainer.downloadFilesResourceIdentifier")
+      .doc("Identifier for the files tarball that was uploaded to the staging service.")
+      .internal()
+      .stringConf
+      .createOptional
+
+  private[spark] val INIT_CONTAINER_DOWNLOAD_FILES_SECRET_LOCATION =
+    ConfigBuilder("spark.kubernetes.driver.initcontainer.downloadFilesSecretLocation")
+      .doc("Location of the application secret to use when the init-container contacts the" +
+        " resource staging server to download files.")
+      .internal()
+      .stringConf
+      .createWithDefault(INIT_CONTAINER_DOWNLOAD_FILES_SECRET_PATH)
+
+  private[spark] val INIT_CONTAINER_DOCKER_IMAGE =
+    ConfigBuilder("spark.kubernetes.driver.initcontainer.docker.image")
+      .doc("Image for the driver's init-container that downloads mounted dependencies.")
+      .stringConf
+      .createWithDefault(s"spark-driver-init:$sparkVersion")
+
+  private[spark] val DRIVER_LOCAL_JARS_DOWNLOAD_LOCATION =
+    ConfigBuilder("spark.kubernetes.driver.mountdependencies.jarsDownloadDir")
+      .doc("Location to download local jars to in the driver. When using spark-submit, this" +
+        " directory must be empty and will be mounted as an empty directory volume on the" +
+        " driver pod.")
+      .stringConf
+      .createWithDefault("/var/spark-data/spark-local-jars")
+
+  private[spark] val DRIVER_LOCAL_FILES_DOWNLOAD_LOCATION =
+    ConfigBuilder("spark.kubernetes.driver.mountdependencies.filesDownloadDir")
+      .doc("Location to download local files to in the driver. When using spark-submit, this" +
+        " directory must be empty and will be mounted as an empty directory volume on the" +
+        " driver pod.")
+      .stringConf
+      .createWithDefault("/var/spark-data/spark-local-files")
+
+  private[spark] val DRIVER_MOUNT_DEPENDENCIES_INIT_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.mountdependencies.mountTimeout")
+      .doc("Timeout before aborting the attempt to download and unpack local dependencies from" +
+        " the dependency staging server when initializing the driver pod.")
+      .timeConf(TimeUnit.MINUTES)
+      .createWithDefault(5)
+
+  private[spark] def resolveK8sMaster(rawMasterString: String): String = {
+    if (!rawMasterString.startsWith("k8s://")) {
+      throw new IllegalArgumentException("Master URL should start with k8s:// in Kubernetes mode.")
+    }
+    val masterWithoutK8sPrefix = rawMasterString.replaceFirst("k8s://", "")
+    if (masterWithoutK8sPrefix.startsWith("http://")
+      || masterWithoutK8sPrefix.startsWith("https://")) {
+      masterWithoutK8sPrefix
+    } else {
+      val resolvedURL = s"https://$masterWithoutK8sPrefix"
+      logDebug(s"No scheme specified for kubernetes master URL, so defaulting to https. Resolved" +
+        s" URL is $resolvedURL")
+      resolvedURL
+    }
+  }
 }

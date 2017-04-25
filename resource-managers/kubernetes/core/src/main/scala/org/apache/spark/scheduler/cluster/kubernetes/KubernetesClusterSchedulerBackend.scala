@@ -47,11 +47,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val blockmanagerPort = conf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
 
-  private val kubernetesDriverServiceName = conf
-    .get(KUBERNETES_DRIVER_SERVICE_NAME)
-    .getOrElse(
-      throw new SparkException("Must specify the service name the driver is running with"))
-
   private val kubernetesDriverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
     .getOrElse(
@@ -73,8 +68,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("kubernetes-executor-requests"))
 
-  private val kubernetesClient = new KubernetesClientBuilder(conf, kubernetesNamespace)
-    .buildFromWithinPod()
+  private val kubernetesClient = new DriverPodKubernetesClientProvider(conf, kubernetesNamespace)
+    .get
 
   private val driverPod = try {
     kubernetesClient.pods().inNamespace(kubernetesNamespace).
@@ -141,11 +136,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
       runningExecutorPods.values.foreach(kubernetesClient.pods().delete(_))
     } catch {
       case e: Throwable => logError("Uncaught exception while shutting down controllers.", e)
-    }
-    try {
-      kubernetesClient.services().withName(kubernetesDriverServiceName).delete()
-    } catch {
-      case e: Throwable => logError("Uncaught exception while shutting down driver service.", e)
     }
     try {
       kubernetesClient.close()

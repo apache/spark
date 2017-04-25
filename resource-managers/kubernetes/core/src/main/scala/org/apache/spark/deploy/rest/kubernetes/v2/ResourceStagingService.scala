@@ -80,6 +80,15 @@ private[spark] trait ResourceStagingService {
   @Produces(Array(MediaType.APPLICATION_OCTET_STREAM))
   @Path("/resources/{resourceId}")
   def downloadResources(
-      @PathParam("resourceId") resourceId: String,
-      @HeaderParam("Authorization") resourceSecret: String): StreamingOutput
+    @PathParam("resourceId") resourceId: String,
+    @HeaderParam("Authorization") resourceSecret: String): StreamingOutput
+
+  /**
+   * Health check.
+   */
+  @GET
+  @Consumes(Array(MediaType.APPLICATION_JSON))
+  @Produces(Array(MediaType.TEXT_PLAIN))
+  @Path("/ping")
+  def ping(): String
 }

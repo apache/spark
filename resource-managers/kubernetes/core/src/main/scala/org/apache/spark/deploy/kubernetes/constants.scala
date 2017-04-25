@@ -30,9 +30,9 @@ package object constants {
   private[spark] val SUBMISSION_APP_SECRET_PREFIX = "spark-submission-server-secret"
   private[spark] val SUBMISSION_APP_SECRET_VOLUME_NAME = "spark-submission-secret-volume"
   private[spark] val SUBMISSION_SSL_KEY_PASSWORD_SECRET_NAME =
-      "spark-submission-server-key-password"
+    "spark-submission-server-key-password"
   private[spark] val SUBMISSION_SSL_KEYSTORE_PASSWORD_SECRET_NAME =
-      "spark-submission-server-keystore-password"
+    "spark-submission-server-keystore-password"
   private[spark] val SUBMISSION_SSL_KEYSTORE_SECRET_NAME = "spark-submission-server-keystore"
   private[spark] val SUBMISSION_SSL_SECRETS_PREFIX = "spark-submission-server-ssl"
   private[spark] val SUBMISSION_SSL_SECRETS_VOLUME_NAME = "spark-submission-server-ssl-secrets"
@@ -55,9 +55,9 @@ package object constants {
   private[spark] val ENV_SUBMISSION_SERVER_PORT = "SPARK_SUBMISSION_SERVER_PORT"
   private[spark] val ENV_SUBMISSION_KEYSTORE_FILE = "SPARK_SUBMISSION_KEYSTORE_FILE"
   private[spark] val ENV_SUBMISSION_KEYSTORE_PASSWORD_FILE =
-      "SPARK_SUBMISSION_KEYSTORE_PASSWORD_FILE"
+    "SPARK_SUBMISSION_KEYSTORE_PASSWORD_FILE"
   private[spark] val ENV_SUBMISSION_KEYSTORE_KEY_PASSWORD_FILE =
-      "SPARK_SUBMISSION_KEYSTORE_KEY_PASSWORD_FILE"
+    "SPARK_SUBMISSION_KEYSTORE_KEY_PASSWORD_FILE"
   private[spark] val ENV_SUBMISSION_KEYSTORE_TYPE = "SPARK_SUBMISSION_KEYSTORE_TYPE"
   private[spark] val ENV_SUBMISSION_KEY_PEM_FILE = "SPARK_SUBMISSION_KEY_PEM_FILE"
   private[spark] val ENV_SUBMISSION_CERT_PEM_FILE = "SPARK_SUBMISSION_CERT_PEM_FILE"
@@ -70,12 +70,18 @@ package object constants {
   private[spark] val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
   private[spark] val ENV_EXECUTOR_POD_IP = "SPARK_EXECUTOR_POD_IP"
   private[spark] val ENV_DRIVER_MEMORY = "SPARK_DRIVER_MEMORY"
+  private[spark] val ENV_UPLOADED_JARS_DIR = "SPARK_UPLOADED_JARS_DIR"
+  private[spark] val ENV_SUBMIT_EXTRA_CLASSPATH = "SPARK_SUBMIT_EXTRA_CLASSPATH"
+  private[spark] val ENV_MOUNTED_CLASSPATH = "SPARK_MOUNTED_CLASSPATH"
+  private[spark] val ENV_DRIVER_MAIN_CLASS = "SPARK_DRIVER_CLASS"
+  private[spark] val ENV_DRIVER_ARGS = "SPARK_DRIVER_ARGS"
+  private[spark] val ENV_DRIVER_JAVA_OPTS = "SPARK_DRIVER_JAVA_OPTS"
 
   // Annotation keys
   private[spark] val ANNOTATION_PROVIDE_EXTERNAL_URI =
-      "spark-job.alpha.apache.org/provideExternalUri"
+    "spark-job.alpha.apache.org/provideExternalUri"
   private[spark] val ANNOTATION_RESOLVED_EXTERNAL_URI =
-      "spark-job.alpha.apache.org/resolvedExternalUri"
+    "spark-job.alpha.apache.org/resolvedExternalUri"
 
   // Miscellaneous
   private[spark] val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
@@ -83,4 +89,28 @@ package object constants {
   private[spark] val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   private[spark] val MEMORY_OVERHEAD_FACTOR = 0.10
   private[spark] val MEMORY_OVERHEAD_MIN = 384L
+
+  // V2 submission init container
+  private[spark] val INIT_CONTAINER_ANNOTATION = "pod.beta.kubernetes.io/init-containers"
+  private[spark] val INIT_CONTAINER_SECRETS_VOLUME_NAME = "dependency-secret"
+  private[spark] val INIT_CONTAINER_SECRETS_VOLUME_MOUNT_PATH = "/mnt/secrets/spark-init"
+  private[spark] val INIT_CONTAINER_DOWNLOAD_JARS_SECRET_KEY = "downloadJarsSecret"
+  private[spark] val INIT_CONTAINER_DOWNLOAD_FILES_SECRET_KEY = "downloadFilesSecret"
+  private[spark] val INIT_CONTAINER_TRUSTSTORE_SECRET_KEY = "trustStore"
+  private[spark] val INIT_CONTAINER_DOWNLOAD_JARS_SECRET_PATH =
+    s"$INIT_CONTAINER_SECRETS_VOLUME_MOUNT_PATH/$INIT_CONTAINER_DOWNLOAD_JARS_SECRET_KEY"
+  private[spark] val INIT_CONTAINER_DOWNLOAD_FILES_SECRET_PATH =
+    s"$INIT_CONTAINER_SECRETS_VOLUME_MOUNT_PATH/$INIT_CONTAINER_DOWNLOAD_FILES_SECRET_KEY"
+  private[spark] val INIT_CONTAINER_TRUSTSTORE_PATH =
+    s"$INIT_CONTAINER_SECRETS_VOLUME_MOUNT_PATH/$INIT_CONTAINER_TRUSTSTORE_SECRET_KEY"
+  private[spark] val INIT_CONTAINER_DOWNLOAD_CREDENTIALS_PATH =
+    "/mnt/secrets/kubernetes-credentials"
+  private[spark] val INIT_CONTAINER_CONFIG_MAP_KEY = "init-driver"
+  private[spark] val INIT_CONTAINER_PROPERTIES_FILE_VOLUME = "init-container-properties"
+  private[spark] val INIT_CONTAINER_PROPERTIES_FILE_MOUNT_PATH = "/etc/spark-init/"
+  private[spark] val INIT_CONTAINER_PROPERTIES_FILE_NAME = "init-driver.properties"
+  private[spark] val INIT_CONTAINER_PROPERTIES_FILE_PATH =
+    s"$INIT_CONTAINER_PROPERTIES_FILE_MOUNT_PATH/$INIT_CONTAINER_PROPERTIES_FILE_NAME"
+  private[spark] val DOWNLOAD_JARS_VOLUME_NAME = "download-jars"
+  private[spark] val DOWNLOAD_FILES_VOLUME_NAME = "download-files"
 }

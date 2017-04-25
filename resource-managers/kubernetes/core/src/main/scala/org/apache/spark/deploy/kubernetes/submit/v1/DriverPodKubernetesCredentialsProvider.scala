@@ -45,7 +45,6 @@ private[spark] class DriverPodKubernetesCredentialsProvider(sparkConf: SparkConf
       s"Driver client key file provided at %s does not exist or is not a file.")
     val clientCertDataBase64 = safeFileConfToBase64(KUBERNETES_DRIVER_CLIENT_CERT_FILE,
       s"Driver client cert file provided at %s does not exist or is not a file.")
-    val serviceAccountName = sparkConf.get(KUBERNETES_SERVICE_ACCOUNT_NAME)
     KubernetesCredentials(
       oauthToken = oauthToken,
       caCertDataBase64 = caCertDataBase64,

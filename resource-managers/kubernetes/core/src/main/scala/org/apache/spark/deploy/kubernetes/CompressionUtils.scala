@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.kubernetes.submit.v1
+package org.apache.spark.deploy.kubernetes
 
-import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
+import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream, InputStream, OutputStream}
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import com.google.common.io.Files
@@ -48,40 +48,7 @@ private[spark] object CompressionUtils extends Logging {
    */
   def createTarGzip(paths: Iterable[String]): TarGzippedData = {
     val compressedBytesStream = Utils.tryWithResource(new ByteBufferOutputStream()) { raw =>
-      Utils.tryWithResource(new GZIPOutputStream(raw)) { gzipping =>
-        Utils.tryWithResource(new TarArchiveOutputStream(
-            gzipping,
-            BLOCK_SIZE,
-            RECORD_SIZE,
-            ENCODING)) { tarStream =>
-          val usedFileNames = mutable.HashSet.empty[String]
-          for (path <- paths) {
-            val file = new File(path)
-            if (!file.isFile) {
-              throw new IllegalArgumentException(s"Cannot add $path to tarball; either does" +
-                s" not exist or is a directory.")
-            }
-            var resolvedFileName = file.getName
-            val extension = Files.getFileExtension(file.getName)
-            val nameWithoutExtension = Files.getNameWithoutExtension(file.getName)
-            var deduplicationCounter = 1
-            while (usedFileNames.contains(resolvedFileName)) {
-              val oldResolvedFileName = resolvedFileName
-              resolvedFileName = s"$nameWithoutExtension-$deduplicationCounter.$extension"
-              logWarning(s"File with name $oldResolvedFileName already exists. Trying to add" +
-                s" with file name $resolvedFileName instead.")
-              deduplicationCounter += 1
-            }
-            usedFileNames += resolvedFileName
-            val tarEntry = new TarArchiveEntry(file, resolvedFileName)
-            tarStream.putArchiveEntry(tarEntry)
-            Utils.tryWithResource(new FileInputStream(file)) { fileInput =>
-              IOUtils.copy(fileInput, tarStream)
-            }
-            tarStream.closeArchiveEntry()
-          }
-        }
-      }
+      writeTarGzipToStream(raw, paths)
       raw
     }
     val compressedAsBase64 = Base64.encodeBase64String(compressedBytesStream.toByteBuffer.array)
@@ -91,6 +58,44 @@ private[spark] object CompressionUtils extends Logging {
       recordSize = RECORD_SIZE,
       encoding = ENCODING
     )
+  }
+
+  def writeTarGzipToStream(outputStream: OutputStream, paths: Iterable[String]): Unit = {
+    Utils.tryWithResource(new GZIPOutputStream(outputStream)) { gzipping =>
+      Utils.tryWithResource(new TarArchiveOutputStream(
+          gzipping,
+          BLOCK_SIZE,
+          RECORD_SIZE,
+          ENCODING)) { tarStream =>
+        val usedFileNames = mutable.HashSet.empty[String]
+        for (path <- paths) {
+          val file = new File(path)
+          if (!file.isFile) {
+            throw new IllegalArgumentException(s"Cannot add $path to tarball; either does" +
+              s" not exist or is a directory.")
+          }
+          var resolvedFileName = file.getName
+          val extension = Files.getFileExtension(file.getName)
+          val nameWithoutExtension = Files.getNameWithoutExtension(file.getName)
+          var deduplicationCounter = 1
+          while (usedFileNames.contains(resolvedFileName)) {
+            val oldResolvedFileName = resolvedFileName
+            resolvedFileName = s"$nameWithoutExtension-$deduplicationCounter.$extension"
+            logWarning(s"File with name $oldResolvedFileName already exists. Trying to add" +
+              s" with file name $resolvedFileName instead.")
+            deduplicationCounter += 1
+          }
+          usedFileNames += resolvedFileName
+          val tarEntry = new TarArchiveEntry(resolvedFileName)
+          tarEntry.setSize(file.length());
+          tarStream.putArchiveEntry(tarEntry)
+          Utils.tryWithResource(new FileInputStream(file)) { fileInput =>
+            IOUtils.copy(fileInput, tarStream)
+          }
+          tarStream.closeArchiveEntry()
+        }
+      }
+    }
   }
 
   /**
@@ -104,7 +109,6 @@ private[spark] object CompressionUtils extends Logging {
   def unpackAndWriteCompressedFiles(
       compressedData: TarGzippedData,
       rootOutputDir: File): Seq[String] = {
-    val paths = mutable.Buffer.empty[String]
     val compressedBytes = Base64.decodeBase64(compressedData.dataBase64)
     if (!rootOutputDir.exists) {
       if (!rootOutputDir.mkdirs) {
@@ -116,24 +120,39 @@ private[spark] object CompressionUtils extends Logging {
          s"${rootOutputDir.getAbsolutePath} exists and is not a directory.")
     }
     Utils.tryWithResource(new ByteArrayInputStream(compressedBytes)) { compressedBytesStream =>
-      Utils.tryWithResource(new GZIPInputStream(compressedBytesStream)) { gzipped =>
-        Utils.tryWithResource(new TarArchiveInputStream(
-            gzipped,
-            compressedData.blockSize,
-            compressedData.recordSize,
-            compressedData.encoding)) { tarInputStream =>
-          var nextTarEntry = tarInputStream.getNextTarEntry
-          while (nextTarEntry != null) {
-            val outputFile = new File(rootOutputDir, nextTarEntry.getName)
-            Utils.tryWithResource(new FileOutputStream(outputFile)) { fileOutputStream =>
-              IOUtils.copy(tarInputStream, fileOutputStream)
-            }
-            paths += outputFile.getAbsolutePath
-            nextTarEntry = tarInputStream.getNextTarEntry
+      unpackTarStreamToDirectory(
+        compressedBytesStream,
+        rootOutputDir,
+        compressedData.blockSize,
+        compressedData.recordSize,
+        compressedData.encoding)
+    }
+  }
+
+  def unpackTarStreamToDirectory(
+      inputStream: InputStream,
+      outputDir: File,
+      blockSize: Int = BLOCK_SIZE,
+      recordSize: Int = RECORD_SIZE,
+      encoding: String = ENCODING): Seq[String] = {
+    val paths = mutable.Buffer.empty[String]
+    Utils.tryWithResource(new GZIPInputStream(inputStream)) { gzipped =>
+      Utils.tryWithResource(new TarArchiveInputStream(
+          gzipped,
+          blockSize,
+          recordSize,
+          encoding)) { tarInputStream =>
+        var nextTarEntry = tarInputStream.getNextTarEntry
+        while (nextTarEntry != null) {
+          val outputFile = new File(outputDir, nextTarEntry.getName)
+          Utils.tryWithResource(new FileOutputStream(outputFile)) { fileOutputStream =>
+            IOUtils.copy(tarInputStream, fileOutputStream)
           }
+          paths += outputFile.getAbsolutePath
+          nextTarEntry = tarInputStream.getNextTarEntry
         }
       }
     }
-    paths.toSeq
+    paths
   }
 }
