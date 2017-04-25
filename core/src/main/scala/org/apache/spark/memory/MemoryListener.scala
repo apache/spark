@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.memory
+package org.apache.spark.memory
 
 import scala.collection.mutable.HashMap
 
@@ -23,14 +23,6 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.{ExecutorMetrics, TransportMetrics}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.ui.{SparkUI, SparkUITab}
-
-private[ui] class MemoryTab(parent: SparkUI) extends SparkUITab(parent, "memory") {
-  val memoryListener = parent.memoryListener
-  val progressListener = parent.jobProgressListener
-  attachPage(new MemoryPage(this))
-  attachPage(new StageMemoryPage(this))
-}
 
 /**
  * :: DeveloperApi ::

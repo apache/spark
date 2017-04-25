@@ -19,6 +19,7 @@ package org.apache.spark.ui.memory
 
 import org.apache.spark._
 import org.apache.spark.executor._
+import org.apache.spark.memory.{MemoryListener, MemTime, TransportMemSize}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
 
