@@ -1542,15 +1542,23 @@ class Dataset[T] private[sql](
     // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
     // constituent partitions each time a split is materialized which could result in
     // overlapping splits. To prevent this, we explicitly sort each input partition to make the
-    // ordering deterministic.
-    // MapType cannot be sorted.
-    val sorted = Sort(logicalPlan.output.filterNot(_.dataType.isInstanceOf[MapType])
-      .map(SortOrder(_, Ascending)), global = false, logicalPlan)
+    // ordering deterministic. Note that MapTypes cannot be sorted and are explicitly pruned out
+    // from the sort order.
+    val sortOrder = logicalPlan.output
+      .filter(attr => RowOrdering.isOrderable(attr.dataType))
+      .map(SortOrder(_, Ascending))
+    val plan = if (sortOrder.nonEmpty) {
+      Sort(sortOrder, global = false, logicalPlan)
+    } else {
+      // SPARK-12662: If sort order is empty, we materialize the dataset to guarantee determinism
+      cache()
+      logicalPlan
+    }
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
       new Dataset[T](
-        sparkSession, Sample(x(0), x(1), withReplacement = false, seed, sorted)(), encoder)
+        sparkSession, Sample(x(0), x(1), withReplacement = false, seed, plan)(), encoder)
     }.toArray
   }
 
