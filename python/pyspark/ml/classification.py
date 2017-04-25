@@ -189,13 +189,14 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     Row(label=0.0, weight=2.0, features=Vectors.dense(1.0, 2.0)),
     ...     Row(label=1.0, weight=3.0, features=Vectors.dense(2.0, 1.0)),
     ...     Row(label=0.0, weight=4.0, features=Vectors.dense(3.0, 3.0))]).toDF()
-    >>> blor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
+    >>> blor = LogisticRegression(regParam=0.01, weightCol="weight")
     >>> blorModel = blor.fit(bdf)
     >>> blorModel.coefficients
     DenseVector([-1.080..., -0.646...])
     >>> blorModel.intercept
     3.112...
-    >>> mdf = spark.read.format("libsvm").load("data/mllib/sample_multiclass_classification_data.txt")
+    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
+    >>> mdf = spark.read.format("libsvm").load(data_path)
     >>> mlor = LogisticRegression(regParam=0.1, elasticNetParam=1.0, family="multinomial")
     >>> mlorModel = mlor.fit(mdf)
     >>> mlorModel.coefficientMatrix
@@ -1478,14 +1479,19 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> df = spark.read.format("libsvm").load("data/mllib/sample_multiclass_classification_data.txt")
+    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
+    >>> df = spark.read.format("libsvm").load(data_path)
     >>> lr = LogisticRegression(regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
-    >>> [x.coefficients for x in model.models]
-    [DenseVector([0.5152, -1.0899, 3.4683, 4.246]), DenseVector([-2.1282, 3.1284, -2.6819, -2.3445]), DenseVector([0.3064, -3.4213, 1.0461, -1.1383])]
+    >>> model.models[0].coefficients
+    DenseVector([0.515..., -1.089..., 3.468..., 4.246...])
+    >>> model.models[1].coefficients
+    DenseVector([-2.128..., 3.128..., -2.681..., -2.344...])
+    >>> model.models[2].coefficients
+    DenseVector([0.306..., -3.421..., 1.046..., -1.138...])
     >>> [x.intercept for x in model.models]
-    [-2.7380690407943225, -2.564092796058285, -1.3244840906167796]
+    [-2.738..., -2.564..., -1.324...]
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0, 1.0, 1.0))]).toDF()
     >>> model.transform(test0).head().prediction
     0.0
