@@ -149,6 +149,8 @@ case class GetJsonObject(json: Expression, path: Expression)
 
     if (parsed.isDefined) {
       try {
+        /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
+          detect character encoding which could fail for some malformed strings */
         Utils.tryWithResource(jsonFactory.createParser(new InputStreamReader(
             new ByteArrayInputStream(jsonStr.getBytes), "UTF-8"))) { parser =>
           val output = new ByteArrayOutputStream()
@@ -394,6 +396,8 @@ case class JsonTuple(children: Seq[Expression])
     }
 
     try {
+      /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
+      detect character encoding which could fail for some malformed strings */
       Utils.tryWithResource(jsonFactory.createParser(new InputStreamReader(
           new ByteArrayInputStream(json.getBytes), "UTF-8"))) {
         parser => parseRow(parser, input)
