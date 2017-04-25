@@ -228,11 +228,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     // We add the table timezone to the relation options, which automatically gets injected into the
     // hadoopConf for the Parquet Converters
     val storageTzKey = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
-    val storageTz = relation.tableMeta.properties.getOrElse(storageTzKey, "")
-    val sessionTz = sparkSession.sessionState.conf.sessionLocalTimeZone
-    Map(
-      storageTzKey -> storageTz
-    )
+    relation.tableMeta.properties.get(storageTzKey).map(storageTzKey -> _).toMap
   }
 
   private def inferIfNeeded(

@@ -267,8 +267,8 @@ private[parquet] class ParquetRowConverter(
       case TimestampType =>
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
         // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
-        val sessionTsString = hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)
-        val sessionTz = Option(sessionTsString).map(TimeZone.getTimeZone(_))
+        val sessionTzString = hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)
+        val sessionTz = Option(sessionTzString).map(TimeZone.getTimeZone(_))
           .getOrElse(DateTimeUtils.defaultTimeZone())
         val storageTzString = hadoopConf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
         val storageTz = Option(storageTzString).map(TimeZone.getTimeZone(_)).getOrElse(sessionTz)
@@ -685,13 +685,13 @@ private[parquet] object ParquetRowConverter {
    * actually store it as micros since epoch, why we have to apply a conversion when timezones
    * change.
    *
-   * @param binary
+   * @param binary a parquet Binary which holds one int96
    * @param sessionTz the session timezone.  This will be used to determine how to display the time,
     *                  and compute functions on the timestamp which involve a timezone, eg. extract
     *                  the hour.
    * @param storageTz the timezone which was used to store the timestamp.  This should come from the
     *                  timestamp table property, or else assume its the same as the sessionTz
-   * @return
+   * @return a timestamp (millis since epoch) which will render correctly in the sessionTz
    */
   def binaryToSQLTimestamp(
       binary: Binary,
