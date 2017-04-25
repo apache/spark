@@ -15,7 +15,7 @@
   ~ limitations under the License.
   -->
 <assembly>
-  <id>driver-docker-dist</id>
+  <id>docker-dist</id>
   <formats>
     <format>tar.gz</format>
     <format>dir</format>
@@ -51,9 +51,9 @@
     </fileSet>
     <fileSet>
       <directory>
-        src/main/docker/driver
+        src/main/docker/
       </directory>
-      <outputDirectory></outputDirectory>
+      <outputDirectory>dockerfiles</outputDirectory>
       <includes>
         <include>**/*</include>
       </includes>

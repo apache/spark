@@ -16,13 +16,11 @@
  */
 package org.apache.spark.deploy.rest.kubernetes.v2
 
-import java.io.{File, FileInputStream}
-import java.util.Properties
+import java.io.File
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.google.common.collect.Maps
 import org.eclipse.jetty.http.HttpVersion
 import org.eclipse.jetty.server.{HttpConfiguration, HttpConnectionFactory, Server, ServerConnector, SslConnectionFactory}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
@@ -30,12 +28,10 @@ import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorSchedul
 import org.glassfish.jersey.media.multipart.MultiPartFeature
 import org.glassfish.jersey.server.ResourceConfig
 import org.glassfish.jersey.servlet.ServletContainer
-import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigReader, SparkConfigProvider}
 import org.apache.spark.util.Utils
 
 private[spark] class ResourceStagingServer(
@@ -97,20 +93,10 @@ private[spark] class ResourceStagingServer(
 
 object ResourceStagingServer {
   def main(args: Array[String]): Unit = {
-    val sparkConf = new SparkConf(true)
-    if (args.nonEmpty) {
-      val propertiesFile = new File(args(0))
-      if (!propertiesFile.isFile) {
-        throw new IllegalArgumentException(s"Server properties file given at" +
-          s" ${propertiesFile.getAbsoluteFile} does not exist or is not a file.")
-      }
-      val properties = new Properties
-      Utils.tryWithResource(new FileInputStream(propertiesFile))(properties.load)
-      val propertiesMap = Maps.fromProperties(properties)
-      val configReader = new ConfigReader(new SparkConfigProvider(propertiesMap))
-      propertiesMap.asScala.keys.foreach { key =>
-        configReader.get(key).foreach(sparkConf.set(key, _))
-      }
+    val sparkConf = if (args.nonEmpty) {
+      SparkConfPropertiesParser.getSparkConfFromPropertiesFile(new File(args(0)))
+    } else {
+      new SparkConf(true)
     }
     val dependenciesRootDir = Utils.createTempDir(namePrefix = "local-application-dependencies")
     val serviceInstance = new ResourceStagingServiceImpl(dependenciesRootDir)

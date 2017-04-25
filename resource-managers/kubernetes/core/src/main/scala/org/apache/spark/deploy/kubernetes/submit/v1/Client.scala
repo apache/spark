@@ -30,6 +30,7 @@ import org.apache.commons.codec.binary.Base64
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.kubernetes.CompressionUtils
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.deploy.rest.kubernetes.v1.{AppResource, ContainerAppResource, HttpClientUtil, KubernetesCreateSubmissionRequest, KubernetesCredentials, KubernetesFileUtils, KubernetesSparkRestApi, RemoteAppResource, UploadedAppResource}
@@ -732,21 +733,5 @@ private[spark] object Client extends Logging {
       mainClass = mainClass,
       sparkConf = sparkConf,
       appArgs = appArgs).run()
-  }
-
-  def resolveK8sMaster(rawMasterString: String): String = {
-    if (!rawMasterString.startsWith("k8s://")) {
-      throw new IllegalArgumentException("Master URL should start with k8s:// in Kubernetes mode.")
-    }
-    val masterWithoutK8sPrefix = rawMasterString.replaceFirst("k8s://", "")
-    if (masterWithoutK8sPrefix.startsWith("http://")
-        || masterWithoutK8sPrefix.startsWith("https://")) {
-      masterWithoutK8sPrefix
-    } else {
-      val resolvedURL = s"https://$masterWithoutK8sPrefix"
-      logDebug(s"No scheme specified for kubernetes master URL, so defaulting to https. Resolved" +
-        s" URL is $resolvedURL")
-      resolvedURL
-    }
   }
 }

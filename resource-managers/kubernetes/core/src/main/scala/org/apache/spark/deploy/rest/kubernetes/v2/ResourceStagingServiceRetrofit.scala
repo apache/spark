@@ -37,6 +37,10 @@ private[spark] trait ResourceStagingServiceRetrofit {
 
   @Streaming
   @retrofit2.http.GET("/api/v0/resources/{resourceId}")
-  def downloadResources(@Path("resourceId") resourceId: String,
-      @retrofit2.http.Header("Authorization") resourceSecret: String): Call[ResponseBody]
+  def downloadResources(
+    @Path("resourceId") resourceId: String,
+    @retrofit2.http.Header("Authorization") resourceSecret: String): Call[ResponseBody]
+
+  @retrofit2.http.GET("/api/ping")
+  def ping(): String
 }

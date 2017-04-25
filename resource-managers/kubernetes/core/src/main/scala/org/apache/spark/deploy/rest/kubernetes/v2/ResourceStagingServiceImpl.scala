@@ -88,6 +88,8 @@ private[spark] class ResourceStagingServiceImpl(dependenciesRootDir: File)
       }
     }
   }
+
+  override def ping(): String = "pong"
 }
 
 private case class StagedResources(

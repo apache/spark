@@ -36,7 +36,11 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-kubernetes_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -69,7 +73,7 @@
       <artifactId>spark-docker-minimal-bundle_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>tar.gz</type>
-      <classifier>driver-docker-dist</classifier>
+      <classifier>docker-dist</classifier>
       <scope>test</scope>
       <exclusions>
         <exclusion>
@@ -150,7 +154,7 @@
             </configuration>
           </execution>
           <execution>
-            <id>copy-test-spark-jobs-to-docker-driver</id>
+            <id>copy-test-spark-jobs-to-docker-dist</id>
             <phase>pre-integration-test</phase>
             <goals>
               <goal>copy</goal>
@@ -162,45 +166,20 @@
                   <artifactId>spark-kubernetes-integration-tests-spark-jobs_${scala.binary.version}</artifactId>
                   <version>${project.version}</version>
                   <type>jar</type>
-                  <outputDirectory>${project.build.directory}/docker/driver/examples/integration-tests-jars</outputDirectory>
+                  <outputDirectory>${project.build.directory}/docker/examples/integration-tests-jars</outputDirectory>
                 </artifactItem>
                 <artifactItem>
                   <groupId>org.apache.spark</groupId>
                   <artifactId>spark-kubernetes-integration-tests-spark-jobs-helpers_${scala.binary.version}</artifactId>
                   <version>${project.version}</version>
                   <type>jar</type>
-                  <outputDirectory>${project.build.directory}/docker/driver/examples/integration-tests-jars</outputDirectory>
+                  <outputDirectory>${project.build.directory}/docker/examples/integration-tests-jars</outputDirectory>
                 </artifactItem>
               </artifactItems>
             </configuration>
           </execution>
           <execution>
-            <id>copy-test-spark-jobs-to-docker-executor</id>
-            <phase>pre-integration-test</phase>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <artifactItems>
-                <artifactItem>
-                  <groupId>org.apache.spark</groupId>
-                  <artifactId>spark-kubernetes-integration-tests-spark-jobs_${scala.binary.version}</artifactId>
-                  <version>${project.version}</version>
-                  <type>jar</type>
-                  <outputDirectory>${project.build.directory}/docker/executor/examples/integration-tests-jars</outputDirectory>
-                </artifactItem>
-                <artifactItem>
-                  <groupId>org.apache.spark</groupId>
-                  <artifactId>spark-kubernetes-integration-tests-spark-jobs-helpers_${scala.binary.version}</artifactId>
-                  <version>${project.version}</version>
-                  <type>jar</type>
-                  <outputDirectory>${project.build.directory}/docker/executor/examples/integration-tests-jars</outputDirectory>
-                </artifactItem>
-              </artifactItems>
-            </configuration>
-          </execution>
-          <execution>
-            <id>unpack-docker-driver-bundle</id>
+            <id>unpack-docker-bundle</id>
             <phase>pre-integration-test</phase>
             <goals>
               <goal>unpack</goal>
@@ -211,30 +190,10 @@
                   <groupId>org.apache.spark</groupId>
                   <artifactId>spark-docker-minimal-bundle_${scala.binary.version}</artifactId>
                   <version>${project.version}</version>
-                  <classifier>driver-docker-dist</classifier>
+                  <classifier>docker-dist</classifier>
                   <type>tar.gz</type>
                   <overWrite>true</overWrite>
-                  <outputDirectory>${project.build.directory}/docker/driver</outputDirectory>
-                </artifactItem>
-              </artifactItems>
-            </configuration>
-          </execution>
-          <execution>
-            <id>unpack-docker-executor-bundle</id>
-            <phase>pre-integration-test</phase>
-            <goals>
-              <goal>unpack</goal>
-            </goals>
-            <configuration>
-              <artifactItems>
-                <artifactItem>
-                  <groupId>org.apache.spark</groupId>
-                  <artifactId>spark-docker-minimal-bundle_${scala.binary.version}</artifactId>
-                  <version>${project.version}</version>
-                  <classifier>executor-docker-dist</classifier>
-                  <type>tar.gz</type>
-                  <overWrite>true</overWrite>
-                  <outputDirectory>${project.build.directory}/docker/executor</outputDirectory>
+                  <outputDirectory>${project.build.directory}/docker/</outputDirectory>
                 </artifactItem>
               </artifactItems>
             </configuration>

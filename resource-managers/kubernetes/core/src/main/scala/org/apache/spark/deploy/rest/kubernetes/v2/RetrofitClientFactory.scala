@@ -22,21 +22,26 @@ import javax.net.ssl.{SSLContext, TrustManagerFactory, X509TrustManager}
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import okhttp3.OkHttpClient
+import okhttp3.{Dispatcher, OkHttpClient}
 import retrofit2.Retrofit
 import retrofit2.converter.jackson.JacksonConverterFactory
 import retrofit2.converter.scalars.ScalarsConverterFactory
 
 import org.apache.spark.SSLOptions
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
-private[spark] object RetrofitUtils {
+private[spark] trait RetrofitClientFactory {
+  def createRetrofitClient[T](baseUrl: String, serviceType: Class[T], sslOptions: SSLOptions): T
+}
+
+private[spark] object RetrofitClientFactoryImpl extends RetrofitClientFactory {
 
   private val OBJECT_MAPPER = new ObjectMapper().registerModule(new DefaultScalaModule)
   private val SECURE_RANDOM = new SecureRandom()
 
   def createRetrofitClient[T](baseUrl: String, serviceType: Class[T], sslOptions: SSLOptions): T = {
-    val okHttpClientBuilder = new OkHttpClient.Builder()
+    val dispatcher = new Dispatcher(ThreadUtils.newDaemonCachedThreadPool(s"http-client-$baseUrl"))
+    val okHttpClientBuilder = new OkHttpClient.Builder().dispatcher(dispatcher)
     sslOptions.trustStore.foreach { trustStoreFile =>
       require(trustStoreFile.isFile, s"TrustStore provided at ${trustStoreFile.getAbsolutePath}"
         + " does not exist, or is not a file.")

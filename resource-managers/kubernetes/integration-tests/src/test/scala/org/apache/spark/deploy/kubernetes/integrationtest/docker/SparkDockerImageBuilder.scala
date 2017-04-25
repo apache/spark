@@ -19,14 +19,20 @@ package org.apache.spark.deploy.kubernetes.integrationtest.docker
 import java.net.URI
 import java.nio.file.Paths
 
-import com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider
-import com.spotify.docker.client.{DefaultDockerClient, DockerCertificates}
+import com.spotify.docker.client.{DefaultDockerClient, DockerCertificates, LoggingBuildHandler}
 import org.apache.http.client.utils.URIBuilder
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 private[spark] class SparkDockerImageBuilder(private val dockerEnv: Map[String, String]) {
 
+  private val DOCKER_BUILD_PATH = Paths.get("target", "docker")
+  // Dockerfile paths must be relative to the build path.
+  private val DRIVER_V1_DOCKER_FILE = "dockerfiles/driver/Dockerfile"
+  private val DRIVER_V2_DOCKER_FILE = "dockerfiles/driver-v2/Dockerfile"
+  private val EXECUTOR_DOCKER_FILE = "dockerfiles/executor/Dockerfile"
+  private val DRIVER_INIT_DOCKER_FILE = "dockerfiles/driver-init/Dockerfile"
+  private val STAGING_SERVER_DOCKER_FILE = "dockerfiles/resource-staging-server/Dockerfile"
   private val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
   private val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
   private val dockerHost = dockerEnv.getOrElse("DOCKER_HOST",
@@ -52,7 +58,18 @@ private[spark] class SparkDockerImageBuilder(private val dockerEnv: Map[String, 
 
   def buildSparkDockerImages(): Unit = {
     Eventually.eventually(TIMEOUT, INTERVAL) { dockerClient.ping() }
-    dockerClient.build(Paths.get("target", "docker", "driver"), "spark-driver")
-    dockerClient.build(Paths.get("target", "docker", "executor"), "spark-executor")
+    buildImage("spark-driver", DRIVER_V1_DOCKER_FILE)
+    buildImage("spark-executor", EXECUTOR_DOCKER_FILE)
+    buildImage("spark-driver-v2", DRIVER_V2_DOCKER_FILE)
+    buildImage("spark-resource-staging-server", STAGING_SERVER_DOCKER_FILE)
+    buildImage("spark-driver-init", DRIVER_INIT_DOCKER_FILE)
+  }
+
+  private def buildImage(name: String, dockerFile: String): Unit = {
+    dockerClient.build(
+      DOCKER_BUILD_PATH,
+      name,
+      dockerFile,
+      new LoggingBuildHandler())
   }
 }
