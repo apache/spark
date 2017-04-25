@@ -2149,6 +2149,20 @@ showDF(properties, numRows = 200, truncate = FALSE)
 
 </table>
 
+### GraphX
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.graphx.pregel.checkpointInterval</code></td>
+  <td>-1</td>
+  <td>
+    Checkpoint interval for graph and message in Pregel. It used to avoid stackOverflowError due to long lineage chains
+  after lots of iterations. The checkpoint is disabled by default.
+  </td>
+</tr>
+</table>
+
 ### Deploy
 
 <table class="table">
