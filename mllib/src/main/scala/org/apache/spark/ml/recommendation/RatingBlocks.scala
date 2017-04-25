@@ -30,6 +30,56 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet}
 
+/** :: DeveloperApi ::
+ * Case class to hold the precomputed rating dependencies of each partition.
+ *
+ * This algorithm is based on the paper by Yunhong Zhou, et al., "Large-Scale Parallel
+ * Collaborative Filtering for the Netflix Prize" (doi:10.1007/978-3-540-68880-8_32).
+ * Notations used below are borrowed from the paper and provided for easy cross-reference.
+ *
+ * =Preshuffled Ratings (`userIn`, `itemIn`)=
+ *
+ * The ALS algorithm partitions the columns of the users factor matrix $U$ evenly
+ * among Spark workers.  Since each column $u_i$ is calculated using the known
+ * ratings $R(i, I^U_i)$ of the corresponding user $i$, and since the ratings
+ * don't change across iterations, the ALS algorithm preshuffles the ratings to
+ * the appropriate partitions, storing them in the RDD `userIn`.
+ *
+ * The ratings shuffled by item ID are computed similarly and stored in the RDD
+ * `itemIn`.  Note that this means every rating is stored twice, once in `userIn`
+ * and once in `itemIn`; this is a necessary tradeoff, because in general a rating
+ * will not be on the same worker when partitioned by user as by item.
+ *
+ * See the Scaladoc for [[RatingBlocks.makeBlocks]] for specific implementation
+ * details on how the shuffling is performed and how the resulting ratings are
+ * encoded.
+ *
+ * =Precomputed Factor Matrix Dependencies (`userOut`, `itemOut`)=
+ *
+ * Also precomputed and stored in this class are each user's (and item's)
+ * dependencies on the columns of the items (and users) factor matrix.
+ *
+ * Specifically, when calculating the users factor matrix $U$, since only the
+ * columns of the items factor matrix that correspond to the items that each user
+ * $i$ has rated (denoted by the indices $I^U_i$) are needed to calculate $u_i$,
+ * we can avoid having to repeatedly copy the entire items factor matrix to each
+ * worker later in the algorithm by precomputing these dependencies, storing them
+ * in the RDD `userOut`.  The items' dependencies on the columns of the users
+ * factor matrix is computed similarly and stored in the RDD `itemOut`.
+ *
+ * See the Scaladoc for [[RatingBlocks.makeBlocks]] for specific implementation
+ * details on how the dependencies are calculated.
+ *
+ * @param userIn the known ratings, each preshuffled to the partition on which it
+ * will be used when calculating the corresponding column of the user factor matrix
+ * @param userOut the dependencies each user has on the items factor matrix
+ * @param itemIn the known ratings, each preshuffled to the partition on which it
+ * will be used when calculating the corresponding column of the item factor matrix
+ * @param itemOut the dependencies each item has on the users factor matrix
+ *
+ * @see [[ALS.train]]
+ * @see [[ALS.computeFactors]]
+ */
 @DeveloperApi
 private[recommendation] final case class RatingBlocks[ID] private (
   userIn: RDD[(Int, InBlock[ID])],
@@ -41,6 +91,22 @@ private[recommendation] final case class RatingBlocks[ID] private (
 @DeveloperApi
 private[recommendation] object RatingBlocks extends RatingBlockMixin with Logging {
 
+  /** :: DeveloperApi ::
+   * Calculates the precomputed rating dependencies of each partition.  See the Scaladoc
+   * for the [[RatingBlocks]] class for details.
+   *
+   * @param ratings the known ratings users have given
+   * @param numUserBlocks the number of Spark partitions that will be used to store the
+   * users factor matrix.  Must not exceed the total number of partitions used by the
+   * application.
+   * @param numUserBlocks the number of Spark partitions that will be used to store the
+   * items factor matrix.  Must not exceed the total number of partitions used by the
+   * application.
+   * @param storageLevel the storage level to use to persist intermediate RDDs generated
+   * during execution of this method.  It's best to leave this value at its default.
+   * All intermediate RDDs are unpersisted before this method returns.
+   * @return a `RatingBlocks` object to be used by the ALS algorithm
+   */
   @DeveloperApi
   def create[ID: ClassTag: Ordering](
       ratings: RDD[Rating[ID]],
@@ -84,28 +150,36 @@ private[recommendation] object RatingBlocks extends RatingBlockMixin with Loggin
   }
 
   /**
-   * Partitions raw ratings into blocks.
+   * Groups an RDD of `Rating`s by the user partition and item partition to which
+   * each `Rating` maps according to the given partitioners.  The returned pair RDD
+   * holds the ratings, encoded in a memory-efficient format but otherwise unchanged,
+   * keyed by the (user partition ID, item partition ID) pair.
    *
-   * @param ratings raw ratings
-   * @param srcPartitioner partitioner for src IDs
-   * @param dstPartitioner partitioner for dst IDs
-   * @return an RDD of rating blocks in the form of ((srcBlockId, dstBlockId), ratingBlock)
+   * Performance note: This is an expensive operation that performs an RDD shuffle.
+   *
+   * Implementation note: This implementation produces the same result as the
+   * following but generates fewer intermediate objects:
+   *
+   * {{{
+   *     ratings.map { r =>
+   *       ((userPartitioner.getPartition(r.user), itemPartitioner.getPartition(r.item)), r)
+   *     }.aggregateByKey(new RatingBlock.Builder)(
+   *         seqOp = (b, r) => b.add(r),
+   *         combOp = (b0, b1) => b0.merge(b1.build())
+   *     ).mapValues(_.build())
+   * }}}
+   *
+   * @param ratings the ratings to shuffle
+   * @param userPartitioner the partitioner for users
+   * @param itemPartitioner the partitioner for items
+   * @return an RDD of the ratings, encoded as `RatingBlock`s and keyed by the (user partition ID,
+   * item partition ID) pair to which the user and item partitioners map each rating
    */
   private[this] def groupRatingsByPartitionPair[ID: ClassTag](
       ratings: RDD[Rating[ID]],
       userPartitioner: Partitioner,
       itemPartitioner: Partitioner
     ): RDD[((Int, Int), RatingBlock[ID])] = {
-
-    /* The implementation produces the same result as the following but generates less objects.
-
-    ratings.map { r =>
-      ((userPartitioner.getPartition(r.user), itemPartitioner.getPartition(r.item)), r)
-    }.aggregateByKey(new RatingBlock.Builder)(
-        seqOp = (b, r) => b.add(r),
-        combOp = (b0, b1) => b0.merge(b1.build()))
-      .mapValues(_.build())
-    */
 
     val numPartitions = userPartitioner.numPartitions * itemPartitioner.numPartitions
     ratings.mapPartitions { iter =>
