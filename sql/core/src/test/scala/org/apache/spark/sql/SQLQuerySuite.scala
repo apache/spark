@@ -2614,12 +2614,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
     // if 'hdfs' is not supported, MalformedURLException will be thrown
     new URL(jarFromHdfs)
-    var exceptionThrown: Boolean = false
-    try {
+
+    intercept[MalformedURLException] {
       new URL(jarFromInvalidFs)
-    } catch {
-      case e: MalformedURLException => exceptionThrown = true
     }
-    assert(exceptionThrown === true)
   }
 }
