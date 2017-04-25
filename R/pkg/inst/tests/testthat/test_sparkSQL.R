@@ -1454,13 +1454,30 @@ test_that("column functions", {
   jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
   df <- as.DataFrame(list(list("people" = jsonArr)))
   schema <- structType(structField("name", "string"))
-  arr <- collect(select(df, alias(from_json(df$people, schema, asJsonArray = TRUE), "arrcol")))
+  arr <- collect(select(df, alias(from_json(df$people, schema, as.json.array = TRUE), "arrcol")))
   expect_equal(ncol(arr), 1)
   expect_equal(nrow(arr), 1)
   expect_is(arr[[1]][[1]], "list")
   expect_equal(length(arr$arrcol[[1]]), 2)
   expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
   expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
+
+  # Test create_array() and create_map()
+  df <- as.DataFrame(data.frame(
+    x = c(1.0, 2.0), y = c(-1.0, 3.0), z = c(-2.0, 5.0)
+  ))
+
+  arrs <- collect(select(df, create_array(df$x, df$y, df$z)))
+  expect_equal(arrs[, 1], list(list(1, -1, -2), list(2, 3, 5)))
+
+  maps <- collect(select(
+    df, create_map(lit("x"), df$x, lit("y"), df$y, lit("z"), df$z)))
+
+  expect_equal(
+    maps[, 1],
+    lapply(
+      list(list(x = 1, y = -1, z = -2), list(x = 2, y = 3,  z = 5)),
+      as.environment))
 })
 
 test_that("column binary mathfunctions", {
@@ -1529,6 +1546,40 @@ test_that("string operators", {
   expect_equal(collect(select(df3, substring_index(df3$a, ".", 2)))[1, 1], "a.b")
   expect_equal(collect(select(df3, substring_index(df3$a, ".", -3)))[1, 1], "b.c.d")
   expect_equal(collect(select(df3, translate(df3$a, "bc", "12")))[1, 1], "a.1.2.d")
+
+  l4 <- list(list(a = "a.b@c.d   1\\b"))
+  df4 <- createDataFrame(l4)
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\s+")))[1, 1],
+    list(list("a.b@c.d", "1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\.")))[1, 1],
+    list(list("a", "b@c", "d   1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "@")))[1, 1],
+    list(list("a.b", "c.d   1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\\\")))[1, 1],
+    list(list("a.b@c.d   1", "b"))
+  )
+
+  l5 <- list(list(a = "abc"))
+  df5 <- createDataFrame(l5)
+  expect_equal(
+    collect(select(df5, repeat_string(df5$a, 1L)))[1, 1],
+    "abc"
+  )
+  expect_equal(
+    collect(select(df5, repeat_string(df5$a, 3)))[1, 1],
+    "abcabcabc"
+  )
+  expect_equal(
+    collect(select(df5, repeat_string(df5$a, -1)))[1, 1],
+    ""
+  )
 })
 
 test_that("date functions on a DataFrame", {
@@ -1713,6 +1764,28 @@ test_that("group by, agg functions", {
   # Test stats::sd, stats::var are working
   expect_true(abs(sd(1:2) - 0.7071068) < 1e-6)
   expect_true(abs(var(1:5, 1:5) - 2.5) < 1e-6)
+
+  # Test collect_list and collect_set
+  gd3_collections_local <- collect(
+    agg(gd3, collect_set(df8$age), collect_list(df8$age))
+  )
+
+  expect_equal(
+    unlist(gd3_collections_local[gd3_collections_local$name == "Andy", 2]),
+    c(30)
+  )
+
+  expect_equal(
+    unlist(gd3_collections_local[gd3_collections_local$name == "Andy", 3]),
+    c(30, 30)
+  )
+
+  expect_equal(
+    sort(unlist(
+      gd3_collections_local[gd3_collections_local$name == "Justin", 3]
+    )),
+    c(1, 19)
+  )
 
   unlink(jsonPath2)
   unlink(jsonPath3)

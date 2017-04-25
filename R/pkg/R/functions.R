@@ -2438,12 +2438,12 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' from_json
 #'
 #' Parses a column containing a JSON string into a Column of \code{structType} with the specified
-#' \code{schema} or array of \code{structType} if \code{asJsonArray} is set to \code{TRUE}.
+#' \code{schema} or array of \code{structType} if \code{as.json.array} is set to \code{TRUE}.
 #' If the string is unparseable, the Column will contains the value NA.
 #'
 #' @param x Column containing the JSON string.
 #' @param schema a structType object to use as the schema to use when parsing the JSON string.
-#' @param asJsonArray indicating if input string is JSON array of objects or a single object.
+#' @param as.json.array indicating if input string is JSON array of objects or a single object.
 #' @param ... additional named properties to control how the json is parsed, accepts the same
 #'            options as the JSON data source.
 #'
@@ -2459,8 +2459,8 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #'}
 #' @note from_json since 2.2.0
 setMethod("from_json", signature(x = "Column", schema = "structType"),
-          function(x, schema, asJsonArray = FALSE, ...) {
-            if (asJsonArray) {
+          function(x, schema, as.json.array = FALSE, ...) {
+            if (as.json.array) {
               jschema <- callJStatic("org.apache.spark.sql.types.DataTypes",
                                      "createArrayType",
                                      schema$jobj)
@@ -3650,5 +3650,156 @@ setMethod("posexplode",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "posexplode", x@jc)
+            column(jc)
+          })
+
+#' create_array
+#'
+#' Creates a new array column. The input columns must all have the same data type.
+#'
+#' @param x Column to compute on
+#' @param ... additional Column(s).
+#'
+#' @family normal_funcs
+#' @rdname create_array
+#' @name create_array
+#' @aliases create_array,Column-method
+#' @export
+#' @examples \dontrun{create_array(df$x, df$y, df$z)}
+#' @note create_array since 2.3.0
+setMethod("create_array",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "array", jcols)
+            column(jc)
+          })
+
+#' create_map
+#'
+#' Creates a new map column. The input columns must be grouped as key-value pairs,
+#' e.g. (key1, value1, key2, value2, ...).
+#' The key columns must all have the same data type, and can't be null.
+#' The value columns must all have the same data type.
+#'
+#' @param x Column to compute on
+#' @param ... additional Column(s).
+#'
+#' @family normal_funcs
+#' @rdname create_map
+#' @name create_map
+#' @aliases create_map,Column-method
+#' @export
+#' @examples \dontrun{create_map(lit("x"), lit(1.0), lit("y"), lit(-1.0))}
+#' @note create_map since 2.3.0
+setMethod("create_map",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "map", jcols)
+            column(jc)
+          })
+
+#' collect_list
+#'
+#' Creates a list of objects with duplicates.
+#'
+#' @param x Column to compute on
+#'
+#' @rdname collect_list
+#' @name collect_list
+#' @family agg_funcs
+#' @aliases collect_list,Column-method
+#' @export
+#' @examples \dontrun{collect_list(df$x)}
+#' @note collect_list since 2.3.0
+setMethod("collect_list",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "collect_list", x@jc)
+            column(jc)
+          })
+
+#' collect_set
+#'
+#' Creates a list of objects with duplicate elements eliminated.
+#'
+#' @param x Column to compute on
+#'
+#' @rdname collect_set
+#' @name collect_set
+#' @family agg_funcs
+#' @aliases collect_set,Column-method
+#' @export
+#' @examples \dontrun{collect_set(df$x)}
+#' @note collect_set since 2.3.0
+setMethod("collect_set",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "collect_set", x@jc)
+            column(jc)
+          })
+
+#' split_string
+#'
+#' Splits string on regular expression.
+#'
+#' Equivalent to \code{split} SQL function
+#'
+#' @param x Column to compute on
+#' @param pattern Java regular expression
+#'
+#' @rdname split_string
+#' @family string_funcs
+#' @aliases split_string,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- read.text("README.md")
+#'
+#' head(select(df, split_string(df$value, "\\s+")))
+#'
+#' # This is equivalent to the following SQL expression
+#' head(selectExpr(df, "split(value, '\\\\s+')"))
+#' }
+#' @note split_string 2.3.0
+setMethod("split_string",
+          signature(x = "Column", pattern = "character"),
+          function(x, pattern) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "split", x@jc, pattern)
+            column(jc)
+          })
+
+#' repeat_string
+#'
+#' Repeats string n times.
+#'
+#' Equivalent to \code{repeat} SQL function
+#'
+#' @param x Column to compute on
+#' @param n Number of repetitions
+#'
+#' @rdname repeat_string
+#' @family string_funcs
+#' @aliases repeat_string,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- read.text("README.md")
+#'
+#' first(select(df, repeat_string(df$value, 3)))
+#'
+#' # This is equivalent to the following SQL expression
+#' first(selectExpr(df, "repeat(value, 3)"))
+#' }
+#' @note repeat_string 2.3.0
+setMethod("repeat_string",
+          signature(x = "Column", n = "numeric"),
+          function(x, n) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "repeat", x@jc, numToInt(n))
             column(jc)
           })

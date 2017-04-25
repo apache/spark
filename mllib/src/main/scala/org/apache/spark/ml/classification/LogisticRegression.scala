@@ -609,9 +609,14 @@ class LogisticRegression @Since("1.2.0") (
             Friedman, et al. "Regularization Paths for Generalized Linear Models via
               Coordinate Descent," https://core.ac.uk/download/files/153/6287975.pdf
            */
-          val denseValues = denseCoefficientMatrix.values
-          val coefficientMean = denseValues.sum / denseValues.length
-          denseCoefficientMatrix.update(_ - coefficientMean)
+          val centers = Array.fill(numFeatures)(0.0)
+          denseCoefficientMatrix.foreachActive { case (i, j, v) =>
+            centers(j) += v
+          }
+          centers.transform(_ / numCoefficientSets)
+          denseCoefficientMatrix.foreachActive { case (i, j, v) =>
+            denseCoefficientMatrix.update(i, j, v - centers(j))
+          }
         }
 
         // center the intercepts when using multinomial algorithm
@@ -1566,9 +1571,6 @@ private class LogisticAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
-        s" Expecting $numFeatures but got ${features.size}.")
-      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
 
@@ -1591,8 +1593,6 @@ private class LogisticAggregator(
    * @return This LogisticAggregator object.
    */
   def merge(other: LogisticAggregator): this.type = {
-    require(numFeatures == other.numFeatures, s"Dimensions mismatch when merging with another " +
-      s"LogisticAggregator. Expecting $numFeatures but got ${other.numFeatures}.")
 
     if (other.weightSum != 0.0) {
       weightSum += other.weightSum
