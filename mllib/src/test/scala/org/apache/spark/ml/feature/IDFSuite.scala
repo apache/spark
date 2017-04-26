@@ -46,7 +46,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
   test("params") {
     ParamsSuite.checkParams(new IDF)
-    val model = new IDFModel("idf", new OldIDFModel(Vectors.dense(1.0)))
+    val model = new IDFModel("idf", Vectors.dense(1.0))
     ParamsSuite.checkParams(model)
   }
 
@@ -114,7 +114,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("IDFModel read/write") {
-    val instance = new IDFModel("myIDFModel", new OldIDFModel(Vectors.dense(1.0, 2.0)))
+    val instance = new IDFModel("myIDFModel", Vectors.dense(1.0, 2.0))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
     val newInstance = testDefaultReadWrite(instance)
