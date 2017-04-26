@@ -3,7 +3,7 @@
 set -euo pipefail
 version=$(git describe --tags)
 
-PALANTIR_FLAGS=(-Phadoop-palantir -Pkinesis-asl -Pkubernetes -Phive -Pyarn -Psparkr)
+PALANTIR_FLAGS=(-Pcloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Phive -Pyarn -Psparkr)
 
 publish_artifacts() {
   tmp_settings="tmp-settings.xml"

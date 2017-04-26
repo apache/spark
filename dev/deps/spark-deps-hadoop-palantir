@@ -18,6 +18,9 @@ automaton-1.11-8.jar
 avro-1.7.7.jar
 avro-ipc-1.7.7.jar
 avro-mapred-1.7.7-hadoop2.jar
+aws-java-sdk-core-1.11.45.jar
+aws-java-sdk-kms-1.11.45.jar
+aws-java-sdk-s3-1.11.45.jar
 base64-2.3.8.jar
 bcpkix-jdk15on-1.54.jar
 bcprov-jdk15on-1.54.jar
@@ -70,6 +73,7 @@ guice-3.0.jar
 guice-servlet-3.0.jar
 hadoop-annotations-2.8.0-palantir3.jar
 hadoop-auth-2.8.0-palantir3.jar
+hadoop-aws-2.8.0-palantir3.jar
 hadoop-client-2.8.0-palantir3.jar
 hadoop-common-2.8.0-palantir3.jar
 hadoop-hdfs-2.8.0-palantir3.jar
@@ -79,6 +83,7 @@ hadoop-mapreduce-client-common-2.8.0-palantir3.jar
 hadoop-mapreduce-client-core-2.8.0-palantir3.jar
 hadoop-mapreduce-client-jobclient-2.8.0-palantir3.jar
 hadoop-mapreduce-client-shuffle-2.8.0-palantir3.jar
+hadoop-openstack-2.8.0-palantir3.jar
 hadoop-yarn-api-2.8.0-palantir3.jar
 hadoop-yarn-client-2.8.0-palantir3.jar
 hadoop-yarn-common-2.8.0-palantir3.jar
@@ -90,11 +95,13 @@ hk2-utils-2.4.0-b34.jar
 htrace-core4-4.0.1-incubating.jar
 httpclient-4.5.2.jar
 httpcore-4.4.4.jar
+ion-java-1.0.1.jar
 ivy-2.4.0.jar
 jackson-annotations-2.6.5.jar
 jackson-core-2.6.5.jar
 jackson-core-asl-1.9.13.jar
 jackson-databind-2.6.5.jar
+jackson-dataformat-cbor-2.6.5.jar
 jackson-dataformat-yaml-2.6.5.jar
 jackson-jaxrs-1.9.13.jar
 jackson-jaxrs-base-2.6.5.jar
@@ -129,6 +136,7 @@ jetty-6.1.26.jar
 jetty-sslengine-6.1.26.jar
 jetty-util-6.1.26.jar
 jline-2.12.1.jar
+jmespath-java-1.0.jar
 joda-time-2.9.3.jar
 jodd-core-3.5.2.jar
 json-smart-1.1.1.jar

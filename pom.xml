@@ -684,6 +684,11 @@
         <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
+        <groupId>com.fasterxml.jackson.dataformat</groupId>
+        <artifactId>jackson-dataformat-cbor</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
         <artifactId>jersey-server</artifactId>
         <version>${jersey.version}</version>
@@ -1205,6 +1210,70 @@
           <exclusion>
             <groupId>com.sun.jersey.contribs</groupId>
             <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <!--
+        the AWS module pulls in jackson; its transitive dependencies can create
+        intra-jackson-module version problems.
+        -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-aws</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-mapper-asl</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-core-asl</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-openstack</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-all</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2583,6 +2652,34 @@
       <properties>
         <hadoop.version>2.7.3</hadoop.version>
       </properties>
+      <dependencyManagement>
+        <dependencies>
+          <!--
+          Hadoop-Azure isn't in Hadoop 2.6, so this has to be made
+          a 2.7+ moodule.
+          -->
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-azure</artifactId>
+            <version>${hadoop.version}</version>
+            <scope>${hadoop.deps.scope}</scope>
+            <exclusions>
+              <exclusion>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-common</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-mapper-asl</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+              </exclusion>
+            </exclusions>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
     </profile>
 
     <profile>
@@ -2591,6 +2688,34 @@
         <hadoop.version>2.8.0-palantir3</hadoop.version>
         <curator.version>2.7.1</curator.version>
       </properties>
+      <dependencyManagement>
+        <dependencies>
+          <!--
+          Hadoop-Azure isn't in Hadoop 2.6, so this has to be made
+          a 2.7+ moodule.
+          -->
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-azure</artifactId>
+            <version>${hadoop.version}</version>
+            <scope>${hadoop.deps.scope}</scope>
+            <exclusions>
+              <exclusion>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-common</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-mapper-asl</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+              </exclusion>
+            </exclusions>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
     </profile>
 
     <profile>
@@ -2629,6 +2754,22 @@
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>
+      </modules>
+    </profile>
+
+    <!--
+      The cloud profile enables the cloud module.
+      It does not declare the hadoop-* artifacts which
+      the cloud module pulls in; these are delegated to
+      the hadoop-x.y protocols, so permitting different
+      hadoop versions to declare different include/exclude
+      rules (especially transient dependencies).
+
+     -->
+    <profile>
+      <id>cloud</id>
+      <modules>
+        <module>cloud</module>
       </modules>
     </profile>
 
