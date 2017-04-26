@@ -67,8 +67,6 @@ private[sql] object ArrowConverters {
       case ByteType => new ArrowType.Int(8, true)
       case StringType => ArrowType.Utf8.INSTANCE
       case BinaryType => ArrowType.Binary.INSTANCE
-      case DateType => new ArrowType.Date(DateUnit.DAY)
-      case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)
       case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dataType")
     }
   }
@@ -160,7 +158,7 @@ private[sql] object ArrowConverters {
     val out = new ByteArrayOutputStream()
     val writer = new ArrowFileWriter(root, null, Channels.newChannel(out))
 
-    // Iterate over payload batches to write each one, ensure all batches get closed
+    // Write batch to a byte array, ensure the batch, allocator and writer are closed
     Utils.tryWithSafeFinally {
       val loader = new VectorLoader(root)
       loader.load(batch)

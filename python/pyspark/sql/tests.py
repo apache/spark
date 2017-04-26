@@ -2496,9 +2496,7 @@ class ArrowTests(ReusedPySparkTestCase):
             StructField("2_int_t", IntegerType(), True),
             StructField("3_long_t", LongType(), True),
             StructField("4_float_t", FloatType(), True),
-            StructField("5_double_t", DoubleType(), True),
-            StructField("6_date_t", DateType(), True),
-            StructField("7_timestamp_t", TimestampType(), True)])
+            StructField("5_double_t", DoubleType(), True)])
 
         def mkdt(*args):
             class NaiveTZ(tzinfo):
@@ -2513,9 +2511,9 @@ class ArrowTests(ReusedPySparkTestCase):
 
             return datetime(*args, tzinfo=NaiveTZ())
 
-        cls.data = [("a", 1, 10, 0.2, 2.0, datetime(2011, 1, 1), mkdt(2011, 1, 1, 1, 1, 1)),
-                    ("b", 2, 20, 0.4, 4.0, datetime(2012, 2, 2), mkdt(2012, 2, 2, 2, 2, 2)),
-                    ("c", 3, 30, 0.8, 6.0, datetime(2013, 3, 3), mkdt(2013, 3, 3, 3, 3, 3))]
+        cls.data = [("a", 1, 10, 0.2, 2.0),
+                    ("b", 2, 20, 0.4, 4.0),
+                    ("c", 3, 30, 0.8, 6.0)]
 
     def assertFramesEqual(self, df_with_arrow, df_without):
         msg = ("DataFrame from Arrow is not equal" +
@@ -2547,8 +2545,6 @@ class ArrowTests(ReusedPySparkTestCase):
         # need to convert these to numpy types first
         data_dict["2_int_t"] = np.int32(data_dict["2_int_t"])
         data_dict["4_float_t"] = np.float32(data_dict["4_float_t"])
-        # Pandas will store the datetime as 'object' if has tzinfo
-        data_dict["7_timestamp_t"] = [dt.replace(tzinfo=None) for dt in data_dict["7_timestamp_t"]]
         pdf = pd.DataFrame(data=data_dict)
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         pdf_arrow = df.toPandas(useArrow=True)

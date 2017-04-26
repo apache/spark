@@ -76,30 +76,29 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     collectAndValidate(mixedNumericData)
   }
 
-  test("boolean type conversion") {
-    collectAndValidate(boolData)
-  }
-
   test("string type conversion") {
     collectAndValidate(stringData)
+  }
+
+  test("boolean type conversion") {
+    collectAndValidate(boolData)
   }
 
   test("byte type conversion") {
     collectAndValidate(byteData)
   }
 
-  test("timestamp conversion") {
-    collectAndValidate(timestampData)
-  }
-
-  // TODO: Not currently supported in Arrow JSON reader
-  test("date conversion") {
-    collectAndValidate(dateData)
-  }
-
   // TODO: Not currently supported in Arrow JSON reader
   ignore("binary type conversion") {
     // collectAndValidate(binaryData)
+  }
+
+  ignore("timestamp conversion") {
+    collectAndValidate(timestampData)
+  }
+
+  ignore("date conversion") {
+    collectAndValidate(dateData)
   }
 
   test("floating-point NaN") {
@@ -160,6 +159,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     runUnsupported { arrayData.toDF().toArrowPayload.collect() }
     runUnsupported { mapData.toDF().toArrowPayload.collect() }
     runUnsupported { complexData.toArrowPayload.collect() }
+    runUnsupported { dateData.df.toArrowPayload.collect() }
+    runUnsupported { timestampData.df.toArrowPayload.collect() }
   }
 
   test("test Arrow Validator") {
