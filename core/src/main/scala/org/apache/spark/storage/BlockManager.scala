@@ -707,7 +707,7 @@ private[spark] class BlockManager(
           logInfo(s"Cache bock $blockId fetched from remotely")
         }
         return remote
-      case None => _
+      case None =>
     }
 
     None
