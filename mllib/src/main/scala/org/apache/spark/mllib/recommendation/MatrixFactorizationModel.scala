@@ -277,39 +277,38 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       num: Int): RDD[(Int, Array[(Int, Double)])] = {
     val srcBlocks = blockify(rank, srcFeatures)
     val dstBlocks = blockify(rank, dstFeatures)
-    val ratings = srcBlocks.cartesian(dstBlocks).flatMap {
-      case (users, items) =>
-      val m = users.size
-      val n = math.min(items.size, num)
+    val ratings = srcBlocks.cartesian(dstBlocks).flatMap { case (srcIter, dstIter) =>
+      val m = srcIter.size
+      val n = math.min(dstIter.size, num)
       val output = new Array[(Int, (Int, Double))](m * n)
       var j = 0
-      users.foreach (user => {
+      srcIter.foreach { case (srcId, srcFactor) =>
           def order(a: (Int, Double)) = a._2
           val pq: BoundedPriorityQueue[(Int, Double)] =
             new BoundedPriorityQueue[(Int, Double)](n)(Ordering.by(order))
-          items.foreach (item => {
+          dstIter.foreach { case (dstId, dstFactor) =>
               /**
                * blas.ddot (F2jBLAS) is the same performance with the following code.
                * the performace of blas.ddot with NativeBLAS is very bad.
                * blas.ddot (F2jBLAS) is about 10% improvement comparing with linalg.dot.
                * val rate = blas.ddot(rank, user._2, 1, item._2, 1)
                */
-              var rate: Double = 0
+              var score: Double = 0
               var k = 0
-              while(k < rank) {
-                rate += user._2(k) * item._2(k)
+              while (k < rank) {
+                score += srcFactor(k) * dstFactor(k)
                 k += 1
               }
-              pq += ((item._1, rate))
-            })
+              pq += ((dstId, score))
+          }
           val pqIter = pq.iterator
           var i = 0
-          while(i < n) {
-            output(j + i) = (user._1, pqIter.next())
+          while (i < n) {
+            output(j + i) = (srcId, pqIter.next())
             i += 1
           }
           j += n
-      })
+      }
       output.toSeq
     }
     ratings.topByKey(num)(Ordering.by(_._2))
