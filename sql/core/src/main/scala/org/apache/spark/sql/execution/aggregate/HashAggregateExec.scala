@@ -59,7 +59,9 @@ case class HashAggregateExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"))
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"),
+    "blockPhaseFinishTime" ->
+      SQLMetrics.createBlockingTimeMetric(sparkContext, "blocking phase finish time", startTimeMs))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -667,6 +669,7 @@ case class HashAggregateExec(
 
 
     val aggTime = metricTerm(ctx, "aggTime")
+    val blockPhaseFinishTime = metricTerm(ctx, "blockPhaseFinishTime")
     val beforeAgg = ctx.freshName("beforeAgg")
     s"""
      if (!$initAgg) {
@@ -692,6 +695,8 @@ case class HashAggregateExec(
      if ($sorterTerm == null) {
        $hashMapTerm.free();
      }
+
+     $blockPhaseFinishTime.add(System.currentTimeMillis());
      """
   }
 

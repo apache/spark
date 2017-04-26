@@ -57,7 +57,9 @@ case class SortExec(
   override lazy val metrics = Map(
     "sortTime" -> SQLMetrics.createTimingMetric(sparkContext, "sort time"),
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+    "blockPhaseFinishTime" ->
+      SQLMetrics.createBlockingTimeMetric(sparkContext, "blocking phase finish time", startTimeMs))
 
   def createSorter(): UnsafeExternalRowSorter = {
     val ordering = newOrdering(sortOrder, output)
@@ -157,6 +159,7 @@ case class SortExec(
     val spillSize = metricTerm(ctx, "spillSize")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
     val sortTime = metricTerm(ctx, "sortTime")
+    val blockPhaseFinishTime = metricTerm(ctx, "blockPhaseFinishTime")
     s"""
        | if ($needToSort) {
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
@@ -174,6 +177,8 @@ case class SortExec(
        |   ${consume(ctx, null, outputRow)}
        |   if (shouldStop()) return;
        | }
+       |
+       | $blockPhaseFinishTime.add(System.currentTimeMillis());
      """.stripMargin.trim
   }
 
