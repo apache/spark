@@ -285,28 +285,4 @@ public class LevelDBSuite {
 
   }
 
-  public static class ArrayKeyIndexType {
-
-    @KVIndex
-    public int[] key;
-
-    @KVIndex("id")
-    public String[] id;
-
-    @Override
-    public boolean equals(Object o) {
-      if (o instanceof ArrayKeyIndexType) {
-        ArrayKeyIndexType other = (ArrayKeyIndexType) o;
-        return Arrays.equals(key, other.key) && Arrays.equals(id, other.id);
-      }
-      return false;
-    }
-
-    @Override
-    public int hashCode() {
-      return key.hashCode();
-    }
-
-  }
-
 }

@@ -91,7 +91,7 @@ public class KVTypeInfo {
       "Duplicate index %s for type %s.", idx.value(), type.getName());
   }
 
-  public Class<?> getType() {
+  public Class<?> type() {
     return type;
   }
 

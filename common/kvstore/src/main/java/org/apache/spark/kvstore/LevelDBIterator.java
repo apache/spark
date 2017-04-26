@@ -52,7 +52,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     this.it = db.db().iterator();
     this.type = params.type;
     this.ti = db.getTypeInfo(type);
-    this.index = ti.index(params.index);
+    this.index = ti.index(params.index != null ? params.index : KVIndex.NATURAL_INDEX_NAME);
     this.max = params.max;
 
     Preconditions.checkArgument(!index.isChild() || params.parent != null,
