@@ -81,6 +81,11 @@ public abstract class BloomFilter {
   public abstract long bitSize();
 
   /**
+   * Swamidass & Baldi (2007) approximation for number of items in a Bloom filter
+   */
+  public abstract double approxItems();
+
+  /**
    * Puts an item into this {@code BloomFilter}. Ensures that subsequent invocations of
    * {@linkplain #mightContain(Object)} with the same item will always return {@code true}.
    *
@@ -146,6 +151,20 @@ public abstract class BloomFilter {
    * A specialized variant of {@link #mightContain(Object)} that only tests byte array items.
    */
   public abstract boolean mightContainBinary(byte[] item);
+
+  /**
+   * Returns a new Bloom filter of the union of two Bloom filters.
+   * Unlike mergeInplace, this will not cause a mutation.
+   * Callers must ensure the bloom filters are appropriately sized to avoid saturating them.
+   *
+   * @throws IncompatibleUnionException if either are null, different classes, or different size or number of hash functions
+   */
+  public abstract BloomFilterImpl createUnionBloomFilter(BloomFilter other) throws IncompatibleUnionException;
+
+  /**
+   * Swamidass & Baldi (2007) approximation for number of items in the intersection of two Bloom filters
+   */
+  public abstract double approxItemsInIntersection(BloomFilter that) throws IncompatibleUnionException;
 
   /**
    * Writes out this {@link BloomFilter} to an output stream in binary format. It is the caller's
