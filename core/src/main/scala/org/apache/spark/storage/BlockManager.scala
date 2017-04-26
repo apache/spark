@@ -702,7 +702,9 @@ private[spark] class BlockManager(
     remote match {
       case Some(blockResult) =>
         logInfo(s"Found block $blockId remotely")
+        logInfo("------------------->" + cacheRemote)
         if (cacheRemote) {
+          logInfo("-------------------> in cacheRemote ")
           putIterator(blockId, blockResult.data, storageLevel)
           logInfo(s"Cache bock $blockId fetched from remotely")
         }
