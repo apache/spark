@@ -500,6 +500,34 @@ class StreamSuite extends StreamTest {
       }
     }
   }
+
+  test("calling stop() on a query cancels related jobs") {
+    val input = MemoryStream[Int]
+    val query = input
+      .toDS()
+      .map { i =>
+        while (!org.apache.spark.TaskContext.get().isInterrupted()) {
+          // keep looping till interrupted by query.stop()
+          Thread.sleep(100)
+        }
+        i
+      }
+      .writeStream
+      .format("console")
+      .start()
+
+    input.addData(1)
+    // wait for jobs to start
+    eventually(timeout(streamingTimeout)) {
+      assert(sparkContext.statusTracker.getActiveJobIds().nonEmpty)
+    }
+
+    query.stop()
+    // make sure jobs are stopped
+    eventually(timeout(streamingTimeout)) {
+      assert(sparkContext.statusTracker.getActiveJobIds().isEmpty)
+    }
+  }
 }
 
 abstract class FakeSource extends StreamSourceProvider {
