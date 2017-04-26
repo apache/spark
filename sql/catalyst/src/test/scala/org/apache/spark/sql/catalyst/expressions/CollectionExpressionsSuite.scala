@@ -105,4 +105,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
+
+  test("Array Unique") {
+    val a0 = Literal.create(Seq(2, 1, 3, 4, 1, 2, 6), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
+    val a2 = Literal.create(Seq("b", "a", "c", "b", "a", "d"), ArrayType(StringType))
+    val a3 = Literal.create(Seq("b", null, "a"), ArrayType(StringType))
+    val a4 = Literal.create(Seq(null, null), ArrayType(NullType))
+
+    checkEvaluation(ArrayUnique(a0), Seq(2, 1, 3, 4, 6))
+    checkEvaluation(ArrayUnique(a1), Seq())
+    checkEvaluation(ArrayUnique(a2), Seq("b", "a", "c", "d"))
+    checkEvaluation(ArrayUnique(a3), Seq("b", null, "a"))
+    checkEvaluation(ArrayUnique(a4), Seq(null))
+  }
 }

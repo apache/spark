@@ -163,4 +163,8 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
       i += 1
     }
   }
+
+  def distinct(elementType: DataType): Array[AnyRef] = {
+    toObjectArray(elementType).distinct
+  }
 }
