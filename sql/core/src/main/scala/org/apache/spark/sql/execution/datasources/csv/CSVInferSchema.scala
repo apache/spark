@@ -248,9 +248,9 @@ private[csv] object CSVTypeCast {
     } else {
       castType match {
         case _: ByteType => datum.toByte
-        case _: ShortType => datum.toShort
-        case _: IntegerType => datum.toInt
-        case _: LongType => datum.toLong
+        case _: ShortType => Try(datum.toShort).getOrElse(null)
+        case _: IntegerType => Try(datum.toInt).getOrElse(null)
+        case _: LongType => Try(datum.toLong).getOrElse(null)
         case _: FloatType =>
           datum match {
             case options.nanValue => Float.NaN
