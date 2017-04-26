@@ -83,6 +83,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
       partition: Partition,
       context: TaskContext,
       level: StorageLevel): Iterator[U] = {
+    logInfo("--------------> in getOrCacheBlock")
     val blockId = RDDBlockId(rdd.id, partition.index)
     var readCachedBlock = true
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
@@ -107,21 +108,21 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
         new InterruptibleIterator(context, iter.asInstanceOf[Iterator[U]])
     }
 
-    context.addTaskCompletionListener(new TaskCompletionListener{
-      override def onTaskCompletion(context: TaskContext): Unit = {
-        if (!readCachedBlock) {
-          SparkEnv.get.blockManager.removeBlock(blockId, false)
-        }
-      }
-    })
-
-    context.addTaskFailureListener(new TaskFailureListener{
-      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-        if (!readCachedBlock) {
-          SparkEnv.get.blockManager.removeBlock(blockId, false)
-        }
-      }
-    })
+//    context.addTaskCompletionListener(new TaskCompletionListener{
+//      override def onTaskCompletion(context: TaskContext): Unit = {
+//        if (!readCachedBlock) {
+//          SparkEnv.get.blockManager.removeBlock(blockId, false)
+//        }
+//      }
+//    })
+//
+//    context.addTaskFailureListener(new TaskFailureListener{
+//      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
+//        if (!readCachedBlock) {
+//          SparkEnv.get.blockManager.removeBlock(blockId, false)
+//        }
+//      }
+//    })
 
     iterator
   }

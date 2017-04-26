@@ -756,6 +756,7 @@ private[spark] class BlockManager(
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T],
       cacheRemote: Boolean = false): Either[BlockResult, Iterator[T]] = {
+    logInfo("--------------> In getOrElseUpdate")
     // Attempt to read the block from local or remote storage. If it's present, then we don't need
     // to go through the local-get-or-put path.
     getOrCacheRemote[T](blockId, cacheRemote, level)(classTag) match {
