@@ -213,21 +213,21 @@ If you need a reference to the proper location to put log files in the YARN so t
  <td><code>spark.yarn.executor.memoryOverhead</code></td>
   <td>executorMemory * 0.10, with minimum of 384 </td>
   <td>
-    The amount of off-heap memory (in megabytes) to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
+    The amount of off-heap memory (in megabytes) to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the executor size (typically 6-10%). This works in the same format as JVM memory settings (e.g. 512m, 2g), but if no suffix is provided, the passed number is assumed to be in mebibytes.
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.driver.memoryOverhead</code></td>
   <td>driverMemory * 0.10, with minimum of 384 </td>
   <td>
-    The amount of off-heap memory (in megabytes) to be allocated per driver in cluster mode. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
+    The amount of off-heap memory (in megabytes) to be allocated per driver in cluster mode. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%). This works in the same format as JVM memory settings (e.g. 512m, 2g), but if no suffix is provided, the passed number is assumed to be in mebibytes.
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.am.memoryOverhead</code></td>
   <td>AM memory * 0.10, with minimum of 384 </td>
   <td>
-    Same as <code>spark.yarn.driver.memoryOverhead</code>, but for the YARN Application Master in client mode.
+    Same as <code>spark.yarn.driver.memoryOverhead</code>, but for the YARN Application Master in client mode. This works in the same format as JVM memory settings (e.g. 512m, 2g), but if no suffix is provided, the passed number is assumed to be in mebibytes.
   </td>
 </tr>
 <tr>
