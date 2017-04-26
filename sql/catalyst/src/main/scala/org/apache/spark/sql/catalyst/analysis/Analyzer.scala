@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.util.generateAliasName
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -230,10 +231,10 @@ class Analyzer(
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _, _) => Alias(c, ne.name)()
-              case e: ExtractValue => Alias(e, toPrettySQL(e))()
+              case e: ExtractValue => Alias(e, generateAliasName(e))()
               case e if optGenAliasFunc.isDefined =>
                 Alias(child, optGenAliasFunc.get.apply(e))()
-              case e => Alias(e, toPrettySQL(e))()
+              case e => Alias(e, generateAliasName(e))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
@@ -307,7 +308,7 @@ class Analyzer(
       expr transform {
         case e: GroupingID =>
           if (e.groupByExprs.isEmpty || e.groupByExprs == groupByExprs) {
-            Alias(gid, toPrettySQL(e))()
+            Alias(gid, generateAliasName(e))()
           } else {
             throw new AnalysisException(
               s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
@@ -317,7 +318,7 @@ class Analyzer(
           val idx = groupByExprs.indexOf(col)
           if (idx >= 0) {
             Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
-              Literal(1)), ByteType), toPrettySQL(e))()
+              Literal(1)), ByteType), generateAliasName(e))()
           } else {
             throw new AnalysisException(s"Column of grouping ($col) can't be found " +
               s"in grouping columns ${groupByExprs.mkString(",")}")
@@ -487,16 +488,8 @@ class Analyzer(
         val singleAgg = aggregates.size == 1
         def outputName(value: Literal, aggregate: Expression): String = {
           val utf8Value = Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
-          val stringValue: String = Option(utf8Value).map(_.toString).getOrElse("null")
-          if (singleAgg) {
-            stringValue
-          } else {
-            val suffix = aggregate match {
-              case n: NamedExpression => n.name
-              case _ => toPrettySQL(aggregate)
-            }
-            stringValue + "_" + suffix
-          }
+          val stringValue = Option(utf8Value).map(_.toString).getOrElse("null")
+          if (singleAgg) stringValue else stringValue + "_" + generateAliasName(aggregate)
         }
         if (aggregates.forall(a => PivotFirst.supportsDataType(a.dataType))) {
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an

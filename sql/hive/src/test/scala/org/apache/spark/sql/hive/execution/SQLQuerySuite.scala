@@ -890,6 +890,23 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     dropTempTable("testTable")
   }
 
+  test("Auto alias construction of get_json_object") {
+    withTempView("tempView") {
+      withTable("t", "t1") {
+        val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
+        df.select($"key", functions.get_json_object($"jstring", "$.f1"))
+          .write.format("hive").saveAsTable("t")
+        checkAnswer(table("t"), Row("1", "value1"))
+        assert(table("t").schema.map(_.name) === Seq("key", "get_json_object(jstring $.f1)"))
+
+        df.createTempView("tempView")
+        sql("CREATE TABLE t1 AS SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
+        checkAnswer(table("t1"), Row("1", "value1"))
+        assert(table("t1").schema.map(_.name) === Seq("key", "get_json_object(jstring $.f1)"))
+      }
+    }
+  }
+
   test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
     val ds = Seq("""{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""").toDS()
     read.json(ds).createOrReplaceTempView("data")
