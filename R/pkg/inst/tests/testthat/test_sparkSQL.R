@@ -1816,6 +1816,108 @@ test_that("pivot GroupedData column", {
   expect_error(collect(sum(pivot(groupBy(df, "year"), "course", list("R", "R")), "earnings")))
 })
 
+test_that("test multi-dimensional aggregations with cube and rollup", {
+  df <- createDataFrame(data.frame(
+    id = 1:6,
+    year = c(2016, 2016, 2016, 2017, 2017, 2017),
+    salary = c(10000, 15000, 20000, 22000, 32000, 21000),
+    department = c("management", "rnd", "sales", "management", "rnd", "sales")
+  ))
+
+  actual_cube <- collect(
+    orderBy(
+      agg(
+        cube(df, "year", "department"),
+        expr("sum(salary) AS total_salary"), expr("avg(salary) AS average_salary")
+      ),
+      "year", "department"
+    )
+  )
+
+  expected_cube <- data.frame(
+    year = c(rep(NA, 4), rep(2016, 4), rep(2017, 4)),
+    department = rep(c(NA, "management", "rnd", "sales"), times = 3),
+    total_salary = c(
+      120000, # Total
+      10000 + 22000, 15000 + 32000, 20000 + 21000, # Department only
+      20000 + 15000 + 10000, # 2016
+      10000, 15000, 20000, # 2016 each department
+      21000 + 32000 + 22000, # 2017
+      22000, 32000, 21000 # 2017 each department
+    ),
+    average_salary = c(
+      # Total
+      mean(c(20000, 15000, 10000, 21000, 32000, 22000)),
+      # Mean by department
+      mean(c(10000, 22000)), mean(c(15000, 32000)), mean(c(20000, 21000)),
+      mean(c(10000, 15000, 20000)), # 2016
+      10000, 15000, 20000, # 2016 each department
+      mean(c(21000, 32000, 22000)), # 2017
+      22000, 32000, 21000 # 2017 each department
+    ),
+    stringsAsFactors = FALSE
+  )
+
+  expect_equal(actual_cube, expected_cube)
+
+  # cube should accept column objects
+  expect_equal(
+    count(sum(cube(df, df$year, df$department), "salary")),
+    12
+  )
+
+  # cube without columns should result in a single aggregate
+  expect_equal(
+    collect(agg(cube(df), expr("sum(salary) as total_salary"))),
+    data.frame(total_salary = 120000)
+  )
+
+  actual_rollup <- collect(
+    orderBy(
+      agg(
+        rollup(df, "year", "department"),
+        expr("sum(salary) AS total_salary"), expr("avg(salary) AS average_salary")
+      ),
+      "year", "department"
+    )
+  )
+
+  expected_rollup <- data.frame(
+    year = c(NA, rep(2016, 4), rep(2017, 4)),
+    department = c(NA, rep(c(NA, "management", "rnd", "sales"), times = 2)),
+    total_salary = c(
+      120000, # Total
+      20000 + 15000 + 10000, # 2016
+      10000, 15000, 20000, # 2016 each department
+      21000 + 32000 + 22000, # 2017
+      22000, 32000, 21000 # 2017 each department
+    ),
+    average_salary = c(
+      # Total
+      mean(c(20000, 15000, 10000, 21000, 32000, 22000)),
+      mean(c(10000, 15000, 20000)), # 2016
+      10000, 15000, 20000, # 2016 each department
+      mean(c(21000, 32000, 22000)), # 2017
+      22000, 32000, 21000 # 2017 each department
+    ),
+    stringsAsFactors = FALSE
+  )
+
+  expect_equal(actual_rollup, expected_rollup)
+
+  # cube should accept column objects
+  expect_equal(
+    count(sum(rollup(df, df$year, df$department), "salary")),
+    9
+  )
+
+  # rollup without columns should result in a single aggregate
+  expect_equal(
+    collect(agg(rollup(df), expr("sum(salary) as total_salary"))),
+    data.frame(total_salary = 120000)
+  )
+})
+
 test_that("arrange() and orderBy() on a DataFrame", {
   df <- read.json(jsonPath)
   sorted <- arrange(df, df$age)
