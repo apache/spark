@@ -182,14 +182,16 @@ class Column(object):
     ...     Row(id=2, value=None)
     ... ])
     >>> df1.select(
-    ...     df1['value'] == 'foo', df1['value'].eqNullSafe('foo')
+    ...     df1['value'] == 'foo',
+    ...     df1['value'].eqNullSafe('foo'),
+    ...     df1['value'].eqNullSafe(None)
     ... ).show()
-    +-------------+---------------+
-    |(value = foo)|(value <=> foo)|
-    +-------------+---------------+
-    |         true|           true|
-    |         null|          false|
-    +-------------+---------------+
+    +-------------+---------------+----------------+
+    |(value = foo)|(value <=> foo)|(value <=> NULL)|
+    +-------------+---------------+----------------+
+    |         true|           true|           false|
+    |         null|          false|            true|
+    +-------------+---------------+----------------+
     >>> df2 = spark.createDataFrame([
     ...     Row(value = 'bar'),
     ...     Row(value = None)
