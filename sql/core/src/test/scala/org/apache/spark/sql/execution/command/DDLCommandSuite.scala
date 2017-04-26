@@ -748,6 +748,33 @@ class DDLCommandSuite extends PlanTest {
     assertUnsupported("ALTER TABLE table_name PARTITION (a='1', a='2') CHANGE COLUMN a new_a INT")
   }
 
+  test("alter table: add columns name/type/comment") {
+    val sql1 = "ALTER TABLE table_name ADD COLUMNS (col_name1 INT)"
+    val sql2 = "ALTER TABLE table_name ADD COLUMNS (col_name2 INT COMMENT 'some comment')"
+    val sql3 = "ALTER TABLE table_name ADD COLUMNS (col_name3 STRING, col_name4 INT)"
+    val parsed1 = parser.parsePlan(sql1)
+    val parsed2 = parser.parsePlan(sql2)
+    val parsed3 = parser.parsePlan(sql3)
+    val tableIdent = TableIdentifier("table_name", None)
+    val expected1 = AlterTableAddColumnsCommand(
+      tableIdent,
+      Seq(StructField("col_name1", IntegerType)))
+    val expected2 = AlterTableAddColumnsCommand(
+      tableIdent,
+      Seq(StructField("col_name2", IntegerType).withComment("some comment")))
+    val expected3 = AlterTableAddColumnsCommand(
+      tableIdent,
+      Seq(StructField("col_name3", StringType),
+        StructField("col_name4", IntegerType)))
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+  }
+
+  test("alter table: add columns in partition spec (not supported)") {
+    assertUnsupported("ALTER TABLE table_name PARTITION (a='1', a='2') ADD COLUMNS (col_name INT)")
+  }
+
   test("alter table: touch (not supported)") {
     assertUnsupported("ALTER TABLE table_name TOUCH")
     assertUnsupported("ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')")

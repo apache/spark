@@ -943,6 +943,26 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
+   * Create a [[AlterTableAddColumnsCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table [PARTITION partition_spec]
+   *   ADD COLUMNS (col_name data_type [COMMENT col_comment], ...);
+   * }}}
+   */
+  override def visitAddColumns(ctx: AddColumnsContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.partitionSpec != null) {
+      operationNotAllowed("ALTER TABLE table PARTITION partition_spec ADD COLUMNS", ctx)
+    }
+
+    val tableName = visitTableIdentifier(ctx.tableIdentifier())
+    val dataCols = Option(ctx.columns).map(visitColTypeList).getOrElse(Nil)
+
+    AlterTableAddColumnsCommand(tableName, dataCols)
+  }
+
+  /**
    * Create location string.
    */
   override def visitLocationSpec(ctx: LocationSpecContext): String = withOrigin(ctx) {

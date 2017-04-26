@@ -99,6 +99,8 @@ statement
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER TABLE tableIdentifier partitionSpec?
         CHANGE COLUMN? identifier colType colPosition?                 #changeColumn
+    | ALTER TABLE tableIdentifier partitionSpec?
+        ADD COLUMNS ('(' columns=colTypeList ')')?                     #addColumns
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE tableIdentifier (partitionSpec)?

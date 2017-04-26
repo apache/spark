@@ -347,6 +347,32 @@ case class AlterTableChangeColumnCommand(
 }
 
 /**
+ * A command to add columns for a table.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   ALTER TABLE table_identifier
+ *   ADD COLUMNS (col_name data_type [COMMENT col_comment], ...);
+ * }}}
+ */
+case class AlterTableAddColumnsCommand(
+    tableName: TableIdentifier,
+    newColumns: Seq[StructField]) extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+
+    val newSchema = StructType(table.schema.fields ++ newColumns)
+    val newTable = table.copy(schema = newSchema)
+    catalog.alterTable(newTable)
+    Seq.empty[Row]
+  }
+}
+
+/**
  * A command that sets the serde class and/or serde properties of a table/view.
  *
  * The syntax of this command is:
