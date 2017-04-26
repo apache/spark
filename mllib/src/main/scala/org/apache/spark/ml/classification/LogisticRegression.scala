@@ -179,7 +179,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   }
 
   /**
-   * The lower bound of coefficients if fitting under bound constrained optimization.
+   * The lower bounds on coefficients if fitting under bound constrained optimization.
    * The bound matrix must be compatible with the shape (1, number of features) for binomial
    * regression, or (number of classes, number of features) for multinomial regression.
    * Otherwise, it throws exception.
@@ -187,15 +187,15 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * @group param
    */
   @Since("2.2.0")
-  val lowerBoundOfCoefficients: Param[Matrix] = new Param(this, "lowerBoundOfCoefficients",
+  val lowerBoundsOnCoefficients: Param[Matrix] = new Param(this, "lowerBoundsOnCoefficients",
     "The lower bound of coefficients if fitting under bound constrained optimization.")
 
   /** @group getParam */
   @Since("2.2.0")
-  def getLowerBoundOfCoefficients: Matrix = $(lowerBoundOfCoefficients)
+  def getLowerBoundsOnCoefficients: Matrix = $(lowerBoundsOnCoefficients)
 
   /**
-   * The upper bound of coefficients if fitting under bound constrained optimization.
+   * The upper bounds on coefficients if fitting under bound constrained optimization.
    * The bound matrix must be compatible with the shape (1, number of features) for binomial
    * regression, or (number of classes, number of features) for multinomial regression.
    * Otherwise, it throws exception.
@@ -203,42 +203,42 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * @group param
    */
   @Since("2.2.0")
-  val upperBoundOfCoefficients: Param[Matrix] = new Param(this, "upperBoundOfCoefficients",
+  val upperBoundsOnCoefficients: Param[Matrix] = new Param(this, "upperBoundsOnCoefficients",
     "The upper bound of coefficients if fitting under bound constrained optimization.")
 
   /** @group getParam */
   @Since("2.2.0")
-  def getUpperBoundOfCoefficients: Matrix = $(upperBoundOfCoefficients)
+  def getUpperBoundsOnCoefficients: Matrix = $(upperBoundsOnCoefficients)
 
   /**
-   * The lower bound of coefficients if fitting under bound constrained optimization.
-   * The bound vector size must be equal with 1 for binomial regression, or the number
+   * The lower bounds on intercepts if fitting under bound constrained optimization.
+   * The bounds vector size must be equal with 1 for binomial regression, or the number
    * of classes for multinomial regression. Otherwise, it throws exception.
    *
    * @group param
    */
   @Since("2.2.0")
-  val lowerBoundOfIntercept: Param[Vector] = new Param(this, "lowerBoundOfIntercept",
+  val lowerBoundsOnIntercepts: Param[Vector] = new Param(this, "lowerBoundsOnIntercepts",
     "The lower bound of intercept if fitting under bound constrained optimization.")
 
   /** @group getParam */
   @Since("2.2.0")
-  def getLowerBoundOfIntercept: Vector = $(lowerBoundOfIntercept)
+  def getLowerBoundsOnIntercepts: Vector = $(lowerBoundsOnIntercepts)
 
   /**
-   * The upper bound of coefficients if fitting under bound constrained optimization.
+   * The upper bounds on intercepts if fitting under bound constrained optimization.
    * The bound vector size must be equal with 1 for binomial regression, or the number
    * of classes for multinomial regression. Otherwise, it throws exception.
    *
    * @group param
    */
   @Since("2.2.0")
-  val upperBoundOfIntercept: Param[Vector] = new Param(this, "upperBoundOfIntercept",
+  val upperBoundsOnIntercepts: Param[Vector] = new Param(this, "upperBoundsOnIntercepts",
     "The upper bound of coefficients if fitting under bound constrained optimization.")
 
   /** @group getParam */
   @Since("2.2.0")
-  def getUpperBoundOfIntercept: Vector = $(upperBoundOfIntercept)
+  def getUpperBoundsOnIntercepts: Vector = $(upperBoundsOnIntercepts)
 
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -378,72 +378,72 @@ class LogisticRegression @Since("1.2.0") (
   setDefault(aggregationDepth -> 2)
 
   /**
-   * Set the lower bound of coefficients if fitting under bound constrained optimization.
+   * Set the lower bounds on coefficients if fitting under bound constrained optimization.
    *
    * @group setParam
    */
   @Since("2.2.0")
-  def setLowerBoundOfCoefficients(value: Matrix): this.type = set(lowerBoundOfCoefficients, value)
+  def setLowerBoundsOnCoefficients(value: Matrix): this.type = set(lowerBoundsOnCoefficients, value)
 
   /**
-   * Set the upper bound of coefficients if fitting under bound constrained optimization.
+   * Set the upper bounds on coefficients if fitting under bound constrained optimization.
    *
    * @group setParam
    */
   @Since("2.2.0")
-  def setUpperBoundOfCoefficients(value: Matrix): this.type = set(upperBoundOfCoefficients, value)
+  def setUpperBoundsOnCoefficients(value: Matrix): this.type = set(upperBoundsOnCoefficients, value)
 
   /**
-   * Set the lower bound of intercepts if fitting under bound constrained optimization.
+   * Set the lower bounds on intercepts if fitting under bound constrained optimization.
    *
    * @group setParam
    */
   @Since("2.2.0")
-  def setLowerBoundOfIntercept(value: Vector): this.type = set(lowerBoundOfIntercept, value)
+  def setLowerBoundsOnIntercepts(value: Vector): this.type = set(lowerBoundsOnIntercepts, value)
 
   /**
-   * Set the upper bound of intercepts if fitting under bound constrained optimization.
+   * Set the upper bounds on intercepts if fitting under bound constrained optimization.
    *
    * @group setParam
    */
   @Since("2.2.0")
-  def setUpperBoundOfIntercept(value: Vector): this.type = set(upperBoundOfIntercept, value)
+  def setUpperBoundsOnIntercepts(value: Vector): this.type = set(upperBoundsOnIntercepts, value)
 
   private def usingBoundConstrainedOptimization: Boolean = {
-    isSet(lowerBoundOfCoefficients) || isSet(upperBoundOfCoefficients) ||
-      isSet(lowerBoundOfIntercept) || isSet(upperBoundOfIntercept)
+    isSet(lowerBoundsOnCoefficients) || isSet(upperBoundsOnCoefficients) ||
+      isSet(lowerBoundsOnIntercepts) || isSet(upperBoundsOnIntercepts)
   }
 
   private def assertBoundConstrainedOptimizationParamsValid(
       numCoefficientSets: Int,
       numFeatures: Int): Unit = {
-    if (isSet(lowerBoundOfCoefficients)) {
-      require($(lowerBoundOfCoefficients).numRows == numCoefficientSets &&
-        $(lowerBoundOfCoefficients).numCols == numFeatures)
+    if (isSet(lowerBoundsOnCoefficients)) {
+      require($(lowerBoundsOnCoefficients).numRows == numCoefficientSets &&
+        $(lowerBoundsOnCoefficients).numCols == numFeatures)
     }
-    if (isSet(upperBoundOfCoefficients)) {
-      require($(upperBoundOfCoefficients).numRows == numCoefficientSets &&
-        $(upperBoundOfCoefficients).numCols == numFeatures)
+    if (isSet(upperBoundsOnCoefficients)) {
+      require($(upperBoundsOnCoefficients).numRows == numCoefficientSets &&
+        $(upperBoundsOnCoefficients).numCols == numFeatures)
     }
-    if (isSet(lowerBoundOfIntercept)) {
-      require($(lowerBoundOfIntercept).size == numCoefficientSets)
+    if (isSet(lowerBoundsOnIntercepts)) {
+      require($(lowerBoundsOnIntercepts).size == numCoefficientSets)
     }
-    if (isSet(upperBoundOfIntercept)) {
-      require($(upperBoundOfIntercept).size == numCoefficientSets)
+    if (isSet(upperBoundsOnIntercepts)) {
+      require($(upperBoundsOnIntercepts).size == numCoefficientSets)
     }
-    if (isSet(lowerBoundOfCoefficients) && isSet(upperBoundOfCoefficients)) {
-      require($(lowerBoundOfCoefficients).toArray.zip($(upperBoundOfCoefficients).toArray)
-        .forall(x => x._1 <= x._2), "LowerBoundOfCoefficients should always " +
-        "less than or equal to upperBoundOfCoefficients, but found: " +
-        s"lowerBoundOfCoefficients = $getLowerBoundOfCoefficients, " +
-        s"upperBoundOfCoefficients = $getUpperBoundOfCoefficients.")
+    if (isSet(lowerBoundsOnCoefficients) && isSet(upperBoundsOnCoefficients)) {
+      require($(lowerBoundsOnCoefficients).toArray.zip($(upperBoundsOnCoefficients).toArray)
+        .forall(x => x._1 <= x._2), "LowerBoundsOnCoefficients should always " +
+        "less than or equal to upperBoundsOnCoefficients, but found: " +
+        s"lowerBoundsOnCoefficients = $getLowerBoundsOnCoefficients, " +
+        s"upperBoundsOnCoefficients = $getUpperBoundsOnCoefficients.")
     }
-    if (isSet(lowerBoundOfIntercept) && isSet(upperBoundOfIntercept)) {
-      require($(lowerBoundOfIntercept).toArray.zip($(upperBoundOfIntercept).toArray)
-        .forall(x => x._1 <= x._2), "LowerBoundOfIntercept should always " +
-        "less than or equal to upperBoundOfIntercept, but found: " +
-        s"lowerBoundOfIntercept = $getLowerBoundOfIntercept, " +
-        s"upperBoundOfIntercept = $getUpperBoundOfIntercept.")
+    if (isSet(lowerBoundsOnIntercepts) && isSet(upperBoundsOnIntercepts)) {
+      require($(lowerBoundsOnIntercepts).toArray.zip($(upperBoundsOnIntercepts).toArray)
+        .forall(x => x._1 <= x._2), "LowerBoundsOnIntercepts should always " +
+        "less than or equal to upperBoundsOnIntercepts, but found: " +
+        s"lowerBoundsOnIntercepts = $getLowerBoundsOnIntercepts, " +
+        s"upperBoundsOnIntercepts = $getUpperBoundsOnIntercepts.")
     }
   }
 
@@ -586,42 +586,50 @@ class LogisticRegression @Since("1.2.0") (
           $(standardization), bcFeaturesStd, regParamL2, multinomial = isMultinomial,
           $(aggregationDepth))
 
-        val numCoeffs = numFeaturesPlusIntercept * numCoefficientSets
-        val isSetLowerBoundOfCoefficients = isSet(lowerBoundOfCoefficients)
-        val isSetUpperBoundOfCoefficients = isSet(upperBoundOfCoefficients)
-        val isSetLowerBoundOfIntercept = isSet(lowerBoundOfIntercept)
-        val isSetUpperBoundOfIntercept = isSet(upperBoundOfIntercept)
-        var lowerBound: Array[Double] = null
-        var upperBound: Array[Double] = null
+        val numCoeffsPlusIntercepts = numFeaturesPlusIntercept * numCoefficientSets
 
-        val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
+        val (lowerBounds, upperBounds): (Array[Double], Array[Double]) = {
           if (usingBoundConstrainedOptimization) {
-            lowerBound = Array.fill[Double](numCoeffs)(Double.NegativeInfinity)
-            upperBound = Array.fill[Double](numCoeffs)(Double.PositiveInfinity)
+            val lowerBounds = Array.fill[Double](numCoeffsPlusIntercepts)(Double.NegativeInfinity)
+            val upperBounds = Array.fill[Double](numCoeffsPlusIntercepts)(Double.PositiveInfinity)
+            val isSetLowerBoundsOnCoefficients = isSet(lowerBoundsOnCoefficients)
+            val isSetUpperBoundsOnCoefficients = isSet(upperBoundsOnCoefficients)
+            val isSetLowerBoundsOnIntercepts = isSet(lowerBoundsOnIntercepts)
+            val isSetUpperBoundsOnIntercepts = isSet(upperBoundsOnIntercepts)
+
             var i = 0
-            while (i < numCoeffs) {
+            while (i < numCoeffsPlusIntercepts) {
               val coefficientSetIndex = i % numCoefficientSets
               val featureIndex = i / numCoefficientSets
               if (featureIndex < numFeatures) {
-                if (isSetLowerBoundOfCoefficients) {
-                  lowerBound(i) = $(lowerBoundOfCoefficients)(
+                if (isSetLowerBoundsOnCoefficients) {
+                  lowerBounds(i) = $(lowerBoundsOnCoefficients)(
                     coefficientSetIndex, featureIndex) * featuresStd(featureIndex)
                 }
-                if (isSetUpperBoundOfCoefficients) {
-                  upperBound(i) = $(upperBoundOfCoefficients)(
+                if (isSetUpperBoundsOnCoefficients) {
+                  upperBounds(i) = $(upperBoundsOnCoefficients)(
                     coefficientSetIndex, featureIndex) * featuresStd(featureIndex)
                 }
               } else {
-                if (isSetLowerBoundOfIntercept) {
-                  lowerBound(i) = $(lowerBoundOfIntercept)(coefficientSetIndex)
+                if (isSetLowerBoundsOnIntercepts) {
+                  lowerBounds(i) = $(lowerBoundsOnIntercepts)(coefficientSetIndex)
                 }
-                if (isSetUpperBoundOfIntercept) {
-                  upperBound(i) = $(upperBoundOfIntercept)(coefficientSetIndex)
+                if (isSetUpperBoundsOnIntercepts) {
+                  upperBounds(i) = $(upperBoundsOnIntercepts)(coefficientSetIndex)
                 }
               }
               i += 1
             }
-            new BreezeLBFGSB(BDV[Double](lowerBound), BDV[Double](upperBound), $(maxIter), 10, $(tol))
+            (lowerBounds, upperBounds)
+          } else {
+            (null, null)
+          }
+        }
+
+        val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
+          if (lowerBounds != null && upperBounds != null) {
+            new BreezeLBFGSB(
+              BDV[Double](lowerBounds), BDV[Double](upperBounds), $(maxIter), 10, $(tol))
           } else {
             new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
           }
@@ -738,13 +746,13 @@ class LogisticRegression @Since("1.2.0") (
         if (usingBoundConstrainedOptimization) {
           // Make sure all initial values locate in the corresponding bound.
           var i = 0
-          while (i < numCoeffs) {
+          while (i < numCoeffsPlusIntercepts) {
             val initialCoefWithInterceptArray =
               initialCoefWithInterceptMatrix.asInstanceOf[DenseMatrix].values
-            if (initialCoefWithInterceptArray(i) < lowerBound(i)) {
-              initialCoefWithInterceptArray(i) = lowerBound(i)
-            } else if (initialCoefWithInterceptArray(i) > upperBound(i)) {
-              initialCoefWithInterceptArray(i) = upperBound(i)
+            if (initialCoefWithInterceptArray(i) < lowerBounds(i)) {
+              initialCoefWithInterceptArray(i) = lowerBounds(i)
+            } else if (initialCoefWithInterceptArray(i) > upperBounds(i)) {
+              initialCoefWithInterceptArray(i) = upperBounds(i)
             }
             i += 1
           }
