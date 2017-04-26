@@ -221,4 +221,119 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
    */
   @Since("1.1.0")
   lazy val labels: Array[Double] = tpByClass.keys.toArray.sorted
+
+  /**
+   * Returns unweighted Cohen's Kappa
+   * Cohen's kappa coefficient is a statistic which measures inter-rater
+   * agreement for qualitative (categorical) items. It is generally thought
+   * to be a more robust measure than simple percent agreement calculation,
+   * since kappa takes into account the agreement occurring by chance.
+   * The kappa score is a number between -1 and 1. Scores above 0.8 are
+   * generally considered good agreement; zero or lower means no agreement
+   * (practically random labels).
+   */
+  @Since("2.0.0")
+  def kappa(): Double = {
+    kappa("default")
+  }
+
+  /**
+   * Returns Cohen's Kappa with built-in weighted types
+   * @param weights the weighted type. "default" means no weighted;
+   *                "linear" means linear weighted;
+   *                "quadratic" means quadratic weighted.
+   */
+  @Since("2.0.0")
+  def kappa(weights: String): Double = {
+
+    val func = weights match {
+      // standard kappa without weighting
+      case "default" =>
+        (i: Int, j: Int) => {
+          if (i == j) {
+            0.0
+          } else {
+            1.0
+          }
+        }
+      // linear weighted kappa
+      case "linear" =>
+        (i: Int, j: Int) =>
+          math.abs(i - j).toDouble
+      // quadratic weighted kappa
+      case "quadratic" =>
+        (i: Int, j: Int) => {
+          val d = i - j
+          d.toDouble * d
+        }
+      // unknown weighting type
+      case t =>
+        throw new IllegalArgumentException(
+          s"kappa only supports weighting type {linear, quadratic, default} but got type ${t}.")
+    }
+
+    kappa(func)
+  }
+
+
+  /**
+   * Returns Cohen's Kappa with user-defined weight matrix
+   * @param weights the weight matrix, must be of the same shape with Confusion Matrix.
+   *                Note: Each Element in it must be no less than zero.
+   */
+  @Since("2.0.0")
+  def kappa(weights: Matrix): Double = {
+    val n = labels.size
+    require(weights.numRows == n)
+    require(weights.numCols == n)
+
+    weights.foreachActive {
+      case (i, j, w) =>
+        require(w >= 0, s"weight for (${i}, ${j}) must be no less than 0 but got ${w}")
+    }
+
+    val func = (i: Int, j: Int) => weights(i, j)
+
+    kappa(func)
+  }
+
+  /**
+   * Returns Cohen's Kappa with user-defined weight calculation function
+   * @param weights the weight calculation function. It takes two number as inputs,
+   *                and return a number no less than zero as the corresponding weight.
+   *                Note: Each return must not be negative.
+   */
+  @Since("2.0.0")
+  def kappa(weights: (Int, Int) => Double): Double = {
+    val mat = confusionMatrix
+    val n = mat.numRows
+
+    val sumByRows = Array.fill(n)(0.0)
+    val sumByCols = Array.fill(n)(0.0)
+    var sum = 0.0
+
+    mat.foreachActive {
+      case (i, j, v) =>
+        sumByRows(i) += v
+        sumByCols(j) += v
+        sum += v
+    }
+
+    var numerator = 0.0
+    var denominator = 0.0
+
+    mat.foreachActive {
+      case (i, j, v) =>
+        val w = weights(i, j)
+        require(w >= 0, s"weight for (${i}, ${j}) must be no less than 0 but got ${w}")
+        numerator += w * v
+        denominator += w * sumByRows(i) * sumByCols(j) / sum
+    }
+
+    if (denominator > 0) {
+      1 - numerator / denominator
+    } else {
+      1.0
+    }
+  }
 }
