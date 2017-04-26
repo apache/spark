@@ -46,6 +46,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
+import org.apache.spark.sql.catalyst.trees.{Barrier, CurrentBarrier}
 import org.apache.spark.sql.catalyst.util.{usePrettyExpression, DateTimeUtils}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
@@ -203,7 +204,7 @@ class Dataset[T] private[sql](
    * custom objects, e.g. collect.  Here we resolve and bind the encoder so that we can call its
    * `fromRow` method later.
    */
-  private val boundEnc =
+  private lazy val boundEnc =
     exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
 
   private implicit def classTag = exprEnc.clsTag
@@ -356,7 +357,11 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = new Dataset[Row](sparkSession, queryExecution, RowEncoder(schema))
+  def toDF(): DataFrame = {
+    CurrentBarrier.withBarrier(Barrier(Some(logicalPlan))) {
+      new Dataset[Row](sparkSession, queryExecution, RowEncoder(schema))
+    }
+  }
 
   /**
    * :: Experimental ::
@@ -2828,21 +2833,27 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
   @inline private def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
-    Dataset.ofRows(sparkSession, logicalPlan)
+    CurrentBarrier.withBarrier(Barrier(Some(this.logicalPlan))) {
+      Dataset.ofRows(sparkSession, logicalPlan)
+    }
   }
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */
   @inline private def withTypedPlan[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
-    Dataset(sparkSession, logicalPlan)
+    CurrentBarrier.withBarrier(Barrier(Some(this.logicalPlan))) {
+      Dataset(sparkSession, logicalPlan)
+    }
   }
 
   /** A convenient function to wrap a set based logical plan and produce a Dataset. */
   @inline private def withSetOperator[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
-    if (classTag.runtimeClass.isAssignableFrom(classOf[Row])) {
-      // Set operators widen types (change the schema), so we cannot reuse the row encoder.
-      Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
-    } else {
-      Dataset(sparkSession, logicalPlan)
+    CurrentBarrier.withBarrier(Barrier(Some(this.logicalPlan))) {
+      if (classTag.runtimeClass.isAssignableFrom(classOf[Row])) {
+        // Set operators widen types (change the schema), so we cannot reuse the row encoder.
+        Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
+      } else {
+        Dataset(sparkSession, logicalPlan)
+      }
     }
   }
 }

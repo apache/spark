@@ -72,6 +72,34 @@ object CurrentOrigin {
   }
 }
 
+case class Barrier(node: Option[TreeNode[_]] = None)
+
+/**
+ * Provides a barrier for TreeNodes to prevent transformation from specified nodes.
+ */
+object CurrentBarrier {
+  private val value = new ThreadLocal[Barrier]() {
+    override def initialValue: Barrier = Barrier()
+  }
+
+  def get: Barrier = value.get()
+  def set(b: Barrier): Unit = value.set(b)
+
+  def reset(): Unit = value.set(Barrier())
+
+  def hitBarrier(currentNode: TreeNode[_]): Boolean = {
+    val barrier = value.get()
+    barrier.node.isDefined && (barrier.node.get fastEquals currentNode)
+  }
+
+  def withBarrier[A](b: Barrier)(f: => A): A = {
+    val barrier = get
+    set(b)
+    val ret = try f finally { set(barrier) }
+    ret
+  }
+}
+
 // scalastyle:off
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 // scalastyle:on
@@ -115,7 +143,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def foreach(f: BaseType => Unit): Unit = {
     f(this)
-    children.foreach(_.foreach(f))
+    if (!CurrentBarrier.hitBarrier(this)) {
+      children.foreach(_.foreach(f))
+    }
   }
 
   /**
@@ -123,7 +153,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param f the function to be applied to each node in the tree.
    */
   def foreachUp(f: BaseType => Unit): Unit = {
-    children.foreach(_.foreachUp(f))
+    if (!CurrentBarrier.hitBarrier(this)) {
+      children.foreach(_.foreachUp(f))
+    }
     f(this)
   }
 
@@ -267,11 +299,19 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       rule.applyOrElse(this, identity[BaseType])
     }
 
-    // Check if unchanged and then possibly return old copy to avoid gc churn.
-    if (this fastEquals afterRule) {
-      mapChildren(_.transformDown(rule))
+    if (CurrentBarrier.hitBarrier(this)) {
+      if (this fastEquals afterRule) {
+        this
+      } else {
+        afterRule
+      }
     } else {
-      afterRule.mapChildren(_.transformDown(rule))
+      // Check if unchanged and then possibly return old copy to avoid gc churn.
+      if (this fastEquals afterRule) {
+        mapChildren(_.transformDown(rule))
+      } else {
+        afterRule.mapChildren(_.transformDown(rule))
+      }
     }
   }
 
@@ -283,14 +323,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param rule the function use to transform this nodes children
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRuleOnChildren = mapChildren(_.transformUp(rule))
-    if (this fastEquals afterRuleOnChildren) {
+    if (CurrentBarrier.hitBarrier(this)) {
       CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(this, identity[BaseType])
       }
     } else {
-      CurrentOrigin.withOrigin(origin) {
-        rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+      val afterRuleOnChildren = mapChildren(_.transformUp(rule))
+      if (this fastEquals afterRuleOnChildren) {
+        CurrentOrigin.withOrigin(origin) {
+          rule.applyOrElse(this, identity[BaseType])
+        }
+      } else {
+        CurrentOrigin.withOrigin(origin) {
+          rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+        }
       }
     }
   }
