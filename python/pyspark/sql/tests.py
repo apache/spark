@@ -211,6 +211,12 @@ class SQLTests(ReusedPySparkTestCase):
         sqlContext2 = SQLContext(self.sc)
         self.assertTrue(sqlContext1.sparkSession is sqlContext2.sparkSession)
 
+    def tearDown(self):
+        super(SQLTests, self).tearDown()
+
+        # tear down test_bucketed_write state
+        self.spark.sql("DROP TABLE IF EXISTS pyspark_bucket")
+
     def test_row_should_be_read_only(self):
         row = Row(a=1, b=2)
         self.assertEqual(1, row.a)
@@ -2234,8 +2240,6 @@ class SQLTests(ReusedPySparkTestCase):
             .sortBy("y", "z")
             .mode("overwrite").saveAsTable("pyspark_bucket"))
         self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
-
-        self.spark.sql("DROP TABLE IF EXISTS pyspark_bucket")
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
