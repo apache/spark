@@ -264,6 +264,36 @@ head(arrange(waiting_counts, desc(waiting_counts$count)))
 {% endhighlight %}
 </div>
 
+In addition to standard aggregations, SparkR supports [OLAP cube](https://en.wikipedia.org/wiki/OLAP_cube) operators `cube`:
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+head(agg(cube(df, "cyl", "disp", "gear"), avg(df$mpg)))
+##  cyl  disp gear avg(mpg)
+##1  NA 140.8    4     22.8
+##2   4  75.7    4     30.4
+##3   8 400.0    3     19.2
+##4   8 318.0    3     15.5
+##5  NA 351.0   NA     15.8
+##6  NA 275.8   NA     16.3
+{% endhighlight %}
+</div>
+
+and `rollup`:
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+head(agg(rollup(df, "cyl", "disp", "gear"), avg(df$mpg)))
+##  cyl  disp gear avg(mpg)
+##1   4  75.7    4     30.4
+##2   8 400.0    3     19.2
+##3   8 318.0    3     15.5
+##4   4  78.7   NA     32.4
+##5   8 304.0    3     15.2
+##6   4  79.0   NA     27.3
+{% endhighlight %}
+</div>
+
 ### Operating on Columns
 
 SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.

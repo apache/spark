@@ -483,6 +483,10 @@ setGeneric("createOrReplaceTempView",
 # @export
 setGeneric("crossJoin", function(x, y) { standardGeneric("crossJoin") })
 
+#' @rdname cube
+#' @export
+setGeneric("cube", function(x, ...) { standardGeneric("cube") })
+
 #' @rdname dapply
 #' @export
 setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
@@ -630,6 +634,10 @@ setGeneric("sample",
            function(x, withReplacement, fraction, seed) {
              standardGeneric("sample")
            })
+
+#' @rdname rollup
+#' @export
+setGeneric("rollup", function(x, ...) { standardGeneric("rollup") })
 
 #' @rdname sample
 #' @export

@@ -1321,7 +1321,7 @@ setMethod("toRDD",
 #' Groups the SparkDataFrame using the specified columns, so we can run aggregation on them.
 #'
 #' @param x a SparkDataFrame.
-#' @param ... variable(s) (character names(s) or Column(s)) to group on.
+#' @param ... character name(s) or Column(s) to group on.
 #' @return A GroupedData.
 #' @family SparkDataFrame functions
 #' @aliases groupBy,SparkDataFrame-method
@@ -1337,6 +1337,7 @@ setMethod("toRDD",
 #'   agg(groupBy(df, "department", "gender"), salary="avg", "age" -> "max")
 #' }
 #' @note groupBy since 1.4.0
+#' @seealso \link{agg}, \link{cube}, \link{rollup}
 setMethod("groupBy",
            signature(x = "SparkDataFrame"),
            function(x, ...) {
@@ -3641,4 +3642,74 @@ setMethod("checkpoint",
           function(x, eager = TRUE) {
             df <- callJMethod(x@sdf, "checkpoint", as.logical(eager))
             dataFrame(df)
+          })
+
+#' cube
+#'
+#' Create a multi-dimensional cube for the SparkDataFrame using the specified columns.
+#'
+#' If grouping expression is missing \code{cube} creates a single global aggregate and is equivalent to
+#' direct application of \link{agg}.
+#'
+#' @param x a SparkDataFrame.
+#' @param ... character name(s) or Column(s) to group on.
+#' @return A GroupedData.
+#' @family SparkDataFrame functions
+#' @aliases cube,SparkDataFrame-method
+#' @rdname cube
+#' @name cube
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(mtcars)
+#' mean(cube(df, "cyl", "gear", "am"), "mpg")
+#'
+#' # Following calls are equivalent
+#' agg(cube(carsDF), mean(carsDF$mpg))
+#' agg(carsDF, mean(carsDF$mpg))
+#' }
+#' @note cube since 2.3.0
+#' @seealso \link{agg}, \link{groupBy}, \link{rollup}
+setMethod("cube",
+          signature(x = "SparkDataFrame"),
+          function(x, ...) {
+            cols <- list(...)
+            jcol <- lapply(cols, function(x) if (class(x) == "Column") x@jc else column(x)@jc)
+            sgd <- callJMethod(x@sdf, "cube", jcol)
+            groupedData(sgd)
+          })
+
+#' rollup
+#'
+#' Create a multi-dimensional rollup for the SparkDataFrame using the specified columns.
+#'
+#' If grouping expression is missing \code{rollup} creates a single global aggregate and is equivalent to
+#' direct application of \link{agg}.
+#'
+#' @param x a SparkDataFrame.
+#' @param ... character name(s) or Column(s) to group on.
+#' @return A GroupedData.
+#' @family SparkDataFrame functions
+#' @aliases rollup,SparkDataFrame-method
+#' @rdname rollup
+#' @name rollup
+#' @export
+#' @examples
+#'\dontrun{
+#' df <- createDataFrame(mtcars)
+#' mean(rollup(df, "cyl", "gear", "am"), "mpg")
+#'
+#' # Following calls are equivalent
+#' agg(rollup(carsDF), mean(carsDF$mpg))
+#' agg(carsDF, mean(carsDF$mpg))
+#' }
+#' @note rollup since 2.3.0
+#' @seealso \link{agg}, \link{cube}, \link{groupBy}
+setMethod("rollup",
+          signature(x = "SparkDataFrame"),
+          function(x, ...) {
+            cols <- list(...)
+            jcol <- lapply(cols, function(x) if (class(x) == "Column") x@jc else column(x)@jc)
+            sgd <- callJMethod(x@sdf, "rollup", jcol)
+            groupedData(sgd)
           })
