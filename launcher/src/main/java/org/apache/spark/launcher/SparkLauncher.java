@@ -126,7 +126,7 @@ public class SparkLauncher {
    * It tries stop/kill Spark Application if launching process goes away.
    *
    * @since 2.2.0
-   * @param autoShutdown Flag for shutdown Spark Application if launcher process goes away.
+   * @param autoShutdown Whether to shut down the Spark application if the launcher process goes away.
    * @return This launcher.
    */
   public SparkLauncher autoShutdown(boolean autoShutdown) {
@@ -139,7 +139,8 @@ public class SparkLauncher {
    * this feature is currently supported only for YARN cluster deployment mode.
    *
    * @since 2.2.0
-   * @param launchAsThread Flag for launching app as a thread.
+   * @param launchAsThread Whether to launch the Spark application in a new thread in
+   *                       the same process.
    * @return This launcher.
    */
   public SparkLauncher launchAsThread(boolean launchAsThread) {
@@ -559,7 +560,7 @@ public class SparkLauncher {
   public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
     if (launchAsThread) {
       checkArgument(builder.childEnv.isEmpty(),
-        "Environment variables are not supported while launching as Thread");
+        "Custom environment variables are not supported while launching in a Thread");
       return startApplicationAsThread(listeners);
     }
     return startApplicationAsChildProc(listeners);

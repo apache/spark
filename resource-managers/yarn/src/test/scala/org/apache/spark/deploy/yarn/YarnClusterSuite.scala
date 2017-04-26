@@ -224,9 +224,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("monitor app using launcher library for thread with auto shutdown") {
-    var handle : SparkAppHandle = null
+    var handle = launchSparkAppWithConf(true, true, "cluster")
     try {
-      handle = launchSparkAppWithConf(true, true, "cluster")
       handle.disconnect()
       val applicationId = ConverterUtils.toApplicationId(handle.getAppId)
       val yarnClient: YarnClient = getYarnClient
@@ -241,9 +240,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("monitor app using launcher library for thread without auto shutdown") {
-    var handle : SparkAppHandle = null
+    var handle = launchSparkAppWithConf(true, false, "cluster")
     try {
-      handle = launchSparkAppWithConf(true, false, "cluster")
       handle.disconnect()
       val applicationId = ConverterUtils.toApplicationId(handle.getAppId)
       val yarnClient: YarnClient = getYarnClient

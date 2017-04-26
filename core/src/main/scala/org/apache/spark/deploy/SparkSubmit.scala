@@ -723,7 +723,7 @@ object SparkSubmit extends CommandLineUtils {
     }
 
     val sparkAppMainMethod = mainClass.getMethods().find(_.getName == "sparkMain")
-    val childSparkConf = sysProps.filter{ p => p._1.startsWith("spark.") }.toMap
+    val childSparkConf = sysProps.filter { p => p._1.startsWith("spark.") }.toMap
 
     // If running a SparkApp we can explicitly pass in the confs separately.
     // If we aren't running a SparkApp they get passed via the system properties.
