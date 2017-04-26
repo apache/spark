@@ -46,6 +46,7 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
