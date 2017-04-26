@@ -563,7 +563,7 @@ class DataFrameWriter(OptionUtils):
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
         return self
 
-    @since(2.2)
+    @since(2.3)
     def bucketBy(self, numBuckets, *cols):
         """Buckets the output by the given columns on the file system.
 
@@ -593,7 +593,7 @@ class DataFrameWriter(OptionUtils):
         self._jwrite = self._jwrite.bucketBy(numBuckets, col, _to_seq(self._spark._sc, cols))
         return self
 
-    @since(2.2)
+    @since(2.3)
     def sortBy(self, *cols):
         """Sorts the output in each bucket by the given columns on the file system.
 
