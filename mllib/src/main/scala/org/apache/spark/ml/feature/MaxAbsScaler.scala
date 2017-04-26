@@ -21,13 +21,10 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
-import org.apache.spark.mllib.stat.Statistics
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -70,14 +67,40 @@ class MaxAbsScaler @Since("2.0.0") (@Since("2.0.0") override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): MaxAbsScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
-      case Row(v: Vector) => OldVectors.fromML(v)
-    }
-    val summary = Statistics.colStats(input)
-    val minVals = summary.min.toArray
-    val maxVals = summary.max.toArray
-    val n = minVals.length
-    val maxAbs = Array.tabulate(n) { i => math.max(math.abs(minVals(i)), math.abs(maxVals(i))) }
+
+    val maxAbs = dataset.select($(inputCol)).rdd.map {
+      row => row.getAs[Vector](0)
+    }.treeAggregate[Array[Double]](Array.emptyDoubleArray)(
+      seqOp = {
+        case (max, vec) if max.isEmpty =>
+          vec.toArray.map(math.abs)
+        case (max, vec) =>
+          require(max.length == vec.size,
+            s"Dimensions mismatch when adding new sample: ${max.length} != ${vec.size}")
+          vec.foreachActive {
+            case (i, v) if v != 0.0 =>
+              val av = math.abs(v)
+              if (av > max(i)) {
+                max(i) = av
+              }
+            case _ =>
+          }
+          max
+      }, combOp = {
+        case (max1, max2) if max1.isEmpty =>
+          max2
+        case (max1, max2) if max2.isEmpty =>
+          max1
+        case (max1, max2) =>
+          require(max1.length == max2.length,
+            s"Dimensions mismatch when merging: ${max1.length} != ${max2.length}")
+          for (i <- 0 until max1.length) {
+            max1(i) = math.max(max1(i), max2(i))
+          }
+          max1
+      })
+
+    require(maxAbs.nonEmpty, "Input dataset must be non-empty")
 
     copyValues(new MaxAbsScalerModel(uid, Vectors.dense(maxAbs)).setParent(this))
   }
