@@ -1036,7 +1036,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             BoundReference(index, partitionSchema(index).dataType, nullable = true)
         })
       clientPrunedPartitions.filter { p =>
-        boundPredicate(p.toRow(partitionSchema, defaultTimeZoneId))
+        boundPredicate.eval(p.toRow(partitionSchema, defaultTimeZoneId))
       }
     } else {
       client.getPartitions(catalogTable).map { part =>

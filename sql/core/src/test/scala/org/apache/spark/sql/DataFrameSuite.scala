@@ -24,6 +24,7 @@ import java.util.UUID
 
 import scala.util.Random
 
+import com.sun.net.httpserver.Authenticator.Retry
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
@@ -1702,5 +1703,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-19691 Calculating percentile of decimal column fails with ClassCastException") {
     val df = spark.range(1).selectExpr("CAST(id as DECIMAL) as x").selectExpr("percentile(x, 0.5)")
     checkAnswer(df, Row(BigDecimal(0.0)) :: Nil)
+  }
+
+  test("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
+    val N = 400
+    val rows = Seq(Row.fromSeq(Seq.fill(N)("string")))
+    val schema = StructType(Seq.tabulate(N)(i => StructField(s"_c$i", StringType)))
+    val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
+
+    val filter = (0 until N)
+      .foldLeft(lit(false))((e, index) => e.or(df.col(df.columns(index)) =!= "string"))
+    df.filter(filter).count
   }
 }
