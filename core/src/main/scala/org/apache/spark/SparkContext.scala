@@ -470,12 +470,25 @@ class SparkContext(config: SparkConf) extends Logging {
       files.foreach(addFile)
     }
 
-    _executorMemory = _conf.getOption("spark.executor.memory")
-      .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
-      .orElse(Option(System.getenv("SPARK_MEM"))
-      .map(warnSparkMem))
-      .map(Utils.memoryStringToMb)
-      .getOrElse(1024)
+    _executorMemory = {
+      val defaultMemory = 1024
+      val configuredMemory = _conf.getOption("spark.executor.memory")
+        .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
+        .orElse(Option(System.getenv("SPARK_MEM")).map(warnSparkMem))
+        .map(Utils.memoryStringToMb)
+      // In local-cluster mode, always use the slave memory specified in the master string
+      // In other modes, use the configured memory if it exists
+      master match {
+        case SparkMasterRegex.LOCAL_CLUSTER_REGEX(_, _, em) =>
+          if (configuredMemory.isDefined) {
+            logWarning(s"Ignoring explicit setting of executor" +
+              s"memory $configuredMemory in local-cluster mode")
+          }
+          em.toInt
+        case _ =>
+          configuredMemory.getOrElse(defaultMemory)
+      }
+    }
 
     // Convert java options to env vars as a work around
     // since we can't set env vars directly in sbt.
@@ -2732,14 +2745,8 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
-        // Check to make sure memory requested <= memoryPerSlave. Otherwise Spark will just hang.
         val memoryPerSlaveInt = memoryPerSlave.toInt
-        if (sc.executorMemory > memoryPerSlaveInt) {
-          throw new SparkException(
-            "Asked to launch cluster with %d MB RAM / worker but requested %d MB/worker".format(
-              memoryPerSlaveInt, sc.executorMemory))
-        }
-
+        assert(sc.executorMemory == memoryPerSlaveInt)
         val scheduler = new TaskSchedulerImpl(sc)
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt, sc.conf)
