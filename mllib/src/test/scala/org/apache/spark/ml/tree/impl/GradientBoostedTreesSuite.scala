@@ -34,6 +34,25 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
   import testImplicits._
 
+  test("evaluateEachIteration should work for 1000+ tree model (stress test)") {
+    // Mainly this test to
+    // prove the fix for SPARK-15858,
+    // and to confirm the discussion in SPARK-16920
+    val numIterations = 2000
+    val trainRdd = sc.parallelize(OldGBTSuite.trainData, 2).map(_.asML)
+    val validateRdd = sc.parallelize(OldGBTSuite.validateData, 2).map(_.asML)
+    val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
+      categoricalFeaturesInfo = Map.empty)
+    val boostingStrategy =
+      new BoostingStrategy(treeStrategy, SquaredError, numIterations, validationTol = 0.0)
+    val (trees, treeWeights) = GradientBoostedTrees.run(trainRdd, boostingStrategy, 0)
+
+    val evaluation = GradientBoostedTrees.evaluateEachIteration(validateRdd, trees, treeWeights,
+      SquaredError, Regression)
+
+    assert(evaluation.length == numIterations)
+  }
+
   test("runWithValidation stops early and performs better on a validation dataset") {
     // Set numIterations large enough so that it stops early.
     val numIterations = 20
