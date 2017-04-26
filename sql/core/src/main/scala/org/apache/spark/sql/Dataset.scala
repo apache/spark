@@ -240,10 +240,10 @@ class Dataset[T] private[sql](
    * @param _numRows Number of rows to show
    * @param truncate If set to more than 0, truncates strings to `truncate` characters and
    *                   all cells will be aligned right.
-   * @param extendedMode Enable expanded table formatting mode to print a column data per line.
+   * @param vertical If set to true, prints output rows vertically (one line per column value).
    */
   private[sql] def showString(
-      _numRows: Int, truncate: Int = 20, extendedMode: Boolean = false): String = {
+      _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
     val numRows = _numRows.max(0)
     val takeResult = toDF().take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
@@ -282,7 +282,7 @@ class Dataset[T] private[sql](
     // We set a minimum column width at '3'
     val minimumColWidth = 3
 
-    if (!extendedMode) {
+    if (!vertical) {
       // Initialise the width of each column to a minimum value
       val colWidths = Array.fill(numCols)(minimumColWidth)
 
@@ -695,7 +695,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def show(numRows: Int, truncate: Int): Unit = show(numRows, truncate, extendedMode = false)
+  def show(numRows: Int, truncate: Int): Unit = show(numRows, truncate, vertical = false)
 
   /**
    * Displays the Dataset in a tabular form. For example:
@@ -708,41 +708,46 @@ class Dataset[T] private[sql](
    *   1984  04    0.450090        0.483521
    * }}}
    *
-   * If `extendedMode` enabled, this command prints a column dat per line:
+   * If `vertical` enabled, this command prints output rows vertically (one line per column value)?
+   *
    * {{{
-   * -RECORD 0-----------------
-   *  c0  | 0.6988392500990668
-   *  c1  | 0.3035961718851606
-   *  c2  | 0.2446213804275899
-   *  c3  | 0.6132556607194246
-   *  c4  | 0.1904412430355646
-   *  c5  | 0.8856600775630444
-   * -RECORD 1-----------------
-   *  c0  | 0.3942727621020799
-   *  c1  | 0.6501707200059537
-   *  c2  | 0.2550059028276454
-   *  c3  | 0.9806662488156962
-   *  c4  | 0.8533897091838063
-   *  c5  | 0.3911189623246518
-   * -RECORD 2-----------------
-   *  c0  | 0.9024183805969801
-   *  c1  | 0.0242018765375147
-   *  c2  | 0.8508820250344251
-   *  c3  | 0.4593368817024575
-   *  c4  | 0.2216918145613194
-   *  c5  | 0.3756882647319614
+   * -RECORD 0-------------------
+   *  year            | 1980
+   *  month           | 12
+   *  AVG('Adj Close) | 0.503218
+   *  AVG('Adj Close) | 0.595103
+   * -RECORD 1-------------------
+   *  year            | 1981
+   *  month           | 01
+   *  AVG('Adj Close) | 0.523289
+   *  AVG('Adj Close) | 0.570307
+   * -RECORD 2-------------------
+   *  year            | 1982
+   *  month           | 02
+   *  AVG('Adj Close) | 0.436504
+   *  AVG('Adj Close) | 0.475256
+   * -RECORD 3-------------------
+   *  year            | 1983
+   *  month           | 03
+   *  AVG('Adj Close) | 0.410516
+   *  AVG('Adj Close) | 0.442194
+   * -RECORD 4-------------------
+   *  year            | 1984
+   *  month           | 04
+   *  AVG('Adj Close) | 0.450090
+   *  AVG('Adj Close) | 0.483521
    * }}}
    *
    * @param numRows Number of rows to show
    * @param truncate If set to more than 0, truncates strings to `truncate` characters and
    *                    all cells will be aligned right.
-   * @param extendedMode Enable expanded table formatting mode to print a column data per line.
+   * @param vertical If set to true, prints output rows vertically (one line per column value).
    * @group action
    * @since 2.3.0
    */
   // scalastyle:off println
-  def show(numRows: Int, truncate: Int, extendedMode: Boolean): Unit =
-    println(showString(numRows, truncate, extendedMode))
+  def show(numRows: Int, truncate: Int, vertical: Boolean): Unit =
+    println(showString(numRows, truncate, vertical))
   // scalastyle:on println
 
   /**
