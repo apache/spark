@@ -92,7 +92,8 @@ private[spark] object ApplicationsListResource {
           sparkUser = internalAttemptInfo.sparkUser,
           completed = internalAttemptInfo.completed
         )
-      }
+      },
+      appSparkVersion = org.apache.spark.SPARK_VERSION
     )
   }
 }

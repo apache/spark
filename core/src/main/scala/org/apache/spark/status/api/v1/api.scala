@@ -29,7 +29,8 @@ class ApplicationInfo private[spark](
     val maxCores: Option[Int],
     val coresPerExecutor: Option[Int],
     val memoryPerExecutorMB: Option[Int],
-    val attempts: Seq[ApplicationAttemptInfo])
+    val attempts: Seq[ApplicationAttemptInfo],
+    val appSparkVersion: String)
 
 class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
