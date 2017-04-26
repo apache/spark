@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.arrow
 
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -34,6 +34,7 @@ import org.json4s.JsonDSL._
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
