@@ -54,6 +54,8 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   extends RDD[(T, U)](sc, Nil)
   with Serializable {
 
+  logInfo("-------------> In Cartesian RDD initialize")
+
   val numPartitionsInRdd2 = rdd2.partitions.length
 
   override def getPartitions: Array[Partition] = {
@@ -72,6 +74,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
+    logInfo("-------------------> In Cartesian compute method")
     val currSplit = split.asInstanceOf[CartesianPartition]
     for (x <- rdd1.iterator(currSplit.s1, context);
          y <- getOrCacheBlock(rdd2, currSplit.s2, context, StorageLevel.MEMORY_AND_DISK))
