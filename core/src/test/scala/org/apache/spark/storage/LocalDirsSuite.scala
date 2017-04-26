@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.File
+import java.io.{File, IOException}
 
 import org.scalatest.BeforeAndAfter
 
@@ -51,4 +51,14 @@ class LocalDirsSuite extends SparkFunSuite with BeforeAndAfter {
     assert(new File(Utils.getLocalDir(conf)).exists())
   }
 
+  test("Utils.getLocalDir() throws an exception if any temporary directory cannot be retrieved") {
+    assert(!new File("/NONEXISTENT_DIR_ONE").exists())
+    assert(!new File("/NONEXISTENT_DIR_TWO").exists())
+    val conf = new SparkConf().set("spark.local.dir", "/NONEXISTENT_PATH_ONE,/NONEXISTENT_PATH_TWO")
+    val message = intercept[IOException] {
+      Utils.getLocalDir(conf)
+    }.getMessage
+    assert(message ===
+      "Failed to get a temp directory under [/NONEXISTENT_PATH_ONE,/NONEXISTENT_PATH_TWO].")
+  }
 }
