@@ -180,7 +180,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public boolean getBoolean(int ordinal) {
-      throw new UnsupportedOperationException();
+      return data.getBoolean(offset + ordinal);
     }
 
     @Override
@@ -188,7 +188,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public short getShort(int ordinal) {
-      throw new UnsupportedOperationException();
+      return data.getShort(offset + ordinal);
     }
 
     @Override
@@ -199,7 +199,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public float getFloat(int ordinal) {
-      throw new UnsupportedOperationException();
+      return data.getFloat(offset + ordinal);
     }
 
     @Override
