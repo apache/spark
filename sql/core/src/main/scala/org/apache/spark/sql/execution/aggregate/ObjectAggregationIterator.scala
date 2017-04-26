@@ -23,10 +23,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.{BaseOrdering, GenerateOrdering}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.KVIterator
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 class ObjectAggregationIterator(
@@ -71,6 +73,49 @@ class ObjectAggregationIterator(
   // A safe projection used to do deep clone of input rows to prevent false sharing.
   private[this] val safeProjection: Projection =
     FromUnsafeProjection(outputAttributes.map(_.dataType))
+
+  // For each buffer row field, keep a boolean flag to indicate if it stores object, and also keep
+  // its data type.
+  private val bufferRowFieldTypes: Array[(Boolean, DataType)] = aggregateFunctions.flatMap { func =>
+    val isTypedAggregate = func.isInstanceOf[TypedImperativeAggregate]
+    func.aggBufferSchema.map(_.dataType).map(isTypedAggregate -> _)
+  }
+
+  private def estimateBufferRowSize(row: InternalRow): Long = {
+    bufferRowFieldTypes.zipWithIndex.map { case ((isTyped, dataType), index) =>
+      if (isTyped) {
+        SizeEstimator.estimate(row.get(index, null))
+      } else {
+        estimateDataSize(row.get(index, dataType), dataType)
+      }
+    }.sum
+  }
+
+  private def estimateDataSize(data: Any, dt: DataType): Long = {
+    if (data == null) {
+      0L
+    } else {
+      dt match {
+        case StringType => data.asInstanceOf[UTF8String].numBytes()
+        case BinaryType => data.asInstanceOf[Array[Byte]].length
+        case s: StructType =>
+          val nestedRow = data.asInstanceOf[InternalRow]
+          s.zipWithIndex.map { case (field, index) =>
+            estimateDataSize(nestedRow.get(index, field.dataType), field.dataType)
+          }.sum
+        case ArrayType(et, _) =>
+          val array = data.asInstanceOf[ArrayData]
+          (0 until array.numElements).map { index =>
+            estimateDataSize(array.get(index, et), et)
+          }.sum
+        case MapType(kt, vt, _) =>
+          val map = data.asInstanceOf[MapData]
+          estimateDataSize(map.keyArray(), ArrayType(kt)) +
+            estimateDataSize(map.valueArray(), ArrayType(vt))
+        case other => other.defaultSize
+      }
+    }
+  }
 
   /**
    * Start processing input rows.
@@ -119,14 +164,16 @@ class ObjectAggregationIterator(
   }
 
   private def getAggregationBufferByKey(
-    hashMap: ObjectAggregationMap, groupingKey: UnsafeRow): InternalRow = {
+    hashMap: ObjectAggregationMap, groupingKey: UnsafeRow): (InternalRow, Long, Int) = {
     var aggBuffer = hashMap.getAggregationBuffer(groupingKey)
 
     if (aggBuffer == null) {
-      aggBuffer = createNewAggregationBuffer()
-      hashMap.putAggregationBuffer(groupingKey.copy(), aggBuffer)
+      val newBuffer = createNewAggregationBuffer()
+      aggBuffer = (newBuffer, estimateBufferRowSize(newBuffer), 0)
+      if (!hashMap.putAggregationBuffer(groupingKey.copy(), aggBuffer)) {
+        aggBuffer = null
+      }
     }
-
     aggBuffer
   }
 
@@ -136,7 +183,7 @@ class ObjectAggregationIterator(
   // spills are merged together for sort-based aggregation.
   private def processInputs(): Unit = {
     // In-memory map to store aggregation buffer for hash-based aggregation.
-    val hashMap = new ObjectAggregationMap()
+    val hashMap = new ObjectAggregationMap(TaskContext.get().taskMemoryManager())
 
     // If in-memory map is unable to stores all aggregation buffer, fallback to sort-based
     // aggregation backed by sorted physical storage.
@@ -144,8 +191,7 @@ class ObjectAggregationIterator(
 
     if (groupingExpressions.isEmpty) {
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
-      val groupingKey = groupingProjection.apply(null)
-      val buffer: InternalRow = getAggregationBufferByKey(hashMap, groupingKey)
+      val buffer: InternalRow = createNewAggregationBuffer()
       while (inputRows.hasNext) {
         val newInput = safeProjection(inputRows.next())
         processRow(buffer, newInput)
@@ -154,21 +200,19 @@ class ObjectAggregationIterator(
       while (inputRows.hasNext && !sortBased) {
         val newInput = safeProjection(inputRows.next())
         val groupingKey = groupingProjection.apply(newInput)
-        val buffer: InternalRow = getAggregationBufferByKey(hashMap, groupingKey)
-        processRow(buffer, newInput)
-
-        // The the hash map gets too large, makes a sorted spill and clear the map.
-        if (hashMap.size >= fallbackCountThreshold) {
-          logInfo(
-            s"Aggregation hash map reaches threshold " +
-              s"capacity ($fallbackCountThreshold entries), spilling and falling back to sort" +
-              s" based aggregation. You may change the threshold by adjust option " +
-              SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key
-          )
-
+        val buffer: (InternalRow, Long, Int) = getAggregationBufferByKey(hashMap, groupingKey)
+        if (buffer == null) {
           // Falls back to sort-based aggregation
           sortBased = true
-
+        } else {
+          processRow(buffer._1, newInput)
+          if (buffer._3 == 10) {
+            val newSize = estimateBufferRowSize(buffer._1)
+            if (!hashMap.updateSize(groupingKey, newSize)) {
+              // Falls back to sort-based aggregation
+              sortBased = true
+            }
+          }
         }
       }
 
