@@ -75,29 +75,6 @@ public class LevelDBSuite {
   }
 
   @Test
-  public void testStringWriteReadDelete() throws Exception {
-    String string = "testString";
-    byte[] key = string.getBytes(UTF_8);
-    testReadWriteDelete(key, string);
-  }
-
-  @Test
-  public void testIntWriteReadDelete() throws Exception {
-    int value = 42;
-    byte[] key = "key".getBytes(UTF_8);
-    testReadWriteDelete(key, value);
-  }
-
-  @Test
-  public void testSimpleTypeWriteReadDelete() throws Exception {
-    byte[] key = "testKey".getBytes(UTF_8);
-    CustomType1 t = new CustomType1();
-    t.id = "id";
-    t.name = "name";
-    testReadWriteDelete(key, t);
-  }
-
-  @Test
   public void testObjectWriteReadDelete() throws Exception {
     CustomType1 t = new CustomType1();
     t.key = "key";
@@ -266,26 +243,6 @@ public class LevelDBSuite {
     }
 
     return count;
-  }
-
-  private <T> void testReadWriteDelete(byte[] key, T value) throws Exception {
-    try {
-      db.get(key, value.getClass());
-      fail("Expected exception for non-existent key.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
-
-    db.put(key, value);
-    assertEquals(value, db.get(key, value.getClass()));
-
-    db.delete(key);
-    try {
-      db.get(key, value.getClass());
-      fail("Expected exception for deleted key.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
   }
 
   public static class IntKeyType {

@@ -25,21 +25,21 @@ import java.util.Map;
  * Abstraction for a local key/value store for storing app data.
  *
  * <p>
- * Use {@link KVStoreBuilder} to create an instance. There are two main features provided by the
- * implementations of this interface:
+ * There are two main features provided by the implementations of this interface:
  * </p>
  *
- * <ul>
- *   <li>serialization: this feature is not optional; data will be serialized to and deserialized
- *   from the underlying data store using a {@link KVStoreSerializer}, which can be customized by
- *   the application. The serializer is based on Jackson, so it supports all the Jackson annotations
- *   for controlling the serialization of app-defined types.</li>
+ * <h3>Serialization</h3>
  *
- *   <li>key management: by using {@link #read(Class, Object)} and {@link #write(Class, Object)},
- *   applications can leave key management to the implementation. For applications that want to
- *   manage their own keys, the {@link #get(byte[], Class)} and {@link #set(byte[], Object)} methods
- *   are available.</li>
- * </ul>
+ * <p>
+ * Data will be serialized to and deserialized from the underlying data store using a
+ * {@link KVStoreSerializer}, which can be customized by the application. The serializer is
+ * based on Jackson, so it supports all the Jackson annotations for controlling the serialization
+ * of app-defined types.
+ * </p>
+ *
+ * <p>
+ * Data is also automatically compressed to save disk space.
+ * </p>
  *
  * <h3>Automatic Key Management</h3>
  *
@@ -77,26 +77,6 @@ public interface KVStore extends Closeable {
    * Writes the given value in the store metadata key.
    */
   void setMetadata(Object value) throws Exception;
-
-  /**
-   * Returns the value of a specific key, deserialized to the given type.
-   */
-  <T> T get(byte[] key, Class<T> klass) throws Exception;
-
-  /**
-   * Write a single key directly to the store, atomically.
-   */
-  void put(byte[] key, Object value) throws Exception;
-
-  /**
-   * Removes a key from the store.
-   */
-  void delete(byte[] key) throws Exception;
-
-  /**
-   * Returns an iterator that will only list values with keys starting with the given prefix.
-   */
-  <T> KVStoreIterator<T> iterator(byte[] prefix, Class<T> klass) throws Exception;
 
   /**
    * Read a specific instance of an object.

@@ -109,8 +109,7 @@ public class LevelDB implements KVStore {
     }
   }
 
-  @Override
-  public <T> T get(byte[] key, Class<T> klass) throws Exception {
+  <T> T get(byte[] key, Class<T> klass) throws Exception {
     byte[] data = db().get(key);
     if (data == null) {
       throw new NoSuchElementException(new String(key, UTF_8));
@@ -118,20 +117,9 @@ public class LevelDB implements KVStore {
     return serializer.deserialize(data, klass);
   }
 
-  @Override
-  public void put(byte[] key, Object value) throws Exception {
+  private void put(byte[] key, Object value) throws Exception {
     Preconditions.checkArgument(value != null, "Null values are not allowed.");
     db().put(key, serializer.serialize(value));
-  }
-
-  @Override
-  public void delete(byte[] key) throws Exception {
-    db().delete(key);
-  }
-
-  @Override
-  public <T> KVStoreIterator<T> iterator(byte[] prefix, Class<T> klass) throws Exception {
-    throw new UnsupportedOperationException();
   }
 
   @Override

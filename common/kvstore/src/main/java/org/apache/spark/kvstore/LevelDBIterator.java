@@ -43,24 +43,6 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   private T next;
   private boolean closed;
 
-  /**
-   * Creates a simple iterator over db keys.
-   */
-  LevelDBIterator(LevelDB db, byte[] keyPrefix, Class<T> type) throws Exception {
-    this.db = db;
-    this.ascending = true;
-    this.type = type;
-    this.ti = null;
-    this.index = null;
-    this.it = db.db().iterator();
-    this.indexKeyPrefix = keyPrefix;
-    this.end = null;
-    it.seek(keyPrefix);
-  }
-
-  /**
-   * Creates an iterator for indexed types (i.e., those whose keys are managed by the library).
-   */
   LevelDBIterator(LevelDB db, KVStoreView<T> params) throws Exception {
     this.db = db;
     this.ascending = params.ascending;
