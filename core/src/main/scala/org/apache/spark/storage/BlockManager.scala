@@ -699,15 +699,17 @@ private[spark] class BlockManager(
       return local
     }
     val remote = getRemoteValues[T](blockId)
-    if (cacheRemote) {
-      remote.foreach{ blockResult =>
-        putIterator(blockId, blockResult.data, storageLevel)
-      }
+    remote match {
+      case Some(blockResult) =>
+        logInfo(s"Found block $blockId remotely")
+        if (cacheRemote) {
+          putIterator(blockId, blockResult.data, storageLevel)
+          logInfo(s"Cache bock $blockId fetched from remotely")
+        }
+        return remote
+      case None => _
     }
-    if (remote.isDefined) {
-      logInfo(s"Found block $blockId remotely")
-      return remote
-    }
+
     None
   }
 
