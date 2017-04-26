@@ -185,34 +185,33 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
     >>> bdf = sc.parallelize([
-    ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
-    ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
-    >>> blor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
+    ...     Row(label=1.0, weight=1.0, features=Vectors.dense(0.0, 5.0)),
+    ...     Row(label=0.0, weight=2.0, features=Vectors.dense(1.0, 2.0)),
+    ...     Row(label=1.0, weight=3.0, features=Vectors.dense(2.0, 1.0)),
+    ...     Row(label=0.0, weight=4.0, features=Vectors.dense(3.0, 3.0))]).toDF()
+    >>> blor = LogisticRegression(regParam=0.01, weightCol="weight")
     >>> blorModel = blor.fit(bdf)
     >>> blorModel.coefficients
-    DenseVector([5.4...])
+    DenseVector([-1.080..., -0.646...])
     >>> blorModel.intercept
-    -2.63...
-    >>> mdf = sc.parallelize([
-    ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
-    ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], [])),
-    ...     Row(label=2.0, weight=2.0, features=Vectors.dense(3.0))]).toDF()
-    >>> mlor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight",
-    ...     family="multinomial")
+    3.112...
+    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
+    >>> mdf = spark.read.format("libsvm").load(data_path)
+    >>> mlor = LogisticRegression(regParam=0.1, elasticNetParam=1.0, family="multinomial")
     >>> mlorModel = mlor.fit(mdf)
     >>> mlorModel.coefficientMatrix
-    DenseMatrix(3, 1, [-2.3..., 0.2..., 2.1...], 1)
+    SparseMatrix(3, 4, [0, 1, 2, 3], [3, 2, 1], [1.87..., -2.75..., -0.50...], 1)
     >>> mlorModel.interceptVector
-    DenseVector([2.1..., 0.6..., -2.8...])
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
+    DenseVector([0.04..., -0.42..., 0.37...])
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 1.0))]).toDF()
     >>> result = blorModel.transform(test0).head()
     >>> result.prediction
-    0.0
+    1.0
     >>> result.probability
-    DenseVector([0.99..., 0.00...])
+    DenseVector([0.02..., 0.97...])
     >>> result.rawPrediction
-    DenseVector([8.12..., -8.12...])
-    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
+    DenseVector([-3.54..., 3.54...])
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
     >>> blorModel.transform(test1).head().prediction
     1.0
     >>> blor.setParams("vector")
@@ -222,8 +221,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> lr_path = temp_path + "/lr"
     >>> blor.save(lr_path)
     >>> lr2 = LogisticRegression.load(lr_path)
-    >>> lr2.getMaxIter()
-    5
+    >>> lr2.getRegParam()
+    0.01
     >>> model_path = temp_path + "/lr_model"
     >>> blorModel.save(model_path)
     >>> model2 = LogisticRegressionModel.load(model_path)
@@ -1480,31 +1479,33 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> df = sc.parallelize([
-    ...     Row(label=0.0, features=Vectors.dense(1.0, 0.8)),
-    ...     Row(label=1.0, features=Vectors.sparse(2, [], [])),
-    ...     Row(label=2.0, features=Vectors.dense(0.5, 0.5))]).toDF()
-    >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
+    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
+    >>> df = spark.read.format("libsvm").load(data_path)
+    >>> lr = LogisticRegression(regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
-    >>> [x.coefficients for x in model.models]
-    [DenseVector([4.9791, 2.426]), DenseVector([-4.1198, -5.9326]), DenseVector([-3.314, 5.2423])]
+    >>> model.models[0].coefficients
+    DenseVector([0.5..., -1.0..., 3.4..., 4.2...])
+    >>> model.models[1].coefficients
+    DenseVector([-2.1..., 3.1..., -2.6..., -2.3...])
+    >>> model.models[2].coefficients
+    DenseVector([0.3..., -3.4..., 1.0..., -1.1...])
     >>> [x.intercept for x in model.models]
-    [-5.06544..., 2.30341..., -1.29133...]
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0))]).toDF()
+    [-2.7..., -2.5..., -1.3...]
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0, 1.0, 1.0))]).toDF()
     >>> model.transform(test0).head().prediction
-    1.0
-    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
-    >>> model.transform(test1).head().prediction
     0.0
-    >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4))]).toDF()
-    >>> model.transform(test2).head().prediction
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(4, [0], [1.0]))]).toDF()
+    >>> model.transform(test1).head().prediction
     2.0
+    >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4, 0.3, 0.2))]).toDF()
+    >>> model.transform(test2).head().prediction
+    0.0
     >>> model_path = temp_path + "/ovr_model"
     >>> model.save(model_path)
     >>> model2 = OneVsRestModel.load(model_path)
     >>> model2.transform(test0).head().prediction
-    1.0
+    0.0
 
     .. versionadded:: 2.0.0
     """
