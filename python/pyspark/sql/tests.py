@@ -2503,7 +2503,7 @@ class ArrowTests(ReusedPySparkTestCase):
         def mkdt(*args):
             class NaiveTZ(tzinfo):
                 """
-                Force Spark to store internal value as offset to UTC, not local time
+                This will have Spark store internal value as UTC, not local time
                 """
                 def utcoffset(self, date_time):
                     return None

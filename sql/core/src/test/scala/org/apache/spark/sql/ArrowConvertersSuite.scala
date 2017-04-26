@@ -27,6 +27,7 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.file.json.JsonFileReader
 import org.apache.arrow.vector.util.Validator
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
@@ -92,8 +93,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   }
 
   // TODO: Not currently supported in Arrow JSON reader
-  ignore("date conversion") {
-    // collectAndValidate(dateTimeData)
+  test("date conversion") {
+    collectAndValidate(dateData)
   }
 
   // TODO: Not currently supported in Arrow JSON reader
@@ -362,23 +363,25 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
     val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
     val data = Seq(ts1, ts2)
-    val schema = new JSONSchema(Seq(new TimestampType("c_timestamp")))
+    val schema = new JSONSchema(Seq(new TimestampType("timestamp")))
+    val us_data = data.map(_.getTime * 1000)  // convert to microseconds
     val columns = Seq(
-      new PrimitiveColumn("c_timestamp", data.length, data.map(_ => true), data.map(_.getTime)))
+      new PrimitiveColumn("timestamp", data.length, data.map(_ => true), us_data))
     val batch = new JSONRecordBatch(data.length, columns)
-    DataTuple(data.toDF("c_timestamp"), new JSONFile(schema, Seq(batch)), "timestampData.json")
+    DataTuple(data.toDF("timestamp"), new JSONFile(schema, Seq(batch)), "timestampData.json")
   }
 
   private def dateData: DataTuple = {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
     val d1 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
-    val d2 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
-    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
-    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
-    val df = Seq((d1, sdf.format(d1), ts1), (d2, sdf.format(d2), ts2))
-      .toDF("a_date", "b_string", "c_timestamp")
-    val jsonFile = new JSONFile(new JSONSchema(Seq.empty[DataType]), Seq.empty[JSONRecordBatch])
-    DataTuple(df, jsonFile, "dateData.json")
+    val d2 = new Date(sdf.parse("2016-05-09 13:10:15.000 UTC").getTime)
+    val data = Seq(d1, d2)
+    val day_data = data.map(d => DateTimeUtils.millisToDays(d.getTime))
+    val schema = new JSONSchema(Seq(new DateType("date")))
+    val columns = Seq(
+        new PrimitiveColumn("date", data.length, data.map(_ => true), day_data))
+    val batch = new JSONRecordBatch(data.length, columns)
+    DataTuple(data.toDF("date"), new JSONFile(schema, Seq(batch)), "dateData.json")
   }
 
   /**
@@ -489,6 +492,15 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   private class StringType(name: String, nullable: Boolean)
     extends BinaryType(name, nullable = nullable) {
     override def _get_type: JObject = JObject("name" -> JString("utf8"))
+  }
+
+  private class DateType(name: String) extends PrimitiveType(name, nullable = true) {
+    override val bit_width = 32
+    override def _get_type: JObject = {
+      JObject(
+        "name" -> "date",
+        "unit" -> "DAY")
+    }
   }
 
   private class TimestampType(name: String) extends PrimitiveType(name, nullable = true) {
