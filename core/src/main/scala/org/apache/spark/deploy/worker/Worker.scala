@@ -103,6 +103,7 @@ private[deploy] class Worker(
   private[worker] var activeMasterWebUiUrl : String = ""
   private val workerUri = rpcEnv.uriOf(systemName, rpcEnv.address, endpointName)
   private var registered = false
+  private var hasRegisteredBefore = false
   private var connected = false
   private val workerId = generateWorkerId()
   private val sparkHome =
@@ -358,6 +359,10 @@ private[deploy] class Worker(
         logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
         registered = true
         changeMaster(masterRef, masterWebUiUrl)
+        if (hasRegisteredBefore) {
+          return
+        }
+        hasRegisteredBefore = true
         forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
             self.send(SendHeartbeat)
