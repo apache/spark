@@ -2270,8 +2270,8 @@ should be included on Spark's classpath:
 * `hdfs-site.xml`, which provides default behaviors for the HDFS client.
 * `core-site.xml`, which sets the default filesystem name.
 
-The location of these configuration files varies across CDH and HDP versions, but
-a common location is inside of `/etc/hadoop/conf`. Some tools, such as Cloudera Manager, create
+The location of these configuration files varies across Hadoop versions, but
+a common location is inside of `/etc/hadoop/conf`. Some tools create
 configurations on-the-fly, but offer a mechanisms to download copies of them.
 
 To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/spark-env.sh`
