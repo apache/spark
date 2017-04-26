@@ -221,6 +221,6 @@ struct<(5 % 3):int>
 -- !query 27
 select pmod(-7, 3)
 -- !query 27 schema
-struct<pmod(-7, 3):int>
+struct<pmod(-7 3):int>
 -- !query 27 output
 2

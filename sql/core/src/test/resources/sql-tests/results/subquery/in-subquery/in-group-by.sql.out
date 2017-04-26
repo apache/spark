@@ -209,7 +209,7 @@ WHERE  t1b IN (SELECT Min(t2b)
                       AND t1c = t2c
                GROUP  BY t2a)
 -- !query 11 schema
-struct<count(DISTINCT t1a, t1b, t1c, t1d, t1e, t1f, t1g, t1h, t1i):bigint>
+struct<count(DISTINCT t1a t1b t1c t1d t1e t1f t1g t1h t1i):bigint>
 -- !query 11 output
 1
 

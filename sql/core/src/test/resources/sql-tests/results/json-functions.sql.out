@@ -34,7 +34,7 @@ Usage: to_json(expr[, options]) - Returns a json string with a given struct valu
 -- !query 2
 select to_json(named_struct('a', 1, 'b', 2))
 -- !query 2 schema
-struct<structstojson(named_struct(a, 1, b, 2)):string>
+struct<structstojson(named_struct(a 1 b 2)):string>
 -- !query 2 output
 {"a":1,"b":2}
 
@@ -42,7 +42,7 @@ struct<structstojson(named_struct(a, 1, b, 2)):string>
 -- !query 3
 select to_json(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'))
 -- !query 3 schema
-struct<structstojson(named_struct(time, to_timestamp('2015-08-26', 'yyyy-MM-dd'))):string>
+struct<structstojson(named_struct(time to_timestamp('2015-08-26' 'yyyy-MM-dd'))):string>
 -- !query 3 output
 {"time":"26/08/2015"}
 
@@ -50,7 +50,7 @@ struct<structstojson(named_struct(time, to_timestamp('2015-08-26', 'yyyy-MM-dd')
 -- !query 4
 select to_json(array(named_struct('a', 1, 'b', 2)))
 -- !query 4 schema
-struct<structstojson(array(named_struct(a, 1, b, 2))):string>
+struct<structstojson(array(named_struct(a 1 b 2))):string>
 -- !query 4 output
 [{"a":1,"b":2}]
 

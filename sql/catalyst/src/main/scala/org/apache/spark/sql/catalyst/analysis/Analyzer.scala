@@ -488,8 +488,16 @@ class Analyzer(
         val singleAgg = aggregates.size == 1
         def outputName(value: Literal, aggregate: Expression): String = {
           val utf8Value = Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
-          val stringValue = Option(utf8Value).map(_.toString).getOrElse("null")
-          if (singleAgg) stringValue else stringValue + "_" + generateAliasName(aggregate)
+          val stringValue: String = Option(utf8Value).map(_.toString).getOrElse("null")
+          if (singleAgg) {
+            stringValue
+          } else {
+            val suffix = aggregate match {
+              case n: NamedExpression => n.name
+              case _ => generateAliasName(aggregate)
+            }
+            stringValue + "_" + suffix
+          }
         }
         if (aggregates.forall(a => PivotFirst.supportsDataType(a.dataType))) {
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
