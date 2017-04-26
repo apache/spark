@@ -826,7 +826,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("showString(negative), vertical = true") {
-    val expectedAnswer = "only showing top 0 rows\n"
+    val expectedAnswer = "(0 rows)\n"
     assert(testData.select($"*").showString(-1, vertical = true) === expectedAnswer)
   }
 
@@ -841,7 +841,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("showString(0), vertical = true") {
-    val expectedAnswer = "only showing top 0 rows\n"
+    val expectedAnswer = "(0 rows)\n"
     assert(testData.select($"*").showString(0, vertical = true) === expectedAnswer)
   }
 
@@ -961,7 +961,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-7327 show with empty dataFrame, vertical = true") {
-    assert(testData.select($"*").filter($"key" < 0).showString(1, vertical = true) === "")
+    assert(testData.select($"*").filter($"key" < 0).showString(1, vertical = true) === "(0 rows)\n")
   }
 
   test("SPARK-18350 show with session local timezone") {
