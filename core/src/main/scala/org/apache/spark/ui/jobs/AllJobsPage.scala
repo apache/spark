@@ -221,7 +221,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       jobs: Seq[JobUIData],
       killEnabled: Boolean): Seq[Node] = {
     // stripXSS is called to remove suspicious characters used in XSS attacks
-    val allParameters = request.getParameterMap.asScala.toMap.mapValues(UIUtils.stripXSSArray)
+    val allParameters = request.getParameterMap.asScala.toMap.mapValues(_.map(UIUtils.stripXSS))
     val parameterOtherTable = allParameters.filterNot(_._1.startsWith(jobTag))
       .map(para => para._1 + "=" + para._2(0))
 
