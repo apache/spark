@@ -54,7 +54,8 @@ class LocalDirsSuite extends SparkFunSuite with BeforeAndAfter {
   test("Utils.getLocalDir() throws an exception if any temporary directory cannot be retrieved") {
     assert(!new File("/NONEXISTENT_DIR_ONE").exists())
     assert(!new File("/NONEXISTENT_DIR_TWO").exists())
-    val conf = new SparkConf().set("spark.local.dir", "/NONEXISTENT_PATH_ONE,/NONEXISTENT_PATH_TWO")
+    val conf = new SparkConf(false)
+      .set("spark.local.dir", "/NONEXISTENT_PATH_ONE,/NONEXISTENT_PATH_TWO")
     val message = intercept[IOException] {
       Utils.getLocalDir(conf)
     }.getMessage
