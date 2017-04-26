@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
-import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
+import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, LBFGSB => BreezeLBFGSB, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -32,7 +32,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.linalg.BLAS._
-import org.apache.spark.ml.optim.LBFGSB
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -622,7 +621,7 @@ class LogisticRegression @Since("1.2.0") (
               }
               i += 1
             }
-            new LBFGSB(BDV[Double](lowerBound), BDV[Double](upperBound), $(maxIter), 10, $(tol))
+            new BreezeLBFGSB(BDV[Double](lowerBound), BDV[Double](upperBound), $(maxIter), 10, $(tol))
           } else {
             new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
           }
