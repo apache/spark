@@ -170,8 +170,38 @@ class Column(object):
     __le__ = _bin_op("leq")
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
-    eqNullSafe = _bin_op("eqNullSafe",
-                         "Equality test that is safe for null values.")
+
+    _eqNullSafe_doc = """
+    Equality test that is safe for null values.
+
+    :param other: a value or :class:`Column`
+
+    >>> from pyspark.sql import Row
+    >>> df1 = spark.createDataFrame([
+    ...     Row(id=1, value='foo'),
+    ...     Row(id=2, value=None)
+    ... ])
+    >>> df1.select(
+    ...     df1['value'] == 'foo', df1['value'].eqNullSafe('foo')
+    ... ).show()
+    +-------------+---------------+
+    |(value = foo)|(value <=> foo)|
+    +-------------+---------------+
+    |         true|           true|
+    |         null|          false|
+    +-------------+---------------+
+    >>> df2 = spark.createDataFrame([
+    ...     Row(value = 'bar'),
+    ...     Row(value = None)
+    ... ])
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()
+    0
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
+    1
+
+    .. versionadded:: 2.3.0
+    """
+    eqNullSafe = _bin_op("eqNullSafe", _eqNullSafe_doc)
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
