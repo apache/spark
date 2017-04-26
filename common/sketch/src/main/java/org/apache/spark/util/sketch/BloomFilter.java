@@ -81,6 +81,11 @@ public abstract class BloomFilter {
   public abstract long bitSize();
 
   /**
+   * Swamidass & Baldi (2007) approximation for number of items in a Bloom filter
+   */
+  public abstract double approxItems();
+
+  /**
    * Puts an item into this {@code BloomFilter}. Ensures that subsequent invocations of
    * {@linkplain #mightContain(Object)} with the same item will always return {@code true}.
    *

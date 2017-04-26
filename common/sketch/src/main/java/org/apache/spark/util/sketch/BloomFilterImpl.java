@@ -221,6 +221,62 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
   }
 
   @Override
+  public double approxSize() {
+    double m = bitSize();
+    return (m / numHashFunctions) * Math.log(1 - (bits.cardinality() / m));
+  }
+
+  /**
+   * Returns a new Bloom filter of the union of two Bloom filters.
+   * Unlike mergeInplace, this will not cause a mutation.
+   * Callers must ensure the bloom filters are appropriately sized to avoid saturating them.
+   *
+   * @throws IncompatibleUnionException if either are null, different classes, or different size or number of hash functions
+   */
+  public static BloomFilterImpl createUnionBloomFilter(BloomFilter bf1, BloomFilter bf2) throws IncompatibleUnionException {
+    // Duplicates the logic of `isCompatible` here to provide better error message.
+    if (bf1 == null || bf2 == null) {
+      throw new IncompatibleUnionException("Cannot union null bloom filters");
+    }
+
+    if (!(bf1 instanceof BloomFilterImpl)) {
+      throw new IncompatibleUnionException(
+          "Cannot union bloom filter of class " + bf1.getClass().getName()
+      );
+    } else if (!(bf2 instanceof BloomFilterImpl)) {
+      throw new IncompatibleUnionException(
+          "Cannot union bloom filter of class " + bf2.getClass().getName()
+      );
+    }
+
+    BloomFilterImpl bfImpl1 = (BloomFilterImpl) bf1;
+    BloomFilterImpl bfImpl2 = (BloomFilterImpl) bf2;
+
+    if (bfImpl1.bitSize() != bfImpl2.bitSize()) {
+      throw new IncompatibleUnionException("Cannot union bloom filters with different bit size");
+    }
+
+    if (bfImpl1.numHashFunctions != bfImpl2.numHashFunctions) {
+      throw new IncompatibleUnionException("Cannot union bloom filters with different number of hash functions");
+    }
+
+    BloomFilterImpl bfUnion = (BloomFilterImpl)BloomFilter.create(bf1.bitSize());
+
+    bfUnion.bits.putAll(bfImpl1.bits);
+    bfUnion.bits.putAll(bfImpl2.bits);
+    return bfUnion;
+  }
+
+  /**
+   * Swamidass & Baldi (2007) approximation for number of items in the intersection of two Bloom filters
+   */
+  public static double approxItemsInIntersection(BloomFilterImpl bf1, BloomFilterImpl bf2) throws IncompatibleUnionException {
+    BloomFilterImpl union = createUnionBloomFilter(bf1, bf2);
+
+    return bf1.approxItems() + bf2.approxItems() - union.approxItems();
+  }
+
+  @Override
   public void writeTo(OutputStream out) throws IOException {
     DataOutputStream dos = new DataOutputStream(out);
 
