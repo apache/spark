@@ -112,7 +112,13 @@ class Analyzer(
    * in an individual batch. This batch is to run right after the normal resolution batch and
    * execute its rules in one pass.
    */
-  val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+  def postHocResolutionRules: Seq[Rule[LogicalPlan]] =
+    ResolveOrdinalInOrderByAndGroupBy ::
+    ResolveAggAliasInGroupBy ::
+    ResolveMissingReferences ::
+    ResolveSubquery ::
+    ResolveAggregateFunctions ::
+    Nil
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Hints", fixedPoint,
@@ -135,9 +141,6 @@ class Analyzer(
       ResolveUpCast ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
-      ResolveOrdinalInOrderByAndGroupBy ::
-      ResolveAggAliasInGroupBy ::
-      ResolveMissingReferences ::
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -148,13 +151,12 @@ class Analyzer(
       ResolveNaturalAndUsingJoin ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
-      ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables(conf) ::
       ResolveTimeZone(conf) ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
-    Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
+    Batch("Post-Hoc Resolution", fixedPoint, postHocResolutionRules: _*),
     Batch("View", Once,
       AliasViewChild(conf)),
     Batch("Nondeterministic", Once,
