@@ -17,16 +17,17 @@
 
 package org.apache.spark.mllib.recommendation
 
-import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import java.io.IOException
 import java.lang.{Integer => JavaInteger}
+
+import scala.collection.mutable
+
+import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-import scala.collection.mutable
-import scala.collection.mutable.PriorityQueue
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
@@ -38,6 +39,7 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.BoundedPriorityQueue
 
 /**
  * Model representing the result of matrix factorization.
@@ -283,13 +285,29 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       var j = 0
       users.foreach (user => {
           def order(a: (Int, Double)) = a._2
-          val pq: PriorityQueue[(Int, Double)] = PriorityQueue()(Ordering.by(order))
+          val pq: BoundedPriorityQueue[(Int, Double)] =
+            new BoundedPriorityQueue[(Int, Double)](n)(Ordering.by(order))
           items.foreach (item => {
-              val rate = blas.ddot(rank, user._2, 1, item._2, 1)
-              pq.enqueue((item._1, rate))
+              /**
+               * blas.ddot (F2jBLAS) is the same performance with the following code.
+               * the performace of blas.ddot with NativeBLAS is very bad.
+               * blas.ddot (F2jBLAS) is about 10% improvement comparing with linalg.dot.
+               * val rate = blas.ddot(rank, user._2, 1, item._2, 1)
+               */
+              var rate: Double = 0
+              var k = 0
+              while(k < rank) {
+                rate += user._2(k) * item._2(k)
+                k += 1
+              }
+              pq += ((item._1, rate))
             })
-          for(i <- 0 to n-1)
-            output(j + i) = (user._1, pq.dequeue())
+          val pqIter = pq.iterator
+          var i = 0
+          while(i < n) {
+            output(j + i) = (user._1, pqIter.next())
+            i += 1
+          }
           j += n
       })
       output.toSeq
