@@ -1989,7 +1989,7 @@ test_that("filter() on a DataFrame", {
   # test suites for %<=>%
   dfNa <- read.json(jsonPathNa)
   expect_equal(count(filter(dfNa, dfNa$age %<=>% 60)), 1)
-  expect_equal(count(filter(dfNa, !(dfNa$age %<=>% 60))), 5 -1)
+  expect_equal(count(filter(dfNa, !(dfNa$age %<=>% 60))), 5 - 1)
   expect_equal(count(filter(dfNa, dfNa$age %<=>% NULL)), 3)
   expect_equal(count(filter(dfNa, !(dfNa$age %<=>% NULL))), 5 - 3)
   # match NA from two columns
