@@ -137,6 +137,18 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
+  /**
+   * Checks the validity of column names. Hive metastore disallows the column names contain comma.
+   */
+  private def verifyColumnNames(table: String, tableSchema: StructType): Unit = {
+    tableSchema.map(_.name).foreach { colName =>
+      if (colName.contains(",")) {
+        throw new AnalysisException("Cannot create a table having a column whose name contains " +
+          s"commas in Hive metastore. Table: $table; Column: $colName")
+      }
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -202,6 +214,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val table = tableDefinition.identifier.table
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
+    verifyColumnNames(tableDefinition.identifier.quotedString, tableDefinition.schema)
 
     if (tableExists(db, table) && !ignoreIfExists) {
       throw new TableAlreadyExistsException(db = db, table = table)
@@ -612,6 +625,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def alterTableSchema(db: String, table: String, schema: StructType): Unit = withClient {
     requireTableExists(db, table)
+    verifyColumnNames(table, schema)
     val rawTable = getRawTable(db, table)
     val withNewSchema = rawTable.copy(schema = schema)
     // Add table metadata such as table schema, partition columns, etc. to table properties.
