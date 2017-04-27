@@ -440,19 +440,14 @@ private class LinearSVCAggregator(
 
   private val numFeatures: Int = bcFeaturesStd.value.length
   private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
-  private val coefficients: Vector = bcCoefficients.value
   private var weightSum: Double = 0.0
   private var lossSum: Double = 0.0
-  require(numFeaturesPlusIntercept == coefficients.size, s"Dimension mismatch. Coefficients " +
-    s"length ${coefficients.size}, FeaturesStd length ${numFeatures}, fitIntercept: $fitIntercept")
-
-  private val coefficientsArray = coefficients match {
-    case dv: DenseVector => dv.values
-    case _ =>
-      throw new IllegalArgumentException(
-        s"coefficients only supports dense vector but got type ${coefficients.getClass}.")
+  @transient private lazy val coefficientsArray = bcCoefficients.value match {
+    case DenseVector(values) => values
+    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
+      s" but got type ${bcCoefficients.value.getClass}.")
   }
-  private val gradientSumArray = Array.fill[Double](coefficientsArray.length)(0)
+  private lazy val gradientSumArray = new Array[Double](numFeaturesPlusIntercept)
 
   /**
    * Add a new training instance to this LinearSVCAggregator, and update the loss and gradient
@@ -463,6 +458,7 @@ private class LinearSVCAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
+
       if (weight == 0.0) return this
       val localFeaturesStd = bcFeaturesStd.value
       val localCoefficients = coefficientsArray
@@ -514,6 +510,7 @@ private class LinearSVCAggregator(
    * @return This LinearSVCAggregator object.
    */
   def merge(other: LinearSVCAggregator): this.type = {
+
     if (other.weightSum != 0.0) {
       weightSum += other.weightSum
       lossSum += other.lossSum
@@ -530,18 +527,15 @@ private class LinearSVCAggregator(
     this
   }
 
-  def loss: Double = {
-    if (weightSum != 0) {
-      lossSum / weightSum
-    } else 0.0
-  }
+  def loss: Double = if (weightSum != 0) lossSum / weightSum else 0.0
 
   def gradient: Vector = {
     if (weightSum != 0) {
       val result = Vectors.dense(gradientSumArray.clone())
       scal(1.0 / weightSum, result)
       result
-    } else Vectors.dense(Array.fill[Double](coefficientsArray.length)(0))
+    } else {
+      Vectors.dense(new Array[Double](numFeaturesPlusIntercept))
+    }
   }
-
 }

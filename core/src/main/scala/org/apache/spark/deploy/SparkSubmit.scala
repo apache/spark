@@ -485,12 +485,17 @@ object SparkSubmit extends CommandLineUtils {
 
     // In client mode, launch the application main class directly
     // In addition, add the main application jar and any added jars (if any) to the classpath
-    if (deployMode == CLIENT) {
+    // Also add the main application jar and any added jars to classpath in case YARN client
+    // requires these jars.
+    if (deployMode == CLIENT || isYarnCluster) {
       childMainClass = args.mainClass
       if (isUserJar(args.primaryResource)) {
         childClasspath += args.primaryResource
       }
       if (args.jars != null) { childClasspath ++= args.jars.split(",") }
+    }
+
+    if (deployMode == CLIENT) {
       if (args.childArgs != null) { childArgs ++= args.childArgs }
     }
 
@@ -665,7 +670,8 @@ object SparkSubmit extends CommandLineUtils {
     if (verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
-      printStream.println(s"System properties:\n${sysProps.mkString("\n")}")
+      // sysProps may contain sensitive information, so redact before printing
+      printStream.println(s"System properties:\n${Utils.redact(sysProps).mkString("\n")}")
       printStream.println(s"Classpath elements:\n${childClasspath.mkString("\n")}")
       printStream.println("\n")
     }

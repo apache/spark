@@ -146,7 +146,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
             completed = sparkJob.numCompletedTasks,
             failed = sparkJob.numFailedTasks,
             skipped = sparkJob.numSkippedTasks,
-            killed = sparkJob.numKilledTasks,
+            reasonToNumKilled = sparkJob.reasonToNumKilled,
             total = sparkJob.numTasks - sparkJob.numSkippedTasks)
         }
       </td>

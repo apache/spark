@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -399,14 +401,9 @@ class LogisticRegression @Since("1.2.0") (
         logWarning(s"All labels are the same value and fitIntercept=true, so the coefficients " +
           s"will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
-        // TODO: use `compressed` after SPARK-17471
-        val coefMatrix = if (numFeatures < numCoefficientSets) {
-          new SparseMatrix(numCoefficientSets, numFeatures,
-            Array.fill(numFeatures + 1)(0), Array.empty[Int], Array.empty[Double])
-        } else {
-          new SparseMatrix(numCoefficientSets, numFeatures, Array.fill(numCoefficientSets + 1)(0),
-            Array.empty[Int], Array.empty[Double], isTransposed = true)
-        }
+        val coefMatrix = new SparseMatrix(numCoefficientSets, numFeatures,
+          new Array[Int](numCoefficientSets + 1), Array.empty[Int], Array.empty[Double],
+          isTransposed = true).compressed
         val interceptVec = if (isMultinomial) {
           Vectors.sparse(numClasses, Seq((constantLabelIndex, Double.PositiveInfinity)))
         } else {
@@ -612,21 +609,13 @@ class LogisticRegression @Since("1.2.0") (
             Friedman, et al. "Regularization Paths for Generalized Linear Models via
               Coordinate Descent," https://core.ac.uk/download/files/153/6287975.pdf
            */
-          val denseValues = denseCoefficientMatrix.values
-          val coefficientMean = denseValues.sum / denseValues.length
-          denseCoefficientMatrix.update(_ - coefficientMean)
-        }
-
-        // TODO: use `denseCoefficientMatrix.compressed` after SPARK-17471
-        val compressedCoefficientMatrix = if (isMultinomial) {
-          denseCoefficientMatrix
-        } else {
-          val compressedVector = Vectors.dense(denseCoefficientMatrix.values).compressed
-          compressedVector match {
-            case dv: DenseVector => denseCoefficientMatrix
-            case sv: SparseVector =>
-              new SparseMatrix(1, numFeatures, Array(0, sv.indices.length), sv.indices, sv.values,
-                isTransposed = true)
+          val centers = Array.fill(numFeatures)(0.0)
+          denseCoefficientMatrix.foreachActive { case (i, j, v) =>
+            centers(j) += v
+          }
+          centers.transform(_ / numCoefficientSets)
+          denseCoefficientMatrix.foreachActive { case (i, j, v) =>
+            denseCoefficientMatrix.update(i, j, v - centers(j))
           }
         }
 
@@ -636,7 +625,7 @@ class LogisticRegression @Since("1.2.0") (
           val interceptMean = interceptArray.sum / interceptArray.length
           (0 until interceptVec.size).foreach { i => interceptArray(i) -= interceptMean }
         }
-        (compressedCoefficientMatrix, interceptVec.compressed, arrayBuilder.result())
+        (denseCoefficientMatrix.compressed, interceptVec.compressed, arrayBuilder.result())
       }
     }
 
@@ -672,7 +661,7 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
   override def load(path: String): LogisticRegression = super.load(path)
 
   private[classification] val supportedFamilyNames =
-    Array("auto", "binomial", "multinomial").map(_.toLowerCase)
+    Array("auto", "binomial", "multinomial").map(_.toLowerCase(Locale.ROOT))
 }
 
 /**
@@ -713,7 +702,7 @@ class LogisticRegressionModel private[spark] (
   // convert to appropriate vector representation without replicating data
   private lazy val _coefficients: Vector = {
     require(coefficientMatrix.isTransposed,
-      "LogisticRegressionModel coefficients should be row major.")
+      "LogisticRegressionModel coefficients should be row major for binomial model.")
     coefficientMatrix match {
       case dm: DenseMatrix => Vectors.dense(dm.values)
       case sm: SparseMatrix => Vectors.sparse(coefficientMatrix.numCols, sm.rowIndices, sm.values)
@@ -1431,7 +1420,12 @@ private class LogisticAggregator(
   private var weightSum = 0.0
   private var lossSum = 0.0
 
-  private val gradientSumArray = Array.fill[Double](coefficientSize)(0.0D)
+  @transient private lazy val coefficientsArray: Array[Double] = bcCoefficients.value match {
+    case DenseVector(values) => values
+    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector but " +
+      s"got type ${bcCoefficients.value.getClass}.)")
+  }
+  private lazy val gradientSumArray = new Array[Double](coefficientSize)
 
   if (multinomial && numClasses <= 2) {
     logInfo(s"Multinomial logistic regression for binary classification yields separate " +
@@ -1447,7 +1441,7 @@ private class LogisticAggregator(
       label: Double): Unit = {
 
     val localFeaturesStd = bcFeaturesStd.value
-    val localCoefficients = bcCoefficients.value
+    val localCoefficients = coefficientsArray
     val localGradientArray = gradientSumArray
     val margin = - {
       var sum = 0.0
@@ -1491,7 +1485,7 @@ private class LogisticAggregator(
       logistic regression without pivoting.
      */
     val localFeaturesStd = bcFeaturesStd.value
-    val localCoefficients = bcCoefficients.value
+    val localCoefficients = coefficientsArray
     val localGradientArray = gradientSumArray
 
     // marginOfLabel is margins(label) in the formula
@@ -1577,9 +1571,6 @@ private class LogisticAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
-        s" Expecting $numFeatures but got ${features.size}.")
-      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
 
@@ -1602,8 +1593,6 @@ private class LogisticAggregator(
    * @return This LogisticAggregator object.
    */
   def merge(other: LogisticAggregator): this.type = {
-    require(numFeatures == other.numFeatures, s"Dimensions mismatch when merging with another " +
-      s"LogisticAggregator. Expecting $numFeatures but got ${other.numFeatures}.")
 
     if (other.weightSum != 0.0) {
       weightSum += other.weightSum

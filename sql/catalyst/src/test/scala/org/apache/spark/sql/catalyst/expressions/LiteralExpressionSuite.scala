@@ -19,9 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
 
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -75,6 +77,9 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("boolean literals") {
     checkEvaluation(Literal(true), true)
     checkEvaluation(Literal(false), false)
+
+    checkEvaluation(Literal.create(true), true)
+    checkEvaluation(Literal.create(false), false)
   }
 
   test("int literals") {
@@ -83,20 +88,36 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal(d.toLong), d.toLong)
       checkEvaluation(Literal(d.toShort), d.toShort)
       checkEvaluation(Literal(d.toByte), d.toByte)
+
+      checkEvaluation(Literal.create(d), d)
+      checkEvaluation(Literal.create(d.toLong), d.toLong)
+      checkEvaluation(Literal.create(d.toShort), d.toShort)
+      checkEvaluation(Literal.create(d.toByte), d.toByte)
     }
     checkEvaluation(Literal(Long.MinValue), Long.MinValue)
     checkEvaluation(Literal(Long.MaxValue), Long.MaxValue)
+
+    checkEvaluation(Literal.create(Long.MinValue), Long.MinValue)
+    checkEvaluation(Literal.create(Long.MaxValue), Long.MaxValue)
   }
 
   test("double literals") {
     List(0.0, -0.0, Double.NegativeInfinity, Double.PositiveInfinity).foreach { d =>
       checkEvaluation(Literal(d), d)
       checkEvaluation(Literal(d.toFloat), d.toFloat)
+
+      checkEvaluation(Literal.create(d), d)
+      checkEvaluation(Literal.create(d.toFloat), d.toFloat)
     }
     checkEvaluation(Literal(Double.MinValue), Double.MinValue)
     checkEvaluation(Literal(Double.MaxValue), Double.MaxValue)
     checkEvaluation(Literal(Float.MinValue), Float.MinValue)
     checkEvaluation(Literal(Float.MaxValue), Float.MaxValue)
+
+    checkEvaluation(Literal.create(Double.MinValue), Double.MinValue)
+    checkEvaluation(Literal.create(Double.MaxValue), Double.MaxValue)
+    checkEvaluation(Literal.create(Float.MinValue), Float.MinValue)
+    checkEvaluation(Literal.create(Float.MaxValue), Float.MaxValue)
 
   }
 
@@ -104,15 +125,23 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal(""), "")
     checkEvaluation(Literal("test"), "test")
     checkEvaluation(Literal("\u0000"), "\u0000")
+
+    checkEvaluation(Literal.create(""), "")
+    checkEvaluation(Literal.create("test"), "test")
+    checkEvaluation(Literal.create("\u0000"), "\u0000")
   }
 
   test("sum two literals") {
     checkEvaluation(Add(Literal(1), Literal(1)), 2)
+    checkEvaluation(Add(Literal.create(1), Literal.create(1)), 2)
   }
 
   test("binary literals") {
     checkEvaluation(Literal.create(new Array[Byte](0), BinaryType), new Array[Byte](0))
     checkEvaluation(Literal.create(new Array[Byte](2), BinaryType), new Array[Byte](2))
+
+    checkEvaluation(Literal.create(new Array[Byte](0)), new Array[Byte](0))
+    checkEvaluation(Literal.create(new Array[Byte](2)), new Array[Byte](2))
   }
 
   test("decimal") {
@@ -124,24 +153,63 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         Decimal((d * 1000L).toLong, 10, 3))
       checkEvaluation(Literal(BigDecimal(d.toString)), Decimal(d))
       checkEvaluation(Literal(new java.math.BigDecimal(d.toString)), Decimal(d))
+
+      checkEvaluation(Literal.create(Decimal(d)), Decimal(d))
+      checkEvaluation(Literal.create(Decimal(d.toInt)), Decimal(d.toInt))
+      checkEvaluation(Literal.create(Decimal(d.toLong)), Decimal(d.toLong))
+      checkEvaluation(Literal.create(Decimal((d * 1000L).toLong, 10, 3)),
+        Decimal((d * 1000L).toLong, 10, 3))
+      checkEvaluation(Literal.create(BigDecimal(d.toString)), Decimal(d))
+      checkEvaluation(Literal.create(new java.math.BigDecimal(d.toString)), Decimal(d))
+
     }
+  }
+
+  private def toCatalyst[T: TypeTag](value: T): Any = {
+    val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
+    CatalystTypeConverters.createToCatalystConverter(dataType)(value)
   }
 
   test("array") {
-    def checkArrayLiteral(a: Array[_], elementType: DataType): Unit = {
-      val toCatalyst = (a: Array[_], elementType: DataType) => {
-        CatalystTypeConverters.createToCatalystConverter(ArrayType(elementType))(a)
-      }
-      checkEvaluation(Literal(a), toCatalyst(a, elementType))
+    def checkArrayLiteral[T: TypeTag](a: Array[T]): Unit = {
+      checkEvaluation(Literal(a), toCatalyst(a))
+      checkEvaluation(Literal.create(a), toCatalyst(a))
     }
-    checkArrayLiteral(Array(1, 2, 3), IntegerType)
-    checkArrayLiteral(Array("a", "b", "c"), StringType)
-    checkArrayLiteral(Array(1.0, 4.0), DoubleType)
-    checkArrayLiteral(Array(CalendarInterval.MICROS_PER_DAY, CalendarInterval.MICROS_PER_HOUR),
+    checkArrayLiteral(Array(1, 2, 3))
+    checkArrayLiteral(Array("a", "b", "c"))
+    checkArrayLiteral(Array(1.0, 4.0))
+    checkArrayLiteral(Array(CalendarInterval.MICROS_PER_DAY, CalendarInterval.MICROS_PER_HOUR))
+  }
+
+  test("seq") {
+    def checkSeqLiteral[T: TypeTag](a: Seq[T], elementType: DataType): Unit = {
+      checkEvaluation(Literal.create(a), toCatalyst(a))
+    }
+    checkSeqLiteral(Seq(1, 2, 3), IntegerType)
+    checkSeqLiteral(Seq("a", "b", "c"), StringType)
+    checkSeqLiteral(Seq(1.0, 4.0), DoubleType)
+    checkSeqLiteral(Seq(CalendarInterval.MICROS_PER_DAY, CalendarInterval.MICROS_PER_HOUR),
       CalendarIntervalType)
   }
 
-  test("unsupported types (map and struct) in literals") {
+  test("map") {
+    def checkMapLiteral[T: TypeTag](m: T): Unit = {
+      checkEvaluation(Literal.create(m), toCatalyst(m))
+    }
+    checkMapLiteral(Map("a" -> 1, "b" -> 2, "c" -> 3))
+    checkMapLiteral(Map("1" -> 1.0, "2" -> 2.0, "3" -> 3.0))
+  }
+
+  test("struct") {
+    def checkStructLiteral[T: TypeTag](s: T): Unit = {
+      checkEvaluation(Literal.create(s), toCatalyst(s))
+    }
+    checkStructLiteral((1, 3.0, "abcde"))
+    checkStructLiteral(("de", 1, 2.0f))
+    checkStructLiteral((1, ("fgh", 3.0)))
+  }
+
+  test("unsupported types (map and struct) in Literal.apply") {
     def checkUnsupportedTypeInLiteral(v: Any): Unit = {
       val errMsgMap = intercept[RuntimeException] {
         Literal(v)

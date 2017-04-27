@@ -200,7 +200,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.bytesToString(2097152) === "2.0 MB")
     assert(Utils.bytesToString(2306867) === "2.2 MB")
     assert(Utils.bytesToString(5368709120L) === "5.0 GB")
-    assert(Utils.bytesToString(5L * 1024L * 1024L * 1024L * 1024L) === "5.0 TB")
+    assert(Utils.bytesToString(5L * (1L << 40)) === "5.0 TB")
+    assert(Utils.bytesToString(5L * (1L << 50)) === "5.0 PB")
+    assert(Utils.bytesToString(5L * (1L << 60)) === "5.0 EB")
+    assert(Utils.bytesToString(BigInt(1L << 11) * (1L << 60)) === "2.36E+21 B")
   }
 
   test("copyStream") {
@@ -507,6 +510,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
         s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
     }
+    assertResolves(",jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
   }
 
   test("nonLocalPaths") {
@@ -1006,15 +1010,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
       "spark.my.password",
       "spark.my.sECreT")
-    secretKeys.foreach { key => sparkConf.set(key, "secret_password") }
+    secretKeys.foreach { key => sparkConf.set(key, "sensitive_value") }
     // Set a non-secret key
-    sparkConf.set("spark.regular.property", "not_a_secret")
+    sparkConf.set("spark.regular.property", "regular_value")
+    // Set a property with a regular key but secret in the value
+    sparkConf.set("spark.sensitive.property", "has_secret_in_value")
 
     // Redact sensitive information
     val redactedConf = Utils.redact(sparkConf, sparkConf.getAll).toMap
 
     // Assert that secret information got redacted while the regular property remained the same
     secretKeys.foreach { key => assert(redactedConf(key) === Utils.REDACTION_REPLACEMENT_TEXT) }
-    assert(redactedConf("spark.regular.property") === "not_a_secret")
+    assert(redactedConf("spark.regular.property") === "regular_value")
+    assert(redactedConf("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
+
   }
 }

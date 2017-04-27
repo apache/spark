@@ -32,7 +32,7 @@ setGeneric("coalesceRDD", function(x, numPartitions, ...) { standardGeneric("coa
 
 # @rdname checkpoint-methods
 # @export
-setGeneric("checkpoint", function(x) { standardGeneric("checkpoint") })
+setGeneric("checkpointRDD", function(x) { standardGeneric("checkpointRDD") })
 
 setGeneric("collectRDD", function(x, ...) { standardGeneric("collectRDD") })
 
@@ -406,6 +406,10 @@ setGeneric("attach")
 #' @export
 setGeneric("cache", function(x) { standardGeneric("cache") })
 
+#' @rdname checkpoint
+#' @export
+setGeneric("checkpoint", function(x, eager = TRUE) { standardGeneric("checkpoint") })
+
 #' @rdname coalesce
 #' @param x a Column or a SparkDataFrame.
 #' @param ... additional argument(s). If \code{x} is a Column, additional Columns can be optionally
@@ -479,6 +483,10 @@ setGeneric("createOrReplaceTempView",
 # @export
 setGeneric("crossJoin", function(x, y) { standardGeneric("crossJoin") })
 
+#' @rdname cube
+#' @export
+setGeneric("cube", function(x, ...) { standardGeneric("cube") })
+
 #' @rdname dapply
 #' @export
 setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
@@ -539,6 +547,9 @@ setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
 
 #' @rdname explain
 #' @export
+#' @param x a SparkDataFrame or a StreamingQuery.
+#' @param extended Logical. If extended is FALSE, prints only the physical plan.
+#' @param ... further arguments to be passed to or from other methods.
 setGeneric("explain", function(x, ...) { standardGeneric("explain") })
 
 #' @rdname except
@@ -576,6 +587,10 @@ setGeneric("intersect", function(x, y) { standardGeneric("intersect") })
 #' @rdname isLocal
 #' @export
 setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
+
+#' @rdname isStreaming
+#' @export
+setGeneric("isStreaming", function(x) { standardGeneric("isStreaming") })
 
 #' @rdname limit
 #' @export
@@ -619,6 +634,10 @@ setGeneric("sample",
            function(x, withReplacement, fraction, seed) {
              standardGeneric("sample")
            })
+
+#' @rdname rollup
+#' @export
+setGeneric("rollup", function(x, ...) { standardGeneric("rollup") })
 
 #' @rdname sample
 #' @export
@@ -681,6 +700,12 @@ setGeneric("write.parquet", function(x, path, ...) {
 #' @rdname write.parquet
 #' @export
 setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
+
+#' @rdname write.stream
+#' @export
+setGeneric("write.stream", function(df, source = NULL, outputMode = NULL, ...) {
+  standardGeneric("write.stream")
+})
 
 #' @rdname write.text
 #' @export
@@ -901,6 +926,14 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 #' @export
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
+#' @rdname collect_list
+#' @export
+setGeneric("collect_list", function(x) { standardGeneric("collect_list") })
+
+#' @rdname collect_set
+#' @export
+setGeneric("collect_set", function(x) { standardGeneric("collect_set") })
+
 #' @rdname column
 #' @export
 setGeneric("column", function(x) { standardGeneric("column") })
@@ -924,6 +957,14 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @rdname crc32
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
+
+#' @rdname create_array
+#' @export
+setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
+
+#' @rdname create_map
+#' @export
+setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
 
 #' @rdname hash
 #' @export
@@ -990,6 +1031,10 @@ setGeneric("format_number", function(y, x) { standardGeneric("format_number") })
 #' @rdname format_string
 #' @export
 setGeneric("format_string", function(format, x, ...) { standardGeneric("format_string") })
+
+#' @rdname from_json
+#' @export
+setGeneric("from_json", function(x, schema, ...) { standardGeneric("from_json") })
 
 #' @rdname from_unixtime
 #' @export
@@ -1155,6 +1200,10 @@ setGeneric("regexp_extract", function(x, pattern, idx) { standardGeneric("regexp
 setGeneric("regexp_replace",
            function(x, pattern, replacement) { standardGeneric("regexp_replace") })
 
+#' @rdname repeat_string
+#' @export
+setGeneric("repeat_string", function(x, n) { standardGeneric("repeat_string") })
+
 #' @rdname reverse
 #' @export
 setGeneric("reverse", function(x) { standardGeneric("reverse") })
@@ -1220,6 +1269,10 @@ setGeneric("skewness", function(x) { standardGeneric("skewness") })
 #' @export
 setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array") })
 
+#' @rdname split_string
+#' @export
+setGeneric("split_string", function(x, pattern) { standardGeneric("split_string") })
+
 #' @rdname soundex
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
@@ -1264,6 +1317,10 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 #' @rdname to_date
 #' @export
 setGeneric("to_date", function(x, format) { standardGeneric("to_date") })
+
+#' @rdname to_json
+#' @export
+setGeneric("to_json", function(x, ...) { standardGeneric("to_json") })
 
 #' @rdname to_timestamp
 #' @export
@@ -1324,6 +1381,7 @@ setGeneric("window", function(x, ...) { standardGeneric("window") })
 #' @rdname year
 #' @export
 setGeneric("year", function(x) { standardGeneric("year") })
+
 
 ###################### Spark.ML Methods ##########################
 
@@ -1406,7 +1464,7 @@ setGeneric("spark.randomForest",
 
 #' @rdname spark.survreg
 #' @export
-setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
+setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
 
 #' @rdname spark.svmLinear
 #' @export
@@ -1420,6 +1478,17 @@ setGeneric("spark.posterior", function(object, newData) { standardGeneric("spark
 #' @export
 setGeneric("spark.perplexity", function(object, data) { standardGeneric("spark.perplexity") })
 
+#' @rdname spark.fpGrowth
+#' @export
+setGeneric("spark.fpGrowth", function(data, ...) { standardGeneric("spark.fpGrowth") })
+
+#' @rdname spark.fpGrowth
+#' @export
+setGeneric("spark.freqItemsets", function(object) { standardGeneric("spark.freqItemsets") })
+
+#' @rdname spark.fpGrowth
+#' @export
+setGeneric("spark.associationRules", function(object) { standardGeneric("spark.associationRules") })
 
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.
@@ -1427,3 +1496,30 @@ setGeneric("spark.perplexity", function(object, data) { standardGeneric("spark.p
 #' @rdname write.ml
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })
+
+
+###################### Streaming Methods ##########################
+
+#' @rdname awaitTermination
+#' @export
+setGeneric("awaitTermination", function(x, timeout) { standardGeneric("awaitTermination") })
+
+#' @rdname isActive
+#' @export
+setGeneric("isActive", function(x) { standardGeneric("isActive") })
+
+#' @rdname lastProgress
+#' @export
+setGeneric("lastProgress", function(x) { standardGeneric("lastProgress") })
+
+#' @rdname queryName
+#' @export
+setGeneric("queryName", function(x) { standardGeneric("queryName") })
+
+#' @rdname status
+#' @export
+setGeneric("status", function(x) { standardGeneric("status") })
+
+#' @rdname stopQuery
+#' @export
+setGeneric("stopQuery", function(x) { standardGeneric("stopQuery") })

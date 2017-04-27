@@ -386,8 +386,8 @@ For example:
 
 The [built-in DataFrames functions](api/scala/index.html#org.apache.spark.sql.functions$) provide common
 aggregations such as `count()`, `countDistinct()`, `avg()`, `max()`, `min()`, etc.
-While those functions are designed for DataFrames, Spark SQL also has type-safe versions for some of them in 
-[Scala](api/scala/index.html#org.apache.spark.sql.expressions.scalalang.typed$) and 
+While those functions are designed for DataFrames, Spark SQL also has type-safe versions for some of them in
+[Scala](api/scala/index.html#org.apache.spark.sql.expressions.scalalang.typed$) and
 [Java](api/java/org/apache/spark/sql/expressions/javalang/typed.html) to work with strongly typed Datasets.
 Moreover, users are not limited to the predefined aggregate functions and can create their own.
 
@@ -397,7 +397,7 @@ Moreover, users are not limited to the predefined aggregate functions and can cr
 
 <div data-lang="scala"  markdown="1">
 
-Users have to extend the [UserDefinedAggregateFunction](api/scala/index.html#org.apache.spark.sql.expressions.UserDefinedAggregateFunction) 
+Users have to extend the [UserDefinedAggregateFunction](api/scala/index.html#org.apache.spark.sql.expressions.UserDefinedAggregateFunction)
 abstract class to implement a custom untyped aggregate function. For example, a user-defined average
 can look like:
 
@@ -571,7 +571,7 @@ be created by calling the `table` method on a `SparkSession` with the name of th
 For file-based data source, e.g. text, parquet, json, etc. you can specify a custom table path via the
 `path` option, e.g. `df.write.option("path", "/some/path").saveAsTable("t")`. When the table is dropped,
 the custom table path will not be removed and the table data is still there. If no custom table path is
-specifed, Spark will write data to a default table path under the warehouse directory. When the table is
+specified, Spark will write data to a default table path under the warehouse directory. When the table is
 dropped, the default table path will be removed too.
 
 Starting from Spark 2.1, persistent datasource tables have per-partition metadata stored in the Hive metastore. This brings several benefits:
@@ -883,26 +883,28 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
 
 <div data-lang="scala"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a `Dataset[Row]`.
-This conversion can be done using `SparkSession.read.json()` on either an RDD of String,
+This conversion can be done using `SparkSession.read.json()` on either a `Dataset[String]`,
 or a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. For more information, please see
-[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
-consequence, a regular multi-line JSON file will most often fail.
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
+
+For a regular multi-line JSON file, set the `wholeFile` option to `true`.
 
 {% include_example json_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a `Dataset<Row>`.
-This conversion can be done using `SparkSession.read().json()` on either an RDD of String,
+This conversion can be done using `SparkSession.read().json()` on either a `Dataset<String>`,
 or a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. For more information, please see
-[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
-consequence, a regular multi-line JSON file will most often fail.
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
+
+For a regular multi-line JSON file, set the `wholeFile` option to `true`.
 
 {% include_example json_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
@@ -913,8 +915,9 @@ This conversion can be done using `SparkSession.read.json` on a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. For more information, please see
-[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
-consequence, a regular multi-line JSON file will most often fail.
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
+
+For a regular multi-line JSON file, set the `wholeFile` parameter to `True`.
 
 {% include_example json_dataset python/sql/datasource.py %}
 </div>
@@ -926,8 +929,9 @@ files is a JSON object.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. For more information, please see
-[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
-consequence, a regular multi-line JSON file will most often fail.
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
+
+For a regular multi-line JSON file, set a named parameter `wholeFile` to `TRUE`.
 
 {% include_example json_dataset r/RSparkSQLExample.R %}
 
@@ -1219,6 +1223,13 @@ the following case-insensitive options:
      This is a JDBC writer related option. If specified, this option allows setting of database-specific table and partition options when creating a table (e.g., <code>CREATE TABLE t (name string) ENGINE=InnoDB.</code>). This option applies only to writing.
    </td>
   </tr>
+  
+  <tr>
+    <td><code>createTableColumnTypes</code></td>
+    <td>
+     The database column data types to use instead of the defaults, when creating the table. Data type information should be specified in the same format as CREATE TABLE columns syntax (e.g: <code>"name CHAR(64), comments VARCHAR(1024)")</code>. The specified types should be valid spark sql data types. This option applies only to writing.
+    </td>
+  </tr>  
 </table>
 
 <div class="codetabs">
@@ -1410,7 +1421,7 @@ Thrift JDBC server also supports sending thrift RPC messages over HTTP transport
 Use the following setting to enable HTTP mode as system property or in `hive-site.xml` file in `conf/`:
 
     hive.server2.transport.mode - Set this to value: http
-    hive.server2.thrift.http.port - HTTP port number fo listen on; default is 10001
+    hive.server2.thrift.http.port - HTTP port number to listen on; default is 10001
     hive.server2.http.endpoint - HTTP endpoint; default is cliservice
 
 To test, use beeline to connect to the JDBC/ODBC server in http mode with:
@@ -1689,7 +1700,7 @@ referencing a singleton.
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently Hive SerDes and UDFs are based on Hive 1.2.1,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 0.12.0 to 1.2.1. Also see [Interacting with Different Versions of Hive Metastore] (#interacting-with-different-versions-of-hive-metastore)).
+(from 0.12.0 to 2.1.1. Also see [Interacting with Different Versions of Hive Metastore] (#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 

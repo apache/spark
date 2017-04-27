@@ -18,3 +18,9 @@ select * from range(1, 1, 1, 1, 1);
 
 -- range call with null
 select * from range(1, null);
+
+-- range call with a mixed-case function name
+select * from RaNgE(2);
+
+-- Explain
+EXPLAIN select * from RaNgE(2);

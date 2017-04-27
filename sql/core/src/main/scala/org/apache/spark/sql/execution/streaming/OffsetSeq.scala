@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
-
 /**
  * An ordered collection of offsets, used to track the progress of processing data from one or more
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
@@ -70,8 +69,12 @@ object OffsetSeq {
  * bound the lateness of data that will processed. Time unit: milliseconds
  * @param batchTimestampMs: The current batch processing timestamp.
  * Time unit: milliseconds
+ * @param conf: Additional conf_s to be persisted across batches, e.g. number of shuffle partitions.
  */
-case class OffsetSeqMetadata(var batchWatermarkMs: Long = 0, var batchTimestampMs: Long = 0) {
+case class OffsetSeqMetadata(
+    batchWatermarkMs: Long = 0,
+    batchTimestampMs: Long = 0,
+    conf: Map[String, String] = Map.empty) {
   def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
 }
 
@@ -79,4 +82,3 @@ object OffsetSeqMetadata {
   private implicit val format = Serialization.formats(NoTypeHints)
   def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
 }
-

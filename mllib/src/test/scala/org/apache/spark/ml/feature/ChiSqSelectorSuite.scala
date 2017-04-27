@@ -119,7 +119,8 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
   test("Test Chi-Square selector: numTopFeatures") {
     val selector = new ChiSqSelector()
       .setOutputCol("filtered").setSelectorType("numTopFeatures").setNumTopFeatures(1)
-    ChiSqSelectorSuite.testSelector(selector, dataset)
+    val model = ChiSqSelectorSuite.testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test Chi-Square selector: percentile") {
@@ -151,7 +152,8 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
       assert(model.selectedFeatures === model2.selectedFeatures)
     }
     val nb = new ChiSqSelector
-    testEstimatorAndModelReadWrite(nb, dataset, ChiSqSelectorSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(nb, dataset, ChiSqSelectorSuite.allParamSettings,
+      ChiSqSelectorSuite.allParamSettings, checkModelData)
   }
 
   test("should support all NumericType labels and not support other types") {
@@ -165,11 +167,13 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
 
 object ChiSqSelectorSuite {
 
-  private def testSelector(selector: ChiSqSelector, dataset: Dataset[_]): Unit = {
-    selector.fit(dataset).transform(dataset).select("filtered", "topFeature").collect()
+  private def testSelector(selector: ChiSqSelector, dataset: Dataset[_]): ChiSqSelectorModel = {
+    val selectorModel = selector.fit(dataset)
+    selectorModel.transform(dataset).select("filtered", "topFeature").collect()
       .foreach { case Row(vec1: Vector, vec2: Vector) =>
         assert(vec1 ~== vec2 absTol 1e-1)
       }
+    selectorModel
   }
 
   /**

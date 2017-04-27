@@ -221,6 +221,17 @@ class SparkSession(object):
                 or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
 
+    def _repr_html_(self):
+        return """
+            <div>
+                <p><b>SparkSession - {catalogImplementation}</b></p>
+                {sc_HTML}
+            </div>
+        """.format(
+            catalogImplementation=self.conf.get("spark.sql.catalogImplementation"),
+            sc_HTML=self.sparkContext._repr_html_()
+        )
+
     @since(2.0)
     def newSession(self):
         """

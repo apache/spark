@@ -23,7 +23,7 @@ import breeze.numerics.constants.Pi
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Dataset
@@ -63,7 +63,7 @@ class BucketedRandomProjectionLSHSuite
     }
     val mh = new BucketedRandomProjectionLSH()
     val settings = Map("inputCol" -> "keys", "outputCol" -> "values", "bucketLength" -> 1.0)
-    testEstimatorAndModelReadWrite(mh, dataset, settings, checkModelData)
+    testEstimatorAndModelReadWrite(mh, dataset, settings, settings, checkModelData)
   }
 
   test("hashFunction") {
@@ -89,10 +89,13 @@ class BucketedRandomProjectionLSHSuite
       .setOutputCol("values")
       .setBucketLength(1.0)
       .setSeed(12345)
-    val unitVectors = brp.fit(dataset).randUnitVectors
+    val brpModel = brp.fit(dataset)
+    val unitVectors = brpModel.randUnitVectors
     unitVectors.foreach { v: Vector =>
       assert(Vectors.norm(v, 2.0) ~== 1.0 absTol 1e-14)
     }
+
+    MLTestingUtils.checkCopyAndUids(brp, brpModel)
   }
 
   test("BucketedRandomProjectionLSH: test of LSH property") {

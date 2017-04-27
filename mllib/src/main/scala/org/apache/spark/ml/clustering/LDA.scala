@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JObject
@@ -34,7 +36,6 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
   EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
   LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
   OnlineLDAOptimizer => OldOnlineLDAOptimizer}
-import org.apache.spark.mllib.impl.PeriodicCheckpointer
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
 import org.apache.spark.mllib.linalg.VectorImplicits._
@@ -43,8 +44,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
-
 
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
   with HasSeed with HasCheckpointInterval {
@@ -173,7 +174,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   final val optimizer = new Param[String](this, "optimizer", "Optimizer or inference" +
     " algorithm used to estimate the LDA model. Supported: " + supportedOptimizers.mkString(", "),
-    (o: String) => ParamValidators.inArray(supportedOptimizers).apply(o.toLowerCase))
+    (o: String) =>
+      ParamValidators.inArray(supportedOptimizers).apply(o.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("1.6.0")
@@ -436,6 +438,9 @@ abstract class LDAModel private[ml] (
    */
   @Since("1.6.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  @Since("2.2.0")
+  def setTopicDistributionCol(value: String): this.type = set(topicDistributionCol, value)
 
   /** @group setParam */
   @Since("1.6.0")

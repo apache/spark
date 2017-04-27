@@ -142,6 +142,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.take(2) === Array(ClassData("a", 1), ClassData("b", 2)))
   }
 
+  test("as seq of case class - reorder fields by name") {
+    val df = spark.range(3).select(array(struct($"id".cast("int").as("b"), lit("a").as("a"))))
+    val ds = df.as[Seq[ClassData]]
+    assert(ds.collect() === Array(
+      Seq(ClassData("a", 0)),
+      Seq(ClassData("a", 1)),
+      Seq(ClassData("a", 2))))
+  }
+
   test("map") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDataset(
@@ -1136,10 +1145,34 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(spark.range(1).map { x => new java.sql.Timestamp(100000) }.head ==
       new java.sql.Timestamp(100000))
   }
+
+  test("SPARK-19896: cannot have circular references in in case class") {
+    val errMsg1 = intercept[UnsupportedOperationException] {
+      Seq(CircularReferenceClassA(null)).toDS
+    }
+    assert(errMsg1.getMessage.startsWith("cannot have circular references in class, but got the " +
+      "circular reference of class"))
+    val errMsg2 = intercept[UnsupportedOperationException] {
+      Seq(CircularReferenceClassC(null)).toDS
+    }
+    assert(errMsg2.getMessage.startsWith("cannot have circular references in class, but got the " +
+      "circular reference of class"))
+    val errMsg3 = intercept[UnsupportedOperationException] {
+      Seq(CircularReferenceClassD(null)).toDS
+    }
+    assert(errMsg3.getMessage.startsWith("cannot have circular references in class, but got the " +
+      "circular reference of class"))
+  }
+
+  test("SPARK-20125: option of map") {
+    val ds = Seq(WithMapInOption(Some(Map(1 -> 1)))).toDS()
+    checkDataset(ds, WithMapInOption(Some(Map(1 -> 1))))
+  }
 }
 
 case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
 case class WithMap(id: String, map_test: scala.collection.Map[Long, String])
+case class WithMapInOption(m: Option[scala.collection.Map[Int, Int]])
 
 case class Generic[T](id: T, value: Double)
 
@@ -1214,3 +1247,9 @@ object DatasetTransform {
 
 case class Route(src: String, dest: String, cost: Int)
 case class GroupedRoutes(src: String, dest: String, routes: Seq[Route])
+
+case class CircularReferenceClassA(cls: CircularReferenceClassB)
+case class CircularReferenceClassB(cls: CircularReferenceClassA)
+case class CircularReferenceClassC(ar: Array[CircularReferenceClassC])
+case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
+case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])

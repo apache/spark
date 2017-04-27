@@ -29,8 +29,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
@@ -40,7 +38,6 @@ import org.apache.spark.util.Utils;
 public class JavaSaveLoadSuite {
 
   private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
 
   File path;
   Dataset<Row> df;
@@ -58,7 +55,6 @@ public class JavaSaveLoadSuite {
       .master("local[*]")
       .appName("testing")
       .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
 
     path =
       Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
@@ -70,8 +66,8 @@ public class JavaSaveLoadSuite {
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
-    JavaRDD<String> rdd = jsc.parallelize(jsonObjects);
-    df = spark.read().json(rdd);
+    Dataset<String> ds = spark.createDataset(jsonObjects, Encoders.STRING());
+    df = spark.read().json(ds);
     df.createOrReplaceTempView("jsonTable");
   }
 

@@ -22,7 +22,7 @@ import java.io.PrintStream
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The slaves should not access this. */
@@ -40,6 +40,7 @@ private[hive] object SparkSQLEnv extends Logging {
       val maybeAppName = sparkConf
         .getOption("spark.app.name")
         .filterNot(_ == classOf[SparkSQLCLIDriver].getName)
+        .filterNot(_ == classOf[HiveThriftServer2].getName)
 
       sparkConf
         .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
@@ -48,10 +49,12 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkContext = sparkSession.sparkContext
       sqlContext = sparkSession.sqlContext
 
-      val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
-      sessionState.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
-      sessionState.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
-      sessionState.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
+      val metadataHive = sparkSession
+        .sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
+        .client.newSession()
+      metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
+      metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
+      metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
       sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
     }
   }

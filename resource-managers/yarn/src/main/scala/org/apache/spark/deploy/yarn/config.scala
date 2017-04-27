@@ -82,6 +82,13 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val ALLOW_HISTORY_SERVER_TRACKING_URL =
+    ConfigBuilder("spark.yarn.historyServer.allowTracking")
+      .doc("Allow using the History Server URL for the application as the tracking URL for the " +
+        "application when the Web UI is not enabled.")
+      .booleanConf
+      .createWithDefault(false)
+
   /* File distribution. */
 
   private[spark] val SPARK_ARCHIVE = ConfigBuilder("spark.yarn.archive")

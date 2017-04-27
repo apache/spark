@@ -69,11 +69,12 @@ class DecisionTreeRegressorSuite
   test("copied model must have the same parent") {
     val categoricalFeatures = Map(0 -> 2, 1 -> 2)
     val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
-    val model = new DecisionTreeRegressor()
+    val dtr = new DecisionTreeRegressor()
       .setImpurity("variance")
       .setMaxDepth(2)
-      .setMaxBins(8).fit(df)
-    MLTestingUtils.checkCopy(model)
+      .setMaxBins(8)
+    val model = dtr.fit(df)
+    MLTestingUtils.checkCopyAndUids(dtr, model)
   }
 
   test("predictVariance") {
@@ -165,16 +166,17 @@ class DecisionTreeRegressorSuite
     val categoricalData: DataFrame =
       TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 0)
     testEstimatorAndModelReadWrite(dt, categoricalData,
-      TreeTests.allParamSettings, checkModelData)
+      TreeTests.allParamSettings, TreeTests.allParamSettings, checkModelData)
 
     // Continuous splits with tree depth 2
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
     testEstimatorAndModelReadWrite(dt, continuousData,
-      TreeTests.allParamSettings, checkModelData)
+      TreeTests.allParamSettings, TreeTests.allParamSettings, checkModelData)
 
     // Continuous splits with tree depth 0
     testEstimatorAndModelReadWrite(dt, continuousData,
+      TreeTests.allParamSettings ++ Map("maxDepth" -> 0),
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
   }
 }

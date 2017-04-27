@@ -184,14 +184,27 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   @Path("applications/{appId}/logs")
   def getEventLogs(
       @PathParam("appId") appId: String): EventLogDownloadResource = {
-    new EventLogDownloadResource(uiRoot, appId, None)
+    try {
+      // withSparkUI will throw NotFoundException if attemptId exists for this application.
+      // So we need to try again with attempt id "1".
+      withSparkUI(appId, None) { _ =>
+        new EventLogDownloadResource(uiRoot, appId, None)
+      }
+    } catch {
+      case _: NotFoundException =>
+        withSparkUI(appId, Some("1")) { _ =>
+          new EventLogDownloadResource(uiRoot, appId, None)
+        }
+    }
   }
 
   @Path("applications/{appId}/{attemptId}/logs")
   def getEventLogs(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
-    new EventLogDownloadResource(uiRoot, appId, Some(attemptId))
+    withSparkUI(appId, Some(attemptId)) { _ =>
+      new EventLogDownloadResource(uiRoot, appId, Some(attemptId))
+    }
   }
 
   @Path("version")
@@ -199,6 +212,21 @@ private[v1] class ApiRootResource extends ApiRequestContext {
     new VersionResource(uiRoot)
   }
 
+  @Path("applications/{appId}/environment")
+  def getEnvironment(@PathParam("appId") appId: String): ApplicationEnvironmentResource = {
+    withSparkUI(appId, None) { ui =>
+      new ApplicationEnvironmentResource(ui)
+    }
+  }
+
+  @Path("applications/{appId}/{attemptId}/environment")
+  def getEnvironment(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): ApplicationEnvironmentResource = {
+    withSparkUI(appId, Some(attemptId)) { ui =>
+      new ApplicationEnvironmentResource(ui)
+    }
+  }
 }
 
 private[spark] object ApiRootResource {
@@ -276,7 +304,6 @@ private[v1] trait ApiRequestContext {
       case None => throw new NotFoundException("no such app: " + appId)
     }
   }
-
 }
 
 private[v1] class ForbiddenException(msg: String) extends WebApplicationException(

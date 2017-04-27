@@ -143,8 +143,8 @@ test_that("PipelinedRDD support actions: cache(), persist(), unpersist(), checkp
   expect_false(rdd2@env$isCached)
 
   tempDir <- tempfile(pattern = "checkpoint")
-  setCheckpointDir(sc, tempDir)
-  checkpoint(rdd2)
+  setCheckpointDirSC(sc, tempDir)
+  checkpointRDD(rdd2)
   expect_true(rdd2@env$isCheckpointed)
 
   rdd2 <- lapply(rdd2, function(x) x)

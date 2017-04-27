@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
+  private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = Some("GMT")): Cast = {
     v match {
       case lit: Expression => Cast(lit, targetType, timeZoneId)
       case _ => Cast(Literal(v), targetType, timeZoneId)
@@ -47,7 +47,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   private def checkNullCast(from: DataType, to: DataType): Unit = {
-    checkEvaluation(cast(Literal.create(null, from), to, Option("GMT")), null)
+    checkEvaluation(cast(Literal.create(null, from), to), null)
   }
 
   test("null cast") {
@@ -812,5 +812,19 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast(1L, DateType).checkInputDataTypes().isFailure)
     assert(cast(1.0.toFloat, DateType).checkInputDataTypes().isFailure)
     assert(cast(1.0, DateType).checkInputDataTypes().isFailure)
+  }
+
+  test("SPARK-20302 cast with same structure") {
+    val from = new StructType()
+      .add("a", IntegerType)
+      .add("b", new StructType().add("b1", LongType))
+
+    val to = new StructType()
+      .add("a1", IntegerType)
+      .add("b1", new StructType().add("b11", LongType))
+
+    val input = Row(10, Row(12L))
+
+    checkEvaluation(cast(Literal.create(input, from), to), input)
   }
 }

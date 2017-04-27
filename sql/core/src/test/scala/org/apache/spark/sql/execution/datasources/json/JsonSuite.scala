@@ -590,7 +590,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalPath
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
     val jsonDF = spark.read.json(path)
 
     val expectedSchema = StructType(
@@ -622,7 +622,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalPath
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
     val jsonDF = spark.read.option("primitivesAsString", "true").json(path)
 
     val expectedSchema = StructType(
@@ -777,9 +777,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
-    val mixedIntegerAndDoubleRecords = sparkContext.parallelize(
-      """{"a": 3, "b": 1.1}""" ::
-      s"""{"a": 3.1, "b": 0.${"0" * 38}1}""" :: Nil)
+    val mixedIntegerAndDoubleRecords = Seq(
+      """{"a": 3, "b": 1.1}""",
+      s"""{"a": 3.1, "b": 0.${"0" * 38}1}""").toDS()
     val jsonDF = spark.read
       .option("prefersDecimal", "true")
       .json(mixedIntegerAndDoubleRecords)
@@ -828,7 +828,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val mergedJsonDF = spark.read
       .option("prefersDecimal", "true")
-      .json(floatingValueRecords ++ bigIntegerRecords)
+      .json(floatingValueRecords.union(bigIntegerRecords))
 
     val expectedMergedSchema = StructType(
       StructField("a", DoubleType, true) ::
@@ -846,7 +846,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.toURI.toString
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
 
     sql(
       s"""
@@ -873,7 +873,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalPath
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
 
     val schema = StructType(
       StructField("bigInteger", DecimalType.SYSTEM_DEFAULT, true) ::
@@ -1041,9 +1041,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       spark.read
         .option("mode", "FAILFAST")
         .json(corruptRecords)
-        .collect()
     }
-    assert(exceptionOne.getMessage.contains("Malformed line in FAILFAST mode: {"))
+    assert(exceptionOne.getMessage.contains("JsonParseException"))
 
     val exceptionTwo = intercept[SparkException] {
       spark.read
@@ -1052,7 +1051,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .json(corruptRecords)
         .collect()
     }
-    assert(exceptionTwo.getMessage.contains("Malformed line in FAILFAST mode: {"))
+    assert(exceptionTwo.getMessage.contains("JsonParseException"))
   }
 
   test("Corrupt records: DROPMALFORMED mode") {
@@ -1082,84 +1081,72 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(jsonDFTwo.schema === schemaTwo)
   }
 
+  test("SPARK-19641: Additional corrupt records: DROPMALFORMED mode") {
+    val schema = new StructType().add("dummy", StringType)
+    // `DROPMALFORMED` mode should skip corrupt records
+    val jsonDF = spark.read
+      .option("mode", "DROPMALFORMED")
+      .json(additionalCorruptRecords)
+    checkAnswer(
+      jsonDF,
+      Row("test"))
+    assert(jsonDF.schema === schema)
+  }
+
   test("Corrupt records: PERMISSIVE mode, without designated column for malformed records") {
-    withTempView("jsonTable") {
-      val schema = StructType(
-        StructField("a", StringType, true) ::
-          StructField("b", StringType, true) ::
-          StructField("c", StringType, true) :: Nil)
+    val schema = StructType(
+      StructField("a", StringType, true) ::
+        StructField("b", StringType, true) ::
+        StructField("c", StringType, true) :: Nil)
 
-      val jsonDF = spark.read.schema(schema).json(corruptRecords)
-      jsonDF.createOrReplaceTempView("jsonTable")
+    val jsonDF = spark.read.schema(schema).json(corruptRecords)
 
-      checkAnswer(
-        sql(
-          """
-            |SELECT a, b, c
-            |FROM jsonTable
-          """.stripMargin),
-        Seq(
-          // Corrupted records are replaced with null
-          Row(null, null, null),
-          Row(null, null, null),
-          Row(null, null, null),
-          Row("str_a_4", "str_b_4", "str_c_4"),
-          Row(null, null, null))
-      )
-    }
+    checkAnswer(
+      jsonDF.select($"a", $"b", $"c"),
+      Seq(
+        // Corrupted records are replaced with null
+        Row(null, null, null),
+        Row(null, null, null),
+        Row(null, null, null),
+        Row("str_a_4", "str_b_4", "str_c_4"),
+        Row(null, null, null))
+    )
   }
 
   test("Corrupt records: PERMISSIVE mode, with designated column for malformed records") {
     // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
-      withTempView("jsonTable") {
-        val jsonDF = spark.read.json(corruptRecords)
-        jsonDF.createOrReplaceTempView("jsonTable")
-        val schema = StructType(
-          StructField("_unparsed", StringType, true) ::
+      val jsonDF = spark.read.json(corruptRecords)
+      val schema = StructType(
+        StructField("_unparsed", StringType, true) ::
           StructField("a", StringType, true) ::
           StructField("b", StringType, true) ::
           StructField("c", StringType, true) :: Nil)
 
-        assert(schema === jsonDF.schema)
+      assert(schema === jsonDF.schema)
 
-        // In HiveContext, backticks should be used to access columns starting with a underscore.
-        checkAnswer(
-          sql(
-            """
-              |SELECT a, b, c, _unparsed
-              |FROM jsonTable
-            """.stripMargin),
-          Row(null, null, null, "{") ::
-            Row(null, null, null, """{"a":1, b:2}""") ::
-            Row(null, null, null, """{"a":{, b:3}""") ::
-            Row("str_a_4", "str_b_4", "str_c_4", null) ::
-            Row(null, null, null, "]") :: Nil
-        )
+      // In HiveContext, backticks should be used to access columns starting with a underscore.
+      checkAnswer(
+        jsonDF.select($"a", $"b", $"c", $"_unparsed"),
+        Row(null, null, null, "{") ::
+          Row(null, null, null, """{"a":1, b:2}""") ::
+          Row(null, null, null, """{"a":{, b:3}""") ::
+          Row("str_a_4", "str_b_4", "str_c_4", null) ::
+          Row(null, null, null, "]") :: Nil
+      )
 
-        checkAnswer(
-          sql(
-            """
-              |SELECT a, b, c
-              |FROM jsonTable
-              |WHERE _unparsed IS NULL
-            """.stripMargin),
-          Row("str_a_4", "str_b_4", "str_c_4")
-        )
+      checkAnswer(
+        jsonDF.filter($"_unparsed".isNull).select($"a", $"b", $"c"),
+        Row("str_a_4", "str_b_4", "str_c_4")
+      )
 
-        checkAnswer(
-          sql(
-            """
-              |SELECT _unparsed
-              |FROM jsonTable
-              |WHERE _unparsed IS NOT NULL
-            """.stripMargin),
-          Row("{") ::
-            Row("""{"a":1, b:2}""") ::
-            Row("""{"a":{, b:3}""") ::
-            Row("]") :: Nil
-        )
-      }
+      checkAnswer(
+        jsonDF.filter($"_unparsed".isNotNull).select($"_unparsed"),
+        Row("{") ::
+          Row("""{"a":1, b:2}""") ::
+          Row("""{"a":{, b:3}""") ::
+          Row("]") :: Nil
+      )
     }
   }
 
@@ -1263,7 +1250,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(result2(3) === "{\"f1\":{\"f11\":4,\"f12\":true},\"f2\":{\"D4\":2147483644}}")
 
     val jsonDF = spark.read.json(primitiveFieldAndType)
-    val primTable = spark.read.json(jsonDF.toJSON.rdd)
+    val primTable = spark.read.json(jsonDF.toJSON)
     primTable.createOrReplaceTempView("primitiveTable")
     checkAnswer(
         sql("select * from primitiveTable"),
@@ -1276,7 +1263,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       )
 
     val complexJsonDF = spark.read.json(complexFieldAndType1)
-    val compTable = spark.read.json(complexJsonDF.toJSON.rdd)
+    val compTable = spark.read.json(complexJsonDF.toJSON)
     compTable.createOrReplaceTempView("complexTable")
     // Access elements of a primitive array.
     checkAnswer(
@@ -1364,10 +1351,10 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     })
   }
 
-  test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
+  test("SPARK-6245 JsonInferSchema.infer on empty RDD") {
     // This is really a test that it doesn't throw an exception
     val emptySchema = JsonInferSchema.infer(
-      empty,
+      empty.rdd,
       new JSONOptions(Map.empty[String, String], "GMT"),
       CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
@@ -1394,7 +1381,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-8093 Erase empty structs") {
     val emptySchema = JsonInferSchema.infer(
-      emptyRecords,
+      emptyRecords.rdd,
       new JSONOptions(Map.empty[String, String], "GMT"),
       CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
@@ -1592,7 +1579,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val dir = Utils.createTempDir()
       dir.delete()
       val path = dir.getCanonicalPath
-      arrayAndStructRecords.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+      arrayAndStructRecords.map(record => record.replaceAll("\n", " ")).write.text(path)
 
       val schema =
         StructType(
@@ -1609,7 +1596,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val dir = Utils.createTempDir()
       dir.delete()
       val path = dir.getCanonicalPath
-      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
 
       val jsonDF = spark.read.json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
@@ -1645,7 +1632,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       dir.delete()
 
       val path = dir.getCanonicalPath
-      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
 
       val jsonDF = spark.read.json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
@@ -1693,8 +1680,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val json = s"""
        |{"a": [{$nested}], "b": [{$nested}]}
      """.stripMargin
-    val rdd = spark.sparkContext.makeRDD(Seq(json))
-    val df = spark.read.json(rdd)
+    val df = spark.read.json(Seq(json).toDS())
     assert(df.schema.size === 2)
     df.collect()
   }
@@ -1768,7 +1754,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       timestampsWithFormat.write
         .format("json")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option("timeZone", "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -1786,7 +1772,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val readBack = spark.read
         .schema(customSchema)
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option("timeZone", "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .json(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)
@@ -1794,8 +1780,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
-    val records = sparkContext
-      .parallelize("""{"a": 3, "b": 1.1}""" :: """{"a": 3.1, "b": 0.000001}""" :: Nil)
+    val records = Seq("""{"a": 3, "b": 1.1}""", """{"a": 3.1, "b": 0.000001}""").toDS()
 
     val schema = StructType(
       StructField("a", DecimalType(21, 1), true) ::
@@ -1908,6 +1893,24 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
+  test("SPARK-19641: Handle multi-line corrupt documents (DROPMALFORMED)") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val corruptRecordCount = additionalCorruptRecords.count().toInt
+      assert(corruptRecordCount === 5)
+
+      additionalCorruptRecords
+        .toDF("value")
+        // this is the minimum partition count that avoids hash collisions
+        .repartition(corruptRecordCount * 4, F.hash($"value"))
+        .write
+        .text(path)
+
+      val jsonDF = spark.read.option("wholeFile", true).option("mode", "DROPMALFORMED").json(path)
+      checkAnswer(jsonDF, Seq(Row("test")))
+    }
+  }
+
   test("SPARK-18352: Handle multi-line corrupt documents (FAILFAST)") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -1929,9 +1932,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .option("wholeFile", true)
           .option("mode", "FAILFAST")
           .json(path)
-          .collect()
       }
-      assert(exceptionOne.getMessage.contains("Malformed line in FAILFAST mode"))
+      assert(exceptionOne.getMessage.contains("Failed to infer a common schema"))
 
       val exceptionTwo = intercept[SparkException] {
         spark.read
@@ -1941,7 +1943,39 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .json(path)
           .collect()
       }
-      assert(exceptionTwo.getMessage.contains("Malformed line in FAILFAST mode"))
+      assert(exceptionTwo.getMessage.contains("Failed to parse a value"))
+    }
+  }
+
+  test("Throw an exception if a `columnNameOfCorruptRecord` field violates requirements") {
+    val columnNameOfCorruptRecord = "_unparsed"
+    val schema = StructType(
+      StructField(columnNameOfCorruptRecord, IntegerType, true) ::
+        StructField("a", StringType, true) ::
+        StructField("b", StringType, true) ::
+        StructField("c", StringType, true) :: Nil)
+    val errMsg = intercept[AnalysisException] {
+      spark.read
+        .option("mode", "Permissive")
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schema)
+        .json(corruptRecords)
+    }.getMessage
+    assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
+
+    // We use `PERMISSIVE` mode by default if invalid string is given.
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      corruptRecords.toDF("value").write.text(path)
+      val errMsg = intercept[AnalysisException] {
+        spark.read
+          .option("mode", "permm")
+          .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+          .schema(schema)
+          .json(path)
+          .collect
+      }.getMessage
+      assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
     }
   }
 }

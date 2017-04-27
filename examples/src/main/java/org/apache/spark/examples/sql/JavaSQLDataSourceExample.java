@@ -25,8 +25,6 @@ import java.util.List;
 import java.util.Properties;
 
 // $example on:basic_parquet_example$
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.Encoders;
 // $example on:schema_merging$
@@ -217,12 +215,11 @@ public class JavaSQLDataSourceExample {
     // +------+
 
     // Alternatively, a DataFrame can be created for a JSON dataset represented by
-    // an RDD[String] storing one JSON object per string.
+    // a Dataset<String> storing one JSON object per string.
     List<String> jsonData = Arrays.asList(
             "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
-    JavaRDD<String> anotherPeopleRDD =
-            new JavaSparkContext(spark.sparkContext()).parallelize(jsonData);
-    Dataset<Row> anotherPeople = spark.read().json(anotherPeopleRDD);
+    Dataset<String> anotherPeopleDataset = spark.createDataset(jsonData, Encoders.STRING());
+    Dataset<Row> anotherPeople = spark.read().json(anotherPeopleDataset);
     anotherPeople.show();
     // +---------------+----+
     // |        address|name|
@@ -260,6 +257,11 @@ public class JavaSQLDataSourceExample {
       .save();
 
     jdbcDF2.write()
+      .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties);
+
+    // Specifying create table column data types on write
+    jdbcDF.write()
+      .option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)")
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties);
     // $example off:jdbc_dataset$
   }

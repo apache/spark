@@ -26,7 +26,7 @@ import java.util.List;
 
 /**
  * Computes an approximation to pi
- * Usage: JavaSparkPi [slices]
+ * Usage: JavaSparkPi [partitions]
  */
 public final class JavaSparkPi {
 
