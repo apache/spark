@@ -444,6 +444,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case None => Nil
     case Some(null) => Nil
     case Some(any) => any :: Nil
+    case table: CatalogTable => table.identifier :: Nil
     case other => other :: Nil
   }.mkString(", ")
 
