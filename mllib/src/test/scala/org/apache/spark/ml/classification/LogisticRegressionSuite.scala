@@ -154,27 +154,46 @@ class LogisticRegressionSuite
     val lowerBoundsOnCoefficients = Matrices.dense(1, 4, Array(1.0, 0.0, 1.0, 0.0))
     val upperBoundsOnCoefficients1 = Matrices.dense(1, 4, Array(0.0, 1.0, 1.0, 0.0))
     val upperBoundsOnCoefficients2 = Matrices.dense(1, 3, Array(1.0, 0.0, 1.0))
-
-    val lr = new LogisticRegression().setLowerBoundsOnCoefficients(lowerBoundsOnCoefficients)
+    val lowerBoundsOnIntercepts = Vectors.dense(1.0)
 
     // Work well when only set bound in one side.
-    lr.fit(binaryDataset)
+    new LogisticRegression()
+      .setLowerBoundsOnCoefficients(lowerBoundsOnCoefficients)
+      .fit(binaryDataset)
 
     withClue("bound constrained optimization only supports L2 regularization") {
       intercept[IllegalArgumentException] {
-        lr.setElasticNetParam(1.0).fit(binaryDataset)
+        new LogisticRegression()
+          .setLowerBoundsOnCoefficients(lowerBoundsOnCoefficients)
+          .setElasticNetParam(1.0)
+          .fit(binaryDataset)
       }
     }
 
     withClue("lowerBoundsOnCoefficients should less than or equal to upperBoundsOnCoefficients") {
       intercept[IllegalArgumentException] {
-        lr.setUpperBoundsOnCoefficients(upperBoundsOnCoefficients1).fit(binaryDataset)
+        new LogisticRegression()
+          .setLowerBoundsOnCoefficients(lowerBoundsOnCoefficients)
+          .setUpperBoundsOnCoefficients(upperBoundsOnCoefficients1)
+          .fit(binaryDataset)
       }
     }
 
     withClue("the coefficients bound matrix mismatched with shape (1, number of features)") {
       intercept[IllegalArgumentException] {
-        lr.setUpperBoundsOnCoefficients(upperBoundsOnCoefficients2).fit(binaryDataset)
+        new LogisticRegression()
+          .setLowerBoundsOnCoefficients(lowerBoundsOnCoefficients)
+          .setUpperBoundsOnCoefficients(upperBoundsOnCoefficients2)
+          .fit(binaryDataset)
+      }
+    }
+
+    withClue("bounds on intercepts should not be set if fitting without intercept") {
+      intercept[IllegalArgumentException] {
+        new LogisticRegression()
+          .setLowerBoundsOnIntercepts(lowerBoundsOnIntercepts)
+          .setFitIntercept(false)
+          .fit(binaryDataset)
       }
     }
   }

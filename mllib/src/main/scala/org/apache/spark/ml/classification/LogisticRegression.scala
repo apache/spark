@@ -468,6 +468,10 @@ class LogisticRegression @Since("1.2.0") (
       require($(elasticNetParam) == 0.0, "Fitting under bound constrained optimization only " +
         s"supports L2 regularization, but got elasticNetParam = $getElasticNetParam.")
     }
+    if (!$(fitIntercept)) {
+      require(!isSet(lowerBoundsOnIntercepts) && !isSet(upperBoundsOnIntercepts),
+        "Pls don't set bounds on intercepts if fitting without intercept.")
+    }
     super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
 
@@ -549,7 +553,7 @@ class LogisticRegression @Since("1.2.0") (
 
       val isConstantLabel = histogram.count(_ != 0.0) == 1
 
-      if ($(fitIntercept) && isConstantLabel) {
+      if ($(fitIntercept) && isConstantLabel && !usingBoundConstrainedOptimization) {
         logWarning(s"All labels are the same value and fitIntercept=true, so the coefficients " +
           s"will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
@@ -754,7 +758,8 @@ class LogisticRegression @Since("1.2.0") (
               initialCoefWithInterceptMatrix.update(
                 coefficientSetIndex, featureIndex, lowerBounds(i))
             } else if (
-              initialCoefWithInterceptMatrix(coefficientSetIndex, featureIndex) > upperBounds(i)) {
+              initialCoefWithInterceptMatrix(coefficientSetIndex, featureIndex) > upperBounds(i))
+            {
               initialCoefWithInterceptMatrix.update(
                 coefficientSetIndex, featureIndex, upperBounds(i))
             }
