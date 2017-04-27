@@ -312,7 +312,6 @@ private[spark] object TaskMetrics extends Logging {
         tmAcc.metadata = acc.metadata
         tmAcc.merge(acc.asInstanceOf[AccumulatorV2[Any, Any]])
       } else {
-        acc.metadata = acc.metadata.copy(name = name)
         tm.externalAccums += acc
       }
     }
