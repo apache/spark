@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = Some("GMT")): Cast = {
+  private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
     v match {
       case lit: Expression => Cast(lit, targetType, timeZoneId)
       case _ => Cast(Literal(v), targetType, timeZoneId)
@@ -47,7 +47,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   private def checkNullCast(from: DataType, to: DataType): Unit = {
-    checkEvaluation(cast(Literal.create(null, from), to), null)
+    checkEvaluation(cast(Literal.create(null, from), to, Option("GMT")), null)
   }
 
   test("null cast") {
