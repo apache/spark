@@ -482,7 +482,6 @@ class StreamExecution(
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
-        sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
         constructNextBatch()
     }
   }
