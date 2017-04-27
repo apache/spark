@@ -252,11 +252,17 @@ private[spark] class EventLoggingListener(
 
   private[spark] def redactEvent(
       event: SparkListenerEnvironmentUpdate): SparkListenerEnvironmentUpdate = {
-    // "Spark Properties" entry will always exist because the map is always populated with it.
-    val redactedProps = Utils.redact(sparkConf, event.environmentDetails("Spark Properties"))
-    val redactedEnvironmentDetails = event.environmentDetails +
-      ("Spark Properties" -> redactedProps)
-    SparkListenerEnvironmentUpdate(redactedEnvironmentDetails)
+    // environmentDetails maps a string descriptor to a set of properties
+    // Similar to:
+    // "JVM Information" -> jvmInformation,
+    // "Spark Properties" -> sparkProperties,
+    // ...
+    // where jvmInformation, sparkProperties, etc. are sequence of tuples.
+    // We go through the various  of properties and redact sensitive information from them.
+    val redactedProps = event.environmentDetails.map{ case (name, props) =>
+      name -> Utils.redact(sparkConf, props)
+    }
+    SparkListenerEnvironmentUpdate(redactedProps)
   }
 
 }
