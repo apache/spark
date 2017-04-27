@@ -999,13 +999,14 @@ class Analyzer(
 
   /**
    * Replace unresolved expressions in grouping keys with resolved ones in SELECT clauses.
+   * This rule is expected to run after [[ResolveReferences]] applied.
    */
   object ResolveAggAliasInGroupBy extends Rule[LogicalPlan] {
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case agg @ Aggregate(groups, aggs, child)
           if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
-            groups.exists(!_.resolved) =>
+            groups.exists(_.isInstanceOf[UnresolvedAttribute]) =>
         agg.copy(groupingExpressions = groups.map {
           case u: UnresolvedAttribute => aggs.find(ne => resolver(ne.name, u.name)).getOrElse(u)
           case e => e
