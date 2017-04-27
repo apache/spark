@@ -114,7 +114,7 @@ class KolmogorovSmirnovTestResult private[stat] (
  * Object containing the test results for streaming testing.
  */
 @Since("1.6.0")
-private[stat] class StreamingTestResult @Since("1.6.0") (
+class StreamingTestResult @Since("1.6.0") (
     @Since("1.6.0") override val pValue: Double,
     @Since("1.6.0") override val degreesOfFreedom: Double,
     @Since("1.6.0") override val statistic: Double,

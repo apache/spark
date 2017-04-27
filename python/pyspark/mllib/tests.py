@@ -59,6 +59,7 @@ from pyspark.mllib.recommendation import Rating
 from pyspark.mllib.regression import LabeledPoint, StreamingLinearRegressionWithSGD
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
+from pyspark.mllib.stat.test import BinarySample, StreamingTest, StreamingTestResult
 from pyspark.mllib.feature import HashingTF
 from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
@@ -66,7 +67,7 @@ from pyspark.mllib.feature import StandardScaler, ElementwiseProduct
 from pyspark.mllib.util import LinearDataGenerator
 from pyspark.mllib.util import MLUtils
 from pyspark.serializers import PickleSerializer
-from pyspark.streaming import StreamingContext
+from pyspark.streaming.tests import PySparkStreamingTestCase
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import IllegalArgumentException
 from pyspark.streaming import StreamingContext
@@ -1697,6 +1698,44 @@ class HashingTFTest(MLlibTestCase):
         for i in range(0, n):
             self.assertAlmostEqual(output[i], expected[i], 14, "Error at " + str(i) +
                                    ": expected " + str(expected[i]) + ", got " + str(output[i]))
+
+
+class StreamingTestTest(PySparkStreamingTestCase):
+    def test_streaming_test_result_and_model(self):
+        """
+        Assert the StreamingTest return valid result, and the set method of it.
+        """
+
+        checkpoint_path = tempfile.mkdtemp()
+        self.ssc.checkpoint(checkpoint_path)
+
+        # Create the queue through which RDDs can be pushed to a QueueInputDStream.
+        rdd_queue = []
+        for i in range(5):
+            rdd_queue += [self.ssc.sparkContext.parallelize(
+                [BinarySample(True, j) for j in range(1, 1001)], 10)]
+
+        # Create the QueueInputDStream and use it do some processing.
+        input_stream = self.ssc.queueStream(rdd_queue)
+
+        model = StreamingTest()
+        model.setPeacePeriod(1)
+        model.setWindowSize(2)
+        model.setTestMethod("student")
+
+        test_result = model.registerStream(input_stream)
+        res = self._take(test_result, 1)[0]
+        self.assertTrue(isinstance(res, StreamingTestResult))
+        self.assertEqual(res.method, "Student's 2-sample t-test")
+
+        self.assertEqual(model._peacePeriod, 1)
+        self.assertEqual(model._windowSize, 2)
+        self.assertEqual(model._testMethod, "student")
+
+        try:
+            rmtree(checkpoint_path)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":

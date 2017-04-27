@@ -15,10 +15,15 @@
 # limitations under the License.
 #
 
+from collections import namedtuple
+
+from pyspark import SparkContext, since
 from pyspark.mllib.common import inherit_doc, JavaModelWrapper
+from pyspark.streaming.dstream import DStream
 
 
-__all__ = ["ChiSqTestResult", "KolmogorovSmirnovTestResult"]
+__all__ = ["ChiSqTestResult", "KolmogorovSmirnovTestResult", "BinarySample", "StreamingTest",
+           "StreamingTestResult"]
 
 
 class TestResult(JavaModelWrapper):
@@ -80,3 +85,118 @@ class KolmogorovSmirnovTestResult(TestResult):
     """
     Contains test results for the Kolmogorov-Smirnov test.
     """
+
+
+class BinarySample(namedtuple("BinarySample", ["isExperiment", "value"])):
+    """
+    Represents a (isExperiment, value) tuple.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __reduce__(self):
+        return BinarySample, (bool(self.isExperiment), float(self.value))
+
+
+class StreamingTestResult(namedtuple("StreamingTestResult",
+                                     ["pValue", "degreesOfFreedom", "statistic", "method",
+                                      "nullHypothesis"])):
+    """
+    Contains test results for StreamingTest.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __reduce__(self):
+        return StreamingTestResult, (float(self.pValue),
+                                     float(self.degreesOfFreedom), float(self.statistic),
+                                     str(self.method), str(self.nullHypothesis))
+
+
+class StreamingTest(object):
+    """
+    .. note:: Experimental
+
+    Online 2-sample significance testing for a stream of (Boolean, Double) pairs. The Boolean
+    identifies which sample each observation comes from, and the Double is the numeric value of the
+    observation.
+
+    To address novelty affects, the `peacePeriod` specifies a set number of initial RDD batches of
+    the DStream to be dropped from significance testing.
+
+    The `windowSize` sets the number of batches each significance test is to be performed over. The
+    window is sliding with a stride length of 1 batch. Setting windowSize to 0 will perform
+    cumulative processing, using all batches seen so far.
+
+    Different tests may be used for assessing statistical significance depending on assumptions
+    satisfied by data. For more details, see StreamingTestMethod. The `testMethod` specifies
+    which test will be used.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __init__(self):
+        self._peacePeriod = 0
+        self._windowSize = 0
+        self._testMethod = "welch"
+
+    @since('2.0.0')
+    def setPeacePeriod(self, peacePeriod):
+        """
+        Update peacePeriod
+        :param peacePeriod:
+          Set number of initial RDD batches of the DStream to be dropped from significance testing.
+        """
+        self._peacePeriod = peacePeriod
+
+    @since('2.0.0')
+    def setWindowSize(self, windowSize):
+        """
+        Update windowSize
+        :param windowSize:
+          Set the number of batches each significance test is to be performed over.
+        """
+        self._windowSize = windowSize
+
+    @since('2.0.0')
+    def setTestMethod(self, testMethod):
+        """
+        Update test method
+        :param testMethod:
+          Currently supported tests: `welch`, `student`.
+        """
+        assert(testMethod in ("welch", "student"),
+               "Currently supported tests: \"welch\", \"student\"")
+        self._testMethod = testMethod
+
+    @since('2.0.0')
+    def registerStream(self, data):
+        """
+        Register a data stream to get its test result.
+
+        :param data:
+          The input data stream, each element is a BinarySample instance.
+        """
+        self._validate(data)
+        sc = SparkContext._active_spark_context
+
+        streamingTest = sc._jvm.org.apache.spark.mllib.stat.test.StreamingTest()
+        streamingTest.setPeacePeriod(self._peacePeriod)
+        streamingTest.setWindowSize(self._windowSize)
+        streamingTest.setTestMethod(self._testMethod)
+
+        javaDStream = sc._jvm.SerDe.pythonToJava(data._jdstream, True)
+        testResult = streamingTest.registerStream(javaDStream)
+        pythonTestResult = sc._jvm.SerDe.javaToPython(testResult)
+
+        pyResult = DStream(pythonTestResult, data._ssc, data._jrdd_deserializer)
+
+        return pyResult
+
+    @classmethod
+    def _validate(cls, samples):
+        if isinstance(samples, DStream):
+            pass
+        else:
+            raise TypeError("BinarySample should be represented by a DStream, "
+                            "but got %s." % type(samples))
