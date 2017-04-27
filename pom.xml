@@ -2599,8 +2599,7 @@
         <dependencies>
 
           <!--
-          Hadoop-Azure isn't in Hadoop 2.6, so this has to be made
-          a 2.7+ moodule.
+          Hadoop WASB client only arrived in Hadoop 2.7
           -->
           <dependency>
             <groupId>org.apache.hadoop</groupId>
