@@ -188,7 +188,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    */
   @Since("2.2.0")
   val lowerBoundsOnCoefficients: Param[Matrix] = new Param(this, "lowerBoundsOnCoefficients",
-    "The lower bound of coefficients if fitting under bound constrained optimization.")
+    "The lower bounds on coefficients if fitting under bound constrained optimization.")
 
   /** @group getParam */
   @Since("2.2.0")
@@ -204,7 +204,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    */
   @Since("2.2.0")
   val upperBoundsOnCoefficients: Param[Matrix] = new Param(this, "upperBoundsOnCoefficients",
-    "The upper bound of coefficients if fitting under bound constrained optimization.")
+    "The upper bounds on coefficients if fitting under bound constrained optimization.")
 
   /** @group getParam */
   @Since("2.2.0")
@@ -219,7 +219,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    */
   @Since("2.2.0")
   val lowerBoundsOnIntercepts: Param[Vector] = new Param(this, "lowerBoundsOnIntercepts",
-    "The lower bound of intercept if fitting under bound constrained optimization.")
+    "The lower bounds on intercepts if fitting under bound constrained optimization.")
 
   /** @group getParam */
   @Since("2.2.0")
@@ -234,17 +234,30 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    */
   @Since("2.2.0")
   val upperBoundsOnIntercepts: Param[Vector] = new Param(this, "upperBoundsOnIntercepts",
-    "The upper bound of coefficients if fitting under bound constrained optimization.")
+    "The upper bounds on intercepts if fitting under bound constrained optimization.")
 
   /** @group getParam */
   @Since("2.2.0")
   def getUpperBoundsOnIntercepts: Vector = $(upperBoundsOnIntercepts)
+
+  protected def usingBoundConstrainedOptimization: Boolean = {
+    isSet(lowerBoundsOnCoefficients) || isSet(upperBoundsOnCoefficients) ||
+      isSet(lowerBoundsOnIntercepts) || isSet(upperBoundsOnIntercepts)
+  }
 
   override protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
     checkThresholdConsistency()
+    if (usingBoundConstrainedOptimization) {
+      require($(elasticNetParam) == 0.0, "Fitting under bound constrained optimization only " +
+        s"supports L2 regularization, but got elasticNetParam = $getElasticNetParam.")
+    }
+    if (!$(fitIntercept)) {
+      require(!isSet(lowerBoundsOnIntercepts) && !isSet(upperBoundsOnIntercepts),
+        "Pls don't set bounds on intercepts if fitting without intercept.")
+    }
     super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
 }
@@ -409,11 +422,6 @@ class LogisticRegression @Since("1.2.0") (
   @Since("2.2.0")
   def setUpperBoundsOnIntercepts(value: Vector): this.type = set(upperBoundsOnIntercepts, value)
 
-  private def usingBoundConstrainedOptimization: Boolean = {
-    isSet(lowerBoundsOnCoefficients) || isSet(upperBoundsOnCoefficients) ||
-      isSet(lowerBoundsOnIntercepts) || isSet(upperBoundsOnIntercepts)
-  }
-
   private def assertBoundConstrainedOptimizationParamsValid(
       numCoefficientSets: Int,
       numFeatures: Int): Unit = {
@@ -457,22 +465,6 @@ class LogisticRegression @Since("1.2.0") (
   override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     train(dataset, handlePersistence)
-  }
-
-  @Since("2.2.0")
-  override def validateAndTransformSchema(
-      schema: StructType,
-      fitting: Boolean,
-      featuresDataType: DataType): StructType = {
-    if (usingBoundConstrainedOptimization) {
-      require($(elasticNetParam) == 0.0, "Fitting under bound constrained optimization only " +
-        s"supports L2 regularization, but got elasticNetParam = $getElasticNetParam.")
-    }
-    if (!$(fitIntercept)) {
-      require(!isSet(lowerBoundsOnIntercepts) && !isSet(upperBoundsOnIntercepts),
-        "Pls don't set bounds on intercepts if fitting without intercept.")
-    }
-    super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
 
   protected[spark] def train(
