@@ -476,6 +476,10 @@ SparkR supports the following machine learning algorithms currently:
 
 * [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS)`](ml-collaborative-filtering.html#collaborative-filtering)
 
+#### Frequent Pattern Mining
+
+* [`spark.fpGrowth`](api/R/spark.fpGrowth.html) : [`FP-growth`](ml-frequent-pattern-mining.html#fp-growth)
+
 #### Statistics
 
 * [`spark.kstest`](api/R/spark.kstest.html): `Kolmogorov-Smirnov Test`
