@@ -158,11 +158,11 @@ private[sql] object ArrowConverters {
     val out = new ByteArrayOutputStream()
     val writer = new ArrowFileWriter(root, null, Channels.newChannel(out))
 
-    // Write batch to a byte array, ensure the batch, allocator and writer are closed
+    // Write a batch to byte stream, ensure the batch, allocator and writer are closed
     Utils.tryWithSafeFinally {
       val loader = new VectorLoader(root)
       loader.load(batch)
-      writer.writeBatch()
+      writer.writeBatch()  // writeBatch can throw IOException
     } {
       batch.close()
       root.close()
