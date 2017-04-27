@@ -198,11 +198,8 @@ public class SparkLauncherSuite {
       .setMainClass(SparkLauncherTestApp.class.getName())
       .launchAsThread(true)
       .addAppArgs("proc");
-    final Process app = launcher.launch();
-
-    new OutputRedirector(app.getInputStream(), TF);
-    new OutputRedirector(app.getErrorStream(), TF);
-    assertEquals(0, app.waitFor());
+    final SparkAppHandle app = launcher.startApplication();
+    assertEquals(false, app.getState().isFinal());
   }
 
   public static class SparkLauncherTestApp {

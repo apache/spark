@@ -500,6 +500,8 @@ public class SparkLauncher {
    * @return A process handle for the Spark app.
    */
   public Process launch() throws IOException {
+    checkArgument(launchAsThread == false,
+        "Use StartApplication method to launch application in a Thread");
     Process childProc = createBuilder().start();
     if (redirectToLog) {
       String loggerName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
@@ -509,7 +511,7 @@ public class SparkLauncher {
   }
 
   private String getAppName() throws IOException {
-    String appName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
+    String appName = launchAsThread ? null : builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
     if (appName == null) {
       if (builder.appName != null) {
         appName = builder.appName;
