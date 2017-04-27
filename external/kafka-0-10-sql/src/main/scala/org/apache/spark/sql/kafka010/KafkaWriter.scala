@@ -84,7 +84,7 @@ private[kafka010] object KafkaWriter extends Logging {
       queryExecution: QueryExecution,
       kafkaParameters: ju.Map[String, Object],
       topic: Option[String] = None): Unit = {
-    val schema = queryExecution.logical.output
+    val schema = queryExecution.analyzed.output
     validateQuery(queryExecution, kafkaParameters, topic)
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
       queryExecution.toRdd.foreachPartition { iter =>

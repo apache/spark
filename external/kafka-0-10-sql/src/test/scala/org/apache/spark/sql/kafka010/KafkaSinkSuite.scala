@@ -33,6 +33,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
 class KafkaSinkSuite extends StreamTest with SharedSQLContext {
+
   import testImplicits._
 
   protected var testUtils: KafkaTestUtils = _
@@ -109,25 +110,35 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
   }
 
   test("batch - enforce analyzed plans SPARK-20496") {
-    val df = Seq(1, 1).toDF("key").selectExpr("key", "2 as value")
+    val input = Seq(1, 1).toDF("key").selectExpr("key", "2 as value")
     /* bad dataframe plan */
-    val input = df.union(df)
+    val invalidInput = input.union(input)
     val topic = newTopic()
     testUtils.createTopic(topic)
 
     /* No topic field or topic option */
     var writer: StreamingQuery = null
     var ex: Exception = null
-      ex = intercept[AnalysisException] {
-        writer = createKafkaWriter(input.toDF())(
-          withSelectExpr = "value as key", "value"
-        )
-        writer.processAllAvailable()
-      }
-    println(ex.getMessage)
+    // for improperly formatted DataFrame
+    ex = intercept[AnalysisException] {
+      writer = createKafkaWriter(invalidInput)(
+        withSelectExpr = "value as key", "value"
+      )
+      writer.processAllAvailable()
+    }
     assert(ex.getMessage
       .toLowerCase(Locale.ROOT)
       .contains("can be called only on streaming"))
+    // for invalid Select Expressions
+    ex = intercept[AnalysisException] {
+      writer = createKafkaWriter(input)(
+        withSelectExpr = "val as key", "value"
+      )
+      writer.processAllAvailable()
+    }
+    assert(ex.getMessage
+      .toLowerCase(Locale.ROOT)
+      .contains("cannot resolve"))
 
   }
 
@@ -213,7 +224,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       withTopic = Some(topic),
       withOutputMode = Some(OutputMode.Update()))(
       withSelectExpr = "'foo' as topic",
-        "CAST(value as STRING) key", "CAST(count as STRING) value")
+      "CAST(value as STRING) key", "CAST(count as STRING) value")
 
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
@@ -412,11 +423,11 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
   }
 
   private def createKafkaWriter(
-      input: DataFrame,
-      withTopic: Option[String] = None,
-      withOutputMode: Option[OutputMode] = None,
-      withOptions: Map[String, String] = Map[String, String]())
-      (withSelectExpr: String*): StreamingQuery = {
+                                 input: DataFrame,
+                                 withTopic: Option[String] = None,
+                                 withOutputMode: Option[OutputMode] = None,
+                                 withOptions: Map[String, String] = Map[String, String]())
+                               (withSelectExpr: String*): StreamingQuery = {
     var stream: DataStreamWriter[Row] = null
     withTempDir { checkpointDir =>
       var df = input.toDF()
