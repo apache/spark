@@ -308,9 +308,7 @@ setMethod("otherwise",
 #' Equality test that is safe for null values.
 #'
 #' Can be used, unlike standard equality operator, to perform null-safe joins.
-#' Equivalent to Scala
-#' \href{https://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.Column@%3C=%3E(other:Any):org.apache.spark.sql.Column}{\code{<=>}} and
-#' \href{https://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.Column@eqNullSafe(other:Any):org.apache.spark.sql.Column}{\code{eqNullSafe}}.
+#' Equivalent to Scala \code{Column.<=>} and \code{Column.eqNullSafe}.
 #'
 #' @param x a Column
 #' @param value a value to compare
