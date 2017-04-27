@@ -108,6 +108,31 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       s"save mode overwrite not allowed for kafka"))
   }
 
+  test("batch - enforce analyzed plans SPARK-20496") {
+    val df = Seq(1, 1).toDF("key").selectExpr("key", "2 as value")
+    /* bad dataframe plan */
+    val input = df.union(df)
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    /* No topic field or topic option */
+    var writer: StreamingQuery = null
+    var ex: Exception = null
+    try {
+      ex = intercept[AnalysisException] {
+        writer = createKafkaWriter(input.toDF())(
+          withSelectExpr = "value as key", "value"
+        )
+        writer.processAllAvailable()
+      }
+    } finally {
+    }
+    assert(ex.getMessage
+      .toLowerCase(Locale.ROOT)
+      .contains("can be called only on streaming"))
+
+  }
+
   test("streaming - write to kafka with topic field") {
     val input = MemoryStream[String]
     val topic = newTopic()
