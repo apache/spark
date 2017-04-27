@@ -114,7 +114,7 @@ class DirectKafkaInputDStream[
     if (effectiveRateLimitPerPartition.values.sum > 0) {
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
       Some(effectiveRateLimitPerPartition.map {
-        case (tp, limit) => tp -> (secsPerBatch * limit).toLong
+        case (tp, limit) => tp -> Math.max((secsPerBatch * limit).toLong, 1L)
       })
     } else {
       None

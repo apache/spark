@@ -542,7 +542,7 @@ class DirectKafkaStreamSuite
     )
     val result = kafkaStream.maxMessagesPerPartition(offsets)
     val expected = Map(
-      TopicAndPartition(topic, 0) -> 0L,
+      TopicAndPartition(topic, 0) -> 1L,
       TopicAndPartition(topic, 1) -> 10L,
       TopicAndPartition(topic, 2) -> 20L,
       TopicAndPartition(topic, 3) -> 30L
