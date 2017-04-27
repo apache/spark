@@ -3796,7 +3796,7 @@ setMethod("split_string",
 #' # This is equivalent to the following SQL expression
 #' first(selectExpr(df, "repeat(value, 3)"))
 #' }
-#' @note repeat_string 2.3.0
+#' @note repeat_string since 2.3.0
 setMethod("repeat_string",
           signature(x = "Column", n = "numeric"),
           function(x, n) {
