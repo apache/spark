@@ -747,12 +747,16 @@ class LogisticRegression @Since("1.2.0") (
           // Make sure all initial values locate in the corresponding bound.
           var i = 0
           while (i < numCoeffsPlusIntercepts) {
-            val initialCoefWithInterceptArray =
-              initialCoefWithInterceptMatrix.asInstanceOf[DenseMatrix].values
-            if (initialCoefWithInterceptArray(i) < lowerBounds(i)) {
-              initialCoefWithInterceptArray(i) = lowerBounds(i)
-            } else if (initialCoefWithInterceptArray(i) > upperBounds(i)) {
-              initialCoefWithInterceptArray(i) = upperBounds(i)
+            val coefficientSetIndex = i % numCoefficientSets
+            val featureIndex = i / numCoefficientSets
+            if (initialCoefWithInterceptMatrix(coefficientSetIndex, featureIndex) < lowerBounds(i))
+            {
+              initialCoefWithInterceptMatrix.update(
+                coefficientSetIndex, featureIndex, lowerBounds(i))
+            } else if (
+              initialCoefWithInterceptMatrix(coefficientSetIndex, featureIndex) > upperBounds(i)) {
+              initialCoefWithInterceptMatrix.update(
+                coefficientSetIndex, featureIndex, upperBounds(i))
             }
             i += 1
           }
