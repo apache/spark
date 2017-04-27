@@ -107,7 +107,16 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       footer = readFooter(configuration, file, range(split.getStart(), split.getEnd()));
       MessageType fileSchema = footer.getFileMetaData().getSchema();
       FilterCompat.Filter filter = getFilter(configuration);
-      blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
+      try {
+        blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
+      } catch (IllegalArgumentException e) {
+        // In the case where a particular parquet files does not contain
+        // the column(s) in the filter, we don't do filtering at this level
+        // PARQUET-389 will resolve this issue in Parquet 1.9, which may be used
+        // by future Spark versions. This is a workaround for current Spark version.
+        // Also the assumption here is that the predicates will be applied later
+        blocks = footer.getBlocks();
+      }
     } else {
       // otherwise we find the row groups that were selected on the client
       footer = readFooter(configuration, file, NO_FILTER);
