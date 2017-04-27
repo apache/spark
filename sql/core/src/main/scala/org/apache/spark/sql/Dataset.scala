@@ -240,8 +240,10 @@ class Dataset[T] private[sql](
    * @param _numRows Number of rows to show
    * @param truncate If set to more than 0, truncates strings to `truncate` characters and
    *                   all cells will be aligned right.
+   * @param vertical If set to true, prints output rows vertically (one line per column value).
    */
-  private[sql] def showString(_numRows: Int, truncate: Int = 20): String = {
+  private[sql] def showString(
+      _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
     val numRows = _numRows.max(0)
     val takeResult = toDF().take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
@@ -277,46 +279,80 @@ class Dataset[T] private[sql](
 
     val sb = new StringBuilder
     val numCols = schema.fieldNames.length
+    // We set a minimum column width at '3'
+    val minimumColWidth = 3
 
-    // Initialise the width of each column to a minimum value of '3'
-    val colWidths = Array.fill(numCols)(3)
+    if (!vertical) {
+      // Initialise the width of each column to a minimum value
+      val colWidths = Array.fill(numCols)(minimumColWidth)
 
-    // Compute the width of each column
-    for (row <- rows) {
-      for ((cell, i) <- row.zipWithIndex) {
-        colWidths(i) = math.max(colWidths(i), cell.length)
+      // Compute the width of each column
+      for (row <- rows) {
+        for ((cell, i) <- row.zipWithIndex) {
+          colWidths(i) = math.max(colWidths(i), cell.length)
+        }
       }
-    }
 
-    // Create SeparateLine
-    val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+      // Create SeparateLine
+      val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
 
-    // column names
-    rows.head.zipWithIndex.map { case (cell, i) =>
-      if (truncate > 0) {
-        StringUtils.leftPad(cell, colWidths(i))
-      } else {
-        StringUtils.rightPad(cell, colWidths(i))
-      }
-    }.addString(sb, "|", "|", "|\n")
-
-    sb.append(sep)
-
-    // data
-    rows.tail.map {
-      _.zipWithIndex.map { case (cell, i) =>
+      // column names
+      rows.head.zipWithIndex.map { case (cell, i) =>
         if (truncate > 0) {
-          StringUtils.leftPad(cell.toString, colWidths(i))
+          StringUtils.leftPad(cell, colWidths(i))
         } else {
-          StringUtils.rightPad(cell.toString, colWidths(i))
+          StringUtils.rightPad(cell, colWidths(i))
         }
       }.addString(sb, "|", "|", "|\n")
+
+      sb.append(sep)
+
+      // data
+      rows.tail.foreach {
+        _.zipWithIndex.map { case (cell, i) =>
+          if (truncate > 0) {
+            StringUtils.leftPad(cell.toString, colWidths(i))
+          } else {
+            StringUtils.rightPad(cell.toString, colWidths(i))
+          }
+        }.addString(sb, "|", "|", "|\n")
+      }
+
+      sb.append(sep)
+    } else {
+      // Extended display mode enabled
+      val fieldNames = rows.head
+      val dataRows = rows.tail
+
+      // Compute the width of field name and data columns
+      val fieldNameColWidth = fieldNames.foldLeft(minimumColWidth) { case (curMax, fieldName) =>
+        math.max(curMax, fieldName.length)
+      }
+      val dataColWidth = dataRows.foldLeft(minimumColWidth) { case (curMax, row) =>
+        math.max(curMax, row.map(_.length).reduceLeftOption[Int] { case (cellMax, cell) =>
+          math.max(cellMax, cell)
+        }.getOrElse(0))
+      }
+
+      dataRows.zipWithIndex.foreach { case (row, i) =>
+        // "+ 5" in size means a character length except for padded names and data
+        val rowHeader = StringUtils.rightPad(
+          s"-RECORD $i", fieldNameColWidth + dataColWidth + 5, "-")
+        sb.append(rowHeader).append("\n")
+        row.zipWithIndex.map { case (cell, j) =>
+          val fieldName = StringUtils.rightPad(fieldNames(j), fieldNameColWidth)
+          val data = StringUtils.rightPad(cell, dataColWidth)
+          s" $fieldName | $data "
+        }.addString(sb, "", "\n", "\n")
+      }
     }
 
-    sb.append(sep)
-
-    // For Data that has more than "numRows" records
-    if (hasMoreData) {
+    // Print a footer
+    if (vertical && data.isEmpty) {
+      // In a vertical mode, print an empty row set explicitly
+      sb.append("(0 rows)\n")
+    } else if (hasMoreData) {
+      // For Data that has more than "numRows" records
       val rowsString = if (numRows == 1) "row" else "rows"
       sb.append(s"only showing top $numRows $rowsString\n")
     }
@@ -663,8 +699,59 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
+  def show(numRows: Int, truncate: Int): Unit = show(numRows, truncate, vertical = false)
+
+  /**
+   * Displays the Dataset in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   *
+   * If `vertical` enabled, this command prints output rows vertically (one line per column value)?
+   *
+   * {{{
+   * -RECORD 0-------------------
+   *  year            | 1980
+   *  month           | 12
+   *  AVG('Adj Close) | 0.503218
+   *  AVG('Adj Close) | 0.595103
+   * -RECORD 1-------------------
+   *  year            | 1981
+   *  month           | 01
+   *  AVG('Adj Close) | 0.523289
+   *  AVG('Adj Close) | 0.570307
+   * -RECORD 2-------------------
+   *  year            | 1982
+   *  month           | 02
+   *  AVG('Adj Close) | 0.436504
+   *  AVG('Adj Close) | 0.475256
+   * -RECORD 3-------------------
+   *  year            | 1983
+   *  month           | 03
+   *  AVG('Adj Close) | 0.410516
+   *  AVG('Adj Close) | 0.442194
+   * -RECORD 4-------------------
+   *  year            | 1984
+   *  month           | 04
+   *  AVG('Adj Close) | 0.450090
+   *  AVG('Adj Close) | 0.483521
+   * }}}
+   *
+   * @param numRows Number of rows to show
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                    all cells will be aligned right.
+   * @param vertical If set to true, prints output rows vertically (one line per column value).
+   * @group action
+   * @since 2.3.0
+   */
   // scalastyle:off println
-  def show(numRows: Int, truncate: Int): Unit = println(showString(numRows, truncate))
+  def show(numRows: Int, truncate: Int, vertical: Boolean): Unit =
+    println(showString(numRows, truncate, vertical))
   // scalastyle:on println
 
   /**
