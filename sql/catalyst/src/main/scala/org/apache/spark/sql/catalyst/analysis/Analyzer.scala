@@ -165,7 +165,8 @@ class Analyzer(
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
-      CleanupAliases)
+      CleanupAliases,
+      CleanupBarriers)
   )
 
   /**
@@ -2432,6 +2433,13 @@ object CleanupAliases extends Rule[LogicalPlan] {
       other transformExpressionsDown {
         case Alias(child, _) => child
       }
+  }
+}
+
+/** Remove the barrier nodes of analysis */
+object CleanupBarriers extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case AnalysisBarrier(child) => child
   }
 }
 

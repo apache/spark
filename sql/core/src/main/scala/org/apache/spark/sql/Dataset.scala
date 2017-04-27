@@ -46,7 +46,6 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
-import org.apache.spark.sql.catalyst.trees.{Barrier, CurrentBarrier}
 import org.apache.spark.sql.catalyst.util.{usePrettyExpression, DateTimeUtils}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
@@ -204,7 +203,7 @@ class Dataset[T] private[sql](
    * custom objects, e.g. collect.  Here we resolve and bind the encoder so that we can call its
    * `fromRow` method later.
    */
-  private lazy val boundEnc =
+  private val boundEnc =
     exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
 
   private implicit def classTag = exprEnc.clsTag
@@ -358,9 +357,8 @@ class Dataset[T] private[sql](
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
   def toDF(): DataFrame = {
-    CurrentBarrier.withBarrier(Barrier(Some(logicalPlan))) {
-      new Dataset[Row](sparkSession, queryExecution, RowEncoder(schema))
-    }
+    val plan = AnalysisBarrier(logicalPlan)
+    new Dataset[Row](sparkSession, plan, RowEncoder(schema))
   }
 
   /**
@@ -707,7 +705,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: Dataset[_]): DataFrame = withPlan {
-    Join(logicalPlan, right.logicalPlan, joinType = Inner, None)
+    Join(AnalysisBarrier(logicalPlan), right.logicalPlan, joinType = Inner, None)
   }
 
   /**
@@ -790,8 +788,8 @@ class Dataset[T] private[sql](
 
     withPlan {
       Join(
-        joined.left,
-        joined.right,
+        AnalysisBarrier(joined.left),
+        AnalysisBarrier(joined.right),
         UsingJoin(JoinType(joinType), usingColumns),
         None)
     }
@@ -846,8 +844,9 @@ class Dataset[T] private[sql](
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
     val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr)))
-      .queryExecution.analyzed.asInstanceOf[Join]
+      Join(AnalysisBarrier(logicalPlan), right.logicalPlan, JoinType(joinType),
+        Some(joinExprs.expr)))
+          .queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.
     if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
@@ -855,8 +854,8 @@ class Dataset[T] private[sql](
     }
 
     // If left/right have no output set intersection, return the plan.
-    val lanalyzed = withPlan(this.logicalPlan).queryExecution.analyzed
-    val ranalyzed = withPlan(right.logicalPlan).queryExecution.analyzed
+    val lanalyzed = withPlan(AnalysisBarrier(this.logicalPlan)).queryExecution.analyzed
+    val ranalyzed = withPlan(AnalysisBarrier(right.logicalPlan)).queryExecution.analyzed
     if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
       return withPlan(plan)
     }
@@ -888,7 +887,7 @@ class Dataset[T] private[sql](
    * @since 2.1.0
    */
   def crossJoin(right: Dataset[_]): DataFrame = withPlan {
-    Join(logicalPlan, right.logicalPlan, joinType = Cross, None)
+    Join(AnalysisBarrier(logicalPlan), right.logicalPlan, joinType = Cross, None)
   }
 
   /**
@@ -1139,7 +1138,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = withPlan {
-    Project(cols.map(_.named), logicalPlan)
+    Project(cols.map(_.named), AnalysisBarrier(logicalPlan))
   }
 
   /**
@@ -1817,7 +1816,7 @@ class Dataset[T] private[sql](
 
     withPlan {
       Generate(generator, join = true, outer = false,
-        qualifier = None, generatorOutput = Nil, logicalPlan)
+        qualifier = None, generatorOutput = Nil, AnalysisBarrier(logicalPlan))
     }
   }
 
@@ -1858,7 +1857,7 @@ class Dataset[T] private[sql](
 
     withPlan {
       Generate(generator, join = true, outer = false,
-        qualifier = None, generatorOutput = Nil, logicalPlan)
+        qualifier = None, generatorOutput = Nil, AnalysisBarrier(logicalPlan))
     }
   }
 
@@ -2833,27 +2832,21 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
   @inline private def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
-    CurrentBarrier.withBarrier(Barrier(Some(this.logicalPlan))) {
-      Dataset.ofRows(sparkSession, logicalPlan)
-    }
+    Dataset.ofRows(sparkSession, logicalPlan)
   }
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */
   @inline private def withTypedPlan[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
-    CurrentBarrier.withBarrier(Barrier(Some(this.logicalPlan))) {
-      Dataset(sparkSession, logicalPlan)
-    }
+    Dataset(sparkSession, logicalPlan)
   }
 
   /** A convenient function to wrap a set based logical plan and produce a Dataset. */
   @inline private def withSetOperator[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
-    CurrentBarrier.withBarrier(Barrier(Some(this.logicalPlan))) {
-      if (classTag.runtimeClass.isAssignableFrom(classOf[Row])) {
-        // Set operators widen types (change the schema), so we cannot reuse the row encoder.
-        Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
-      } else {
-        Dataset(sparkSession, logicalPlan)
-      }
+    if (classTag.runtimeClass.isAssignableFrom(classOf[Row])) {
+      // Set operators widen types (change the schema), so we cannot reuse the row encoder.
+      Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
+    } else {
+      Dataset(sparkSession, logicalPlan)
     }
   }
 }
