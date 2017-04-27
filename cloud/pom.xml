@@ -32,17 +32,6 @@
   <description>
     Contains support for cloud infrastructures, specifically the Hadoop JARs and
     transitive dependencies needed to interact with the infrastructures.
-
-    Any project which explicitly depends upon the spark-hadoop-cloud artifact will get the
-    dependencies; the exact versions of which will depend upon the hadoop version Spark was compiled
-    against.
-
-    The imports of transitive dependencies are managed to make them consistent
-    with those of the Spark build.
-
-    WARNING: the signatures of methods in the AWS and Azure SDKs do change between
-    versions: use exactly the same version with which the Hadoop JARs were
-    built.
   </description>
   <properties>
     <sbt.project.name>hadoop-cloud</sbt.project.name>

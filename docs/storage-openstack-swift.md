@@ -36,8 +36,6 @@ For example, for Maven support, add the following to the <code>pom.xml</code> fi
 </dependencyManagement>
 {% endhighlight %}
 
-If using the Scala 2.10-compatible version of Spark, the artifact is of course `spark-hadoop-cloud_2.10`.
-
 # Configuration Parameters
 
 Create <code>core-site.xml</code> and place it inside Spark's <code>conf</code> directory.

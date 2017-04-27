@@ -2619,6 +2619,10 @@
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-core</artifactId>
               </exclusion>
+              <exclusion>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+              </exclusion>
             </exclusions>
           </dependency>
         </dependencies>
