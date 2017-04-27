@@ -441,10 +441,10 @@ class DirectKafkaStreamSuite
     // Try different rate limits.
     // Wait for arrays of data to appear matching the rate.
     Seq(100, 50, 20).foreach { rate =>
-      collectedData.clear() // Empty this buffer on each pass.
-      estimator.updateRate(rate) // Set a new rate.
-    // Expect blocks of data equal to "rate", scaled by the interval length in secs.
-    val expectedSize = Math.round(rate * batchIntervalMilliseconds * 0.001)
+      collectedData.clear()       // Empty this buffer on each pass.
+      estimator.updateRate(rate)  // Set a new rate.
+      // Expect blocks of data equal to "rate", scaled by the interval length in secs.
+      val expectedSize = Math.round(rate * batchIntervalMilliseconds * 0.001)
       eventually(timeout(5.seconds), interval(batchIntervalMilliseconds.milliseconds)) {
         // Assert that rate estimator values are used to determine maxMessagesPerPartition.
         // Funky "-" in message makes the complete assertion message read better.
