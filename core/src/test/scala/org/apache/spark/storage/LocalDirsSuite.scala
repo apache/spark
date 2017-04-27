@@ -33,6 +33,10 @@ class LocalDirsSuite extends SparkFunSuite with BeforeAndAfter {
     Utils.clearLocalRootDirs()
   }
 
+  after {
+    Utils.clearLocalRootDirs()
+  }
+
   test("Utils.getLocalDir() returns a valid directory, even if some local dirs are missing") {
     // Regression test for SPARK-2974
     assert(!new File("/NONEXISTENT_PATH").exists())
