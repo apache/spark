@@ -102,7 +102,7 @@ true	1	1	1	1
 -- !query 10
 SELECT float(1), double(1), decimal(1)
 -- !query 10 schema
-struct<CAST(1 AS FLOAT):float,CAST(1 AS DOUBLE):double,CAST(1 AS DECIMAL(100)):decimal(10,0)>
+struct<CAST(1 AS FLOAT):float,CAST(1 AS DOUBLE):double,CAST(1 AS DECIMAL(10 0)):decimal(10,0)>
 -- !query 10 output
 1.0	1.0	1
 
