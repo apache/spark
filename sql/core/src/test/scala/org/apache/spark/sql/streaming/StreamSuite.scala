@@ -532,11 +532,14 @@ class StreamSuite extends StreamTest {
   }
 
   test("batch id is updated correctly in the job description") {
-    def containsNameAndBatch(desc: String, name: String, batch: Integer): Boolean = {
-      desc.contains(name) && desc.contains(s"batch = $batch")
+    val queryName = "memStream"
+    @volatile var jobDescription: String = null
+    def assertContainsNameAndBatch(batch: Integer): Unit = {
+      // wait for listener event to be processed
+      spark.sparkContext.listenerBus.waitUntilEmpty(streamingTimeout.toMillis)
+      assert(jobDescription.contains(queryName) && jobDescription.contains(s"batch = $batch"))
     }
 
-    @volatile var jobDescription: String = null
     spark.sparkContext.addSparkListener(new SparkListener {
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
         jobDescription = jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)
@@ -549,18 +552,18 @@ class StreamSuite extends StreamTest {
       .map(_ + 1)
       .writeStream
       .format("memory")
-      .queryName("memStream")
+      .queryName(queryName)
       .start()
 
     input.addData(1)
     query.processAllAvailable()
-    assert(Option(jobDescription).exists(containsNameAndBatch(_, "memStream", 0)))
+    assertContainsNameAndBatch(batch = 0)
     input.addData(2, 3)
     query.processAllAvailable()
-    assert(Option(jobDescription).exists(containsNameAndBatch(_, "memStream", 1)))
+    assertContainsNameAndBatch(batch = 1)
     input.addData(4)
     query.processAllAvailable()
-    assert(Option(jobDescription).exists(containsNameAndBatch(_, "memStream", 2)))
+    assertContainsNameAndBatch(batch = 2)
   }
 }
 

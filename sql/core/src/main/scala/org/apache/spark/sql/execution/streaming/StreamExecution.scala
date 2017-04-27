@@ -835,7 +835,7 @@ class StreamExecution(
   private def getBatchDescriptionString: String = {
     val batchDescription = if (currentBatchId < 0) "init" else currentBatchId.toString
     Option(name).map(_ + " ").getOrElse("") +
-      s"[batch = $batchDescription, id = $id, runId = $runId]"
+      s"[batch = $batchDescription,<br/>id = $id,<br/>runId = $runId]"
   }
 }
 
