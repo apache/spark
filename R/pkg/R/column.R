@@ -67,8 +67,7 @@ operators <- list(
   "+" = "plus", "-" = "minus", "*" = "multiply", "/" = "divide", "%%" = "mod",
   "==" = "equalTo", ">" = "gt", "<" = "lt", "!=" = "notEqual", "<=" = "leq", ">=" = "geq",
   # we can not override `&&` and `||`, so use `&` and `|` instead
-  "&" = "and", "|" = "or", #, "!" = "unary_$bang"
-  "^" = "pow"
+  "&" = "and", "|" = "or", "^" = "pow"
 )
 column_functions1 <- c("asc", "desc", "isNaN", "isNull", "isNotNull")
 column_functions2 <- c("like", "rlike", "getField", "getItem", "contains")
@@ -344,3 +343,23 @@ setMethod("%<=>%",
             jc <- callJMethod(x@jc, "eqNullSafe", value)
             column(jc)
           })
+
+#' !
+#'
+#' @rdname not
+#' @aliases !,Column-method
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(data.frame(x = c(-1, 0, 1)))
+#'
+#' head(select(df, !column("x") > 0))
+#' ##  (NOT (x > 0.0))
+#' ##1            TRUE
+#' ##2            TRUE
+#' ##3           FALSE
+#' }
+#' @note ! since 2.3.0
+setMethod("!",
+          signature(x = "Column"),
+          function(x) not(x))

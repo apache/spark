@@ -1324,6 +1324,7 @@ test_that("column operators", {
   c4 <- (c > c2) & (c2 <= c3) | (c == c2) & (c2 != c3)
   c5 <- c2 ^ c3 ^ c4
   c6 <- c2 %<=>% c3
+  c7 <- !c6
 })
 
 test_that("column functions", {
@@ -1349,6 +1350,7 @@ test_that("column functions", {
   c19 <- spark_partition_id() + coalesce(c) + coalesce(c1, c2, c3)
   c20 <- to_timestamp(c) + to_timestamp(c, "yyyy") + to_date(c, "yyyy")
   c21 <- posexplode_outer(c) + explode_outer(c)
+  c22 <- not(c)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1489,6 +1491,13 @@ test_that("column functions", {
     lapply(
       list(list(x = 1, y = -1, z = -2), list(x = 2, y = 3,  z = 5)),
       as.environment))
+
+  df <- as.DataFrame(data.frame(is_true = c(TRUE, FALSE, NA)))
+  expect_equal(
+    collect(select(df, alias(SparkR::not(df$is_true), "is_false"))),
+    data.frame(is_false = c(FALSE, TRUE, NA))
+  )
+
 })
 
 test_that("column binary mathfunctions", {

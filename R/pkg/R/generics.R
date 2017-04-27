@@ -1158,6 +1158,10 @@ setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
 #' @export
 setGeneric("negate", function(x) { standardGeneric("negate") })
 
+#' @rdname not
+#' @export
+setGeneric("not", function(x) { standardGeneric("not") })
+
 #' @rdname next_day
 #' @export
 setGeneric("next_day", function(y, x) { standardGeneric("next_day") })
