@@ -1008,10 +1008,10 @@ class Analyzer(
           if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(_.isInstanceOf[UnresolvedAttribute]) =>
         // This is a strict check though, we put this to apply the rule only in alias expressions
-        def checkIfChildOutputHasNo(attrName: String): Boolean =
+        def notResolvableByChild(attrName: String): Boolean =
           !child.output.exists(a => resolver(a.name, attrName))
         agg.copy(groupingExpressions = groups.map {
-          case u: UnresolvedAttribute if checkIfChildOutputHasNo(u.name) =>
+          case u: UnresolvedAttribute if notResolvableByChild(u.name) =>
             aggs.find(ne => resolver(ne.name, u.name)).getOrElse(u)
           case e => e
         })
