@@ -27,7 +27,6 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.file.json.JsonFileReader
 import org.apache.arrow.vector.util.Validator
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
@@ -35,6 +34,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -147,7 +147,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     allocator.close()
   }
 
-  test("unsupported types") {
+  testQuietly("unsupported types") {
     def runUnsupported(block: => Unit): Unit = {
       val msg = intercept[SparkException] {
         block

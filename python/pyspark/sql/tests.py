@@ -50,7 +50,7 @@ from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
-from pyspark.tests import ReusedPySparkTestCase, SparkSubmitTests
+from pyspark.tests import QuietTest, ReusedPySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
@@ -2488,29 +2488,15 @@ class ArrowTests(ReusedPySparkTestCase):
 
     @classmethod
     def setUpClass(cls):
-        from datetime import datetime, tzinfo
         ReusedPySparkTestCase.setUpClass()
         cls.spark = SparkSession(cls.sc)
+        cls.spark.conf.set("spark.sql.execution.arrow.enable", "true")
         cls.schema = StructType([
             StructField("1_str_t", StringType(), True),
             StructField("2_int_t", IntegerType(), True),
             StructField("3_long_t", LongType(), True),
             StructField("4_float_t", FloatType(), True),
             StructField("5_double_t", DoubleType(), True)])
-
-        def mkdt(*args):
-            class NaiveTZ(tzinfo):
-                """
-                This will have Spark store internal value as UTC, not local time
-                """
-                def utcoffset(self, date_time):
-                    return None
-
-                def dst(self, date_time):
-                    return None
-
-            return datetime(*args, tzinfo=NaiveTZ())
-
         cls.data = [("a", 1, 10, 0.2, 2.0),
                     ("b", 2, 20, 0.4, 4.0),
                     ("c", 3, 30, 0.8, 6.0)]
@@ -2521,10 +2507,16 @@ class ArrowTests(ReusedPySparkTestCase):
                ("\n\nWithout:\n%s\n%s" % (df_without, df_without.dtypes)))
         self.assertTrue(df_without.equals(df_with_arrow), msg=msg)
 
+    def test_unsupported_datatype(self):
+        schema = StructType([StructField("array", ArrayType(IntegerType(), False), True)])
+        df = self.spark.createDataFrame([([1, 2, 3],)], schema=schema)
+        with QuietTest(self.sc):
+            self.assertRaises(Exception, lambda: df.toPandas())
+
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
                                              self.data)
-        pdf = df_null.toPandas(useArrow=True)
+        pdf = df_null.toPandas()
         null_counts = pdf.isnull().sum().tolist()
         self.assertTrue(all([c == 1 for c in null_counts]))
 
@@ -2532,8 +2524,10 @@ class ArrowTests(ReusedPySparkTestCase):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         # NOTE - toPandas(useArrow=False) will infer standard python data types
         df_sel = df.select("1_str_t", "3_long_t", "5_double_t")
-        pdf = df_sel.toPandas(useArrow=False)
-        pdf_arrow = df_sel.toPandas(useArrow=True)
+        self.spark.conf.set("spark.sql.execution.arrow.enable", "false")
+        pdf = df_sel.toPandas()
+        self.spark.conf.set("spark.sql.execution.arrow.enable", "true")
+        pdf_arrow = df_sel.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
 
     def test_pandas_round_trip(self):
@@ -2547,7 +2541,7 @@ class ArrowTests(ReusedPySparkTestCase):
         data_dict["4_float_t"] = np.float32(data_dict["4_float_t"])
         pdf = pd.DataFrame(data=data_dict)
         df = self.spark.createDataFrame(self.data, schema=self.schema)
-        pdf_arrow = df.toPandas(useArrow=True)
+        pdf_arrow = df.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
 
 

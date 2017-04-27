@@ -360,7 +360,10 @@ private[arrow] class DateColumnWriter(dtype: ArrowType, ordinal: Int, allocator:
   }
 }
 
-private[arrow] class TimeStampColumnWriter(dtype: ArrowType, ordinal: Int, allocator: BufferAllocator)
+private[arrow] class TimeStampColumnWriter(
+    dtype: ArrowType,
+    ordinal: Int,
+    allocator: BufferAllocator)
   extends PrimitiveColumnWriter(ordinal) {
   override val valueVector: NullableTimeStampMicroVector
     = new NullableTimeStampMicroVector("TimeStampValue", getFieldType(dtype), allocator)

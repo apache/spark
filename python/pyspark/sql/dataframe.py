@@ -1636,35 +1636,30 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)
-    def toPandas(self, useArrow=False):
+    def toPandas(self):
         """
         Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
         This is only available if Pandas is installed and available.
 
-        :param useArrow: Make use of Apache Arrow for conversion, pyarrow must be installed
-            and available on the calling Python process (Experimental).
-
         .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
-
-        .. note:: Using pyarrow is experimental and currently supports the following data types:
-            StringType, BinaryType, BooleanType, DoubleType, FloatType, ByteType, IntegerType,
-            LongType, ShortType
 
         >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
         1    5    Bob
         """
-        if useArrow:
+        if self.sql_ctx.getConf("spark.sql.execution.arrow.enable", "false").lower() == "true":
             try:
                 import pyarrow
                 tables = self._collectAsArrow()
                 table = pyarrow.concat_tables(tables)
                 return table.to_pandas()
             except ImportError as e:
-                raise ImportError("%s\n%s" % (e.message, self.toPandas.__doc__))
+                msg = "note: pyarrow must be installed and available on calling Python process " \
+                      "if using spark.sql.execution.arrow.enable=true"
+                raise ImportError("%s\n%s" % (e.message, msg))
         else:
             import pandas as pd
             return pd.DataFrame.from_records(self.collect(), columns=self.columns)
