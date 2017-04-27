@@ -456,7 +456,7 @@ class DirectKafkaStreamSuite
     ssc.stop()
   }
 
-  test("max messages per partition on small rate not none") {
+  test("maxMessagesPerPartition with rate equal to one") {
     val topic = "backpressure"
     val kafkaParams = Map(
       "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
@@ -499,7 +499,7 @@ class DirectKafkaStreamSuite
     assert(result.isDefined, s"Messages per partition should exist for estimated rate of 1")
   }
 
-  test("max messages per partition can be zero") {
+  test("maxMessagesPerPartition with zero offset and rate equal to one") {
     val topic = "backpressure"
     val kafkaParams = Map(
       "metadata.broker.list" -> kafkaTestUtils.brokerAddress,

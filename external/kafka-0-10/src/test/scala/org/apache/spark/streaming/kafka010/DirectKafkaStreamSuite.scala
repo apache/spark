@@ -617,7 +617,7 @@ class DirectKafkaStreamSuite
     ssc.stop()
   }
 
-  test("max messages per partition on small rate not none") {
+  test("maxMessagesPerPartition with rate equal to one") {
     val topic = "backpressure"
     val kafkaParams = getKafkaParams()
     val batchIntervalMilliseconds = 10000
@@ -657,7 +657,7 @@ class DirectKafkaStreamSuite
     assert(result.isDefined, s"Messages per partitions should exist for estimated rate of 1")
   }
 
-  test("max messages per partition can be zero") {
+  test("maxMessagesPerPartition with zero offset and rate equal to one") {
     val topic = "backpressure"
     val kafkaParams = getKafkaParams()
     val batchIntervalMilliseconds = 60000
