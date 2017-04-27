@@ -30,6 +30,7 @@ import org.apache.spark.scheduler._
  * This class is thread-safe (unlike JobProgressListener)
  */
 @DeveloperApi
+@deprecated("This class will be removed in a future release.", "2.2.0")
 class StorageStatusListener(conf: SparkConf) extends SparkListener {
   // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
   private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
