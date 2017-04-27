@@ -47,7 +47,8 @@ private[kafka010] object KafkaWriter extends Logging {
       queryExecution: QueryExecution,
       kafkaParameters: ju.Map[String, Object],
       topic: Option[String] = None): Unit = {
-    val schema = queryExecution.logical.output
+    queryExecution.assertAnalyzed()
+    val schema = queryExecution.analyzed.output
     schema.find(_.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
       if (topic == None) {
         throw new AnalysisException(s"topic option required when no " +
