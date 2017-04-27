@@ -194,6 +194,7 @@ setMethod("isLocal",
 #'                 20 characters will be truncated. However, if set greater than zero,
 #'                 truncates strings longer than \code{truncate} characters and all cells
 #'                 will be aligned right.
+#' @param vertical whether print output rows vertically (one line per column value).
 #' @param ... further arguments to be passed to or from other methods.
 #' @family SparkDataFrame functions
 #' @aliases showDF,SparkDataFrame-method
@@ -210,12 +211,13 @@ setMethod("isLocal",
 #' @note showDF since 1.4.0
 setMethod("showDF",
           signature(x = "SparkDataFrame"),
-          function(x, numRows = 20, truncate = TRUE) {
+          function(x, numRows = 20, truncate = TRUE, vertical = FALSE) {
             if (is.logical(truncate) && truncate) {
-              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(20))
+              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(20), vertical)
             } else {
               truncate2 <- as.numeric(truncate)
-              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(truncate2))
+              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(truncate2),
+                               vertical)
             }
             cat(s)
           })
