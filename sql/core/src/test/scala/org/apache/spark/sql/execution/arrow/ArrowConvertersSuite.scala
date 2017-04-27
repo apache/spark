@@ -251,42 +251,6 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     // collectAndValidate(binaryData)
   }
 
-  ignore("timestamp conversion") {
-    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
-    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
-    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
-    val data = Seq(ts1, ts2)
-
-    val schema = new JSONSchema(Seq(new TimestampType("timestamp")))
-    val us_data = data.map(_.getTime * 1000)  // convert to microseconds
-    val columns = Seq(
-        new PrimitiveColumn("timestamp", data.length, data.map(_ => true), us_data))
-    val batch = new JSONRecordBatch(data.length, columns)
-    val json = new JSONFile(schema, Seq(batch))
-
-    val df = data.toDF("timestamp")
-
-    collectAndValidate(df, json, "timestampData.json")
-  }
-
-  ignore("date conversion") {
-    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
-    val d1 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
-    val d2 = new Date(sdf.parse("2016-05-09 13:10:15.000 UTC").getTime)
-    val data = Seq(d1, d2)
-
-    val day_data = data.map(d => DateTimeUtils.millisToDays(d.getTime))
-    val schema = new JSONSchema(Seq(new DateType("date")))
-    val columns = Seq(
-      new PrimitiveColumn("date", data.length, data.map(_ => true), day_data))
-    val batch = new JSONRecordBatch(data.length, columns)
-    val json = new JSONFile(schema, Seq(batch))
-
-    val df = data.toDF("date")
-
-    collectAndValidate(df, json, "dateData.json")
-  }
-
   test("floating-point NaN") {
     val fnan = Seq(1.2F, Float.NaN)
     val dnan = Seq(Double.NaN, 1.2)
@@ -358,8 +322,13 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     runUnsupported { arrayData.toDF().toArrowPayload.collect() }
     runUnsupported { mapData.toDF().toArrowPayload.collect() }
     runUnsupported { complexData.toArrowPayload.collect() }
-    // runUnsupported { dateData.df.toArrowPayload.collect() }
-    // runUnsupported { timestampData.df.toArrowPayload.collect() }
+
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
+    val d1 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
+    val d2 = new Date(sdf.parse("2016-05-09 13:10:15.000 UTC").getTime)
+    val data = Seq(d1, d2)
+    runUnsupported { data.toDF("date").toArrowPayload.collect() }
+    runUnsupported { data.toDF("timestamp").toArrowPayload.collect() }
   }
 
   test("test Arrow Validator") {
@@ -467,10 +436,11 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     }
   }
 
-  private class PrimitiveColumn[T <% JValue](name: String,
-                                             count: Int,
-                                             is_valid: Seq[Boolean],
-                                             values: Seq[T])
+  private class PrimitiveColumn[T <% JValue](
+      name: String,
+      count: Int,
+      is_valid: Seq[Boolean],
+      values: Seq[T])
     extends Column(name, count) {
     override def _get_children: JArray = JArray(List.empty)
     override def _get_buffers: JObject = {
@@ -480,10 +450,11 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     }
   }
 
-  private class IntegerType(name: String,
-                            is_signed: Boolean,
-                            override val bit_width: Int,
-                            nullable: Boolean)
+  private class IntegerType(
+      name: String,
+      is_signed: Boolean,
+      override val bit_width: Int,
+      nullable: Boolean)
     extends PrimitiveType(name, nullable = nullable) {
     override def _get_type: JObject = {
       JObject(
@@ -555,10 +526,11 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     }
   }
 
-  private class BinaryColumn(name: String,
-                             count: Int,
-                             is_valid: Seq[Boolean],
-                             values: Seq[String])
+  private class BinaryColumn(
+      name: String,
+      count: Int,
+      is_valid: Seq[Boolean],
+      values: Seq[String])
     extends PrimitiveColumn(name, count, is_valid, values) {
     def _encode_value(v: String): String = {
       v.map(c => String.format("%h", c.toString)).reduce(_ + _)
@@ -579,10 +551,11 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     }
   }
 
-  private class StringColumn(name: String,
-                             count: Int,
-                             is_valid: Seq[Boolean],
-                             values: Seq[String])
+  private class StringColumn(
+      name: String,
+      count: Int,
+      is_valid: Seq[Boolean],
+      values: Seq[String])
     extends BinaryColumn(name, count, is_valid, values) {
     override def _encode_value(v: String): String = v
   }
