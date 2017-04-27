@@ -547,7 +547,7 @@ class DirectKafkaStreamSuite
       TopicAndPartition(topic, 2) -> 20L,
       TopicAndPartition(topic, 3) -> 30L
     )
-    assert(result.contains(expected), s"Number of messages must be zero for one partition")
+    assert(result.contains(expected), s"Number of messages per partition must be at least 1")
   }
 
   /** Get the generated offset ranges from the DirectKafkaStream */
