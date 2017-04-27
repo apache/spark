@@ -224,7 +224,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       withTopic = Some(topic),
       withOutputMode = Some(OutputMode.Update()))(
       withSelectExpr = "'foo' as topic",
-      "CAST(value as STRING) key", "CAST(count as STRING) value")
+        "CAST(value as STRING) key", "CAST(count as STRING) value")
 
     val reader = createKafkaReader(topic)
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
@@ -423,11 +423,11 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
   }
 
   private def createKafkaWriter(
-                                 input: DataFrame,
-                                 withTopic: Option[String] = None,
-                                 withOutputMode: Option[OutputMode] = None,
-                                 withOptions: Map[String, String] = Map[String, String]())
-                               (withSelectExpr: String*): StreamingQuery = {
+      input: DataFrame,
+      withTopic: Option[String] = None,
+      withOutputMode: Option[OutputMode] = None,
+      withOptions: Map[String, String] = Map[String, String]())
+      (withSelectExpr: String*): StreamingQuery = {
     var stream: DataStreamWriter[Row] = null
     withTempDir { checkpointDir =>
       var df = input.toDF()
