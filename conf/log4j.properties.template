@@ -38,3 +38,14 @@ log4j.logger.parquet=ERROR
 # SPARK-9183: Settings to avoid annoying messages when looking up nonexistent UDFs in SparkSQL with Hive support
 log4j.logger.org.apache.hadoop.hive.metastore.RetryingHMSHandler=FATAL
 log4j.logger.org.apache.hadoop.hive.ql.exec.FunctionRegistry=ERROR
+
+# SPARK-14754: Metrics as logs are not coming through slf4j.
+#log4j.logger.org.apache.spark.metrics=INFO, metricFileAppender
+#log4j.additivity.org.apache.spark.metrics=true
+
+#log4j.appender.metricFileAppender=org.apache.log4j.RollingFileAppender
+#log4j.appender.metricFileAppender.File=${logFilePath}
+#log4j.appender.metricFileAppender.MaxFileSize=10MB
+#log4j.appender.metricFileAppender.MaxBackupIndex=10
+#log4j.appender.metricFileAppender.layout=org.apache.log4j.PatternLayout
+#log4j.appender.metricFileAppender.layout.ConversionPattern=%d{yyyy-MM-dd HH:mm:ss} %-5p %c{1}:%L - %m%n
