@@ -25,6 +25,8 @@ import scala.util.control.ControlThrowable
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkContext
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.ExplainCommand
@@ -527,6 +529,38 @@ class StreamSuite extends StreamTest {
     eventually(timeout(streamingTimeout)) {
       assert(sparkContext.statusTracker.getActiveJobIds().isEmpty)
     }
+  }
+
+  test("batch id is updated correctly in the job description") {
+    def containsNameAndBatch(desc: String, name: String, batch: Integer): Boolean = {
+      desc.contains(name) && desc.contains(s"batch = $batch")
+    }
+
+    @volatile var jobDescription: String = null
+    spark.sparkContext.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobDescription = jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+      }
+    })
+
+    val input = MemoryStream[Int]
+    val query = input
+      .toDS()
+      .map(_ + 1)
+      .writeStream
+      .format("memory")
+      .queryName("memStream")
+      .start()
+
+    input.addData(1)
+    query.processAllAvailable()
+    assert(Option(jobDescription).exists(containsNameAndBatch(_, "memStream", 0)))
+    input.addData(2, 3)
+    query.processAllAvailable()
+    assert(Option(jobDescription).exists(containsNameAndBatch(_, "memStream", 1)))
+    input.addData(4)
+    query.processAllAvailable()
+    assert(Option(jobDescription).exists(containsNameAndBatch(_, "memStream", 2)))
   }
 }
 

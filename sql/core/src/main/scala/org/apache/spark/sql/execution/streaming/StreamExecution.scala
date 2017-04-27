@@ -252,7 +252,8 @@ class StreamExecution(
    */
   private def runBatches(): Unit = {
     try {
-      sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString)
+      sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString,
+        interruptOnCancel = true)
       if (sparkSession.sessionState.conf.streamingMetricsEnabled) {
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
@@ -290,6 +291,7 @@ class StreamExecution(
               if (currentBatchId < 0) {
                 // We'll do this initialization only once
                 populateStartOffsets(sparkSessionToRunBatches)
+                sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
                 logDebug(s"Stream running from $committedOffsets to $availableOffsets")
               } else {
                 constructNextBatch()
@@ -420,7 +422,6 @@ class StreamExecution(
         /* First assume that we are re-executing the latest known batch
          * in the offset log */
         currentBatchId = latestBatchId
-        sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
         availableOffsets = nextOffsets.toStreamProgress(sources)
         /* Initialize committed offsets to a committed batch, which at this
          * is the second latest batch id in the offset log. */
@@ -466,7 +467,6 @@ class StreamExecution(
                 }
               }
               currentBatchId = latestCommittedBatchId + 1
-              sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
               committedOffsets ++= availableOffsets
               // Construct a new batch be recomputing availableOffsets
               constructNextBatch()
