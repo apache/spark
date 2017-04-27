@@ -29,7 +29,6 @@ import org.apache.spark.rdd._
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
 
-
 trait RDDCheckpointTester { self: SparkFunSuite =>
 
   protected val partitioner = new HashPartitioner(2)
@@ -241,42 +240,6 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
   protected def generateFatPairRDD(): RDD[(Int, Int)] = {
     new FatPairRDD(sparkContext.makeRDD(1 to 100, 4), partitioner).mapValues(x => x)
   }
-
-  protected def testBasicCheckpoint(sc: SparkContext, reliableCheckpoint: Boolean): Unit = {
-    val parCollection = sc.makeRDD(1 to 4)
-    val flatMappedRDD = parCollection.flatMap(x => 1 to x)
-    checkpoint(flatMappedRDD, reliableCheckpoint)
-    assert(flatMappedRDD.dependencies.head.rdd === parCollection)
-    val result = flatMappedRDD.collect()
-    assert(flatMappedRDD.dependencies.head.rdd != parCollection)
-    assert(flatMappedRDD.collect() === result)
-  }
-
-  protected def testCompression(checkpointDir: File, compressionCodec: String): Unit = {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.checkpoint.compress.codec", compressionCodec)
-    val sc = new SparkContext("local", "test", sparkConf)
-    sc.setCheckpointDir(checkpointDir.toString)
-    val initialSize = 20
-    // Use just one partition for now since compression works best on large data sets.
-    val collection = sc.makeRDD(1 to initialSize, numSlices = 1)
-    val flatMappedRDD = collection.flatMap(x => 1 to x)
-    checkpoint(flatMappedRDD, reliableCheckpoint = true)
-    assert(flatMappedRDD.collect().length == initialSize * (initialSize + 1)/2,
-      "The checkpoint was lossy!")
-    sc.stop()
-    val checkpointPath = new Path(flatMappedRDD.getCheckpointFile.get)
-    val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
-    val fileStatus = fs.listStatus(checkpointPath).find(_.getPath.getName.startsWith("part-")).get
-    val compressedSize = fileStatus.getLen
-    assert(compressedSize > 0, "The checkpoint file was not written!")
-    val compressedInputStream = CompressionCodec.createCodec(sparkConf, compressionCodec)
-      .compressedInputStream(fs.open(fileStatus.getPath))
-    val uncompressedSize = ByteStreams.toByteArray(compressedInputStream).length
-    compressedInputStream.close()
-    assert(compressedSize < uncompressedSize, "The compression was not successful!")
-  }
-
 }
 
 /**
@@ -290,13 +253,9 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     super.beforeEach()
     checkpointDir = File.createTempFile("temp", "", Utils.createTempDir())
     checkpointDir.delete()
-  }
-
-  private def startSparkContext(): Unit = {
     sc = new SparkContext("local", "test")
     sc.setCheckpointDir(checkpointDir.toString)
   }
-
 
   override def afterEach(): Unit = {
     try {
@@ -309,44 +268,13 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   override def sparkContext: SparkContext = sc
 
   runTest("basic checkpointing") { reliableCheckpoint: Boolean =>
-    startSparkContext()
-    testBasicCheckpoint(sc, reliableCheckpoint)
-  }
-
-  runTest("compression with snappy", skipLocalCheckpoint = true) { _: Boolean =>
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.checkpoint.compress.codec", "snappy")
-    sc = new SparkContext("local", "test", sparkConf)
-    sc.setCheckpointDir(checkpointDir.toString)
-    testBasicCheckpoint(sc, reliableCheckpoint = true)
-  }
-
-  runTest("compression with lz4", skipLocalCheckpoint = true) { _: Boolean =>
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.checkpoint.compress.codec", "lz4")
-    sc = new SparkContext("local", "test", sparkConf)
-    sc.setCheckpointDir(checkpointDir.toString)
-    testBasicCheckpoint(sc, reliableCheckpoint = true)
-  }
-
-  runTest("compression with lzf", skipLocalCheckpoint = true) { _: Boolean =>
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.checkpoint.compress.codec", "lzf")
-    sc = new SparkContext("local", "test", sparkConf)
-    sc.setCheckpointDir(checkpointDir.toString)
-    testBasicCheckpoint(sc, reliableCheckpoint = true)
-  }
-
-  runTest("compression size snappy", skipLocalCheckpoint = true) { _: Boolean =>
-    testCompression(checkpointDir, "snappy")
-  }
-
-  runTest("compression size lzf", skipLocalCheckpoint = true) { _: Boolean =>
-    testCompression(checkpointDir, "lzf")
-  }
-
-  runTest("compression size lz4", skipLocalCheckpoint = true) { _: Boolean =>
-    testCompression(checkpointDir, "lz4")
+    val parCollection = sc.makeRDD(1 to 4)
+    val flatMappedRDD = parCollection.flatMap(x => 1 to x)
+    checkpoint(flatMappedRDD, reliableCheckpoint)
+    assert(flatMappedRDD.dependencies.head.rdd === parCollection)
+    val result = flatMappedRDD.collect()
+    assert(flatMappedRDD.dependencies.head.rdd != parCollection)
+    assert(flatMappedRDD.collect() === result)
   }
 
   runTest("checkpointing partitioners", skipLocalCheckpoint = true) { _: Boolean =>
@@ -386,7 +314,6 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
       }
     }
 
-    startSparkContext()
     testPartitionerCheckpointing(partitioner)
 
     // Test that corrupted partitioner file does not prevent recovery of RDD
@@ -394,7 +321,6 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("RDDs with one-to-one dependencies") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     testRDD(_.map(x => x.toString), reliableCheckpoint)
     testRDD(_.flatMap(x => 1 to x), reliableCheckpoint)
     testRDD(_.filter(_ % 2 == 0), reliableCheckpoint)
@@ -408,7 +334,6 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("ParallelCollectionRDD") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     val parCollection = sc.makeRDD(1 to 4, 2)
     val numPartitions = parCollection.partitions.size
     checkpoint(parCollection, reliableCheckpoint)
@@ -425,7 +350,6 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("BlockRDD") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     val blockId = TestBlockId("id")
     val blockManager = SparkEnv.get.blockManager
     blockManager.putSingle(blockId, "test", StorageLevel.MEMORY_ONLY)
@@ -443,7 +367,6 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("ShuffleRDD") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     testRDD(rdd => {
       // Creating ShuffledRDD directly as PairRDDFunctions.combineByKey produces a MapPartitionedRDD
       new ShuffledRDD[Int, Int, Int](rdd.map(x => (x % 2, 1)), partitioner)
@@ -451,14 +374,12 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("UnionRDD") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     def otherRDD: RDD[Int] = sc.makeRDD(1 to 10, 1)
     testRDD(_.union(otherRDD), reliableCheckpoint)
     testRDDPartitions(_.union(otherRDD), reliableCheckpoint)
   }
 
   runTest("CartesianRDD") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     def otherRDD: RDD[Int] = sc.makeRDD(1 to 10, 1)
     testRDD(new CartesianRDD(sc, _, otherRDD), reliableCheckpoint)
     testRDDPartitions(new CartesianRDD(sc, _, otherRDD), reliableCheckpoint)
@@ -482,7 +403,6 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("CoalescedRDD") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     testRDD(_.coalesce(2), reliableCheckpoint)
     testRDDPartitions(_.coalesce(2), reliableCheckpoint)
 
@@ -505,7 +425,6 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("CoGroupedRDD") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     val longLineageRDD1 = generateFatPairRDD()
 
     // Collect the RDD as sequences instead of arrays to enable equality tests in testRDD
@@ -524,7 +443,6 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("ZippedPartitionsRDD") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     testRDD(rdd => rdd.zip(rdd.map(x => x)), reliableCheckpoint)
     testRDDPartitions(rdd => rdd.zip(rdd.map(x => x)), reliableCheckpoint)
 
@@ -550,7 +468,6 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("PartitionerAwareUnionRDD") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     testRDD(rdd => {
       new PartitionerAwareUnionRDD[(Int, Int)](sc, Array(
         generateFatPairRDD(),
@@ -585,7 +502,6 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("CheckpointRDD with zero partitions") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     val rdd = new BlockRDD[Int](sc, Array.empty[BlockId])
     assert(rdd.partitions.size === 0)
     assert(rdd.isCheckpointed === false)
@@ -600,7 +516,6 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("checkpointAllMarkedAncestors") { reliableCheckpoint: Boolean =>
-    startSparkContext()
     testCheckpointAllMarkedAncestors(reliableCheckpoint, checkpointAllMarkedAncestors = true)
     testCheckpointAllMarkedAncestors(reliableCheckpoint, checkpointAllMarkedAncestors = false)
   }
@@ -665,5 +580,44 @@ object CheckpointSuite {
       Seq(first.asInstanceOf[RDD[(K, _)]], second.asInstanceOf[RDD[(K, _)]]),
       part
     ).asInstanceOf[RDD[(K, Array[Iterable[V]])]]
+  }
+}
+
+class CheckpointCompressionSuite extends SparkFunSuite with LocalSparkContext {
+
+  test("checkpoint compression") {
+    val checkpointDir = Utils.createTempDir()
+    try {
+      val conf = new SparkConf()
+        .set("spark.checkpoint.compress", "true")
+        .set("spark.ui.enabled", "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 1)
+      rdd.checkpoint()
+      assert(rdd.collect().toSeq === (1 to 20))
+
+      // Verify that RDD is checkpointed
+      assert(rdd.firstParent.isInstanceOf[ReliableCheckpointRDD[_]])
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+      val checkpointFile =
+        fs.listStatus(checkpointPath).map(_.getPath).find(_.getName.startsWith("part-")).get
+
+      // Verify the checkpoint file is compressed, in other words, can be decompressed
+      val compressedInputStream = CompressionCodec.createCodec(conf)
+        .compressedInputStream(fs.open(checkpointFile))
+      try {
+        ByteStreams.toByteArray(compressedInputStream)
+      } finally {
+        compressedInputStream.close()
+      }
+
+      // Verify that the compressed content can be read back
+      assert(rdd.collect().toSeq === (1 to 20))
+    } finally {
+      Utils.deleteRecursively(checkpointDir)
+    }
   }
 }
