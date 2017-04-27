@@ -388,6 +388,37 @@
   </build>
   <profiles>
     <profile>
+      <id>bigtop-dist</id>
+      <dependencies>
+        <!-- Promote guava to compiled scope for the purpose of shading it -->
+        <dependency>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+          <scope>compile</scope>
+        </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-shade-plugin</artifactId>
+            <configuration>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-examples-${project.version}-hadoop${hadoop.version}.jar</outputFile>
+              <artifactSet>
+                <includes>
+                  <!-- At a minimum we must include this to force effective pom generation -->
+                  <include>org.spark-project.spark:unused</include>
+                  <!-- Examples are not included in the classpath -->
+                  <include>com.google.guava:guava</include>
+                </includes>
+              </artifactSet>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
       <id>kinesis-asl</id>
       <dependencies>
         <dependency>
