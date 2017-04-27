@@ -35,6 +35,7 @@ import org.apache.spark.internal.Logging
  * class cannot mutate the source of the information. Accesses are not thread-safe.
  */
 @DeveloperApi
+@deprecated("This class may be removed or made private in a future release.", "2.2.0")
 class StorageStatus(
     val blockManagerId: BlockManagerId,
     val maxMemory: Long,

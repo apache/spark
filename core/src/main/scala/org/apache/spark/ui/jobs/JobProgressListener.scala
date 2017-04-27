@@ -41,6 +41,7 @@ import org.apache.spark.ui.jobs.UIData._
  * updating the internal data structures concurrently.
  */
 @DeveloperApi
+@deprecated("This class will be removed in a future release.", "2.2.0")
 class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   // Define a handful of type aliases so that data structures' types can serve as documentation.
