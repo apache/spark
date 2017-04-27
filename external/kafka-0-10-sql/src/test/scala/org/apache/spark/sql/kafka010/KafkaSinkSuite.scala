@@ -118,15 +118,13 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     /* No topic field or topic option */
     var writer: StreamingQuery = null
     var ex: Exception = null
-    try {
       ex = intercept[AnalysisException] {
         writer = createKafkaWriter(input.toDF())(
           withSelectExpr = "value as key", "value"
         )
         writer.processAllAvailable()
       }
-    } finally {
-    }
+    println(ex.getMessage)
     assert(ex.getMessage
       .toLowerCase(Locale.ROOT)
       .contains("can be called only on streaming"))
