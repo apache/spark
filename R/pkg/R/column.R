@@ -302,3 +302,47 @@ setMethod("otherwise",
             jc <- callJMethod(x@jc, "otherwise", value)
             column(jc)
           })
+
+#' \%<=>\%
+#'
+#' Equality test that is safe for null values.
+#'
+#' Can be used, unlike standard equality operator, to perform null-safe joins.
+#' Equivalent to Scala
+#' \href{https://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.Column@%3C=%3E(other:Any):org.apache.spark.sql.Column}{\code{<=>}} and
+#' \href{https://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.Column@eqNullSafe(other:Any):org.apache.spark.sql.Column}{\code{eqNullSafe}}.
+#'
+#' @param x a Column
+#' @param value a value to compare
+#' @rdname eq_null_safe
+#' @name %<=>%
+#' @aliases %<=>%,Column-method
+#' @export
+#' @examples
+#' \dontrun{
+#' df1 <- createDataFrame(data.frame(
+#'   x = c(1, NA, 3, NA), y = c(2, 6, 3, NA)
+#' ))
+#'
+#' head(select(df1, df1$x == df1$y, df1$x %<=>% df1$y))
+#' ##  (x = y) (x <=> y)
+#' ##1   FALSE     FALSE
+#' ##2      NA     FALSE
+#' ##3    TRUE      TRUE
+#' ##4      NA      TRUE
+#'
+#' df2 <- createDataFrame(data.frame(y = c(3, NA)))
+#' count(join(df1, df2, df1$y == df2$y))
+#' ## [1] 1
+#'
+#' count(join(df1, df2, df1$y %<=>% df2$y))
+#' ## [1] 2
+#' }
+#' @note \%<=>\% since 2.3.0
+setMethod("%<=>%",
+          signature(x = "Column", value = "ANY"),
+          function(x, value) {
+            value <- if (class(value) == "Column") { value@jc } else { value }
+            jc <- callJMethod(x@jc, "eqNullSafe", value)
+            column(jc)
+          })

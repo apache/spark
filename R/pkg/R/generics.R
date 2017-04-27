@@ -856,6 +856,10 @@ setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
 #' @export
 setGeneric("over", function(x, window) { standardGeneric("over") })
 
+#' @rdname eq_null_safe
+#' @export
+setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
+
 ###################### WindowSpec Methods ##########################
 
 #' @rdname partitionBy

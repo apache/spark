@@ -1323,6 +1323,7 @@ test_that("column operators", {
   c3 <- (c + c2 - c2) * c2 %% c2
   c4 <- (c > c2) & (c2 <= c3) | (c == c2) & (c2 != c3)
   c5 <- c2 ^ c3 ^ c4
+  c6 <- c2 %<=>% c3
 })
 
 test_that("column functions", {
@@ -1975,6 +1976,16 @@ test_that("filter() on a DataFrame", {
 
   # Test stats::filter is working
   #expect_true(is.ts(filter(1:100, rep(1, 3)))) # nolint
+
+  # test suites for %<=>%
+  dfNa <- read.json(jsonPathNa)
+  expect_equal(count(filter(dfNa, dfNa$age %<=>% 60)), 1)
+  expect_equal(count(filter(dfNa, !(dfNa$age %<=>% 60))), 5 -1)
+  expect_equal(count(filter(dfNa, dfNa$age %<=>% NULL)), 3)
+  expect_equal(count(filter(dfNa, !(dfNa$age %<=>% NULL))), 5 - 3)
+  # match NA from two columns
+  expect_equal(count(filter(dfNa, dfNa$age %<=>% dfNa$height)), 2)
+  expect_equal(count(filter(dfNa, !(dfNa$age %<=>% dfNa$height))), 5 - 2)
 })
 
 test_that("join(), crossJoin() and merge() on a DataFrame", {
