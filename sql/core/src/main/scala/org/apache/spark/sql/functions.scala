@@ -2487,21 +2487,19 @@ object functions {
    */
   def current_timestamp(): Column = withExpr { CurrentTimestamp() }
 
-  // scalastyle:off line.size.limit
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
-   * A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
-   * pattern letters of [[https://docs.oracle.com/javase/8/docs/api/java/text/SimpleDateFormat.html java.text.SimpleDateFormat]] can be used.
+   * A pattern `dd.MM.yyyy` would return a string like `18.03.1993`.
+   * All pattern letters of `java.text.SimpleDateFormat` can be used.
    *
-   * @note Use when ever possible specialized functions like [[year]]. These benefit from a
+   * @note Use specialized functions like [[year]] whenever possible as they benefit from a
    * specialized implementation.
    *
    * @group datetime_funcs
    * @since 1.5.0
    */
-  // scalastyle:on line.size.limit
   def date_format(dateExpr: Column, format: String): Column = withExpr {
     DateFormatClass(dateExpr.expr, Literal(format))
   }
