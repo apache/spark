@@ -21,8 +21,6 @@
  * <p>
  * This library allows applications to launch Spark programmatically. There's only one entry
  * point to the library - the {@link org.apache.spark.launcher.SparkLauncher} class.
- * Under YARN manager cluster mode, it supports launching in Application in thread or
- * child JVM process.
  * </p>
  *
  * <p>
