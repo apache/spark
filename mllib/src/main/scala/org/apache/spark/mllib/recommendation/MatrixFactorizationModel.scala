@@ -277,21 +277,22 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       num: Int): RDD[(Int, Array[(Int, Double)])] = {
     val srcBlocks = blockify(rank, srcFeatures)
     val dstBlocks = blockify(rank, dstFeatures)
+    /**
+     * Use dot to replace blas 3 gemm is the key approach to improve efficiency.
+     * By this change, we can get the topK elements of each block to reduce the GC time.
+     * Comparing with BLAS.dot, hand writing dot is high efficiency.
+     */
     val ratings = srcBlocks.cartesian(dstBlocks).flatMap { case (srcIter, dstIter) =>
       val m = srcIter.size
       val n = math.min(dstIter.size, num)
       val output = new Array[(Int, (Int, Double))](m * n)
       var j = 0
       srcIter.foreach { case (srcId, srcFactor) =>
-          def order(a: (Int, Double)) = a._2
-          val pq: BoundedPriorityQueue[(Int, Double)] =
-            new BoundedPriorityQueue[(Int, Double)](n)(Ordering.by(order))
+          val pq = new BoundedPriorityQueue[(Int, Double)](n)(Ordering.by(_._2))
           dstIter.foreach { case (dstId, dstFactor) =>
               /**
-               * blas.ddot (F2jBLAS) is the same performance with the following code.
-               * the performace of blas.ddot with NativeBLAS is very bad.
-               * blas.ddot (F2jBLAS) is about 10% improvement comparing with linalg.dot.
-               * val rate = blas.ddot(rank, user._2, 1, item._2, 1)
+               * The below code is equivalent to
+               * val score = blas.ddot(rank, srcFactor, 1, dstFactor, 1)
                */
               var score: Double = 0
               var k = 0
@@ -315,7 +316,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
   }
 
   /**
-   * Blockifies features to use Level-3 BLAS.
+   * Blockifies features to improve the efficiency of cartesian product
    */
   private def blockify(
       rank: Int,
