@@ -1983,9 +1983,6 @@ test_that("filter() on a DataFrame", {
   filtered6 <- where(df, df$age %in% c(19, 30))
   expect_equal(count(filtered6), 2)
 
-  # Test stats::filter is working
-  #expect_true(is.ts(filter(1:100, rep(1, 3)))) # nolint
-
   # test suites for %<=>%
   dfNa <- read.json(jsonPathNa)
   expect_equal(count(filter(dfNa, dfNa$age %<=>% 60)), 1)
@@ -1995,6 +1992,9 @@ test_that("filter() on a DataFrame", {
   # match NA from two columns
   expect_equal(count(filter(dfNa, dfNa$age %<=>% dfNa$height)), 2)
   expect_equal(count(filter(dfNa, !(dfNa$age %<=>% dfNa$height))), 5 - 2)
+
+  # Test stats::filter is working
+  #expect_true(is.ts(filter(1:100, rep(1, 3)))) # nolint
 })
 
 test_that("join(), crossJoin() and merge() on a DataFrame", {
