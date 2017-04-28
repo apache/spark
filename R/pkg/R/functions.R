@@ -3879,17 +3879,9 @@ setMethod("posexplode_outer",
 #' ))
 #'
 #' head(select(df, not(df$is_true)))
-#' ##  (NOT is_true)
-#' ##1         FALSE
-#' ##2          TRUE
-#' ##3            NA
 #'
 #' # Explicit cast is required when working with numeric column
 #' head(select(df, not(cast(df$flag, "boolean"))))
-#' ##   (NOT CAST(flag AS BOOLEAN))
-#' ## 1                       FALSE
-#' ## 2                        TRUE
-#' ## 3                       FALSE
 #' }
 #' @note not since 2.3.0
 setMethod("not",
