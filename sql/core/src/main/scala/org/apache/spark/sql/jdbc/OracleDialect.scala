@@ -43,10 +43,6 @@ private case object OracleDialect extends JdbcDialect {
         // Not sure if there is a more robust way to identify the field as a float (or other
         // numeric types that do not specify a scale.
         case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
-        case 1 => Option(BooleanType)
-        case 3 | 5 | 10 => Option(IntegerType)
-        case 19 if scale == 0L => Option(LongType)
-        case 19 if scale == 4L => Option(FloatType)
         case _ => None
       }
     } else {
