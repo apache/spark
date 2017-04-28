@@ -24,9 +24,9 @@ description: Introduction to cloud storage support in Apache Spark SPARK_VERSION
 ## Introduction
 
 
-Amazon AWS, Microsoft Azure, Google GCS and other cloud infrastructures offer
-persistent data storage in *object stores*. These are not classic "POSIX" file
-systems. In order to store hundreds of petabytes of data without any single points of failure,
+All major cloud providers offer persistent data storage in *object stores*.
+These are not classic "POSIX" file systems.
+In order to store hundreds of petabytes of data without any single points of failure,
 object stores replace the classic filesystem directory tree
 with a simpler model of `object-name => data`. To enable remote access, operations
 on objects are usually performed through (slow) HTTP REST operations.
