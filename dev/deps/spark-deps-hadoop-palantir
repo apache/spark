@@ -137,7 +137,7 @@ jetty-sslengine-6.1.26.jar
 jetty-util-6.1.26.jar
 jline-2.12.1.jar
 jmespath-java-1.0.jar
-joda-time-2.9.3.jar
+joda-time-2.9.9.jar
 jodd-core-3.5.2.jar
 json-smart-1.1.1.jar
 json4s-ast_2.11-3.2.11.jar
