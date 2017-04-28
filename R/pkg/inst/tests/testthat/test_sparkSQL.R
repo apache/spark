@@ -1494,7 +1494,7 @@ test_that("column functions", {
 
   df <- as.DataFrame(data.frame(is_true = c(TRUE, FALSE, NA)))
   expect_equal(
-    collect(select(df, alias(SparkR::not(df$is_true), "is_false"))),
+    collect(select(df, alias(not(df$is_true), "is_false"))),
     data.frame(is_false = c(FALSE, TRUE, NA))
   )
 
