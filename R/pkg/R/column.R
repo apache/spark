@@ -322,18 +322,11 @@ setMethod("otherwise",
 #' ))
 #'
 #' head(select(df1, df1$x == df1$y, df1$x %<=>% df1$y))
-#' ##  (x = y) (x <=> y)
-#' ##1   FALSE     FALSE
-#' ##2      NA     FALSE
-#' ##3    TRUE      TRUE
-#' ##4      NA      TRUE
 #'
 #' df2 <- createDataFrame(data.frame(y = c(3, NA)))
 #' count(join(df1, df2, df1$y == df2$y))
-#' ## [1] 1
 #'
 #' count(join(df1, df2, df1$y %<=>% df2$y))
-#' ## [1] 2
 #' }
 #' @note \%<=>\% since 2.3.0
 setMethod("%<=>%",
@@ -354,12 +347,6 @@ setMethod("%<=>%",
 #' df <- createDataFrame(data.frame(x = c(-1, 0, 1)))
 #'
 #' head(select(df, !column("x") > 0))
-#' ##  (NOT (x > 0.0))
-#' ##1            TRUE
-#' ##2            TRUE
-#' ##3           FALSE
 #' }
 #' @note ! since 2.3.0
-setMethod("!",
-          signature(x = "Column"),
-          function(x) not(x))
+setMethod("!", signature(x = "Column"), function(x) not(x))
