@@ -29,8 +29,8 @@ import org.eclipse.jetty.client.api.Response
 import org.eclipse.jetty.proxy.ProxyServlet
 import org.eclipse.jetty.server._
 import org.eclipse.jetty.server.handler._
+import org.eclipse.jetty.server.handler.gzip.GzipHandler
 import org.eclipse.jetty.servlet._
-import org.eclipse.jetty.servlets.gzip.GzipHandler
 import org.eclipse.jetty.util.component.LifeCycle
 import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
 import org.json4s.JValue
