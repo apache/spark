@@ -917,19 +917,115 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   private type OutBlock = Array[Array[Int]]
 
   /**
-   * In-link block for computing src (user/item) factors. This includes the original src IDs
-   * of the elements within this block as well as encoded dst (item/user) indices and corresponding
-   * ratings. The dst indices are in the form of (blockId, localIndex), which are not the original
-   * dst IDs. To compute src factors, we expect receiving dst factors that match the dst indices.
-   * For example, if we have an in-link record
+   * In-link block for computing user and item factor matrices.
    *
-   * {srcId: 0, dstBlockId: 2, dstLocalIndex: 3, rating: 5.0},
+   * The ALS algorithm partitions the columns of the users factor matrix evenly among Spark workers.
+   * Since each column of the factor matrix is calculated using the known ratings of the correspond-
+   * ing user, and since the ratings don't change across iterations, the ALS algorithm preshuffles
+   * the ratings to the appropriate partitions, storing them in `InBlock` objects.
    *
-   * and assume that the dst factors are stored as dstFactors: Map[Int, Array[Array[Float]]], which
-   * is a blockId to dst factors map, the corresponding dst factor of the record is dstFactor(2)(3).
+   * The ratings shuffled by item ID are computed similarly and also stored in `InBlock` objects.
+   * Note that this means every rating is stored twice, once as shuffled by user ID and once by item
+   * ID.  This is a necessary tradeoff, since in general a rating will not be on the same worker
+   * when partitioned by user as by item.
    *
-   * We use a CSC-like (compressed sparse column) format to store the in-link information. So we can
-   * compute src factors one after another using only one normal equation instance.
+   * =Example=
+   *
+   * Say we have a small collection of eight items to offer the seven users in our application.  We
+   * have some known ratings given by the users, as seen in the matrix below:
+   *
+   * {{{
+   *                       Items
+   *            0   1   2   3   4   5   6   7
+   *          +---+---+---+---+---+---+---+---+
+   *        0 |   |0.1|   |   |0.4|   |   |0.7|
+   *          +---+---+---+---+---+---+---+---+
+   *        1 |   |   |   |   |   |   |   |   |
+   *          +---+---+---+---+---+---+---+---+
+   *     U  2 |   |   |   |   |   |   |   |   |
+   *     s    +---+---+---+---+---+---+---+---+
+   *     e  3 |   |3.1|   |   |3.4|   |   |3.7|
+   *     r    +---+---+---+---+---+---+---+---+
+   *     s  4 |   |   |   |   |   |   |   |   |
+   *          +---+---+---+---+---+---+---+---+
+   *        5 |   |   |   |   |   |   |   |   |
+   *          +---+---+---+---+---+---+---+---+
+   *        6 |   |6.1|   |   |6.4|   |   |6.7|
+   *          +---+---+---+---+---+---+---+---+
+   * }}}
+   *
+   * The ratings are represented as an RDD, passed to the `partitionRatings` method as the `ratings`
+   * parameter:
+   *
+   * {{{
+   *     ratings.collect() == Seq(
+   *       Rating(0, 1, 0.1f),
+   *       Rating(0, 4, 0.4f),
+   *       Rating(0, 7, 0.7f),
+   *       Rating(3, 1, 3.1f),
+   *       Rating(3, 4, 3.4f),
+   *       Rating(3, 7, 3.7f),
+   *       Rating(6, 1, 6.1f),
+   *       Rating(6, 4, 6.4f),
+   *       Rating(6, 7, 6.7f)
+   *     )
+   * }}}
+   *
+   * (In this contrived example, the rating values are chosen specifically for clarity and are in
+   * the form ''x''.''y'', where ''x'' is the user ID and ''y'' is the item ID.  Note that in a real
+   * use case, the ratings given by users would more likely be whole numbers.)
+   *
+   * Say that we are using two partitions to calculate each factor matrix:
+   *
+   * {{{
+   *     val userPart = new ALSPartitioner(2)
+   *     val itemPart = new ALSPartitioner(2)
+   *     val blockRatings = partitionRatings(ratings, userPart, itemPart)
+   * }}}
+   *
+   * Ratings with even-valued user IDs are shuffled to partition 0 while those with odd-valued user
+   * IDs are shuffled to partition 1:
+   *
+   * {{{
+   *     userInBlocks.collect() == Seq(
+   *       0 -> Seq(
+   *              // Internally, the class stores the ratings in a more optimized format than
+   *              // a sequence of `Rating`s, but for clarity we show it as such here.
+   *              Rating(0, 1, 0.1f),
+   *              Rating(0, 4, 0.4f),
+   *              Rating(0, 7, 0.7f),
+   *              Rating(6, 1, 6.1f),
+   *              Rating(6, 4, 6.4f),
+   *              Rating(6, 7, 6.7f)
+   *            ),
+   *       1 -> Seq(
+   *              Rating(3, 1, 3.1f),
+   *              Rating(3, 4, 3.4f),
+   *              Rating(3, 7, 3.7f)
+   *            )
+   *     )
+   * }}}
+   *
+   * Similarly, ratings with even-valued item IDs are shuffled to partition 0 while those with
+   * odd-valued item IDs are shuffled to partition 1:
+   *
+   * {{{
+   *     itemInBlocks.collect() == Seq(
+   *       0 -> Seq(
+   *              Rating(0, 4, 0.4f),
+   *              Rating(3, 4, 3.4f),
+   *              Rating(6, 4, 6.4f)
+   *            ),
+   *       1 -> Seq(
+   *              Rating(0, 1, 0.1f),
+   *              Rating(0, 7, 0.7f),
+   *              Rating(3, 1, 3.1f),
+   *              Rating(3, 7, 3.7f),
+   *              Rating(6, 1, 6.1f),
+   *              Rating(6, 7, 6.7f)
+   *            )
+   *     )
+   * }}}
    *
    * @param srcIds src ids (ordered)
    * @param dstPtrs dst pointers. Elements in range [dstPtrs(i), dstPtrs(i+1)) of dst indices and
