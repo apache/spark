@@ -421,6 +421,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val GROUP_BY_ALIASES = buildConf("spark.sql.groupByAliases")
+    .doc("When true, aliases in a select list can be used in group by clauses. When false, " +
+      "an analysis exception is thrown in the case.")
+    .booleanConf
+    .createWithDefault(true)
+
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS =
@@ -1002,6 +1008,8 @@ class SQLConf extends Serializable with Logging {
   def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
   def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
+
+  def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
