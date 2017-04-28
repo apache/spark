@@ -280,7 +280,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
     /**
      * Use dot to replace blas 3 gemm is the key approach to improve efficiency.
      * By this change, we can get the topK elements of each block to reduce the GC time.
-     * Comparing with BLAS.dot, hand writing dot is high efficiency.
+     * Comparing with BLAS.dot, hand-written dot is high efficiency.
      */
     val ratings = srcBlocks.cartesian(dstBlocks).flatMap { case (srcIter, dstIter) =>
       val m = srcIter.size
