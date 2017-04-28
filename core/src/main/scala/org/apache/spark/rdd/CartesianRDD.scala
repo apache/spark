@@ -86,13 +86,14 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
       partition: Partition,
       context: TaskContext,
       level: StorageLevel): Iterator[U] = {
-    logInfo("--------------> in getOrCacheBlock")
+    logInfo(s"--------------> in getOrCacheBlock(${rdd.id}, ${partition.index})")
     val blockId = RDDBlockId(rdd.id, partition.index)
     var readCachedBlock = true
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
     val iterator = SparkEnv.get.blockManager.getOrElseUpdate(blockId, level, classTag[U], () => {
+
       readCachedBlock = false
-      rdd.iterator(partition, context)
+      rdd.computeOrReadCheckpoint(partition, context)
     }, true) match {
       case Left(blockResult) =>
         if (readCachedBlock) {
