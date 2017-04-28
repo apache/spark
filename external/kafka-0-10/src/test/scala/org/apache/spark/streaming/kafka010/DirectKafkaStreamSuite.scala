@@ -617,46 +617,6 @@ class DirectKafkaStreamSuite
     ssc.stop()
   }
 
-  test("maxMessagesPerPartition with rate equal to one") {
-    val topic = "backpressure"
-    val kafkaParams = getKafkaParams()
-    val batchIntervalMilliseconds = 10000
-    val sparkConf = new SparkConf()
-      // Safe, even with streaming, because we're using the direct API.
-      // Using 1 core is useful to make the test more predictable.
-      .setMaster("local[1]")
-      .setAppName(this.getClass.getSimpleName)
-      .set("spark.streaming.kafka.maxRatePerPartition", "100")
-
-    // Setup the streaming context
-    ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
-    val estimatedRate = 1
-    val fromOffsets = Map(
-      new TopicPartition(topic, 0) -> 0L,
-      new TopicPartition(topic, 1) -> 0L,
-      new TopicPartition(topic, 2) -> 0L
-    )
-    val kafkaStream = withClue("Error creating direct stream") {
-      new DirectKafkaInputDStream[String, String](
-        ssc,
-        preferredHosts,
-        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
-        new DefaultPerPartitionConfig(sparkConf)
-      ) {
-        currentOffsets = fromOffsets
-        override val rateController = Some(new ConstantRateController(id, null, estimatedRate))
-      }
-    }
-
-    val offsets = Map[TopicPartition, Long](
-      new TopicPartition(topic, 0) -> 100L,
-      new TopicPartition(topic, 1) -> 100L,
-      new TopicPartition(topic, 2) -> 100L
-    )
-    val result = kafkaStream.maxMessagesPerPartition(offsets)
-    assert(result.isDefined, s"Messages per partitions should exist for estimated rate of 1")
-  }
-
   test("maxMessagesPerPartition with zero offset and rate equal to one") {
     val topic = "backpressure"
     val kafkaParams = getKafkaParams()
