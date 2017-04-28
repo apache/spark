@@ -151,6 +151,12 @@
       <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
+	<dependency>
+      <groupId>com.sparkjava</groupId>
+      <artifactId>spark-core</artifactId>
+      <version>2.5</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
