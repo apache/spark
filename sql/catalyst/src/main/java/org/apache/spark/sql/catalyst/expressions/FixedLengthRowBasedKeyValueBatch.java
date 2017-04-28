@@ -79,6 +79,9 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
       keyRow.pointTo(base, offset, klen);
       // set keyRowId so we can check if desired row is cached
       keyRowId = rowId;
+      isValueCached = false;
+    } else {
+      isValueCached = true;
     }
     return keyRow;
   }
@@ -91,10 +94,12 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
    */
   @Override
   protected UnsafeRow getValueFromKey(int rowId) {
-    if (keyRowId != rowId) {
+    assert(rowId >= 0);
+    if (keyRowId == rowId && isValueCached) {
+      return valueRow;
+    } else if (keyRowId != rowId) {
       getKeyRow(rowId);
     }
-    assert(rowId >= 0);
     valueRow.pointTo(base, keyRow.getBaseOffset() + klen, vlen + 4);
     return valueRow;
   }
