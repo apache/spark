@@ -308,6 +308,21 @@ numCyl <- summarize(groupBy(carsDF, carsDF$cyl), count = n(carsDF$cyl))
 head(numCyl)
 ```
 
+Use `cube` or `rollup` to compute subtotals across multiple dimensions.
+
+```{r}
+mean(cube(carsDF, "cyl", "gear", "am"), "mpg")
+```
+
+generates groupings for {(`cyl`, `gear`, `am`), (`cyl`, `gear`), (`cyl`), ()}, while 
+
+```{r}
+mean(rollup(carsDF, "cyl", "gear", "am"), "mpg")
+```
+
+generates groupings for all possible combinations of grouping columns.
+
+
 #### Operating on Columns
 
 SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.

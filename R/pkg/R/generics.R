@@ -483,6 +483,10 @@ setGeneric("createOrReplaceTempView",
 # @export
 setGeneric("crossJoin", function(x, y) { standardGeneric("crossJoin") })
 
+#' @rdname cube
+#' @export
+setGeneric("cube", function(x, ...) { standardGeneric("cube") })
+
 #' @rdname dapply
 #' @export
 setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
@@ -630,6 +634,10 @@ setGeneric("sample",
            function(x, withReplacement, fraction, seed) {
              standardGeneric("sample")
            })
+
+#' @rdname rollup
+#' @export
+setGeneric("rollup", function(x, ...) { standardGeneric("rollup") })
 
 #' @rdname sample
 #' @export
@@ -918,6 +926,14 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 #' @export
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
+#' @rdname collect_list
+#' @export
+setGeneric("collect_list", function(x) { standardGeneric("collect_list") })
+
+#' @rdname collect_set
+#' @export
+setGeneric("collect_set", function(x) { standardGeneric("collect_set") })
+
 #' @rdname column
 #' @export
 setGeneric("column", function(x) { standardGeneric("column") })
@@ -1184,6 +1200,10 @@ setGeneric("regexp_extract", function(x, pattern, idx) { standardGeneric("regexp
 setGeneric("regexp_replace",
            function(x, pattern, replacement) { standardGeneric("regexp_replace") })
 
+#' @rdname repeat_string
+#' @export
+setGeneric("repeat_string", function(x, n) { standardGeneric("repeat_string") })
+
 #' @rdname reverse
 #' @export
 setGeneric("reverse", function(x) { standardGeneric("reverse") })
@@ -1248,6 +1268,10 @@ setGeneric("skewness", function(x) { standardGeneric("skewness") })
 #' @rdname sort_array
 #' @export
 setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array") })
+
+#' @rdname split_string
+#' @export
+setGeneric("split_string", function(x, pattern) { standardGeneric("split_string") })
 
 #' @rdname soundex
 #' @export
@@ -1357,6 +1381,7 @@ setGeneric("window", function(x, ...) { standardGeneric("window") })
 #' @rdname year
 #' @export
 setGeneric("year", function(x) { standardGeneric("year") })
+
 
 ###################### Spark.ML Methods ##########################
 
