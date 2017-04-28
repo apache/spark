@@ -740,7 +740,11 @@ private[spark] object Utils extends Logging {
    * always return a single directory.
    */
   def getLocalDir(conf: SparkConf): String = {
-    getOrCreateLocalRootDirs(conf)(0)
+    getOrCreateLocalRootDirs(conf).headOption.getOrElse {
+      val configuredLocalDirs = getConfiguredLocalDirs(conf)
+      throw new IOException(
+        s"Failed to get a temp directory under [${configuredLocalDirs.mkString(",")}].")
+    }
   }
 
   private[spark] def isRunningInYarnContainer(conf: SparkConf): Boolean = {
