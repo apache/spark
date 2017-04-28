@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{Connection, PreparedStatement, Types}
 
-import org.apache.spark.sql.types.{BooleanType, DataType, LongType, MetadataBuilder}
+import org.apache.spark.sql.types.{BooleanType, DataType, LongType, MetadataBuilder, StructType}
 
 private case object MySQLDialect extends JdbcDialect {
 
@@ -46,4 +46,35 @@ private case object MySQLDialect extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  /**
+   * Returns a PreparedStatement that does Insert/Update table
+   */
+  override def upsertStatement(
+      conn: Connection,
+      table: String,
+      rddSchema: StructType,
+      upsertParam: UpsertInfo = UpsertInfo(Array.empty, Array.empty)): PreparedStatement = {
+    require(upsertParam.upsertUpdateColumns.nonEmpty,
+      "Upsert option requires update column names." +
+        "Please specify option(\"upsertUpdateColumn\", \"c1, c2, ...\")")
+
+
+    val updateClause = if (upsertParam.upsertUpdateColumns.nonEmpty) {
+      upsertParam.upsertUpdateColumns.map(x => s"$x = VALUES($x)").mkString(", ")
+    }
+    else {
+      rddSchema.fields.map(x => s"$x = VALUES($x)").mkString(", ")
+    }
+    val insertColumns = rddSchema.fields.map(_.name).mkString(", ")
+    val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
+
+    val sql =
+      s"""
+         |INSERT INTO $table ($insertColumns)
+         |VALUES ( $placeholders )
+         |ON DUPLICATE KEY UPDATE $updateClause
+      """.stripMargin
+    conn.prepareStatement(sql)
+  }
 }

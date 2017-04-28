@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.Connection
 import java.util.Properties
+import org.apache.spark.sql.SaveMode
 
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -27,8 +28,9 @@ import org.apache.spark.tags.DockerTest
 
 @DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
+  import testImplicits._
   override val db = new DatabaseOnDocker {
-    override val imageName = "postgres:9.4.5"
+    override val imageName = "postgres:9.5.4"
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
@@ -55,6 +57,26 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       + "null, null, null, null, null, "
       + "null, null, null, null, null, null, null)"
     ).executeUpdate()
+    conn.prepareStatement("CREATE TABLE upsertT0 " +
+      "(c1 INTEGER, c2 INTEGER, c3 INTEGER, primary key(c1))").executeUpdate()
+    conn.prepareStatement("INSERT INTO upsertT0 VALUES (1, 2, 3), (2, 3, 4), (3, 4, 5)")
+      .executeUpdate()
+    conn.prepareStatement("CREATE TABLE upsertT1 " +
+      "(c1 INTEGER, c2 INTEGER, c3 INTEGER, primary key(c1))").executeUpdate()
+    conn.prepareStatement("INSERT INTO upsertT1 VALUES (1, 2, 3), (2, 3, 4), (3, 4, 5)")
+      .executeUpdate()
+    conn.prepareStatement("CREATE TABLE upsertT2 " +
+      "(c1 INTEGER, c2 INTEGER, c3 INTEGER, primary key(c1, c2))").executeUpdate()
+    conn.prepareStatement("INSERT INTO upsertT2 VALUES (1, 2, 3), (2, 3, 4), (3, 4, 5)")
+      .executeUpdate()
+    conn.prepareStatement("CREATE TABLE upsertT3 " +
+      "(c1 INTEGER, c2 INTEGER, c3 INTEGER, primary key(c1))").executeUpdate()
+    conn.prepareStatement("INSERT INTO upsertT3 VALUES (1, 2, 3), (2, 3, 4), (3, 4, 5)")
+      .executeUpdate()
+    conn.prepareStatement("CREATE TABLE upsertT4 " +
+      "(c1 INTEGER, c2 INTEGER, c3 INTEGER, primary key(c1))").executeUpdate()
+    conn.prepareStatement("INSERT INTO upsertT4 VALUES (1, 2, 3), (2, 3, 4), (3, 4, 5)")
+      .executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -125,5 +147,94 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val schema = sqlContext.read.jdbc(jdbcUrl, "shortfloat", new Properties).schema
     assert(schema(0).dataType == FloatType)
     assert(schema(1).dataType == ShortType)
+  }
+
+  test("Upsert and OverWrite mode") {
+    //existing table has these rows
+    //(1, 2, 3), (2, 3, 4), (3, 4, 5)
+    val df1 = spark.read.jdbc(jdbcUrl, "upsertT0", new Properties())
+    assert(df1.filter("c1=1").collect.head.getInt(1) == 2)
+    assert(df1.filter("c1=1").collect.head.getInt(2) == 3)
+    assert(df1.filter("c1=2").collect.head.getInt(1) == 3)
+    assert(df1.filter("c1=2").collect.head.getInt(2) == 4)
+    val df2 = Seq((1, 3, 6), (2, 5, 6)).toDF("c1", "c2", "c3")
+    // it will do the Overwrite, not upsert
+    df2.write.mode(SaveMode.Overwrite)
+      .option("upsert", true).option("upsertConditionColumn", "c1")
+      .jdbc(jdbcUrl, "upsertT0", new Properties)
+    val df3 = spark.read.jdbc(jdbcUrl, "upsertT0", new Properties())
+    assert(df3.filter("c1=1").collect.head.getInt(1) == 3)
+    assert(df3.filter("c1=1").collect.head.getInt(2) == 6)
+    assert(df3.filter("c1=2").collect.head.getInt(1) == 5)
+    assert(df3.filter("c1=2").collect.head.getInt(2) == 6)
+    assert(df3.filter("c1=3").collect.size == 0)
+  }
+
+  test("upsert with Append and negative option values") {
+    val df1 = Seq((1, 3, 6), (2, 5, 6)).toDF("c1", "c2", "c3")
+    val m = intercept[java.sql.SQLException] {
+    df1.write.mode(SaveMode.Append).option("upsert", true).option("upsertConditionColumn", "C11")
+      .jdbc(jdbcUrl, "upsertT1", new Properties)
+    }.getMessage
+    assert(m.contains("column C11 not found"))
+
+    val n = intercept[java.sql.SQLException] {
+    df1.write.mode(SaveMode.Append).option("upsert", true).option("upsertConditionColumn", "C11")
+      .jdbc(jdbcUrl, "upsertT1", new Properties)
+    }.getMessage
+    assert(n.contains("column C11 not found"))
+
+    val o = intercept[org.apache.spark.SparkException] {
+    df1.write.mode(SaveMode.Append).option("upsert", true).option("upsertconditionColumn", "c2")
+      .jdbc(jdbcUrl, "upsertT1", new Properties)
+    }.getMessage
+    assert(o.contains("there is no unique or exclusion constraint matching the ON CONFLICT"))
+  }
+
+  test("upsert with Append without existing table") {
+    val df1 = Seq((1, 3), (2, 5)).toDF("c1", "c2")
+    df1.write.mode(SaveMode.Append).option("upsert", true).option("upsertConditionColumn", "c1")
+      .jdbc(jdbcUrl, "upsertT", new Properties)
+    val df2 = spark.read.jdbc(jdbcUrl, "upsertT", new Properties)
+    assert(df2.count() == 2)
+    assert(df2.filter("C1=1").collect.head.get(1) == 3)
+
+    // table upsertT create without primary key or unique constraints, it will throw the exception
+    val df3 = Seq((1, 4)).toDF("c1", "c2")
+    val p = intercept[org.apache.spark.SparkException] {
+    df3.write.mode(SaveMode.Append).option("upsert", true).option("upsertConditionColumn", "c1")
+      .jdbc(jdbcUrl, "upsertT", new Properties)
+    }.getMessage
+    assert(p.contains("there is no unique or exclusion constraint matching the ON CONFLICT specification"))
+  }
+
+  test("Upsert & Append test  -- matching one column") {
+    val df1 = spark.read.jdbc(jdbcUrl, "upsertT3", new Properties())
+    assert(df1.filter("c1=1").collect.head.getInt(1) == 2)
+    assert(df1.filter("c1=1").collect.head.getInt(2) == 3)
+    assert(df1.filter("c1=4").collect.size == 0)
+    // update Row(1, 2, 3) to (1, 3, 6) and insert new Row(4, 5, 6)
+    val df2 = Seq((1, 3, 6), (4, 5, 6)).toDF("c1", "c2", "c3")
+    // condition on one column
+    df2.write.mode(SaveMode.Append)
+      .option("upsert", true).option("upsertConditionColumn", "c1").option("upsertUpdateColumn", "c2, c3")
+      .jdbc(jdbcUrl, "upsertT3", new Properties)
+    val df3 = spark.read.jdbc(jdbcUrl, "upsertT3", new Properties())
+    assert(df3.filter("c1=1").collect.head.getInt(1) == 3)
+    assert(df3.filter("c1=1").collect.head.getInt(2) == 6)
+    assert(df3.filter("c1=4").collect.size == 1)
+  }
+
+  test("Upsert & Append test -- matching two columns") {
+    val df1 = spark.read.jdbc(jdbcUrl, "upsertT2", new Properties())
+    assert(df1.filter("c1=1").collect.head.getInt(1) == 2)
+    assert(df1.filter("c1=1").collect.head.getInt(2) == 3)
+    // update Row(2, 3, 4) to Row(2, 3, 10) that matches 2 columns
+    val df2 = Seq((2, 3, 10)).toDF("c1", "c2", "c3")
+    df2.write.mode(SaveMode.Append)
+      .option("upsert", true).option("upsertConditionColumn", "c1, c2")
+      .jdbc(jdbcUrl, "upsertT2", new Properties)
+    val df3 = spark.read.jdbc(jdbcUrl, "upsertT2", new Properties())
+    assert(df3.filter("c1=2").collect.head.getInt(2) == 10)
   }
 }

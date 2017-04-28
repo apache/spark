@@ -27,13 +27,13 @@ import scala.util.control.NonFatal
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
-import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
+import org.apache.spark.sql.jdbc._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
@@ -570,7 +570,7 @@ object JdbcUtils extends Logging {
    * non-Serializable.  Instead, we explicitly close over all variables that
    * are used.
    */
-  def savePartition(
+  private def savePartition(
       getConnection: () => Connection,
       table: String,
       iterator: Iterator[Row],
@@ -578,7 +578,9 @@ object JdbcUtils extends Logging {
       insertStmt: String,
       batchSize: Int,
       dialect: JdbcDialect,
-      isolationLevel: Int): Iterator[Byte] = {
+      isolationLevel: Int,
+      isUpsert: Boolean = false,
+      upsertParam: UpsertInfo = UpsertInfo(Array(), Array())): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
 
@@ -612,7 +614,12 @@ object JdbcUtils extends Logging {
         conn.setAutoCommit(false) // Everything in the same db transaction.
         conn.setTransactionIsolation(finalIsolationLevel)
       }
-      val stmt = conn.prepareStatement(insertStmt)
+
+      val stmt = if (isUpsert) {
+        dialect.upsertStatement(conn, table, rddSchema, upsertParam)
+      } else {
+        conn.prepareStatement(insertStmt)
+      }
       val setters = rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType))
       val nullTypes = rddSchema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
       val numFields = rddSchema.fields.length
@@ -753,7 +760,9 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      options: JDBCOptions): Unit = {
+      mode: SaveMode,
+      options: JDBCOptions,
+      newTableFlag: Boolean = false): Unit = {
     val url = options.url
     val table = options.table
     val dialect = JdbcDialects.get(url)
@@ -770,9 +779,69 @@ object JdbcUtils extends Logging {
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
-    repartitionedDF.foreachPartition(iterator => savePartition(
-      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel)
-    )
+    val isUpsert = if (options.isUpsert && (mode == SaveMode.Append)) {
+      if (newTableFlag) {
+        logWarning("UPSERT operation is not applicable for a brand new table, " +
+          "regular INSERT operation will be done.")
+        false
+      } else true
+    } else false
+    // if upsert feature is on, validate the column name and prepare the upsertParam
+    // if the input data(dataframe) have duplicate row, the upsert result is non-deterministic.
+    // It is documented at upsert(merge) wiki: https://en.wikipedia.org/wiki/Merge_(SQL)
+    if (isUpsert) {
+      val upsertUpdateColumns = options.upsertUpdateColumn
+      val upsertConditionColumns = options.upsertConditionColumn
+      val upsertParam = UpsertInfo(upsertConditionColumns, upsertUpdateColumns)
+      val caseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+      validateColumn(rddSchema, upsertParam.upsertUpdateColumns, caseSensitive)
+      validateColumn(rddSchema, upsertParam.upsertConditionColumns, caseSensitive)
+      repartitionedDF.foreachPartition(iterator =>
+        savePartition(
+          getConnection,
+          table,
+          iterator,
+          rddSchema,
+          insertStmt,
+          batchSize,
+          dialect,
+          isolationLevel,
+          isUpsert,
+          upsertParam)
+      )
+    } else {
+      repartitionedDF.foreachPartition(iterator =>
+        savePartition(
+          getConnection,
+          table,
+          iterator,
+          rddSchema,
+          insertStmt,
+          batchSize,
+          dialect,
+          isolationLevel)
+      )
+    }
+  }
+
+  /**
+   *  Validate the column name for Upsert with caseSensitive/inSensitive
+   */
+  def validateColumn(
+      schema: StructType,
+      upsertColumns: Seq[String],
+      caseSensitive: Boolean): Unit = {
+    upsertColumns.map { col =>
+      schema.find { f =>
+        if (caseSensitive) {
+          org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution(f.name, col)
+        } else {
+          org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution(f.name, col)
+        }
+      }.getOrElse {
+        throw new SQLException(s"upsert column $col not found in schema $schema")
+      }
+    }
   }
 
   /**
