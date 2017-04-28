@@ -112,18 +112,13 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
   }
 
   test("batch - enforce analyzed plans SPARK-20496") {
-    val adTypes = Seq("banner")
-    val eventTypes = Seq("view")
-
     val inputEvents =
       spark.range(1, 1000)
         .select(to_json(struct("*")) as 'value)
 
-
     val topic = newTopic()
     testUtils.createTopic(topic)
 
-    // for improperly formatted DataFrame
      inputEvents.write
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
