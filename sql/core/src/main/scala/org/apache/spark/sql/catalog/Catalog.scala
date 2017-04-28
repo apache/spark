@@ -477,13 +477,13 @@ abstract class Catalog {
   def cacheTable(tableName: String): Unit
 
   /**
-   * Caches the specified table in-memory with given storage level.
+   * Caches the specified table with the given storage level.
    *
    * @param tableName is either a qualified or unqualified name that designates a table/view.
    *                  If no database identifier is provided, it refers to a temporary view or
    *                  a table/view in the current database.
    * @param storageLevel storage level to cache table.
-   * @since 2.0.0
+   * @since 2.3.0
    */
   def cacheTable(tableName: String, storageLevel: StorageLevel): Unit
 
