@@ -2487,12 +2487,13 @@ object functions {
    */
   def current_timestamp(): Column = withExpr { CurrentTimestamp() }
 
+  // scalastyle:off line.size.limit
   /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
    * A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
-   * pattern letters of `java.text.SimpleDateFormat` can be used.
+   * pattern letters of [[https://docs.oracle.com/javase/8/docs/api/java/text/SimpleDateFormat.html java.text.SimpleDateFormat]] can be used.
    *
    * @note Use when ever possible specialized functions like [[year]]. These benefit from a
    * specialized implementation.
@@ -2500,6 +2501,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  // scalastyle:on line.size.limit
   def date_format(dateExpr: Column, format: String): Column = withExpr {
     DateFormatClass(dateExpr.expr, Literal(format))
   }
@@ -2647,7 +2649,11 @@ object functions {
   }
 
   /**
-   * Gets current Unix timestamp in seconds.
+   * Returns the current Unix timestamp (in seconds).
+   *
+   * NOTE: All calls of `unix_timestamp` within the same query return the same value
+   * (i.e. the current timestamp is calculated at the start of query evaluation).
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2657,7 +2663,9 @@ object functions {
 
   /**
    * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
-   * using the default timezone and the default locale, return null if fail.
+   * using the default timezone and the default locale.
+   * Returns `null` if fails.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2665,14 +2673,17 @@ object functions {
     UnixTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
   }
 
+  // scalastyle:off line.size.limit
   /**
-   * Convert time string with given pattern
-   * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
-   * to Unix time stamp (in seconds), return null if fail.
+   * Converts time string with given pattern to Unix timestamp (in seconds).
+   * Returns `null` if fails.
+   *
+   * @see [[http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html Customizing Formats]]
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def unix_timestamp(s: Column, p: String): Column = withExpr {UnixTimestamp(s.expr, Literal(p)) }
+  // scalastyle:on
+  def unix_timestamp(s: Column, p: String): Column = withExpr { UnixTimestamp(s.expr, Literal(p)) }
 
   /**
    * Convert time string to a Unix timestamp (in seconds).
