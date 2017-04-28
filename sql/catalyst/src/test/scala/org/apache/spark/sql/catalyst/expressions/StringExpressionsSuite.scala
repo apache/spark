@@ -21,7 +21,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
-
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("concat") {
@@ -408,24 +407,67 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("TRIM/LTRIM/RTRIM") {
     val s = 'a.string.at(0)
-    checkEvaluation(StringTrim(Literal(" aa  ")), "aa", create_row(" abdef "))
-    checkEvaluation(StringTrim(s), "abdef", create_row(" abdef "))
+    checkEvaluation(StringTrim(Seq(Literal(" aa  "))), "aa", create_row(" abdef "))
+    checkEvaluation(StringTrim(Seq("a", Literal("aa"))), "", create_row(" abdef "))
+    checkEvaluation(StringTrim(Seq("a", Literal(" aa"))), " ", create_row(" abdef "))
+    checkEvaluation(StringTrim(Seq("a", Literal("aa "))), " ", create_row(" abdef "))
+    checkEvaluation(StringTrim(Seq("a", Literal("aabbaaaa"))), "bb", create_row(" abdef "))
+    checkEvaluation(StringTrim(Seq("a", Literal("aabbaaaa "))), "bbaaaa ", create_row(" abdef "))
+    checkEvaluation(StringTrim(Seq(s)), "abdef", create_row(" abdef "))
+    checkEvaluation(StringTrim(Seq("a", s)), "bdef", create_row("abdefa"))
+    checkEvaluation(StringTrim(Seq("a", s)), "bdef", create_row("aaabdefaaaa"))
+    checkEvaluation(StringTrim(Seq("S", s)), "parkSQL", create_row("SSparkSQLS"))
 
-    checkEvaluation(StringTrimLeft(Literal(" aa  ")), "aa  ", create_row(" abdef "))
-    checkEvaluation(StringTrimLeft(s), "abdef ", create_row(" abdef "))
-
-    checkEvaluation(StringTrimRight(Literal(" aa  ")), " aa", create_row(" abdef "))
-    checkEvaluation(StringTrimRight(s), " abdef", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(Seq(Literal(" aa  "))), "aa  ", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(Seq("a", Literal("aa"))), "", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(Seq("a", Literal("aa "))), " ", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(Seq("a", Literal("aabbaaaa"))), "bbaaaa", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(Seq(s)), "abdef ", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(Seq("a", s)), "bdefa", create_row("abdefa"))
+    checkEvaluation(StringTrimLeft(Seq("a", s)), " aaabdefaaaa", create_row(" aaabdefaaaa"))
+    checkEvaluation(StringTrimLeft(Seq("S", s)), "parkSQLS", create_row("SSparkSQLS"))
+    checkEvaluation(StringTrimRight(Seq(Literal(" aa  "))), " aa", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Seq("a", Literal("a"))), "", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Seq("a", Literal("aa"))), "", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Seq("a", Literal("aabbaaaa"))), "aabb", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Seq(s)), " abdef", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Seq("a", s)), "abdef", create_row("abdefa"))
+    checkEvaluation(StringTrimRight(Seq("a", s)), " aaabdef", create_row(" aaabdefaaaa"))
+    checkEvaluation(StringTrimRight(Seq("S", s)), "SSparkSQL", create_row("SSparkSQLS"))
 
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    checkEvaluation(StringTrimRight(s), "  花花世界", create_row("  花花世界 "))
-    checkEvaluation(StringTrimLeft(s), "花花世界 ", create_row("  花花世界 "))
-    checkEvaluation(StringTrim(s), "花花世界", create_row("  花花世界 "))
+    checkEvaluation(StringTrimRight(Seq("花", Literal("a"))), "a", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Seq("a", Literal("花"))), "花", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Seq("花", Literal("花"))), "", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Seq(s)), "  花花世界", create_row("  花花世界 "))
+    checkEvaluation(StringTrimRight(Seq("花", s)), "花花世界", create_row("花花世界花花"))
+    checkEvaluation(StringTrimRight(Seq("花", s)), "", create_row("花花花花"))
+    checkEvaluation(StringTrimRight(Seq("花", s)), " 花花世界花花 ", create_row(" 花花世界花花 "))
+    checkEvaluation(StringTrimRight(Seq("a", s)), "aa花花世界花花", create_row("aa花花世界花花aa"))
+    checkEvaluation(StringTrimRight(Seq("a", s)), "aa花花世界花花", create_row("aa花花世界花花"))
+    checkEvaluation(StringTrimLeft(Seq(s)), "花花世界 ", create_row("  花花世界 "))
+    checkEvaluation(StringTrimLeft(Seq("花", s)), "世界花花", create_row("花花世界花花"))
+    checkEvaluation(StringTrimLeft(Seq("花", s)), " 花花世界花花", create_row(" 花花世界花花"))
+    checkEvaluation(StringTrimLeft(Seq("花", s)), "a花花世界花花 ", create_row("a花花世界花花 "))
+    checkEvaluation(StringTrimLeft(Seq("a", s)), "花花世界花花aa", create_row("aa花花世界花花aa"))
+    checkEvaluation(StringTrimLeft(Seq("a", s)), "花花世界花花", create_row("花花世界花花"))
+    checkEvaluation(StringTrim(Seq(s)), "花花世界", create_row("  花花世界 "))
+    checkEvaluation(StringTrim(Seq("花", s)), "世界", create_row("花花世界花花"))
+    checkEvaluation(StringTrim(Seq("花", s)), " 花花世界", create_row(" 花花世界花花"))
+    checkEvaluation(StringTrim(Seq("花", s)), " 花花世界花花 ", create_row(" 花花世界花花 "))
+    checkEvaluation(StringTrim(Seq("a", s)), "花花世界花花", create_row("aa花花世界花花aa"))
+    checkEvaluation(StringTrim(Seq("a", s)), "花花世界花花", create_row("aa花花世界花花"))
+    checkEvaluation(StringTrim(Seq("花", Literal("花"))), "", create_row(" abdef "))
+    checkEvaluation(StringTrim(Seq("花", Literal("a"))), "a", create_row(" abdef "))
+    checkEvaluation(StringTrim(Seq("a", Literal("花"))), "花", create_row(" abdef "))
     // scalastyle:on
-    checkEvaluation(StringTrim(Literal.create(null, StringType)), null)
-    checkEvaluation(StringTrimLeft(Literal.create(null, StringType)), null)
-    checkEvaluation(StringTrimRight(Literal.create(null, StringType)), null)
+    checkEvaluation(StringTrim(Seq((Literal("a")),
+      (Literal.create(null, StringType)))), null)
+    checkEvaluation(StringTrimLeft(Seq((Literal("a")),
+      (Literal.create(null, StringType)))), null)
+    checkEvaluation(StringTrimRight(Seq((Literal("a")),
+      (Literal.create(null, StringType)))), null)
   }
 
   test("FORMAT") {

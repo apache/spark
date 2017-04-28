@@ -1181,6 +1181,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
     // Create the function call.
     val name = ctx.qualifiedName.getText
+    val trimFuncName = Option(ctx.trimOperator).map {
+      o => visitTrimFuncName(ctx, o)}
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     val arguments = ctx.argument.asScala.map(expression) match {
       case Seq(UnresolvedStar(None))
@@ -1190,7 +1192,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case expressions =>
         expressions
     }
-    val function = UnresolvedFunction(visitFunctionName(ctx.qualifiedName), arguments, isDistinct)
+    val function = UnresolvedFunction(visitFunctionName(ctx.qualifiedName, trimFuncName),
+      arguments, isDistinct)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1199,6 +1202,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case spec: WindowDefContext =>
         WindowExpression(function, visitWindowDef(spec))
       case _ => function
+    }
+  }
+
+  /**
+   * Create a name LTRIM for TRIM(Leading), RTRIM for TRIM(Trailing), TRIM for TRIM(BOTH)
+   */
+  private def visitTrimFuncName(ctx: FunctionCallContext, opt: Token): String = {
+    if (ctx.qualifiedName.getText.toLowerCase != "trim") {
+      throw new ParseException(s"The specified function ${ctx.qualifiedName.getText} " +
+        s"doesn't support with option ${opt.getText}.", ctx)
+    }
+    opt.getType match {
+      case SqlBaseParser.BOTH => "trim"
+      case SqlBaseParser.LEADING => "ltrim"
+      case SqlBaseParser.TRAILING => "rtrim"
+      case _ => throw new ParseException(s"Function trim doesn't support " +
+        s"this ${opt.getType}.", ctx)
     }
   }
 
@@ -1218,10 +1238,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Create a function database (optional) and name pair.
    */
-  protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
+  protected def visitFunctionName(
+      ctx: QualifiedNameContext,
+      trimFuncN: Option[String] = None): FunctionIdentifier = {
     ctx.identifier().asScala.map(_.getText) match {
-      case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
-      case Seq(fn) => FunctionIdentifier(fn, None)
+      case Seq(db, fn) =>
+        if (fn.equalsIgnoreCase("trim") && trimFuncN.isDefined) {
+          FunctionIdentifier(trimFuncN.get, Option(db))
+        } else {
+          FunctionIdentifier(fn, Option(db))
+        }
+      case Seq(fn) =>
+        if (fn.equalsIgnoreCase("trim") && trimFuncN.isDefined) {
+          FunctionIdentifier(trimFuncN.get, None)
+        } else {
+          FunctionIdentifier(fn, None)
+        }
       case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
     }
   }

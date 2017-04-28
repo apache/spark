@@ -24,6 +24,7 @@ import java.util.regex.Pattern
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -504,68 +505,267 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 }
 
 /**
- * A function that trim the spaces from both ends for the specified string.
+ * A function that trim the spaces or a character from both ends for the specified string.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Removes the leading and trailing space characters from `str`.",
-  examples = """
+  usage = """
+    _FUNC_(str) - Removes the leading and trailing space characters from `str`.
+    _FUNC_(BOTH trimChar FROM str) - Remove the leading and trailing trimChar from `str`
+  """,
+  extended = """
+    Arguments:
+      str - a string expression
+      trimChar - the trim character
+      BOTH, FROM - these are keyword to specify for trim character from both side of the string
+
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
+      > SELECT _FUNC_(BOTH 'S' FROM 'SSparkSQLS');
+       parkSQL
   """)
-case class StringTrim(child: Expression)
-  extends UnaryExpression with String2StringExpression {
+case class StringTrim(children: Seq[Expression])
+  extends Expression with ImplicitCastInputTypes {
 
-  def convert(v: UTF8String): UTF8String = v.trim()
+  require(children.size <= 2 && children.nonEmpty,
+    s"$prettyName requires at least one argument and no more than two.")
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
+
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
 
   override def prettyName: String = "trim"
 
+  override def eval(input: InternalRow): Any = {
+    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+    if (inputs(0) != null) {
+      if (children.size == 1) {
+        return inputs(0).trim()
+      } else if (inputs(1) != null) {
+        if (inputs(0).numChars > 1) {
+          throw new AnalysisException(s"Trim character '${inputs(0)}' can not be greater than " +
+            s"1 character.")
+        } else {
+          return inputs(1).trim(inputs(0))
+        }
+      }
+    }
+    null
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"($c).trim()")
+    if (children.size == 2 &&
+      (! children(0).isInstanceOf[Literal] || children(0).toString.length > 1)) {
+      throw new AnalysisException(s"The trimming parameter should be Literal " +
+        s"and only one character.") }
+
+    val evals = children.map(_.genCode(ctx))
+    val inputs = evals.map { eval =>
+      s"${eval.isNull} ? null : ${eval.value}"
+    }
+    val getTrimFunction = if (children.size == 1) {
+      s"""UTF8String ${ev.value} = ${inputs(0)}.trim();"""
+    } else {
+      s"""UTF8String ${ev.value} = ${inputs(1)}.trim(${inputs(0)});""".stripMargin
+    }
+    ev.copy(evals.map(_.code).mkString("\n") +
+      s"""
+    boolean ${ev.isNull} = false;
+    ${getTrimFunction};
+    if (${ev.value} == null) {
+      ${ev.isNull} = true;
+    }
+    """)
+    }
+
+  override def sql: String = {
+    if (children.size == 1) {
+      val childrenSQL = children.map(_.sql).mkString(", ")
+      s"$prettyName($childrenSQL)"
+    } else {
+      val trimSQL = children(0).map(_.sql).mkString(", ")
+      val tarSQL = children(1).map(_.sql).mkString(", ")
+      s"$prettyName($trimSQL, $tarSQL)"
+    }
   }
 }
 
 /**
- * A function that trim the spaces from left end for given string.
+ * A function that trim the spaces or a character from left end for given string.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Removes the leading and trailing space characters from `str`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('    SparkSQL');
-       SparkSQL
-  """)
-case class StringTrimLeft(child: Expression)
-  extends UnaryExpression with String2StringExpression {
+  usage = """
+    _FUNC_(str) - Removes the leading and trailing space characters from `str`.
+    _FUNC_(LEADING trimChar FROM str) - Remove the leading trimChar from `str`
+  """,
+  extended = """
+    Arguments:
+      str - a string expression
+      trimChar - the trim character
+      LEADING, FROM - these are keyword to specify for trim character from left side of the string
 
-  def convert(v: UTF8String): UTF8String = v.trimLeft()
+    Examples:
+      > SELECT _FUNC_('    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(LEADING 'S' FROM 'SSparkSQLS');
+       parkSQLS
+  """)
+case class StringTrimLeft(children: Seq[Expression])
+  extends Expression with ImplicitCastInputTypes {
+
+  require (children.size <= 2 && children.nonEmpty,
+    "$prettyName requires at least one argument and no more than two.")
+
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
+  override def dataType: DataType = StringType
+
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
 
   override def prettyName: String = "ltrim"
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"($c).trimLeft()")
+  override def eval(input: InternalRow): Any = {
+    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+    if (inputs(0) != null) {
+      if (children.size == 1) {
+        return inputs(0).trimLeft()
+      } else if (inputs(1) != null) {
+        if (inputs(0).numChars > 1) {
+          throw new AnalysisException(s"Trim character '${inputs(0)}' can not be greater than" +
+            s" 1 character.")
+        } else {
+          return inputs(1).trimLeft(inputs(0))
+        }
+      }
+    }
+    null
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (children.size == 2 &&
+      (! children(0).isInstanceOf[Literal] || children(0).toString.length > 1)) {
+      throw new AnalysisException(s"The trimming parameter should be Literal " +
+        s"and only one character.") }
+
+    val evals = children.map(_.genCode(ctx))
+    val inputs = evals.map { eval =>
+      s"${eval.isNull} ? null : ${eval.value}"
+    }
+    val getTrimLeftFunction = if (children.size == 1) {
+      s"""UTF8String ${ev.value} = ${inputs(0)}.trimLeft();"""
+    } else {
+      s"""UTF8String ${ev.value} = ${inputs(1)}.trimLeft(${inputs(0)});"""
+    }
+
+    ev.copy(evals.map(_.code).mkString("\n") +
+      s"""
+    boolean ${ev.isNull} = false;
+    ${getTrimLeftFunction};
+    if (${ev.value} == null) {
+      ${ev.isNull} = true;
+    }
+    """)
+  }
+
+  override def sql: String = {
+    if (children.size == 1) {
+      val childrenSQL = children.map(_.sql).mkString(", ")
+      s"$prettyName($childrenSQL)"
+    } else {
+      val trimSQL = children(0).map(_.sql).mkString(", ")
+      val tarSQL = children(1).map(_.sql).mkString(", ")
+      s"$prettyName($trimSQL, $tarSQL)"
+    }
   }
 }
 
 /**
- * A function that trim the spaces from right end for given string.
+ * A function that trim the spaces or a character from right end for given string.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Removes the trailing space characters from `str`.",
-  examples = """
+  usage = """
+    _FUNC_(str) - Removes the leading and trailing space characters from `str`.
+    _FUNC_(TRAILING trimChar FROM str) - Remove the trailing trimChar from `str`
+  """,
+  extended = """
+    Arguments:
+      str - a string expression
+      trimChar - the trim character
+      TRAILING, FROM - these are keyword to specify for trim character from right side of the string
+
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
-           SparkSQL
+       SparkSQL
+      > SELECT _FUNC_(TRAILING 'S' FROM 'SSparkSQLS');
+       SSparkSQL
   """)
-case class StringTrimRight(child: Expression)
-  extends UnaryExpression with String2StringExpression {
+case class StringTrimRight(children: Seq[Expression])
+  extends Expression with ImplicitCastInputTypes {
 
-  def convert(v: UTF8String): UTF8String = v.trimRight()
+  require (children.size <= 2 && children.nonEmpty,
+    "$prettyName requires at least one argument and no more than two.")
+
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
+  override def dataType: DataType = StringType
+
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
 
   override def prettyName: String = "rtrim"
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"($c).trimRight()")
+  override def eval(input: InternalRow): Any = {
+    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+    if (inputs(0) != null) {
+      if (children.size == 1) {
+        return inputs(0).trimRight()
+      } else if (inputs(1) != null) {
+        if (inputs(0).numChars > 1) {
+          throw new AnalysisException(s"Trim character '${inputs(0)}' can not be greater than" +
+            s" 1 character.")
+        } else {
+          return inputs(1).trimRight(inputs(0))
+        }
+      }
+    }
+    null
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (children.size == 2 &&
+      (! children(0).isInstanceOf[Literal] || children(0).toString.length > 1)) {
+      throw new AnalysisException(s"The trimming parameter should be Literal " +
+        s"and only one character.") }
+
+    val evals = children.map(_.genCode(ctx))
+    val inputs = evals.map { eval =>
+      s"${eval.isNull} ? null : ${eval.value}"
+    }
+    val getTrimRightFunction = if (children.size == 1) {
+      s"""UTF8String ${ev.value} = ${inputs(0)}.trimRight();"""
+    } else {
+      s"""UTF8String ${ev.value} = ${inputs(1)}.trimRight(${inputs(0)});"""
+    }
+    ev.copy(evals.map(_.code).mkString("\n") +
+      s"""
+    boolean ${ev.isNull} = false;
+    ${getTrimRightFunction};
+    if (${ev.value} == null) {
+      ${ev.isNull} = true;
+    }
+    """)
+  }
+
+  override def sql: String = {
+    if (children.size == 1) {
+      val childrenSQL = children.map(_.sql).mkString(", ")
+      s"$prettyName($childrenSQL)"
+    } else {
+      val trimSQL = children(0).map(_.sql).mkString(", ")
+      val tarSQL = children(1).map(_.sql).mkString(", ")
+      s"$prettyName($trimSQL, $tarSQL)"
+    }
   }
 }
 
