@@ -339,7 +339,10 @@ setMethod("%<=>%",
 
 #' !
 #'
-#' @rdname not
+#' Inversion of boolean expression.
+#'
+#' @rdname column
+#' @name !
 #' @aliases !,Column-method
 #' @export
 #' @examples
@@ -349,4 +352,5 @@ setMethod("%<=>%",
 #' head(select(df, !column("x") > 0))
 #' }
 #' @note ! since 2.3.0
+#' @seealso \link{not}
 setMethod("!", signature(x = "Column"), function(x) not(x))
