@@ -50,6 +50,16 @@ Key differences are
 * Directory renames may be very slow and, on failure, leave the store in an unknown state.
 * Output may only be uploaded when the writing process closes the output stream.
 * Changes to stored objects may not be immediately visible, both in directory listings and actual data access.
+* The means by which directories are emulated may make working with them slow.
+* Seeking within a file may require new REST calls, so be slow. 
+
+How does affect spark? 
+
+1. Reading and writing data can be slower than expected.
+1. Some directory structures may be very inefficient to scan during query split calculation.
+1. The output of saved RDD may not be immediately visible to a follow-on query.
+1. The internal mechanism by which Spark commits work when saving an RDD is potentially
+both slow and unreliable.
 
 For these reasons, it is not always safe to use an object store as a direct destination of queries, or as
 an intermediate store in a chain of queries. Consult the documentation of the object store and its
@@ -122,6 +132,9 @@ renaming than the "version 1" algorithm.
 Speculative execution is disabled to reduce the risk of invalid output
 —but it may not eliminate it.
 
+Bear in mind that storing temporary files can run up charges; Delete
+directories called `"_temporary"` on a regular basis to avoid this.
+
 ### Parquet I/O Settings
 
 For optimal performance when working with Parquet data use the following settings:
@@ -157,6 +170,23 @@ waiting for the scheduler to find a node close to the data.
 {% endhighlight %}
 
 This must be set in the cluster's `yarn-site.xml` file.
+
+#### <a name="checkpointing"></a>Spark Streaming and object stores
+
+Spark Streaming can monitor files added to object stores, by
+creating a `FileInputDStream` DStream monitoring a path under a bucket through
+`StreamingContext.textFileStream()`.
+
+1. The time to scan for new files is proportional to the number of files
+under the path, not the number of *new* files, and that it can become a slow operation.
+The size of the window needs to be set to handle this.
+
+1. Files only appear in an object store once they are completely written; there
+is no need for a worklow of write-then-rename to ensure that files aren't picked up
+while they are still being written. Applications can write straight to the monitored directory.
+
+1. Streams should only be checkpointed to an object store considered compatible with
+HDFS. Otherwise the checkpointing will be slow and potentially unreliable.
 
 ## Further Reading
 
