@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, DataType}
@@ -106,6 +107,21 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
       s"save mode overwrite not allowed for kafka"))
+  }
+
+  test("SPARK-20496: batch - enforce analyzed plans") {
+    val inputEvents =
+      spark.range(1, 1000)
+        .select(to_json(struct("*")) as 'value)
+
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+    // used to throw UnresolvedException
+    inputEvents.write
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("topic", topic)
+      .save()
   }
 
   test("streaming - write to kafka with topic field") {
