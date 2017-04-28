@@ -21,49 +21,51 @@ description: Introduction to cloud storage support in Apache Spark SPARK_VERSION
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-## <a name="introduction"></a>Introduction
+## Introduction
 
 
 Amazon AWS, Microsoft Azure, Google GCS and other cloud infrastructures offer
-persistent data storage systems, "object stores". These are not quite the same as classic file
-systems: in order to scale to hundreds of Petabytes, without any single points of failure
-or size limits, object stores, "blobstores", they replace the classic directory tree of
-have a simpler model of `object-name => data`.
+persistent data storage in *object stores*. These are not classic "POSIX" file
+systems. In order to store hundreds of petabytes of data without any single points of failure,
+object stores replace the classic filesystem directory tree
+with a simpler model of `object-name => data`. To enable remote access, operations
+on objects are usually performed through (slow) HTTP REST operations.
 
-Apache Spark can read and write data in object stores through filesystem connectors implemented
-in Apache Hadoop or provided by the infrastructure suppliers themselves.
+Spark can read and write data in object stores through filesystem connectors implemented
+in Hadoop or provided by the infrastructure suppliers themselves.
 These connectors make the object stores look *almost* like filesystems, with directories and files
 and the classic operations on them such as list, delete and rename.
 
 
-## <a name="cloud_stores_are_not_filesystems"></a>Important: Cloud Object Stores are Not Real Filesystems
+### Important: Cloud Object Stores are Not Real Filesystems
 
 While the stores appear to be filesystems, underneath
 they are still object stores, [and the difference is significant](http://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/filesystem/introduction.html)
 
-They cannot be used as a direct replacement for a cluster-wide filesystem such as HDFS
+They cannot be used as a direct replacement for a cluster filesystem such as HDFS
 *except when this is explicitly stated*.
 
 Key differences are
 
-* Directory renames may be very slow and leave the store in an unknown state on failure.
-* Output written may only be visible when the writing process completes the write.
+* Directory renames may be very slow and, on failure, leave the store in an unknown state.
+* Output may only be uploaded when the writing process closes the output stream.
 * Changes to stored objects may not be immediately visible, both in directory listings and actual data access.
 
 For these reasons, it is not always safe to use an object store as a direct destination of queries, or as
-an intermediate store destination in chained queries. Consult the provider of the object store and the object store
-connector's documentation, to determine which actions are considered safe.
+an intermediate store in a chain of queries. Consult the documentation of the object store and its
+connector to determine which uses are considered safe.
 
-## <a name="installation"></a>Installation
+### Installation
 
 Provided the relevant libraries are on the classpath, and Spark is configured with the credentials,
 objects can be can be read or written through URLs referencing the data,
-such as `s3a://landsat-pds/scene_list.gz`.
+such as `"s3a://landsat-pds/scene_list.gz"`.
 
 The libraries can be added to an application's classpath by including the `spark-hadoop-cloud` 
 module and its dependencies.
 
-In Maven, add the following to the <code>pom.xml</code> file:
+In Maven, add the following to the `pom.xml` file, assuming `spark.version`
+is set to the chosen version of Spark:
 
 {% highlight xml %}
 <dependencyManagement>
@@ -78,28 +80,32 @@ In Maven, add the following to the <code>pom.xml</code> file:
 {% endhighlight %}
 
 Commercial products based on Spark generally set up the classpath for talking to cloud infrastructures,
-in which case this module is not needed.
+in which case this module may not be needed.
 
 
-## <a name="authenticating"></a>Authenticating
+### Authenticating
 
-Spark jobs must authenticate with the services to access their data.
+Spark jobs must authenticate with the object stores to access data within them.
 
-1. When Spark is running in cloud infrastructure (for example, on Amazon EC2, Google Cloud or
-Microsoft Azure), the credentials are usually automatically set up.
+1. When Spark is running in a cloud infrastructure, the credentials are usually automatically set up.
 1. `spark-submit`  picks up the `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`
-and `AWS_SESSION_TOKEN` environment variables and sets the associated configuration parameters
-for`s3n` and `s3a` to these values
+and `AWS_SESSION_TOKEN` environment variables and sets the associated authentication options
+for the `s3n` and `s3a` filesystem clients.
 1. In a Hadoop cluster, settings may be set in the `core-site.xml` file.
 1. Authentication details may be manually added to the Spark configuration in `spark-default.conf`
-1. Alternatively, they can be programmatically set in the `SparkConf` instances used to configure 
+1. Alternatively, they can be programmatically set in the `SparkConf` instance used to configure 
 the application's `SparkContext`.
 
-*Important: never check in authentication secrets into source code repositories,
+*Important: never check authentication secrets into source code repositories,
 especially public ones*
 
 Consult [the Hadoop documentation](http://hadoop.apache.org/docs/current/) for the relevant
 configuration and security options.
+
+## Configuring
+
+Each cloud connector has its own set of configuration parameters, again, 
+consult the relevant documentation.
 
 ### Recommended settings for writing to object stores
 
@@ -111,9 +117,10 @@ spark.hadoop.mapreduce.fileoutputcommitter.cleanup-failures.ignored true
 spark.speculation false
 ```
 
-This uses the "version 2" algorithm
-for committing files —which does less renaming than the v1 algorithm. Speculative execution is
-disabled to reduce the risk of invalid output —but it may not eliminate it.
+This uses the "version 2" algorithm for committing files, which does less
+renaming than the "version 1" algorithm.
+Speculative execution is disabled to reduce the risk of invalid output
+—but it may not eliminate it.
 
 ### Parquet I/O Settings
 
@@ -149,9 +156,9 @@ waiting for the scheduler to find a node close to the data.
 </property>
 {% endhighlight %}
 
-This must to be set in the cluster's `yarn-site.xml` file.
+This must be set in the cluster's `yarn-site.xml` file.
 
-### Further Reading
+## Further Reading
 
 Here is the documentation on the standard connectors both from Apache and the cloud providers.
 
