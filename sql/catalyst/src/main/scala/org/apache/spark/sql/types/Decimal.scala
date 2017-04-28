@@ -132,14 +132,22 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
-   * Set this Decimal to the given BigInteger value. Will have precision 38 and scale 0.
+   * If the value is not in the range of long, convert it to BigDecimal and
+   * the precision and scale are based on the converted value.
+   *
+   * This code avoids BigDecimal object allocation as possible to improve runtime efficiency
    */
   def set(bigintval: BigInteger): Decimal = {
-    this.decimalVal = null
-    this.longVal = bigintval.longValueExact()
-    this._precision = DecimalType.MAX_PRECISION
-    this._scale = 0
-    this
+    try {
+      this.decimalVal = null
+      this.longVal = bigintval.longValueExact()
+      this._precision = DecimalType.MAX_PRECISION
+      this._scale = 0
+      this
+    } catch {
+      case _: ArithmeticException =>
+        set(BigDecimal(bigintval))
+    }
   }
 
   /**

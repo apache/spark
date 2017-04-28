@@ -778,7 +778,7 @@ windowedCounts = words \
 In this example, we are defining the watermark of the query on the value of the column "timestamp", 
 and also defining "10 minutes" as the threshold of how late is the data allowed to be. If this query 
 is run in Update output mode (discussed later in [Output Modes](#output-modes) section), 
-the engine will keep updating counts of a window in the Resule Table until the window is older 
+the engine will keep updating counts of a window in the Result Table until the window is older
 than the watermark, which lags behind the current event time in column "timestamp" by 10 minutes.
 Here is an illustration. 
 
