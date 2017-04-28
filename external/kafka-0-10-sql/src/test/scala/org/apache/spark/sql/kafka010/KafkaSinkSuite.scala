@@ -33,6 +33,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
 class KafkaSinkSuite extends StreamTest with SharedSQLContext {
+
   import testImplicits._
 
   protected var testUtils: KafkaTestUtils = _
@@ -106,6 +107,39 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
       s"save mode overwrite not allowed for kafka"))
+  }
+
+  test("batch - enforce analyzed plans SPARK-20496") {
+    val input = Seq(1, 1).toDF("key").selectExpr("key", "2 as value")
+    /* bad dataframe plan */
+    val invalidInput = input.union(input)
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    /* No topic field or topic option */
+    var writer: StreamingQuery = null
+    var ex: Exception = null
+    // for improperly formatted DataFrame
+    ex = intercept[AnalysisException] {
+      writer = createKafkaWriter(invalidInput)(
+        withSelectExpr = "value as key", "value"
+      )
+      writer.processAllAvailable()
+    }
+    assert(ex.getMessage
+      .toLowerCase(Locale.ROOT)
+      .contains("can be called only on streaming"))
+    // for invalid Select Expressions
+    ex = intercept[AnalysisException] {
+      writer = createKafkaWriter(input)(
+        withSelectExpr = "val as key", "value"
+      )
+      writer.processAllAvailable()
+    }
+    assert(ex.getMessage
+      .toLowerCase(Locale.ROOT)
+      .contains("cannot resolve"))
+
   }
 
   test("streaming - write to kafka with topic field") {
