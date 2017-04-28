@@ -18,6 +18,7 @@ package org.apache.spark.status.api.v1
 
 import java.util.zip.ZipOutputStream
 import javax.servlet.ServletContext
+import javax.servlet.http.HttpServletRequest
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
 
@@ -40,7 +41,7 @@ import org.apache.spark.ui.SparkUI
  * HistoryServerSuite.
  */
 @Path("/v1")
-private[v1] class ApiRootResource extends UIRootFromServletContext {
+private[v1] class ApiRootResource extends ApiRequestContext {
 
   @Path("applications")
   def getApplicationList(): ApplicationListResource = {
@@ -56,21 +57,21 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
   def getJobs(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): AllJobsResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new AllJobsResource(ui)
     }
   }
 
   @Path("applications/{appId}/jobs")
   def getJobs(@PathParam("appId") appId: String): AllJobsResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new AllJobsResource(ui)
     }
   }
 
   @Path("applications/{appId}/jobs/{jobId: \\d+}")
   def getJob(@PathParam("appId") appId: String): OneJobResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new OneJobResource(ui)
     }
   }
@@ -79,15 +80,22 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
   def getJob(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): OneJobResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new OneJobResource(ui)
     }
   }
 
   @Path("applications/{appId}/executors")
   def getExecutors(@PathParam("appId") appId: String): ExecutorListResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new ExecutorListResource(ui)
+    }
+  }
+
+  @Path("applications/{appId}/allexecutors")
+  def getAllExecutors(@PathParam("appId") appId: String): AllExecutorListResource = {
+    withSparkUI(appId, None) { ui =>
+      new AllExecutorListResource(ui)
     }
   }
 
@@ -95,15 +103,23 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
   def getExecutors(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): ExecutorListResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new ExecutorListResource(ui)
     }
   }
 
+  @Path("applications/{appId}/{attemptId}/allexecutors")
+  def getAllExecutors(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): AllExecutorListResource = {
+    withSparkUI(appId, Some(attemptId)) { ui =>
+      new AllExecutorListResource(ui)
+    }
+  }
 
   @Path("applications/{appId}/stages")
   def getStages(@PathParam("appId") appId: String): AllStagesResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new AllStagesResource(ui)
     }
   }
@@ -112,14 +128,14 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
   def getStages(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): AllStagesResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new AllStagesResource(ui)
     }
   }
 
   @Path("applications/{appId}/stages/{stageId: \\d+}")
   def getStage(@PathParam("appId") appId: String): OneStageResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new OneStageResource(ui)
     }
   }
@@ -128,14 +144,14 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
   def getStage(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): OneStageResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new OneStageResource(ui)
     }
   }
 
   @Path("applications/{appId}/storage/rdd")
   def getRdds(@PathParam("appId") appId: String): AllRDDResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new AllRDDResource(ui)
     }
   }
@@ -144,14 +160,14 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
   def getRdds(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): AllRDDResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new AllRDDResource(ui)
     }
   }
 
   @Path("applications/{appId}/storage/rdd/{rddId: \\d+}")
   def getRdd(@PathParam("appId") appId: String): OneRDDResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new OneRDDResource(ui)
     }
   }
@@ -160,7 +176,7 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
   def getRdd(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): OneRDDResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new OneRDDResource(ui)
     }
   }
@@ -168,14 +184,27 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
   @Path("applications/{appId}/logs")
   def getEventLogs(
       @PathParam("appId") appId: String): EventLogDownloadResource = {
-    new EventLogDownloadResource(uiRoot, appId, None)
+    try {
+      // withSparkUI will throw NotFoundException if attemptId exists for this application.
+      // So we need to try again with attempt id "1".
+      withSparkUI(appId, None) { _ =>
+        new EventLogDownloadResource(uiRoot, appId, None)
+      }
+    } catch {
+      case _: NotFoundException =>
+        withSparkUI(appId, Some("1")) { _ =>
+          new EventLogDownloadResource(uiRoot, appId, None)
+        }
+    }
   }
 
   @Path("applications/{appId}/{attemptId}/logs")
   def getEventLogs(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
-    new EventLogDownloadResource(uiRoot, appId, Some(attemptId))
+    withSparkUI(appId, Some(attemptId)) { _ =>
+      new EventLogDownloadResource(uiRoot, appId, Some(attemptId))
+    }
   }
 
   @Path("version")
@@ -183,6 +212,21 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
     new VersionResource(uiRoot)
   }
 
+  @Path("applications/{appId}/environment")
+  def getEnvironment(@PathParam("appId") appId: String): ApplicationEnvironmentResource = {
+    withSparkUI(appId, None) { ui =>
+      new ApplicationEnvironmentResource(ui)
+    }
+  }
+
+  @Path("applications/{appId}/{attemptId}/environment")
+  def getEnvironment(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): ApplicationEnvironmentResource = {
+    withSparkUI(appId, Some(attemptId)) { ui =>
+      new ApplicationEnvironmentResource(ui)
+    }
+  }
 }
 
 private[spark] object ApiRootResource {
@@ -206,6 +250,7 @@ private[spark] object ApiRootResource {
 private[spark] trait UIRoot {
   def getSparkUI(appKey: String): Option[SparkUI]
   def getApplicationInfoList: Iterator[ApplicationInfo]
+  def getApplicationInfo(appId: String): Option[ApplicationInfo]
 
   /**
    * Write the event logs for the given app to the [[ZipOutputStream]] instance. If attemptId is
@@ -216,19 +261,6 @@ private[spark] trait UIRoot {
       .entity("Event logs are only available through the history server.")
       .status(Response.Status.SERVICE_UNAVAILABLE)
       .build()
-  }
-
-  /**
-   * Get the spark UI with the given appID, and apply a function
-   * to it.  If there is no such app, throw an appropriate exception
-   */
-  def withSparkUI[T](appId: String, attemptId: Option[String])(f: SparkUI => T): T = {
-    val appKey = attemptId.map(appId + "/" + _).getOrElse(appId)
-    getSparkUI(appKey) match {
-      case Some(ui) =>
-        f(ui)
-      case None => throw new NotFoundException("no such app: " + appId)
-    }
   }
   def securityManager: SecurityManager
 }
@@ -246,12 +278,36 @@ private[v1] object UIRootFromServletContext {
   }
 }
 
-private[v1] trait UIRootFromServletContext {
+private[v1] trait ApiRequestContext {
   @Context
-  var servletContext: ServletContext = _
+  protected var servletContext: ServletContext = _
+
+  @Context
+  protected var httpRequest: HttpServletRequest = _
 
   def uiRoot: UIRoot = UIRootFromServletContext.getUiRoot(servletContext)
+
+
+  /**
+   * Get the spark UI with the given appID, and apply a function
+   * to it.  If there is no such app, throw an appropriate exception
+   */
+  def withSparkUI[T](appId: String, attemptId: Option[String])(f: SparkUI => T): T = {
+    val appKey = attemptId.map(appId + "/" + _).getOrElse(appId)
+    uiRoot.getSparkUI(appKey) match {
+      case Some(ui) =>
+        val user = httpRequest.getRemoteUser()
+        if (!ui.securityManager.checkUIViewPermissions(user)) {
+          throw new ForbiddenException(raw"""user "$user" is not authorized""")
+        }
+        f(ui)
+      case None => throw new NotFoundException("no such app: " + appId)
+    }
+  }
 }
+
+private[v1] class ForbiddenException(msg: String) extends WebApplicationException(
+  Response.status(Response.Status.FORBIDDEN).entity(msg).build())
 
 private[v1] class NotFoundException(msg: String) extends WebApplicationException(
   new NoSuchElementException(msg),

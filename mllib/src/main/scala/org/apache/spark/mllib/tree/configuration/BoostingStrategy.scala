@@ -36,14 +36,14 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, Loss, SquaredError}
  * @param validationTol validationTol is a condition which decides iteration termination when
  *                      runWithValidation is used.
  *                      The end of iteration is decided based on below logic:
- *                      If the current loss on the validation set is > 0.01, the diff
+ *                      If the current loss on the validation set is greater than 0.01, the diff
  *                      of validation error is compared to relative tolerance which is
  *                      validationTol * (current loss on the validation set).
- *                      If the current loss on the validation set is <= 0.01, the diff
- *                      of validation error is compared to absolute tolerance which is
+ *                      If the current loss on the validation set is less than or equal to 0.01,
+ *                      the diff of validation error is compared to absolute tolerance which is
  *                      validationTol * 0.01.
  *                      Ignored when
- *                      [[org.apache.spark.mllib.tree.GradientBoostedTrees.run()]] is used.
+ *                      `org.apache.spark.mllib.tree.GradientBoostedTrees.run()` is used.
  */
 @Since("1.2.0")
 case class BoostingStrategy @Since("1.4.0") (
@@ -92,8 +92,8 @@ object BoostingStrategy {
   /**
    * Returns default configuration for the boosting algorithm
    * @param algo Learning goal.  Supported:
-   *             [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
-   *             [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
+   *             `org.apache.spark.mllib.tree.configuration.Algo.Classification`,
+   *             `org.apache.spark.mllib.tree.configuration.Algo.Regression`
    * @return Configuration for boosting algorithm
    */
   @Since("1.3.0")

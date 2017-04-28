@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Clustering - spark.mllib
-displayTitle: Clustering - spark.mllib
+title: Clustering - RDD-based API
+displayTitle: Clustering - RDD-based API
 ---
 
 [Clustering](https://en.wikipedia.org/wiki/Cluster_analysis) is an unsupervised learning problem whereby we aim to group subsets
@@ -24,13 +24,11 @@ variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
 called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 The implementation in `spark.mllib` has the following parameters:
 
-* *k* is the number of desired clusters.
+* *k* is the number of desired clusters. Note that it is possible for fewer than k clusters to be returned, for example, if there are fewer than k distinct points to cluster.
 * *maxIterations* is the maximum number of iterations to run.
 * *initializationMode* specifies either random initialization or
 initialization via k-means\|\|.
-* *runs* is the number of times to run the k-means algorithm (k-means is not
-guaranteed to find a globally optimal solution, and when run multiple times on
-a given dataset, the algorithm returns the best clustering result).
+* *runs* This param has no effect since Spark 2.0.0.
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged.
 * *initialModel* is an optional set of cluster centers used for initialization. If this parameter is supplied, only one run is performed.
@@ -170,10 +168,6 @@ which contains the computed clustering assignments.
 Refer to the [`PowerIterationClustering` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClustering) and [`PowerIterationClusteringModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/PowerIterationClusteringExample.scala %}
-
-A full example that produces the experiment described in the PIC paper can be found under
-[`examples/`](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/mllib/PowerIterationClusteringExample.scala).
-
 </div>
 
 <div data-lang="java" markdown="1">

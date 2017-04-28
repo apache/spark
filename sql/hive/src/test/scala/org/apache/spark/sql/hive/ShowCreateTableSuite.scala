@@ -28,11 +28,11 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
   import testImplicits._
 
   test("data source table with user specified schema") {
-    withTable("ddl_test1") {
+    withTable("ddl_test") {
       val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
 
       sql(
-        s"""CREATE TABLE ddl_test1 (
+        s"""CREATE TABLE ddl_test (
            |  a STRING,
            |  b STRING,
            |  `extra col` ARRAY<INT>,
@@ -45,55 +45,55 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
          """.stripMargin
       )
 
-      checkCreateTable("ddl_test1")
+      checkCreateTable("ddl_test")
     }
   }
 
   test("data source table CTAS") {
-    withTable("ddl_test2") {
+    withTable("ddl_test") {
       sql(
-        s"""CREATE TABLE ddl_test2
+        s"""CREATE TABLE ddl_test
            |USING json
            |AS SELECT 1 AS a, "foo" AS b
          """.stripMargin
       )
 
-      checkCreateTable("ddl_test2")
+      checkCreateTable("ddl_test")
     }
   }
 
   test("partitioned data source table") {
-    withTable("ddl_test3") {
+    withTable("ddl_test") {
       sql(
-        s"""CREATE TABLE ddl_test3
+        s"""CREATE TABLE ddl_test
            |USING json
            |PARTITIONED BY (b)
            |AS SELECT 1 AS a, "foo" AS b
          """.stripMargin
       )
 
-      checkCreateTable("ddl_test3")
+      checkCreateTable("ddl_test")
     }
   }
 
   test("bucketed data source table") {
-    withTable("ddl_test3") {
+    withTable("ddl_test") {
       sql(
-        s"""CREATE TABLE ddl_test3
+        s"""CREATE TABLE ddl_test
            |USING json
            |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
            |AS SELECT 1 AS a, "foo" AS b
          """.stripMargin
       )
 
-      checkCreateTable("ddl_test3")
+      checkCreateTable("ddl_test")
     }
   }
 
   test("partitioned bucketed data source table") {
-    withTable("ddl_test4") {
+    withTable("ddl_test") {
       sql(
-        s"""CREATE TABLE ddl_test4
+        s"""CREATE TABLE ddl_test
            |USING json
            |PARTITIONED BY (c)
            |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
@@ -101,12 +101,12 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
          """.stripMargin
       )
 
-      checkCreateTable("ddl_test4")
+      checkCreateTable("ddl_test")
     }
   }
 
   test("data source table using Dataset API") {
-    withTable("ddl_test5") {
+    withTable("ddl_test") {
       spark
         .range(3)
         .select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd, 'id as 'e)
@@ -114,9 +114,9 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
         .mode("overwrite")
         .partitionBy("a", "b")
         .bucketBy(2, "c", "d")
-        .saveAsTable("ddl_test5")
+        .saveAsTable("ddl_test")
 
-      checkCreateTable("ddl_test5")
+      checkCreateTable("ddl_test")
     }
   }
 
@@ -146,7 +146,7 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
              |  c1 INT COMMENT 'bla',
              |  c2 STRING
              |)
-             |LOCATION '$dir'
+             |LOCATION '${dir.toURI}'
              |TBLPROPERTIES (
              |  'prop1' = 'value1',
              |  'prop2' = 'value2'
@@ -265,8 +265,36 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     }
   }
 
+  test("hive partitioned view is not supported") {
+    withTable("t1") {
+      withView("v1") {
+        sql(
+          s"""
+             |CREATE TABLE t1 (c1 INT, c2 STRING)
+             |PARTITIONED BY (
+             |  p1 BIGINT COMMENT 'bla',
+             |  p2 STRING )
+           """.stripMargin)
+
+        createRawHiveTable(
+          s"""
+             |CREATE VIEW v1
+             |PARTITIONED ON (p1, p2)
+             |AS SELECT * from t1
+           """.stripMargin
+        )
+
+        val cause = intercept[AnalysisException] {
+          sql("SHOW CREATE TABLE v1")
+        }
+
+        assert(cause.getMessage.contains(" - partitioned view"))
+      }
+    }
+  }
+
   private def createRawHiveTable(ddl: String): Unit = {
-    hiveContext.sharedState.metadataHive.runSqlHive(ddl)
+    hiveContext.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client.runSqlHive(ddl)
   }
 
   private def checkCreateTable(table: String): Unit = {
@@ -318,21 +346,8 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
       table.copy(
         createTime = 0L,
         lastAccessTime = 0L,
-        properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
-        // View texts are checked separately
-        viewOriginalText = None,
-        viewText = None
+        properties = table.properties.filterKeys(!nondeterministicProps.contains(_))
       )
-    }
-
-    // Normalizes attributes auto-generated by Spark SQL for views
-    def normalizeGeneratedAttributes(str: String): String = {
-      str.replaceAll("gen_attr_[0-9]+", "gen_attr_0")
-    }
-
-    // We use expanded canonical view text as original view text of the new table
-    assertResult(expected.viewText.map(normalizeGeneratedAttributes)) {
-      actual.viewOriginalText.map(normalizeGeneratedAttributes)
     }
 
     assert(normalize(actual) == normalize(expected))

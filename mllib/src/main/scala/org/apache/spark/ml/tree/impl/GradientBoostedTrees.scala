@@ -21,12 +21,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
-import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy => OldBoostingStrategy}
 import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
 
 
@@ -34,7 +34,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to train a gradient boosting model
-   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param input Training dataset: RDD of `LabeledPoint`.
    * @param seed Random seed.
    * @return tuple of ensemble models and weights:
    *         (array of decision tree models, array of model weights)
@@ -59,12 +59,12 @@ private[spark] object GradientBoostedTrees extends Logging {
 
   /**
    * Method to validate a gradient boosting model
-   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param input Training dataset: RDD of `LabeledPoint`.
    * @param validationInput Validation dataset.
    *                        This dataset should be different from the training dataset,
    *                        but it should follow the same distribution.
    *                        E.g., these two datasets could be created from an original dataset
-   *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
+   *                        by using `org.apache.spark.rdd.RDD.randomSplit()`
    * @param seed Random seed.
    * @return tuple of ensemble models and weights:
    *         (array of decision tree models, array of model weights)
@@ -98,7 +98,7 @@ private[spark] object GradientBoostedTrees extends Logging {
    * @param initTreeWeight: learning rate assigned to the first tree.
    * @param initTree: first DecisionTreeModel.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to every sample.
    */
   def computeInitialPredictionAndError(
@@ -121,7 +121,7 @@ private[spark] object GradientBoostedTrees extends Logging {
    * @param treeWeight: Learning rate.
    * @param tree: Tree using which the prediction and error should be updated.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to each sample.
    */
   def updatePredictionError(
@@ -162,7 +162,7 @@ private[spark] object GradientBoostedTrees extends Logging {
    * Method to calculate error of the base learner for the gradient boosting calculation.
    * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
    * purposes.
-   * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param data Training dataset: RDD of `LabeledPoint`.
    * @param trees Boosted Decision Tree models
    * @param treeWeights Learning rates at each boosting iteration.
    * @param loss evaluation metric.
@@ -184,7 +184,7 @@ private[spark] object GradientBoostedTrees extends Logging {
   /**
    * Method to compute error or loss for every iteration of gradient boosting.
    *
-   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param data RDD of `LabeledPoint`
    * @param trees Boosted Decision Tree models
    * @param treeWeights Learning rates at each boosting iteration.
    * @param loss evaluation metric.
@@ -205,31 +205,29 @@ private[spark] object GradientBoostedTrees extends Logging {
       case _ => data
     }
 
-    val numIterations = trees.length
-    val evaluationArray = Array.fill(numIterations)(0.0)
-    val localTreeWeights = treeWeights
-
-    var predictionAndError = computeInitialPredictionAndError(
-      remappedData, localTreeWeights(0), trees(0), loss)
-
-    evaluationArray(0) = predictionAndError.values.mean()
-
     val broadcastTrees = sc.broadcast(trees)
-    (1 until numIterations).foreach { nTree =>
-      predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
-        val currentTree = broadcastTrees.value(nTree)
-        val currentTreeWeight = localTreeWeights(nTree)
-        iter.map { case (point, (pred, error)) =>
-          val newPred = updatePrediction(point.features, pred, currentTree, currentTreeWeight)
-          val newError = loss.computeError(newPred, point.label)
-          (newPred, newError)
-        }
-      }
-      evaluationArray(nTree) = predictionAndError.values.mean()
-    }
+    val localTreeWeights = treeWeights
+    val treesIndices = trees.indices
 
-    broadcastTrees.unpersist()
-    evaluationArray
+    val dataCount = remappedData.count()
+    val evaluation = remappedData.map { point =>
+      treesIndices.map { idx =>
+        val prediction = broadcastTrees.value(idx)
+          .rootNode
+          .predictImpl(point.features)
+          .prediction
+        prediction * localTreeWeights(idx)
+      }
+      .scanLeft(0.0)(_ + _).drop(1)
+      .map(prediction => loss.computeError(prediction, point.label))
+    }
+    .aggregate(treesIndices.map(_ => 0.0))(
+      (aggregated, row) => treesIndices.map(idx => aggregated(idx) + row(idx)),
+      (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
+    .map(_ / dataCount)
+
+    broadcastTrees.destroy(blocking = false)
+    evaluation.toArray
   }
 
   /**

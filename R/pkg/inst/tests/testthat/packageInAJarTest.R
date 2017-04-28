@@ -17,13 +17,13 @@
 library(SparkR)
 library(sparkPackageTest)
 
-sc <- sparkR.init()
+sparkR.session()
 
 run1 <- myfunc(5L)
 
 run2 <- myfunc(-4L)
 
-sparkR.stop()
+sparkR.session.stop()
 
 if (run1 != 6) quit(save = "no", status = 1)
 

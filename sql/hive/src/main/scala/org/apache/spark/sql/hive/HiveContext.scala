@@ -48,14 +48,6 @@ class HiveContext private[hive](_sparkSession: SparkSession)
     new HiveContext(sparkSession.newSession())
   }
 
-  protected[sql] override def sessionState: HiveSessionState = {
-    sparkSession.sessionState.asInstanceOf[HiveSessionState]
-  }
-
-  protected[sql] override def sharedState: HiveSharedState = {
-    sparkSession.sharedState.asInstanceOf[HiveSharedState]
-  }
-
   /**
    * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
    * Spark SQL or the external data source library it uses might cache certain metadata about a

@@ -40,9 +40,9 @@ class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
         Predict values for a single data point or an RDD of points using
         the model trained.
 
-        Note: In Python, predict cannot currently be used within an RDD
-              transformation or action.
-              Call predict directly on the RDD instead.
+        .. note:: In Python, predict cannot currently be used within an RDD
+            transformation or action.
+            Call predict directly on the RDD instead.
         """
         if isinstance(x, RDD):
             return self.call("predict", x.map(_convert_to_vector))
@@ -76,8 +76,6 @@ class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
 
 class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     """
-    .. note:: Experimental
-
     A decision tree model for classification or regression.
 
     .. versionadded:: 1.1.0
@@ -87,9 +85,9 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         Predict the label of one or more examples.
 
-        Note: In Python, predict cannot currently be used within an RDD
-              transformation or action.
-              Call predict directly on the RDD instead.
+        .. note:: In Python, predict cannot currently be used within an RDD
+            transformation or action.
+            Call predict directly on the RDD instead.
 
         :param x:
           Data point (feature vector), or an RDD of data points (feature
@@ -130,8 +128,6 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
 class DecisionTree(object):
     """
-    .. note:: Experimental
-
     Learning algorithm for a decision tree model for classification or
     regression.
 
@@ -283,8 +279,6 @@ class DecisionTree(object):
 @inherit_doc
 class RandomForestModel(TreeEnsembleModel, JavaLoader):
     """
-    .. note:: Experimental
-
     Represents a random forest model.
 
     .. versionadded:: 1.2.0
@@ -297,8 +291,6 @@ class RandomForestModel(TreeEnsembleModel, JavaLoader):
 
 class RandomForest(object):
     """
-    .. note:: Experimental
-
     Learning algorithm for a random forest model for classification or
     regression.
 
@@ -486,8 +478,6 @@ class RandomForest(object):
 @inherit_doc
 class GradientBoostedTreesModel(TreeEnsembleModel, JavaLoader):
     """
-    .. note:: Experimental
-
     Represents a gradient-boosted tree model.
 
     .. versionadded:: 1.3.0
@@ -500,8 +490,6 @@ class GradientBoostedTreesModel(TreeEnsembleModel, JavaLoader):
 
 class GradientBoostedTrees(object):
     """
-    .. note:: Experimental
-
     Learning algorithm for a gradient boosted trees model for
     classification or regression.
 

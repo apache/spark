@@ -16,38 +16,22 @@
  */
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.util.Utils
 
 /**
  * Used to link a [[BaseRelation]] in to a logical query plan.
- *
- * Note that sometimes we need to use `LogicalRelation` to replace an existing leaf node without
- * changing the output attributes' IDs.  The `expectedOutputAttributes` parameter is used for
- * this purpose.  See https://issues.apache.org/jira/browse/SPARK-10741 for more details.
  */
 case class LogicalRelation(
     relation: BaseRelation,
-    expectedOutputAttributes: Option[Seq[Attribute]] = None,
-    metastoreTableIdentifier: Option[TableIdentifier] = None)
+    output: Seq[AttributeReference],
+    catalogTable: Option[CatalogTable])
   extends LeafNode with MultiInstanceRelation {
-
-  override val output: Seq[AttributeReference] = {
-    val attrs = relation.schema.toAttributes
-    expectedOutputAttributes.map { expectedAttrs =>
-      assert(expectedAttrs.length == attrs.length)
-      attrs.zip(expectedAttrs).map {
-        // We should respect the attribute names provided by base relation and only use the
-        // exprId in `expectedOutputAttributes`.
-        // The reason is that, some relations(like parquet) will reconcile attribute names to
-        // workaround case insensitivity issue.
-        case (attr, expected) => attr.withExprId(expected.exprId)
-      }
-    }.getOrElse(attrs)
-  }
 
   // Logical Relations are distinct if they have different output for the sake of transformations.
   override def equals(other: Any): Boolean = other match {
@@ -59,28 +43,39 @@ case class LogicalRelation(
     com.google.common.base.Objects.hashCode(relation, output)
   }
 
-  override def sameResult(otherPlan: LogicalPlan): Boolean = otherPlan match {
-    case LogicalRelation(otherRelation, _, _) => relation == otherRelation
-    case _ => false
+  // Only care about relation when canonicalizing.
+  override def preCanonicalized: LogicalPlan = copy(catalogTable = None)
+
+  @transient override def computeStats(conf: SQLConf): Statistics = {
+    catalogTable.flatMap(_.stats.map(_.toPlanStats(output))).getOrElse(
+      Statistics(sizeInBytes = relation.sizeInBytes))
   }
-
-  // When comparing two LogicalRelations from within LogicalPlan.sameResult, we only need
-  // LogicalRelation.cleanArgs to return Seq(relation), since expectedOutputAttribute's
-  // expId can be different but the relation is still the same.
-  override lazy val cleanArgs: Seq[Any] = Seq(relation)
-
-  @transient override lazy val statistics: Statistics = Statistics(
-    sizeInBytes = BigInt(relation.sizeInBytes)
-  )
 
   /** Used to lookup original attribute capitalization */
   val attributeMap: AttributeMap[AttributeReference] = AttributeMap(output.map(o => (o, o)))
 
-  def newInstance(): this.type =
-    LogicalRelation(
-      relation,
-      expectedOutputAttributes,
-      metastoreTableIdentifier).asInstanceOf[this.type]
+  /**
+   * Returns a new instance of this LogicalRelation. According to the semantics of
+   * MultiInstanceRelation, this method returns a copy of this object with
+   * unique expression ids. We respect the `expectedOutputAttributes` and create
+   * new instances of attributes in it.
+   */
+  override def newInstance(): LogicalRelation = {
+    this.copy(output = output.map(_.newInstance()))
+  }
 
-  override def simpleString: String = s"Relation[${output.mkString(",")}] $relation"
+  override def refresh(): Unit = relation match {
+    case fs: HadoopFsRelation => fs.location.refresh()
+    case _ =>  // Do nothing.
+  }
+
+  override def simpleString: String = s"Relation[${Utils.truncatedString(output, ",")}] $relation"
+}
+
+object LogicalRelation {
+  def apply(relation: BaseRelation): LogicalRelation =
+    LogicalRelation(relation, relation.schema.toAttributes, None)
+
+  def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation =
+    LogicalRelation(relation, relation.schema.toAttributes, Some(table))
 }

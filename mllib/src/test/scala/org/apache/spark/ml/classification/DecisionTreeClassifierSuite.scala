@@ -34,6 +34,7 @@ class DecisionTreeClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import DecisionTreeClassifierSuite.compareAPIs
+  import testImplicits._
 
   private var categoricalDataPointsRDD: RDD[LabeledPoint] = _
   private var orderedLabeledPointsWithLabel0RDD: RDD[LabeledPoint] = _
@@ -248,8 +249,7 @@ class DecisionTreeClassifierSuite
     val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(newTree)
+    MLTestingUtils.checkCopyAndUids(dt, newTree)
 
     val predictions = newTree.transform(newData)
       .select(newTree.getPredictionCol, newTree.getRawPredictionCol, newTree.getProbabilityCol)
@@ -345,7 +345,7 @@ class DecisionTreeClassifierSuite
   }
 
   test("Fitting without numClasses in metadata") {
-    val df: DataFrame = spark.createDataFrame(TreeTests.featureImportanceData(sc))
+    val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val dt = new DecisionTreeClassifier().setMaxDepth(1)
     dt.fit(df)
   }
@@ -371,16 +371,32 @@ class DecisionTreeClassifierSuite
     // Categorical splits with tree depth 2
     val categoricalData: DataFrame =
       TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
-    testEstimatorAndModelReadWrite(dt, categoricalData, allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(dt, categoricalData, allParamSettings,
+      allParamSettings, checkModelData)
 
     // Continuous splits with tree depth 2
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
-    testEstimatorAndModelReadWrite(dt, continuousData, allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(dt, continuousData, allParamSettings,
+      allParamSettings, checkModelData)
 
     // Continuous splits with tree depth 0
     testEstimatorAndModelReadWrite(dt, continuousData, allParamSettings ++ Map("maxDepth" -> 0),
-      checkModelData)
+      allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
+  }
+
+  test("SPARK-20043: " +
+       "ImpurityCalculator builder fails for uppercase impurity type Gini in model read/write") {
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+    val data: DataFrame =
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
+
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(2)
+    val model = dt.fit(data)
+
+    testDefaultReadWrite(model)
   }
 }
 

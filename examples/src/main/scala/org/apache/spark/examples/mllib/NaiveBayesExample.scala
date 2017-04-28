@@ -45,6 +45,8 @@ object NaiveBayesExample {
     model.save(sc, "target/tmp/myNaiveBayesModel")
     val sameModel = NaiveBayesModel.load(sc, "target/tmp/myNaiveBayesModel")
     // $example off$
+
+    sc.stop()
   }
 }
 

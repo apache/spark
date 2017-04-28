@@ -233,13 +233,13 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       // Create Parquet data.
       val nodes = model.topNode.subtreeIterator.toSeq
       val dataRDD = sc.parallelize(nodes).map(NodeData.apply(0, _))
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       spark.createDataFrame(dataRDD).write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String, algo: String, numNodes: Int): DecisionTreeModel = {
       // Load Parquet data.
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val dataPath = Loader.dataPath(path)
       val dataRDD = spark.read.parquet(dataPath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
@@ -248,7 +248,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       // Build node data into a tree.
       val trees = constructTrees(nodes)
       assert(trees.length == 1,
-        "Decision tree should contain exactly one tree but got ${trees.size} trees.")
+        s"Decision tree should contain exactly one tree but got ${trees.size} trees.")
       val model = new DecisionTreeModel(trees(0), Algo.fromString(algo))
       assert(model.numNodes == numNodes, s"Unable to load DecisionTreeModel data from: $dataPath." +
         s" Expected $numNodes nodes but found ${model.numNodes}")

@@ -62,7 +62,7 @@ class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
     super.beforeAll()
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTenPruned
+        |CREATE TEMPORARY VIEW oneToTenPruned
         |USING org.apache.spark.sql.sources.PrunedScanSource
         |OPTIONS (
         |  from '1',

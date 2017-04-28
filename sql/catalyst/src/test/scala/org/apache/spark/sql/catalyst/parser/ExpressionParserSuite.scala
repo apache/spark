@@ -21,12 +21,14 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * Test basic expression parsing. If a type of expression is supported it should be tested here.
+ * Test basic expression parsing.
+ * If the type of an expression is supported it should be tested here.
  *
  * Please note that some of the expressions test don't have to be sound expressions, only their
  * structure needs to be valid. Unsound expressions should be caught by the Analyzer or
@@ -209,6 +211,7 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
     assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
     assertEqual("`select`(all a, b)", 'select.function('a, 'b))
+    assertEqual("foo(a as x, b as e)", 'foo.function('a as 'x, 'b as 'e))
   }
 
   test("window function expressions") {
@@ -278,6 +281,7 @@ class ExpressionParserSuite extends PlanTest {
     // Note that '(a)' will be interpreted as a nested expression.
     assertEqual("(a, b)", CreateStruct(Seq('a, 'b)))
     assertEqual("(a, b, c)", CreateStruct(Seq('a, 'b, 'c)))
+    assertEqual("(a as b, b as c)", CreateStruct(Seq('a as 'b, 'b as 'c)))
   }
 
   test("scalar sub-query") {
@@ -292,8 +296,14 @@ class ExpressionParserSuite extends PlanTest {
   test("case when") {
     assertEqual("case a when 1 then b when 2 then c else d end",
       CaseKeyWhen('a, Seq(1, 'b, 2, 'c, 'd)))
+    assertEqual("case (a or b) when true then c when false then d else e end",
+      CaseKeyWhen('a || 'b, Seq(true, 'c, false, 'd, 'e)))
+    assertEqual("case 'a'='a' when true then 1 end",
+      CaseKeyWhen("a" ===  "a", Seq(true, 1)))
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
       CaseWhen(Seq(('a === 1, 'b.expr), ('a === 2, 'c.expr)), 'd))
+    assertEqual("case when (1) + case when a > b then c else d end then f else g end",
+      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(('a > 'b, 'c.expr)), 'd.expr), 'f.expr)), 'g))
   }
 
   test("dereference") {
@@ -331,22 +341,27 @@ class ExpressionParserSuite extends PlanTest {
   test("type constructors") {
     // Dates.
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
-    intercept[IllegalArgumentException] {
-      parseExpression("DAtE 'mar 11 2016'")
-    }
+    intercept("DAtE 'mar 11 2016'")
 
     // Timestamps.
     assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
-    intercept[IllegalArgumentException] {
-      parseExpression("timestamP '2016-33-11 20:54:00.000'")
-    }
+    intercept("timestamP '2016-33-11 20:54:00.000'")
+
+    // Binary.
+    assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
+    assertEqual("x'A10C'", Literal(Array(0xa1, 0x0c).map(_.toByte)))
+    intercept("x'A1OC'")
 
     // Unsupported datatype.
     intercept("GEO '(10,-6)'", "Literals of type 'GEO' are currently not supported.")
   }
 
   test("literals") {
+    def testDecimal(value: String): Unit = {
+      assertEqual(value, Literal(BigDecimal(value).underlying))
+    }
+
     // NULL
     assertEqual("null", Literal(null))
 
@@ -357,38 +372,44 @@ class ExpressionParserSuite extends PlanTest {
     // Integral should have the narrowest possible type
     assertEqual("787324", Literal(787324))
     assertEqual("7873247234798249234", Literal(7873247234798249234L))
-    assertEqual("78732472347982492793712334",
-      Literal(BigDecimal("78732472347982492793712334").underlying()))
+    testDecimal("78732472347982492793712334")
 
     // Decimal
-    assertEqual("7873247234798249279371.2334",
-      Literal(BigDecimal("7873247234798249279371.2334").underlying()))
+    testDecimal("7873247234798249279371.2334")
 
     // Scientific Decimal
-    assertEqual("9.0e1", 90d)
-    assertEqual(".9e+2", 90d)
-    assertEqual("0.9e+2", 90d)
-    assertEqual("900e-1", 90d)
-    assertEqual("900.0E-1", 90d)
-    assertEqual("9.e+1", 90d)
+    testDecimal("9.0e1")
+    testDecimal(".9e+2")
+    testDecimal("0.9e+2")
+    testDecimal("900e-1")
+    testDecimal("900.0E-1")
+    testDecimal("9.e+1")
     intercept(".e3")
 
     // Tiny Int Literal
     assertEqual("10Y", Literal(10.toByte))
-    intercept("-1000Y")
+    intercept("-1000Y", s"does not fit in range [${Byte.MinValue}, ${Byte.MaxValue}]")
 
     // Small Int Literal
     assertEqual("10S", Literal(10.toShort))
-    intercept("40000S")
+    intercept("40000S", s"does not fit in range [${Short.MinValue}, ${Short.MaxValue}]")
 
     // Long Int Literal
     assertEqual("10L", Literal(10L))
-    intercept("78732472347982492793712334L")
+    intercept("78732472347982492793712334L",
+        s"does not fit in range [${Long.MinValue}, ${Long.MaxValue}]")
 
     // Double Literal
     assertEqual("10.0D", Literal(10.0D))
-    // TODO we need to figure out if we should throw an exception here!
-    assertEqual("1E309", Literal(Double.PositiveInfinity))
+    intercept("-1.8E308D", s"does not fit in range")
+    intercept("1.8E308D", s"does not fit in range")
+
+    // BigDecimal Literal
+    assertEqual("90912830918230182310293801923652346786BD",
+      Literal(BigDecimal("90912830918230182310293801923652346786").underlying()))
+    assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
+    assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
+    intercept("1.20E-38BD", "DecimalType can only support precision up to 38")
   }
 
   test("strings") {
@@ -501,5 +522,39 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
     assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
     intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
+  }
+
+  test("current date/timestamp braceless expressions") {
+    assertEqual("current_date", CurrentDate())
+    assertEqual("current_timestamp", CurrentTimestamp())
+  }
+
+  test("SPARK-17364, fully qualified column name which starts with number") {
+    assertEqual("123_", UnresolvedAttribute("123_"))
+    assertEqual("1a.123_", UnresolvedAttribute("1a.123_"))
+    // ".123" should not be treated as token of type DECIMAL_VALUE
+    assertEqual("a.123A", UnresolvedAttribute("a.123A"))
+    // ".123E3" should not be treated as token of type SCIENTIFIC_DECIMAL_VALUE
+    assertEqual("a.123E3_column", UnresolvedAttribute("a.123E3_column"))
+    // ".123D" should not be treated as token of type DOUBLE_LITERAL
+    assertEqual("a.123D_column", UnresolvedAttribute("a.123D_column"))
+    // ".123BD" should not be treated as token of type BIGDECIMAL_LITERAL
+    assertEqual("a.123BD_column", UnresolvedAttribute("a.123BD_column"))
+  }
+
+  test("SPARK-17832 function identifier contains backtick") {
+    val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
+    assertEqual(complexName.quotedString, UnresolvedAttribute("`fo`o.`ba`r"))
+    intercept(complexName.unquotedString, "mismatched input")
+    // Function identifier contains countious backticks should be treated correctly.
+    val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
+    assertEqual(complexName2.quotedString, UnresolvedAttribute("fo``o.ba``r"))
+  }
+
+  test("SPARK-19526 Support ignore nulls keywords for first and last") {
+    assertEqual("first(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
+    assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
+    assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
+    assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 }

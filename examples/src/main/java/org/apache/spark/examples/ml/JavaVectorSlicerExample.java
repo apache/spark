@@ -20,15 +20,14 @@ package org.apache.spark.examples.ml;
 import org.apache.spark.sql.SparkSession;
 
 // $example on$
+import java.util.Arrays;
 import java.util.List;
-
-import com.google.common.collect.Lists;
 
 import org.apache.spark.ml.attribute.Attribute;
 import org.apache.spark.ml.attribute.AttributeGroup;
 import org.apache.spark.ml.attribute.NumericAttribute;
 import org.apache.spark.ml.feature.VectorSlicer;
-import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -43,14 +42,14 @@ public class JavaVectorSlicerExample {
       .getOrCreate();
 
     // $example on$
-    Attribute[] attrs = new Attribute[]{
+    Attribute[] attrs = {
       NumericAttribute.defaultAttr().withName("f1"),
       NumericAttribute.defaultAttr().withName("f2"),
       NumericAttribute.defaultAttr().withName("f3")
     };
     AttributeGroup group = new AttributeGroup("userFeatures", attrs);
 
-    List<Row> data = Lists.newArrayList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(Vectors.sparse(3, new int[]{0, 1}, new double[]{-2.0, 2.3})),
       RowFactory.create(Vectors.dense(-2.0, 2.3, 0.0))
     );
@@ -65,9 +64,9 @@ public class JavaVectorSlicerExample {
     // or slicer.setIndices(new int[]{1, 2}), or slicer.setNames(new String[]{"f2", "f3"})
 
     Dataset<Row> output = vectorSlicer.transform(dataset);
-
-    System.out.println(output.select("userFeatures", "features").first());
+    output.show(false);
     // $example off$
+
     spark.stop();
   }
 }

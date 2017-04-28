@@ -53,13 +53,13 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("basic usage") {
-    val topic = s"topicbasic-${Random.nextInt}"
+    val topic = s"topicbasic-${Random.nextInt}-${System.currentTimeMillis}"
     kafkaTestUtils.createTopic(topic)
     val messages = Array("the", "quick", "brown", "fox")
     kafkaTestUtils.sendMessages(topic, messages)
 
     val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
-      "group.id" -> s"test-consumer-${Random.nextInt}")
+      "group.id" -> s"test-consumer-${Random.nextInt}-${System.currentTimeMillis}")
 
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
@@ -92,12 +92,12 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("iterator boundary conditions") {
     // the idea is to find e.g. off-by-one errors between what kafka has available and the rdd
-    val topic = s"topicboundary-${Random.nextInt}"
+    val topic = s"topicboundary-${Random.nextInt}-${System.currentTimeMillis}"
     val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
     kafkaTestUtils.createTopic(topic)
 
     val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
-      "group.id" -> s"test-consumer-${Random.nextInt}")
+      "group.id" -> s"test-consumer-${Random.nextInt}-${System.currentTimeMillis}")
 
     val kc = new KafkaCluster(kafkaParams)
 

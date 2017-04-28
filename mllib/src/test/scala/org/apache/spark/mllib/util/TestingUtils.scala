@@ -154,7 +154,7 @@ object TestingUtils {
      */
     def absTol(eps: Double): CompareVectorRightSide = CompareVectorRightSide(
       (x: Vector, y: Vector, eps: Double) => {
-        x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 absTol eps)
+        x.size == y.size && x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 absTol eps)
       }, x, eps, ABS_TOL_MSG)
 
     /**
@@ -164,7 +164,7 @@ object TestingUtils {
      */
     def relTol(eps: Double): CompareVectorRightSide = CompareVectorRightSide(
       (x: Vector, y: Vector, eps: Double) => {
-        x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 relTol eps)
+        x.size == y.size && x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 relTol eps)
       }, x, eps, REL_TOL_MSG)
 
     override def toString: String = x.toString
@@ -207,7 +207,7 @@ object TestingUtils {
       if (r.fun(x, r.y, r.eps)) {
         throw new TestFailedException(
           s"Did not expect \n$x\n and \n${r.y}\n to be within " +
-            "${r.eps}${r.method} for all elements.", 0)
+            s"${r.eps}${r.method} for all elements.", 0)
       }
       true
     }
@@ -217,7 +217,8 @@ object TestingUtils {
      */
     def absTol(eps: Double): CompareMatrixRightSide = CompareMatrixRightSide(
       (x: Matrix, y: Matrix, eps: Double) => {
-        x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 absTol eps)
+        x.numRows == y.numRows && x.numCols == y.numCols &&
+          x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 absTol eps)
       }, x, eps, ABS_TOL_MSG)
 
     /**
@@ -227,7 +228,8 @@ object TestingUtils {
      */
     def relTol(eps: Double): CompareMatrixRightSide = CompareMatrixRightSide(
       (x: Matrix, y: Matrix, eps: Double) => {
-        x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 relTol eps)
+        x.numRows == y.numRows && x.numCols == y.numCols &&
+          x.toArray.zip(y.toArray).forall(x => x._1 ~= x._2 relTol eps)
       }, x, eps, REL_TOL_MSG)
 
     override def toString: String = x.toString

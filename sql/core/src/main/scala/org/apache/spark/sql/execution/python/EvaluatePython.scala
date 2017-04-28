@@ -24,9 +24,8 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 
-import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
+import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
@@ -34,16 +33,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 object EvaluatePython {
-  def takeAndServe(df: DataFrame, n: Int): Int = {
-    registerPicklers()
-    df.withNewExecutionId {
-      val iter = new SerDeUtil.AutoBatchedPickler(
-        df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
-          EvaluatePython.toJava(row, df.schema)
-        })
-      PythonRDD.serveIterator(iter, s"serve-DataFrame")
-    }
-  }
 
   def needConversionInPython(dt: DataType): Boolean = dt match {
     case DateType | TimestampType => true
@@ -123,6 +112,8 @@ object EvaluatePython {
     case (c: Int, DateType) => c
 
     case (c: Long, TimestampType) => c
+    // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
+    case (c: Int, TimestampType) => c.toLong
 
     case (c, StringType) => UTF8String.fromString(c.toString)
 
@@ -135,11 +126,11 @@ object EvaluatePython {
     case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
       new GenericArrayData(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
 
-    case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
-      val keyValues = c.asScala.toSeq
-      val keys = keyValues.map(kv => fromJava(kv._1, keyType)).toArray
-      val values = keyValues.map(kv => fromJava(kv._2, valueType)).toArray
-      ArrayBasedMapData(keys, values)
+    case (javaMap: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
+      ArrayBasedMapData(
+        javaMap,
+        (key: Any) => fromJava(key, keyType),
+        (value: Any) => fromJava(value, valueType))
 
     case (c, StructType(fields)) if c.getClass.isArray =>
       val array = c.asInstanceOf[Array[_]]

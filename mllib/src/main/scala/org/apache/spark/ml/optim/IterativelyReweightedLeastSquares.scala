@@ -50,9 +50,10 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
  * @param maxIter maximum number of iterations.
  * @param tol the convergence tolerance.
  *
- * @see [[http://www.jstor.org/stable/2345503 P. J. Green, Iteratively Reweighted Least Squares
- *     for Maximum Likelihood Estimation, and some Robust and Resistant Alternatives,
- *     Journal of the Royal Statistical Society. Series B, 1984.]]
+ * @see <a href="http://www.jstor.org/stable/2345503">P. J. Green, Iteratively
+ * Reweighted Least Squares for Maximum Likelihood Estimation, and some Robust
+ * and Resistant Alternatives, Journal of the Royal Statistical Society.
+ * Series B, 1984.</a>
  */
 private[ml] class IterativelyReweightedLeastSquares(
     val initialModel: WeightedLeastSquaresModel,
@@ -81,14 +82,14 @@ private[ml] class IterativelyReweightedLeastSquares(
       }
 
       // Estimate new model
-      model = new WeightedLeastSquares(fitIntercept, regParam, standardizeFeatures = false,
-        standardizeLabel = false).fit(newInstances)
+      model = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
+        standardizeFeatures = false, standardizeLabel = false).fit(newInstances)
 
       // Check convergence
       val oldCoefficients = oldModel.coefficients
       val coefficients = model.coefficients
       BLAS.axpy(-1.0, coefficients, oldCoefficients)
-      val maxTolOfCoefficients = oldCoefficients.toArray.reduce { (x, y) =>
+      val maxTolOfCoefficients = oldCoefficients.toArray.foldLeft(0.0) { (x, y) =>
         math.max(math.abs(x), math.abs(y))
       }
       val maxTol = math.max(maxTolOfCoefficients, math.abs(oldModel.intercept - model.intercept))

@@ -16,10 +16,7 @@
  */
 
 /**
- * Spark ML is a component that adds a new set of machine learning APIs to let users quickly
- * assemble and configure practical machine learning pipelines.
+ * DataFrame-based machine learning APIs to let users quickly assemble and configure practical
+ * machine learning pipelines.
  */
-@Experimental
 package org.apache.spark.ml;
-
-import org.apache.spark.annotation.Experimental;

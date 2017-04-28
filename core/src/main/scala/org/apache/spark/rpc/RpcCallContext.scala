@@ -18,7 +18,7 @@
 package org.apache.spark.rpc
 
 /**
- * A callback that [[RpcEndpoint]] can use it to send back a message or failure. It's thread-safe
+ * A callback that [[RpcEndpoint]] can use to send back a message or failure. It's thread-safe
  * and can be called in any thread.
  */
 private[spark] trait RpcCallContext {

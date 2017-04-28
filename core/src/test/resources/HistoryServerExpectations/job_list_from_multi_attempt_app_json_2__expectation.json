@@ -6,7 +6,7 @@
   "numTasks" : 8,
   "numActiveTasks" : 0,
   "numCompletedTasks" : 8,
-  "numSkippedTasks" : 8,
+  "numSkippedTasks" : 0,
   "numFailedTasks" : 0,
   "numActiveStages" : 0,
   "numCompletedStages" : 1,

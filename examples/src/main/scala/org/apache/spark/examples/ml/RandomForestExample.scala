@@ -18,6 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import java.util.Locale
+
 import scala.collection.mutable
 import scala.language.reflectiveCalls
 
@@ -133,21 +135,20 @@ object RandomForestExample {
       }
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val spark = SparkSession
       .builder
       .appName(s"RandomForestExample with $params")
       .getOrCreate()
 
     params.checkpointDir.foreach(spark.sparkContext.setCheckpointDir)
-    val algo = params.algo.toLowerCase
+    val algo = params.algo.toLowerCase(Locale.ROOT)
 
     println(s"RandomForestExample with parameters:\n$params")
 

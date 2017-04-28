@@ -36,6 +36,8 @@ import org.apache.spark.sql.types.StructType
 
 class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   abstract class MyModel extends Model[MyModel]
 
   test("pipeline") {
@@ -77,7 +79,7 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setStages(Array(estimator0, transformer1, estimator2, transformer3))
     val pipelineModel = pipeline.fit(dataset0)
 
-    MLTestingUtils.checkCopy(pipelineModel)
+    MLTestingUtils.checkCopyAndUids(pipeline, pipelineModel)
 
     assert(pipelineModel.stages.length === 4)
     assert(pipelineModel.stages(0).eq(model0))
@@ -99,13 +101,31 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     }
   }
 
+  test("Pipeline.copy") {
+    val hashingTF = new HashingTF()
+      .setNumFeatures(100)
+    val pipeline = new Pipeline("pipeline").setStages(Array[Transformer](hashingTF))
+    val copied = pipeline.copy(ParamMap(hashingTF.numFeatures -> 10))
+
+    assert(copied.uid === pipeline.uid,
+      "copy should create an instance with the same UID")
+    assert(copied.getStages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
+      "copy should handle extra stage params")
+  }
+
   test("PipelineModel.copy") {
     val hashingTF = new HashingTF()
       .setNumFeatures(100)
-    val model = new PipelineModel("pipeline", Array[Transformer](hashingTF))
+    val model = new PipelineModel("pipelineModel", Array[Transformer](hashingTF))
+      .setParent(new Pipeline())
     val copied = model.copy(ParamMap(hashingTF.numFeatures -> 10))
-    require(copied.stages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
+
+    assert(copied.uid === model.uid,
+      "copy should create an instance with the same UID")
+    assert(copied.stages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
       "copy should handle extra stage params")
+    assert(copied.parent === model.parent,
+      "copy should create an instance with the same parent")
   }
 
   test("pipeline model constructors") {
@@ -183,12 +203,11 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   }
 
   test("pipeline validateParams") {
-    val df = spark.createDataFrame(
-      Seq(
-        (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
-        (2, Vectors.dense(1.0, 0.0, 4.0), 2.0),
-        (3, Vectors.dense(1.0, 0.0, 5.0), 3.0),
-        (4, Vectors.dense(0.0, 0.0, 5.0), 4.0))
+    val df = Seq(
+      (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
+      (2, Vectors.dense(1.0, 0.0, 4.0), 2.0),
+      (3, Vectors.dense(1.0, 0.0, 5.0), 3.0),
+      (4, Vectors.dense(0.0, 0.0, 5.0), 4.0)
     ).toDF("id", "features", "label")
 
     intercept[IllegalArgumentException] {
@@ -211,7 +230,9 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 }
 
 
-/** Used to test [[Pipeline]] with [[MLWritable]] stages */
+/**
+ * Used to test [[Pipeline]] with `MLWritable` stages
+ */
 class WritableStage(override val uid: String) extends Transformer with MLWritable {
 
   final val intParam: IntParam = new IntParam(this, "intParam", "doc")
@@ -238,7 +259,9 @@ object WritableStage extends MLReadable[WritableStage] {
   override def load(path: String): WritableStage = super.load(path)
 }
 
-/** Used to test [[Pipeline]] with non-[[MLWritable]] stages */
+/**
+ * Used to test [[Pipeline]] with non-`MLWritable` stages
+ */
 class UnWritableStage(override val uid: String) extends Transformer {
 
   final val intParam: IntParam = new IntParam(this, "intParam", "doc")

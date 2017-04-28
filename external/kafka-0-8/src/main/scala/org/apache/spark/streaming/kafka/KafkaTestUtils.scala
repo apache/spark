@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.kafka
 
-import java.io.File
+import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
 import java.util.{Map => JMap, Properties}
@@ -25,7 +25,6 @@ import java.util.concurrent.TimeoutException
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
@@ -35,6 +34,7 @@ import kafka.serializer.StringEncoder
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.{ZKStringSerializer, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
+import org.apache.commons.lang3.RandomUtils
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
 import org.apache.spark.SparkConf
@@ -62,7 +62,8 @@ private[kafka] class KafkaTestUtils extends Logging {
 
   // Kafka broker related configurations
   private val brokerHost = "localhost"
-  private var brokerPort = 9092
+  // 0.8.2 server doesn't have a boundPort method, so can't use 0 for a random port
+  private var brokerPort = RandomUtils.nextInt(1024, 65536)
   private var brokerConf: KafkaConfig = _
 
   // Kafka broker server
@@ -112,7 +113,7 @@ private[kafka] class KafkaTestUtils extends Logging {
       brokerConf = new KafkaConfig(brokerConfiguration)
       server = new KafkaServer(brokerConf)
       server.startup()
-      (server, port)
+      (server, brokerPort)
     }, new SparkConf(), "KafkaBroker")
 
     brokerReady = true
@@ -136,10 +137,21 @@ private[kafka] class KafkaTestUtils extends Logging {
 
     if (server != null) {
       server.shutdown()
+      server.awaitShutdown()
       server = null
     }
 
-    brokerConf.logDirs.foreach { f => Utils.deleteRecursively(new File(f)) }
+    // On Windows, `logDirs` is left open even after Kafka server above is completely shut down
+    // in some cases. It leads to test failures on Windows if the directory deletion failure
+    // throws an exception.
+    brokerConf.logDirs.foreach { f =>
+      try {
+        Utils.deleteRecursively(new File(f))
+      } catch {
+        case e: IOException if Utils.isWindows =>
+          logWarning(e.getMessage)
+      }
+    }
 
     if (zkClient != null) {
       zkClient.close()
@@ -267,9 +279,21 @@ private[kafka] class KafkaTestUtils extends Logging {
 
     def shutdown() {
       factory.shutdown()
-      Utils.deleteRecursively(snapshotDir)
-      Utils.deleteRecursively(logDir)
+      // The directories are not closed even if the ZooKeeper server is shut down.
+      // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
+      // on Windows if the directory deletion failure throws an exception.
+      try {
+        Utils.deleteRecursively(snapshotDir)
+      } catch {
+        case e: IOException if Utils.isWindows =>
+          logWarning(e.getMessage)
+      }
+      try {
+        Utils.deleteRecursively(logDir)
+      } catch {
+        case e: IOException if Utils.isWindows =>
+          logWarning(e.getMessage)
+      }
     }
   }
 }
-

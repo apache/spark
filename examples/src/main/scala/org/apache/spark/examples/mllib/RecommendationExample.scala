@@ -62,6 +62,8 @@ object RecommendationExample {
     model.save(sc, "target/tmp/myCollaborativeFilter")
     val sameModel = MatrixFactorizationModel.load(sc, "target/tmp/myCollaborativeFilter")
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

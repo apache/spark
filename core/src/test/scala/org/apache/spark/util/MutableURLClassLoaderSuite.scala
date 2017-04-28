@@ -51,6 +51,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
     assert(fakeClassVersion === "1")
     val fakeClass2 = classLoader.loadClass("FakeClass2").newInstance()
     assert(fakeClass.getClass === fakeClass2.getClass)
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("parent first") {
@@ -61,6 +63,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
     assert(fakeClassVersion === "2")
     val fakeClass2 = classLoader.loadClass("FakeClass1").newInstance()
     assert(fakeClass.getClass === fakeClass2.getClass)
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("child first can fall back") {
@@ -69,6 +73,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
     val fakeClass = classLoader.loadClass("FakeClass3").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("child first can fail") {
@@ -77,6 +83,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
     intercept[java.lang.ClassNotFoundException] {
       classLoader.loadClass("FakeClassDoesNotExist").newInstance()
     }
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("default JDK classloader get resources") {
@@ -84,6 +92,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
     val classLoader = new URLClassLoader(fileUrlsChild, parentLoader)
     assert(classLoader.getResources("resource1").asScala.size === 2)
     assert(classLoader.getResources("resource2").asScala.size === 1)
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("parent first get resources") {
@@ -91,6 +101,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
     val classLoader = new MutableURLClassLoader(fileUrlsChild, parentLoader)
     assert(classLoader.getResources("resource1").asScala.size === 2)
     assert(classLoader.getResources("resource2").asScala.size === 1)
+    classLoader.close()
+    parentLoader.close()
   }
 
   test("child first get resources") {
@@ -103,6 +115,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
 
     res1.map(scala.io.Source.fromURL(_).mkString) should contain inOrderOnly
       ("resource1Contents-child", "resource1Contents-parent")
+    classLoader.close()
+    parentLoader.close()
   }
 
 

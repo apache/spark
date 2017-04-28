@@ -19,21 +19,27 @@ package org.apache.spark.sql.execution.ui
 
 import java.util.Properties
 
+import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.mock
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config
+import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{AccumulatorMetadata, LongAccumulator}
+import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator}
 
 
-class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
+class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTestUtils {
   import testImplicits._
   import org.apache.spark.AccumulatorSuite.makeInfo
 
@@ -139,6 +145,11 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       (1L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo))
     )))
 
+    checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
+
+    // Driver accumulator updates don't belong to this execution should be filtered and no
+    // exception will be thrown.
+    listener.onOtherEvent(SparkListenerDriverAccumUpdates(0, Seq((999L, 2L))))
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
@@ -365,11 +376,11 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     // This task has both accumulators that are SQL metrics and accumulators that are not.
     // The listener should only track the ones that are actually SQL metrics.
     val sqlMetric = SQLMetrics.createMetric(sparkContext, "beach umbrella")
-    val nonSqlMetric = sparkContext.accumulator[Int](0, "baseball")
+    val nonSqlMetric = sparkContext.longAccumulator("baseball")
     val sqlMetricInfo = sqlMetric.toInfo(Some(sqlMetric.value), None)
-    val nonSqlMetricInfo = nonSqlMetric.toInfo(Some(nonSqlMetric.localValue), None)
+    val nonSqlMetricInfo = nonSqlMetric.toInfo(Some(nonSqlMetric.value), None)
     val taskInfo = createTaskInfo(0, 0)
-    taskInfo.accumulables ++= Seq(sqlMetricInfo, nonSqlMetricInfo)
+    taskInfo.setAccumulables(List(sqlMetricInfo, nonSqlMetricInfo))
     val taskEnd = SparkListenerTaskEnd(0, 0, "just-a-task", null, taskInfo, null)
     listener.onOtherEvent(executionStart)
     listener.onJobStart(jobStart)
@@ -386,6 +397,93 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     assert(trackedAccums.head === (sqlMetricInfo.id, sqlMetricInfo.update.get))
   }
 
+  test("driver side SQL metrics") {
+    val listener = new SQLListener(spark.sparkContext.conf)
+    val expectedAccumValue = 12345
+    val physicalPlan = MyPlan(sqlContext.sparkContext, expectedAccumValue)
+    sqlContext.sparkContext.addSparkListener(listener)
+    val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
+      override lazy val sparkPlan = physicalPlan
+      override lazy val executedPlan = physicalPlan
+    }
+    SQLExecution.withNewExecutionId(spark, dummyQueryExecution) {
+      physicalPlan.execute().collect()
+    }
+
+    def waitTillExecutionFinished(): Unit = {
+      while (listener.getCompletedExecutions.isEmpty) {
+        Thread.sleep(100)
+      }
+    }
+    waitTillExecutionFinished()
+
+    val driverUpdates = listener.getCompletedExecutions.head.driverAccumUpdates
+    assert(driverUpdates.size == 1)
+    assert(driverUpdates(physicalPlan.longMetric("dummy").id) == expectedAccumValue)
+  }
+
+  test("roundtripping SparkListenerDriverAccumUpdates through JsonProtocol (SPARK-18462)") {
+    val event = SparkListenerDriverAccumUpdates(1L, Seq((2L, 3L)))
+    val json = JsonProtocol.sparkEventToJson(event)
+    assertValidDataInJson(json,
+      parse("""
+        |{
+        |  "Event": "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
+        |  "executionId": 1,
+        |  "accumUpdates": [[2,3]]
+        |}
+      """.stripMargin))
+    JsonProtocol.sparkEventFromJson(json) match {
+      case SparkListenerDriverAccumUpdates(executionId, accums) =>
+        assert(executionId == 1L)
+        accums.foreach { case (a, b) =>
+          assert(a == 2L)
+          assert(b == 3L)
+        }
+    }
+
+    // Test a case where the numbers in the JSON can only fit in longs:
+    val longJson = parse(
+      """
+        |{
+        |  "Event": "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
+        |  "executionId": 4294967294,
+        |  "accumUpdates": [[4294967294,3]]
+        |}
+      """.stripMargin)
+    JsonProtocol.sparkEventFromJson(longJson) match {
+      case SparkListenerDriverAccumUpdates(executionId, accums) =>
+        assert(executionId == 4294967294L)
+        accums.foreach { case (a, b) =>
+          assert(a == 4294967294L)
+          assert(b == 3L)
+        }
+    }
+  }
+
+}
+
+
+/**
+ * A dummy [[org.apache.spark.sql.execution.SparkPlan]] that updates a [[SQLMetrics]]
+ * on the driver.
+ */
+private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExecNode {
+  override def sparkContext: SparkContext = sc
+  override def output: Seq[Attribute] = Seq()
+
+  override val metrics: Map[String, SQLMetric] = Map(
+    "dummy" -> SQLMetrics.createMetric(sc, "dummy"))
+
+  override def doExecute(): RDD[InternalRow] = {
+    longMetric("dummy") += expectedValue
+
+    SQLMetrics.postDriverMetricUpdates(
+      sc,
+      sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+      metrics.values.toSeq)
+    sc.emptyRDD
+  }
 }
 
 
@@ -396,7 +494,7 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
       val conf = new SparkConf()
         .setMaster("local")
         .setAppName("test")
-        .set("spark.task.maxFailures", "1") // Don't retry the tasks to run this test quickly
+        .set(config.MAX_TASK_FAILURES, 1) // Don't retry the tasks to run this test quickly
         .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
       val sc = new SparkContext(conf)
       try {

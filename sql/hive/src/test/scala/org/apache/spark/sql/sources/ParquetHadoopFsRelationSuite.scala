@@ -21,9 +21,11 @@ import java.io.File
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.hadoop.ParquetOutputFormat
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -42,12 +44,9 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
-      val basePath = new Path(file.getCanonicalPath)
-      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
-      val qualifiedBasePath = fs.makeQualified(basePath)
-
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
+        val partitionDir = new Path(
+          CatalogUtils.URIToString(makeQualifiedPath(file.getCanonicalPath)), s"p1=$p1/p2=$p2")
         sparkContext
           .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
           .toDF("a", "b", "p1")
@@ -124,23 +123,28 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 
   test("SPARK-8604: Parquet data source should write summary file while doing appending") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val df = spark.range(0, 5).toDF()
-      df.write.mode(SaveMode.Overwrite).parquet(path)
+    withSQLConf(
+        ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true",
+        SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+          classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = spark.range(0, 5).toDF()
+        df.write.mode(SaveMode.Overwrite).parquet(path)
 
-      val summaryPath = new Path(path, "_metadata")
-      val commonSummaryPath = new Path(path, "_common_metadata")
+        val summaryPath = new Path(path, "_metadata")
+        val commonSummaryPath = new Path(path, "_common_metadata")
 
-      val fs = summaryPath.getFileSystem(spark.sessionState.newHadoopConf())
-      fs.delete(summaryPath, true)
-      fs.delete(commonSummaryPath, true)
+        val fs = summaryPath.getFileSystem(spark.sessionState.newHadoopConf())
+        fs.delete(summaryPath, true)
+        fs.delete(commonSummaryPath, true)
 
-      df.write.mode(SaveMode.Append).parquet(path)
-      checkAnswer(spark.read.parquet(path), df.union(df))
+        df.write.mode(SaveMode.Append).parquet(path)
+        checkAnswer(spark.read.parquet(path), df.union(df))
 
-      assert(fs.exists(summaryPath))
-      assert(fs.exists(commonSummaryPath))
+        assert(fs.exists(summaryPath))
+        assert(fs.exists(commonSummaryPath))
+      }
     }
   }
 

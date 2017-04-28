@@ -84,6 +84,8 @@ object LBFGSExample {
     loss.foreach(println)
     println("Area under ROC = " + auROC)
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

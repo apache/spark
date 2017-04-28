@@ -17,6 +17,7 @@
 
 import sys
 import warnings
+import json
 
 if sys.version >= '3':
     basestring = str
@@ -27,7 +28,7 @@ from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.types import *
 
-__all__ = ["DataFrame", "Column", "DataFrameNaFunctions", "DataFrameStatFunctions"]
+__all__ = ["Column"]
 
 
 def _create_column_from_literal(literal):
@@ -179,8 +180,9 @@ class Column(object):
     __ror__ = _bin_op("or")
 
     # container operators
-    __contains__ = _bin_op("contains")
-    __getitem__ = _bin_op("apply")
+    def __contains__(self, item):
+        raise ValueError("Cannot apply 'in' operator against a column: please use 'contains' "
+                         "in a string column or 'array_contains' function for an array column.")
 
     # bitwise operators
     bitwiseOR = _bin_op("bitwiseOR")
@@ -236,14 +238,62 @@ class Column(object):
             raise AttributeError(item)
         return self.getField(item)
 
+    def __getitem__(self, k):
+        if isinstance(k, slice):
+            if k.step is not None:
+                raise ValueError("slice with step is not supported.")
+            return self.substr(k.start, k.stop)
+        else:
+            return _bin_op("apply")(self, k)
+
     def __iter__(self):
         raise TypeError("Column is not iterable")
 
     # string methods
-    rlike = _bin_op("rlike")
-    like = _bin_op("like")
-    startswith = _bin_op("startsWith")
-    endswith = _bin_op("endsWith")
+    _rlike_doc = """
+    Return a Boolean :class:`Column` based on a regex match.
+
+    :param other: an extended regex expression
+
+    >>> df.filter(df.name.rlike('ice$')).collect()
+    [Row(age=2, name=u'Alice')]
+    """
+    _like_doc = """
+    Return a Boolean :class:`Column` based on a SQL LIKE match.
+
+    :param other: a SQL LIKE pattern
+
+    See :func:`rlike` for a regex version
+
+    >>> df.filter(df.name.like('Al%')).collect()
+    [Row(age=2, name=u'Alice')]
+    """
+    _startswith_doc = """
+    Return a Boolean :class:`Column` based on a string match.
+
+    :param other: string at end of line (do not use a regex `^`)
+
+    >>> df.filter(df.name.startswith('Al')).collect()
+    [Row(age=2, name=u'Alice')]
+    >>> df.filter(df.name.startswith('^Al')).collect()
+    []
+    """
+    _endswith_doc = """
+    Return a Boolean :class:`Column` based on matching end of string.
+
+    :param other: string at end of line (do not use a regex `$`)
+
+    >>> df.filter(df.name.endswith('ice')).collect()
+    [Row(age=2, name=u'Alice')]
+    >>> df.filter(df.name.endswith('ice$')).collect()
+    []
+    """
+
+    contains = _bin_op("contains")
+    rlike = ignore_unicode_prefix(_bin_op("rlike", _rlike_doc))
+    like = ignore_unicode_prefix(_bin_op("like", _like_doc))
+    startswith = ignore_unicode_prefix(_bin_op("startsWith", _startswith_doc))
+    endswith = ignore_unicode_prefix(_bin_op("endsWith", _endswith_doc))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -266,8 +316,6 @@ class Column(object):
         else:
             raise TypeError("Unexpected type: %s" % type(startPos))
         return Column(jc)
-
-    __getslice__ = substr
 
     @ignore_unicode_prefix
     @since(1.5)
@@ -294,23 +342,61 @@ class Column(object):
     desc = _unary_op("desc", "Returns a sort expression based on the"
                              " descending order of the given column name.")
 
-    isNull = _unary_op("isNull", "True if the current expression is null.")
-    isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
+    _isNull_doc = """
+    True if the current expression is null. Often combined with
+    :func:`DataFrame.filter` to select rows with null values.
+
+    >>> from pyspark.sql import Row
+    >>> df2 = sc.parallelize([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]).toDF()
+    >>> df2.filter(df2.height.isNull()).collect()
+    [Row(height=None, name=u'Alice')]
+    """
+    _isNotNull_doc = """
+    True if the current expression is null. Often combined with
+    :func:`DataFrame.filter` to select rows with non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df2 = sc.parallelize([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]).toDF()
+    >>> df2.filter(df2.height.isNotNull()).collect()
+    [Row(height=80, name=u'Tom')]
+    """
+
+    isNull = ignore_unicode_prefix(_unary_op("isNull", _isNull_doc))
+    isNotNull = ignore_unicode_prefix(_unary_op("isNotNull", _isNotNull_doc))
 
     @since(1.3)
-    def alias(self, *alias):
+    def alias(self, *alias, **kwargs):
         """
         Returns this column aliased with a new name or names (in the case of expressions that
         return more than one column, such as explode).
 
+        :param alias: strings of desired column names (collects all positional arguments passed)
+        :param metadata: a dict of information to be stored in ``metadata`` attribute of the
+            corresponding :class: `StructField` (optional, keyword only argument)
+
+        .. versionchanged:: 2.2
+           Added optional ``metadata`` argument.
+
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
+        >>> df.select(df.age.alias("age3", metadata={'max': 99})).schema['age3'].metadata['max']
+        99
         """
 
+        metadata = kwargs.pop('metadata', None)
+        assert not kwargs, 'Unexpected kwargs where passed: %s' % kwargs
+
+        sc = SparkContext._active_spark_context
         if len(alias) == 1:
-            return Column(getattr(self._jc, "as")(alias[0]))
+            if metadata:
+                jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(
+                    json.dumps(metadata))
+                return Column(getattr(self._jc, "as")(alias[0], jmeta))
+            else:
+                return Column(getattr(self._jc, "as")(alias[0]))
         else:
-            sc = SparkContext._active_spark_context
+            if metadata:
+                raise ValueError('metadata can only be provided for a single column')
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
     name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
@@ -328,10 +414,9 @@ class Column(object):
         if isinstance(dataType, basestring):
             jc = self._jc.cast(dataType)
         elif isinstance(dataType, DataType):
-            from pyspark.sql import SQLContext
-            sc = SparkContext.getOrCreate()
-            ctx = SQLContext.getOrCreate(sc)
-            jdt = ctx._ssql_ctx.parseDataType(dataType.json())
+            from pyspark.sql import SparkSession
+            spark = SparkSession.builder.getOrCreate()
+            jdt = spark._jsparkSession.parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
         else:
             raise TypeError("unexpected type: %s" % type(dataType))

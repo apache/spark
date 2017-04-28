@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Tree ensemble methods - spark.ml
-displayTitle: Tree ensemble methods - spark.ml
+title: Tree ensemble methods
+displayTitle: Tree ensemble methods
 ---
 
   > This section has been moved into the

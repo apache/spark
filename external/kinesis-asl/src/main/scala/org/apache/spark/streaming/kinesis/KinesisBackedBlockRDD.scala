@@ -36,7 +36,11 @@ import org.apache.spark.util.NextIterator
 /** Class representing a range of Kinesis sequence numbers. Both sequence numbers are inclusive. */
 private[kinesis]
 case class SequenceNumberRange(
-    streamName: String, shardId: String, fromSeqNumber: String, toSeqNumber: String)
+    streamName: String,
+    shardId: String,
+    fromSeqNumber: String,
+    toSeqNumber: String,
+    recordCount: Int)
 
 /** Class representing an array of Kinesis sequence number ranges */
 private[kinesis]
@@ -78,8 +82,8 @@ class KinesisBackedBlockRDD[T: ClassTag](
     @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
     @transient private val isBlockIdValid: Array[Boolean] = Array.empty,
     val retryTimeoutMs: Int = 10000,
-    val messageHandler: Record => T = KinesisUtils.defaultMessageHandler _,
-    val awsCredentialsOption: Option[SerializableAWSCredentials] = None
+    val messageHandler: Record => T = KinesisInputDStream.defaultMessageHandler _,
+    val kinesisCreds: SparkAWSCredentials = DefaultCredentials
   ) extends BlockRDD[T](sc, _blockIds) {
 
   require(_blockIds.length == arrayOfseqNumberRanges.length,
@@ -105,9 +109,7 @@ class KinesisBackedBlockRDD[T: ClassTag](
     }
 
     def getBlockFromKinesis(): Iterator[T] = {
-      val credentials = awsCredentialsOption.getOrElse {
-        new DefaultAWSCredentialsProviderChain().getCredentials()
-      }
+      val credentials = kinesisCreds.provider.getCredentials
       partition.seqNumberRanges.ranges.iterator.flatMap { range =>
         new KinesisSequenceRangeIterator(credentials, endpointUrl, regionName,
           range, retryTimeoutMs).map(messageHandler)
@@ -138,12 +140,14 @@ class KinesisSequenceRangeIterator(
   private val client = new AmazonKinesisClient(credentials)
   private val streamName = range.streamName
   private val shardId = range.shardId
+  // AWS limits to maximum of 10k records per get call
+  private val maxGetRecordsLimit = 10000
 
   private var toSeqNumberReceived = false
   private var lastSeqNumber: String = null
   private var internalIterator: Iterator[Record] = null
 
-  client.setEndpoint(endpointUrl, "kinesis", regionId)
+  client.setEndpoint(endpointUrl)
 
   override protected def getNext(): Record = {
     var nextRecord: Record = null
@@ -155,12 +159,14 @@ class KinesisSequenceRangeIterator(
 
         // If the internal iterator has not been initialized,
         // then fetch records from starting sequence number
-        internalIterator = getRecords(ShardIteratorType.AT_SEQUENCE_NUMBER, range.fromSeqNumber)
+        internalIterator = getRecords(ShardIteratorType.AT_SEQUENCE_NUMBER, range.fromSeqNumber,
+          range.recordCount)
       } else if (!internalIterator.hasNext) {
 
         // If the internal iterator does not have any more records,
         // then fetch more records after the last consumed sequence number
-        internalIterator = getRecords(ShardIteratorType.AFTER_SEQUENCE_NUMBER, lastSeqNumber)
+        internalIterator = getRecords(ShardIteratorType.AFTER_SEQUENCE_NUMBER, lastSeqNumber,
+          range.recordCount)
       }
 
       if (!internalIterator.hasNext) {
@@ -193,9 +199,12 @@ class KinesisSequenceRangeIterator(
   /**
    * Get records starting from or after the given sequence number.
    */
-  private def getRecords(iteratorType: ShardIteratorType, seqNum: String): Iterator[Record] = {
+  private def getRecords(
+      iteratorType: ShardIteratorType,
+      seqNum: String,
+      recordCount: Int): Iterator[Record] = {
     val shardIterator = getKinesisIterator(iteratorType, seqNum)
-    val result = getRecordsAndNextKinesisIterator(shardIterator)
+    val result = getRecordsAndNextKinesisIterator(shardIterator, recordCount)
     result._1
   }
 
@@ -204,10 +213,12 @@ class KinesisSequenceRangeIterator(
    * to get records from Kinesis), and get the next shard iterator for next consumption.
    */
   private def getRecordsAndNextKinesisIterator(
-      shardIterator: String): (Iterator[Record], String) = {
+      shardIterator: String,
+      recordCount: Int): (Iterator[Record], String) = {
     val getRecordsRequest = new GetRecordsRequest
     getRecordsRequest.setRequestCredentials(credentials)
     getRecordsRequest.setShardIterator(shardIterator)
+    getRecordsRequest.setLimit(Math.min(recordCount, this.maxGetRecordsLimit))
     val getRecordsResult = retryOrTimeout[GetRecordsResult](
       s"getting records using shard iterator") {
         client.getRecords(getRecordsRequest)

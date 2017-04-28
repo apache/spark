@@ -40,8 +40,6 @@ __all__ = ['DistributedMatrix', 'RowMatrix', 'IndexedRow',
 
 class DistributedMatrix(object):
     """
-    .. note:: Experimental
-
     Represents a distributively stored matrix backed by one or
     more RDDs.
 
@@ -57,8 +55,6 @@ class DistributedMatrix(object):
 
 class RowMatrix(DistributedMatrix):
     """
-    .. note:: Experimental
-
     Represents a row-oriented distributed Matrix with no meaningful
     row indices.
 
@@ -175,8 +171,9 @@ class RowMatrix(DistributedMatrix):
     def computeCovariance(self):
         """
         Computes the covariance matrix, treating each row as an
-        observation. Note that this cannot be computed on matrices
-        with more than 65535 columns.
+        observation.
+
+        .. note:: This cannot be computed on matrices with more than 65535 columns.
 
         >>> rows = sc.parallelize([[1, 2], [2, 1]])
         >>> mat = RowMatrix(rows)
@@ -189,8 +186,9 @@ class RowMatrix(DistributedMatrix):
     @since('2.0.0')
     def computeGramianMatrix(self):
         """
-        Computes the Gramian matrix `A^T A`. Note that this cannot be
-        computed on matrices with more than 65535 columns.
+        Computes the Gramian matrix `A^T A`.
+
+        .. note:: This cannot be computed on matrices with more than 65535 columns.
 
         >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6]])
         >>> mat = RowMatrix(rows)
@@ -306,8 +304,6 @@ class RowMatrix(DistributedMatrix):
 
 class IndexedRow(object):
     """
-    .. note:: Experimental
-
     Represents a row of an IndexedRowMatrix.
 
     Just a wrapper over a (long, vector) tuple.
@@ -334,8 +330,6 @@ def _convert_to_indexed_row(row):
 
 class IndexedRowMatrix(DistributedMatrix):
     """
-    .. note:: Experimental
-
     Represents a row-oriented distributed Matrix with indexed rows.
 
     :param rows: An RDD of IndexedRows or (long, vector) tuples.
@@ -466,8 +460,9 @@ class IndexedRowMatrix(DistributedMatrix):
     @since('2.0.0')
     def computeGramianMatrix(self):
         """
-        Computes the Gramian matrix `A^T A`. Note that this cannot be
-        computed on matrices with more than 65535 columns.
+        Computes the Gramian matrix `A^T A`.
+
+        .. note:: This cannot be computed on matrices with more than 65535 columns.
 
         >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
         ...                        IndexedRow(1, [4, 5, 6])])
@@ -536,8 +531,6 @@ class IndexedRowMatrix(DistributedMatrix):
 
 class MatrixEntry(object):
     """
-    .. note:: Experimental
-
     Represents an entry of a CoordinateMatrix.
 
     Just a wrapper over a (long, long, float) tuple.
@@ -566,8 +559,6 @@ def _convert_to_matrix_entry(entry):
 
 class CoordinateMatrix(DistributedMatrix):
     """
-    .. note:: Experimental
-
     Represents a matrix in coordinate format.
 
     :param entries: An RDD of MatrixEntry inputs or
@@ -795,8 +786,6 @@ def _convert_to_matrix_block_tuple(block):
 
 class BlockMatrix(DistributedMatrix):
     """
-    .. note:: Experimental
-
     Represents a distributed matrix in blocks of local matrices.
 
     :param blocks: An RDD of sub-matrix blocks

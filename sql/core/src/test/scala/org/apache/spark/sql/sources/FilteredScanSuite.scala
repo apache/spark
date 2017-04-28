@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import java.util.Locale
+
 import scala.language.existentials
 
 import org.apache.spark.rdd.RDD
@@ -76,7 +78,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: S
       case "b" => (i: Int) => Seq(i * 2)
       case "c" => (i: Int) =>
         val c = (i - 1 + 'a').toChar.toString
-        Seq(c * 5 + c.toUpperCase * 5)
+        Seq(c * 5 + c.toUpperCase(Locale.ROOT) * 5)
     }
 
     FiltersPushed.list = filters
@@ -113,7 +115,8 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: S
     }
 
     def eval(a: Int) = {
-      val c = (a - 1 + 'a').toChar.toString * 5 + (a - 1 + 'a').toChar.toString.toUpperCase * 5
+      val c = (a - 1 + 'a').toChar.toString * 5 +
+        (a - 1 + 'a').toChar.toString.toUpperCase(Locale.ROOT) * 5
       filters.forall(translateFilterOnA(_)(a)) && filters.forall(translateFilterOnC(_)(c))
     }
 
@@ -139,7 +142,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
     super.beforeAll()
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTenFiltered
+        |CREATE TEMPORARY VIEW oneToTenFiltered
         |USING org.apache.spark.sql.sources.FilteredScanSource
         |OPTIONS (
         |  from '1',
@@ -151,7 +154,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
   sqlTest(
     "SELECT * FROM oneToTenFiltered",
     (1 to 10).map(i => Row(i, i * 2, (i - 1 + 'a').toChar.toString * 5
-      + (i - 1 + 'a').toChar.toString.toUpperCase * 5)).toSeq)
+      + (i - 1 + 'a').toChar.toString.toUpperCase(Locale.ROOT) * 5)).toSeq)
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered",
