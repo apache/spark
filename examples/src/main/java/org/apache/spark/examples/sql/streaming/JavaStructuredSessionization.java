@@ -28,8 +28,6 @@ import java.io.Serializable;
 import java.sql.Timestamp;
 import java.util.*;
 
-import scala.Tuple2;
-
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network.
  * <p>
@@ -148,7 +146,7 @@ public final class JavaStructuredSessionization {
             stateUpdateFunc,
             Encoders.bean(SessionInfo.class),
             Encoders.bean(SessionUpdate.class),
-            GroupStateTimeout.ProcessingTimeTimeout());
+            GroupStateTimeout.processingTimeTimeout());
 
     // Start running the query that prints the session updates to the console
     StreamingQuery query = sessionUpdates

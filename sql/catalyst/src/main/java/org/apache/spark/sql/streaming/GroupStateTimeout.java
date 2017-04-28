@@ -37,7 +37,9 @@ public class GroupStateTimeout {
    * `map/flatMapGroupsWithState` by calling `GroupState.setTimeoutDuration()`. See documentation
    * on `GroupState` for more details.
    */
-  public static GroupStateTimeout ProcessingTimeTimeout() { return ProcessingTimeTimeout$.MODULE$; }
+  public static GroupStateTimeout processingTimeTimeout() {
+    return ProcessingTimeTimeout$.MODULE$;
+  }
 
   /**
    * Timeout based on event-time. The event-time timestamp for timeout can be set for each
@@ -47,8 +49,13 @@ public class GroupStateTimeout {
    * received any data, then the group times out. See documentation on
    * `GroupState` for more details.
    */
-  public static GroupStateTimeout EventTimeTimeout() { return EventTimeTimeout$.MODULE$; }
+  public static GroupStateTimeout eventTimeTimeout() {
+    return EventTimeTimeout$.MODULE$;
+  }
 
   /** No timeout. */
-  public static GroupStateTimeout NoTimeout() { return NoTimeout$.MODULE$; }
+  public static GroupStateTimeout noTimeout() {
+    return NoTimeout$.MODULE$;
+  }
+
 }

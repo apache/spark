@@ -26,8 +26,8 @@ public class JavaGroupStateTimeoutSuite {
 
   @Test
   public void testTimeouts() {
-    assert (GroupStateTimeout.ProcessingTimeTimeout() == ProcessingTimeTimeout$.MODULE$);
-    assert (GroupStateTimeout.EventTimeTimeout() == EventTimeTimeout$.MODULE$);
-    assert (GroupStateTimeout.NoTimeout() == NoTimeout$.MODULE$);
+    assert (GroupStateTimeout.processingTimeTimeout() == ProcessingTimeTimeout$.MODULE$);
+    assert (GroupStateTimeout.eventTimeTimeout() == EventTimeTimeout$.MODULE$);
+    assert (GroupStateTimeout.noTimeout() == NoTimeout$.MODULE$);
   }
 }

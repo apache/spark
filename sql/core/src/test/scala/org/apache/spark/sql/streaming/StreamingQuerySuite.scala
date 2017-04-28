@@ -159,7 +159,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   }
 
   testQuietly("OneTime trigger, commit log, and exception") {
-    import Trigger.Once
+    import Trigger.once
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map { 6 / _}
 
@@ -167,7 +167,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.isActive === true),
       StopStream,
       AddData(inputData, 1, 2),
-      StartStream(trigger = Once),
+      StartStream(trigger = once),
       CheckAnswer(6, 3),
       StopStream, // clears out StreamTest state
       AssertOnQuery { q =>
@@ -181,15 +181,15 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
-      StartStream(trigger = Once),
+      StartStream(trigger = once),
       CheckAnswer(6, 3), // ensure we fall back to offset log and reprocess batch
       StopStream,
       AddData(inputData, 3),
-      StartStream(trigger = Once),
+      StartStream(trigger = once),
       CheckLastBatch(2), // commit log should be back in place
       StopStream,
       AddData(inputData, 0),
-      StartStream(trigger = Once),
+      StartStream(trigger = once),
       ExpectFailure[SparkException](),
       AssertOnQuery(_.isActive === false),
       AssertOnQuery(q => {

@@ -74,7 +74,7 @@ object StructuredSessionization {
     // and report session updates.
     val sessionUpdates = events
       .groupByKey(event => event.sessionId)
-      .mapGroupsWithState[SessionInfo, SessionUpdate](GroupStateTimeout.ProcessingTimeTimeout) {
+      .mapGroupsWithState[SessionInfo, SessionUpdate](GroupStateTimeout.processingTimeTimeout) {
 
         case (sessionId: String, events: Iterator[Event], state: GroupState[SessionInfo]) =>
 

@@ -250,7 +250,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         dataAttributes,
         OutputMode.Update,
         isMapGroupsWithState = true,
-        GroupStateTimeout.NoTimeout,
+        GroupStateTimeout.noTimeout,
         child = logicalPlan))
   }
 
