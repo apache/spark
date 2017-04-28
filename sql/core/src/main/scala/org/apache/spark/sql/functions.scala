@@ -26,12 +26,12 @@ import scala.util.control.NonFatal
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.expressions.UserDefinedFunction
+import org.apache.spark.sql.expressions.{TypedUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -3335,4 +3335,30 @@ object functions {
   def callUDF(udfName: String, cols: Column*): Column = withExpr {
     UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }
+
+  // scalastyle:off parameter.number
+  // scalastyle:off line.size.limit
+
+  def typedUdf[R: Encoder](f: Function0[R]): TypedUserDefinedFunction[Int, R] = {
+    implicit val intEncoder: Encoder[Int] = Encoders.scalaInt
+    TypedUserDefinedFunction{ (i: Int) => f() }
+  }
+
+  def typedUdf[T1: Encoder, R: Encoder](f: Function1[T1, R]): TypedUserDefinedFunction[T1, R] = {
+    TypedUserDefinedFunction(f)
+  }
+
+  def typedUdf[T1: Encoder, T2: Encoder, R: Encoder](f: Function2[T1, T2, R]): TypedUserDefinedFunction[(T1, T2), R] = {
+    implicit val t1t2Encoder: Encoder[(T1, T2)] = ExpressionEncoder.tuple(encoderFor[T1], encoderFor[T2])
+    TypedUserDefinedFunction(f.tupled)
+  }
+
+  def typedUdf[T1: Encoder, T2: Encoder, T3: Encoder, R: Encoder](f: Function3[T1, T2, T3, R]): TypedUserDefinedFunction[(T1, T2, T3), R] = {
+    implicit val t1t2t3Encoder: Encoder[(T1, T2, T3)] = ExpressionEncoder.tuple(encoderFor[T1], encoderFor[T2], encoderFor[T3])
+    TypedUserDefinedFunction(f.tupled)
+  }
+
+  // scalastyle:on parameter.number
+  // scalastyle:on line.size.limit
 }
+
