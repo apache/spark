@@ -288,27 +288,27 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       val output = new Array[(Int, (Int, Double))](m * n)
       var j = 0
       srcIter.foreach { case (srcId, srcFactor) =>
-          val pq = new BoundedPriorityQueue[(Int, Double)](n)(Ordering.by(_._2))
-          dstIter.foreach { case (dstId, dstFactor) =>
-              /**
-               * The below code is equivalent to
-               * val score = blas.ddot(rank, srcFactor, 1, dstFactor, 1)
-               */
-              var score: Double = 0
-              var k = 0
-              while (k < rank) {
-                score += srcFactor(k) * dstFactor(k)
-                k += 1
-              }
-              pq += ((dstId, score))
+        val pq = new BoundedPriorityQueue[(Int, Double)](n)(Ordering.by(_._2))
+        dstIter.foreach { case (dstId, dstFactor) =>
+          /**
+           * The below code is equivalent to
+           * val score = blas.ddot(rank, srcFactor, 1, dstFactor, 1)
+           */
+          var score: Double = 0
+          var k = 0
+          while (k < rank) {
+            score += srcFactor(k) * dstFactor(k)
+            k += 1
           }
-          val pqIter = pq.iterator
-          var i = 0
-          while (i < n) {
-            output(j + i) = (srcId, pqIter.next())
-            i += 1
-          }
-          j += n
+          pq += ((dstId, score))
+        }
+        val pqIter = pq.iterator
+        var i = 0
+        while (i < n) {
+          output(j + i) = (srcId, pqIter.next())
+          i += 1
+        }
+        j += n
       }
       output.toSeq
     }
