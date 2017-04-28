@@ -352,9 +352,10 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     env.put("YARN_CONF_DIR", hadoopConfDir.getAbsolutePath())
 
     val propsFile = createConfFile()
-    val handle = new SparkLauncher(env)
+    val launcher = if (launchAsThread == true) new SparkLauncher() else new SparkLauncher(env)
       .setSparkHome(sys.props("spark.test.home"))
-      .setConf("spark.ui.enabled", "false")
+
+    val handle = launcher.setConf("spark.ui.enabled", "false")
       .setPropertiesFile(propsFile)
       .setMaster("yarn")
       .setDeployMode(deployMode)

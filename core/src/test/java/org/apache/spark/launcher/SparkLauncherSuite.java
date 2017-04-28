@@ -189,6 +189,7 @@ public class SparkLauncherSuite {
     // by the path length limitation. See SPARK-18718.
     assumeTrue(!Utils.isWindows());
 
+    launcher = new SparkLauncher();
     launcher
       .setMaster("local")
       .setAppResource(SparkLauncher.NO_RESOURCE)
