@@ -138,13 +138,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Checks the validity of column names. Hive metastore disallows the column names contain comma.
+   * Checks the validity of column names. Hive metastore disallows the table to use comma in
+   * data column names. Partition columns do not have such a restriction. Views do not have such
+   * a restriction.
    */
-  private def verifyColumnNames(table: String, tableSchema: StructType): Unit = {
-    tableSchema.map(_.name).foreach { colName =>
-      if (colName.contains(",")) {
-        throw new AnalysisException("Cannot create a table having a column whose name contains " +
-          s"commas in Hive metastore. Table: $table; Column: $colName")
+  private def verifyColumnNames(table: CatalogTable): Unit = {
+    if (table.tableType != VIEW) {
+      table.dataSchema.map(_.name).foreach { colName =>
+        if (colName.contains(",")) {
+          throw new AnalysisException("Cannot create a table having a column whose name contains " +
+            s"commas in Hive metastore. Table: ${table.identifier}; Column: $colName")
+        }
       }
     }
   }
@@ -214,7 +218,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val table = tableDefinition.identifier.table
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
-    verifyColumnNames(tableDefinition.identifier.quotedString, tableDefinition.schema)
+    verifyColumnNames(tableDefinition)
 
     if (tableExists(db, table) && !ignoreIfExists) {
       throw new TableAlreadyExistsException(db = db, table = table)
@@ -625,9 +629,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def alterTableSchema(db: String, table: String, schema: StructType): Unit = withClient {
     requireTableExists(db, table)
-    verifyColumnNames(table, schema)
     val rawTable = getRawTable(db, table)
     val withNewSchema = rawTable.copy(schema = schema)
+    verifyColumnNames(withNewSchema)
     // Add table metadata such as table schema, partition columns, etc. to table properties.
     val updatedTable = withNewSchema.copy(
       properties = withNewSchema.properties ++ tableMetaToTableProps(withNewSchema))
