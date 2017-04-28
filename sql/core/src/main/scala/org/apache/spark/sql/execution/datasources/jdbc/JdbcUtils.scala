@@ -653,7 +653,13 @@ object JdbcUtils extends Logging {
         val cause = e.getNextException
         if (cause != null && e.getCause != cause) {
           if (e.getCause == null) {
-            e.initCause(cause)
+            try {
+              e.initCause(cause)
+            } catch {
+              // cause may have been explicitly initialized to null, in which case this
+              // fails. No way to detect it, can only catch the exception.
+              case _: IllegalStateException => e.addSuppressed(cause)
+            }
           } else {
             e.addSuppressed(cause)
           }
