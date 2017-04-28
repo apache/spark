@@ -17,11 +17,12 @@
 
 package org.apache.spark.streaming.scheduler
 
-import scala.util.{Failure, Success, Try}
-
 import org.apache.spark.internal.Logging
+import org.apache.spark.streaming.scheduler.batch.BatchEstimator
+
+import scala.util.{Failure, Success, Try}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
+import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Duration, Time}
 import org.apache.spark.streaming.api.python.PythonDStream
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, EventLoop, ManualClock, Utils}
@@ -33,6 +34,8 @@ private[scheduler] case class ClearMetadata(time: Time) extends JobGeneratorEven
 private[scheduler] case class DoCheckpoint(
     time: Time, clearCheckpointDataLater: Boolean) extends JobGeneratorEvent
 private[scheduler] case class ClearCheckpointData(time: Time) extends JobGeneratorEvent
+
+case class UpdateBatchInterval(newBatchInterval : Long) extends JobGeneratorEvent
 
 /**
  * This class generates jobs from DStreams as well as drives checkpointing and cleaning
@@ -77,6 +80,15 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   // last batch whose completion,checkpointing and metadata cleanup has been completed
   private var lastProcessedBatch: Time = null
 
+  protected[streaming] val batchController: Option[BatchController] = {
+    if (BatchController.isDynamicBatchIntervalEnabled(ssc.conf)) {
+      logInfo(s" ##### init batchController....")
+      Some(new ReceiverBatchController(
+        ssc.getNewInputStreamId(), BatchEstimator.create(ssc.conf, ssc.graph.batchDuration)))
+    } else {
+      None
+    }
+  }
   /** Start generation of jobs */
   def start(): Unit = synchronized {
     if (eventLoop != null) return // generator has already been started
@@ -185,6 +197,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       case DoCheckpoint(time, clearCheckpointDataLater) =>
         doCheckpoint(time, clearCheckpointDataLater)
       case ClearCheckpointData(time) => clearCheckpointData(time)
+      case UpdateBatchInterval(newBatchInterval) => updateBatchInteval(newBatchInterval)
     }
   }
 
@@ -231,7 +244,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       // added but not allocated, are dangling in the queue after recovering, we have to allocate
       // those blocks to the next batch, which is the batch they were supposed to go.
       jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
-      jobScheduler.submitJobSet(JobSet(time, graph.generateJobs(time)))
+      jobScheduler.submitJobSet(JobSet(
+        graph.batchDuration.milliseconds, time, graph.generateJobs(time)))
     }
 
     // Restart the timer
@@ -250,7 +264,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     } match {
       case Success(jobs) =>
         val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
-        jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
+        jobScheduler.submitJobSet(JobSet(
+          graph.batchDuration.milliseconds, time, jobs, streamIdToInputInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
         PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
@@ -289,6 +304,21 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     markBatchFullyProcessed(time)
   }
 
+
+  /**
+    * update batch interval
+    * */
+  private def updateBatchInterval(newBatchInterval: Long) {
+    this.synchronized{
+      logInfo(s" ##### updateBatchInterval. before update the batchDuration " +
+        "${graph.batchDuration} and the period ${timer.period} ")
+      graph.batchDuration = new Duration(newBatchInterval)
+      timer.period = newBatchInterval
+      logInfo(s" ##### after update the batchDuration" +
+        " ${graph.batchDuration} and the period ${timer.period} ")
+    }
+  }
+
   /** Perform checkpoint for the given `time`. */
   private def doCheckpoint(time: Time, clearCheckpointDataLater: Boolean) {
     if (shouldCheckpoint && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
@@ -302,5 +332,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   private def markBatchFullyProcessed(time: Time) {
     lastProcessedBatch = time
+  }
+
+  private[streaming] class ReceiverBatchController(id: Int, estimator: BatchEstimator)
+    extends BatchController(id, estimator) with Logging{
+    override def publish(newBatchInterval: Long): Unit = {
+      logInfo(s"##### Begin to publish new batch interval $newBatchInterval " )
+      eventLoop.post(UpdateBatchInterval(newBatchInterval))
+    }
   }
 }

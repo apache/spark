@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.{Clock, SystemClock}
 
 private[streaming]
-class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name: String)
+class RecurringTimer(clock: Clock, var period: Long, callback: (Long) => Unit, name: String)
   extends Logging {
 
   private val thread = new Thread("RecurringTimer - " + name) {

@@ -26,8 +26,7 @@ import org.apache.commons.lang3.SerializationUtils
 
 import org.apache.spark.ExecutorAllocationClient
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.SparkHadoopWriterUtils
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{PairRDDFunctions, RDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api.python.PythonDStream
 import org.apache.spark.streaming.ui.UIUtils
@@ -82,6 +81,11 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       inputDStream <- ssc.graph.getInputStreams
       rateController <- inputDStream.rateController
     } ssc.addStreamingListener(rateController)
+
+    // attach batch controllers of input streams to receive batch completion updates
+    for {
+      batchController <- jobGenerator.batchController
+    } ssc.addStreamingListener(batchController)
 
     listenerBus.start()
     receiverTracker = new ReceiverTracker(ssc)
@@ -201,20 +205,18 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     listenerBus.post(StreamingListenerOutputOperationCompleted(job.toOutputOperationInfo))
     logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
     if (jobSet.hasCompleted) {
+      jobSets.remove(jobSet.time)
+      jobGenerator.onBatchCompletion(jobSet.time)
+      logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
+        jobSet.totalDelay / 1000.0, jobSet.time.toString,
+        jobSet.processingDelay / 1000.0
+      ))
       listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
     }
     job.result match {
       case Failure(e) =>
         reportError("Error running job " + job, e)
       case _ =>
-        if (jobSet.hasCompleted) {
-          jobSets.remove(jobSet.time)
-          jobGenerator.onBatchCompletion(jobSet.time)
-          logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
-            jobSet.totalDelay / 1000.0, jobSet.time.toString,
-            jobSet.processingDelay / 1000.0
-          ))
-        }
     }
   }
 
@@ -253,7 +255,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
           // Disable checks for existing output directories in jobs launched by the streaming
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details.
-          SparkHadoopWriterUtils.disableOutputSpecValidation.withValue(true) {
+          PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
             job.run()
           }
           _eventLoop = eventLoop

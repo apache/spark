@@ -23,6 +23,7 @@ import org.apache.spark.streaming.Time
 /**
  * :: DeveloperApi ::
  * Class having information on completed batches.
+ * @param batchInterval Time of the batch Intercval
  * @param batchTime   Time of the batch
  * @param streamIdToInputInfo A map of input stream id to its input info
  * @param submissionTime  Clock time of when jobs of this batch was submitted to
@@ -33,6 +34,7 @@ import org.apache.spark.streaming.Time
  */
 @DeveloperApi
 case class BatchInfo(
+    batchInterval: Long,
     batchTime: Time,
     streamIdToInputInfo: Map[Int, StreamInputInfo],
     submissionTime: Long,
