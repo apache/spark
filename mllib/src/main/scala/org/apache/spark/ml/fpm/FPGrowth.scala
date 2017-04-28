@@ -81,7 +81,7 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   def getNumPartitions: Int = $(numPartitions)
 
   /**
-   * Minimal confidence for generating Association Rule. MinConfidence will not affect the mining
+   * Minimal confidence for generating Association Rule. minConfidence will not affect the mining
    * for frequent itemsets, but will affect the association rules generation.
    * Default: 0.8
    * @group param
@@ -269,8 +269,12 @@ class FPGrowthModel private[ml] (
     val predictUDF = udf((items: Seq[_]) => {
       if (items != null) {
         val itemset = items.toSet
-        brRules.value.filter(_._1.forall(itemset.contains))
-          .flatMap(_._2.filter(!itemset.contains(_))).distinct
+        brRules.value.flatMap(rule =>
+          if (items != null && rule._1.forall(item => itemset.contains(item))) {
+            rule._2.filter(item => !itemset.contains(item))
+          } else {
+            Seq.empty
+          }).distinct
       } else {
         Seq.empty
       }}, dt)

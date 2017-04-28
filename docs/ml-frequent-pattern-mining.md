@@ -48,7 +48,7 @@ The `FPGrowthModel` provides:
 * `freqItemsets`: frequent itemsets in the format of DataFrame("items"[Array], "freq"[Long])
 * `associationRules`: association rules generated with confidence above `minConfidence`, in the format of 
   DataFrame("antecedent"[Array], "consequent"[Array], "confidence"[Double]).
-* `transform`: For each transaction in itemsCol, the `transform` method will compare its items against the antecedents
+* `transform`: For each transaction in `itemsCol`, the `transform` method will compare its items against the antecedents
   of each association rule. If the record contains all the antecedents of a specific association rule, the rule
   will be considered as applicable and its consequents will be added to the prediction result. The transform
   method will summarize the consequents from all the applicable rules as prediction. The prediction column has
