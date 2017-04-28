@@ -372,7 +372,7 @@ case class CatalogStatistics(
 }
 
 
-case class CatalogTableType private(name: String)
+class CatalogTableType private(val name: String)
 object CatalogTableType {
   val EXTERNAL = new CatalogTableType("EXTERNAL")
   val MANAGED = new CatalogTableType("MANAGED")
