@@ -430,11 +430,12 @@ class TimSort<K, Buffer> {
     }
 
     /**
+     * mergeCollapse should fully restore the invariant (see SPARK-5984).
      * Examines the stack of runs waiting to be merged and merges adjacent runs
      * until the stack invariants are reestablished:
      *
      *     1. runLen[i - 3] > runLen[i - 2] + runLen[i - 1]
-     *     2. runLen[i - 2] > runLen[i - 1]
+     *     2. runLen[i - 4] > runLen[i - 3] + runLen[i - 2]
      *
      * This method is called each time a new run is pushed onto the stack,
      * so the invariants are guaranteed to hold for i < stackSize upon
