@@ -150,7 +150,12 @@ test_that("structField type strings", {
                          binary = "BinaryType",
                          boolean = "BooleanType",
                          timestamp = "TimestampType",
-                         date = "DateType")
+                         date = "DateType",
+                         tinyint = "ByteType",
+                         smallint = "ShortType",
+                         int = "IntegerType",
+                         bigint = "LongType",
+                         decimal = "DecimalType(10,0)")
 
   complexTypes <- list("map<string,integer>" = "MapType(StringType,IntegerType,true)",
                        "array<string>" = "ArrayType(StringType,true)",
@@ -174,7 +179,11 @@ test_that("structField type strings", {
                           numeric = "numeric",
                           character = "character",
                           raw = "raw",
-                          logical = "logical")
+                          logical = "logical",
+                          short = "short",
+                          varchar = "varchar",
+                          long = "long",
+                          char = "char")
 
   complexErrors <- list("map<string, integer>" = " integer",
                         "array<String>" = "String",

@@ -167,13 +167,13 @@ test_that("convertToJSaveMode", {
 })
 
 test_that("captureJVMException", {
-  method <- "getSQLDataType"
+  method <- "createStructField"
   expect_error(tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", method,
-                                    "unknown"),
+                                    "col", "unknown", TRUE),
                         error = function(e) {
                           captureJVMException(e, method)
                         }),
-               "Error in getSQLDataType : illegal argument - Invalid type unknown")
+               "parse error - .*DataType unknown.*not supported.")
 })
 
 test_that("hashCode", {
