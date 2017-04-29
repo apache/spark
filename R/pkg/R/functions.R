@@ -3923,7 +3923,6 @@ setMethod("not",
 #' )
 #' }
 #' @note is_grouping since 2.3.0
-#' @seealso \link{cube}, \link{grouping_id}, \link{rollup}
 setMethod("is_grouping",
           signature(x = "Column"),
           function(x) {
@@ -3965,7 +3964,6 @@ setMethod("is_grouping",
 #' )
 #' }
 #' @note grouping_id since 2.3.0
-#' @seealso \link{cube}, \link{is_grouping}, \link{rollup}
 setMethod("grouping_id",
           signature(x = "Column"),
           function(x, ...) {
