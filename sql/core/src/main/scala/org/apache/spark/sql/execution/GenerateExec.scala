@@ -257,7 +257,7 @@ case class GenerateExec(
     val values = e.dataType match {
       case ArrayType(st: StructType, nullable) =>
         st.fields.toSeq.zipWithIndex.map { case (f, i) =>
-          codeGenAccessor(ctx, current, s"st_col$i", s"${i}", f.dataType, f.nullable, checks)
+          codeGenAccessor(ctx, current, s"st_col${i}", s"$i", f.dataType, f.nullable, checks)
         }
     }
 
