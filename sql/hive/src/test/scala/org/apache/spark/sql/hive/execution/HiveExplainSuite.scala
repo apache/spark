@@ -43,7 +43,9 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("explain extended command") {
     checkKeywordsExist(sql(" explain   select * from src where key=123 "),
-                   "== Physical Plan ==")
+                   "== Physical Plan ==",
+                   "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+
     checkKeywordsNotExist(sql(" explain   select * from src where key=123 "),
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
