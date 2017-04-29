@@ -864,6 +864,14 @@ captureJVMException <- function(e, method) {
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
     stop(paste0(rmsg, "no such table - ", first), call. = FALSE)
+  } else if (any(grep("org.apache.spark.sql.catalyst.parser.ParseException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.parser.ParseException: ",
+                    fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(paste0(rmsg, "parse error - ", first), call. = FALSE)
   } else {
     stop(stacktrace, call. = FALSE)
   }
