@@ -3890,3 +3890,89 @@ setMethod("not",
             jc <- callJStatic("org.apache.spark.sql.functions", "not", x@jc)
             column(jc)
           })
+
+#' is_grouping
+#'
+#' Indicates whether a specified column in a GROUP BY list is aggregated or not,
+#' returns 1 for aggregated or 0 for not aggregated in the result set.
+#'
+#' Same as \code{GROUPING} in SQL and \code{grouping} function in Scala.
+#'
+#' @param x Column to compute on
+#'
+#' @rdname is_grouping
+#' @name is_grouping
+#' @family agg_funcs
+#' @aliases is_grouping,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(mtcars)
+#'
+#' # With cube
+#' agg(
+#'   cube(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   is_grouping(df$cyl), is_grouping(df$gear), is_grouping(df$am)
+#' )
+#'
+#' # With rollup
+#' agg(
+#'   rollup(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   is_grouping(df$cyl), is_grouping(df$gear), is_grouping(df$am)
+#' )
+#' }
+#' @note is_grouping since 2.3.0
+#' @seealso \link{cube}, \link{grouping_id}, \link{rollup}
+setMethod("is_grouping",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "grouping", x@jc)
+            column(jc)
+          })
+
+#' grouping_id
+#'
+#' Returns the level of grouping.
+#'
+#' Equals to \code{
+#' (is_grouping(c1) <<; (n-1)) + (is_grouping(c2) <<; (n-2)) + ... + is_grouping(cn)
+#' }
+#'
+#' @param x Column to compute on
+#' @param ... additional Column(s).
+#'
+#' @rdname grouping_id
+#' @name grouping_id
+#' @family agg_funcs
+#' @aliases grouping_id,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(mtcars)
+#'
+#' # With cube
+#' agg(
+#'   cube(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   grouping_id(df$cyl, df$gear, df$am)
+#' )
+#'
+#' # With rollup
+#' agg(
+#'   rollup(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   grouping_id(df$cyl, df$gear, df$am)
+#' )
+#' }
+#' @note grouping_id since 2.3.0
+#' @seealso \link{cube}, \link{is_grouping}, \link{rollup}
+setMethod("grouping_id",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "grouping_id", jcols)
+            column(jc)
+          })
