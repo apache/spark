@@ -1019,7 +1019,6 @@ private[spark] object RandomForest extends Logging {
       if (possibleSplits == 0) {
         // constant feature
         Array.empty[Double]
-
       } else if (possibleSplits <= numSplits) {
         // if possible splits is not enough or just enough, just return all possible splits
         valueCounts
@@ -1053,7 +1052,6 @@ private[spark] object RandomForest extends Logging {
           if (previousGap < currentGap) {
             val pre = valueCounts(index - 1)
             val cur = valueCounts(index)
-
             splitsBuilder += weightedMean(pre, cur)
             targetCount += stride
           }
