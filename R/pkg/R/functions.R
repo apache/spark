@@ -3939,7 +3939,7 @@ setMethod("grouping_col",
 #' }
 #'
 #' @param x Column to compute on
-#' @param ... additional Column(s).
+#' @param ... additional Column(s) (optional).
 #'
 #' @rdname grouping_id
 #' @name grouping_id
