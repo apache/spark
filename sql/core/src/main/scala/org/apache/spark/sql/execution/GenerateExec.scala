@@ -187,7 +187,7 @@ case class GenerateExec(
           codeGenAccessor(
             ctx,
             row.value,
-            s"st_col$i",
+            s"st_col${i}",
             i.toString,
             f.dataType,
             f.nullable,
@@ -255,9 +255,9 @@ case class GenerateExec(
     // Add a check if the generate outer flag is true.
     val checks = optionalCode(outer, s"!$hasNext")
     val values = e.dataType match {
-      case ArrayType(st: StructType, _) =>
+      case ArrayType(st: StructType, nullable) =>
         st.fields.toSeq.zipWithIndex.map { case (f, i) =>
-          codeGenAccessor(ctx, current, s"st_col$i", s"$i", f.dataType, f.nullable, checks)
+          codeGenAccessor(ctx, current, s"st_col$i", s"${i}", f.dataType, f.nullable, checks)
         }
     }
 
