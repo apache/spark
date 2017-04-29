@@ -1896,12 +1896,12 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
       0, 0, 0 # 2017 by department
     ),
     grouping_id = c(
-      3, #  0x11
-      2, 2, 2, # 0x10
-      1, # 0x01
-      0, 0, 0, # 0x00
-      1, # 0x01
-      0, 0, 0 # 0x00
+      3, #  11
+      2, 2, 2, # 10
+      1, # 01
+      0, 0, 0, # 00
+      1, # 01
+      0, 0, 0 # 00
     ),
     stringsAsFactors = FALSE
   )
@@ -1966,11 +1966,11 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
       0, 0, 0 # 2017 each department
     ),
     grouping_id = c(
-      3, # 0x11
-      1, # 0x01
-      0, 0, 0, # 0x00
-      1, # 0x01
-      0, 0, 0 # 0x00
+      3, # 11
+      1, # 01
+      0, 0, 0, # 00
+      1, # 01
+      0, 0, 0 # 00
     ),
     stringsAsFactors = FALSE
   )
