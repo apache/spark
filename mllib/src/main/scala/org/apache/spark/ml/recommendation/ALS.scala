@@ -779,8 +779,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    * Spark workers so as to reduce network communication by only sending one copy of each factor
    * vector to each Spark worker on each iteration, and only if needed.  This is achieved by
    * precomputing some information about the ratings matrix to determine which users require which
-   * item factors and vice versa.  See the Scaladoc for [[InBlock]] for a detailed explanation of
-   * how the precomputation is done.
+   * item factors and vice versa.  See the Scaladoc for `InBlock` for a detailed explanation of how
+   * the precomputation is done.
    *
    * In addition, since each iteration of calculating the factor matrices depends on the known
    * ratings, which are spread across Spark partitions, a naive implementation would incur
@@ -788,7 +788,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    * repeatedly shuffled during each iteration.  This implementation reduces that overhead by
    * performing the shuffling operation up front, precomputing each partition's ratings dependencies
    * and duplicating those values to the appropriate workers before starting iterations to solve for
-   * the factor matrices.  See the Scaladoc for [[OutBlock]] for a detailed explanation of how the
+   * the factor matrices.  See the Scaladoc for `OutBlock` for a detailed explanation of how the
    * precomputation is done.
    *
    * Note that the term "rating block" is a bit of a misnomer, as the ratings are not partitioned by
@@ -1277,8 +1277,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     def length: Int = srcIds.length
 
     /**
-     * Compresses the block into an [[InBlock]]. The algorithm is the same as converting a
-     * sparse matrix from coordinate list (COO) format into compressed sparse column (CSC) format.
+     * Compresses the block into an `InBlock`. The algorithm is the same as converting a sparse
+     * matrix from coordinate list (COO) format into compressed sparse column (CSC) format.
      * Sorting is done using Spark's built-in Timsort to avoid generating too many objects.
      */
     def compress(): InBlock[ID] = {
