@@ -1022,8 +1022,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    *     val blockRatings = partitionRatings(ratings, userPart, itemPart)
    * }}}
    *
-   * Ratings with even-valued user IDs are shuffled to partition 0 while those with odd-valued user
-   * IDs are shuffled to partition 1:
+   * Ratings are mapped to partitions using the user/item IDs modulo the number of partitions.  With
+   * two partitions, ratings with even-valued user IDs are shuffled to partition 0 while those with
+   * odd-valued user IDs are shuffled to partition 1:
    *
    * {{{
    *     userInBlocks.collect() == Seq(
