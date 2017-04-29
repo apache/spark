@@ -200,7 +200,25 @@ class Column(object):
     0
     >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
     1
+    >>> df2 = spark.createDataFrame([
+    ...     Row(id=1, value=float('NaN')),
+    ...     Row(id=2, value=42.0),
+    ...     Row(id=3, value=None)
+    ... ])
+    >>> df2.select(
+    ...     df2['value'].eqNullSafe(None),
+    ...     df2['value'].eqNullSafe(float('NaN')),
+    ...     df2['value'].eqNullSafe(42.0)
+    ... ).show()
+    +----------------+---------------+----------------+
+    |(value <=> NULL)|(value <=> NaN)|(value <=> 42.0)|
+    +----------------+---------------+----------------+
+    |           false|           true|           false|
+    |           false|          false|            true|
+    |            true|          false|           false|
+    +----------------+---------------+----------------+
 
+    .. note:: Unlike Pandas, PySpark doesn't consider NaN values to be NULL.
     .. versionadded:: 2.3.0
     """
     eqNullSafe = _bin_op("eqNullSafe", _eqNullSafe_doc)
