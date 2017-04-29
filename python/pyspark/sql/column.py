@@ -192,8 +192,8 @@ class Column(object):
                   this :class:`Column`.
 
     >>> from pyspark.sql import Row
-    >>> df3 = spark.createDataFrame([Row(a=170, b=75)])
-    >>> df3.select(df3.a.bitwiseOR(df3.b)).collect()
+    >>> df = spark.createDataFrame([Row(a=170, b=75)])
+    >>> df.select(df.a.bitwiseOR(df.b)).collect()
     [Row((a | b)=235)]
     """
     _bitwiseAND_doc = """
@@ -203,8 +203,8 @@ class Column(object):
                   this :class:`Column`.
 
     >>> from pyspark.sql import Row
-    >>> df3 = spark.createDataFrame([Row(a=170, b=75)])
-    >>> df3.select(df3.a.bitwiseAND(df3.b)).collect()
+    >>> df = spark.createDataFrame([Row(a=170, b=75)])
+    >>> df.select(df.a.bitwiseAND(df.b)).collect()
     [Row((a & b)=10)]
     """
     _bitwiseXOR_doc = """
@@ -214,8 +214,8 @@ class Column(object):
                   this :class:`Column`.
 
     >>> from pyspark.sql import Row
-    >>> df3 = spark.createDataFrame([Row(a=170, b=75)])
-    >>> df3.select(df3.a.bitwiseXOR(df3.b)).collect()
+    >>> df = spark.createDataFrame([Row(a=170, b=75)])
+    >>> df.select(df.a.bitwiseXOR(df.b)).collect()
     [Row((a ^ b)=225)]
     """
 
@@ -384,16 +384,16 @@ class Column(object):
     Returns a sort expression based on the ascending order of the given column name
 
     >>> from pyspark.sql import Row
-    >>> df2 = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
-    >>> df2.select(df2.name).orderBy(df2.name.asc()).collect()
+    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df.select(df.name).orderBy(df.name.asc()).collect()
     [Row(name=u'Alice'), Row(name=u'Tom')]
     """
     _desc_doc = """
     Returns a sort expression based on the descending order of the given column name.
 
     >>> from pyspark.sql import Row
-    >>> df2 = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
-    >>> df2.select(df2.name).orderBy(df2.name.desc()).collect()
+    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df.select(df.name).orderBy(df.name.desc()).collect()
     [Row(name=u'Tom'), Row(name=u'Alice')]
     """
 
@@ -404,16 +404,16 @@ class Column(object):
     True if the current expression is null.
 
     >>> from pyspark.sql import Row
-    >>> df2 = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
-    >>> df2.filter(df2.height.isNull()).collect()
+    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df.filter(df.height.isNull()).collect()
     [Row(height=None, name=u'Alice')]
     """
     _isNotNull_doc = """
     True if the current expression is NOT null.
 
     >>> from pyspark.sql import Row
-    >>> df2 = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
-    >>> df2.filter(df2.height.isNotNull()).collect()
+    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df.filter(df.height.isNotNull()).collect()
     [Row(height=80, name=u'Tom')]
     """
 
