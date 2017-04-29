@@ -1162,9 +1162,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   }
 
   /**
-   * Groups an RDD of `Rating`s by the user partition and item partition to which each `Rating` maps
-   * according to the given partitioners.  The returned pair RDD holds the ratings, encoded in a
-   * memory-efficient format but otherwise unchanged, keyed by the (user partition ID, item
+   * Groups an RDD of [[Rating]]s by the user partition and item partition to which each `Rating`
+   * maps according to the given partitioners.  The returned pair RDD holds the ratings, encoded in
+   * a memory-efficient format but otherwise unchanged, keyed by the (user partition ID, item
    * partition ID) pair.
    *
    * Performance note: This is an expensive operation that performs an RDD shuffle.
