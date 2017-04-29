@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 private[execution] sealed case class LazyIterator(func: () => TraversableOnce[InternalRow])
   extends Iterator[InternalRow] {
 
-  lazy val results = func().toIterator
+  lazy val results: Iterator[InternalRow] = func().toIterator
   override def hasNext: Boolean = results.hasNext
   override def next(): InternalRow = results.next()
 }
@@ -78,15 +78,15 @@ case class GenerateExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  val boundGenerator = BindReferences.bindReference(generator, child.output)
+  val boundGenerator: Generator = BindReferences.bindReference(generator, child.output)
 
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
-    val rows = if (join) {
-      child.execute().mapPartitionsInternal { iter =>
-        val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
+    val numOutputRows = longMetric("numOutputRows")
+    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
+      val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
+      val rows = if (join) {
         val joinedRow = new JoinedRow
-
         iter.flatMap { row =>
           // we should always set the left (child output)
           joinedRow.withLeft(row)
@@ -101,18 +101,21 @@ case class GenerateExec(
           // keep it the same as Hive does
           joinedRow.withRight(row)
         }
+      } else {
+        iter.flatMap { row =>
+          val outputRows = boundGenerator.eval(row)
+          if (outer && outputRows.isEmpty) {
+            Seq(generatorNullRow)
+          } else {
+            outputRows
+          }
+        } ++ LazyIterator(boundGenerator.terminate)
       }
-    } else {
-      child.execute().mapPartitionsInternal { iter =>
-        iter.flatMap(boundGenerator.eval) ++ LazyIterator(boundGenerator.terminate)
-      }
-    }
 
-    val numOutputRows = longMetric("numOutputRows")
-    rows.mapPartitionsWithIndexInternal { (index, iter) =>
+      // Convert the rows to unsafe rows.
       val proj = UnsafeProjection.create(output, output)
       proj.initialize(index)
-      iter.map { r =>
+      rows.map { r =>
         numOutputRows += 1
         proj(r)
       }
@@ -184,7 +187,7 @@ case class GenerateExec(
           codeGenAccessor(
             ctx,
             row.value,
-            s"st_col${i}",
+            s"st_col$i",
             i.toString,
             f.dataType,
             f.nullable,
@@ -252,9 +255,9 @@ case class GenerateExec(
     // Add a check if the generate outer flag is true.
     val checks = optionalCode(outer, s"!$hasNext")
     val values = e.dataType match {
-      case ArrayType(st: StructType, nullable) =>
+      case ArrayType(st: StructType, _) =>
         st.fields.toSeq.zipWithIndex.map { case (f, i) =>
-          codeGenAccessor(ctx, current, s"st_col${i}", s"$i", f.dataType, f.nullable, checks)
+          codeGenAccessor(ctx, current, s"st_col$i", s"$i", f.dataType, f.nullable, checks)
         }
     }
 
