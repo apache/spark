@@ -55,6 +55,10 @@
       <scope>${hadoop.deps.scope}</scope>
       <exclusions>
         <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+        <exclusion>
           <groupId>com.fasterxml.jackson.dataformat</groupId>
           <artifactId>jackson-dataformat-cbor</artifactId>
         </exclusion>
