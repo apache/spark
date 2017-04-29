@@ -3891,7 +3891,7 @@ setMethod("not",
             column(jc)
           })
 
-#' is_grouping
+#' grouping_col
 #'
 #' Indicates whether a specified column in a GROUP BY list is aggregated or not,
 #' returns 1 for aggregated or 0 for not aggregated in the result set.
@@ -3900,10 +3900,10 @@ setMethod("not",
 #'
 #' @param x Column to compute on
 #'
-#' @rdname is_grouping
-#' @name is_grouping
+#' @rdname grouping_col
+#' @name grouping_col
 #' @family agg_funcs
-#' @aliases is_grouping,Column-method
+#' @aliases grouping_col,Column-method
 #' @export
 #' @examples \dontrun{
 #' df <- createDataFrame(mtcars)
@@ -3912,18 +3912,18 @@ setMethod("not",
 #' agg(
 #'   cube(df, "cyl", "gear", "am"),
 #'   mean(df$mpg),
-#'   is_grouping(df$cyl), is_grouping(df$gear), is_grouping(df$am)
+#'   grouping_col(df$cyl), grouping_col(df$gear), grouping_col(df$am)
 #' )
 #'
 #' # With rollup
 #' agg(
 #'   rollup(df, "cyl", "gear", "am"),
 #'   mean(df$mpg),
-#'   is_grouping(df$cyl), is_grouping(df$gear), is_grouping(df$am)
+#'   grouping_col(df$cyl), grouping_col(df$gear), grouping_col(df$am)
 #' )
 #' }
-#' @note is_grouping since 2.3.0
-setMethod("is_grouping",
+#' @note grouping_col since 2.3.0
+setMethod("grouping_col",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "grouping", x@jc)
@@ -3935,7 +3935,7 @@ setMethod("is_grouping",
 #' Returns the level of grouping.
 #'
 #' Equals to \code{
-#' (is_grouping(c1) <<; (n-1)) + (is_grouping(c2) <<; (n-2)) + ... + is_grouping(cn)
+#' (grouping_col(c1) <<; (n-1)) + (grouping_col(c2) <<; (n-2)) + ... + grouping_col(cn)
 #' }
 #'
 #' @param x Column to compute on
