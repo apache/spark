@@ -28,7 +28,7 @@ val spark = SparkSession
   .builder
   .appName("StructuredNetworkWordCount")
   .getOrCreate()
-
+  
 import spark.implicits._
 {% endhighlight %}
 
@@ -412,62 +412,62 @@ Batch: 1
 
 # Programming Model
 
-The key idea in Structured Streaming is to treat a live data stream as a
-table that is being continuously appended. This leads to a new stream
-processing model that is very similar to a batch processing model. You will
-express your streaming computation as standard batch-like query as on a static
-table, and Spark runs it as an *incremental* query on the *unbounded* input
+The key idea in Structured Streaming is to treat a live data stream as a 
+table that is being continuously appended. This leads to a new stream 
+processing model that is very similar to a batch processing model. You will 
+express your streaming computation as standard batch-like query as on a static 
+table, and Spark runs it as an *incremental* query on the *unbounded* input 
 table. Let’s understand this model in more detail.
 
 ## Basic Concepts
-Consider the input data stream as the "Input Table". Every data item that is
+Consider the input data stream as the "Input Table". Every data item that is 
 arriving on the stream is like a new row being appended to the Input Table.
 
 ![Stream as a Table](img/structured-streaming-stream-as-a-table.png "Stream as a Table")
 
-A query on the input will generate the "Result Table". Every trigger interval (say, every 1 second), new rows get appended to the Input Table, which eventually updates the Result Table. Whenever the result table gets updated, we would want to write the changed result rows to an external sink.
+A query on the input will generate the "Result Table". Every trigger interval (say, every 1 second), new rows get appended to the Input Table, which eventually updates the Result Table. Whenever the result table gets updated, we would want to write the changed result rows to an external sink. 
 
 ![Model](img/structured-streaming-model.png)
 
 The "Output" is defined as what gets written out to the external storage. The output can be defined in a different mode:
 
-  - *Complete Mode* - The entire updated Result Table will be written to the external storage. It is up to the storage connector to decide how to handle writing of the entire table.
+  - *Complete Mode* - The entire updated Result Table will be written to the external storage. It is up to the storage connector to decide how to handle writing of the entire table. 
 
   - *Append Mode* - Only the new rows appended in the Result Table since the last trigger will be written to the external storage. This is applicable only on the queries where existing rows in the Result Table are not expected to change.
-
+  
   - *Update Mode* - Only the rows that were updated in the Result Table since the last trigger will be written to the external storage (available since Spark 2.1.1). Note that this is different from the Complete Mode in that this mode only outputs the rows that have changed since the last trigger. If the query doesn't contain aggregations, it will be equivalent to Append mode.
 
 Note that each mode is applicable on certain types of queries. This is discussed in detail [later](#output-modes).
 
-To illustrate the use of this model, let’s understand the model in context of
-the [Quick Example](#quick-example) above. The first `lines` DataFrame is the input table, and
-the final `wordCounts` DataFrame is the result table. Note that the query on
-streaming `lines` DataFrame to generate `wordCounts` is *exactly the same* as
-it would be a static DataFrame. However, when this query is started, Spark
-will continuously check for new data from the socket connection. If there is
-new data, Spark will run an "incremental" query that combines the previous
+To illustrate the use of this model, let’s understand the model in context of 
+the [Quick Example](#quick-example) above. The first `lines` DataFrame is the input table, and 
+the final `wordCounts` DataFrame is the result table. Note that the query on 
+streaming `lines` DataFrame to generate `wordCounts` is *exactly the same* as 
+it would be a static DataFrame. However, when this query is started, Spark 
+will continuously check for new data from the socket connection. If there is 
+new data, Spark will run an "incremental" query that combines the previous 
 running counts with the new data to compute updated counts, as shown below.
 
 ![Model](img/structured-streaming-example-model.png)
 
-This model is significantly different from many other stream processing
-engines. Many streaming systems require the user to maintain running
-aggregations themselves, thus having to reason about fault-tolerance, and
-data consistency (at-least-once, or at-most-once, or exactly-once). In this
-model, Spark is responsible for updating the Result Table when there is new
-data, thus relieving the users from reasoning about it. As an example, let’s
+This model is significantly different from many other stream processing 
+engines. Many streaming systems require the user to maintain running 
+aggregations themselves, thus having to reason about fault-tolerance, and 
+data consistency (at-least-once, or at-most-once, or exactly-once). In this 
+model, Spark is responsible for updating the Result Table when there is new 
+data, thus relieving the users from reasoning about it. As an example, let’s 
 see how this model handles event-time based processing and late arriving data.
 
 ## Handling Event-time and Late Data
 Event-time is the time embedded in the data itself. For many applications, you may want to operate on this event-time. For example, if you want to get the number of events generated by IoT devices every minute, then you probably want to use the time when the data was generated (that is, event-time in the data), rather than the time Spark receives them. This event-time is very naturally expressed in this model -- each event from the devices is a row in the table, and event-time is a column value in the row. This allows window-based aggregations (e.g. number of events every minute) to be just a special type of grouping and aggregation on the event-time column -- each time window is a group and each row can belong to multiple windows/groups. Therefore, such event-time-window-based aggregation queries can be defined consistently on both a static dataset (e.g. from collected device events logs) as well as on a data stream, making the life of the user much easier.
 
-Furthermore, this model naturally handles data that has arrived later than
-expected based on its event-time. Since Spark is updating the Result Table,
-it has full control over updating old aggregates when there is late data,
+Furthermore, this model naturally handles data that has arrived later than 
+expected based on its event-time. Since Spark is updating the Result Table, 
+it has full control over updating old aggregates when there is late data, 
 as well as cleaning up old aggregates to limit the size of intermediate
-state data. Since Spark 2.1, we have support for watermarking which
+state data. Since Spark 2.1, we have support for watermarking which 
 allows the user to specify the threshold of late data, and allows the engine
-to accordingly clean up old state. These are explained later in more
+to accordingly clean up old state. These are explained later in more 
 detail in the [Window Operations](#window-operations-on-event-time) section.
 
 ## Fault Tolerance Semantics
@@ -492,10 +492,10 @@ In Spark 2.0, there are a few built-in sources.
 
   - **Kafka source** - Poll data from Kafka. It's compatible with Kafka broker versions 0.10.0 or higher. See the [Kafka Integration Guide](structured-streaming-kafka-integration.html) for more details.
 
-  - **Socket source (for testing)** - Reads UTF8 text data from a socket connection. The listening server socket is at the driver. Note that this should be used only for testing as this does not provide end-to-end fault-tolerance guarantees.
+  - **Socket source (for testing)** - Reads UTF8 text data from a socket connection. The listening server socket is at the driver. Note that this should be used only for testing as this does not provide end-to-end fault-tolerance guarantees. 
 
-Some sources are not fault-tolerant because they do not guarantee that data can be replayed using
-checkpointed offsets after a failure. See the earlier section on
+Some sources are not fault-tolerant because they do not guarantee that data can be replayed using 
+checkpointed offsets after a failure. See the earlier section on 
 [fault-tolerance semantics](#fault-tolerance-semantics).
 Here are the details of all the sources in Spark.
 
@@ -803,26 +803,26 @@ windowedCounts = words.groupBy(
 
 ### Handling Late Data and Watermarking
 Now consider what happens if one of the events arrives late to the application.
-For example, say, a word generated at 12:04 (i.e. event time) could be received by
+For example, say, a word generated at 12:04 (i.e. event time) could be received by 
 the application at 12:11. The application should use the time 12:04 instead of 12:11
-to update the older counts for the window `12:00 - 12:10`. This occurs
-naturally in our window-based grouping – Structured Streaming can maintain the intermediate state
-for partial aggregates for a long period of time such that late data can update aggregates of
+to update the older counts for the window `12:00 - 12:10`. This occurs 
+naturally in our window-based grouping – Structured Streaming can maintain the intermediate state 
+for partial aggregates for a long period of time such that late data can update aggregates of 
 old windows correctly, as illustrated below.
 
 ![Handling Late Data](img/structured-streaming-late-data.png)
 
-However, to run this query for days, it's necessary for the system to bound the amount of
-intermediate in-memory state it accumulates. This means the system needs to know when an old
-aggregate can be dropped from the in-memory state because the application is not going to receive
-late data for that aggregate any more. To enable this, in Spark 2.1, we have introduced
+However, to run this query for days, it's necessary for the system to bound the amount of 
+intermediate in-memory state it accumulates. This means the system needs to know when an old 
+aggregate can be dropped from the in-memory state because the application is not going to receive 
+late data for that aggregate any more. To enable this, in Spark 2.1, we have introduced 
 **watermarking**, which lets the engine automatically track the current event time in the data
-and attempt to clean up old state accordingly. You can define the watermark of a query by
-specifying the event time column and the threshold on how late the data is expected to be in terms of
+and attempt to clean up old state accordingly. You can define the watermark of a query by 
+specifying the event time column and the threshold on how late the data is expected to be in terms of 
 event time. For a specific window starting at time `T`, the engine will maintain state and allow late
-data to update the state until `(max event time seen by the engine - late threshold > T)`.
-In other words, late data within the threshold will be aggregated,
-but data later than the threshold will be dropped. Let's understand this with an example. We can
+data to update the state until `(max event time seen by the engine - late threshold > T)`. 
+In other words, late data within the threshold will be aggregated, 
+but data later than the threshold will be dropped. Let's understand this with an example. We can 
 easily define watermarking on the previous example using `withWatermark()` as shown below.
 
 <div class="codetabs">
@@ -874,27 +874,27 @@ windowedCounts = words \
 </div>
 </div>
 
-In this example, we are defining the watermark of the query on the value of the column "timestamp",
-and also defining "10 minutes" as the threshold of how late is the data allowed to be. If this query
-is run in Update output mode (discussed later in [Output Modes](#output-modes) section),
+In this example, we are defining the watermark of the query on the value of the column "timestamp", 
+and also defining "10 minutes" as the threshold of how late is the data allowed to be. If this query 
+is run in Update output mode (discussed later in [Output Modes](#output-modes) section), 
 the engine will keep updating counts of a window in the Result Table until the window is older
 than the watermark, which lags behind the current event time in column "timestamp" by 10 minutes.
-Here is an illustration.
+Here is an illustration. 
 
 ![Watermarking in Update Mode](img/structured-streaming-watermark-update-mode.png)
 
-As shown in the illustration, the maximum event time tracked by the engine is the
+As shown in the illustration, the maximum event time tracked by the engine is the 
 *blue dashed line*, and the watermark set as `(max event time - '10 mins')`
-at the beginning of every trigger is the red line  For example, when the engine observes the data
+at the beginning of every trigger is the red line  For example, when the engine observes the data 
 `(12:14, dog)`, it sets the watermark for the next trigger as `12:04`.
 This watermark lets the engine maintain intermediate state for additional 10 minutes to allow late
 data to be counted. For example, the data `(12:09, cat)` is out of order and late, and it falls in
-windows `12:05 - 12:15` and `12:10 - 12:20`. Since, it is still ahead of the watermark `12:04` in
-the trigger, the engine still maintains the intermediate counts as state and correctly updates the
-counts of the related windows. However, when the watermark is updated to `12:11`, the intermediate
-state for window `(12:00 - 12:10)` is cleared, and all subsequent data (e.g. `(12:04, donkey)`)
-is considered "too late" and therefore ignored. Note that after every trigger,
-the updated counts (i.e. purple rows) are written to sink as the trigger output, as dictated by
+windows `12:05 - 12:15` and `12:10 - 12:20`. Since, it is still ahead of the watermark `12:04` in 
+the trigger, the engine still maintains the intermediate counts as state and correctly updates the 
+counts of the related windows. However, when the watermark is updated to `12:11`, the intermediate 
+state for window `(12:00 - 12:10)` is cleared, and all subsequent data (e.g. `(12:04, donkey)`) 
+is considered "too late" and therefore ignored. Note that after every trigger, 
+the updated counts (i.e. purple rows) are written to sink as the trigger output, as dictated by 
 the Update mode.
 
 Some sinks (e.g. files) may not supported fine-grained updates that Update Mode requires. To work
@@ -903,31 +903,31 @@ This is illustrated below.
 
 ![Watermarking in Append Mode](img/structured-streaming-watermark-append-mode.png)
 
-Similar to the Update Mode earlier, the engine maintains intermediate counts for each window.
+Similar to the Update Mode earlier, the engine maintains intermediate counts for each window. 
 However, the partial counts are not updated to the Result Table and not written to sink. The engine
-waits for "10 mins" for late date to be counted,
+waits for "10 mins" for late date to be counted, 
 then drops intermediate state of a window < watermark, and appends the final
-counts to the Result Table/sink. For example, the final counts of window `12:00 - 12:10` is
-appended to the Result Table only after the watermark is updated to `12:11`.
+counts to the Result Table/sink. For example, the final counts of window `12:00 - 12:10` is 
+appended to the Result Table only after the watermark is updated to `12:11`. 
 
 **Conditions for watermarking to clean aggregation state**
-It is important to note that the following conditions must be satisfied for the watermarking to
+It is important to note that the following conditions must be satisfied for the watermarking to 
 clean the state in aggregation queries *(as of Spark 2.1.1, subject to change in the future)*.
 
-- **Output mode must be Append or Update.** Complete mode requires all aggregate data to be preserved,
-and hence cannot use watermarking to drop intermediate state. See the [Output Modes](#output-modes)
+- **Output mode must be Append or Update.** Complete mode requires all aggregate data to be preserved, 
+and hence cannot use watermarking to drop intermediate state. See the [Output Modes](#output-modes) 
 section for detailed explanation of the semantics of each output mode.
 
-- The aggregation must have either the event-time column, or a `window` on the event-time column.
+- The aggregation must have either the event-time column, or a `window` on the event-time column. 
 
-- `withWatermark` must be called on the
-same column as the timestamp column used in the aggregate. For example,
-`df.withWatermark("time", "1 min").groupBy("time2").count()` is invalid
+- `withWatermark` must be called on the 
+same column as the timestamp column used in the aggregate. For example, 
+`df.withWatermark("time", "1 min").groupBy("time2").count()` is invalid 
 in Append output mode, as watermark is defined on a different column
 from the aggregation column.
 
-- `withWatermark` must be called before the aggregation for the watermark details to be used.
-For example, `df.groupBy("time").count().withWatermark("time", "1 min")` is invalid in Append
+- `withWatermark` must be called before the aggregation for the watermark details to be used. 
+For example, `df.groupBy("time").count().withWatermark("time", "1 min")` is invalid in Append 
 output mode.
 
 
@@ -1027,12 +1027,12 @@ streamingDf \
 </div>
 
 ### Arbitrary Stateful Operations
-Many uscases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)).
+Many uscases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)). 
 
 ### Unsupported Operations
-There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets.
+There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
 Some of them are as follows.
-
+ 
 - Multiple streaming aggregations (i.e. a chain of aggregations on a streaming DF) are not yet supported on streaming Datasets.
 
 - Limit and take first N rows are not supported on streaming Datasets.
@@ -1053,17 +1053,17 @@ Some of them are as follows.
 
 In addition, there are some Dataset methods that will not work on streaming Datasets. They are actions that will immediately run queries and return results, which does not make sense on a streaming Dataset. Rather, those functionalities can be done by explicitly starting a streaming query (see the next section regarding that).
 
-- `count()` - Cannot return a single count from a streaming Dataset. Instead, use `ds.groupBy.count()` which returns a streaming Dataset containing a running count.
+- `count()` - Cannot return a single count from a streaming Dataset. Instead, use `ds.groupBy.count()` which returns a streaming Dataset containing a running count. 
 
 - `foreach()` - Instead use `ds.writeStream.foreach(...)` (see next section).
 
 - `show()` - Instead use the console sink (see next section).
 
 If you try any of these operations, you will see an `AnalysisException` like "operation XYZ is not supported with streaming DataFrames/Datasets".
-While some of them may be supported in future releases of Spark,
-there are others which are fundamentally hard to implement on streaming data efficiently.
-For example, sorting on the input stream is not supported, as it requires keeping
-track of all the data received in the stream. This is therefore fundamentally hard to execute
+While some of them may be supported in future releases of Spark, 
+there are others which are fundamentally hard to implement on streaming data efficiently. 
+For example, sorting on the input stream is not supported, as it requires keeping 
+track of all the data received in the stream. This is therefore fundamentally hard to execute 
 efficiently.
 
 ## Starting Streaming Queries
@@ -1084,19 +1084,19 @@ returned through `Dataset.writeStream()`. You will have to specify one or more o
 #### Output Modes
 There are a few types of output modes.
 
-- **Append mode (default)** - This is the default mode, where only the
-new rows added to the Result Table since the last trigger will be
-outputted to the sink. This is supported for only those queries where
-rows added to the Result Table is never going to change. Hence, this mode
-guarantees that each row will be output only once (assuming
-fault-tolerant sink). For example, queries with only `select`,
+- **Append mode (default)** - This is the default mode, where only the 
+new rows added to the Result Table since the last trigger will be 
+outputted to the sink. This is supported for only those queries where 
+rows added to the Result Table is never going to change. Hence, this mode 
+guarantees that each row will be output only once (assuming 
+fault-tolerant sink). For example, queries with only `select`, 
 `where`, `map`, `flatMap`, `filter`, `join`, etc. will support Append mode.
 
 - **Complete mode** - The whole Result Table will be outputted to the sink after every trigger.
  This is supported for aggregation queries.
 
-- **Update mode** - (*Available since Spark 2.1.1*) Only the rows in the Result Table that were
-updated since the last trigger will be outputted to the sink.
+- **Update mode** - (*Available since Spark 2.1.1*) Only the rows in the Result Table that were 
+updated since the last trigger will be outputted to the sink. 
 More information to be added in future releases.
 
 Different types of streaming queries support different output modes.
@@ -1114,9 +1114,9 @@ Here is the compatibility matrix.
     <td style="vertical-align: middle;">Aggregation on event-time with watermark</td>
     <td style="vertical-align: middle;">Append, Update, Complete</td>
     <td>
-        Append mode uses watermark to drop old aggregation state. But the output of a
+        Append mode uses watermark to drop old aggregation state. But the output of a 
         windowed aggregation is delayed the late threshold specified in `withWatermark()` as by
-        the modes semantics, rows can be added to the Result Table only once after they are
+        the modes semantics, rows can be added to the Result Table only once after they are 
         finalized (i.e. after watermark is crossed). See the
         <a href="#handling-late-data-and-watermarking">Late Data</a> section for more details.
         <br/><br/>
@@ -1130,10 +1130,10 @@ Here is the compatibility matrix.
     <td style="vertical-align: middle;">Other aggregations</td>
     <td style="vertical-align: middle;">Complete, Update</td>
     <td>
-        Since no watermark is defined (only defined in other category),
+        Since no watermark is defined (only defined in other category), 
         old aggregation state is not dropped.
         <br/><br/>
-        Append mode is not supported as aggregates can update thus violating the semantics of
+        Append mode is not supported as aggregates can update thus violating the semantics of 
         this mode.
     </td>  
   </tr>
@@ -1213,9 +1213,9 @@ writeStream
     .start()
 {% endhighlight %}
 
-Some sinks are not fault-tolerant because they do not guarantee persistence of the output and are
-meant for debugging purposes only. See the earlier section on
-[fault-tolerance semantics](#fault-tolerance-semantics).
+Some sinks are not fault-tolerant because they do not guarantee persistence of the output and are 
+meant for debugging purposes only. See the earlier section on 
+[fault-tolerance semantics](#fault-tolerance-semantics). 
 Here are the details of all the sinks in Spark.
 
 <table class="table">
@@ -1459,12 +1459,12 @@ which has methods that get called whenever there is a sequence of rows generated
 
 - `version` and `partition` are two parameters in `open` that uniquely represent a set of rows that needs to be pushed out. `version` is a monotonically increasing id that increases with every trigger. `partition` is an id that represents a partition of the output, since the output is distributed and will be processed on multiple executors.
 
-- `open` can use the `version` and `partition` to choose whether it needs to write the sequence of rows. Accordingly, it can return `true` (proceed with writing), or `false` (no need to write). If `false` is returned, then `process` will not be called on any row. For example, after a partial failure, some of the output partitions of the failed trigger may have already been committed to a database. Based on metadata stored in the database, the writer can identify partitions that have already been committed and accordingly return false to skip committing them again.
+- `open` can use the `version` and `partition` to choose whether it needs to write the sequence of rows. Accordingly, it can return `true` (proceed with writing), or `false` (no need to write). If `false` is returned, then `process` will not be called on any row. For example, after a partial failure, some of the output partitions of the failed trigger may have already been committed to a database. Based on metadata stored in the database, the writer can identify partitions that have already been committed and accordingly return false to skip committing them again. 
 
 - Whenever `open` is called, `close` will also be called (unless the JVM exits due to some error). This is true even if `open` returns false. If there is any error in processing and writing the data, `close` will be called with the error. It is your responsibility to clean up state (e.g. connections, transactions, etc.) that have been created in `open` such that there are no resource leaks.
 
 ## Managing Streaming Queries
-The `StreamingQuery` object created when a query is started can be used to monitor and manage the query.
+The `StreamingQuery` object created when a query is started can be used to monitor and manage the query. 
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
