@@ -104,7 +104,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(splits.distinct.length === splits.length)
     }
 
-    // SPARK-16957: Use weighted midpoints for split values.
+    // SPARK-16957: Use midpoints for split values.
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
         Map(), Set(),
@@ -116,7 +116,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       {
         val featureSamples = Array(0, 1, 0, 0, 1, 0, 1, 1).map(_.toDouble)
         val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-        val expectedSplits = Array((0.0 * 4 + 1.0 * 4) / (4 + 4))  // = 0.5
+        val expectedSplits = Array((0.0 + 1.0) / 2)
         assert(splits === expectedSplits)
       }
 
@@ -124,8 +124,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       {
         val featureSamples = Array(0, 0, 1, 1, 2, 2, 3, 3).map(_.toDouble)
         val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-        val expectedSplits = Array((0.0 * 2 + 1.0 * 2) / (2 + 2),
-                                   (2.0 * 2 + 3.0 * 2) / (2 + 2))  // = (0.5, 2.5)
+        val expectedSplits = Array((0.0 + 1.0) / 2, (2.0 + 3.0) / 2)
         assert(splits === expectedSplits)
       }
     }
@@ -140,8 +139,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       )
       val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3).map(_.toDouble)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      val expectedSplits = Array((1.0 * 2 + 2.0 * 8) / (2 + 8),
-                                 (2.0 * 8 + 3.0 * 2) / (8 + 2)) // = (1.8, 2.2)
+      val expectedSplits = Array((1.0 + 2.0) / 2, (2.0 + 3.0) / 2)
       assert(splits === expectedSplits)
       // check returned splits are distinct
       assert(splits.distinct.length === splits.length)
@@ -157,8 +155,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       val featureSamples = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 4, 5)
         .map(_.toDouble)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      val expectedSplits = Array((2.0 * 15 + 3.0 * 1) / (15 + 1),
-                                 (3.0 * 1 + 4.0 * 1) / (1 + 1)) // = (2.0625, 3.5)
+      val expectedSplits = Array((2.0 + 3.0) / 2, (3.0 + 4.0) / 2)
       assert(splits === expectedSplits)
     }
 
@@ -171,7 +168,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       )
       val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(_.toDouble)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      val expectedSplits = Array((1.0 * 1 + 2.0 * 15) / (1 + 15))  // = (1.9375)
+      val expectedSplits = Array((1.0 + 2.0) / 2)
       assert(splits === expectedSplits)
     }
 
