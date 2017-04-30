@@ -1016,6 +1016,10 @@ setGeneric("encode", function(x, charset) { standardGeneric("encode") })
 #' @export
 setGeneric("explode", function(x) { standardGeneric("explode") })
 
+#' @rdname explode_outer
+#' @export
+setGeneric("explode_outer", function(x) { standardGeneric("explode_outer") })
+
 #' @rdname expr
 #' @export
 setGeneric("expr", function(x) { standardGeneric("expr") })
@@ -1174,6 +1178,10 @@ setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
 #' @rdname posexplode
 #' @export
 setGeneric("posexplode", function(x) { standardGeneric("posexplode") })
+
+#' @rdname posexplode_outer
+#' @export
+setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer") })
 
 #' @rdname quarter
 #' @export
