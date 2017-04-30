@@ -1790,7 +1790,7 @@ Will print something like the following.
 '''
 
 print(query.status)
-'''
+''' 
 Will print something like the following.
 
 {u'message': u'Waiting for data to arrive', u'isTriggerActive': False, u'isDataAvailable': False}
@@ -1917,7 +1917,7 @@ Not available in R.
 </div>
 </div>
 
-## Recovering from Failures with Checkpointing
+## Recovering from Failures with Checkpointing 
 In case of a failure or intentional shutdown, you can recover the previous progress and state of a previous query, and continue where it left off. This is done using checkpointing and write ahead logs. You can configure a query with a checkpoint location, and the query will save all the progress information (i.e. range of offsets processed in each trigger) and the running aggregates (e.g. word counts in the [quick example](#quick-example)) to the checkpoint location. This checkpoint location has to be a path in an HDFS compatible file system, and can be set as an option in the DataStreamWriter when [starting a query](#starting-streaming-queries).
 
 <div class="codetabs">
