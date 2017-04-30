@@ -219,8 +219,8 @@ awaitTermination(query)
 
 After this code is executed, the streaming computation will have started in the background. The `query` object is a handle to that active streaming query, and we have decided to wait for the termination of the query using `awaitTermination()` to prevent the process from exiting while the query is active.
 
-To actually execute this example code, you can either compile the code in your own
-[Spark application](quick-start.html#self-contained-applications), or simply
+To actually execute this example code, you can either compile the code in your own 
+[Spark application](quick-start.html#self-contained-applications), or simply 
 [run the example](index.html#running-the-examples-and-shell) once you have downloaded Spark. We are showing the latter. You will first need to run Netcat (a small utility found in most Unix-like systems) as a data server by using
 
 
@@ -746,7 +746,7 @@ count(groupBy(df, "deviceType"))
 </div>
 
 ### Window Operations on Event Time
-Aggregations over a sliding event-time window are straightforward with Structured Streaming and are very similar to grouped aggregations. In a grouped aggregation, aggregate values (e.g. counts) are maintained for each unique value in the user-specified grouping column. In case of window-based aggregations, aggregate values are maintained for each window the event-time of a row falls into. Let's understand this with an illustration.
+Aggregations over a sliding event-time window are straightforward with Structured Streaming and are very similar to grouped aggregations. In a grouped aggregation, aggregate values (e.g. counts) are maintained for each unique value in the user-specified grouping column. In case of window-based aggregations, aggregate values are maintained for each window the event-time of a row falls into. Let's understand this with an illustration. 
 
 Imagine our [quick example](#quick-example) is modified and the stream now contains lines along with the time when the line was generated. Instead of running word counts, we want to count words within 10 minute windows, updating every 5 minutes. That is, word counts in words received between 10 minute windows 12:00 - 12:10, 12:05 - 12:15, 12:10 - 12:20, etc. Note that 12:00 - 12:10 means data that arrived after 12:00 but before 12:10. Now, consider a word that was received at 12:07. This word should increment the counts corresponding to two windows 12:00 - 12:10 and 12:05 - 12:15. So the counts will be indexed by both, the grouping key (i.e. the word) and the window (can be calculated from the event-time).
 
@@ -1619,23 +1619,23 @@ Not available in R.
 
 
 ## Monitoring Streaming Queries
-There are two APIs for monitoring and debugging active queries -
+There are two APIs for monitoring and debugging active queries - 
 interactively and asynchronously.
 
 ### Interactive APIs
 
-You can directly get the current status and metrics of an active query using
-`streamingQuery.lastProgress()` and `streamingQuery.status()`.
-`lastProgress()` returns a `StreamingQueryProgress` object
-in [Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryProgress)
+You can directly get the current status and metrics of an active query using 
+`streamingQuery.lastProgress()` and `streamingQuery.status()`. 
+`lastProgress()` returns a `StreamingQueryProgress` object 
+in [Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryProgress) 
 and [Java](api/java/org/apache/spark/sql/streaming/StreamingQueryProgress.html)
 and a dictionary with the same fields in Python. It has all the information about
-the progress made in the last trigger of the stream - what data was processed,
-what were the processing rates, latencies, etc. There is also
+the progress made in the last trigger of the stream - what data was processed, 
+what were the processing rates, latencies, etc. There is also 
 `streamingQuery.recentProgress` which returns an array of last few progresses.  
 
-In addition, `streamingQuery.status()` returns a `StreamingQueryStatus` object
-in [Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryStatus)
+In addition, `streamingQuery.status()` returns a `StreamingQueryStatus` object 
+in [Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryStatus) 
 and [Java](api/java/org/apache/spark/sql/streaming/StreamingQueryStatus.html)
 and a dictionary with the same fields in Python. It gives information about
 what the query is immediately doing - is a trigger active, is data being processed, etc.
