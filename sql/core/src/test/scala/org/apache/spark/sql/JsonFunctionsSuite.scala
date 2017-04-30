@@ -274,7 +274,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val errMsg2 = intercept[AnalysisException] {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
-    assert(errMsg2.getMessage.contains("DataType invalidtype() is not supported"))
+    assert(errMsg2.getMessage.contains("DataType invalidtype is not supported"))
     val errMsg3 = intercept[AnalysisException] {
       df3.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
     }
