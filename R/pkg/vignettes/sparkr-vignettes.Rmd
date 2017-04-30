@@ -1035,17 +1035,17 @@ It is simple to read data from Kafka. For more information, see [Input Sources](
 topic <- read.stream("kafka",
                      kafka.bootstrap.servers = "host1:port1,host2:port2",
                      subscribe = "topic1")
-keyvalue <- selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+keyvalue <- selectExpr(topic, "CAST(key AS STRING)", "CAST(value AS STRING)")
 ```
 
 ### Operations and Sinks
 
 Most of the common operations on `SparkDataFrame` are supported for streaming, including selection, projection, and aggregation. Once you have defined the final result, to start the streaming computation, you will call the `write.stream` method setting a sink and `outputMode`.
 
-A streaming `SparkDataFrame` can be written for debugging to the console, to a temporary in-memory table, or for further processing in a fault-tolerant manner to the File Sink in different formats.
+A streaming `SparkDataFrame` can be written for debugging to the console, to a temporary in-memory table, or for further processing in a fault-tolerant manner to a File Sink in different formats.
 
 ```{r, eval=FALSE}
-noAggDF <- select(where(deviceDataDf, "signal > 10"), "device")
+noAggDF <- select(where(deviceDataStreamingDf, "signal > 10"), "device")
 
 # Print new data to console
 write.stream(noAggDF, "console")
