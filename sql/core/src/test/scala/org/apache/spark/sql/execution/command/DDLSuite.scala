@@ -1567,13 +1567,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("drop current database") {
-    sql("CREATE DATABASE temp")
-    sql("USE temp")
-    sql("DROP DATABASE temp")
-    val e = intercept[AnalysisException] {
+    withDatabase("temp") {
+      sql("CREATE DATABASE temp")
+      sql("USE temp")
+      sql("DROP DATABASE temp")
+      val e = intercept[AnalysisException] {
         sql("CREATE TABLE t (a INT, b INT) USING parquet")
       }.getMessage
-    assert(e.contains("Database 'temp' not found"))
+      assert(e.contains("Database 'temp' not found"))
+    }
   }
 
   test("drop default database") {
@@ -1803,22 +1805,25 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         checkAnswer(spark.table("tbl"), Row(1))
         val defaultTablePath = spark.sessionState.catalog
           .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
+        try {
+          sql(s"ALTER TABLE tbl SET LOCATION '${dir.toURI}'")
+          spark.catalog.refreshTable("tbl")
+          // SET LOCATION won't move data from previous table path to new table path.
+          assert(spark.table("tbl").count() == 0)
+          // the previous table path should be still there.
+          assert(new File(defaultTablePath).exists())
 
-        sql(s"ALTER TABLE tbl SET LOCATION '${dir.toURI}'")
-        spark.catalog.refreshTable("tbl")
-        // SET LOCATION won't move data from previous table path to new table path.
-        assert(spark.table("tbl").count() == 0)
-        // the previous table path should be still there.
-        assert(new File(defaultTablePath).exists())
+          sql("INSERT INTO tbl SELECT 2")
+          checkAnswer(spark.table("tbl"), Row(2))
+          // newly inserted data will go to the new table path.
+          assert(dir.listFiles().nonEmpty)
 
-        sql("INSERT INTO tbl SELECT 2")
-        checkAnswer(spark.table("tbl"), Row(2))
-        // newly inserted data will go to the new table path.
-        assert(dir.listFiles().nonEmpty)
-
-        sql("DROP TABLE tbl")
-        // the new table path will be removed after DROP TABLE.
-        assert(!dir.exists())
+          sql("DROP TABLE tbl")
+          // the new table path will be removed after DROP TABLE.
+          assert(!dir.exists())
+        } finally {
+          Utils.deleteRecursively(new File(defaultTablePath))
+        }
       }
     }
   }
@@ -2091,7 +2096,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   Seq("a b", "a:b", "a%b").foreach { specialChars =>
     test(s"location uri contains $specialChars for database") {
-      try {
+      withDatabase ("tmpdb") {
         withTable("t") {
           withTempDir { dir =>
             val loc = new File(dir, specialChars)
@@ -2106,8 +2111,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             assert(tblloc.listFiles().nonEmpty)
           }
         }
-      } finally {
-        spark.sql("DROP DATABASE IF EXISTS tmpdb")
       }
     }
   }
