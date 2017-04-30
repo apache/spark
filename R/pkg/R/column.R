@@ -341,8 +341,8 @@ setMethod("%<=>%",
 #'
 #' Inversion of boolean expression.
 #'
-#' @rdname column
-#' @name !
+#' @rdname not
+#' @name not
 #' @aliases !,Column-method
 #' @export
 #' @examples
