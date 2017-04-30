@@ -222,21 +222,27 @@ public class UTF8StringSuite {
 
   @Test
   public void trims() {
-    assertEquals(fromString("hello"), fromString("  hello ").trim(fromString("")));
-    assertEquals(fromString("hello "), fromString("  hello ").trimLeft(fromString("")));
-    assertEquals(fromString("  hello"), fromString("  hello ").trimRight(fromString("")));
+    assertEquals(fromString("hello"), fromString("  hello ").trim());
+    assertEquals(fromString("hello "), fromString("  hello ").trimLeft());
+    assertEquals(fromString("  hello"), fromString("  hello ").trimRight());
 
-    assertEquals(EMPTY_UTF8, fromString("  ").trim(fromString("")));
-    assertEquals(EMPTY_UTF8, fromString("  ").trimLeft(fromString("")));
-    assertEquals(EMPTY_UTF8, fromString("  ").trimRight(fromString("")));
+    assertEquals(EMPTY_UTF8, fromString("  ").trim());
+    assertEquals(EMPTY_UTF8, fromString("  ").trimLeft());
+    assertEquals(EMPTY_UTF8, fromString("  ").trimRight());
 
-    assertEquals(fromString("数据砖头"), fromString("  数据砖头 ").trim(fromString("")));
-    assertEquals(fromString("数据砖头 "), fromString("  数据砖头 ").trimLeft(fromString("")));
-    assertEquals(fromString("  数据砖头"), fromString("  数据砖头 ").trimRight(fromString("")));
+    assertEquals(fromString("数据砖头"), fromString("  数据砖头 ").trim());
+    assertEquals(fromString("数据砖头 "), fromString("  数据砖头 ").trimLeft());
+    assertEquals(fromString("  数据砖头"), fromString("  数据砖头 ").trimRight());
 
-    assertEquals(fromString("数据砖头"), fromString("数据砖头").trim(fromString("")));
-    assertEquals(fromString("数据砖头"), fromString("数据砖头").trimLeft(fromString("")));
-    assertEquals(fromString("数据砖头"), fromString("数据砖头").trimRight(fromString("")));
+    char[] charsLessThan0x20 = new char[10];
+    Arrays.fill(charsLessThan0x20, (char)(' ' - 1));
+    String stringStartingWithSpace =
+      new String(charsLessThan0x20) + "hello" + new String(charsLessThan0x20);
+    assertEquals(fromString(stringStartingWithSpace), fromString(stringStartingWithSpace).trim());
+    assertEquals(fromString(stringStartingWithSpace),
+      fromString(stringStartingWithSpace).trimLeft());
+    assertEquals(fromString(stringStartingWithSpace),
+      fromString(stringStartingWithSpace).trimRight());
   }
 
   @Test
