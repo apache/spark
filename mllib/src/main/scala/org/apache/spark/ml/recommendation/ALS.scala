@@ -1010,10 +1010,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    *     )
    * }}}
    *
-   * (In this contrived example, the rating values are chosen specifically for clarity and are in
-   * the form ''x''.''y'', where ''x'' is the user ID and ''y'' is the item ID.  Note that in a real
-   * use case, the ratings given by users would more likely be whole numbers.)
-   *
    * Say that we are using two partitions to calculate each factor matrix:
    *
    * {{{
