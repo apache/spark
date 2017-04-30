@@ -30,7 +30,7 @@ class DataTypeParserSuite extends SparkFunSuite {
     }
   }
 
-  def intercept(sql: String): Unit =
+  def intercept(sql: String): ParseException =
     intercept[ParseException](CatalystSqlParser.parseDataType(sql))
 
   def unsupported(dataTypeString: String): Unit = {
@@ -117,6 +117,11 @@ class DataTypeParserSuite extends SparkFunSuite {
   unsupported("struct<x+y: int, 1.1:timestamp>")
   unsupported("struct<x: int")
   unsupported("struct<x int, y string>")
+
+  test("Do not print empty parentheses for no params") {
+    assert(intercept("unkwon").getMessage.contains("unkwon is not supported"))
+    assert(intercept("unkwon(1,2,3)").getMessage.contains("unkwon(1,2,3) is not supported"))
+  }
 
   // DataType parser accepts certain reserved keywords.
   checkDataType(
