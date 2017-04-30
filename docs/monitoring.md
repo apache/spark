@@ -27,8 +27,8 @@ in the UI to persisted storage.
 
 ## Viewing After the Fact
 
-If Spark is run on Mesos or YARN, it is still possible to construct the UI of an
-application through Spark's history server, provided that the application's event logs exist.
+It is still possible to construct the UI of an application through Spark's history server, 
+provided that the application's event logs exist.
 You can start the history server by executing:
 
     ./sbin/start-history-server.sh
@@ -299,12 +299,12 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/stages</code></td>
     <td>A list of all stages for a given application.</td>
+    <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
     <td>
       A list of all attempts for the given stage.
-      <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
     </td>
   </tr>
   <tr>

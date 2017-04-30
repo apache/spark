@@ -544,12 +544,15 @@ sql <- function(x, ...) {
   dispatchFunc("sql(sqlQuery)", x, ...)
 }
 
-#' Create a SparkDataFrame from a SparkSQL Table
+#' Create a SparkDataFrame from a SparkSQL table or view
 #'
-#' Returns the specified Table as a SparkDataFrame.  The Table must have already been registered
-#' in the SparkSession.
+#' Returns the specified table or view as a SparkDataFrame. The table or view must already exist or
+#' have already been registered in the SparkSession.
 #'
-#' @param tableName The SparkSQL Table to convert to a SparkDataFrame.
+#' @param tableName the qualified or unqualified name that designates a table or view. If a database
+#'                  is specified, it identifies the table/view from the database.
+#'                  Otherwise, it first attempts to find a temporary view with the given name
+#'                  and then match the table/view from the current database.
 #' @return SparkDataFrame
 #' @rdname tableToDF
 #' @name tableToDF
@@ -603,7 +606,7 @@ tableToDF <- function(tableName) {
 #' @note read.df since 1.4.0
 read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
   if (!is.null(path) && !is.character(path)) {
-    stop("path should be charactor, NULL or omitted.")
+    stop("path should be character, NULL or omitted.")
   }
   if (!is.null(source) && !is.character(source)) {
     stop("source should be character, NULL or omitted. It is the datasource specified ",

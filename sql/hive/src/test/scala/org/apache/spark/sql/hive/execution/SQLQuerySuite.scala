@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util.Locale
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
@@ -475,13 +476,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           case None => // OK.
         }
         // Also make sure that the format and serde are as desired.
-        assert(catalogTable.storage.inputFormat.get.toLowerCase.contains(format))
-        assert(catalogTable.storage.outputFormat.get.toLowerCase.contains(format))
+        assert(catalogTable.storage.inputFormat.get.toLowerCase(Locale.ROOT).contains(format))
+        assert(catalogTable.storage.outputFormat.get.toLowerCase(Locale.ROOT).contains(format))
         val serde = catalogTable.storage.serde.get
         format match {
           case "sequence" | "text" => assert(serde.contains("LazySimpleSerDe"))
           case "rcfile" => assert(serde.contains("LazyBinaryColumnarSerDe"))
-          case _ => assert(serde.toLowerCase.contains(format))
+          case _ => assert(serde.toLowerCase(Locale.ROOT).contains(format))
         }
     }
 
@@ -1971,6 +1972,30 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         checkAnswer(spark.table("bar"), Row(0) :: Nil)
         val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
         assert(tableMetadata.provider == Some("hive"), "the expected table is a Hive serde table")
+      }
+    }
+  }
+
+  test("Auto alias construction of get_json_object") {
+    val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
+    val expectedMsg = "Cannot create a table having a column whose name contains commas " +
+      "in Hive metastore. Table: `default`.`t`; Column: get_json_object(jstring, $.f1)"
+
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        df.select($"key", functions.get_json_object($"jstring", "$.f1"))
+          .write.format("hive").saveAsTable("t")
+      }.getMessage
+      assert(e.contains(expectedMsg))
+    }
+
+    withTempView("tempView") {
+      withTable("t") {
+        df.createTempView("tempView")
+        val e = intercept[AnalysisException] {
+          sql("CREATE TABLE t AS SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
+        }.getMessage
+        assert(e.contains(expectedMsg))
       }
     }
   }

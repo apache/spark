@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
@@ -349,9 +350,31 @@ class SparkHadoopUtil extends Logging {
       }
     } catch {
       case e: IOException =>
-        logDebug("Failed to decode $token: $e", e)
+        logDebug(s"Failed to decode $token: $e", e)
     }
     buffer.toString
+  }
+
+  private[spark] def checkAccessPermission(status: FileStatus, mode: FsAction): Boolean = {
+    val perm = status.getPermission
+    val ugi = UserGroupInformation.getCurrentUser
+
+    if (ugi.getShortUserName == status.getOwner) {
+      if (perm.getUserAction.implies(mode)) {
+        return true
+      }
+    } else if (ugi.getGroupNames.contains(status.getGroup)) {
+      if (perm.getGroupAction.implies(mode)) {
+        return true
+      }
+    } else if (perm.getOtherAction.implies(mode)) {
+      return true
+    }
+
+    logDebug(s"Permission denied: user=${ugi.getShortUserName}, " +
+      s"path=${status.getPath}:${status.getOwner}:${status.getGroup}" +
+      s"${if (status.isDirectory) "d" else "-"}$perm")
+    false
   }
 }
 

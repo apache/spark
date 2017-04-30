@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
+import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -568,7 +569,7 @@ class ThrowingIOExceptionLikeHadoop12074 extends FakeSource {
 
 object ThrowingIOExceptionLikeHadoop12074 {
   /**
-   * A latch to allow the user to wait until [[ThrowingIOExceptionLikeHadoop12074.createSource]] is
+   * A latch to allow the user to wait until `ThrowingIOExceptionLikeHadoop12074.createSource` is
    * called.
    */
   @volatile var createSourceLatch: CountDownLatch = null
@@ -599,7 +600,7 @@ class ThrowingInterruptedIOException extends FakeSource {
 
 object ThrowingInterruptedIOException {
   /**
-   * A latch to allow the user to wait until [[ThrowingInterruptedIOException.createSource]] is
+   * A latch to allow the user to wait until `ThrowingInterruptedIOException.createSource` is
    * called.
    */
   @volatile var createSourceLatch: CountDownLatch = null

@@ -24,9 +24,9 @@ class StringUtilsSuite extends SparkFunSuite {
 
   test("escapeLikeRegex") {
     assert(escapeLikeRegex("abdef") === "(?s)\\Qa\\E\\Qb\\E\\Qd\\E\\Qe\\E\\Qf\\E")
-    assert(escapeLikeRegex("a\\__b") === "(?s)\\Qa\\E_.\\Qb\\E")
+    assert(escapeLikeRegex("a\\__b") === "(?s)\\Qa\\E\\Q_\\E.\\Qb\\E")
     assert(escapeLikeRegex("a_%b") === "(?s)\\Qa\\E..*\\Qb\\E")
-    assert(escapeLikeRegex("a%\\%b") === "(?s)\\Qa\\E.*%\\Qb\\E")
+    assert(escapeLikeRegex("a%\\%b") === "(?s)\\Qa\\E.*\\Q%\\E\\Qb\\E")
     assert(escapeLikeRegex("a%") === "(?s)\\Qa\\E.*")
     assert(escapeLikeRegex("**") === "(?s)\\Q*\\E\\Q*\\E")
     assert(escapeLikeRegex("a_b") === "(?s)\\Qa\\E.\\Qb\\E")

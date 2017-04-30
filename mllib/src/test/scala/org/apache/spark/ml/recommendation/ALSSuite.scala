@@ -409,8 +409,7 @@ class ALSSuite
     logInfo(s"Test RMSE is $rmse.")
     assert(rmse < targetRMSE)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(als, model)
   }
 
   test("exact rank-1 matrix") {

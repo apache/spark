@@ -75,9 +75,10 @@ class CatalogSuite
   }
 
   private def createTempFunction(name: String): Unit = {
-    val info = new ExpressionInfo("className", name)
     val tempFunc = (e: Seq[Expression]) => e.head
-    sessionCatalog.createTempFunction(name, info, tempFunc, ignoreIfExists = false)
+    val funcMeta = CatalogFunction(FunctionIdentifier(name, None), "className", Nil)
+    sessionCatalog.registerFunction(
+      funcMeta, ignoreIfExists = false, functionBuilder = Some(tempFunc))
   }
 
   private def dropFunction(name: String, db: Option[String] = None): Unit = {

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 import java.net.URI
+import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -154,7 +155,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql(query)
     }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
   }
 
   private def maybeWrapException[T](expectException: Boolean)(body: => T): Unit = {
@@ -1779,7 +1780,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         withTable(tabName) {
           sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
           val message = intercept[AnalysisException] {
-            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase}")
+            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
           }.getMessage
           assert(message.contains("SHOW COLUMNS with conflicting databases"))
         }
@@ -2255,6 +2256,25 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
               sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
               assert(spark.table("t1").schema
                 .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
+            }
+          }
+        }
+      }
+    }
+
+    test(s"basic DDL using locale tr - caseSensitive $caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
+        withLocale("tr") {
+          val dbName = "DaTaBaSe_I"
+          withDatabase(dbName) {
+            sql(s"CREATE DATABASE $dbName")
+            sql(s"USE $dbName")
+
+            val tabName = "tAb_I"
+            withTable(tabName) {
+              sql(s"CREATE TABLE $tabName(col_I int) USING PARQUET")
+              sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1")
+              checkAnswer(sql(s"SELECT col_I FROM $tabName"), Row(1) :: Nil)
             }
           }
         }

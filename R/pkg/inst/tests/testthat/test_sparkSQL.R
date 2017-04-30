@@ -150,7 +150,12 @@ test_that("structField type strings", {
                          binary = "BinaryType",
                          boolean = "BooleanType",
                          timestamp = "TimestampType",
-                         date = "DateType")
+                         date = "DateType",
+                         tinyint = "ByteType",
+                         smallint = "ShortType",
+                         int = "IntegerType",
+                         bigint = "LongType",
+                         decimal = "DecimalType(10,0)")
 
   complexTypes <- list("map<string,integer>" = "MapType(StringType,IntegerType,true)",
                        "array<string>" = "ArrayType(StringType,true)",
@@ -174,7 +179,11 @@ test_that("structField type strings", {
                           numeric = "numeric",
                           character = "character",
                           raw = "raw",
-                          logical = "logical")
+                          logical = "logical",
+                          short = "short",
+                          varchar = "varchar",
+                          long = "long",
+                          char = "char")
 
   complexErrors <- list("map<string, integer>" = " integer",
                         "array<String>" = "String",
@@ -281,7 +290,7 @@ test_that("create DataFrame from RDD", {
   setHiveContext(sc)
   sql("CREATE TABLE people (name string, age double, height float)")
   df <- read.df(jsonPathNa, "json", schema)
-  invisible(insertInto(df, "people"))
+  insertInto(df, "people")
   expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age,
                c(16))
   expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
@@ -1268,7 +1277,16 @@ test_that("column calculation", {
 
 test_that("test HiveContext", {
   setHiveContext(sc)
-  df <- createExternalTable("json", jsonPath, "json")
+
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("people", source = "json", schema = schema)
+  df <- read.df(jsonPathNa, "json", schema)
+  insertInto(df, "people")
+  expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age, c(16))
+  sql("DROP TABLE people")
+
+  df <- createTable("json", jsonPath, "json")
   expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
   df2 <- sql("select * from json")
@@ -1276,25 +1294,26 @@ test_that("test HiveContext", {
   expect_equal(count(df2), 3)
 
   jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "json2", "json", "append", path = jsonPath2))
+  saveAsTable(df, "json2", "json", "append", path = jsonPath2)
   df3 <- sql("select * from json2")
   expect_is(df3, "SparkDataFrame")
   expect_equal(count(df3), 3)
   unlink(jsonPath2)
 
   hivetestDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "hivetestbl", path = hivetestDataPath))
+  saveAsTable(df, "hivetestbl", path = hivetestDataPath)
   df4 <- sql("select * from hivetestbl")
   expect_is(df4, "SparkDataFrame")
   expect_equal(count(df4), 3)
   unlink(hivetestDataPath)
 
   parquetDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath))
+  saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath)
   df5 <- sql("select * from parquetest")
   expect_is(df5, "SparkDataFrame")
   expect_equal(count(df5), 3)
   unlink(parquetDataPath)
+
   unsetHiveContext()
 })
 
@@ -1444,13 +1463,30 @@ test_that("column functions", {
   jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
   df <- as.DataFrame(list(list("people" = jsonArr)))
   schema <- structType(structField("name", "string"))
-  arr <- collect(select(df, alias(from_json(df$people, schema, asJsonArray = TRUE), "arrcol")))
+  arr <- collect(select(df, alias(from_json(df$people, schema, as.json.array = TRUE), "arrcol")))
   expect_equal(ncol(arr), 1)
   expect_equal(nrow(arr), 1)
   expect_is(arr[[1]][[1]], "list")
   expect_equal(length(arr$arrcol[[1]]), 2)
   expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
   expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
+
+  # Test create_array() and create_map()
+  df <- as.DataFrame(data.frame(
+    x = c(1.0, 2.0), y = c(-1.0, 3.0), z = c(-2.0, 5.0)
+  ))
+
+  arrs <- collect(select(df, create_array(df$x, df$y, df$z)))
+  expect_equal(arrs[, 1], list(list(1, -1, -2), list(2, 3, 5)))
+
+  maps <- collect(select(
+    df, create_map(lit("x"), df$x, lit("y"), df$y, lit("z"), df$z)))
+
+  expect_equal(
+    maps[, 1],
+    lapply(
+      list(list(x = 1, y = -1, z = -2), list(x = 2, y = 3,  z = 5)),
+      as.environment))
 })
 
 test_that("column binary mathfunctions", {
@@ -1519,6 +1555,40 @@ test_that("string operators", {
   expect_equal(collect(select(df3, substring_index(df3$a, ".", 2)))[1, 1], "a.b")
   expect_equal(collect(select(df3, substring_index(df3$a, ".", -3)))[1, 1], "b.c.d")
   expect_equal(collect(select(df3, translate(df3$a, "bc", "12")))[1, 1], "a.1.2.d")
+
+  l4 <- list(list(a = "a.b@c.d   1\\b"))
+  df4 <- createDataFrame(l4)
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\s+")))[1, 1],
+    list(list("a.b@c.d", "1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\.")))[1, 1],
+    list(list("a", "b@c", "d   1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "@")))[1, 1],
+    list(list("a.b", "c.d   1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\\\")))[1, 1],
+    list(list("a.b@c.d   1", "b"))
+  )
+
+  l5 <- list(list(a = "abc"))
+  df5 <- createDataFrame(l5)
+  expect_equal(
+    collect(select(df5, repeat_string(df5$a, 1L)))[1, 1],
+    "abc"
+  )
+  expect_equal(
+    collect(select(df5, repeat_string(df5$a, 3)))[1, 1],
+    "abcabcabc"
+  )
+  expect_equal(
+    collect(select(df5, repeat_string(df5$a, -1)))[1, 1],
+    ""
+  )
 })
 
 test_that("date functions on a DataFrame", {
@@ -1704,6 +1774,28 @@ test_that("group by, agg functions", {
   expect_true(abs(sd(1:2) - 0.7071068) < 1e-6)
   expect_true(abs(var(1:5, 1:5) - 2.5) < 1e-6)
 
+  # Test collect_list and collect_set
+  gd3_collections_local <- collect(
+    agg(gd3, collect_set(df8$age), collect_list(df8$age))
+  )
+
+  expect_equal(
+    unlist(gd3_collections_local[gd3_collections_local$name == "Andy", 2]),
+    c(30)
+  )
+
+  expect_equal(
+    unlist(gd3_collections_local[gd3_collections_local$name == "Andy", 3]),
+    c(30, 30)
+  )
+
+  expect_equal(
+    sort(unlist(
+      gd3_collections_local[gd3_collections_local$name == "Justin", 3]
+    )),
+    c(1, 19)
+  )
+
   unlink(jsonPath2)
   unlink(jsonPath3)
 })
@@ -1731,6 +1823,108 @@ test_that("pivot GroupedData column", {
 
   expect_error(collect(sum(pivot(groupBy(df, "year"), "course", c("R", "R")), "earnings")))
   expect_error(collect(sum(pivot(groupBy(df, "year"), "course", list("R", "R")), "earnings")))
+})
+
+test_that("test multi-dimensional aggregations with cube and rollup", {
+  df <- createDataFrame(data.frame(
+    id = 1:6,
+    year = c(2016, 2016, 2016, 2017, 2017, 2017),
+    salary = c(10000, 15000, 20000, 22000, 32000, 21000),
+    department = c("management", "rnd", "sales", "management", "rnd", "sales")
+  ))
+
+  actual_cube <- collect(
+    orderBy(
+      agg(
+        cube(df, "year", "department"),
+        expr("sum(salary) AS total_salary"), expr("avg(salary) AS average_salary")
+      ),
+      "year", "department"
+    )
+  )
+
+  expected_cube <- data.frame(
+    year = c(rep(NA, 4), rep(2016, 4), rep(2017, 4)),
+    department = rep(c(NA, "management", "rnd", "sales"), times = 3),
+    total_salary = c(
+      120000, # Total
+      10000 + 22000, 15000 + 32000, 20000 + 21000, # Department only
+      20000 + 15000 + 10000, # 2016
+      10000, 15000, 20000, # 2016 each department
+      21000 + 32000 + 22000, # 2017
+      22000, 32000, 21000 # 2017 each department
+    ),
+    average_salary = c(
+      # Total
+      mean(c(20000, 15000, 10000, 21000, 32000, 22000)),
+      # Mean by department
+      mean(c(10000, 22000)), mean(c(15000, 32000)), mean(c(20000, 21000)),
+      mean(c(10000, 15000, 20000)), # 2016
+      10000, 15000, 20000, # 2016 each department
+      mean(c(21000, 32000, 22000)), # 2017
+      22000, 32000, 21000 # 2017 each department
+    ),
+    stringsAsFactors = FALSE
+  )
+
+  expect_equal(actual_cube, expected_cube)
+
+  # cube should accept column objects
+  expect_equal(
+    count(sum(cube(df, df$year, df$department), "salary")),
+    12
+  )
+
+  # cube without columns should result in a single aggregate
+  expect_equal(
+    collect(agg(cube(df), expr("sum(salary) as total_salary"))),
+    data.frame(total_salary = 120000)
+  )
+
+  actual_rollup <- collect(
+    orderBy(
+      agg(
+        rollup(df, "year", "department"),
+        expr("sum(salary) AS total_salary"), expr("avg(salary) AS average_salary")
+      ),
+      "year", "department"
+    )
+  )
+
+  expected_rollup <- data.frame(
+    year = c(NA, rep(2016, 4), rep(2017, 4)),
+    department = c(NA, rep(c(NA, "management", "rnd", "sales"), times = 2)),
+    total_salary = c(
+      120000, # Total
+      20000 + 15000 + 10000, # 2016
+      10000, 15000, 20000, # 2016 each department
+      21000 + 32000 + 22000, # 2017
+      22000, 32000, 21000 # 2017 each department
+    ),
+    average_salary = c(
+      # Total
+      mean(c(20000, 15000, 10000, 21000, 32000, 22000)),
+      mean(c(10000, 15000, 20000)), # 2016
+      10000, 15000, 20000, # 2016 each department
+      mean(c(21000, 32000, 22000)), # 2017
+      22000, 32000, 21000 # 2017 each department
+    ),
+    stringsAsFactors = FALSE
+  )
+
+  expect_equal(actual_rollup, expected_rollup)
+
+  # cube should accept column objects
+  expect_equal(
+    count(sum(rollup(df, df$year, df$department), "salary")),
+    9
+  )
+
+  # rollup without columns should result in a single aggregate
+  expect_equal(
+    collect(agg(rollup(df), expr("sum(salary) as total_salary"))),
+    data.frame(total_salary = 120000)
+  )
 })
 
 test_that("arrange() and orderBy() on a DataFrame", {
@@ -2916,9 +3110,9 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
                paste("source should be character, NULL or omitted. It is the datasource specified",
                      "in 'spark.sql.sources.default' configuration by default."))
   expect_error(write.df(df, path = c(3)),
-               "path should be charactor, NULL or omitted.")
+               "path should be character, NULL or omitted.")
   expect_error(write.df(df, mode = TRUE),
-               "mode should be charactor or omitted. It is 'error' by default.")
+               "mode should be character or omitted. It is 'error' by default.")
 })
 
 test_that("Call DataFrameWriter.load() API in Java without path and check argument types", {
@@ -2937,7 +3131,7 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
 
   # Arguments checking in R side.
   expect_error(read.df(path = c(3)),
-               "path should be charactor, NULL or omitted.")
+               "path should be character, NULL or omitted.")
   expect_error(read.df(jsonPath, source = c(1, 2)),
                paste("source should be character, NULL or omitted. It is the datasource specified",
                      "in 'spark.sql.sources.default' configuration by default."))

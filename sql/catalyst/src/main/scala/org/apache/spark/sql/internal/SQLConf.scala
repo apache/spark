@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.{NoSuchElementException, Properties, TimeZone}
+import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -243,7 +243,7 @@ object SQLConf {
     .doc("Sets the compression codec use when writing Parquet files. Acceptable values include: " +
       "uncompressed, snappy, gzip, lzo.")
     .stringConf
-    .transform(_.toLowerCase())
+    .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
     .createWithDefault("snappy")
 
@@ -324,7 +324,7 @@ object SQLConf {
       "properties) and NEVER_INFER (fallback to using the case-insensitive metastore schema " +
       "instead of inferring).")
     .stringConf
-    .transform(_.toUpperCase())
+    .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
 
@@ -418,6 +418,12 @@ object SQLConf {
   val GROUP_BY_ORDINAL = buildConf("spark.sql.groupByOrdinal")
     .doc("When true, the ordinal numbers in group by clauses are treated as the position " +
       "in the select list. When false, the ordinal numbers are ignored.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val GROUP_BY_ALIASES = buildConf("spark.sql.groupByAliases")
+    .doc("When true, aliases in a select list can be used in group by clauses. When false, " +
+      "an analysis exception is thrown in the case.")
     .booleanConf
     .createWithDefault(true)
 
@@ -736,6 +742,12 @@ object SQLConf {
       .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
       .createWithDefault(0.7)
 
+  val JOIN_REORDER_DP_STAR_FILTER =
+    buildConf("spark.sql.cbo.joinReorder.dp.star.filter")
+      .doc("Applies star-join filter heuristics to cost based join enumeration.")
+      .booleanConf
+      .createWithDefault(false)
+
   val STARSCHEMA_DETECTION = buildConf("spark.sql.cbo.starSchemaDetection")
     .doc("When true, it enables join reordering based on star schema detection. ")
     .booleanConf
@@ -752,7 +764,7 @@ object SQLConf {
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
       .stringConf
-      .createWithDefault(TimeZone.getDefault().getID())
+      .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.spill.threshold")
@@ -997,6 +1009,8 @@ class SQLConf extends Serializable with Logging {
 
   def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
+  def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
+
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
@@ -1010,6 +1024,8 @@ class SQLConf extends Serializable with Logging {
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
 
   def joinReorderCardWeight: Double = getConf(SQLConf.JOIN_REORDER_CARD_WEIGHT)
+
+  def joinReorderDPStarFilter: Boolean = getConf(SQLConf.JOIN_REORDER_DP_STAR_FILTER)
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
@@ -1153,7 +1169,7 @@ class SQLConf extends Serializable with Logging {
   }
 
   // For test only
-  private[spark] def copy(entries: (ConfigEntry[_], Any)*): SQLConf = {
+  def copy(entries: (ConfigEntry[_], Any)*): SQLConf = {
     val cloned = clone()
     entries.foreach {
       case (entry, value) => cloned.setConfString(entry.key, value.toString)
