@@ -962,6 +962,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         IsNotNull(e)
       case SqlBaseParser.NULL =>
         IsNull(e)
+      case SqlBaseParser.DISTINCT =>
+        ctx.NOT match {
+          case null => Not(EqualTo(e, expression(ctx.right)))
+          case not => EqualNullSafe(e, expression(ctx.right))
+        }
     }
   }
 
