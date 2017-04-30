@@ -3803,3 +3803,59 @@ setMethod("repeat_string",
             jc <- callJStatic("org.apache.spark.sql.functions", "repeat", x@jc, numToInt(n))
             column(jc)
           })
+
+#' explode_outer
+#'
+#' Creates a new row for each element in the given array or map column.
+#' Unlike \code{explode}, if the array/map is \code{null} or empty
+#' then \code{null} is produced.
+#'
+#' @param x Column to compute on
+#'
+#' @rdname explode_outer
+#' @name explode_outer
+#' @family collection_funcs
+#' @aliases explode_outer,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(data.frame(
+#'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
+#' ))
+#'
+#' head(select(df, df$id, explode_outer(split_string(df$text, ","))))
+#' }
+#' @note explode_outer since 2.3.0
+setMethod("explode_outer",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "explode_outer", x@jc)
+            column(jc)
+          })
+
+#' posexplode_outer
+#'
+#' Creates a new row for each element with position in the given array or map column.
+#' Unlike \code{posexplode}, if the array/map is \code{null} or empty
+#' then the row (\code{null}, \code{null}) is produced.
+#'
+#' @param x Column to compute on
+#'
+#' @rdname posexplode_outer
+#' @name posexplode_outer
+#' @family collection_funcs
+#' @aliases posexplode_outer,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(data.frame(
+#'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
+#' ))
+#'
+#' head(select(df, df$id, posexplode_outer(split_string(df$text, ","))))
+#' }
+#' @note posexplode_outer since 2.3.0
+setMethod("posexplode_outer",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "posexplode_outer", x@jc)
+            column(jc)
+          })
