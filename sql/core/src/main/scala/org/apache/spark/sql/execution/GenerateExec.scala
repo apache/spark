@@ -50,7 +50,7 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * @param join  when true, each output row is implicitly joined with the input tuple that produced
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
- *              given `generator` is empty. `outer` has no effect when `join` is false.
+ *              given `generator` is empty.
  * @param generatorOutput the qualified output attributes of the generator of this node, which
  *                        constructed in analysis phase, and we can not change it, as the
  *                        parent node bound with it already.
