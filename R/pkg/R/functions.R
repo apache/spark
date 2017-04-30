@@ -3935,7 +3935,7 @@ setMethod("grouping_col",
 #' Returns the level of grouping.
 #'
 #' Equals to \code{
-#' (grouping_col(c1) <<; (n-1)) + (grouping_col(c2) <<; (n-2)) + ... + grouping_col(cn)
+#'   grouping_col(c1) * 2^(n - 1) + grouping_col(c2) * 2^(n - 2)  + ... + grouping_col(cn)
 #' }
 #'
 #' @param x Column to compute on
