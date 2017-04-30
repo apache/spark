@@ -1009,10 +1009,11 @@ private[spark] object RandomForest extends Logging {
       // sort distinct values
       val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
 
-      def weightedMean(pre: (Double, Int), cur: (Double, Int)): Double = {
+      // perhaps weighted mean is better in the future, see SPARK-16957 and Github PR 17556.
+      def mean(pre: (Double, Int), cur: (Double, Int)): Double = {
         val (preValue, preCount) = pre
         val (curValue, curCount) = cur
-        (preValue * preCount + curValue * curCount) / (preCount.toDouble + curCount)
+        (preValue + curValue) / 2
       }
 
       val possibleSplits = valueCounts.length - 1
@@ -1023,7 +1024,7 @@ private[spark] object RandomForest extends Logging {
         // if possible splits is not enough or just enough, just return all possible splits
         valueCounts
           .sliding(2)
-          .map(x => weightedMean(x(0), x(1)))
+          .map(x => mean(x(0), x(1)))
           .toArray
 
       } else {
@@ -1052,7 +1053,7 @@ private[spark] object RandomForest extends Logging {
           if (previousGap < currentGap) {
             val pre = valueCounts(index - 1)
             val cur = valueCounts(index)
-            splitsBuilder += weightedMean(pre, cur)
+            splitsBuilder += mean(pre, cur)
             targetCount += stride
           }
           index += 1
