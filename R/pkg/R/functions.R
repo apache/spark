@@ -3835,7 +3835,8 @@ setMethod("explode_outer",
 #' posexplode_outer
 #'
 #' Creates a new row for each element with position in the given array or map column.
-#' Unlike \code{posexplode}, if the array/map is null or empty then the row (null, null) is produced.
+#' Unlike \code{posexplode}, if the array/map is \code{null} or empty
+#' then the row (\code{null}, \code{null}) is produced.
 #'
 #' @param x Column to compute on
 #'
