@@ -41,7 +41,7 @@ test_that("using broadcast variable", {
 
 test_that("without using broadcast variable", {
   skip_on_cran()
-  
+
   randomMat <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
 
   useBroadcast <- function(x) {

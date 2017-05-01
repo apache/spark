@@ -183,7 +183,7 @@ test_that("spark.lapply should perform simple transforms", {
 
 test_that("add and get file to be downloaded with Spark job on every node", {
   skip_on_cran()
-  
+
   sparkR.sparkContext()
   # Test add file.
   path <- tempfile(pattern = "hello", fileext = ".txt")

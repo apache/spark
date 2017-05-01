@@ -158,7 +158,7 @@ test_that("textFile() on multiple paths", {
 
 test_that("Pipelined operations on RDDs created using textFile", {
   skip_on_cran()
-  
+
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 

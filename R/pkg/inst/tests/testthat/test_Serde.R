@@ -21,7 +21,7 @@ sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
 test_that("SerDe of primitive types", {
   skip_on_cran()
-  
+
   x <- callJStatic("SparkRHandler", "echo", 1L)
   expect_equal(x, 1L)
   expect_equal(class(x), "integer")

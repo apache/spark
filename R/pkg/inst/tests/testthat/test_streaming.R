@@ -135,7 +135,7 @@ test_that("Unsupported operation", {
 
 test_that("Terminated by error", {
   skip_on_cran()
-  
+
   df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = -1)
   counts <- count(group_by(df, "name"))
   # This would not fail before returning with a StreamingQuery,

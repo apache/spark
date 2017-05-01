@@ -81,7 +81,7 @@ test_that("saveAsObjectFile()/objectFile() following RDD transformations works",
 
 test_that("saveAsObjectFile()/objectFile() works with multiple paths", {
   skip_on_cran()
-  
+
   fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
 

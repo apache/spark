@@ -228,7 +228,7 @@ test_that("partitionBy works with dependencies", {
 
 test_that("test partitionBy with string keys", {
   skip_on_cran()
-  
+
   words <- flatMap(strListRDD, function(line) { strsplit(line, " ")[[1]] })
   wordCount <- lapply(words, function(word) { list(word, 1L) })
 

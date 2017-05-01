@@ -24,7 +24,7 @@ sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
 test_that("formula of spark.glm", {
   skip_on_cran()
-  
+
   training <- suppressWarnings(createDataFrame(iris))
   # directly calling the spark API
   # dot minus and intercept vs native glm

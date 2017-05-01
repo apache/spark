@@ -45,7 +45,7 @@ test_that("include inside function", {
 
 test_that("use include package", {
   skip_on_cran()
-  
+
   # Only run the test if plyr is installed.
   if ("plyr" %in% rownames(installed.packages())) {
     suppressPackageStartupMessages(library(plyr))
