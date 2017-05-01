@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -656,14 +657,20 @@ class TypeCoercionSuite extends PlanTest {
 
   test("nanvl casts") {
     ruleTest(TypeCoercion.FunctionArgumentConversion,
-      NaNvl(Literal.create(1.0, FloatType), Literal.create(1.0, DoubleType)),
-      NaNvl(Cast(Literal.create(1.0, FloatType), DoubleType), Literal.create(1.0, DoubleType)))
+      NaNvl(Literal.create(1.0f, FloatType), Literal.create(1.0, DoubleType)),
+      NaNvl(Cast(Literal.create(1.0f, FloatType), DoubleType), Literal.create(1.0, DoubleType)))
     ruleTest(TypeCoercion.FunctionArgumentConversion,
-      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, FloatType)),
-      NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(1.0, FloatType), DoubleType)))
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0f, FloatType)),
+      NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(1.0f, FloatType), DoubleType)))
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)),
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0f, FloatType), Literal.create(null, NullType)),
+      NaNvl(Literal.create(1.0f, FloatType), Cast(Literal.create(null, NullType), FloatType)))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(null, NullType)),
+      NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(null, NullType), DoubleType)))
   }
 
   test("type coercion for If") {
@@ -781,6 +788,12 @@ class TypeCoercionSuite extends PlanTest {
     }
   }
 
+  private val timeZoneResolver = ResolveTimeZone(new SQLConf)
+
+  private def widenSetOperationTypes(plan: LogicalPlan): LogicalPlan = {
+    timeZoneResolver(TypeCoercion.WidenSetOperationTypes(plan))
+  }
+
   test("WidenSetOperationTypes for except and intersect") {
     val firstTable = LocalRelation(
       AttributeReference("i", IntegerType)(),
@@ -793,11 +806,10 @@ class TypeCoercionSuite extends PlanTest {
       AttributeReference("f", FloatType)(),
       AttributeReference("l", LongType)())
 
-    val wt = TypeCoercion.WidenSetOperationTypes
     val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
-    val r1 = wt(Except(firstTable, secondTable)).asInstanceOf[Except]
-    val r2 = wt(Intersect(firstTable, secondTable)).asInstanceOf[Intersect]
+    val r1 = widenSetOperationTypes(Except(firstTable, secondTable)).asInstanceOf[Except]
+    val r2 = widenSetOperationTypes(Intersect(firstTable, secondTable)).asInstanceOf[Intersect]
     checkOutput(r1.left, expectedTypes)
     checkOutput(r1.right, expectedTypes)
     checkOutput(r2.left, expectedTypes)
@@ -832,10 +844,9 @@ class TypeCoercionSuite extends PlanTest {
       AttributeReference("p", ByteType)(),
       AttributeReference("q", DoubleType)())
 
-    val wt = TypeCoercion.WidenSetOperationTypes
     val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
-    val unionRelation = wt(
+    val unionRelation = widenSetOperationTypes(
       Union(firstTable :: secondTable :: thirdTable :: forthTable :: Nil)).asInstanceOf[Union]
     assert(unionRelation.children.length == 4)
     checkOutput(unionRelation.children.head, expectedTypes)
@@ -856,17 +867,15 @@ class TypeCoercionSuite extends PlanTest {
       }
     }
 
-    val dp = TypeCoercion.WidenSetOperationTypes
-
     val left1 = LocalRelation(
       AttributeReference("l", DecimalType(10, 8))())
     val right1 = LocalRelation(
       AttributeReference("r", DecimalType(5, 5))())
     val expectedType1 = Seq(DecimalType(10, 8))
 
-    val r1 = dp(Union(left1, right1)).asInstanceOf[Union]
-    val r2 = dp(Except(left1, right1)).asInstanceOf[Except]
-    val r3 = dp(Intersect(left1, right1)).asInstanceOf[Intersect]
+    val r1 = widenSetOperationTypes(Union(left1, right1)).asInstanceOf[Union]
+    val r2 = widenSetOperationTypes(Except(left1, right1)).asInstanceOf[Except]
+    val r3 = widenSetOperationTypes(Intersect(left1, right1)).asInstanceOf[Intersect]
 
     checkOutput(r1.children.head, expectedType1)
     checkOutput(r1.children.last, expectedType1)
@@ -885,17 +894,17 @@ class TypeCoercionSuite extends PlanTest {
       val plan2 = LocalRelation(
         AttributeReference("r", rType)())
 
-      val r1 = dp(Union(plan1, plan2)).asInstanceOf[Union]
-      val r2 = dp(Except(plan1, plan2)).asInstanceOf[Except]
-      val r3 = dp(Intersect(plan1, plan2)).asInstanceOf[Intersect]
+      val r1 = widenSetOperationTypes(Union(plan1, plan2)).asInstanceOf[Union]
+      val r2 = widenSetOperationTypes(Except(plan1, plan2)).asInstanceOf[Except]
+      val r3 = widenSetOperationTypes(Intersect(plan1, plan2)).asInstanceOf[Intersect]
 
       checkOutput(r1.children.last, Seq(expectedType))
       checkOutput(r2.right, Seq(expectedType))
       checkOutput(r3.right, Seq(expectedType))
 
-      val r4 = dp(Union(plan2, plan1)).asInstanceOf[Union]
-      val r5 = dp(Except(plan2, plan1)).asInstanceOf[Except]
-      val r6 = dp(Intersect(plan2, plan1)).asInstanceOf[Intersect]
+      val r4 = widenSetOperationTypes(Union(plan2, plan1)).asInstanceOf[Union]
+      val r5 = widenSetOperationTypes(Except(plan2, plan1)).asInstanceOf[Except]
+      val r6 = widenSetOperationTypes(Intersect(plan2, plan1)).asInstanceOf[Intersect]
 
       checkOutput(r4.children.last, Seq(expectedType))
       checkOutput(r5.left, Seq(expectedType))

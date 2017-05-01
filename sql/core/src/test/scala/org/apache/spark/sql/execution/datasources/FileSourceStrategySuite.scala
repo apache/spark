@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
   import testImplicits._
 
-  protected override val sparkConf = new SparkConf().set("spark.default.parallelism", "1")
+  protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")
 
   test("unpartitioned table, single partition") {
     val table =

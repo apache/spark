@@ -72,6 +72,9 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   // Whether to write timestamps as int96
   private var writeTimestampAsInt96: Boolean = _
 
+  // Whether to write timestamp value with milliseconds precision.
+  private var writeTimestampInMillis: Boolean = _
+
   // Reusable byte array used to write decimal values
   private val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
 
@@ -87,6 +90,12 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
       assert(configuration.get(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key) != null)
       configuration.get(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key).toBoolean
     }
+
+    this.writeTimestampInMillis = {
+      assert(configuration.get(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key) != null)
+      configuration.get(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key).toBoolean
+    }
+
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter)
 
     val messageType = new ParquetSchemaConverter(configuration).convert(schema)
@@ -188,6 +197,9 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   }
 
   private def makeTimestampWriter(): ValueWriter = {
+    val millisWriter = (row: SpecializedGetters, ordinal: Int) => {
+      recordConsumer.addLong(DateTimeUtils.toMillis(row.getLong(ordinal)))
+    }
     val int96Writer = (row: SpecializedGetters, ordinal: Int) => {
       val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
       val buf = ByteBuffer.wrap(timestampBuffer)
@@ -196,7 +208,8 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
     }
     val longWriter = (row: SpecializedGetters, ordinal: Int) =>
       recordConsumer.addLong(row.getLong(ordinal))
-    if (writeTimestampAsInt96) int96Writer else longWriter
+    if (writeTimestampAsInt96) int96Writer else
+      if (writeTimestampInMillis) millisWriter else longWriter
   }
 
   private def makeDecimalWriter(precision: Int, scale: Int): ValueWriter = {

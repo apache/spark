@@ -17,10 +17,11 @@
 
 package org.apache.spark
 
-import org.scalatest.{Ignore, Matchers}
+import org.scalatest.Matchers
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.time.{Millis, Span}
 
+import org.apache.spark.security.EncryptionFunSuite
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -28,8 +29,8 @@ class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
 
 
-@Ignore
-class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContext {
+class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContext
+  with EncryptionFunSuite {
 
   val clusterUrl = "local-cluster[2,1,1024]"
 
@@ -150,8 +151,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc.parallelize(1 to 10).count()
   }
 
-  private def testCaching(storageLevel: StorageLevel): Unit = {
-    sc = new SparkContext(clusterUrl, "test")
+  private def testCaching(conf: SparkConf, storageLevel: StorageLevel): Unit = {
+    sc = new SparkContext(conf.setMaster(clusterUrl).setAppName("test"))
     sc.jobProgressListener.waitUntilExecutorsUp(2, 30000)
     val data = sc.parallelize(1 to 1000, 10)
     val cachedData = data.persist(storageLevel)
@@ -188,8 +189,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
     "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
   ).foreach { case (testName, storageLevel) =>
-    test(testName) {
-      testCaching(storageLevel)
+    encryptionTest(testName) { conf =>
+      testCaching(conf, storageLevel)
     }
   }
 
@@ -232,7 +233,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("recover from node failures") {
-    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    import DistributedSuite.{failOnMarkedIdentity, markNodeIfIdentity}
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(Seq(true, true), 2)
@@ -242,7 +243,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("recover from repeated node failures during shuffle-map") {
-    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    import DistributedSuite.{failOnMarkedIdentity, markNodeIfIdentity}
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
     for (i <- 1 to 3) {
@@ -254,7 +255,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("recover from repeated node failures during shuffle-reduce") {
-    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    import DistributedSuite.{failOnMarkedIdentity, markNodeIfIdentity}
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
     for (i <- 1 to 3) {
@@ -273,7 +274,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("recover from node failures with replication") {
-    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    import DistributedSuite.{failOnMarkedIdentity, markNodeIfIdentity}
     DistributedSuite.amMaster = true
     // Using more than two nodes so we don't have a symmetric communication pattern and might
     // cache a partially correct list of peers.

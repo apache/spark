@@ -149,6 +149,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
     validateModelFit(pi, theta, model)
     assert(model.hasParent)
+    MLTestingUtils.checkCopyAndUids(nb, model)
 
     val validationDataset =
       generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()
@@ -178,7 +179,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       MLTestingUtils.testArbitrarilyScaledWeights[NaiveBayesModel, NaiveBayes](
         dataset.as[LabeledPoint], estimatorNoSmoothing, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[NaiveBayesModel, NaiveBayes](
-        dataset.as[LabeledPoint], estimatorWithSmoothing, numClasses, modelEquals)
+        dataset.as[LabeledPoint], estimatorWithSmoothing, numClasses, modelEquals, outlierRatio = 3)
       MLTestingUtils.testOversamplingVsWeighting[NaiveBayesModel, NaiveBayes](
         dataset.as[LabeledPoint], estimatorWithSmoothing, modelEquals, seed)
     }
@@ -280,7 +281,8 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       assert(model.theta === model2.theta)
     }
     val nb = new NaiveBayes()
-    testEstimatorAndModelReadWrite(nb, dataset, NaiveBayesSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(nb, dataset, NaiveBayesSuite.allParamSettings,
+      NaiveBayesSuite.allParamSettings, checkModelData)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {

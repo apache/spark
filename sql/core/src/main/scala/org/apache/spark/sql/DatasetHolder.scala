@@ -24,7 +24,8 @@ import org.apache.spark.annotation.InterfaceStability
  *
  * To use this, import implicit conversions in SQL:
  * {{{
- *   import sqlContext.implicits._
+ *   val spark: SparkSession = ...
+ *   import spark.implicits._
  * }}}
  *
  * @since 1.6.0

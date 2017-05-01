@@ -26,7 +26,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * An exception thrown if RpcTimeout modifies a [[TimeoutException]].
+ * An exception thrown if RpcTimeout modifies a `TimeoutException`.
  */
 private[rpc] class RpcTimeoutException(message: String, cause: TimeoutException)
   extends TimeoutException(message) { initCause(cause) }
