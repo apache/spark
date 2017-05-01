@@ -324,8 +324,11 @@ object FileFormatWriter extends Logging {
 
     override def releaseResources(): Unit = {
       if (currentWriter != null) {
-        currentWriter.close()
-        currentWriter = null
+        try {
+          currentWriter.close()
+        } finally {
+          currentWriter = null
+        }
       }
     }
   }
@@ -459,8 +462,11 @@ object FileFormatWriter extends Logging {
 
     override def releaseResources(): Unit = {
       if (currentWriter != null) {
-        currentWriter.close()
-        currentWriter = null
+        try {
+          currentWriter.close()
+        } finally {
+          currentWriter = null
+        }
       }
     }
   }

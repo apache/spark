@@ -24,7 +24,6 @@ import java.util.{Calendar, TimeZone}
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -34,6 +33,9 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * Common base class for time zone aware expressions.
  */
 trait TimeZoneAwareExpression extends Expression {
+  /** The expression is only resolved when the time zone has been set. */
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && timeZoneId.isDefined
 
   /** the timezone ID to be used to evaluate value. */
   def timeZoneId: Option[String]

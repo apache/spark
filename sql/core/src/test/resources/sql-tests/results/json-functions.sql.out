@@ -141,7 +141,7 @@ struct<>
 -- !query 13 output
 org.apache.spark.sql.AnalysisException
 
-DataType invalidtype() is not supported.(line 1, pos 2)
+DataType invalidtype is not supported.(line 1, pos 2)
 
 == SQL ==
 a InvalidType

@@ -25,7 +25,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -302,30 +301,6 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
   }
 
   /**
-   * For a SQL data type, its internal data type may be different from its external type.
-   * For DateType, its internal type is Int, and its external data type is Java Date type.
-   * The min/max values in ColumnStat are saved in their corresponding external type.
-   *
-   * @param attrDataType the column data type
-   * @param litValue the literal value
-   * @return a BigDecimal value
-   */
-  def convertBoundValue(attrDataType: DataType, litValue: Any): Option[Any] = {
-    attrDataType match {
-      case DateType =>
-        Some(DateTimeUtils.toJavaDate(litValue.toString.toInt))
-      case TimestampType =>
-        Some(DateTimeUtils.toJavaTimestamp(litValue.toString.toLong))
-      case _: DecimalType =>
-        Some(litValue.asInstanceOf[Decimal].toJavaBigDecimal)
-      case StringType | BinaryType =>
-        None
-      case _ =>
-        Some(litValue)
-    }
-  }
-
-  /**
    * Returns a percentage of rows meeting an equality (=) expression.
    * This method evaluates the equality predicate for all data types.
    *
@@ -356,12 +331,16 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
     val statsRange = Range(colStat.min, colStat.max, attr.dataType)
     if (statsRange.contains(literal)) {
       if (update) {
-        // We update ColumnStat structure after apply this equality predicate.
-        // Set distinctCount to 1.  Set nullCount to 0.
-        // Need to save new min/max using the external type value of the literal
-        val newValue = convertBoundValue(attr.dataType, literal.value)
-        val newStats = colStat.copy(distinctCount = 1, min = newValue,
-          max = newValue, nullCount = 0)
+        // We update ColumnStat structure after apply this equality predicate:
+        // Set distinctCount to 1, nullCount to 0, and min/max values (if exist) to the literal
+        // value.
+        val newStats = attr.dataType match {
+          case StringType | BinaryType =>
+            colStat.copy(distinctCount = 1, nullCount = 0)
+          case _ =>
+            colStat.copy(distinctCount = 1, min = Some(literal.value),
+              max = Some(literal.value), nullCount = 0)
+        }
         colStatsMap(attr) = newStats
       }
 
@@ -430,18 +409,14 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
           return Some(0.0)
         }
 
-        // Need to save new min/max using the external type value of the literal
-        val newMax = convertBoundValue(
-          attr.dataType, validQuerySet.maxBy(v => BigDecimal(v.toString)))
-        val newMin = convertBoundValue(
-          attr.dataType, validQuerySet.minBy(v => BigDecimal(v.toString)))
-
+        val newMax = validQuerySet.maxBy(EstimationUtils.toDecimal(_, dataType))
+        val newMin = validQuerySet.minBy(EstimationUtils.toDecimal(_, dataType))
         // newNdv should not be greater than the old ndv.  For example, column has only 2 values
         // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
         newNdv = ndv.min(BigInt(validQuerySet.size))
         if (update) {
-          val newStats = colStat.copy(distinctCount = newNdv, min = newMin,
-                max = newMax, nullCount = 0)
+          val newStats = colStat.copy(distinctCount = newNdv, min = Some(newMin),
+            max = Some(newMax), nullCount = 0)
           colStatsMap(attr) = newStats
         }
 
@@ -478,8 +453,8 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
 
     val colStat = colStatsMap(attr)
     val statsRange = Range(colStat.min, colStat.max, attr.dataType).asInstanceOf[NumericRange]
-    val max = BigDecimal(statsRange.max)
-    val min = BigDecimal(statsRange.min)
+    val max = statsRange.max.toBigDecimal
+    val min = statsRange.min.toBigDecimal
     val ndv = BigDecimal(colStat.distinctCount)
 
     // determine the overlapping degree between predicate range and column's range
@@ -540,8 +515,7 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
       }
 
       if (update) {
-        // Need to save new min/max using the external type value of the literal
-        val newValue = convertBoundValue(attr.dataType, literal.value)
+        val newValue = Some(literal.value)
         var newMax = colStat.max
         var newMin = colStat.min
         var newNdv = (ndv * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
@@ -606,14 +580,14 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
     val colStatLeft = colStatsMap(attrLeft)
     val statsRangeLeft = Range(colStatLeft.min, colStatLeft.max, attrLeft.dataType)
       .asInstanceOf[NumericRange]
-    val maxLeft = BigDecimal(statsRangeLeft.max)
-    val minLeft = BigDecimal(statsRangeLeft.min)
+    val maxLeft = statsRangeLeft.max
+    val minLeft = statsRangeLeft.min
 
     val colStatRight = colStatsMap(attrRight)
     val statsRangeRight = Range(colStatRight.min, colStatRight.max, attrRight.dataType)
       .asInstanceOf[NumericRange]
-    val maxRight = BigDecimal(statsRangeRight.max)
-    val minRight = BigDecimal(statsRangeRight.min)
+    val maxRight = statsRangeRight.max
+    val minRight = statsRangeRight.min
 
     // determine the overlapping degree between predicate range and column's range
     val allNotNull = (colStatLeft.nullCount == 0) && (colStatRight.nullCount == 0)
