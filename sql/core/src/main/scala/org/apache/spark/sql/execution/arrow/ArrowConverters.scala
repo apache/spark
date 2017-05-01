@@ -40,14 +40,14 @@ import org.apache.spark.util.Utils
 /**
  * Store Arrow data in a form that can be serialized by Spark
  */
-private[sql] class ArrowPayload(val batchBytes: Array[Byte]) extends Serializable {
+private[sql] class ArrowPayload(val payload: Array[Byte]) extends Serializable {
 
   def this(batch: ArrowRecordBatch, schema: StructType, allocator: BufferAllocator) = {
     this(ArrowConverters.batchToByteArray(batch, schema, allocator))
   }
 
   def loadBatch(allocator: BufferAllocator): ArrowRecordBatch = {
-    ArrowConverters.byteArrayToBatch(batchBytes, allocator)
+    ArrowConverters.byteArrayToBatch(payload, allocator)
   }
 }
 
@@ -179,12 +179,16 @@ private[sql] object ArrowConverters {
       allocator: BufferAllocator): ArrowRecordBatch = {
     val in = new ByteArrayReadableSeekableByteChannel(batchBytes)
     val reader = new ArrowFileReader(in, allocator)
-    val root = reader.getVectorSchemaRoot
-    val unloader = new VectorUnloader(root)
-    reader.loadNextBatch()
-    val batch = unloader.getRecordBatch
-    reader.close()
-    batch
+
+    // Read a batch from a byte stream, ensure the reader is closed
+    Utils.tryWithSafeFinally {
+      val root = reader.getVectorSchemaRoot  // throws IOException
+      val unloader = new VectorUnloader(root)
+      reader.loadNextBatch()  // throws IOException
+      unloader.getRecordBatch
+    } {
+      reader.close()
+    }
   }
 }
 

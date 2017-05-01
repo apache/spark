@@ -2778,7 +2778,7 @@ class Dataset[T] private[sql](
    */
   private[sql] def collectAsArrowToPython(): Int = {
     withNewExecutionId {
-      val iter = toArrowPayload.collect().iterator.map(_.batchBytes)
+      val iter = toArrowPayload.collect().iterator.map(_.payload)
       PythonRDD.serveIterator(iter, "serve-Arrow")
     }
   }
