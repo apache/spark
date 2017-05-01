@@ -33,10 +33,10 @@ import org.json4s.JsonDSL._
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Row, DataFrame}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 
@@ -245,10 +245,21 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
     collectAndValidate(df, json, "byteData.json")
   }
+  
+  test("binary type conversion") {
+    val data = Seq("abc", "d", "ef")
 
-  // TODO: Not currently supported in Arrow JSON reader
-  ignore("binary type conversion") {
-    // collectAndValidate(binaryData)
+    val fields = Seq(new BinaryType("a_binary", nullable = true))
+    val schema = new JSONSchema(fields)
+    val columns = Seq(
+      new BinaryColumn("a_binary", data.length, data.map(_ => true), data))
+    val batch = new JSONRecordBatch(data.length, columns)
+    val json = new JSONFile(schema, Seq(batch))
+
+    val rdd = sparkContext.parallelize(data.map(s => Row(s.getBytes("utf-8"))))
+    val df = spark.createDataFrame(rdd, StructType(Seq(StructField("a_binary", BinaryType))))
+
+    collectAndValidate(df, json, "binaryData.json")
   }
 
   test("floating-point NaN") {
@@ -350,12 +361,12 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val schema_other = new JSONSchema(fields.reverse)
     val json_other = new JSONFile(schema_other, Seq(batch))
     intercept[IllegalArgumentException] {
-      collectAndValidate(df, json_other, "validador_diff_schema.json")
+      collectAndValidate(df, json_other, "validator_diff_schema.json")
     }
 
     // Different values
     intercept[IllegalArgumentException] {
-      collectAndValidate(df.sort($"a_i".desc), json, "validador_diff_values.json")
+      collectAndValidate(df.sort($"a_i".desc), json, "validator_diff_values.json")
     }
   }
 
@@ -385,9 +396,6 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val jsonRoot = jsonReader.read()
     Validator.compareVectorSchemaRoot(arrowRoot, jsonRoot)
   }
-
-  // Create Spark DataFrame and matching Arrow JSON at same time for validation
-  private case class DataTuple(df: DataFrame, json: JSONFile, file: String)
 
 
   /**
