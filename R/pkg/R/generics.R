@@ -1052,9 +1052,9 @@ setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") 
 #' @export
 setGeneric("greatest", function(x, ...) { standardGeneric("greatest") })
 
-#' @rdname grouping_col
+#' @rdname grouping_bit
 #' @export
-setGeneric("grouping_col", function(x) { standardGeneric("grouping_col") })
+setGeneric("grouping_bit", function(x) { standardGeneric("grouping_bit") })
 
 #' @rdname grouping_id
 #' @export

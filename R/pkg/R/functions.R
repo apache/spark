@@ -3891,7 +3891,7 @@ setMethod("not",
             column(jc)
           })
 
-#' grouping_col
+#' grouping_bit
 #'
 #' Indicates whether a specified column in a GROUP BY list is aggregated or not,
 #' returns 1 for aggregated or 0 for not aggregated in the result set.
@@ -3900,10 +3900,10 @@ setMethod("not",
 #'
 #' @param x Column to compute on
 #'
-#' @rdname grouping_col
-#' @name grouping_col
+#' @rdname grouping_bit
+#' @name grouping_bit
 #' @family agg_funcs
-#' @aliases grouping_col,Column-method
+#' @aliases grouping_bit,Column-method
 #' @export
 #' @examples \dontrun{
 #' df <- createDataFrame(mtcars)
@@ -3912,18 +3912,18 @@ setMethod("not",
 #' agg(
 #'   cube(df, "cyl", "gear", "am"),
 #'   mean(df$mpg),
-#'   grouping_col(df$cyl), grouping_col(df$gear), grouping_col(df$am)
+#'   grouping_bit(df$cyl), grouping_bit(df$gear), grouping_bit(df$am)
 #' )
 #'
 #' # With rollup
 #' agg(
 #'   rollup(df, "cyl", "gear", "am"),
 #'   mean(df$mpg),
-#'   grouping_col(df$cyl), grouping_col(df$gear), grouping_col(df$am)
+#'   grouping_bit(df$cyl), grouping_bit(df$gear), grouping_bit(df$am)
 #' )
 #' }
-#' @note grouping_col since 2.3.0
-setMethod("grouping_col",
+#' @note grouping_bit since 2.3.0
+setMethod("grouping_bit",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "grouping", x@jc)
@@ -3935,7 +3935,7 @@ setMethod("grouping_col",
 #' Returns the level of grouping.
 #'
 #' Equals to \code{
-#'   grouping_col(c1) * 2^(n - 1) + grouping_col(c2) * 2^(n - 2)  + ... + grouping_col(cn)
+#' grouping_bit(c1) * 2^(n - 1) + grouping_bit(c2) * 2^(n - 2)  + ... + grouping_bit(cn)
 #' }
 #'
 #' @param x Column to compute on

@@ -1850,8 +1850,8 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
         cube(df, "year", "department"),
         expr("sum(salary) AS total_salary"),
         expr("avg(salary) AS average_salary"),
-        alias(grouping_col(df$year), "grouping_year"),
-        alias(grouping_col(df$department), "grouping_department"),
+        alias(grouping_bit(df$year), "grouping_year"),
+        alias(grouping_bit(df$department), "grouping_department"),
         alias(grouping_id(df$year, df$department), "grouping_id")
       ),
       "year", "department"
@@ -1925,8 +1925,8 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
       agg(
         rollup(df, "year", "department"),
         expr("sum(salary) AS total_salary"), expr("avg(salary) AS average_salary"),
-        alias(grouping_col(df$year), "grouping_year"),
-        alias(grouping_col(df$department), "grouping_department"),
+        alias(grouping_bit(df$year), "grouping_year"),
+        alias(grouping_bit(df$department), "grouping_department"),
         alias(grouping_id(df$year, df$department), "grouping_id")
       ),
       "year", "department"
