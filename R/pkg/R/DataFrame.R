@@ -3748,7 +3748,6 @@ setMethod("hint",
 
 #' alias
 #'
-#' @return SparkDataFrame
 #' @aliases alias,SparkDataFrame-method
 #' @rdname alias
 #' @name alias
