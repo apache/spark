@@ -61,6 +61,7 @@ test_that("read.stream, write.stream, awaitTermination, stopQuery", {
 
   stopQuery(q)
   expect_true(awaitTermination(q, 1))
+  expect_true(awaitTermination(q))
 })
 
 test_that("print from explain, lastProgress, status, isActive", {
