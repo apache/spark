@@ -856,6 +856,10 @@ setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
 #' @export
 setGeneric("over", function(x, window) { standardGeneric("over") })
 
+#' @rdname eq_null_safe
+#' @export
+setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
+
 ###################### WindowSpec Methods ##########################
 
 #' @rdname partitionBy
@@ -1153,6 +1157,10 @@ setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
 #' @rdname negate
 #' @export
 setGeneric("negate", function(x) { standardGeneric("negate") })
+
+#' @rdname not
+#' @export
+setGeneric("not", function(x) { standardGeneric("not") })
 
 #' @rdname next_day
 #' @export

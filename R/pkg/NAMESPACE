@@ -182,7 +182,8 @@ exportMethods("arrange",
 
 exportClasses("Column")
 
-exportMethods("%in%",
+exportMethods("%<=>%",
+              "%in%",
               "abs",
               "acos",
               "add_months",
@@ -291,6 +292,7 @@ exportMethods("%in%",
               "nanvl",
               "negate",
               "next_day",
+              "not",
               "ntile",
               "otherwise",
               "over",
