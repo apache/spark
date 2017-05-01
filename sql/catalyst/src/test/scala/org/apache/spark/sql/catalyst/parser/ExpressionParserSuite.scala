@@ -168,7 +168,7 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("is distinct expressions") {
-    assertEqual("a is distinct from b", !('a === 'b))
+    assertEqual("a is distinct from b", !('a <=> 'b))
     assertEqual("a is not distinct from b", 'a <=> 'b)
   }
 
