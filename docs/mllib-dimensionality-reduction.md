@@ -84,6 +84,25 @@ quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
 
 </div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.mllib.linalg.distributed import RowMatrix
+from numpy.random import RandomState
+
+# Generate random data with 50 samples and 30 features.
+rng = RandomState(0)
+mat = RowMatrix(sc.parallelize(rng.randn(50, 30)))
+
+# Compute the top 20 singular values and corresponding singular vectors.
+svd = mat.computeSVD(20, computeU=True)
+u = svd.U  # The U factor is a RowMatrix.
+s = svd.s  # The singular values are stored in a local dense vector.
+V = svd.V  # The V factor is a local dense matrix.
+{% endhighlight %}
+
+The same code applies to `IndexedRowMatrix` if `U` is defined as an
+`IndexedRowMatrix`.
+</div>
 </div>
 
 ## Principal component analysis (PCA)
@@ -123,6 +142,29 @@ The number of columns should be small, e.g, less than 1000.
 Refer to the [`RowMatrix` Java docs](api/java/org/apache/spark/mllib/linalg/distributed/RowMatrix.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaPCAExample.java %}
+
+</div>
+
+<div data-lang="python" markdown="1">
+
+The following code demonstrates how to compute principal components on a `RowMatrix`
+and use them to project the vectors into a low-dimensional space.
+
+{% highlight python %}
+from pyspark.mllib.linalg.distributed import RowMatrix
+from numpy.random import RandomState
+
+# Generate random data with 50 samples and 30 features.
+rng = RandomState(0)
+data = sc.parallelize(rng.randn(50, 30))
+mat = RowMatrix(data)
+
+# Compute the top 10 principal components stored in a local dense matrix.
+pc = rm.computePrincipalComponents(10)
+
+# Project the rows to the linear space spanned by the top 10 principal components.
+projected = rm.multiply(pc)
+{% endhighlight %}
 
 </div>
 </div>
