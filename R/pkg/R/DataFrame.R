@@ -3744,4 +3744,30 @@ setMethod("hint",
             stopifnot(all(sapply(parameters, is.character)))
             jdf <- callJMethod(x@sdf, "hint", name, parameters)
             dataFrame(jdf)
+		  })
+
+#' alias
+#'
+#' Returns a new SparkDataFrame with an alias set.
+#'
+#' @param object a SparkDataFrame
+#' @param data new name to use
+#' @return SparkDataFrame
+#' @aliases alias,SparkDataFrame-method
+#' @rdname alias
+#' @name alias
+#' @examples \dontrun{
+#' df <- alias(createDataFrame(mtcars), "mtcars")
+#' avg_mpg <- alias(agg(groupBy(df, df$cyl), avg(df$mpg)), "avg_mpg")
+#'
+#' head(select(df, column("mtcars.mpg")))
+#' head(join(df, avg_mpg, column("mtcars.cyl") == column("avg_mpg.cyl")))
+#' }
+#' @note alias since 2.3.0
+setMethod("alias",
+          signature(object = "SparkDataFrame"),
+          function(object, data) {
+            stopifnot(is.character(data))
+            sdf <- callJMethod(object@sdf, "alias", data)
+            dataFrame(sdf)
           })

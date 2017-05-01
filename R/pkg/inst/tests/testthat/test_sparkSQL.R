@@ -2352,6 +2352,15 @@ test_that("mutate(), transform(), rename() and names()", {
   detach(airquality)
 })
 
+test("alias on SparkDataFrame", {
+  df <- alias(read.df(jsonPath, "json"), "table")
+
+  actual <- sort(collect(select(df, column("table.name")))$name)
+  expected <- c("Andy", "Justin", "Michael")
+
+  expect_equal(actual, expected)
+})
+
 test_that("read/write ORC files", {
   skip_on_cran()
 
