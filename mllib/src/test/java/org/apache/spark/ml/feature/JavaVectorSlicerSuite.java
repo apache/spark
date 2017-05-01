@@ -20,39 +20,22 @@ package org.apache.spark.ml.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.attribute.Attribute;
 import org.apache.spark.ml.attribute.AttributeGroup;
 import org.apache.spark.ml.attribute.NumericAttribute;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.ml.linalg.Vector;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.StructType;
 
 
-public class JavaVectorSlicerSuite {
-  private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
-
-  @Before
-  public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaVectorSlicerSuite");
-    jsql = new SQLContext(jsc);
-  }
-
-  @After
-  public void tearDown() {
-    jsc.stop();
-    jsc = null;
-  }
+public class JavaVectorSlicerSuite extends SharedSparkSession {
 
   @Test
   public void vectorSlice() {
@@ -69,7 +52,7 @@ public class JavaVectorSlicerSuite {
     );
 
     Dataset<Row> dataset =
-        jsql.createDataFrame(data, (new StructType()).add(group.toStructField()));
+      spark.createDataFrame(data, (new StructType()).add(group.toStructField()));
 
     VectorSlicer vectorSlicer = new VectorSlicer()
       .setInputCol("userFeatures").setOutputCol("features");

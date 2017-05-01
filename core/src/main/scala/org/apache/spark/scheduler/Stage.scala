@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.HashSet
 
-import org.apache.spark._
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
@@ -67,32 +67,14 @@ private[scheduler] abstract class Stage(
   /** Set of jobs that this stage belongs to. */
   val jobIds = new HashSet[Int]
 
-  val pendingPartitions = new HashSet[Int]
-
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
 
   val name: String = callSite.shortForm
   val details: String = callSite.longForm
 
-  private var _internalAccumulators: Seq[Accumulator[_]] = Seq.empty
-
-  /** Internal accumulators shared across all tasks in this stage. */
-  def internalAccumulators: Seq[Accumulator[_]] = _internalAccumulators
-
   /**
-   * Re-initialize the internal accumulators associated with this stage.
-   *
-   * This is called every time the stage is submitted, *except* when a subset of tasks
-   * belonging to this stage has already finished. Otherwise, reinitializing the internal
-   * accumulators here again will override partial values from the finished tasks.
-   */
-  def resetInternalAccumulators(): Unit = {
-    _internalAccumulators = InternalAccumulator.create(rdd.sparkContext)
-  }
-
-  /**
-   * Pointer to the [StageInfo] object for the most recent attempt. This needs to be initialized
+   * Pointer to the [[StageInfo]] object for the most recent attempt. This needs to be initialized
    * here, before any attempts have actually been created, because the DAGScheduler uses this
    * StageInfo to tell SparkListeners when a job starts (which happens before any stage attempts
    * have been created).
@@ -105,29 +87,20 @@ private[scheduler] abstract class Stage(
    * We keep track of each attempt ID that has failed to avoid recording duplicate failures if
    * multiple tasks from the same stage attempt fail (SPARK-5945).
    */
-  private val fetchFailedAttemptIds = new HashSet[Int]
+  val fetchFailedAttemptIds = new HashSet[Int]
 
   private[scheduler] def clearFailures() : Unit = {
     fetchFailedAttemptIds.clear()
-  }
-
-  /**
-   * Check whether we should abort the failedStage due to multiple consecutive fetch failures.
-   *
-   * This method updates the running set of failed stage attempts and returns
-   * true if the number of failures exceeds the allowable number of failures.
-   */
-  private[scheduler] def failedOnFetchAndShouldAbort(stageAttemptId: Int): Boolean = {
-    fetchFailedAttemptIds.add(stageAttemptId)
-    fetchFailedAttemptIds.size >= Stage.MAX_CONSECUTIVE_FETCH_FAILURES
   }
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
   def makeNewStageAttempt(
       numPartitionsToCompute: Int,
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {
+    val metrics = new TaskMetrics
+    metrics.register(rdd.sparkContext)
     _latestInfo = StageInfo.fromStage(
-      this, nextAttemptId, Some(numPartitionsToCompute), taskLocalityPreferences)
+      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences)
     nextAttemptId += 1
   }
 
@@ -143,9 +116,4 @@ private[scheduler] abstract class Stage(
 
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   def findMissingPartitions(): Seq[Int]
-}
-
-private[scheduler] object Stage {
-  // The number of consecutive failures allowed before a stage is aborted
-  val MAX_CONSECUTIVE_FETCH_FAILURES = 4
 }

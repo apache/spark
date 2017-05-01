@@ -17,28 +17,29 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
 /**
  * Returns the first value of `child` for a group of rows. If the first value of `child`
- * is `null`, it returns `null` (respecting nulls). Even if [[First]] is used on a already
+ * is `null`, it returns `null` (respecting nulls). Even if [[First]] is used on an already
  * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
  * is used) its result will not be deterministic (unless the input table is sorted and has
  * a single partition, and we use a single reducer to do the aggregation.).
  */
-case class First(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr[, isIgnoreNull]) - Returns the first value of `expr` for a group of rows.
+      If `isIgnoreNull` is true, returns only non-null values.
+  """)
+case class First(child: Expression, ignoreNullsExpr: Expression)
+  extends DeclarativeAggregate with ExpectsInputTypes {
 
   def this(child: Expression) = this(child, Literal.create(false, BooleanType))
 
-  private val ignoreNulls: Boolean = ignoreNullsExpr match {
-    case Literal(b: Boolean, BooleanType) => b
-    case _ =>
-      throw new AnalysisException("The second argument of First should be a boolean literal.")
-  }
-
-  override def children: Seq[Expression] = child :: Nil
+  override def children: Seq[Expression] = child :: ignoreNullsExpr :: Nil
 
   override def nullable: Boolean = true
 
@@ -49,7 +50,21 @@ case class First(child: Expression, ignoreNullsExpr: Expression) extends Declara
   override def dataType: DataType = child.dataType
 
   // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, BooleanType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (!ignoreNullsExpr.foldable) {
+      TypeCheckFailure(
+        s"The second argument of First must be a boolean literal, but got: ${ignoreNullsExpr.sql}")
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
+  private def ignoreNulls: Boolean = ignoreNullsExpr.eval().asInstanceOf[Boolean]
 
   private lazy val first = AttributeReference("first", child.dataType)()
 

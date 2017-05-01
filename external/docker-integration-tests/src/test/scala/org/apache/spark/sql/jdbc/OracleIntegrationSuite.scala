@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -48,19 +50,46 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   import testImplicits._
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "wnameless/oracle-xe-11g:latest"
+    override val imageName = "wnameless/oracle-xe-11g:14.04.4"
     override val env = Map(
       "ORACLE_ROOT_PASSWORD" -> "oracle"
     )
+    override val usesIpc = false
     override val jdbcPort: Int = 1521
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:oracle:thin:system/oracle@//$ip:$port/xe"
+    override def getStartupProcessName: Option[String] = None
   }
 
   override def dataPreparation(conn: Connection): Unit = {
+    conn.prepareStatement("CREATE TABLE datetime (id NUMBER(10), d DATE, t TIMESTAMP)")
+      .executeUpdate()
+    conn.prepareStatement(
+      """INSERT INTO datetime VALUES
+        |(1, {d '1991-11-09'}, {ts '1996-01-01 01:23:45'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+        |CREATE TEMPORARY VIEW datetime
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$jdbcUrl', dbTable 'datetime', oracle.jdbc.mapDateToTimestamp 'false')
+      """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement("CREATE TABLE datetime1 (id NUMBER(10), d DATE, t TIMESTAMP)")
+      .executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+        |CREATE TEMPORARY VIEW datetime1
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$jdbcUrl', dbTable 'datetime1', oracle.jdbc.mapDateToTimestamp 'false')
+      """.stripMargin.replaceAll("\n", " "))
   }
 
-  ignore("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
+  test("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
     // create a sample dataframe with string type
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     // write the dataframe to the oracle table tbl
@@ -74,5 +103,86 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(types(0).equals("class java.lang.String"))
     // verify the value is the inserted correct or not
     assert(rows(0).getString(0).equals("foo"))
+  }
+
+  test("SPARK-16625: General data types to be mapped to Oracle") {
+    val props = new Properties()
+    props.put("oracle.jdbc.mapDateToTimestamp", "false")
+
+    val schema = StructType(Seq(
+      StructField("boolean_type", BooleanType, true),
+      StructField("integer_type", IntegerType, true),
+      StructField("long_type", LongType, true),
+      StructField("float_Type", FloatType, true),
+      StructField("double_type", DoubleType, true),
+      StructField("byte_type", ByteType, true),
+      StructField("short_type", ShortType, true),
+      StructField("string_type", StringType, true),
+      StructField("binary_type", BinaryType, true),
+      StructField("date_type", DateType, true),
+      StructField("timestamp_type", TimestampType, true)
+    ))
+
+    val tableName = "test_oracle_general_types"
+    val booleanVal = true
+    val integerVal = 1
+    val longVal = 2L
+    val floatVal = 3.0f
+    val doubleVal = 4.0
+    val byteVal = 2.toByte
+    val shortVal = 5.toShort
+    val stringVal = "string"
+    val binaryVal = Array[Byte](6, 7, 8)
+    val dateVal = Date.valueOf("2016-07-26")
+    val timestampVal = Timestamp.valueOf("2016-07-26 11:49:45")
+
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(
+        booleanVal, integerVal, longVal, floatVal, doubleVal, byteVal, shortVal, stringVal,
+        binaryVal, dateVal, timestampVal
+      )))
+
+    val dfWrite = spark.createDataFrame(data, schema)
+    dfWrite.write.jdbc(jdbcUrl, tableName, props)
+
+    val dfRead = spark.read.jdbc(jdbcUrl, tableName, props)
+    val rows = dfRead.collect()
+    // verify the data type is inserted
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(0).equals("class java.lang.Boolean"))
+    assert(types(1).equals("class java.lang.Integer"))
+    assert(types(2).equals("class java.lang.Long"))
+    assert(types(3).equals("class java.lang.Float"))
+    assert(types(4).equals("class java.lang.Float"))
+    assert(types(5).equals("class java.lang.Integer"))
+    assert(types(6).equals("class java.lang.Integer"))
+    assert(types(7).equals("class java.lang.String"))
+    assert(types(8).equals("class [B"))
+    assert(types(9).equals("class java.sql.Date"))
+    assert(types(10).equals("class java.sql.Timestamp"))
+    // verify the value is the inserted correct or not
+    val values = rows(0)
+    assert(values.getBoolean(0).equals(booleanVal))
+    assert(values.getInt(1).equals(integerVal))
+    assert(values.getLong(2).equals(longVal))
+    assert(values.getFloat(3).equals(floatVal))
+    assert(values.getFloat(4).equals(doubleVal.toFloat))
+    assert(values.getInt(5).equals(byteVal.toInt))
+    assert(values.getInt(6).equals(shortVal.toInt))
+    assert(values.getString(7).equals(stringVal))
+    assert(values.getAs[Array[Byte]](8).mkString.equals("678"))
+    assert(values.getDate(9).equals(dateVal))
+    assert(values.getTimestamp(10).equals(timestampVal))
+  }
+
+  test("SPARK-19318: connection property keys should be case-sensitive") {
+    def checkRow(row: Row): Unit = {
+      assert(row.getInt(0) == 1)
+      assert(row.getDate(1).equals(Date.valueOf("1991-11-09")))
+      assert(row.getTimestamp(2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
+    }
+    checkRow(sql("SELECT * FROM datetime where id = 1").head())
+    sql("INSERT INTO TABLE datetime1 SELECT * FROM datetime where id = 1")
+    checkRow(sql("SELECT * FROM datetime1 where id = 1").head())
   }
 }

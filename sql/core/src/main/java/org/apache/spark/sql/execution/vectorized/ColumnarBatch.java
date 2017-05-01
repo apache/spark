@@ -16,13 +16,12 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.math.BigDecimal;
 import java.util.*;
-
-import org.apache.commons.lang.NotImplementedException;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
@@ -129,7 +128,7 @@ public final class ColumnarBatch {
      * Revisit this. This is expensive. This is currently only used in test paths.
      */
     public InternalRow copy() {
-      GenericMutableRow row = new GenericMutableRow(columns.length);
+      GenericInternalRow row = new GenericInternalRow(columns.length);
       for (int i = 0; i < numFields(); i++) {
         if (isNullAt(i)) {
           row.setNullAt(i);
@@ -137,6 +136,10 @@ public final class ColumnarBatch {
           DataType dt = columns[i].dataType();
           if (dt instanceof BooleanType) {
             row.setBoolean(i, getBoolean(i));
+          } else if (dt instanceof ByteType) {
+            row.setByte(i, getByte(i));
+          } else if (dt instanceof ShortType) {
+            row.setShort(i, getShort(i));
           } else if (dt instanceof IntegerType) {
             row.setInt(i, getInt(i));
           } else if (dt instanceof LongType) {
@@ -154,6 +157,8 @@ public final class ColumnarBatch {
             row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
           } else if (dt instanceof DateType) {
             row.setInt(i, getInt(i));
+          } else if (dt instanceof TimestampType) {
+            row.setLong(i, getLong(i));
           } else {
             throw new RuntimeException("Not implemented. " + dt);
           }
@@ -164,7 +169,7 @@ public final class ColumnarBatch {
 
     @Override
     public boolean anyNull() {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -225,12 +230,102 @@ public final class ColumnarBatch {
 
     @Override
     public MapData getMap(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
     public Object get(int ordinal, DataType dataType) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void update(int ordinal, Object value) {
+      if (value == null) {
+        setNullAt(ordinal);
+      } else {
+        DataType dt = columns[ordinal].dataType();
+        if (dt instanceof BooleanType) {
+          setBoolean(ordinal, (boolean) value);
+        } else if (dt instanceof IntegerType) {
+          setInt(ordinal, (int) value);
+        } else if (dt instanceof ShortType) {
+          setShort(ordinal, (short) value);
+        } else if (dt instanceof LongType) {
+          setLong(ordinal, (long) value);
+        } else if (dt instanceof FloatType) {
+          setFloat(ordinal, (float) value);
+        } else if (dt instanceof DoubleType) {
+          setDouble(ordinal, (double) value);
+        } else if (dt instanceof DecimalType) {
+          DecimalType t = (DecimalType) dt;
+          setDecimal(ordinal, Decimal.apply((BigDecimal) value, t.precision(), t.scale()),
+              t.precision());
+        } else {
+          throw new UnsupportedOperationException("Datatype not supported " + dt);
+        }
+      }
+    }
+
+    @Override
+    public void setNullAt(int ordinal) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNull(rowId);
+    }
+
+    @Override
+    public void setBoolean(int ordinal, boolean value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putBoolean(rowId, value);
+    }
+
+    @Override
+    public void setByte(int ordinal, byte value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putByte(rowId, value);
+    }
+
+    @Override
+    public void setShort(int ordinal, short value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putShort(rowId, value);
+    }
+
+    @Override
+    public void setInt(int ordinal, int value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putInt(rowId, value);
+    }
+
+    @Override
+    public void setLong(int ordinal, long value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putLong(rowId, value);
+    }
+
+    @Override
+    public void setFloat(int ordinal, float value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putFloat(rowId, value);
+    }
+
+    @Override
+    public void setDouble(int ordinal, double value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putDouble(rowId, value);
+    }
+
+    @Override
+    public void setDecimal(int ordinal, Decimal value, int precision) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putDecimal(rowId, value, precision);
     }
   }
 
@@ -338,7 +433,7 @@ public final class ColumnarBatch {
    */
   public void setColumn(int ordinal, ColumnVector column) {
     if (column instanceof OffHeapColumnVector) {
-      throw new NotImplementedException("Need to ref count columns.");
+      throw new UnsupportedOperationException("Need to ref count columns.");
     }
     columns[ordinal] = column;
   }

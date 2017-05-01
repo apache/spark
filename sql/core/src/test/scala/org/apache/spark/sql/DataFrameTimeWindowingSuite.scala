@@ -29,16 +29,6 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
 
   import testImplicits._
 
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-  }
-
-  override def afterEach(): Unit = {
-    super.beforeEach()
-    TimeZone.setDefault(null)
-  }
-
   test("tumbling window groupBy statement") {
     val df = Seq(
       ("2016-03-27 19:39:34", 1, "a"),
@@ -238,5 +228,62 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
         Row("2016-03-27 09:00:00.64", "2016-03-27 09:00:00.84", 1),
         Row("2016-03-27 09:00:00.68", "2016-03-27 09:00:00.88", 1))
     )
+  }
+
+  private def withTempTable(f: String => Unit): Unit = {
+    val tableName = "temp"
+    Seq(
+      ("2016-03-27 19:39:34", 1),
+      ("2016-03-27 19:39:56", 2),
+      ("2016-03-27 19:39:27", 4)).toDF("time", "value").createOrReplaceTempView(tableName)
+    try {
+      f(tableName)
+    } finally {
+      spark.catalog.dropTempView(tableName)
+    }
+  }
+
+  test("time window in SQL with single string expression") {
+    withTempTable { table =>
+      checkAnswer(
+        spark.sql(s"""select window(time, "10 seconds"), value from $table""")
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+        Seq(
+          Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", 4),
+          Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1),
+          Row("2016-03-27 19:39:50", "2016-03-27 19:40:00", 2)
+        )
+      )
+    }
+  }
+
+  test("time window in SQL with two expressions") {
+    withTempTable { table =>
+      checkAnswer(
+        spark.sql(
+          s"""select window(time, "10 seconds", 10000000), value from $table""")
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+        Seq(
+          Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", 4),
+          Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1),
+          Row("2016-03-27 19:39:50", "2016-03-27 19:40:00", 2)
+        )
+      )
+    }
+  }
+
+  test("time window in SQL with three expressions") {
+    withTempTable { table =>
+      checkAnswer(
+        spark.sql(
+          s"""select window(time, "10 seconds", 10000000, "5 seconds"), value from $table""")
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+        Seq(
+          Row("2016-03-27 19:39:25", "2016-03-27 19:39:35", 1),
+          Row("2016-03-27 19:39:25", "2016-03-27 19:39:35", 4),
+          Row("2016-03-27 19:39:55", "2016-03-27 19:40:05", 2)
+        )
+      )
+    }
   }
 }

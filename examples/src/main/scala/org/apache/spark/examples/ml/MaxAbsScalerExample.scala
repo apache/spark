@@ -15,23 +15,28 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.MaxAbsScaler
+import org.apache.spark.ml.linalg.Vectors
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object MaxAbsScalerExample {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("MaxAbsScalerExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("MaxAbsScalerExample")
+      .getOrCreate()
 
     // $example on$
-    val dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val dataFrame = spark.createDataFrame(Seq(
+      (0, Vectors.dense(1.0, 0.1, -8.0)),
+      (1, Vectors.dense(2.0, 1.0, -4.0)),
+      (2, Vectors.dense(4.0, 10.0, 8.0))
+    )).toDF("id", "features")
+
     val scaler = new MaxAbsScaler()
       .setInputCol("features")
       .setOutputCol("scaledFeatures")
@@ -41,9 +46,9 @@ object MaxAbsScalerExample {
 
     // rescale each feature to range [-1, 1]
     val scaledData = scalerModel.transform(dataFrame)
-    scaledData.show()
+    scaledData.select("features", "scaledFeatures").show()
     // $example off$
-    sc.stop()
+
+    spark.stop()
   }
 }
-// scalastyle:on println

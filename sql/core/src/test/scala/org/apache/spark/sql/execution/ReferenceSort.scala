@@ -34,7 +34,7 @@ case class ReferenceSort(
     sortOrder: Seq[SortOrder],
     global: Boolean,
     child: SparkPlan)
-  extends UnaryNode {
+  extends UnaryExecNode {
 
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
@@ -57,4 +57,6 @@ case class ReferenceSort(
   override def output: Seq[Attribute] = child.output
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }

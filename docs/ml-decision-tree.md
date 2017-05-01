@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Decision trees - spark.ml
-displayTitle: Decision trees - spark.ml
+title: Decision trees
+displayTitle: Decision trees
 ---
 
   > This section has been moved into the

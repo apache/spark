@@ -42,6 +42,16 @@ final class PackedRecordPointer {
    */
   static final int MAXIMUM_PARTITION_ID = (1 << 24) - 1;  // 16777215
 
+  /**
+   * The index of the first byte of the partition id, counting from the least significant byte.
+   */
+  static final int PARTITION_ID_START_BYTE_INDEX = 5;
+
+  /**
+   * The index of the last byte of the partition id, counting from the least significant byte.
+   */
+  static final int PARTITION_ID_END_BYTE_INDEX = 7;
+
   /** Bit mask for the lower 40 bits of a long. */
   private static final long MASK_LONG_LOWER_40_BITS = (1L << 40) - 1;
 

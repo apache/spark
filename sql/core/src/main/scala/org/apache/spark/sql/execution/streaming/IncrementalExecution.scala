@@ -17,56 +17,103 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import java.util.concurrent.atomic.AtomicInteger
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryNode}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.streaming.OutputMode
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
  * plan incrementally. Possibly preserving state in between each execution.
  */
 class IncrementalExecution(
-    ctx: SQLContext,
+    sparkSession: SparkSession,
     logicalPlan: LogicalPlan,
-    checkpointLocation: String,
-    currentBatchId: Long) extends QueryExecution(ctx, logicalPlan) {
-
-  // TODO: make this always part of planning.
-  val stateStrategy = sqlContext.sessionState.planner.StatefulAggregationStrategy :: Nil
+    val outputMode: OutputMode,
+    val checkpointLocation: String,
+    val currentBatchId: Long,
+    offsetSeqMetadata: OffsetSeqMetadata)
+  extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.
-  override def planner: SparkPlanner =
-    new SparkPlanner(
-      sqlContext.sparkContext,
-      sqlContext.conf,
-      stateStrategy)
+  override val planner: SparkPlanner = new SparkPlanner(
+      sparkSession.sparkContext,
+      sparkSession.sessionState.conf,
+      sparkSession.sessionState.experimentalMethods) {
+    override def extraPlanningStrategies: Seq[Strategy] =
+      StatefulAggregationStrategy ::
+      FlatMapGroupsWithStateStrategy ::
+      StreamingRelationStrategy ::
+      StreamingDeduplicationStrategy :: Nil
+  }
+
+  /**
+   * See [SPARK-18339]
+   * Walk the optimized logical plan and replace CurrentBatchTimestamp
+   * with the desired literal
+   */
+  override lazy val optimizedPlan: LogicalPlan = {
+    sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
+      case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
+        logInfo(s"Current batch timestamp = $timestamp")
+        ts.toLiteral
+    }
+  }
 
   /**
    * Records the current id for a given stateful operator in the query plan as the `state`
-   * preperation walks the query plan.
+   * preparation walks the query plan.
    */
-  private var operatorId = 0
+  private val operatorId = new AtomicInteger(0)
 
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
-    override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSave(keys, None,
-             UnaryNode(agg,
-               StateStoreRestore(keys2, None, child))) =>
-        val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId - 1)
-        operatorId += 1
 
-        StateStoreSave(
+    override def apply(plan: SparkPlan): SparkPlan = plan transform {
+      case StateStoreSaveExec(keys, None, None, None,
+             UnaryExecNode(agg,
+               StateStoreRestoreExec(keys2, None, child))) =>
+        val stateId =
+          OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
+
+        StateStoreSaveExec(
           keys,
           Some(stateId),
+          Some(outputMode),
+          Some(offsetSeqMetadata.batchWatermarkMs),
           agg.withNewChildren(
-            StateStoreRestore(
+            StateStoreRestoreExec(
               keys,
               Some(stateId),
               child) :: Nil))
+
+      case StreamingDeduplicateExec(keys, child, None, None) =>
+        val stateId =
+          OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
+
+        StreamingDeduplicateExec(
+          keys,
+          child,
+          Some(stateId),
+          Some(offsetSeqMetadata.batchWatermarkMs))
+
+      case m: FlatMapGroupsWithStateExec =>
+        val stateId =
+          OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
+        m.copy(
+          stateId = Some(stateId),
+          batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
+          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
     }
   }
 
   override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
+
+  /** No need assert supported, as this check has already been done */
+  override def assertSupported(): Unit = { }
 }

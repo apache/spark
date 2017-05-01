@@ -39,6 +39,7 @@ private[ui] class StorageTab(parent: SparkUI) extends SparkUITab(parent, "storag
  * This class is thread-safe (unlike JobProgressListener)
  */
 @DeveloperApi
+@deprecated("This class will be removed in a future release.", "2.2.0")
 class StorageListener(storageStatusListener: StorageStatusListener) extends BlockStatusListener {
 
   private[ui] val _rddInfoMap = mutable.Map[Int, RDDInfo]() // exposed for testing
@@ -59,7 +60,7 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Bloc
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
     val rddInfos = stageSubmitted.stageInfo.rddInfos
-    rddInfos.foreach { info => _rddInfoMap.getOrElseUpdate(info.id, info) }
+    rddInfos.foreach { info => _rddInfoMap.getOrElseUpdate(info.id, info).name = info.name }
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {

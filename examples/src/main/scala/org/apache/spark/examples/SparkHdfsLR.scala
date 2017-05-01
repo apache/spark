@@ -23,16 +23,14 @@ import java.util.Random
 import scala.math.exp
 
 import breeze.linalg.{DenseVector, Vector}
-import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark._
+import org.apache.spark.sql.SparkSession
 
 /**
  * Logistic regression based classification.
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
- * please refer to either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
- * org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS based on your needs.
+ * please refer to org.apache.spark.ml.classification.LogisticRegression.
  */
 object SparkHdfsLR {
   val D = 10   // Number of dimensions
@@ -54,8 +52,7 @@ object SparkHdfsLR {
   def showWarning() {
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
-        |Please use either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
-        |org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
+        |Please use org.apache.spark.ml.classification.LogisticRegression
         |for more conventional use.
       """.stripMargin)
   }
@@ -69,11 +66,14 @@ object SparkHdfsLR {
 
     showWarning()
 
-    val sparkConf = new SparkConf().setAppName("SparkHdfsLR")
+    val spark = SparkSession
+      .builder
+      .appName("SparkHdfsLR")
+      .getOrCreate()
+
     val inputPath = args(0)
-    val conf = new Configuration()
-    val sc = new SparkContext(sparkConf)
-    val lines = sc.textFile(inputPath)
+    val lines = spark.read.textFile(inputPath).rdd
+
     val points = lines.map(parsePoint).cache()
     val ITERATIONS = args(1).toInt
 
@@ -90,7 +90,7 @@ object SparkHdfsLR {
     }
 
     println("Final w: " + w)
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

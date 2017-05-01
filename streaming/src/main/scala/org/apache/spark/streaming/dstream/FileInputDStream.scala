@@ -195,10 +195,16 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       )
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
-      val filter = new PathFilter {
+
+      val newFileFilter = new PathFilter {
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
-      val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
+      val directoryFilter = new PathFilter {
+        override def accept(path: Path): Boolean = fs.getFileStatus(path).isDirectory
+      }
+      val directories = fs.globStatus(directoryPath, directoryFilter).map(_.getPath)
+      val newFiles = directories.flatMap(dir =>
+        fs.listStatus(dir, newFileFilter).map(_.getPath.toString))
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)
@@ -224,7 +230,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
    * - It must pass the user-provided file filter.
    * - It must be newer than the ignore threshold. It is assumed that files older than the ignore
    *   threshold have already been considered or are existing files before start
-   *   (when newFileOnly = true).
+   *   (when newFilesOnly = true).
    * - It must not be present in the recently selected files that this class remembers.
    * - It must not be newer than the time of the batch (i.e. `currentTime` for which this
    *   file is being tested. This can occur if the driver was recovered, and the missing batches
@@ -333,14 +339,13 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
     override def restore() {
       hadoopFiles.toSeq.sortBy(_._1)(Time.ordering).foreach {
-        case (t, f) => {
+        case (t, f) =>
           // Restore the metadata in both files and generatedRDDs
           logInfo("Restoring files for time " + t + " - " +
             f.mkString("[", ", ", "]") )
           batchTimeToSelectedFiles.synchronized { batchTimeToSelectedFiles += ((t, f)) }
           recentlySelectedFiles ++= f
           generatedRDDs += ((t, filesToRDD(f)))
-        }
       }
     }
 

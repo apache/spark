@@ -39,8 +39,6 @@ class ErrorParserSuite extends SparkFunSuite {
   }
 
   test("no viable input") {
-    intercept("select from tbl", 1, 7, "no viable alternative at input", "-------^^^")
-    intercept("select\nfrom tbl", 2, 0, "no viable alternative at input", "^^^")
     intercept("select ((r + 1) ", 1, 16, "no viable alternative at input", "----------------^^^")
   }
 
@@ -60,8 +58,8 @@ class ErrorParserSuite extends SparkFunSuite {
     intercept("select *\nfrom r\norder by q\ncluster by q", 3, 0,
       "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported",
       "^^^")
-    intercept("select * from r where a in (select * from t)", 1, 24,
-      "IN with a Sub-query is currently not supported",
-      "------------------------^^^")
+    intercept("select * from r except all select * from t", 1, 0,
+      "EXCEPT ALL is not supported",
+      "^^^")
   }
 }

@@ -18,13 +18,15 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
 class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
 
   @transient var data: Array[Double] = _
 
@@ -39,8 +41,7 @@ class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
   test("Binarize continuous features with default parameter") {
     val defaultBinarized: Array[Double] = data.map(x => if (x > 0.0) 1.0 else 0.0)
-    val dataFrame: DataFrame = sqlContext.createDataFrame(
-      data.zip(defaultBinarized)).toDF("feature", "expected")
+    val dataFrame: DataFrame = data.zip(defaultBinarized).toSeq.toDF("feature", "expected")
 
     val binarizer: Binarizer = new Binarizer()
       .setInputCol("feature")
@@ -55,8 +56,7 @@ class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   test("Binarize continuous features with setter") {
     val threshold: Double = 0.2
     val thresholdBinarized: Array[Double] = data.map(x => if (x > threshold) 1.0 else 0.0)
-    val dataFrame: DataFrame = sqlContext.createDataFrame(
-        data.zip(thresholdBinarized)).toDF("feature", "expected")
+    val dataFrame: DataFrame = data.zip(thresholdBinarized).toSeq.toDF("feature", "expected")
 
     val binarizer: Binarizer = new Binarizer()
       .setInputCol("feature")
@@ -71,9 +71,9 @@ class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
   test("Binarize vector of continuous features with default parameter") {
     val defaultBinarized: Array[Double] = data.map(x => if (x > 0.0) 1.0 else 0.0)
-    val dataFrame: DataFrame = sqlContext.createDataFrame(Seq(
+    val dataFrame: DataFrame = Seq(
       (Vectors.dense(data), Vectors.dense(defaultBinarized))
-    )).toDF("feature", "expected")
+    ).toDF("feature", "expected")
 
     val binarizer: Binarizer = new Binarizer()
       .setInputCol("feature")
@@ -88,9 +88,9 @@ class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   test("Binarize vector of continuous features with setter") {
     val threshold: Double = 0.2
     val defaultBinarized: Array[Double] = data.map(x => if (x > threshold) 1.0 else 0.0)
-    val dataFrame: DataFrame = sqlContext.createDataFrame(Seq(
+    val dataFrame: DataFrame = Seq(
       (Vectors.dense(data), Vectors.dense(defaultBinarized))
-    )).toDF("feature", "expected")
+    ).toDF("feature", "expected")
 
     val binarizer: Binarizer = new Binarizer()
       .setInputCol("feature")

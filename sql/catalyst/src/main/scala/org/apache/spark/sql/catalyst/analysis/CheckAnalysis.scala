@@ -20,14 +20,14 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.UsingJoin
+import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-trait CheckAnalysis {
+trait CheckAnalysis extends PredicateHelper {
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -45,6 +45,33 @@ trait CheckAnalysis {
     }).length > 1
   }
 
+  protected def hasMapType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[MapType])
+  }
+
+  protected def mapColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
+    case _: Intersect | _: Except | _: Distinct =>
+      plan.output.find(a => hasMapType(a.dataType))
+    case d: Deduplicate =>
+      d.keys.find(a => hasMapType(a.dataType))
+    case _ => None
+  }
+
+  private def checkLimitClause(limitExpr: Expression): Unit = {
+    limitExpr match {
+      case e if !e.foldable => failAnalysis(
+        "The limit expression must evaluate to a constant value, but got " +
+          limitExpr.sql)
+      case e if e.dataType != IntegerType => failAnalysis(
+        s"The limit expression must be integer type, but got " +
+          e.dataType.simpleString)
+      case e if e.eval().asInstanceOf[Int] < 0 => failAnalysis(
+        "The limit expression must be equal to or greater than 0, but got " +
+          e.eval().asInstanceOf[Int])
+      case e => // OK
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
@@ -52,7 +79,7 @@ trait CheckAnalysis {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table not found: ${u.tableIdentifier}")
+        u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
@@ -72,9 +99,9 @@ trait CheckAnalysis {
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
           case g: Grouping =>
-            failAnalysis(s"grouping() can only be used with GroupingSets/Cube/Rollup")
+            failAnalysis("grouping() can only be used with GroupingSets/Cube/Rollup")
           case g: GroupingID =>
-            failAnalysis(s"grouping_id() can only be used with GroupingSets/Cube/Rollup")
+            failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
           case w @ WindowExpression(AggregateExpression(_, _, true, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
@@ -102,39 +129,88 @@ trait CheckAnalysis {
               case None => w
             }
 
+          case s @ ScalarSubquery(query, conditions, _) =>
+            // If no correlation, the output must be exactly one column
+            if (conditions.isEmpty && query.output.size != 1) {
+              failAnalysis(
+                s"Scalar subquery must return only one column, but got ${query.output.size}")
+            }
+            else if (conditions.nonEmpty) {
+              def checkAggregate(agg: Aggregate): Unit = {
+                // Make sure correlated scalar subqueries contain one row for every outer row by
+                // enforcing that they are aggregates containing exactly one aggregate expression.
+                // The analyzer has already checked that subquery contained only one output column,
+                // and added all the grouping expressions to the aggregate.
+                val aggregates = agg.expressions.flatMap(_.collect {
+                  case a: AggregateExpression => a
+                })
+                if (aggregates.isEmpty) {
+                  failAnalysis("The output of a correlated scalar subquery must be aggregated")
+                }
+
+                // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
+                // are not part of the correlated columns.
+                val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
+                // Collect the local references from the correlated predicate in the subquery.
+                val subqueryColumns = getCorrelatedPredicates(query).flatMap(_.references)
+                  .filterNot(conditions.flatMap(_.references).contains)
+                val correlatedCols = AttributeSet(subqueryColumns)
+                val invalidCols = groupByCols -- correlatedCols
+                // GROUP BY columns must be a subset of columns in the predicates
+                if (invalidCols.nonEmpty) {
+                  failAnalysis(
+                    "A GROUP BY clause in a scalar correlated subquery " +
+                      "cannot contain non-correlated columns: " +
+                      invalidCols.mkString(","))
+                }
+              }
+
+              // Skip subquery aliases added by the Analyzer.
+              // For projects, do the necessary mapping and skip to its child.
+              def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
+                case s: SubqueryAlias => cleanQuery(s.child)
+                case p: Project => cleanQuery(p.child)
+                case child => child
+              }
+
+              cleanQuery(query) match {
+                case a: Aggregate => checkAggregate(a)
+                case Filter(_, a: Aggregate) => checkAggregate(a)
+                case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
+              }
+            }
+            checkAnalysis(query)
+            s
+
+          case s: SubqueryExpression =>
+            checkAnalysis(s.plan)
+            s
         }
 
         operator match {
+          case etw: EventTimeWatermark =>
+            etw.eventTime.dataType match {
+              case s: StructType
+                if s.find(_.name == "end").map(_.dataType) == Some(TimestampType) =>
+              case _: TimestampType =>
+              case _ =>
+                failAnalysis(
+                  s"Event time must be defined on a window or a timestamp, but " +
+                  s"${etw.eventTime.name} is of type ${etw.eventTime.dataType.simpleString}")
+            }
           case f: Filter if f.condition.dataType != BooleanType =>
             failAnalysis(
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          case j @ Join(_, _, UsingJoin(_, cols), _) =>
-            val from = operator.inputSet.map(_.name).mkString(", ")
-            failAnalysis(
-              s"using columns [${cols.mkString(",")}] " +
-                s"can not be resolved given input columns: [$from] ")
+          case Filter(condition, _) if hasNullAwarePredicateWithinNot(condition) =>
+            failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
+              s"conditions: $condition")
 
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.simpleString} is not a boolean.")
-
-          case j @ Join(_, _, _, Some(condition)) =>
-            def checkValidJoinConditionExprs(expr: Expression): Unit = expr match {
-              case p: Predicate =>
-                p.asInstanceOf[Expression].children.foreach(checkValidJoinConditionExprs)
-              case e if e.dataType.isInstanceOf[BinaryType] =>
-                failAnalysis(s"binary type expression ${e.sql} cannot be used " +
-                  "in join conditions")
-              case e if e.dataType.isInstanceOf[MapType] =>
-                failAnalysis(s"map type expression ${e.sql} cannot be used " +
-                  "in join conditions")
-              case _ => // OK
-            }
-
-            checkValidJoinConditionExprs(condition)
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
@@ -155,6 +231,18 @@ trait CheckAnalysis {
                         s"appear in the arguments of an aggregate function.")
                   }
                 }
+              case e: Attribute if groupingExprs.isEmpty =>
+                // Collect all [[AggregateExpressions]]s.
+                val aggExprs = aggregateExprs.filter(_.collect {
+                  case a: AggregateExpression => a
+                }.nonEmpty)
+                failAnalysis(
+                  s"grouping expressions sequence is empty, " +
+                    s"and '${e.sql}' is not an aggregate function. " +
+                    s"Wrap '${aggExprs.map(_.sql).mkString("(", ", ", ")")}' in windowing " +
+                    s"function(s) or wrap '${e.sql}' in first() (or first_value) " +
+                    s"if you don't care which value you get."
+                )
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.sql}' is neither present in the group by, " +
@@ -162,16 +250,20 @@ trait CheckAnalysis {
                     "Add to group by or wrap in first() (or first_value) if you don't care " +
                     "which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
-              case e if e.references.isEmpty => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
             def checkValidGroupingExprs(expr: Expression): Unit = {
+              if (expr.find(_.isInstanceOf[AggregateExpression]).isDefined) {
+                failAnalysis(
+                  "aggregate functions are not allowed in GROUP BY, but found " + expr.sql)
+              }
+
               // Check if the data type of expr is orderable.
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
-                    s"because its data type ${expr.dataType.simpleString} is not a orderable " +
+                    s"because its data type ${expr.dataType.simpleString} is not an orderable " +
                     s"data type.")
               }
 
@@ -184,8 +276,8 @@ trait CheckAnalysis {
               }
             }
 
-            aggregateExprs.foreach(checkValidAggregateExpression)
             groupingExprs.foreach(checkValidGroupingExprs)
+            aggregateExprs.foreach(checkValidAggregateExpression)
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>
@@ -195,19 +287,54 @@ trait CheckAnalysis {
               }
             }
 
-          case s @ SetOperation(left, right) if left.output.length != right.output.length =>
-            failAnalysis(
-              s"${s.nodeName} can only be performed on tables with the same number of columns, " +
-               s"but the left table has ${left.output.length} columns and the right has " +
-               s"${right.output.length}")
+          case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
 
-          case s: Union if s.children.exists(_.output.length != s.children.head.output.length) =>
-            val firstError = s.children.find(_.output.length != s.children.head.output.length).get
-            failAnalysis(
-              s"""
-                |Unions can only be performed on tables with the same number of columns,
-                | but one table has '${firstError.output.length}' columns and another table has
-                | '${s.children.head.output.length}' columns""".stripMargin)
+          case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
+
+          case p if p.expressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
+            p match {
+              case _: Filter | _: Aggregate | _: Project => // Ok
+              case other => failAnalysis(
+                s"Correlated scalar sub-queries can only be used in a Filter/Aggregate/Project: $p")
+            }
+
+          case p if p.expressions.exists(SubqueryExpression.hasInOrExistsSubquery) =>
+            p match {
+              case _: Filter => // Ok
+              case _ => failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
+            }
+
+          case _: Union | _: SetOperation if operator.children.length > 1 =>
+            def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
+            def ordinalNumber(i: Int): String = i match {
+              case 0 => "first"
+              case 1 => "second"
+              case i => s"${i}th"
+            }
+            val ref = dataTypes(operator.children.head)
+            operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
+              // Check the number of columns
+              if (child.output.length != ref.length) {
+                failAnalysis(
+                  s"""
+                    |${operator.nodeName} can only be performed on tables with the same number
+                    |of columns, but the first table has ${ref.length} columns and
+                    |the ${ordinalNumber(ti + 1)} table has ${child.output.length} columns
+                  """.stripMargin.replace("\n", " ").trim())
+              }
+              // Check if the data types match.
+              dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
+                // SPARK-18058: we shall not care about the nullability of columns
+                if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
+                  failAnalysis(
+                    s"""
+                      |${operator.nodeName} can only be performed on tables with the compatible
+                      |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
+                      |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
+                    """.stripMargin.replace("\n", " ").trim())
+                }
+              }
+            }
 
           case _ => // Fallbacks to the following checks
         }
@@ -242,11 +369,24 @@ trait CheckAnalysis {
                  |Failure when resolving conflicting references in Intersect:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-                 |""".stripMargin)
+               """.stripMargin)
 
-          case o if !o.resolved =>
+          case e: Except if !e.duplicateResolved =>
+            val conflictingAttributes = e.left.outputSet.intersect(e.right.outputSet)
             failAnalysis(
-              s"unresolved operator ${operator.simpleString}")
+              s"""
+                 |Failure when resolving conflicting references in Except:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+               """.stripMargin)
+
+          // TODO: although map type is not orderable, technically map type should be able to be
+          // used in equality comparison, remove this type check once we support it.
+          case o if mapColumnInSetOperation(o).isDefined =>
+            val mapCol = mapColumnInSetOperation(o).get
+            failAnalysis("Cannot have map type columns in DataFrame which calls " +
+              s"set operations(intersect, except, etc.), but the type of column ${mapCol.name} " +
+              "is " + mapCol.dataType.simpleString)
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
@@ -259,10 +399,18 @@ trait CheckAnalysis {
                  |in operator ${operator.simpleString}
                """.stripMargin)
 
+          case _: Hint =>
+            throw new IllegalStateException(
+              "Internal error: logical hint operator should have been removed during analysis")
+
           case _ => // Analysis successful!
         }
     }
     extendedCheckRules.foreach(_(plan))
+    plan.foreachUp {
+      case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
+      case _ =>
+    }
 
     plan.foreach(_.setAnalyzed())
   }

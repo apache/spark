@@ -123,6 +123,22 @@ class JoinedRow extends InternalRow {
 
   override def anyNull: Boolean = row1.anyNull || row2.anyNull
 
+  override def setNullAt(i: Int): Unit = {
+    if (i < row1.numFields) {
+      row1.setNullAt(i)
+    } else {
+      row2.setNullAt(i - row1.numFields)
+    }
+  }
+
+  override def update(i: Int, value: Any): Unit = {
+    if (i < row1.numFields) {
+      row1.update(i, value)
+    } else {
+      row2.update(i - row1.numFields, value)
+    }
+  }
+
   override def copy(): InternalRow = {
     val copy1 = row1.copy()
     val copy2 = row2.copy()

@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.{DataInputStream, DataOutputStream, IOException}
+import java.io.{DataInputStream, DataOutputStream, FileNotFoundException, IOException}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -46,12 +47,14 @@ import org.apache.spark.util.Utils
  * Usage:
  * To update the data in the state store, the following order of operations are needed.
  *
- * - val store = StateStore.get(operatorId, partitionId, version) // to get the right store
- * - store.update(...)
+ * // get the right store
+ * - val store = StateStore.get(
+ *      StateStoreId(checkpointLocation, operatorId, partitionId), ..., version, ...)
+ * - store.put(...)
  * - store.remove(...)
- * - store.commit()    // commits all the updates to made with version number
+ * - store.commit()    // commits all the updates to made; the new version will be returned
  * - store.iterator()  // key-value data after last commit as an iterator
- * - store.updates()   // updates made in the last as an iterator
+ * - store.updates()   // updates made in the last commit as an iterator
  *
  * Fault-tolerance model:
  * - Every set of updates is written to a delta file before committing.
@@ -71,7 +74,12 @@ private[state] class HDFSBackedStateStoreProvider(
     hadoopConf: Configuration
   ) extends StateStoreProvider with Logging {
 
-  type MapType = java.util.HashMap[UnsafeRow, UnsafeRow]
+  // ConcurrentHashMap is used because it generates fail-safe iterators on filtering
+  // - The iterator is weakly consistent with the map, i.e., iterator's data reflect the values in
+  //   the map when the iterator was created
+  // - Any updates to the map while iterating through the filtered iterator does not throw
+  //   java.util.ConcurrentModificationException
+  type MapType = java.util.concurrent.ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
   /** Implementation of [[StateStore]] API which is backed by a HDFS-compatible file system */
   class HDFSBackedStateStore(val version: Long, mapToUpdate: MapType)
@@ -85,8 +93,7 @@ private[state] class HDFSBackedStateStoreProvider(
 
     private val newVersion = version + 1
     private val tempDeltaFile = new Path(baseDir, s"temp-${Random.nextLong}")
-    private val tempDeltaFileStream = compressStream(fs.create(tempDeltaFile, true))
-
+    private lazy val tempDeltaFileStream = compressStream(fs.create(tempDeltaFile, true))
     private val allUpdates = new java.util.HashMap[UnsafeRow, StoreUpdate]()
 
     @volatile private var state: STATE = UPDATING
@@ -98,8 +105,18 @@ private[state] class HDFSBackedStateStoreProvider(
       Option(mapToUpdate.get(key))
     }
 
+    override def filter(
+        condition: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
+      mapToUpdate
+        .entrySet
+        .asScala
+        .iterator
+        .filter { entry => condition(entry.getKey, entry.getValue) }
+        .map { entry => (entry.getKey, entry.getValue) }
+    }
+
     override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
-      verify(state == UPDATING, "Cannot remove after already committed or cancelled")
+      verify(state == UPDATING, "Cannot put after already committed or aborted")
 
       val isNewKey = !mapToUpdate.containsKey(key)
       mapToUpdate.put(key, value)
@@ -108,8 +125,8 @@ private[state] class HDFSBackedStateStoreProvider(
         case Some(ValueAdded(_, _)) =>
           // Value did not exist in previous version and was added already, keep it marked as added
           allUpdates.put(key, ValueAdded(key, value))
-        case Some(ValueUpdated(_, _)) | Some(KeyRemoved(_)) =>
-          // Value existed in prev version and updated/removed, mark it as updated
+        case Some(ValueUpdated(_, _)) | Some(ValueRemoved(_, _)) =>
+          // Value existed in previous version and updated/removed, mark it as updated
           allUpdates.put(key, ValueUpdated(key, value))
         case None =>
           // There was no prior update, so mark this as added or updated according to its presence
@@ -122,55 +139,78 @@ private[state] class HDFSBackedStateStoreProvider(
 
     /** Remove keys that match the following condition */
     override def remove(condition: UnsafeRow => Boolean): Unit = {
-      verify(state == UPDATING, "Cannot remove after already committed or cancelled")
-      val keyIter = mapToUpdate.keySet().iterator()
-      while (keyIter.hasNext) {
-        val key = keyIter.next
-        if (condition(key)) {
-          keyIter.remove()
+      verify(state == UPDATING, "Cannot remove after already committed or aborted")
+      val entryIter = mapToUpdate.entrySet().iterator()
+      while (entryIter.hasNext) {
+        val entry = entryIter.next
+        if (condition(entry.getKey)) {
+          val value = entry.getValue
+          val key = entry.getKey
+          entryIter.remove()
 
           Option(allUpdates.get(key)) match {
             case Some(ValueUpdated(_, _)) | None =>
               // Value existed in previous version and maybe was updated, mark removed
-              allUpdates.put(key, KeyRemoved(key))
+              allUpdates.put(key, ValueRemoved(key, value))
             case Some(ValueAdded(_, _)) =>
               // Value did not exist in previous version and was added, should not appear in updates
               allUpdates.remove(key)
-            case Some(KeyRemoved(_)) =>
+            case Some(ValueRemoved(_, _)) =>
               // Remove already in update map, no need to change
           }
-          writeToDeltaFile(tempDeltaFileStream, KeyRemoved(key))
+          writeToDeltaFile(tempDeltaFileStream, ValueRemoved(key, value))
         }
+      }
+    }
+
+    /** Remove a single key. */
+    override def remove(key: UnsafeRow): Unit = {
+      verify(state == UPDATING, "Cannot remove after already committed or aborted")
+      if (mapToUpdate.containsKey(key)) {
+        val value = mapToUpdate.remove(key)
+        Option(allUpdates.get(key)) match {
+          case Some(ValueUpdated(_, _)) | None =>
+            // Value existed in previous version and maybe was updated, mark removed
+            allUpdates.put(key, ValueRemoved(key, value))
+          case Some(ValueAdded(_, _)) =>
+            // Value did not exist in previous version and was added, should not appear in updates
+            allUpdates.remove(key)
+          case Some(ValueRemoved(_, _)) =>
+          // Remove already in update map, no need to change
+        }
+        writeToDeltaFile(tempDeltaFileStream, ValueRemoved(key, value))
       }
     }
 
     /** Commit all the updates that have been made to the store, and return the new version. */
     override def commit(): Long = {
-      verify(state == UPDATING, "Cannot commit after already committed or cancelled")
+      verify(state == UPDATING, "Cannot commit after already committed or aborted")
 
       try {
         finalizeDeltaFile(tempDeltaFileStream)
         finalDeltaFile = commitUpdates(newVersion, mapToUpdate, tempDeltaFile)
         state = COMMITTED
-        logInfo(s"Committed version $newVersion for $this")
+        logInfo(s"Committed version $newVersion for $this to file $finalDeltaFile")
         newVersion
       } catch {
         case NonFatal(e) =>
           throw new IllegalStateException(
-            s"Error committing version $newVersion into ${HDFSBackedStateStoreProvider.this}", e)
+            s"Error committing version $newVersion into $this", e)
       }
     }
 
-    /** Cancel all the updates made on this store. This store will not be usable any more. */
+    /** Abort all the updates made on this store. This store will not be usable any more. */
     override def abort(): Unit = {
+      verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
+
       state = ABORTED
       if (tempDeltaFileStream != null) {
         tempDeltaFileStream.close()
       }
-      if (tempDeltaFile != null && fs.exists(tempDeltaFile)) {
+      if (tempDeltaFile != null) {
         fs.delete(tempDeltaFile, true)
       }
-      logInfo("Canceled ")
+      logInfo(s"Aborted version $newVersion for $this")
     }
 
     /**
@@ -178,7 +218,8 @@ private[state] class HDFSBackedStateStoreProvider(
      * This can be called only after committing all the updates made in the current thread.
      */
     override def iterator(): Iterator[(UnsafeRow, UnsafeRow)] = {
-      verify(state == COMMITTED, "Cannot get iterator of store data before committing")
+      verify(state == COMMITTED,
+        "Cannot get iterator of store data before committing or after aborting")
       HDFSBackedStateStoreProvider.this.iterator(newVersion)
     }
 
@@ -187,15 +228,22 @@ private[state] class HDFSBackedStateStoreProvider(
      * This can be called only after committing all the updates made in the current thread.
      */
     override def updates(): Iterator[StoreUpdate] = {
-      verify(state == COMMITTED, "Cannot get iterator of updates before committing")
+      verify(state == COMMITTED,
+        "Cannot get iterator of updates before committing or after aborting")
       allUpdates.values().asScala.toIterator
     }
+
+    override def numKeys(): Long = mapToUpdate.size()
 
     /**
      * Whether all updates have been committed
      */
-    override private[state] def hasCommitted: Boolean = {
+    override private[streaming] def hasCommitted: Boolean = {
       state == COMMITTED
+    }
+
+    override def toString(): String = {
+      s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
   }
 
@@ -207,7 +255,7 @@ private[state] class HDFSBackedStateStoreProvider(
       newMap.putAll(loadMap(version))
     }
     val store = new HDFSBackedStateStore(version, newMap)
-    logInfo(s"Retrieved version $version of $this for update")
+    logInfo(s"Retrieved version $version of ${HDFSBackedStateStoreProvider.this} for update")
     store
   }
 
@@ -223,7 +271,7 @@ private[state] class HDFSBackedStateStoreProvider(
   }
 
   override def toString(): String = {
-    s"StateStore[id = (op=${id.operatorId},part=${id.partitionId}), dir = $baseDir]"
+    s"HDFSStateStoreProvider[id = (op=${id.operatorId}, part=${id.partitionId}), dir = $baseDir]"
   }
 
   /* Internal classes and methods */
@@ -242,7 +290,20 @@ private[state] class HDFSBackedStateStoreProvider(
   private def commitUpdates(newVersion: Long, map: MapType, tempDeltaFile: Path): Path = {
     synchronized {
       val finalDeltaFile = deltaFile(newVersion)
-      fs.rename(tempDeltaFile, finalDeltaFile)
+
+      // scalastyle:off
+      // Renaming a file atop an existing one fails on HDFS
+      // (http://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/filesystem/filesystem.html).
+      // Hence we should either skip the rename step or delete the target file. Because deleting the
+      // target file will break speculation, skipping the rename step is the only choice. It's still
+      // semantically correct because Structured Streaming requires rerunning a batch should
+      // generate the same output. (SPARK-19677)
+      // scalastyle:on
+      if (fs.exists(finalDeltaFile)) {
+        fs.delete(tempDeltaFile, true)
+      } else if (!fs.rename(tempDeltaFile, finalDeltaFile)) {
+        throw new IOException(s"Failed to rename $tempDeltaFile to $finalDeltaFile")
+      }
       loadedMaps.put(newVersion, map)
       finalDeltaFile
     }
@@ -272,14 +333,12 @@ private[state] class HDFSBackedStateStoreProvider(
 
   /** Initialize the store provider */
   private def initialize(): Unit = {
-    if (!fs.exists(baseDir)) {
+    try {
       fs.mkdirs(baseDir)
-    } else {
-      if (!fs.isDirectory(baseDir)) {
+    } catch {
+      case e: IOException =>
         throw new IllegalStateException(
-          s"Cannot use ${id.checkpointLocation} for storing state data for $this as" +
-            s"$baseDir already exists and is not a directory")
-      }
+          s"Cannot use ${id.checkpointLocation} for storing state data for $this: $e ", e)
     }
   }
 
@@ -290,7 +349,6 @@ private[state] class HDFSBackedStateStoreProvider(
       val mapFromFile = readSnapshotFile(version).getOrElse {
         val prevMap = loadMap(version - 1)
         val newMap = new MapType(prevMap)
-        newMap.putAll(prevMap)
         updateFromDeltaFile(version, newMap)
         newMap
       }
@@ -322,7 +380,7 @@ private[state] class HDFSBackedStateStoreProvider(
         writeUpdate(key, value)
       case ValueUpdated(key, value) =>
         writeUpdate(key, value)
-      case KeyRemoved(key) =>
+      case ValueRemoved(key, value) =>
         writeRemove(key)
     }
   }
@@ -334,13 +392,16 @@ private[state] class HDFSBackedStateStoreProvider(
 
   private def updateFromDeltaFile(version: Long, map: MapType): Unit = {
     val fileToRead = deltaFile(version)
-    if (!fs.exists(fileToRead)) {
-      throw new IllegalStateException(
-        s"Error reading delta file $fileToRead of $this: $fileToRead does not exist")
-    }
     var input: DataInputStream = null
+    val sourceStream = try {
+      fs.open(fileToRead)
+    } catch {
+      case f: FileNotFoundException =>
+        throw new IllegalStateException(
+          s"Error reading delta file $fileToRead of $this: $fileToRead does not exist", f)
+    }
     try {
-      input = decompressStream(fs.open(fileToRead))
+      input = decompressStream(sourceStream)
       var eof = false
 
       while(!eof) {
@@ -399,8 +460,6 @@ private[state] class HDFSBackedStateStoreProvider(
 
   private def readSnapshotFile(version: Long): Option[MapType] = {
     val fileToRead = snapshotFile(version)
-    if (!fs.exists(fileToRead)) return None
-
     val map = new MapType()
     var input: DataInputStream = null
 
@@ -437,6 +496,9 @@ private[state] class HDFSBackedStateStoreProvider(
       }
       logInfo(s"Read snapshot file for version $version of $this from $fileToRead")
       Some(map)
+    } catch {
+      case _: FileNotFoundException =>
+        None
     } finally {
       if (input != null) input.close()
     }
@@ -453,11 +515,11 @@ private[state] class HDFSBackedStateStoreProvider(
           filesForVersion(files, lastVersion).filter(_.isSnapshot == false)
         synchronized { loadedMaps.get(lastVersion) } match {
           case Some(map) =>
-            if (deltaFilesForLastVersion.size > storeConf.maxDeltasForSnapshot) {
+            if (deltaFilesForLastVersion.size > storeConf.minDeltasForSnapshot) {
               writeSnapshotFile(lastVersion, map)
             }
           case None =>
-            // The last map is not loaded, probably some other instance is incharge
+            // The last map is not loaded, probably some other instance is in charge
         }
 
       }
@@ -483,10 +545,12 @@ private[state] class HDFSBackedStateStoreProvider(
             val mapsToRemove = loadedMaps.keys.filter(_ < earliestVersionToRetain).toSeq
             mapsToRemove.foreach(loadedMaps.remove)
           }
-          files.filter(_.version < earliestFileToRetain.version).foreach { f =>
+          val filesToDelete = files.filter(_.version < earliestFileToRetain.version)
+          filesToDelete.foreach { f =>
             fs.delete(f.path, true)
           }
-          logInfo(s"Deleted files older than ${earliestFileToRetain.version} for $this")
+          logInfo(s"Deleted files older than ${earliestFileToRetain.version} for $this: " +
+            filesToDelete.mkString(", "))
         }
       }
     } catch {
@@ -506,11 +570,10 @@ private[state] class HDFSBackedStateStoreProvider(
       .lastOption
     val deltaBatchFiles = latestSnapshotFileBeforeVersion match {
       case Some(snapshotFile) =>
-        val deltaBatchIds = (snapshotFile.version + 1) to version
 
         val deltaFiles = allFiles.filter { file =>
           file.version > snapshotFile.version && file.version <= version
-        }
+        }.toList
         verify(
           deltaFiles.size == version - snapshotFile.version,
           s"Unexpected list of delta files for version $version for $this: $deltaFiles"
@@ -537,7 +600,7 @@ private[state] class HDFSBackedStateStoreProvider(
       val nameParts = path.getName.split("\\.")
       if (nameParts.size == 2) {
         val version = nameParts(0).toLong
-        nameParts(1).toLowerCase match {
+        nameParts(1).toLowerCase(Locale.ROOT) match {
           case "delta" =>
             // ignore the file otherwise, snapshot file already exists for that batch id
             if (!versionToFiles.contains(version)) {
@@ -551,7 +614,7 @@ private[state] class HDFSBackedStateStoreProvider(
       }
     }
     val storeFiles = versionToFiles.values.toSeq.sortBy(_.version)
-    logDebug(s"Current set of files for $this: $storeFiles")
+    logDebug(s"Current set of files for $this: ${storeFiles.mkString(", ")}")
     storeFiles
   }
 
@@ -579,4 +642,3 @@ private[state] class HDFSBackedStateStoreProvider(
     }
   }
 }
-

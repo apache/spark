@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import java.io.File
 import java.util.concurrent.TimeoutException
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -32,8 +31,9 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
+import org.apache.spark.internal.io.SparkHadoopWriter
 import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Unit tests for the output commit coordination functionality.
@@ -77,7 +77,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     val conf = new SparkConf()
       .setMaster("local[4]")
       .setAppName(classOf[OutputCommitCoordinatorSuite].getSimpleName)
-      .set("spark.speculation", "true")
+      .set("spark.hadoop.outputCommitCoordination.enabled", "true")
     sc = new SparkContext(conf) {
       override private[spark] def createSparkEnv(
           conf: SparkConf,
@@ -160,7 +160,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
     intercept[TimeoutException] {
-      Await.result(futureAction, 5 seconds)
+      ThreadUtils.awaitResult(futureAction, 5 seconds)
     }
     assert(tempDir.list().size === 0)
   }
@@ -176,19 +176,36 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter))
     // The non-authorized committer fails
     outputCommitCoordinator.taskCompleted(
-      stage, partition, attemptNumber = nonAuthorizedCommitter, reason = TaskKilled)
+      stage, partition, attemptNumber = nonAuthorizedCommitter, reason = TaskKilled("test"))
     // New tasks should still not be able to commit because the authorized committer has not failed
     assert(
       !outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 1))
     // The authorized committer now fails, clearing the lock
     outputCommitCoordinator.taskCompleted(
-      stage, partition, attemptNumber = authorizedCommitter, reason = TaskKilled)
+      stage, partition, attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
     // A new task should now be allowed to become the authorized committer
     assert(
       outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 2))
     // There can only be one authorized committer
     assert(
       !outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 3))
+  }
+
+  test("Duplicate calls to canCommit from the authorized committer gets idempotent responses.") {
+    val rdd = sc.parallelize(Seq(1), 1)
+    sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).callCanCommitMultipleTimes _,
+       0 until rdd.partitions.size)
+  }
+
+  test("SPARK-19631: Do not allow failed attempts to be authorized for committing") {
+    val stage: Int = 1
+    val partition: Int = 1
+    val failedAttempt: Int = 0
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    outputCommitCoordinator.taskCompleted(stage, partition, attemptNumber = failedAttempt,
+      reason = ExecutorLostFailure("0", exitCausedByApp = true, None))
+    assert(!outputCommitCoordinator.canCommit(stage, partition, failedAttempt))
+    assert(outputCommitCoordinator.canCommit(stage, partition, failedAttempt + 1))
   }
 }
 
@@ -220,6 +237,16 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     val ctx = TaskContext.get()
     runCommitWithProvidedCommitter(ctx, iter,
       if (ctx.attemptNumber == 0) failingOutputCommitter else successfulOutputCommitter)
+  }
+
+  // Receiver should be idempotent for AskPermissionToCommitOutput
+  def callCanCommitMultipleTimes(iter: Iterator[Int]): Unit = {
+    val ctx = TaskContext.get()
+    val canCommit1 = SparkEnv.get.outputCommitCoordinator
+      .canCommit(ctx.stageId(), ctx.partitionId(), ctx.attemptNumber())
+    val canCommit2 = SparkEnv.get.outputCommitCoordinator
+      .canCommit(ctx.stageId(), ctx.partitionId(), ctx.attemptNumber())
+    assert(canCommit1 && canCommit2)
   }
 
   private def runCommitWithProvidedCommitter(

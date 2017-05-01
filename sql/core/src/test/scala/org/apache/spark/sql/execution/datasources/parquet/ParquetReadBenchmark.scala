@@ -21,9 +21,9 @@ import java.io.File
 import scala.collection.JavaConverters._
 import scala.util.Try
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.{Benchmark, Utils}
 
 /**
@@ -34,12 +34,16 @@ import org.apache.spark.util.{Benchmark, Utils}
 object ParquetReadBenchmark {
   val conf = new SparkConf()
   conf.set("spark.sql.parquet.compression.codec", "snappy")
-  val sc = new SparkContext("local[1]", "test-sql-context", conf)
-  val sqlContext = new SQLContext(sc)
+
+  val spark = SparkSession.builder
+    .master("local[1]")
+    .appName("test-sql-context")
+    .config(conf)
+    .getOrCreate()
 
   // Set default configs. Individual cases will change them if necessary.
-  sqlContext.conf.setConfString(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
-  sqlContext.conf.setConfString(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+  spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
+  spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
 
   def withTempPath(f: File => Unit): Unit = {
     val path = Utils.createTempDir()
@@ -48,17 +52,17 @@ object ParquetReadBenchmark {
   }
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
-    try f finally tableNames.foreach(sqlContext.dropTempTable)
+    try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
 
   def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(sqlContext.conf.getConfString(key)).toOption)
-    (keys, values).zipped.foreach(sqlContext.conf.setConfString)
+    val currentValues = keys.map(key => Try(spark.conf.get(key)).toOption)
+    (keys, values).zipped.foreach(spark.conf.set)
     try f finally {
       keys.zip(currentValues).foreach {
-        case (key, Some(value)) => sqlContext.conf.setConfString(key, value)
-        case (key, None) => sqlContext.conf.unsetConf(key)
+        case (key, Some(value)) => spark.conf.set(key, value)
+        case (key, None) => spark.conf.unset(key)
       }
     }
   }
@@ -71,18 +75,18 @@ object ParquetReadBenchmark {
 
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        sqlContext.range(values).registerTempTable("t1")
-        sqlContext.sql("select cast(id as INT) as id from t1")
+        spark.range(values).createOrReplaceTempView("t1")
+        spark.sql("select cast(id as INT) as id from t1")
             .write.parquet(dir.getCanonicalPath)
-        sqlContext.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tempTable")
 
         sqlBenchmark.addCase("SQL Parquet Vectorized") { iter =>
-          sqlContext.sql("select sum(id) from tempTable").collect()
+          spark.sql("select sum(id) from tempTable").collect()
         }
 
         sqlBenchmark.addCase("SQL Parquet MR") { iter =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            sqlContext.sql("select sum(id) from tempTable").collect()
+            spark.sql("select sum(id) from tempTable").collect()
           }
         }
 
@@ -155,20 +159,20 @@ object ParquetReadBenchmark {
   def intStringScanBenchmark(values: Int): Unit = {
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        sqlContext.range(values).registerTempTable("t1")
-        sqlContext.sql("select cast(id as INT) as c1, cast(id as STRING) as c2 from t1")
+        spark.range(values).createOrReplaceTempView("t1")
+        spark.sql("select cast(id as INT) as c1, cast(id as STRING) as c2 from t1")
             .write.parquet(dir.getCanonicalPath)
-        sqlContext.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tempTable")
 
         val benchmark = new Benchmark("Int and String Scan", values)
 
         benchmark.addCase("SQL Parquet Vectorized") { iter =>
-          sqlContext.sql("select sum(c1), sum(length(c2)) from tempTable").collect
+          spark.sql("select sum(c1), sum(length(c2)) from tempTable").collect
         }
 
         benchmark.addCase("SQL Parquet MR") { iter =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            sqlContext.sql("select sum(c1), sum(length(c2)) from tempTable").collect
+            spark.sql("select sum(c1), sum(length(c2)) from tempTable").collect
           }
         }
 
@@ -189,20 +193,20 @@ object ParquetReadBenchmark {
   def stringDictionaryScanBenchmark(values: Int): Unit = {
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        sqlContext.range(values).registerTempTable("t1")
-        sqlContext.sql("select cast((id % 200) + 10000 as STRING) as c1 from t1")
+        spark.range(values).createOrReplaceTempView("t1")
+        spark.sql("select cast((id % 200) + 10000 as STRING) as c1 from t1")
           .write.parquet(dir.getCanonicalPath)
-        sqlContext.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tempTable")
 
         val benchmark = new Benchmark("String Dictionary", values)
 
         benchmark.addCase("SQL Parquet Vectorized") { iter =>
-          sqlContext.sql("select sum(length(c1)) from tempTable").collect
+          spark.sql("select sum(length(c1)) from tempTable").collect
         }
 
         benchmark.addCase("SQL Parquet MR") { iter =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            sqlContext.sql("select sum(length(c1)) from tempTable").collect
+            spark.sql("select sum(length(c1)) from tempTable").collect
           }
         }
 
@@ -221,23 +225,23 @@ object ParquetReadBenchmark {
   def partitionTableScanBenchmark(values: Int): Unit = {
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        sqlContext.range(values).registerTempTable("t1")
-        sqlContext.sql("select id % 2 as p, cast(id as INT) as id from t1")
+        spark.range(values).createOrReplaceTempView("t1")
+        spark.sql("select id % 2 as p, cast(id as INT) as id from t1")
           .write.partitionBy("p").parquet(dir.getCanonicalPath)
-        sqlContext.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tempTable")
 
         val benchmark = new Benchmark("Partitioned Table", values)
 
         benchmark.addCase("Read data column") { iter =>
-          sqlContext.sql("select sum(id) from tempTable").collect
+          spark.sql("select sum(id) from tempTable").collect
         }
 
         benchmark.addCase("Read partition column") { iter =>
-          sqlContext.sql("select sum(p) from tempTable").collect
+          spark.sql("select sum(p) from tempTable").collect
         }
 
         benchmark.addCase("Read both columns") { iter =>
-          sqlContext.sql("select sum(p), sum(id) from tempTable").collect
+          spark.sql("select sum(p), sum(id) from tempTable").collect
         }
 
         /*
@@ -256,16 +260,16 @@ object ParquetReadBenchmark {
   def stringWithNullsScanBenchmark(values: Int, fractionOfNulls: Double): Unit = {
     withTempPath { dir =>
       withTempTable("t1", "tempTable") {
-        sqlContext.range(values).registerTempTable("t1")
-        sqlContext.sql(s"select IF(rand(1) < $fractionOfNulls, NULL, cast(id as STRING)) as c1, " +
+        spark.range(values).createOrReplaceTempView("t1")
+        spark.sql(s"select IF(rand(1) < $fractionOfNulls, NULL, cast(id as STRING)) as c1, " +
           s"IF(rand(2) < $fractionOfNulls, NULL, cast(id as STRING)) as c2 from t1")
           .write.parquet(dir.getCanonicalPath)
-        sqlContext.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tempTable")
 
         val benchmark = new Benchmark("String with Nulls Scan", values)
 
         benchmark.addCase("SQL Parquet Vectorized") { iter =>
-          sqlContext.sql("select sum(length(c2)) from tempTable where c1 is " +
+          spark.sql("select sum(length(c2)) from tempTable where c1 is " +
             "not NULL and c2 is not NULL").collect()
         }
 

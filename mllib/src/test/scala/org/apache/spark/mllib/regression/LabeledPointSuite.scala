@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.{LabeledPoint => NewLabeledPoint}
 import org.apache.spark.mllib.linalg.Vectors
 
 class LabeledPointSuite extends SparkFunSuite {
@@ -39,5 +40,17 @@ class LabeledPointSuite extends SparkFunSuite {
   test("parse labeled points with v0.9 format") {
     val point = LabeledPoint.parse("1.0,1.0 0.0 -2.0")
     assert(point === LabeledPoint(1.0, Vectors.dense(1.0, 0.0, -2.0)))
+  }
+
+  test("conversions between new ml LabeledPoint and mllib LabeledPoint") {
+    val points: Seq[LabeledPoint] = Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
+      LabeledPoint(0.0, Vectors.sparse(2, Array(1), Array(-1.0))))
+
+    val newPoints: Seq[NewLabeledPoint] = points.map(_.asML)
+
+    points.zip(newPoints).foreach { case (p1, p2) =>
+      assert(p1 === LabeledPoint.fromML(p2))
+    }
   }
 }

@@ -28,7 +28,7 @@
 
     with Spark-specific changes from:
 
-    https://cwiki.apache.org/confluence/display/SPARK/Spark+Code+Style+Guide
+    http://spark.apache.org/contributing.html#code-style-guide
 
     Checkstyle is very configurable. Be sure to read the documentation at
     http://checkstyle.sf.net (or in your downloaded distribution).
@@ -52,6 +52,20 @@
       <property name="file" value="dev/checkstyle-suppressions.xml"/>
     </module>
 
+    <!--
+    If you wish to turn off checking for a section of code, you can put a comment in the source
+    before and after the section, with the following syntax:
+
+      // checkstyle:off no.XXX (such as checkstyle.off: NoFinalizer)
+      ...  // stuff that breaks the styles
+      // checkstyle:on
+    -->
+    <module name="SuppressionCommentFilter">
+        <property name="offCommentFormat" value="checkstyle.off\: ([\w\|]+)"/>
+        <property name="onCommentFormat" value="checkstyle.on\: ([\w\|]+)"/>
+        <property name="checkFormat" value="$1"/>
+    </module>
+
     <!-- Checks for whitespace                               -->
     <!-- See http://checkstyle.sf.net/config_whitespace.html -->
     <module name="FileTabCharacter">
@@ -63,6 +77,8 @@
         <property name="format" value="\s+$"/>
         <property name="message" value="No trailing whitespace allowed."/>
     </module>
+
+    <module name="NewlineAtEndOfFile"/>
 
     <module name="TreeWalker">
         <module name="OuterTypeFilename"/>
@@ -166,5 +182,6 @@
         <module name="UnusedImports"/>
         <module name="RedundantImport"/>
         <module name="RedundantModifier"/>
+        <module name="FileContentsHolder"/>
     </module>
 </module>

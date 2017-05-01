@@ -24,11 +24,11 @@ if sys.version > '3':
 from abc import ABCMeta
 import copy
 import numpy as np
-import warnings
 
-from pyspark import since
+from py4j.java_gateway import JavaObject
+
+from pyspark.ml.linalg import DenseVector, Vector
 from pyspark.ml.util import Identifiable
-from pyspark.mllib.linalg import DenseVector, Vector
 
 
 __all__ = ['Param', 'Params', 'TypeConverters']
@@ -38,22 +38,15 @@ class Param(object):
     """
     A param with self-contained documentation.
 
-    Note: `expectedType` is deprecated and will be removed in 2.1. Use typeConverter instead,
-          as a keyword argument.
-
     .. versionadded:: 1.3.0
     """
 
-    def __init__(self, parent, name, doc, expectedType=None, typeConverter=None):
+    def __init__(self, parent, name, doc, typeConverter=None):
         if not isinstance(parent, Identifiable):
             raise TypeError("Parent must be an Identifiable but got type %s." % type(parent))
         self.parent = parent.uid
         self.name = str(name)
         self.doc = str(doc)
-        self.expectedType = expectedType
-        if expectedType is not None:
-            warnings.warn("expectedType is deprecated and will be removed in 2.1. " +
-                          "Use typeConverter instead, as a keyword argument.")
         self.typeConverter = TypeConverters.identity if typeConverter is None else typeConverter
 
     def _copy_new_parent(self, parent):
@@ -256,7 +249,6 @@ class Params(Identifiable):
             setattr(self, name, param._copy_new_parent(self))
 
     @property
-    @since("1.3.0")
     def params(self):
         """
         Returns all params ordered by name. The default implementation
@@ -269,7 +261,6 @@ class Params(Identifiable):
                                         not isinstance(getattr(type(self), x, None), property)]))
         return self._params
 
-    @since("1.4.0")
     def explainParam(self, param):
         """
         Explains a single param and returns its name, doc, and optional
@@ -287,7 +278,6 @@ class Params(Identifiable):
         valueStr = "(" + ", ".join(values) + ")"
         return "%s: %s %s" % (param.name, param.doc, valueStr)
 
-    @since("1.4.0")
     def explainParams(self):
         """
         Returns the documentation of all params with their optionally
@@ -295,7 +285,6 @@ class Params(Identifiable):
         """
         return "\n".join([self.explainParam(param) for param in self.params])
 
-    @since("1.4.0")
     def getParam(self, paramName):
         """
         Gets a param by its name.
@@ -306,7 +295,6 @@ class Params(Identifiable):
         else:
             raise ValueError("Cannot find param with name %s." % paramName)
 
-    @since("1.4.0")
     def isSet(self, param):
         """
         Checks whether a param is explicitly set by user.
@@ -314,7 +302,6 @@ class Params(Identifiable):
         param = self._resolveParam(param)
         return param in self._paramMap
 
-    @since("1.4.0")
     def hasDefault(self, param):
         """
         Checks whether a param has a default value.
@@ -322,7 +309,6 @@ class Params(Identifiable):
         param = self._resolveParam(param)
         return param in self._defaultParamMap
 
-    @since("1.4.0")
     def isDefined(self, param):
         """
         Checks whether a param is explicitly set by user or has
@@ -330,7 +316,6 @@ class Params(Identifiable):
         """
         return self.isSet(param) or self.hasDefault(param)
 
-    @since("1.4.0")
     def hasParam(self, paramName):
         """
         Tests whether this instance contains a param with a given
@@ -342,7 +327,6 @@ class Params(Identifiable):
         else:
             raise TypeError("hasParam(): paramName must be a string")
 
-    @since("1.4.0")
     def getOrDefault(self, param):
         """
         Gets the value of a param in the user-supplied param map or its
@@ -354,7 +338,6 @@ class Params(Identifiable):
         else:
             return self._defaultParamMap[param]
 
-    @since("1.4.0")
     def extractParamMap(self, extra=None):
         """
         Extracts the embedded default param values and user-supplied
@@ -373,7 +356,6 @@ class Params(Identifiable):
         paramMap.update(extra)
         return paramMap
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with the same uid and some
@@ -389,8 +371,9 @@ class Params(Identifiable):
         if extra is None:
             extra = dict()
         that = copy.copy(self)
-        that._paramMap = self.extractParamMap(extra)
-        return that
+        that._paramMap = {}
+        that._defaultParamMap = {}
+        return self._copyValues(that, extra)
 
     def _shouldOwn(self, param):
         """
@@ -439,12 +422,26 @@ class Params(Identifiable):
             self._paramMap[p] = value
         return self
 
+    def _clear(self, param):
+        """
+        Clears a param from the param map if it has been explicitly set.
+        """
+        if self.isSet(param):
+            del self._paramMap[param]
+
     def _setDefault(self, **kwargs):
         """
         Sets default params.
         """
         for param, value in kwargs.items():
-            self._defaultParamMap[getattr(self, param)] = value
+            p = getattr(self, param)
+            if value is not None and not isinstance(value, JavaObject):
+                try:
+                    value = p.typeConverter(value)
+                except TypeError as e:
+                    raise TypeError('Invalid default param value given for param "%s". %s'
+                                    % (p.name, e))
+            self._defaultParamMap[p] = value
         return self
 
     def _copyValues(self, to, extra=None):
@@ -456,12 +453,16 @@ class Params(Identifiable):
         :param extra: extra params to be copied
         :return: the target instance with param values copied
         """
-        if extra is None:
-            extra = dict()
-        paramMap = self.extractParamMap(extra)
-        for p in self.params:
-            if p in paramMap and to.hasParam(p.name):
-                to._set(**{p.name: paramMap[p]})
+        paramMap = self._paramMap.copy()
+        if extra is not None:
+            paramMap.update(extra)
+        for param in self.params:
+            # copy default params
+            if param in self._defaultParamMap and to.hasParam(param.name):
+                to._defaultParamMap[to.getParam(param.name)] = self._defaultParamMap[param]
+            # copy explicitly set params
+            if param in paramMap and to.hasParam(param.name):
+                to._set(**{param.name: paramMap[param]})
         return to
 
     def _resetUid(self, newUid):
@@ -469,10 +470,11 @@ class Params(Identifiable):
         Changes the uid of this instance. This updates both
         the stored uid and the parent uid of params and param maps.
         This is used by persistence (loading).
-        :param newUid: new uid to use
+        :param newUid: new uid to use, which is converted to unicode
         :return: same instance, but with the uid and Param.parent values
                  updated, including within param maps
         """
+        newUid = unicode(newUid)
         self.uid = newUid
         newDefaultParamMap = dict()
         newParamMap = dict()

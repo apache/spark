@@ -48,7 +48,7 @@ class DataFrameTungstenSuite extends QueryTest with SharedSQLContext {
           .add("b3", FloatType)
           .add("b4", DoubleType))
 
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = spark.createDataFrame(data, schema)
     assert(df.select("b").first() === Row(struct))
   }
 
@@ -70,7 +70,7 @@ class DataFrameTungstenSuite extends QueryTest with SharedSQLContext {
           .add("b5b", StringType))
           .add("b6", StringType))
 
-    val df = sqlContext.createDataFrame(data, schema)
+    val df = spark.createDataFrame(data, schema)
     assert(df.select("b").first() === Row(outerStruct))
   }
 }

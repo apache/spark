@@ -17,11 +17,11 @@
 
 package org.apache.spark.ml.param
 
-import java.io.{ByteArrayOutputStream, NotSerializableException, ObjectOutputStream}
+import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.MyParams
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 class ParamsSuite extends SparkFunSuite {
 
@@ -377,7 +377,7 @@ class ParamsSuite extends SparkFunSuite {
 object ParamsSuite extends SparkFunSuite {
 
   /**
-   * Checks common requirements for [[Params.params]]:
+   * Checks common requirements for `Params.params`:
    *   - params are ordered by names
    *   - param parent has the same UID as the object's UID
    *   - param name is the same as the param method name

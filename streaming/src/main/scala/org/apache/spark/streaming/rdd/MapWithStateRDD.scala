@@ -29,7 +29,7 @@ import org.apache.spark.streaming.util.{EmptyStateMap, StateMap}
 import org.apache.spark.util.Utils
 
 /**
- * Record storing the keyed-state [[MapWithStateRDD]]. Each record contains a [[StateMap]] and a
+ * Record storing the keyed-state [[MapWithStateRDD]]. Each record contains a `StateMap` and a
  * sequence of records returned by the mapping function of `mapWithState`.
  */
 private[streaming] case class MapWithStateRDDRecord[K, S, E](
@@ -84,15 +84,19 @@ private[streaming] object MapWithStateRDDRecord {
  * RDD, and a partitioned keyed-data RDD
  */
 private[streaming] class MapWithStateRDDPartition(
-    idx: Int,
+    override val index: Int,
     @transient private var prevStateRDD: RDD[_],
     @transient private var partitionedDataRDD: RDD[_]) extends Partition {
 
   private[rdd] var previousSessionRDDPartition: Partition = null
   private[rdd] var partitionedDataRDDPartition: Partition = null
 
-  override def index: Int = idx
-  override def hashCode(): Int = idx
+  override def hashCode(): Int = index
+
+  override def equals(other: Any): Boolean = other match {
+    case that: MapWithStateRDDPartition => index == that.index
+    case _ => false
+  }
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
@@ -107,7 +111,7 @@ private[streaming] class MapWithStateRDDPartition(
 /**
  * RDD storing the keyed states of `mapWithState` operation and corresponding mapped data.
  * Each partition of this RDD has a single record of type [[MapWithStateRDDRecord]]. This contains a
- * [[StateMap]] (containing the keyed-states) and the sequence of records returned by the mapping
+ * `StateMap` (containing the keyed-states) and the sequence of records returned by the mapping
  * function of  `mapWithState`.
  * @param prevStateRDD The previous MapWithStateRDD on whose StateMap data `this` RDD
   *                    will be created

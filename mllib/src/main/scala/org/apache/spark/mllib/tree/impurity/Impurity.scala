@@ -17,17 +17,17 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import java.util.Locale
+
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
- * :: Experimental ::
  * Trait for calculating information gain.
  * This trait is used for
  *  (a) setting the impurity parameter in [[org.apache.spark.mllib.tree.configuration.Strategy]]
  *  (b) calculating impurity values from sufficient statistics.
  */
 @Since("1.0.0")
-@Experimental
 trait Impurity extends Serializable {
 
   /**
@@ -186,7 +186,7 @@ private[spark] object ImpurityCalculator {
    * the given stats.
    */
   def getCalculator(impurity: String, stats: Array[Double]): ImpurityCalculator = {
-    impurity match {
+    impurity.toLowerCase(Locale.ROOT) match {
       case "gini" => new GiniCalculator(stats)
       case "entropy" => new EntropyCalculator(stats)
       case "variance" => new VarianceCalculator(stats)

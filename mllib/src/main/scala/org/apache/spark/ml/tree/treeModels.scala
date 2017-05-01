@@ -23,15 +23,15 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite.NodeData
 import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter}
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, SQLContext}
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -95,11 +95,6 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   /** Trees in this ensemble. Warning: These have null parent Estimators. */
   def trees: Array[M]
 
-  /**
-   * Number of trees in ensemble
-   */
-  val getNumTrees: Int = trees.length
-
   /** Weights for each tree, zippable with [[trees]] */
   def treeWeights: Array[Double]
 
@@ -133,8 +128,8 @@ private[ml] object TreeEnsembleModel {
    * following the explanation of Gini importance from "Random Forests" documentation
    * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
    *
-   *  For collections of trees, including boosting and bagging, Hastie et al.
-   *  propose to use the average of single tree importances across all trees in the ensemble.
+   * For collections of trees, including boosting and bagging, Hastie et al.
+   * propose to use the average of single tree importances across all trees in the ensemble.
    *
    * This feature importance is calculated as follows:
    *  - Average over trees:
@@ -332,8 +327,8 @@ private[ml] object DecisionTreeModelReadWrite {
   def loadTreeNodes(
       path: String,
       metadata: DefaultParamsReader.Metadata,
-      sqlContext: SQLContext): Node = {
-    import sqlContext.implicits._
+      sparkSession: SparkSession): Node = {
+    import sparkSession.implicits._
     implicit val format = DefaultFormats
 
     // Get impurity to construct ImpurityCalculator for each node
@@ -343,7 +338,7 @@ private[ml] object DecisionTreeModelReadWrite {
     }
 
     val dataPath = new Path(path, "data").toString
-    val data = sqlContext.read.parquet(dataPath).as[NodeData]
+    val data = sparkSession.read.parquet(dataPath).as[NodeData]
     buildTreeFromNodes(data.collect(), impurityType)
   }
 
@@ -393,15 +388,17 @@ private[ml] object EnsembleModelReadWrite {
   def saveImpl[M <: Params with TreeEnsembleModel[_ <: DecisionTreeModel]](
       instance: M,
       path: String,
-      sql: SQLContext,
+      sql: SparkSession,
       extraMetadata: JObject): Unit = {
     DefaultParamsWriter.saveMetadata(instance, path, sql.sparkContext, Some(extraMetadata))
-    val treesMetadataJson: Array[(Int, String)] = instance.trees.zipWithIndex.map {
+    val treesMetadataWeights: Array[(Int, String, Double)] = instance.trees.zipWithIndex.map {
       case (tree, treeID) =>
-        treeID -> DefaultParamsWriter.getMetadataToSave(tree.asInstanceOf[Params], sql.sparkContext)
+        (treeID,
+          DefaultParamsWriter.getMetadataToSave(tree.asInstanceOf[Params], sql.sparkContext),
+          instance.treeWeights(treeID))
     }
     val treesMetadataPath = new Path(path, "treesMetadata").toString
-    sql.createDataFrame(treesMetadataJson).toDF("treeID", "metadata")
+    sql.createDataFrame(treesMetadataWeights).toDF("treeID", "metadata", "weights")
       .write.parquet(treesMetadataPath)
     val dataPath = new Path(path, "data").toString
     val nodeDataRDD = sql.sparkContext.parallelize(instance.trees.zipWithIndex).flatMap {
@@ -413,18 +410,18 @@ private[ml] object EnsembleModelReadWrite {
   /**
    * Helper method for loading a tree ensemble from disk.
    * This reconstructs all trees, returning the root nodes.
-   * @param path  Path given to [[saveImpl()]]
+   * @param path  Path given to `saveImpl`
    * @param className  Class name for ensemble model type
    * @param treeClassName  Class name for tree model type in the ensemble
    * @return  (ensemble metadata, array over trees of (tree metadata, root node)),
    *          where the root node is linked with all descendents
-   * @see [[saveImpl()]] for how the model was saved
+   * @see `saveImpl` for how the model was saved
    */
   def loadImpl(
       path: String,
-      sql: SQLContext,
+      sql: SparkSession,
       className: String,
-      treeClassName: String): (Metadata, Array[(Metadata, Node)]) = {
+      treeClassName: String): (Metadata, Array[(Metadata, Node)], Array[Double]) = {
     import sql.implicits._
     implicit val format = DefaultFormats
     val metadata = DefaultParamsReader.loadMetadata(path, sql.sparkContext, className)
@@ -436,12 +433,15 @@ private[ml] object EnsembleModelReadWrite {
     }
 
     val treesMetadataPath = new Path(path, "treesMetadata").toString
-    val treesMetadataRDD: RDD[(Int, Metadata)] = sql.read.parquet(treesMetadataPath)
-      .select("treeID", "metadata").as[(Int, String)].rdd.map {
-      case (treeID: Int, json: String) =>
-        treeID -> DefaultParamsReader.parseMetadata(json, treeClassName)
+    val treesMetadataRDD: RDD[(Int, (Metadata, Double))] = sql.read.parquet(treesMetadataPath)
+      .select("treeID", "metadata", "weights").as[(Int, String, Double)].rdd.map {
+      case (treeID: Int, json: String, weights: Double) =>
+        treeID -> (DefaultParamsReader.parseMetadata(json, treeClassName), weights)
     }
-    val treesMetadata: Array[Metadata] = treesMetadataRDD.sortByKey().values.collect()
+
+    val treesMetadataWeights = treesMetadataRDD.sortByKey().values.collect()
+    val treesMetadata = treesMetadataWeights.map(_._1)
+    val treesWeights = treesMetadataWeights.map(_._2)
 
     val dataPath = new Path(path, "data").toString
     val nodeData: Dataset[EnsembleNodeData] =
@@ -452,7 +452,7 @@ private[ml] object EnsembleModelReadWrite {
           treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeData.toArray, impurityType)
       }
     val rootNodes: Array[Node] = rootNodesRDD.sortByKey().values.collect()
-    (metadata, treesMetadata.zip(rootNodes))
+    (metadata, treesMetadata.zip(rootNodes), treesWeights)
   }
 
   /**

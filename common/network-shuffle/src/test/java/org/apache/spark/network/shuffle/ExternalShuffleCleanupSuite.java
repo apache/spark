@@ -29,14 +29,15 @@ import org.junit.Test;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class ExternalShuffleCleanupSuite {
 
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
   private Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
-  private TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+  private TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
+  private static final String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
 
   @Test
   public void noCleanupAndCleanup() throws IOException {
@@ -44,12 +45,12 @@ public class ExternalShuffleCleanupSuite {
 
     ExternalShuffleBlockResolver resolver =
       new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
-    resolver.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
+    resolver.registerExecutor("app", "exec0", dataContext.createExecutorInfo(SORT_MANAGER));
     resolver.applicationRemoved("app", false /* cleanup */);
 
     assertStillThere(dataContext);
 
-    resolver.registerExecutor("app", "exec1", dataContext.createExecutorInfo("shuffleMgr"));
+    resolver.registerExecutor("app", "exec1", dataContext.createExecutorInfo(SORT_MANAGER));
     resolver.applicationRemoved("app", true /* cleanup */);
 
     assertCleanedUp(dataContext);
@@ -59,17 +60,15 @@ public class ExternalShuffleCleanupSuite {
   public void cleanupUsesExecutor() throws IOException {
     TestShuffleDataContext dataContext = createSomeData();
 
-    final AtomicBoolean cleanupCalled = new AtomicBoolean(false);
+    AtomicBoolean cleanupCalled = new AtomicBoolean(false);
 
     // Executor which does nothing to ensure we're actually using it.
-    Executor noThreadExecutor = new Executor() {
-      @Override public void execute(Runnable runnable) { cleanupCalled.set(true); }
-    };
+    Executor noThreadExecutor = runnable -> cleanupCalled.set(true);
 
     ExternalShuffleBlockResolver manager =
       new ExternalShuffleBlockResolver(conf, null, noThreadExecutor);
 
-    manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo("shuffleMgr"));
+    manager.registerExecutor("app", "exec0", dataContext.createExecutorInfo(SORT_MANAGER));
     manager.applicationRemoved("app", true);
 
     assertTrue(cleanupCalled.get());
@@ -87,8 +86,8 @@ public class ExternalShuffleCleanupSuite {
     ExternalShuffleBlockResolver resolver =
       new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
 
-    resolver.registerExecutor("app", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
-    resolver.registerExecutor("app", "exec1", dataContext1.createExecutorInfo("shuffleMgr"));
+    resolver.registerExecutor("app", "exec0", dataContext0.createExecutorInfo(SORT_MANAGER));
+    resolver.registerExecutor("app", "exec1", dataContext1.createExecutorInfo(SORT_MANAGER));
     resolver.applicationRemoved("app", true);
 
     assertCleanedUp(dataContext0);
@@ -103,8 +102,8 @@ public class ExternalShuffleCleanupSuite {
     ExternalShuffleBlockResolver resolver =
       new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
 
-    resolver.registerExecutor("app-0", "exec0", dataContext0.createExecutorInfo("shuffleMgr"));
-    resolver.registerExecutor("app-1", "exec0", dataContext1.createExecutorInfo("shuffleMgr"));
+    resolver.registerExecutor("app-0", "exec0", dataContext0.createExecutorInfo(SORT_MANAGER));
+    resolver.registerExecutor("app-1", "exec0", dataContext1.createExecutorInfo(SORT_MANAGER));
 
     resolver.applicationRemoved("app-nonexistent", true);
     assertStillThere(dataContext0);
@@ -144,9 +143,6 @@ public class ExternalShuffleCleanupSuite {
     dataContext.insertSortShuffleData(rand.nextInt(1000), rand.nextInt(1000), new byte[][] {
         "ABC".getBytes(StandardCharsets.UTF_8),
         "DEF".getBytes(StandardCharsets.UTF_8)});
-    dataContext.insertHashShuffleData(rand.nextInt(1000), rand.nextInt(1000) + 1000, new byte[][] {
-        "GHI".getBytes(StandardCharsets.UTF_8),
-        "JKLMNOPQRSTUVWXYZ".getBytes(StandardCharsets.UTF_8)});
     return dataContext;
   }
 }

@@ -44,6 +44,19 @@ class SamplingUtilsSuite extends SparkFunSuite {
     assert(sample3.length === 10)
   }
 
+  test("SPARK-18678 reservoirSampleAndCount with tiny input") {
+    val input = Seq(0, 1)
+    val counts = new Array[Int](input.size)
+    for (i <- 0 until 500) {
+      val (samples, inputSize) = SamplingUtils.reservoirSampleAndCount(input.iterator, 1)
+      assert(inputSize === 2)
+      assert(samples.length === 1)
+      counts(samples.head) += 1
+    }
+    // If correct, should be true with prob ~ 0.99999707
+    assert(math.abs(counts(0) - counts(1)) <= 100)
+  }
+
   test("computeFraction") {
     // test that the computed fraction guarantees enough data points
     // in the sample with a failure rate <= 0.0001

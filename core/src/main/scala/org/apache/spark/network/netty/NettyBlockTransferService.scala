@@ -27,7 +27,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap, TransportClientFactory}
-import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
+import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server._
 import org.apache.spark.network.shuffle.{BlockFetchingListener, OneForOneBlockFetcher, RetryingBlockFetcher}
 import org.apache.spark.network.shuffle.protocol.UploadBlock
@@ -37,9 +37,15 @@ import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
 /**
- * A BlockTransferService that uses Netty to fetch a set of blocks at at time.
+ * A BlockTransferService that uses Netty to fetch a set of blocks at time.
  */
-class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManager, numCores: Int)
+private[spark] class NettyBlockTransferService(
+    conf: SparkConf,
+    securityManager: SecurityManager,
+    bindAddress: String,
+    override val hostName: String,
+    _port: Int,
+    numCores: Int)
   extends BlockTransferService {
 
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
@@ -57,26 +63,24 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
     var serverBootstrap: Option[TransportServerBootstrap] = None
     var clientBootstrap: Option[TransportClientBootstrap] = None
     if (authEnabled) {
-      serverBootstrap = Some(new SaslServerBootstrap(transportConf, securityManager))
-      clientBootstrap = Some(new SaslClientBootstrap(transportConf, conf.getAppId, securityManager,
-        securityManager.isSaslEncryptionEnabled()))
+      serverBootstrap = Some(new AuthServerBootstrap(transportConf, securityManager))
+      clientBootstrap = Some(new AuthClientBootstrap(transportConf, conf.getAppId, securityManager))
     }
     transportContext = new TransportContext(transportConf, rpcHandler)
     clientFactory = transportContext.createClientFactory(clientBootstrap.toSeq.asJava)
     server = createServer(serverBootstrap.toList)
     appId = conf.getAppId
-    logInfo("Server created on " + server.getPort)
+    logInfo(s"Server created on ${hostName}:${server.getPort}")
   }
 
   /** Creates and binds the TransportServer, possibly trying multiple ports. */
   private def createServer(bootstraps: List[TransportServerBootstrap]): TransportServer = {
     def startService(port: Int): (TransportServer, Int) = {
-      val server = transportContext.createServer(port, bootstraps.asJava)
+      val server = transportContext.createServer(bindAddress, port, bootstraps.asJava)
       (server, server.getPort)
     }
 
-    val portToTry = conf.getInt("spark.blockManager.port", 0)
-    Utils.startServiceOnPort(portToTry, startService, conf, getClass.getName)._1
+    Utils.startServiceOnPort(_port, startService, conf, getClass.getName)._1
   }
 
   override def fetchBlocks(
@@ -108,8 +112,6 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
         blockIds.foreach(listener.onBlockFetchFailure(_, e))
     }
   }
-
-  override def hostName: String = Utils.localHostName()
 
   override def port: Int = server.getPort
 

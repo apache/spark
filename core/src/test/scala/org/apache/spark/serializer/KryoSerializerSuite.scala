@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.{Kryo, KryoException}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import org.roaringbitmap.RoaringBitmap
 
@@ -36,6 +36,7 @@ import org.apache.spark.util.Utils
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   conf.set("spark.kryo.registrator", classOf[MyRegistrator].getName)
+  conf.set("spark.kryo.unsafe", "false")
 
   test("SPARK-7392 configuration limits") {
     val kryoBufferProperty = "spark.kryoserializer.buffer"
@@ -75,6 +76,9 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("basic types") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
@@ -100,11 +104,14 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(Array("aaa", "bbb", null))
     check(Array(true, false, true))
     check(Array('a', 'b', 'c'))
-    check(Array[Int]())
+    check(Array.empty[Int])
     check(Array(Array("1", "2"), Array("1", "2", "3", "4")))
   }
 
   test("pairs") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
@@ -129,12 +136,16 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("Scala data structures") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(List[Int]())
     check(List[Int](1, 2, 3))
+    check(Seq[Int](1, 2, 3))
     check(List[String]())
     check(List[String]("x", "y", "z"))
     check(None)
@@ -350,6 +361,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val ser = new KryoSerializer(conf).newInstance()
     val thrown = intercept[SparkException](ser.serialize(largeObject))
     assert(thrown.getMessage.contains(kryoBufferMaxProperty))
+    assert(thrown.getCause.isInstanceOf[KryoException])
   }
 
   test("SPARK-12222: deserialize RoaringBitmap throw Buffer underflow exception") {
@@ -476,6 +488,9 @@ object KryoTest {
 
   class ClassWithNoArgConstructor {
     var x: Int = 0
+
+    override def hashCode(): Int = x
+
     override def equals(other: Any): Boolean = other match {
       case c: ClassWithNoArgConstructor => x == c.x
       case _ => false
@@ -483,6 +498,8 @@ object KryoTest {
   }
 
   class ClassWithoutNoArgConstructor(val x: Int) {
+    override def hashCode(): Int = x
+
     override def equals(other: Any): Boolean = other match {
       case c: ClassWithoutNoArgConstructor => x == c.x
       case _ => false

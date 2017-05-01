@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util._
 /**
  * A framework for running the query tests that are listed as a set of text files.
  *
- * TestSuites that derive from this class must provide a map of testCaseName -> testCaseFiles
+ * TestSuites that derive from this class must provide a map of testCaseName to testCaseFiles
  * that should be included. Additionally, there is support for whitelisting and blacklisting
  * tests as development progresses.
  */
@@ -40,14 +40,14 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
 
   def testCases: Seq[(String, File)]
 
-  val runAll =
+  val runAll: Boolean =
     !(System.getProperty("spark.hive.alltests") == null) ||
     runOnlyDirectories.nonEmpty ||
     skipDirectories.nonEmpty
 
-  val whiteListProperty = "spark.hive.whitelist"
+  val whiteListProperty: String = "spark.hive.whitelist"
   // Allow the whiteList to be overridden by a system property
-  val realWhiteList =
+  val realWhiteList: Seq[String] =
     Option(System.getProperty(whiteListProperty)).map(_.split(",").toSeq).getOrElse(whiteList)
 
   // Go through all the test cases and add them to scala test.

@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.UUID
+import java.util.{Objects, UUID}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types._
 
@@ -104,6 +105,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
   def withNullability(newNullability: Boolean): Attribute
   def withQualifier(newQualifier: Option[String]): Attribute
   def withName(newName: String): Attribute
+  def withMetadata(newMetadata: Metadata): Attribute
 
   override def toAttribute: Attribute = this
   def newInstance(): Attribute
@@ -142,8 +144,8 @@ case class Alias(child: Expression, name: String)(
   override def eval(input: InternalRow): Any = child.eval(input)
 
   /** Just a simple passthrough for code generation. */
-  override def gen(ctx: CodegenContext): ExprCode = child.gen(ctx)
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = ""
+  override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev.copy("")
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
@@ -173,6 +175,11 @@ case class Alias(child: Expression, name: String)(
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifier :: explicitMetadata :: isGenerated :: Nil
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(name, exprId, child, qualifier, explicitMetadata)
+    state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -287,11 +294,22 @@ case class AttributeReference(
     }
   }
 
+  override def withMetadata(newMetadata: Metadata): Attribute = {
+    AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier, isGenerated)
+  }
+
   override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifier :: isGenerated :: Nil
   }
 
-  override def toString: String = s"$name#${exprId.id}$typeSuffix"
+  /** Used to signal the column used to calculate an eventTime watermark (e.g. a#1-T{delayMs}) */
+  private def delaySuffix = if (metadata.contains(EventTimeWatermark.delayKey)) {
+    s"-T${metadata.getLong(EventTimeWatermark.delayKey)}ms"
+  } else {
+    ""
+  }
+
+  override def toString: String = s"$name#${exprId.id}$typeSuffix$delaySuffix"
 
   // Since the expression id is not in the first constructor it is missing from the default
   // tree string.
@@ -327,12 +345,33 @@ case class PrettyAttribute(
   override def withQualifier(newQualifier: Option[String]): Attribute =
     throw new UnsupportedOperationException
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
+  override def withMetadata(newMetadata: Metadata): Attribute =
+    throw new UnsupportedOperationException
   override def qualifier: Option[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = true
 }
 
+/**
+ * A place holder used to hold a reference that has been resolved to a field outside of the current
+ * plan. This is used for correlated subqueries.
+ */
+case class OuterReference(e: NamedExpression)
+  extends LeafExpression with NamedExpression with Unevaluable {
+  override def dataType: DataType = e.dataType
+  override def nullable: Boolean = e.nullable
+  override def prettyName: String = "outer"
+
+  override def name: String = e.name
+  override def qualifier: Option[String] = e.qualifier
+  override def exprId: ExprId = e.exprId
+  override def toAttribute: Attribute = e.toAttribute
+  override def newInstance(): NamedExpression = OuterReference(e.newInstance())
+}
+
 object VirtualColumn {
-  val groupingIdName: String = "grouping__id"
+  // The attribute name used by Hive, which has different result than Spark, deprecated.
+  val hiveGroupingIdName: String = "grouping__id"
+  val groupingIdName: String = "spark_grouping_id"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
 }

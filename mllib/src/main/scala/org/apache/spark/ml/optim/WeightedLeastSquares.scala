@@ -19,19 +19,22 @@ package org.apache.spark.ml.optim
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.mllib.linalg._
+import org.apache.spark.ml.linalg._
 import org.apache.spark.rdd.RDD
 
 /**
  * Model fitted by [[WeightedLeastSquares]].
+ *
  * @param coefficients model coefficients
  * @param intercept model intercept
  * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1
+ * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 private[ml] class WeightedLeastSquaresModel(
     val coefficients: DenseVector,
     val intercept: Double,
-    val diagInvAtWA: DenseVector) extends Serializable {
+    val diagInvAtWA: DenseVector,
+    val objectiveHistory: Array[Double]) extends Serializable {
 
   def predict(features: Vector): Double = {
     BLAS.dot(coefficients, features) + intercept
@@ -43,35 +46,52 @@ private[ml] class WeightedLeastSquaresModel(
  * Given weighted observations (w,,i,,, a,,i,,, b,,i,,), we use the following weighted least squares
  * formulation:
  *
- * min,,x,z,, 1/2 sum,,i,, w,,i,, (a,,i,,^T^ x + z - b,,i,,)^2^ / sum,,i,, w_i
- *   + 1/2 lambda / delta sum,,j,, (sigma,,j,, x,,j,,)^2^,
+ * min,,x,z,, 1/2 sum,,i,, w,,i,, (a,,i,,^T^ x + z - b,,i,,)^2^ / sum,,i,, w,,i,,
+ *   + lambda / delta (1/2 (1 - alpha) sum,,j,, (sigma,,j,, x,,j,,)^2^
+ *   + alpha sum,,j,, abs(sigma,,j,, x,,j,,)),
  *
- * where lambda is the regularization parameter, and delta and sigma,,j,, are controlled by
- * [[standardizeLabel]] and [[standardizeFeatures]], respectively.
+ * where lambda is the regularization parameter, alpha is the ElasticNet mixing parameter,
+ * and delta and sigma,,j,, are controlled by [[standardizeLabel]] and [[standardizeFeatures]],
+ * respectively.
  *
  * Set [[regParam]] to 0.0 and turn off both [[standardizeFeatures]] and [[standardizeLabel]] to
  * match R's `lm`.
  * Turn on [[standardizeLabel]] to match R's `glmnet`.
  *
+ * @note The coefficients and intercept are always trained in the scaled space, but are returned
+ *       on the original scale. [[standardizeFeatures]] and [[standardizeLabel]] can be used to
+ *       control whether regularization is applied in the original space or the scaled space.
  * @param fitIntercept whether to fit intercept. If false, z is 0.0.
- * @param regParam L2 regularization parameter (lambda)
- * @param standardizeFeatures whether to standardize features. If true, sigma_,,j,, is the
+ * @param regParam Regularization parameter (lambda).
+ * @param elasticNetParam the ElasticNet mixing parameter (alpha).
+ * @param standardizeFeatures whether to standardize features. If true, sigma,,j,, is the
  *                            population standard deviation of the j-th column of A. Otherwise,
  *                            sigma,,j,, is 1.0.
  * @param standardizeLabel whether to standardize label. If true, delta is the population standard
  *                         deviation of the label column b. Otherwise, delta is 1.0.
+ * @param solverType the type of solver to use for optimization.
+ * @param maxIter maximum number of iterations. Only for QuasiNewton solverType.
+ * @param tol the convergence tolerance of the iterations. Only for QuasiNewton solverType.
  */
 private[ml] class WeightedLeastSquares(
     val fitIntercept: Boolean,
     val regParam: Double,
+    val elasticNetParam: Double,
     val standardizeFeatures: Boolean,
-    val standardizeLabel: Boolean) extends Logging with Serializable {
+    val standardizeLabel: Boolean,
+    val solverType: WeightedLeastSquares.Solver = WeightedLeastSquares.Auto,
+    val maxIter: Int = 100,
+    val tol: Double = 1e-6) extends Logging with Serializable {
   import WeightedLeastSquares._
 
   require(regParam >= 0.0, s"regParam cannot be negative: $regParam")
   if (regParam == 0.0) {
     logWarning("regParam is zero, which might cause numerical instability and overfitting.")
   }
+  require(elasticNetParam >= 0.0 && elasticNetParam <= 1.0,
+    s"elasticNetParam must be in [0, 1]: $elasticNetParam")
+  require(maxIter >= 0, s"maxIter must be a positive integer: $maxIter")
+  require(tol >= 0.0, s"tol must be >= 0, but was set to $tol")
 
   /**
    * Creates a [[WeightedLeastSquaresModel]] from an RDD of [[Instance]]s.
@@ -81,76 +101,220 @@ private[ml] class WeightedLeastSquares(
     summary.validate()
     logInfo(s"Number of instances: ${summary.count}.")
     val k = if (fitIntercept) summary.k + 1 else summary.k
+    val numFeatures = summary.k
     val triK = summary.triK
     val wSum = summary.wSum
-    val bBar = summary.bBar
-    val bStd = summary.bStd
-    val aBar = summary.aBar
-    val aVar = summary.aVar
-    val abBar = summary.abBar
-    val aaBar = summary.aaBar
-    val aaValues = aaBar.values
 
-    if (bStd == 0) {
-      if (fitIntercept) {
-        logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
-          s"zeros and the intercept will be the mean of the label; as a result, " +
-          s"training is not needed.")
-        val coefficients = new DenseVector(Array.ofDim(k-1))
-        val intercept = bBar
+    val rawBStd = summary.bStd
+    val rawBBar = summary.bBar
+    // if b is constant (rawBStd is zero), then b cannot be scaled. In this case
+    // setting bStd=abs(rawBBar) ensures that b is not scaled anymore in l-bfgs algorithm.
+    val bStd = if (rawBStd == 0.0) math.abs(rawBBar) else rawBStd
+
+    if (rawBStd == 0) {
+      if (fitIntercept || rawBBar == 0.0) {
+        if (rawBBar == 0.0) {
+          logWarning(s"Mean and standard deviation of the label are zero, so the coefficients " +
+            s"and the intercept will all be zero; as a result, training is not needed.")
+        } else {
+          logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
+            s"zeros and the intercept will be the mean of the label; as a result, " +
+            s"training is not needed.")
+        }
+        val coefficients = new DenseVector(Array.ofDim(numFeatures))
+        val intercept = rawBBar
         val diagInvAtWA = new DenseVector(Array(0D))
-        return new WeightedLeastSquaresModel(coefficients, intercept, diagInvAtWA)
+        return new WeightedLeastSquaresModel(coefficients, intercept, diagInvAtWA, Array(0D))
       } else {
-        require(!(regParam > 0.0 && standardizeLabel),
-          "The standard deviation of the label is zero. " +
-            "Model cannot be regularized with standardization=true")
-        logWarning(s"The standard deviation of the label is zero. " +
-          "Consider setting fitIntercept=true.")
+        require(!(regParam > 0.0 && standardizeLabel), "The standard deviation of the label is " +
+          "zero. Model cannot be regularized with standardization=true")
+        logWarning(s"The standard deviation of the label is zero. Consider setting " +
+          s"fitIntercept=true.")
       }
     }
 
-    // add regularization to diagonals
+    val bBar = summary.bBar / bStd
+    val bbBar = summary.bbBar / (bStd * bStd)
+
+    val aStd = summary.aStd
+    val aStdValues = aStd.values
+
+    val aBar = {
+      val _aBar = summary.aBar
+      val _aBarValues = _aBar.values
+      var i = 0
+      // scale aBar to standardized space in-place
+      while (i < numFeatures) {
+        if (aStdValues(i) == 0.0) {
+          _aBarValues(i) = 0.0
+        } else {
+          _aBarValues(i) /= aStdValues(i)
+        }
+        i += 1
+      }
+      _aBar
+    }
+    val aBarValues = aBar.values
+
+    val abBar = {
+      val _abBar = summary.abBar
+      val _abBarValues = _abBar.values
+      var i = 0
+      // scale abBar to standardized space in-place
+      while (i < numFeatures) {
+        if (aStdValues(i) == 0.0) {
+          _abBarValues(i) = 0.0
+        } else {
+          _abBarValues(i) /= (aStdValues(i) * bStd)
+        }
+        i += 1
+      }
+      _abBar
+    }
+    val abBarValues = abBar.values
+
+    val aaBar = {
+      val _aaBar = summary.aaBar
+      val _aaBarValues = _aaBar.values
+      var j = 0
+      var p = 0
+      // scale aaBar to standardized space in-place
+      while (j < numFeatures) {
+        val aStdJ = aStdValues(j)
+        var i = 0
+        while (i <= j) {
+          val aStdI = aStdValues(i)
+          if (aStdJ == 0.0 || aStdI == 0.0) {
+            _aaBarValues(p) = 0.0
+          } else {
+            _aaBarValues(p) /= (aStdI * aStdJ)
+          }
+          p += 1
+          i += 1
+        }
+        j += 1
+      }
+      _aaBar
+    }
+    val aaBarValues = aaBar.values
+
+    val effectiveRegParam = regParam / bStd
+    val effectiveL1RegParam = elasticNetParam * effectiveRegParam
+    val effectiveL2RegParam = (1.0 - elasticNetParam) * effectiveRegParam
+
+    // add L2 regularization to diagonals
     var i = 0
     var j = 2
     while (i < triK) {
-      var lambda = regParam
-      if (standardizeFeatures) {
-        lambda *= aVar(j - 2)
+      var lambda = effectiveL2RegParam
+      if (!standardizeFeatures) {
+        val std = aStdValues(j - 2)
+        if (std != 0.0) {
+          lambda /= (std * std)
+        } else {
+          lambda = 0.0
+        }
       }
-      if (standardizeLabel && bStd != 0) {
-        lambda /= bStd
+      if (!standardizeLabel) {
+        lambda *= bStd
       }
-      aaValues(i) += lambda
+      aaBarValues(i) += lambda
       i += j
       j += 1
     }
 
-    val aa = if (fitIntercept) {
-      Array.concat(aaBar.values, aBar.values, Array(1.0))
+    val aa = getAtA(aaBarValues, aBarValues)
+    val ab = getAtB(abBarValues, bBar)
+
+    val solver = if ((solverType == WeightedLeastSquares.Auto && elasticNetParam != 0.0 &&
+      regParam != 0.0) || (solverType == WeightedLeastSquares.QuasiNewton)) {
+      val effectiveL1RegFun: Option[(Int) => Double] = if (effectiveL1RegParam != 0.0) {
+        Some((index: Int) => {
+            if (fitIntercept && index == numFeatures) {
+              0.0
+            } else {
+              if (standardizeFeatures) {
+                effectiveL1RegParam
+              } else {
+                if (aStdValues(index) != 0.0) effectiveL1RegParam / aStdValues(index) else 0.0
+              }
+            }
+          })
+      } else {
+        None
+      }
+      new QuasiNewtonSolver(fitIntercept, maxIter, tol, effectiveL1RegFun)
     } else {
-      aaBar.values
-    }
-    val ab = if (fitIntercept) {
-      Array.concat(abBar.values, Array(bBar))
-    } else {
-      abBar.values
+      new CholeskySolver
     }
 
-    val x = CholeskyDecomposition.solve(aa, ab)
+    val solution = solver match {
+      case cholesky: CholeskySolver =>
+        try {
+          cholesky.solve(bBar, bbBar, ab, aa, aBar)
+        } catch {
+          // if Auto solver is used and Cholesky fails due to singular AtA, then fall back to
+          // Quasi-Newton solver.
+          case _: SingularMatrixException if solverType == WeightedLeastSquares.Auto =>
+            logWarning("Cholesky solver failed due to singular covariance matrix. " +
+              "Retrying with Quasi-Newton solver.")
+            // ab and aa were modified in place, so reconstruct them
+            val _aa = getAtA(aaBarValues, aBarValues)
+            val _ab = getAtB(abBarValues, bBar)
+            val newSolver = new QuasiNewtonSolver(fitIntercept, maxIter, tol, None)
+            newSolver.solve(bBar, bbBar, _ab, _aa, aBar)
+        }
+      case qn: QuasiNewtonSolver =>
+        qn.solve(bBar, bbBar, ab, aa, aBar)
+    }
 
-    val aaInv = CholeskyDecomposition.inverse(aa, k)
+    val (coefficientArray, intercept) = if (fitIntercept) {
+      (solution.coefficients.slice(0, solution.coefficients.length - 1),
+        solution.coefficients.last * bStd)
+    } else {
+      (solution.coefficients, 0.0)
+    }
+
+    // convert the coefficients from the scaled space to the original space
+    var q = 0
+    val len = coefficientArray.length
+    while (q < len) {
+      coefficientArray(q) *= { if (aStdValues(q) != 0.0) bStd / aStdValues(q) else 0.0 }
+      q += 1
+    }
 
     // aaInv is a packed upper triangular matrix, here we get all elements on diagonal
-    val diagInvAtWA = new DenseVector((1 to k).map { i =>
-      aaInv(i + (i - 1) * i / 2 - 1) / wSum }.toArray)
+    val diagInvAtWA = solution.aaInv.map { inv =>
+      new DenseVector((1 to k).map { i =>
+        val multiplier = if (i == k && fitIntercept) {
+          1.0
+        } else {
+          aStdValues(i - 1) * aStdValues(i - 1)
+        }
+        inv(i + (i - 1) * i / 2 - 1) / (wSum * multiplier)
+      }.toArray)
+    }.getOrElse(new DenseVector(Array(0D)))
 
-    val (coefficients, intercept) = if (fitIntercept) {
-      (new DenseVector(x.slice(0, x.length - 1)), x.last)
+    new WeightedLeastSquaresModel(new DenseVector(coefficientArray), intercept, diagInvAtWA,
+      solution.objectiveHistory.getOrElse(Array(0D)))
+  }
+
+  /** Construct A^T^ A (append bias if necessary). */
+  private def getAtA(aaBar: Array[Double], aBar: Array[Double]): DenseVector = {
+    if (fitIntercept) {
+      new DenseVector(Array.concat(aaBar, aBar, Array(1.0)))
     } else {
-      (new DenseVector(x), 0.0)
+      new DenseVector(aaBar.clone())
     }
+  }
 
-    new WeightedLeastSquaresModel(coefficients, intercept, diagInvAtWA)
+  /** Construct A^T^ b (append bias if necessary). */
+  private def getAtB(abBar: Array[Double], bBar: Double): DenseVector = {
+    if (fitIntercept) {
+      new DenseVector(Array.concat(abBar, Array(bBar)))
+    } else {
+      new DenseVector(abBar.clone())
+    }
   }
 }
 
@@ -161,6 +325,13 @@ private[ml] object WeightedLeastSquares {
    * only supports the number of features is no more than 4096.
    */
   val MAX_NUM_FEATURES: Int = 4096
+
+  sealed trait Solver
+  case object Auto extends Solver
+  case object Cholesky extends Solver
+  case object QuasiNewton extends Solver
+
+  val supportedSolvers = Array(Auto, Cholesky, QuasiNewton)
 
   /**
    * Aggregator to provide necessary summary statistics for solving [[WeightedLeastSquares]].
@@ -262,6 +433,11 @@ private[ml] object WeightedLeastSquares {
     def bBar: Double = bSum / wSum
 
     /**
+     * Weighted mean of squared labels.
+     */
+    def bbBar: Double = bbSum / wSum
+
+    /**
      * Weighted population standard deviation of labels.
      */
     def bStd: Double = math.sqrt(bbSum / wSum - bBar * bBar)
@@ -282,6 +458,24 @@ private[ml] object WeightedLeastSquares {
       val output = aaSum.copy
       BLAS.scal(1.0 / wSum, output)
       output
+    }
+
+    /**
+     * Weighted population standard deviation of features.
+     */
+    def aStd: DenseVector = {
+      val std = Array.ofDim[Double](k)
+      var i = 0
+      var j = 2
+      val aaValues = aaSum.values
+      while (i < triK) {
+        val l = j - 2
+        val aw = aSum(l) / wSum
+        std(l) = math.sqrt(aaValues(i) / wSum - aw * aw)
+        i += j
+        j += 1
+      }
+      new DenseVector(std)
     }
 
     /**

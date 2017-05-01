@@ -56,7 +56,7 @@ private[netty] case class RpcOutboxMessage(
     content: ByteBuffer,
     _onFailure: (Throwable) => Unit,
     _onSuccess: (TransportClient, ByteBuffer) => Unit)
-  extends OutboxMessage with RpcResponseCallback {
+  extends OutboxMessage with RpcResponseCallback with Logging {
 
   private var client: TransportClient = _
   private var requestId: Long = _
@@ -67,8 +67,11 @@ private[netty] case class RpcOutboxMessage(
   }
 
   def onTimeout(): Unit = {
-    require(client != null, "TransportClient has not yet been set.")
-    client.removeRpcRequest(requestId)
+    if (client != null) {
+      client.removeRpcRequest(requestId)
+    } else {
+      logError("Ask timeout before connecting successfully")
+    }
   }
 
   override def onFailure(e: Throwable): Unit = {
@@ -241,10 +244,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
   }
 
   private def closeClient(): Unit = synchronized {
-    // Not sure if `client.close` is idempotent. Just for safety.
-    if (client != null) {
-      client.close()
-    }
+    // Just set client to null. Don't close it in order to reuse the connection.
     client = null
   }
 

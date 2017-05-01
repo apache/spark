@@ -18,9 +18,11 @@
 package org.apache.spark.ml.tree.impl
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.tree.RandomForestParams
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.Strategy
@@ -33,7 +35,7 @@ import org.apache.spark.rdd.RDD
  * @param numClasses    For classification: labels can take values {0, ..., numClasses - 1}.
  *                      For regression: fixed at 0 (no meaning).
  * @param maxBins  Maximum number of bins, for all features.
- * @param featureArity  Map: categorical feature index --> arity.
+ * @param featureArity  Map: categorical feature index to arity.
  *                      I.e., the feature takes values in {0, ..., arity - 1}.
  * @param numBins  Number of bins for each feature.
  */
@@ -111,6 +113,8 @@ private[spark] object DecisionTreeMetadata extends Logging {
       throw new IllegalArgumentException(s"DecisionTree requires size of input RDD > 0, " +
         s"but was given by empty one.")
     }
+    require(numFeatures > 0, s"DecisionTree requires number of features > 0, " +
+      s"but was given an empty features vector")
     val numExamples = input.count()
     val numClasses = strategy.algo match {
       case Classification => strategy.numClasses
@@ -183,11 +187,23 @@ private[spark] object DecisionTreeMetadata extends Logging {
         }
       case _ => featureSubsetStrategy
     }
+
     val numFeaturesPerNode: Int = _featureSubsetStrategy match {
       case "all" => numFeatures
       case "sqrt" => math.sqrt(numFeatures).ceil.toInt
       case "log2" => math.max(1, (math.log(numFeatures) / math.log(2)).ceil.toInt)
       case "onethird" => (numFeatures / 3.0).ceil.toInt
+      case _ =>
+        Try(_featureSubsetStrategy.toInt).filter(_ > 0).toOption match {
+          case Some(value) => math.min(value, numFeatures)
+          case None =>
+            Try(_featureSubsetStrategy.toDouble).filter(_ > 0).filter(_ <= 1.0).toOption match {
+              case Some(value) => math.ceil(value * numFeatures).toInt
+              case _ => throw new IllegalArgumentException(s"Supported values:" +
+                s" ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}," +
+                s" (0.0-1.0], [1-n].")
+            }
+        }
     }
 
     new DecisionTreeMetadata(numFeatures, numExamples, numClasses, numBins.max,

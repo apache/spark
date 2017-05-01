@@ -21,9 +21,11 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
@@ -107,8 +109,9 @@ package object dsl {
     def cast(to: DataType): Expression = Cast(expr, to)
 
     def asc: SortOrder = SortOrder(expr, Ascending)
+    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Set.empty)
     def desc: SortOrder = SortOrder(expr, Descending)
-
+    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Set.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
@@ -165,6 +168,23 @@ package object dsl {
       case Seq() => UnresolvedStar(None)
       case target => UnresolvedStar(Option(target))
     }
+
+    def callFunction[T, U](
+        func: T => U,
+        returnType: DataType,
+        argument: Expression): Expression = {
+      val function = Literal.create(func, ObjectType(classOf[T => U]))
+      Invoke(function, "apply", returnType, argument :: Nil)
+    }
+
+    def windowSpec(
+        partitionSpec: Seq[Expression],
+        orderSpec: Seq[SortOrder],
+        frame: WindowFrame): WindowSpecDefinition =
+      WindowSpecDefinition(partitionSpec, orderSpec, frame)
+
+    def windowExpr(windowFunc: Expression, windowSpec: WindowSpecDefinition): WindowExpression =
+      WindowExpression(windowFunc, windowSpec)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?
@@ -223,6 +243,9 @@ package object dsl {
       def array(dataType: DataType): AttributeReference =
         AttributeReference(s, ArrayType(dataType), nullable = true)()
 
+      def array(arrayType: ArrayType): AttributeReference =
+        AttributeReference(s, arrayType)()
+
       /** Creates a new AttributeReference of type map */
       def map(keyType: DataType, valueType: DataType): AttributeReference =
         map(MapType(keyType, valueType))
@@ -235,6 +258,10 @@ package object dsl {
         AttributeReference(s, structType, nullable = true)()
       def struct(attrs: AttributeReference*): AttributeReference =
         struct(StructType.fromAttributes(attrs))
+
+      /** Creates a new AttributeReference of object type */
+      def obj(cls: Class[_]): AttributeReference =
+        AttributeReference(s, ObjectType(cls), nullable = true)()
 
       /** Create a function. */
       def function(exprs: Expression*): UnresolvedFunction =
@@ -253,11 +280,10 @@ package object dsl {
   object expressions extends ExpressionConversions  // scalastyle:ignore
 
   object plans {  // scalastyle:ignore
-    def table(ref: String): LogicalPlan =
-      UnresolvedRelation(TableIdentifier(ref), None)
+    def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
 
     def table(db: String, ref: String): LogicalPlan =
-      UnresolvedRelation(TableIdentifier(ref, Option(db)), None)
+      UnresolvedRelation(TableIdentifier(ref, Option(db)))
 
     implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) {
       def select(exprs: Expression*): LogicalPlan = {
@@ -270,6 +296,12 @@ package object dsl {
 
       def where(condition: Expression): LogicalPlan = Filter(condition, logicalPlan)
 
+      def filter[T : Encoder](func: T => Boolean): LogicalPlan = TypedFilter(func, logicalPlan)
+
+      def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
+
+      def deserialize[T : Encoder]: LogicalPlan = CatalystSerde.deserialize[T](logicalPlan)
+
       def limit(limitExpr: Expression): LogicalPlan = Limit(limitExpr, logicalPlan)
 
       def join(
@@ -277,6 +309,24 @@ package object dsl {
         joinType: JoinType = Inner,
         condition: Option[Expression] = None): LogicalPlan =
         Join(logicalPlan, otherPlan, joinType, condition)
+
+      def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
+          otherPlan: LogicalPlan,
+          func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+          leftGroup: Seq[Attribute],
+          rightGroup: Seq[Attribute],
+          leftAttr: Seq[Attribute],
+          rightAttr: Seq[Attribute]
+        ): LogicalPlan = {
+        CoGroup.apply[Key, Left, Right, Result](
+          func,
+          leftGroup,
+          rightGroup,
+          leftAttr,
+          rightAttr,
+          logicalPlan,
+          otherPlan)
+      }
 
       def orderBy(sortExprs: SortOrder*): LogicalPlan = Sort(sortExprs, true, logicalPlan)
 
@@ -318,13 +368,16 @@ package object dsl {
           analysis.UnresolvedRelation(TableIdentifier(tableName)),
           Map.empty, logicalPlan, overwrite, false)
 
-      def as(alias: String): LogicalPlan = logicalPlan match {
-        case UnresolvedRelation(tbl, _) => UnresolvedRelation(tbl, Option(alias))
-        case plan => SubqueryAlias(alias, plan)
-      }
+      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
-      def distribute(exprs: Expression*): LogicalPlan =
-        RepartitionByExpression(exprs, logicalPlan)
+      def coalesce(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = false, logicalPlan)
+
+      def repartition(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = true, logicalPlan)
+
+      def distribute(exprs: Expression*)(n: Int): LogicalPlan =
+        RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
 
       def analyze: LogicalPlan =
         EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))

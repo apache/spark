@@ -68,7 +68,7 @@ object ExtractValue {
           case StructType(_) =>
             s"Field name should be String Literal, but it's $extraction"
           case other =>
-            s"Can't extract value from $child"
+            s"Can't extract value from $child: need struct type but got ${other.simpleString}"
         }
         throw new AnalysisException(errorMsg)
     }
@@ -104,9 +104,9 @@ trait ExtractValue extends Expression
  * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
  */
 case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
-  extends UnaryExpression with ExtractValue {
+  extends UnaryExpression with ExtractValue with NullIntolerant {
 
-  private[sql] lazy val childSchema = child.dataType.asInstanceOf[StructType]
+  lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
   override def dataType: DataType = childSchema(ordinal).dataType
   override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
@@ -122,7 +122,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow].get(ordinal, childSchema(ordinal).dataType)
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
       if (nullable) {
         s"""
@@ -152,7 +152,7 @@ case class GetArrayStructFields(
     field: StructField,
     ordinal: Int,
     numFields: Int,
-    containsNull: Boolean) extends UnaryExpression with ExtractValue {
+    containsNull: Boolean) extends UnaryExpression with ExtractValue with NullIntolerant {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def toString: String = s"$child.${field.name}"
@@ -179,7 +179,7 @@ case class GetArrayStructFields(
     new GenericArrayData(result)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, eval => {
       val n = ctx.freshName("n")
@@ -213,7 +213,7 @@ case class GetArrayStructFields(
  * We need to do type checking here as `ordinal` expression maybe unresolved.
  */
 case class GetArrayItem(child: Expression, ordinal: Expression)
-  extends BinaryExpression with ExpectsInputTypes with ExtractValue {
+  extends BinaryExpression with ExpectsInputTypes with ExtractValue with NullIntolerant {
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
@@ -239,7 +239,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
       s"""
@@ -260,7 +260,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
  * We need to do type checking here as `key` expression maybe unresolved.
  */
 case class GetMapValue(child: Expression, key: Expression)
-  extends BinaryExpression with ExpectsInputTypes with ExtractValue {
+  extends BinaryExpression with ImplicitCastInputTypes with ExtractValue with NullIntolerant {
 
   private def keyType = child.dataType.asInstanceOf[MapType].keyType
 
@@ -302,7 +302,7 @@ case class GetMapValue(child: Expression, key: Expression)
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
     val keys = ctx.freshName("keys")

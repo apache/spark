@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.pmml.export
 
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Date, Locale}
 
 import scala.beans.BeanProperty
 
@@ -34,7 +34,7 @@ private[mllib] trait PMMLModelExport {
     val version = getClass.getPackage.getImplementationVersion
     val app = new Application("Apache Spark MLlib").setVersion(version)
     val timestamp = new Timestamp()
-      .addContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(new Date()))
+      .addContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(new Date()))
     val header = new Header()
       .setApplication(app)
       .setTimestamp(timestamp)

@@ -28,12 +28,12 @@ private[columnar] trait ColumnBuilder {
   /**
    * Initializes with an approximate lower bound on the expected number of elements in this column.
    */
-  def initialize(initialSize: Int, columnName: String = "", useCompression: Boolean = false)
+  def initialize(initialSize: Int, columnName: String = "", useCompression: Boolean = false): Unit
 
   /**
    * Appends `row(ordinal)` to the column builder.
    */
-  def appendFrom(row: InternalRow, ordinal: Int)
+  def appendFrom(row: InternalRow, ordinal: Int): Unit
 
   /**
    * Column statistics information

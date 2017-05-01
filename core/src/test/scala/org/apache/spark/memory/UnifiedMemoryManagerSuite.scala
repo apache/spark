@@ -280,4 +280,27 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(evictedBlocks.nonEmpty)
   }
 
+  test("SPARK-15260: atomically resize memory pools") {
+    val conf = new SparkConf()
+      .set("spark.memory.fraction", "1")
+      .set("spark.memory.storageFraction", "0")
+      .set("spark.testing.memory", "1000")
+    val mm = UnifiedMemoryManager(conf, numCores = 2)
+    makeBadMemoryStore(mm)
+    val memoryMode = MemoryMode.ON_HEAP
+    // Acquire 1000 then release 600 bytes of storage memory, leaving the
+    // storage memory pool at 1000 bytes but only 400 bytes of which are used.
+    assert(mm.acquireStorageMemory(dummyBlock, 1000L, memoryMode))
+    mm.releaseStorageMemory(600L, memoryMode)
+    // Before the fix for SPARK-15260, we would first shrink the storage pool by the amount of
+    // unused storage memory (600 bytes), try to evict blocks, then enlarge the execution pool
+    // by the same amount. If the eviction threw an exception, then we would shrink one pool
+    // without enlarging the other, resulting in an assertion failure.
+    intercept[RuntimeException] {
+      mm.acquireExecutionMemory(1000L, 0, memoryMode)
+    }
+    val assertInvariants = PrivateMethod[Unit]('assertInvariants)
+    mm.invokePrivate[Unit](assertInvariants())
+  }
+
 }

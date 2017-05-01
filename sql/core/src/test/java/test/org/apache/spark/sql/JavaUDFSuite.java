@@ -18,76 +18,91 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.SparkContext;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.api.java.UDF1;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.api.java.UDF2;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.types.DataTypes;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
 public class JavaUDFSuite implements Serializable {
-  private transient JavaSparkContext sc;
-  private transient SQLContext sqlContext;
+  private transient SparkSession spark;
 
   @Before
   public void setUp() {
-    SparkContext _sc = new SparkContext("local[*]", "testing");
-    sqlContext = new SQLContext(_sc);
-    sc = new JavaSparkContext(_sc);
+    spark = SparkSession.builder()
+      .master("local[*]")
+      .appName("testing")
+      .getOrCreate();
   }
 
   @After
   public void tearDown() {
-    sqlContext.sparkContext().stop();
-    sqlContext = null;
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @SuppressWarnings("unchecked")
   @Test
   public void udf1Test() {
-    // With Java 8 lambdas:
-    // sqlContext.registerFunction(
-    //   "stringLengthTest", (String str) -> str.length(), DataType.IntegerType);
+    spark.udf().register("stringLengthTest", (String str) -> str.length(), DataTypes.IntegerType);
 
-    sqlContext.udf().register("stringLengthTest", new UDF1<String, Integer>() {
-      @Override
-      public Integer call(String str) {
-        return str.length();
-      }
-    }, DataTypes.IntegerType);
-
-    Row result = sqlContext.sql("SELECT stringLengthTest('test')").head();
+    Row result = spark.sql("SELECT stringLengthTest('test')").head();
     Assert.assertEquals(4, result.getInt(0));
   }
 
   @SuppressWarnings("unchecked")
   @Test
   public void udf2Test() {
-    // With Java 8 lambdas:
-    // sqlContext.registerFunction(
-    //   "stringLengthTest",
-    //   (String str1, String str2) -> str1.length() + str2.length,
-    //   DataType.IntegerType);
+    spark.udf().register("stringLengthTest",
+        (String str1, String str2) -> str1.length() + str2.length(), DataTypes.IntegerType);
 
-    sqlContext.udf().register("stringLengthTest", new UDF2<String, String, Integer>() {
-      @Override
-      public Integer call(String str1, String str2) {
-        return str1.length() + str2.length();
-      }
-    }, DataTypes.IntegerType);
-
-    Row result = sqlContext.sql("SELECT stringLengthTest('test', 'test2')").head();
+    Row result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
     Assert.assertEquals(9, result.getInt(0));
+  }
+
+  public static class StringLengthTest implements UDF2<String, String, Integer> {
+    @Override
+    public Integer call(String str1, String str2) {
+      return str1.length() + str2.length();
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void udf3Test() {
+    spark.udf().registerJava("stringLengthTest", StringLengthTest.class.getName(),
+        DataTypes.IntegerType);
+    Row result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
+    Assert.assertEquals(9, result.getInt(0));
+
+    // returnType is not provided
+    spark.udf().registerJava("stringLengthTest2", StringLengthTest.class.getName(), null);
+    result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
+    Assert.assertEquals(9, result.getInt(0));
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void udf4Test() {
+    spark.udf().register("inc", (Long i) -> i + 1, DataTypes.LongType);
+
+    spark.range(10).toDF("x").createOrReplaceTempView("tmp");
+    // This tests when Java UDFs are required to be the semantically same (See SPARK-9435).
+    List<Row> results = spark.sql("SELECT inc(x) FROM tmp GROUP BY inc(x)").collectAsList();
+    Assert.assertEquals(10, results.size());
+    long sum = 0;
+    for (Row result : results) {
+      sum += result.getLong(0);
+    }
+    Assert.assertEquals(55, sum);
   }
 }

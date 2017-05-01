@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution
 import java.util.Properties
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.SparkSession
 
 class SQLExecutionSuite extends SparkFunSuite {
 
@@ -50,16 +51,19 @@ class SQLExecutionSuite extends SparkFunSuite {
   }
 
   test("concurrent query execution with fork-join pool (SPARK-13747)") {
-    val sc = new SparkContext("local[*]", "test")
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    val spark = SparkSession.builder
+      .master("local[*]")
+      .appName("test")
+      .getOrCreate()
+
+    import spark.implicits._
     try {
       // Should not throw IllegalArgumentException
       (1 to 100).par.foreach { _ =>
-        sc.parallelize(1 to 5).map { i => (i, i) }.toDF("a", "b").count()
+        spark.sparkContext.parallelize(1 to 5).map { i => (i, i) }.toDF("a", "b").count()
       }
     } finally {
-      sc.stop()
+      spark.sparkContext.stop()
     }
   }
 
@@ -67,8 +71,8 @@ class SQLExecutionSuite extends SparkFunSuite {
    * Trigger SPARK-10548 by mocking a parent and its child thread executing queries concurrently.
    */
   private def testConcurrentQueryExecution(sc: SparkContext): Unit = {
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    val spark = SparkSession.builder.getOrCreate()
+    import spark.implicits._
 
     // Initialize local properties. This is necessary for the test to pass.
     sc.getLocalProperties
@@ -99,6 +103,35 @@ class SQLExecutionSuite extends SparkFunSuite {
     }
   }
 
+
+  test("Finding QueryExecution for given executionId") {
+    val spark = SparkSession.builder.master("local[*]").appName("test").getOrCreate()
+    import spark.implicits._
+
+    var queryExecution: QueryExecution = null
+
+    spark.sparkContext.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        val executionIdStr = jobStart.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
+        if (executionIdStr != null) {
+          queryExecution = SQLExecution.getQueryExecution(executionIdStr.toLong)
+        }
+        SQLExecutionSuite.canProgress = true
+      }
+    })
+
+    val df = spark.range(1).map { x =>
+      while (!SQLExecutionSuite.canProgress) {
+        Thread.sleep(1)
+      }
+      x
+    }
+    df.collect()
+
+    assert(df.queryExecution === queryExecution)
+
+    spark.stop()
+  }
 }
 
 /**
@@ -110,4 +143,8 @@ private class BadSparkContext(conf: SparkConf) extends SparkContext(conf) {
     override protected def childValue(parent: Properties): Properties = new Properties(parent)
     override protected def initialValue(): Properties = new Properties()
   }
+}
+
+object SQLExecutionSuite {
+  @volatile var canProgress = false
 }

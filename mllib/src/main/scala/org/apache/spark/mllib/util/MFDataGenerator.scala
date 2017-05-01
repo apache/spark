@@ -19,7 +19,6 @@ package org.apache.spark.mllib.util
 
 import java.{util => ju}
 
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.SparkContext

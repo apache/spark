@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import com.google.common.collect.ConcurrentHashMultiset
+import com.google.common.collect.{ConcurrentHashMultiset, ImmutableMultiset}
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -211,9 +211,6 @@ private[storage] class BlockInfoManager extends Logging {
    * If another task has already locked this block for either reading or writing, then this call
    * will block until the other locks are released or will return immediately if `blocking = false`.
    *
-   * If this is called by a task which already holds the block's exclusive write lock, then this
-   * method will throw an exception.
-   *
    * @param blockId the block to lock.
    * @param blocking if true (default), this call will block until the lock is acquired. If false,
    *                 this call will return immediately if the lock acquisition fails.
@@ -228,10 +225,7 @@ private[storage] class BlockInfoManager extends Logging {
       infos.get(blockId) match {
         case None => return None
         case Some(info) =>
-          if (info.writerTask == currentTaskAttemptId) {
-            throw new IllegalStateException(
-              s"Task $currentTaskAttemptId has already locked $blockId for writing")
-          } else if (info.writerTask == BlockInfo.NO_WRITER && info.readerCount == 0) {
+          if (info.writerTask == BlockInfo.NO_WRITER && info.readerCount == 0) {
             info.writerTask = currentTaskAttemptId
             writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
             logTrace(s"Task $currentTaskAttemptId acquired write lock for $blockId")
@@ -346,7 +340,7 @@ private[storage] class BlockInfoManager extends Logging {
     val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
 
     val readLocks = synchronized {
-      readLocksByTask.remove(taskAttemptId).get
+      readLocksByTask.remove(taskAttemptId).getOrElse(ImmutableMultiset.of[BlockId]())
     }
     val writeLocks = synchronized {
       writeLocksByTask.remove(taskAttemptId).getOrElse(Seq.empty)
@@ -375,6 +369,12 @@ private[storage] class BlockInfoManager extends Logging {
       notifyAll()
     }
     blocksWithReleasedLocks
+  }
+
+  /** Returns the number of locks held by the given task.  Used only for testing. */
+  private[storage] def getTaskLockCount(taskAttemptId: TaskAttemptId): Int = {
+    readLocksByTask.get(taskAttemptId).map(_.size()).getOrElse(0) +
+      writeLocksByTask.get(taskAttemptId).map(_.size).getOrElse(0)
   }
 
   /**

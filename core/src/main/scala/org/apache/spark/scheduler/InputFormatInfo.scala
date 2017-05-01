@@ -57,11 +57,10 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
   // Since we are not doing canonicalization of path, this can be wrong : like relative vs
   // absolute path .. which is fine, this is best case effort to remove duplicates - right ?
   override def equals(other: Any): Boolean = other match {
-    case that: InputFormatInfo => {
+    case that: InputFormatInfo =>
       // not checking config - that should be fine, right ?
       this.inputFormatClazz == that.inputFormatClazz &&
         this.path == that.path
-    }
     case _ => false
   }
 
@@ -86,10 +85,9 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
       }
     }
     catch {
-      case e: ClassNotFoundException => {
+      case e: ClassNotFoundException =>
         throw new IllegalArgumentException("Specified inputformat " + inputFormatClazz +
           " cannot be found ?", e)
-      }
     }
   }
 
@@ -155,7 +153,7 @@ object InputFormatInfo {
 
     a) For each host, count number of splits hosted on that host.
     b) Decrement the currently allocated containers on that host.
-    c) Compute rack info for each host and update rack -> count map based on (b).
+    c) Compute rack info for each host and update rack to count map based on (b).
     d) Allocate nodes based on (c)
     e) On the allocation result, ensure that we don't allocate "too many" jobs on a single node
        (even if data locality on that is very high) : this is to prevent fragility of job if a

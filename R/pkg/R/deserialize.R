@@ -139,7 +139,7 @@ readEnv <- function(con) {
   env
 }
 
-# Read a field of StructType from DataFrame
+# Read a field of StructType from SparkDataFrame
 # into a named list in R whose class is "struct"
 readStruct <- function(con) {
   names <- readObject(con)
@@ -195,6 +195,36 @@ readMultipleObjects <- function(inputCon) {
     data[[length(data) + 1L]] <- readTypedObject(inputCon, type)
   }
   data # this is a list of named lists now
+}
+
+readMultipleObjectsWithKeys <- function(inputCon) {
+  # readMultipleObjectsWithKeys will read multiple continuous objects from
+  # a DataOutputStream. There is no preceding field telling the count
+  # of the objects, so the number of objects varies, we try to read
+  # all objects in a loop until the end of the stream. This function
+  # is for use by gapply. Each group of rows is followed by the grouping
+  # key for this group which is then followed by next group.
+  keys <- list()
+  data <- list()
+  subData <- list()
+  while (TRUE) {
+    # If reaching the end of the stream, type returned should be "".
+    type <- readType(inputCon)
+    if (type == "") {
+      break
+    } else if (type == "r") {
+      type <- readType(inputCon)
+      # A grouping boundary detected
+      key <- readTypedObject(inputCon, type)
+      index <- length(data) + 1L
+      data[[index]] <- subData
+      keys[[index]] <- key
+      subData <- list()
+    } else {
+      subData[[length(subData) + 1L]] <- readTypedObject(inputCon, type)
+    }
+  }
+  list(keys = keys, data = data) # this is a list of keys and corresponding data
 }
 
 readRowList <- function(obj) {
