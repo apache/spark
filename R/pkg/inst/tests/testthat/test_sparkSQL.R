@@ -1663,7 +1663,7 @@ test_that("input_file_name()", {
   df <- read.text(path)
   actual_names <- sort(collect(distinct(select(df, input_file_name()))))
   expect_equal(length(actual_names), 1)
-  expect_true(gsub("^.*?://", "", actual_names) == path)
+  expect_equal(basename(actual_names[1, 1]), basename(path))
 
   unlink(path)
 })
