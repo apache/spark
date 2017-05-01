@@ -1247,7 +1247,7 @@ class DataFrame(object):
             Value to replace null values with.
             If the value is a dict, then `subset` is ignored and `value` must be a mapping
             from column name (string) to replacement value. The replacement value must be
-            an int, long, float, or string.
+            an int, long, float, boolean, or string.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
