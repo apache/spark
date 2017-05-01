@@ -91,7 +91,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, Seq(1, 2, 3)), (2, Seq())).toDF("a", "intList")
     checkAnswer(
       df.select(explode_outer('intList)),
-      Row(1) :: Row(2) :: Row(3) :: Nil)
+      Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
   }
 
   test("single posexplode") {
@@ -105,7 +105,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, Seq(1, 2, 3)), (2, Seq())).toDF("a", "intList")
     checkAnswer(
       df.select(posexplode_outer('intList)),
-      Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Nil)
+      Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Row(null, null) :: Nil)
   }
 
   test("explode and other columns") {
@@ -161,7 +161,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(explode_outer('intList).as('int)).select('int),
-      Row(1) :: Row(2) :: Row(3) :: Nil)
+      Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
 
     checkAnswer(
       df.select(explode('intList).as('int)).select(sum('int)),
@@ -182,7 +182,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(explode_outer('map)),
-      Row("a", "b") :: Row("c", "d") :: Nil)
+      Row("a", "b") :: Row(null, null) :: Row("c", "d") :: Nil)
   }
 
   test("explode on map with aliases") {
@@ -198,7 +198,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(explode_outer('map).as("key1" :: "value1" :: Nil)).select("key1", "value1"),
-      Row("a", "b") :: Nil)
+      Row("a", "b") :: Row(null, null) :: Nil)
   }
 
   test("self join explode") {
@@ -279,7 +279,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     )
     checkAnswer(
       df2.selectExpr("inline_outer(col1)"),
-      Row(3, "4") :: Row(5, "6") :: Nil
+      Row(null, null) :: Row(3, "4") :: Row(5, "6") :: Nil
     )
   }
 
