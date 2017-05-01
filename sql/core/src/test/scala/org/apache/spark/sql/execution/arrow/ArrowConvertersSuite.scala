@@ -33,8 +33,7 @@ import org.json4s.JsonDSL._
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Row, DataFrame}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -245,7 +244,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
     collectAndValidate(df, json, "byteData.json")
   }
-  
+
   test("binary type conversion") {
     val data = Seq("abc", "d", "ef")
 
@@ -337,9 +336,11 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
     val d1 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
     val d2 = new Date(sdf.parse("2016-05-09 13:10:15.000 UTC").getTime)
-    val data = Seq(d1, d2)
-    runUnsupported { data.toDF("date").toArrowPayload.collect() }
-    runUnsupported { data.toDF("timestamp").toArrowPayload.collect() }
+    runUnsupported { Seq(d1, d2).toDF("date").toArrowPayload.collect() }
+
+    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
+    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
+    runUnsupported { Seq(ts1, ts2).toDF("timestamp").toArrowPayload.collect() }
   }
 
   test("test Arrow Validator") {
