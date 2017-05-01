@@ -1323,6 +1323,8 @@ test_that("column operators", {
   c3 <- (c + c2 - c2) * c2 %% c2
   c4 <- (c > c2) & (c2 <= c3) | (c == c2) & (c2 != c3)
   c5 <- c2 ^ c3 ^ c4
+  c6 <- c2 %<=>% c3
+  c7 <- !c6
 })
 
 test_that("column functions", {
@@ -1348,6 +1350,7 @@ test_that("column functions", {
   c19 <- spark_partition_id() + coalesce(c) + coalesce(c1, c2, c3)
   c20 <- to_timestamp(c) + to_timestamp(c, "yyyy") + to_date(c, "yyyy")
   c21 <- posexplode_outer(c) + explode_outer(c)
+  c22 <- not(c)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1488,6 +1491,13 @@ test_that("column functions", {
     lapply(
       list(list(x = 1, y = -1, z = -2), list(x = 2, y = 3,  z = 5)),
       as.environment))
+
+  df <- as.DataFrame(data.frame(is_true = c(TRUE, FALSE, NA)))
+  expect_equal(
+    collect(select(df, alias(not(df$is_true), "is_false"))),
+    data.frame(is_false = c(FALSE, TRUE, NA))
+  )
+
 })
 
 test_that("column binary mathfunctions", {
@@ -1972,6 +1982,16 @@ test_that("filter() on a DataFrame", {
   expect_equal(count(filtered5), 1)
   filtered6 <- where(df, df$age %in% c(19, 30))
   expect_equal(count(filtered6), 2)
+
+  # test suites for %<=>%
+  dfNa <- read.json(jsonPathNa)
+  expect_equal(count(filter(dfNa, dfNa$age %<=>% 60)), 1)
+  expect_equal(count(filter(dfNa, !(dfNa$age %<=>% 60))), 5 - 1)
+  expect_equal(count(filter(dfNa, dfNa$age %<=>% NULL)), 3)
+  expect_equal(count(filter(dfNa, !(dfNa$age %<=>% NULL))), 5 - 3)
+  # match NA from two columns
+  expect_equal(count(filter(dfNa, dfNa$age %<=>% dfNa$height)), 2)
+  expect_equal(count(filter(dfNa, !(dfNa$age %<=>% dfNa$height))), 5 - 2)
 
   # Test stats::filter is working
   #expect_true(is.ts(filter(1:100, rep(1, 3)))) # nolint

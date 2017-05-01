@@ -3859,3 +3859,34 @@ setMethod("posexplode_outer",
             jc <- callJStatic("org.apache.spark.sql.functions", "posexplode_outer", x@jc)
             column(jc)
           })
+
+#' not
+#'
+#' Inversion of boolean expression.
+#'
+#' \code{not} and \code{!} cannot be applied directly to numerical column.
+#' To achieve R-like truthiness column has to be casted to \code{BooleanType}.
+#'
+#' @param x Column to compute on
+#' @rdname not
+#' @name not
+#' @aliases not,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(data.frame(
+#'   is_true = c(TRUE, FALSE, NA),
+#'   flag = c(1, 0,  1)
+#' ))
+#'
+#' head(select(df, not(df$is_true)))
+#'
+#' # Explicit cast is required when working with numeric column
+#' head(select(df, not(cast(df$flag, "boolean"))))
+#' }
+#' @note not since 2.3.0
+setMethod("not",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "not", x@jc)
+            column(jc)
+          })
