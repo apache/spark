@@ -252,6 +252,8 @@ class StreamExecution(
    */
   private def runBatches(): Unit = {
     try {
+      sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString,
+        interruptOnCancel = true)
       if (sparkSession.sessionState.conf.streamingMetricsEnabled) {
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
@@ -289,6 +291,7 @@ class StreamExecution(
               if (currentBatchId < 0) {
                 // We'll do this initialization only once
                 populateStartOffsets(sparkSessionToRunBatches)
+                sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
                 logDebug(s"Stream running from $committedOffsets to $availableOffsets")
               } else {
                 constructNextBatch()
@@ -308,6 +311,7 @@ class StreamExecution(
               logDebug(s"batch ${currentBatchId} committed")
               // We'll increase currentBatchId after we complete processing current batch's data
               currentBatchId += 1
+              sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
             } else {
               currentStatus = currentStatus.copy(isDataAvailable = false)
               updateStatusMessage("Waiting for data to arrive")
@@ -684,8 +688,11 @@ class StreamExecution(
     // intentionally
     state.set(TERMINATED)
     if (microBatchThread.isAlive) {
+      sparkSession.sparkContext.cancelJobGroup(runId.toString)
       microBatchThread.interrupt()
       microBatchThread.join()
+      // microBatchThread may spawn new jobs, so we need to cancel again to prevent a leak
+      sparkSession.sparkContext.cancelJobGroup(runId.toString)
     }
     logInfo(s"Query $prettyIdString was stopped")
   }
@@ -825,6 +832,11 @@ class StreamExecution(
     }
   }
 
+  private def getBatchDescriptionString: String = {
+    val batchDescription = if (currentBatchId < 0) "init" else currentBatchId.toString
+    Option(name).map(_ + "<br/>").getOrElse("") +
+      s"id = $id<br/>runId = $runId<br/>batch = $batchDescription"
+  }
 }
 
 
