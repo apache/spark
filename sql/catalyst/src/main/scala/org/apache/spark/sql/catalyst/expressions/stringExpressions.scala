@@ -604,7 +604,7 @@ case class StringTrim(children: Seq[Expression])
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(str) - Removes the leading and trailing space characters from `str`.
+    _FUNC_(str) - Removes the leading space characters from `str`.
     _FUNC_(trimChar, str) - Remove the leading trimChar from `str`
   """,
   extended = """
@@ -691,7 +691,7 @@ case class StringTrimLeft(children: Seq[Expression])
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(str) - Removes the leading and trailing space characters from `str`.
+    _FUNC_(str) - Removes the trailing space characters from `str`.
     _FUNC_(trimChar, str) - Remove the trailing trimChar from `str`
   """,
   extended = """
