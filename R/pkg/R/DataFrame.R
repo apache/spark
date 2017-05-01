@@ -3748,10 +3748,6 @@ setMethod("hint",
 
 #' alias
 #'
-#' Returns a new SparkDataFrame with an alias set.
-#'
-#' @param object a SparkDataFrame
-#' @param data new name to use
 #' @return SparkDataFrame
 #' @aliases alias,SparkDataFrame-method
 #' @rdname alias

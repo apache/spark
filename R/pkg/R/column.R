@@ -132,9 +132,9 @@ createMethods()
 
 #' alias
 #'
-#' Set a new name for a column
+#' Set a new name for an object
 #'
-#' @param object Column to rename
+#' @param object object to rename
 #' @param data new name to use
 #'
 #' @rdname alias
