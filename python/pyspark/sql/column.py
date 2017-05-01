@@ -171,6 +171,61 @@ class Column(object):
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
 
+    _eqNullSafe_doc = """
+    Equality test that is safe for null values.
+
+    :param other: a value or :class:`Column`
+
+    >>> from pyspark.sql import Row
+    >>> df1 = spark.createDataFrame([
+    ...     Row(id=1, value='foo'),
+    ...     Row(id=2, value=None)
+    ... ])
+    >>> df1.select(
+    ...     df1['value'] == 'foo',
+    ...     df1['value'].eqNullSafe('foo'),
+    ...     df1['value'].eqNullSafe(None)
+    ... ).show()
+    +-------------+---------------+----------------+
+    |(value = foo)|(value <=> foo)|(value <=> NULL)|
+    +-------------+---------------+----------------+
+    |         true|           true|           false|
+    |         null|          false|            true|
+    +-------------+---------------+----------------+
+    >>> df2 = spark.createDataFrame([
+    ...     Row(value = 'bar'),
+    ...     Row(value = None)
+    ... ])
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()
+    0
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
+    1
+    >>> df2 = spark.createDataFrame([
+    ...     Row(id=1, value=float('NaN')),
+    ...     Row(id=2, value=42.0),
+    ...     Row(id=3, value=None)
+    ... ])
+    >>> df2.select(
+    ...     df2['value'].eqNullSafe(None),
+    ...     df2['value'].eqNullSafe(float('NaN')),
+    ...     df2['value'].eqNullSafe(42.0)
+    ... ).show()
+    +----------------+---------------+----------------+
+    |(value <=> NULL)|(value <=> NaN)|(value <=> 42.0)|
+    +----------------+---------------+----------------+
+    |           false|           true|           false|
+    |           false|          false|            true|
+    |            true|          false|           false|
+    +----------------+---------------+----------------+
+
+    .. note:: Unlike Pandas, PySpark doesn't consider NaN values to be NULL.
+       See the `NaN Semantics`_ for details.
+    .. _NaN Semantics:
+       https://spark.apache.org/docs/latest/sql-programming-guide.html#nan-semantics
+    .. versionadded:: 2.3.0
+    """
+    eqNullSafe = _bin_op("eqNullSafe", _eqNullSafe_doc)
+
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
     __and__ = _bin_op('and')
