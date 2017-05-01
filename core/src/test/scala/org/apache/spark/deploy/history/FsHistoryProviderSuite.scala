@@ -108,7 +108,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
           user: String,
           completed: Boolean): ApplicationHistoryInfo = {
         ApplicationHistoryInfo(id, name,
-          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed)))
+          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed, org.apache.spark.SPARK_VERSION)))
       }
 
       // For completed files, lastUpdated would be lastModified time.

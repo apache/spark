@@ -90,10 +90,10 @@ private[spark] object ApplicationsListResource {
             },
           lastUpdated = new Date(internalAttemptInfo.lastUpdated),
           sparkUser = internalAttemptInfo.sparkUser,
-          completed = internalAttemptInfo.completed
+          completed = internalAttemptInfo.completed,
+          appSparkVersion = internalAttemptInfo.appSparkVersion
         )
-      },
-      appSparkVersion = org.apache.spark.SPARK_VERSION
+      }
     )
   }
 }

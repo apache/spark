@@ -29,8 +29,7 @@ class ApplicationInfo private[spark](
     val maxCores: Option[Int],
     val coresPerExecutor: Option[Int],
     val memoryPerExecutorMB: Option[Int],
-    val attempts: Seq[ApplicationAttemptInfo],
-    val appSparkVersion: String)
+    val attempts: Seq[ApplicationAttemptInfo])
 
 class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
@@ -39,7 +38,8 @@ class ApplicationAttemptInfo private[spark](
     val lastUpdated: Date,
     val duration: Long,
     val sparkUser: String,
-    val completed: Boolean = false) {
+    val completed: Boolean = false,
+    val appSparkVersion: String) {
     def getStartTimeEpoch: Long = startTime.getTime
     def getEndTimeEpoch: Long = endTime.getTime
     def getLastUpdatedEpoch: Long = lastUpdated.getTime

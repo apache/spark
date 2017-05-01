@@ -475,7 +475,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           lastUpdated,
           appListener.sparkUser.getOrElse(NOT_STARTED),
           appCompleted,
-          fileStatus.getLen()
+          fileStatus.getLen(),
+          appListener.appSparkVersion.getOrElse("")
         )
         fileToAppInfo(logPath) = attemptInfo
         logDebug(s"Application log ${attemptInfo.logPath} loaded successfully: $attemptInfo")
@@ -748,6 +749,7 @@ private[history] object FsHistoryProvider {
  *
  * @param logPath path to the log file, or, for a legacy log, its directory
  * @param name application name
+ * @param appSparkVersion application spark version
  * @param appId application ID
  * @param attemptId optional attempt ID
  * @param startTime start time (from playback)
@@ -768,9 +770,10 @@ private class FsApplicationAttemptInfo(
     lastUpdated: Long,
     sparkUser: String,
     completed: Boolean,
-    val fileSize: Long)
+    val fileSize: Long,
+    appSparkVersion: String)
   extends ApplicationAttemptInfo(
-      attemptId, startTime, endTime, lastUpdated, sparkUser, completed) {
+      attemptId, startTime, endTime, lastUpdated, sparkUser, completed, appSparkVersion) {
 
   /** extend the superclass string value with the extra attributes of this class */
   override def toString: String = {
