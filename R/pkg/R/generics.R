@@ -1518,7 +1518,7 @@ setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml")
 
 #' @rdname awaitTermination
 #' @export
-setGeneric("awaitTermination", function(x, timeout) { standardGeneric("awaitTermination") })
+setGeneric("awaitTermination", function(x, timeout = NULL) { standardGeneric("awaitTermination") })
 
 #' @rdname isActive
 #' @export
