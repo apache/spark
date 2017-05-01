@@ -511,18 +511,25 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   usage = """
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
     _FUNC_(BOTH trimChar FROM str) - Remove the leading and trailing trimChar from `str`
+    _FUNC_(LEADING trimChar FROM str) - Remove the leading trimChar from `str`
+    _FUNC_(TRAILING trimChar FROM str) - Remove the trailing trimChar from `str`
   """,
   extended = """
     Arguments:
       str - a string expression
       trimChar - the trim character
       BOTH, FROM - these are keyword to specify for trim character from both side of the string
-
+      LEADING, FROM - these are keyword to specify for trim character from left side of the string
+      TRAILING, FROM - these are keyword to specify for trim character from right side of the string
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
       > SELECT _FUNC_(BOTH 'S' FROM 'SSparkSQLS');
        parkSQL
+      > SELECT _FUNC_(LEADING 'S' FROM 'SSparkSQLS');
+       parkSQLS
+      > SELECT _FUNC_(TRAILING 'S' FROM 'SSparkSQLS');
+       SSparkSQL
   """)
 case class StringTrim(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes {
@@ -598,18 +605,16 @@ case class StringTrim(children: Seq[Expression])
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
-    _FUNC_(LEADING trimChar FROM str) - Remove the leading trimChar from `str`
+    _FUNC_(trimChar, str) - Remove the leading trimChar from `str`
   """,
   extended = """
     Arguments:
       str - a string expression
       trimChar - the trim character
-      LEADING, FROM - these are keyword to specify for trim character from left side of the string
-
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_(LEADING 'S' FROM 'SSparkSQLS');
+      > SELECT _FUNC_('S', 'SSparkSQLS');
        parkSQLS
   """)
 case class StringTrimLeft(children: Seq[Expression])
@@ -687,18 +692,16 @@ case class StringTrimLeft(children: Seq[Expression])
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
-    _FUNC_(TRAILING trimChar FROM str) - Remove the trailing trimChar from `str`
+    _FUNC_(trimChar, str) - Remove the trailing trimChar from `str`
   """,
   extended = """
     Arguments:
       str - a string expression
       trimChar - the trim character
-      TRAILING, FROM - these are keyword to specify for trim character from right side of the string
-
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_(TRAILING 'S' FROM 'SSparkSQLS');
+      > SELECT _FUNC_('S', 'SSparkSQLS');
        SSparkSQL
   """)
 case class StringTrimRight(children: Seq[Expression])
