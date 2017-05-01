@@ -40,4 +40,78 @@ class ShortestPathsSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("Shortest Path single source all paths in weighted graph") {
+    withSpark { sc =>
+      val edgeArr: Array[Edge[Double]] = Array(Edge(2, 1, 7),
+        Edge(2, 4, 2),
+        Edge(3, 2, 4),
+        Edge(3, 6, 3),
+        Edge(4, 1, 1),
+        Edge(5, 2, 2),
+        Edge(5, 3, 3),
+        Edge(5, 6, 8),
+        Edge(5, 7, 2),
+        Edge(7, 6, 4),
+        Edge(7, 4, 1))
+
+      val edges = sc.parallelize(edgeArr)
+      val graph = Graph.fromEdges(edges, true)
+      val results = ShortestPaths.run(graph, 5, true).vertices.collect.map {
+        case(id, distAndPaths) => distAndPaths._2.map{
+          path => (distAndPaths._1, path)
+        }
+      }.flatMap(pair => pair)
+
+      val shortestPaths = Set(
+        (3.0, List[VertexId](5, 7, 4)),
+        (4.0, List[VertexId](5, 7, 4, 1)),
+        (0.0, List[VertexId](5)),
+        (6.0, List[VertexId](5, 7, 6)),
+        (6.0, List[VertexId](5, 3, 6)),
+        (2.0, List[VertexId](5, 2)),
+        (3.0, List[VertexId](5, 3)),
+        (2.0, List[VertexId](5, 7))
+      )
+
+      assert(results.toSet === shortestPaths)
+    }
+  }
+
+  test("Shortest Path single source all paths in unweighted graph") {
+    withSpark { sc =>
+      val edgeArr: Array[Edge[Double]] = Array(Edge(2, 1, 7),
+        Edge(2, 4, 2),
+        Edge(3, 2, 4),
+        Edge(3, 6, 3),
+        Edge(4, 1, 1),
+        Edge(5, 2, 2),
+        Edge(5, 3, 3),
+        Edge(5, 6, 8),
+        Edge(5, 7, 2),
+        Edge(7, 6, 4),
+        Edge(7, 4, 1))
+
+      val edges = sc.parallelize(edgeArr)
+      val graph = Graph.fromEdges(edges, true)
+      val results = ShortestPaths.run(graph, 5, false).vertices.collect.map {
+        case(id, distAndPaths) => distAndPaths._2.map{
+          path => (distAndPaths._1, path)
+        }
+      }.flatMap(pair => pair)
+
+      val shortestPaths = Set(
+        (2.0, List[VertexId](5, 2, 4)),
+        (2.0, List[VertexId](5, 7, 4)),
+        (2.0, List[VertexId](5, 2, 1)),
+        (0.0, List[VertexId](5)),
+        (1.0, List[VertexId](5, 6)),
+        (1.0, List[VertexId](5, 2)),
+        (1.0, List[VertexId](5, 3)),
+        (1.0, List[VertexId](5, 7))
+      )
+
+      assert(results.toSet === shortestPaths)
+    }
+  }
 }
+
