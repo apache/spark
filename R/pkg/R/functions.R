@@ -3974,3 +3974,23 @@ setMethod("grouping_id",
             jc <- callJStatic("org.apache.spark.sql.functions", "grouping_id", jcols)
             column(jc)
           })
+
+#' input_file_name
+#'
+#' Creates a string column for the file name of the current Spark task.
+#'
+#' @rdname input_file_name
+#' @name input_file_name
+#' @aliases input_file_name,missing-method
+#' @export
+#' @examples \dontrun{
+#' df <- read.text("README.md")
+#'
+#' head(select(df, input_file_name()))
+#' }
+#' @note input_file_name since 2.3.0
+setMethod("input_file_name", signature("missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "input_file_name")
+            column(jc)
+          })

@@ -1656,6 +1656,18 @@ test_that("greatest() and least() on a DataFrame", {
   expect_equal(collect(select(df, least(df$a, df$b)))[, 1], c(1, 3))
 })
 
+test_that("input_file_name()", {
+  path <- tempfile(pattern = "input_file_name_test", fileext = ".txt")
+  write.table(iris[1:50, ], path, row.names = FALSE, col.names = FALSE)
+
+  df <- read.text(path)
+  actual_names <- sort(collect(distinct(select(df, input_file_name()))))
+  expect_equal(length(actual_names), 1)
+  expect_true(gsub("^.*?://", "", actual_names) == path)
+
+  unlink(path)
+})
+
 test_that("time windowing (window()) with all inputs", {
   df <- createDataFrame(data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
   df$window <- window(df$t, "5 seconds", "5 seconds", "0 seconds")
