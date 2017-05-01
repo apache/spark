@@ -652,12 +652,15 @@ object JdbcUtils extends Logging {
       case e: SQLException =>
         val cause = e.getNextException
         if (cause != null && e.getCause != cause) {
+          // If there is no cause already, set 'next exception' as cause. If cause is null,
+          // it *may* be because no cause was set yet
           if (e.getCause == null) {
             try {
               e.initCause(cause)
             } catch {
-              // cause may have been explicitly initialized to null, in which case this
-              // fails. No way to detect it, can only catch the exception.
+              // Or it may be null because the cause *was* explicitly initialized, to *null*,
+              // in which case this fails. There is no other way to detect it.
+              // addSuppressed in this case as well.
               case _: IllegalStateException => e.addSuppressed(cause)
             }
           } else {
