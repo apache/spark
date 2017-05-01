@@ -50,7 +50,7 @@ private[sql] class GroupStateImpl[S](
     optionalValue,
     batchProcessingTimeMs = NO_TIMESTAMP,
     eventTimeWatermarkMs = NO_TIMESTAMP,
-    timeoutConf = GroupStateTimeout.noTimeout,
+    timeoutConf = GroupStateTimeout.NoTimeout,
     hasTimedOut = false)
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined

@@ -339,20 +339,20 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     var q = df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .trigger(processingTime(10.seconds))
+      .trigger(ProcessingTime(10.seconds))
       .start()
     q.stop()
 
-    assert(q.asInstanceOf[StreamingQueryWrapper].streamingQuery.trigger == processingTime(10000))
+    assert(q.asInstanceOf[StreamingQueryWrapper].streamingQuery.trigger == ProcessingTime(10000))
 
     q = df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .trigger(processingTime(100, TimeUnit.SECONDS))
+      .trigger(ProcessingTime(100, TimeUnit.SECONDS))
       .start()
     q.stop()
 
-    assert(q.asInstanceOf[StreamingQueryWrapper].streamingQuery.trigger == processingTime(100000))
+    assert(q.asInstanceOf[StreamingQueryWrapper].streamingQuery.trigger == ProcessingTime(100000))
   }
 
   test("source metadataPath") {
@@ -371,7 +371,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     val q = df1.union(df2).writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", checkpointLocationURI.toString)
-      .trigger(processingTime(10.seconds))
+      .trigger(ProcessingTime(10.seconds))
       .start()
     q.processAllAvailable()
     q.stop()
@@ -431,7 +431,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     val sq = df.writeStream
       .format("console")
       .option("checkpointLocation", newMetadataDir)
-      .trigger(processingTime(2.seconds))
+      .trigger(ProcessingTime(2.seconds))
       .start()
 
     sq.awaitTermination(2000L)

@@ -42,7 +42,7 @@ public class Trigger {
    *
    * @since 2.2.0
    */
-  public static Trigger processingTime(long intervalMs) {
+  public static Trigger ProcessingTime(long intervalMs) {
       return ProcessingTime.create(intervalMs, TimeUnit.MILLISECONDS);
   }
 
@@ -54,12 +54,12 @@ public class Trigger {
    *
    * {{{
    *    import java.util.concurrent.TimeUnit
-   *    df.writeStream.trigger(processingTime.create(10, TimeUnit.SECONDS))
+   *    df.writeStream.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
    * }}}
    *
    * @since 2.2.0
    */
-  public static Trigger processingTime(long interval, TimeUnit timeUnit) {
+  public static Trigger ProcessingTime(long interval, TimeUnit timeUnit) {
       return ProcessingTime.create(interval, timeUnit);
   }
 
@@ -71,11 +71,11 @@ public class Trigger {
    *
    * {{{
    *    import scala.concurrent.duration._
-   *    df.writeStream.trigger(processingTime(10.seconds))
+   *    df.writeStream.trigger(ProcessingTime(10.seconds))
    * }}}
    * @since 2.2.0
    */
-  public static Trigger processingTime(Duration interval) {
+  public static Trigger ProcessingTime(Duration interval) {
       return ProcessingTime.apply(interval);
   }
 
@@ -85,11 +85,11 @@ public class Trigger {
    * If `interval` is effectively 0, the query will run as fast as possible.
    *
    * {{{
-   *    df.writeStream.trigger(Trigger.processingTime("10 seconds"))
+   *    df.writeStream.trigger(Trigger.ProcessingTime("10 seconds"))
    * }}}
    * @since 2.2.0
    */
-  public static Trigger processingTime(String interval) {
+  public static Trigger ProcessingTime(String interval) {
       return ProcessingTime.apply(interval);
   }
 
@@ -99,7 +99,7 @@ public class Trigger {
    *
    * @since 2.2.0
    */
-  public static Trigger once() {
+  public static Trigger Once() {
     return OneTimeTrigger$.MODULE$;
   }
 }

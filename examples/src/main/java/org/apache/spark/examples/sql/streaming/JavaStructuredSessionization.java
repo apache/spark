@@ -146,7 +146,7 @@ public final class JavaStructuredSessionization {
             stateUpdateFunc,
             Encoders.bean(SessionInfo.class),
             Encoders.bean(SessionUpdate.class),
-            GroupStateTimeout.processingTimeTimeout());
+            GroupStateTimeout.ProcessingTimeTimeout());
 
     // Start running the query that prints the session updates to the console
     StreamingQuery query = sessionUpdates
