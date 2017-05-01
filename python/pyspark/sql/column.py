@@ -219,6 +219,9 @@ class Column(object):
     +----------------+---------------+----------------+
 
     .. note:: Unlike Pandas, PySpark doesn't consider NaN values to be NULL.
+       See the `NaN Semantics`_ for details.
+    .. _NaN Semantics:
+       https://spark.apache.org/docs/latest/sql-programming-guide.html#nan-semantics
     .. versionadded:: 2.3.0
     """
     eqNullSafe = _bin_op("eqNullSafe", _eqNullSafe_doc)
