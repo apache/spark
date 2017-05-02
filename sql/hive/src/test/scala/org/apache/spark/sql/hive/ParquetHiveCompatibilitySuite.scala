@@ -35,8 +35,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType, TimestampType}
 
-class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton
-    with BeforeAndAfterEach {
+class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton {
   /**
    * Set the staging directory (and hence path to ignore Parquet files under)
    * to the default value of hive.exec.stagingdir.
