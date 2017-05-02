@@ -254,6 +254,11 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
             def checkValidGroupingExprs(expr: Expression): Unit = {
+              if (expr.find(_.isInstanceOf[AggregateExpression]).isDefined) {
+                failAnalysis(
+                  "aggregate functions are not allowed in GROUP BY, but found " + expr.sql)
+              }
+
               // Check if the data type of expr is orderable.
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 failAnalysis(
@@ -271,8 +276,8 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-            aggregateExprs.foreach(checkValidAggregateExpression)
             groupingExprs.foreach(checkValidGroupingExprs)
+            aggregateExprs.foreach(checkValidAggregateExpression)
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>

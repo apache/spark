@@ -331,10 +331,11 @@ case class SampleExec(
 case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   extends LeafExecNode with CodegenSupport {
 
-  def start: Long = range.start
-  def step: Long = range.step
-  def numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
-  def numElements: BigInt = range.numElements
+  val start: Long = range.start
+  val end: Long = range.end
+  val step: Long = range.step
+  val numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
+  val numElements: BigInt = range.numElements
 
   override val output: Seq[Attribute] = range.output
 
@@ -463,9 +464,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     $number = $batchEnd;
       |   }
       |
-      |   if ($taskContext.isInterrupted()) {
-      |     throw new TaskKilledException();
-      |   }
+      |   $taskContext.killTaskIfInterrupted();
       |
       |   long $nextBatchTodo;
       |   if ($numElementsTodo > ${batchSize}L) {
@@ -540,7 +539,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       }
   }
 
-  override def simpleString: String = range.simpleString
+  override def simpleString: String = s"Range ($start, $end, step=$step, splits=$numSlices)"
 }
 
 /**

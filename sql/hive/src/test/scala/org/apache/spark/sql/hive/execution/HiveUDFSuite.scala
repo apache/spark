@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -387,6 +388,20 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     hiveContext.reset()
   }
 
+  test("non-deterministic children of UDF") {
+    withUserDefinedFunction("testStringStringUDF" -> true, "testGenericUDFHash" -> true) {
+      // HiveSimpleUDF
+      sql(s"CREATE TEMPORARY FUNCTION testStringStringUDF AS '${classOf[UDFStringString].getName}'")
+      val df1 = sql("SELECT testStringStringUDF(rand(), \"hello\")")
+      assert(!df1.logicalPlan.asInstanceOf[Project].projectList.forall(_.deterministic))
+
+      // HiveGenericUDF
+      sql(s"CREATE TEMPORARY FUNCTION testGenericUDFHash AS '${classOf[GenericUDFHash].getName}'")
+      val df2 = sql("SELECT testGenericUDFHash(rand())")
+      assert(!df2.logicalPlan.asInstanceOf[Project].projectList.forall(_.deterministic))
+    }
+  }
+
   test("Hive UDFs with insufficient number of input arguments should trigger an analysis error") {
     Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("testUDF")
 
@@ -556,6 +571,23 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       // Expected Max(s) is 1, as stateless UDF is deterministic and foldable and replaced
       // by constant 1 by ConstantFolding optimizer.
       checkAnswer(testData.selectExpr("statelessUDF() as s").agg(max($"s")), Row(1))
+    }
+  }
+
+  test("Show persistent functions") {
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    withTempView("inputTable") {
+      testData.createOrReplaceTempView("inputTable")
+      withUserDefinedFunction("testUDFToListInt" -> false) {
+        val numFunc = spark.catalog.listFunctions().count()
+        sql(s"CREATE FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
+        assert(spark.catalog.listFunctions().count() == numFunc + 1)
+        checkAnswer(
+          sql("SELECT testUDFToListInt(s) FROM inputTable"),
+          Seq(Row(Seq(1, 2, 3))))
+        assert(sql("show functions").count() == numFunc + 1)
+        assert(spark.catalog.listFunctions().count() == numFunc + 1)
+      }
     }
   }
 }
