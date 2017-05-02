@@ -1223,6 +1223,12 @@ test_that("select with column", {
   expect_equal(columns(df4), c("name", "age"))
   expect_equal(count(df4), 3)
 
+  # Test select with alias
+  df5 <- alias(df, "table")
+
+  expect_equal(columns(select(df5, column("table.name"))), "name")
+  expect_equal(columns(select(df5, "table.name")), "name")
+
   expect_error(select(df, c("name", "age"), "name"),
                 "To select multiple columns, use a character vector or list for col")
 })
@@ -2350,15 +2356,6 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_equal(nrow(result), 153)
   expect_equal(ncol(result), 2)
   detach(airquality)
-})
-
-test_that("alias on SparkDataFrame", {
-  df <- alias(read.df(jsonPath, "json"), "table")
-
-  actual <- sort(collect(select(df, column("table.name")))$name)
-  expected <- c("Andy", "Justin", "Michael")
-
-  expect_equal(actual, expected)
 })
 
 test_that("read/write ORC files", {
