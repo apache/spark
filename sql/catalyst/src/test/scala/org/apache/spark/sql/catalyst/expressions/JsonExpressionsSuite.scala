@@ -453,6 +453,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("SPARK-20549: from_json bad UTF-8") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    checkEvaluation(
+      JsonToStructs(schema, Map.empty, Literal(badJson), gmtId),
+      null)
+  }
+
   test("from_json with timestamp") {
     val schema = StructType(StructField("t", TimestampType) :: Nil)
 

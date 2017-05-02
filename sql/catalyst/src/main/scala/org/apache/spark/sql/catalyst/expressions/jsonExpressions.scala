@@ -151,8 +151,7 @@ case class GetJsonObject(json: Expression, path: Expression)
       try {
         /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
           detect character encoding which could fail for some malformed strings */
-        Utils.tryWithResource(jsonFactory.createParser(new InputStreamReader(
-            new ByteArrayInputStream(jsonStr.getBytes), "UTF-8"))) { parser =>
+        Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, jsonStr)) { parser =>
           val output = new ByteArrayOutputStream()
           val matched = Utils.tryWithResource(
             jsonFactory.createGenerator(output, JsonEncoding.UTF8)) { generator =>
@@ -398,9 +397,8 @@ case class JsonTuple(children: Seq[Expression])
     try {
       /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
       detect character encoding which could fail for some malformed strings */
-      Utils.tryWithResource(jsonFactory.createParser(new InputStreamReader(
-          new ByteArrayInputStream(json.getBytes), "UTF-8"))) {
-        parser => parseRow(parser, input)
+      Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
+        parseRow(parser, input)
       }
     } catch {
       case _: JsonProcessingException =>
