@@ -50,7 +50,7 @@ Key differences are
 * Changes to stored objects may not be immediately visible, both in directory listings and actual data access.
 * The means by which directories are emulated may make working with them slow.
 * Rename operations may be very slow and, on failure, leave the store in an unknown state.
-* Seeking within a file may require new REST calls, hurting performance. 
+* Seeking within a file may require new HTTP calls, hurting performance. 
 
 How does affect Spark? 
 
@@ -66,7 +66,7 @@ connector to determine which uses are considered safe.
 
 ### Installation
 
-With the relevant libraries on the classpath and Spark configured with the credentials,
+With the relevant libraries on the classpath and Spark configured with valid credentials,
 objects can be can be read or written by using their URLs as the path to data.
 For example `sparkContext.textFile("s3a://landsat-pds/scene_list.gz")` will create
 an RDD of the file `scene_list.gz` stored in S3, using the s3a connector.
@@ -127,9 +127,9 @@ spark.hadoop.mapreduce.fileoutputcommitter.cleanup-failures.ignored true
 
 This uses the "version 2" algorithm for committing files, which does less
 renaming than the "version 1" algorithm, though as it still uses `rename()`
-to commit files, it is still unsafe to use in some environments.
+to commit files, it may be unsafe to use.
 
-Bear in mind that storing temporary files can run up charges; delete
+As storing temporary files can run up charges; delete
 directories called `"_temporary"` on a regular basis to avoid this.
 
 
@@ -144,6 +144,8 @@ spark.sql.parquet.filterPushdown true
 spark.sql.hive.metastorePartitionPruning true
 ```
 
+These minimise the amount of data read during queries.
+
 ### ORC I/O Settings
 
 For best performance when working with ORC data, use these settings:
@@ -155,7 +157,9 @@ spark.sql.orc.cache.stripe.details.size 10000
 spark.sql.hive.metastorePartitionPruning true
 ```
 
-#### <a name="checkpointing"></a>Spark Streaming and Object Storage
+Again, these minimise the amount of data read during queries.
+
+## Spark Streaming and Object Storage
 
 Spark Streaming can monitor files added to object stores, by
 creating a `FileInputDStream` to monitor a path in the store through a call to
