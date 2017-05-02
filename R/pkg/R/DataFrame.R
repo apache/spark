@@ -3751,7 +3751,8 @@ setMethod("hint",
 #' @aliases alias,SparkDataFrame-method
 #' @rdname alias
 #' @name alias
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- alias(createDataFrame(mtcars), "mtcars")
 #' avg_mpg <- alias(agg(groupBy(df, df$cyl), avg(df$mpg)), "avg_mpg")
 #'
