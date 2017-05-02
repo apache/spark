@@ -22,8 +22,8 @@ import java.io.{IOException, ObjectOutputStream}
 import scala.reflect._
 
 import org.apache.spark._
-import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-import org.apache.spark.util.{TaskCompletionListener, TaskFailureListener, Utils}
+import org.apache.spark.storage.{BlockId, RDDBlockId, StorageLevel}
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 private[spark]
 class CartesianPartition(
@@ -54,8 +54,6 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   extends RDD[(T, U)](sc, Nil)
   with Serializable {
 
-  logInfo("-------------> In Cartesian RDD initialize")
-
   val numPartitionsInRdd2 = rdd2.partitions.length
 
   override def getPartitions: Array[Partition] = {
@@ -74,7 +72,6 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
-    logInfo("-------------------> In Cartesian compute method")
     val currSplit = split.asInstanceOf[CartesianPartition]
     for (x <- rdd1.iterator(currSplit.s1, context);
          y <- getOrCacheBlock(rdd2, currSplit.s2, context, StorageLevel.MEMORY_AND_DISK))
@@ -86,12 +83,10 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
       partition: Partition,
       context: TaskContext,
       level: StorageLevel): Iterator[U] = {
-    logInfo(s"--------------> in getOrCacheBlock(${rdd.id}, ${partition.index})")
     val blockId = RDDBlockId(rdd.id, partition.index)
     var readCachedBlock = true
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
     val iterator = SparkEnv.get.blockManager.getOrElseUpdate(blockId, level, classTag[U], () => {
-
       readCachedBlock = false
       rdd.computeOrReadCheckpoint(partition, context)
     }, true) match {
@@ -112,23 +107,14 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
         new InterruptibleIterator(context, iter.asInstanceOf[Iterator[U]])
     }
 
-//    context.addTaskCompletionListener(new TaskCompletionListener{
-//      override def onTaskCompletion(context: TaskContext): Unit = {
-//        if (!readCachedBlock) {
-//          SparkEnv.get.blockManager.removeBlock(blockId, false)
-//        }
-//      }
-//    })
-//
-//    context.addTaskFailureListener(new TaskFailureListener{
-//      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
-//        if (!readCachedBlock) {
-//          SparkEnv.get.blockManager.removeBlock(blockId, false)
-//        }
-//      }
-//    })
+    def removeBlock(blockId: BlockId,
+        readCachedBlock: Boolean): Unit = {
+      if (!readCachedBlock) {
+        SparkEnv.get.blockManager.removeBlock(blockId, true, false)
+      }
+    }
 
-    iterator
+    CompletionIterator[U, Iterator[U]](iterator, removeBlock(blockId, readCachedBlock))
   }
 
   override def getDependencies: Seq[Dependency[_]] = List(

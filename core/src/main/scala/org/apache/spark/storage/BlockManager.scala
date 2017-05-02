@@ -679,21 +679,24 @@ private[spark] class BlockManager(
   }
 
   def get[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
-    logInfo("-------------> get")
-    getOrCacheRemote(blockId, false, StorageLevel.NONE)
+    getOrCacheRemote(blockId, false, Some(StorageLevel.NONE))
   }
 
   /**
-   * Get a block from the block manager (either local or remote).
+   * Get a block from the block manager (either local or remote). And also can cache the block
+   * fetched from remote in local.
    *
    * This acquires a read lock on the block if the block was stored locally and does not acquire
    * any locks if the block was fetched from a remote block manager. The read lock will
    * automatically be freed once the result's `data` iterator is fully consumed.
+   * @param blockId the block under fetching.
+   * @param cacheRemote whether cache the block fetched remotely.
+   * @param storageLevel if the cacheRemote enabled, this should be set.
    */
   def getOrCacheRemote[T: ClassTag](
       blockId: BlockId,
-      cacheRemote: Boolean,
-      storageLevel: StorageLevel): Option[BlockResult] = {
+      cacheRemote: Boolean = false,
+      storageLevel: Option[StorageLevel] = None): Option[BlockResult] = {
     val local = getLocalValues(blockId)
     if (local.isDefined) {
       logInfo(s"Found block $blockId locally")
@@ -703,10 +706,10 @@ private[spark] class BlockManager(
     remote match {
       case Some(blockResult) =>
         logInfo(s"Found block $blockId remotely")
-        logInfo(s"-------------------> (${blockId.name})")
         if (cacheRemote) {
-          logInfo(s"-------------------> in cacheRemote (${blockId.name})")
-          putIterator(blockId, blockResult.data, storageLevel)
+          assert(storageLevel.isDefined && storageLevel.get.isValid,
+            "The storage level is invalid.")
+          putIterator(blockId, blockResult.data, storageLevel.get)
           logInfo(s"Cache bock $blockId fetched from remotely")
         }
         return remote
@@ -759,10 +762,9 @@ private[spark] class BlockManager(
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T],
       cacheRemote: Boolean = false): Either[BlockResult, Iterator[T]] = {
-    logInfo("--------------> In getOrElseUpdate, cacheRemote: " + cacheRemote)
     // Attempt to read the block from local or remote storage. If it's present, then we don't need
     // to go through the local-get-or-put path.
-    getOrCacheRemote[T](blockId, cacheRemote, level)(classTag) match {
+    getOrCacheRemote[T](blockId, cacheRemote, Some(level))(classTag) match {
       case Some(block) =>
         return Left(block)
       case _ =>
@@ -1446,10 +1448,14 @@ private[spark] class BlockManager(
 
   /**
    * Remove a block from both memory and disk.
+   * @param blocking if true (default), this call will block until the lock is acquired. If false,
+   *                 this call will return immediately if the lock acquisition fails.
    */
-  def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {
+  def removeBlock(blockId: BlockId,
+      tellMaster: Boolean = true,
+      blocking: Boolean = true): Unit = {
     logDebug(s"Removing block $blockId")
-    blockInfoManager.lockForWriting(blockId) match {
+    blockInfoManager.lockForWriting(blockId, blocking) match {
       case None =>
         // The block has already been removed; do nothing.
         logWarning(s"Asked to remove block $blockId, which does not exist")
