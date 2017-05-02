@@ -18,6 +18,8 @@ package org.apache.spark.deploy.kubernetes.integrationtest
 
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
+
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.SettableFuture
 import io.fabric8.kubernetes.api.model.Pod
@@ -25,26 +27,28 @@ import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 import org.scalatest.{BeforeAndAfter, DoNotDiscover}
 import org.scalatest.concurrent.Eventually
-import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.kubernetes.SSLUtils
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.kubernetes.integrationtest.minikube.Minikube
+import org.apache.spark.deploy.kubernetes.integrationtest.backend.IntegrationTestBackend
+import org.apache.spark.deploy.kubernetes.integrationtest.backend.minikube.Minikube
+import org.apache.spark.deploy.kubernetes.integrationtest.constants.{GCE_TEST_BACKEND, MINIKUBE_TEST_BACKEND}
 import org.apache.spark.deploy.kubernetes.integrationtest.restapis.SparkRestApiV1
 import org.apache.spark.deploy.kubernetes.submit.v1.{Client, ExternalSuppliedUrisDriverServiceManager}
 import org.apache.spark.status.api.v1.{ApplicationStatus, StageStatus}
 import org.apache.spark.util.Utils
 
 @DoNotDiscover
-private[spark] class KubernetesV1Suite extends SparkFunSuite with BeforeAndAfter {
+private[spark] class KubernetesV1Suite(testBackend: IntegrationTestBackend)
+  extends SparkFunSuite with BeforeAndAfter {
 
   private var kubernetesTestComponents: KubernetesTestComponents = _
   private var sparkConf: SparkConf = _
 
   override def beforeAll(): Unit = {
-    kubernetesTestComponents = new KubernetesTestComponents()
+    kubernetesTestComponents = new KubernetesTestComponents(testBackend.getKubernetesClient)
     kubernetesTestComponents.createNamespace()
   }
 
@@ -85,7 +89,7 @@ private[spark] class KubernetesV1Suite extends SparkFunSuite with BeforeAndAfter
       .get(0)
       .getMetadata
       .getName
-    Minikube.getService[SparkRestApiV1](serviceName,
+    kubernetesTestComponents.getService[SparkRestApiV1](serviceName,
       kubernetesTestComponents.namespace, "spark-ui-port")
   }
 
@@ -168,6 +172,8 @@ private[spark] class KubernetesV1Suite extends SparkFunSuite with BeforeAndAfter
   }
 
   test("Enable SSL on the driver submit server") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+
     val (keyStoreFile, trustStoreFile) = SSLUtils.generateKeyStoreTrustStorePair(
       Minikube.getMinikubeIp,
       "changeit",
@@ -188,6 +194,8 @@ private[spark] class KubernetesV1Suite extends SparkFunSuite with BeforeAndAfter
   }
 
   test("Enable SSL on the driver submit server using PEM files") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+
     val (keyPem, certPem) = SSLUtils.generateKeyCertPemPair(Minikube.getMinikubeIp)
     sparkConf.set(DRIVER_SUBMIT_SSL_KEY_PEM, s"file://${keyPem.getAbsolutePath}")
     sparkConf.set(DRIVER_SUBMIT_SSL_CLIENT_CERT_PEM, s"file://${certPem.getAbsolutePath}")
@@ -201,6 +209,8 @@ private[spark] class KubernetesV1Suite extends SparkFunSuite with BeforeAndAfter
   }
 
   test("Added files should exist on the driver.") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+
     sparkConf.set("spark.files", KubernetesSuite.TEST_EXISTENCE_FILE.getAbsolutePath)
     sparkConf.setAppName("spark-file-existence-test")
     val podCompletedFuture = SettableFuture.create[Boolean]
@@ -257,6 +267,8 @@ private[spark] class KubernetesV1Suite extends SparkFunSuite with BeforeAndAfter
   }
 
   test("Use external URI provider") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+
     val externalUriProviderWatch =
       new ExternalUriProviderWatch(kubernetesTestComponents.kubernetesClient)
     Utils.tryWithResource(kubernetesTestComponents.kubernetesClient.services()
@@ -288,6 +300,8 @@ private[spark] class KubernetesV1Suite extends SparkFunSuite with BeforeAndAfter
   }
 
   test("Mount the Kubernetes credentials onto the driver pod") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+
     sparkConf.set(KUBERNETES_DRIVER_CA_CERT_FILE,
       kubernetesTestComponents.clientConfig.getCaCertFile)
     sparkConf.set(KUBERNETES_DRIVER_CLIENT_KEY_FILE,

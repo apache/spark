@@ -14,20 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.kubernetes.integrationtest.minikube
+package org.apache.spark.deploy.kubernetes.integrationtest.backend.minikube
 
-import java.io.{BufferedReader, InputStreamReader}
 import java.nio.file.Paths
-import java.util.concurrent.TimeUnit
-import java.util.regex.Pattern
-import javax.net.ssl.X509TrustManager
 
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient}
-import io.fabric8.kubernetes.client.internal.SSLUtils
-import scala.collection.mutable.ArrayBuffer
-import scala.reflect.ClassTag
 
-import org.apache.spark.deploy.rest.kubernetes.v1.HttpClientUtil
+import org.apache.spark.deploy.kubernetes.integrationtest.ProcessUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -93,7 +86,7 @@ private[spark] object Minikube extends Logging {
   }
 
   def getKubernetesClient: DefaultKubernetesClient = synchronized {
-    val kubernetesMaster = s"https://$getMinikubeIp:8443"
+    val kubernetesMaster = s"https://${getMinikubeIp}:8443"
     val userHome = System.getProperty("user.home")
     val kubernetesConf = new ConfigBuilder()
       .withApiVersion("v1")
@@ -103,32 +96,6 @@ private[spark] object Minikube extends Logging {
       .withClientKeyFile(Paths.get(userHome, ".minikube", "apiserver.key").toFile.getAbsolutePath)
       .build()
     new DefaultKubernetesClient(kubernetesConf)
-  }
-
-  def getService[T: ClassTag](
-      serviceName: String,
-      namespace: String,
-      servicePortName: String,
-      servicePath: String = ""): T = synchronized {
-    val kubernetesMaster = s"https://$getMinikubeIp:8443"
-    val url = s"${
-      Array[String](
-        kubernetesMaster,
-        "api", "v1", "proxy",
-        "namespaces", namespace,
-        "services", serviceName).mkString("/")}" +
-      s":$servicePortName$servicePath"
-    val userHome = System.getProperty("user.home")
-    val kubernetesConf = new ConfigBuilder()
-      .withApiVersion("v1")
-      .withMasterUrl(kubernetesMaster)
-      .withCaCertFile(Paths.get(userHome, ".minikube", "ca.crt").toFile.getAbsolutePath)
-      .withClientCertFile(Paths.get(userHome, ".minikube", "apiserver.crt").toFile.getAbsolutePath)
-      .withClientKeyFile(Paths.get(userHome, ".minikube", "apiserver.key").toFile.getAbsolutePath)
-      .build()
-    val sslContext = SSLUtils.sslContext(kubernetesConf)
-    val trustManager = SSLUtils.trustManagers(kubernetesConf)(0).asInstanceOf[X509TrustManager]
-    HttpClientUtil.createClient[T](Set(url), 5, sslContext.getSocketFactory, trustManager)
   }
 
   def executeMinikubeSsh(command: String): Unit = {
@@ -141,28 +108,8 @@ private[spark] object Minikube extends Logging {
         throw new IllegalStateException("Failed to make the Minikube binary executable.")
       }
     }
-    val fullCommand = Array(MINIKUBE_EXECUTABLE_DEST.getAbsolutePath, action) ++ args
-    val pb = new ProcessBuilder().command(fullCommand: _*)
-    pb.redirectErrorStream(true)
-    val proc = pb.start()
-    val outputLines = new ArrayBuffer[String]
-
-    Utils.tryWithResource(new InputStreamReader(proc.getInputStream)) { procOutput =>
-      Utils.tryWithResource(new BufferedReader(procOutput)) { (bufferedOutput: BufferedReader) =>
-        var line: String = null
-        do {
-          line = bufferedOutput.readLine()
-          if (line != null) {
-            logInfo(line)
-            outputLines += line
-          }
-        } while (line != null)
-      }
-    }
-    assert(proc.waitFor(MINIKUBE_STARTUP_TIMEOUT_SECONDS, TimeUnit.SECONDS),
-      s"Timed out while executing $action on minikube.")
-    assert(proc.exitValue == 0, s"Failed to execute minikube $action ${args.mkString(" ")}")
-    outputLines.toSeq
+    ProcessUtils.executeProcess(Array(MINIKUBE_EXECUTABLE_DEST.getAbsolutePath, action) ++ args,
+      MINIKUBE_STARTUP_TIMEOUT_SECONDS)
   }
 }
 

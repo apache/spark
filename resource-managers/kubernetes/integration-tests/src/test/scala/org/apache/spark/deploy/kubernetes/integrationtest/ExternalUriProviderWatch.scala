@@ -24,7 +24,7 @@ import io.fabric8.kubernetes.client.Watcher.Action
 import scala.collection.JavaConverters._
 
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.kubernetes.integrationtest.minikube.Minikube
+import org.apache.spark.deploy.kubernetes.integrationtest.backend.minikube.Minikube
 import org.apache.spark.internal.Logging
 
 /**

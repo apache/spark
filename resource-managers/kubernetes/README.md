@@ -61,6 +61,14 @@ build/mvn integration-test \
     -pl resource-managers/kubernetes/integration-tests -am
 ```
 
+# Running against an arbitrary cluster
+
+In order to run against any cluster, use the following:
+build/mvn integration-test \
+    -Pkubernetes -Pkubernetes-integration-tests \
+    -pl resource-managers/kubernetes/integration-tests -am
+    -DextraScalaTestArgs="-Dspark.kubernetes.test.master=k8s://https://<master> -Dspark.docker.test.driverImage=<driver-image> -Dspark.docker.test.executorImage=<executor-image>"
+
 # Preserve the Minikube VM
 
 The integration tests make use of [Minikube](https://github.com/kubernetes/minikube), which fires up a virtual machine
