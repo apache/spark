@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.net.URLDecoder
 import java.sql.Timestamp
 import java.util.TimeZone
 
@@ -32,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompatibilityT
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{StringType, StructType, TimestampType}
 
 class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton
     with BeforeAndAfterEach {
@@ -299,7 +300,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
     test(s"SPARK-12297: Write to Parquet tables with Timestamps; explicitTz = $explicitTz; " +
         s"sessionTzOpt = $sessionTzOpt") {
 
-      withTable(s"saveAsTable_$baseTable", s"insert_$baseTable") {
+      withTable(s"saveAsTable_$baseTable", s"insert_$baseTable", s"partitioned_ts_$baseTable") {
         val sessionTzId = sessionTzOpt.getOrElse(TimeZone.getDefault().getID())
         // check that created tables have correct TBLPROPERTIES
         val tblProperties = explicitTz.map {
@@ -349,6 +350,18 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
               s"$expectedMillis (delta = ${millis - expectedMillis})")
           }
         }
+
+        // check tables partitioned by timestamps.  We don't compare the "raw" data in this case,
+        // since they are adjusted even when we bypass the hive table.
+        rawData.write.partitionBy("ts").saveAsTable(s"partitioned_ts_$baseTable")
+        val partitionDiskLocation = spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier(s"partitioned_ts_$baseTable")).location.getPath
+        // no matter what mix of timezones we use, the dirs should specify the value with the
+        // same time we use for display.
+        val parts = new File(partitionDiskLocation).list().collect {
+          case name if name.startsWith("ts=") => URLDecoder.decode(name.stripPrefix("ts="))
+        }.toSet
+        assert(parts === desiredTimestampStrings.toSet)
       }
     }
   }
