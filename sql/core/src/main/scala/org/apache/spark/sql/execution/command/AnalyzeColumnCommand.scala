@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableTyp
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.SQLExecution
 
 
 /**
@@ -96,7 +97,9 @@ case class AnalyzeColumnCommand(
       attributesToAnalyze.map(ColumnStat.statExprs(_, ndvMaxErr))
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
-    val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation)).head()
+    val statsRow = SQLExecution.nested(sparkSession) {
+      Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation)).head()
+    }
 
     val rowCount = statsRow.getLong(0)
     val columnStats = attributesToAnalyze.zipWithIndex.map { case (attr, i) =>

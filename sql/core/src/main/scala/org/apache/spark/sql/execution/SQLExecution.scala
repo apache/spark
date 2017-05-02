@@ -122,7 +122,7 @@ object SQLExecution extends Logging {
       // To avoid this warning, use nested { ... }
       if (!Option(sc.getLocalProperty(ALLOW_NESTED_EXECUTION)).exists(_.toBoolean)) {
         if (testing) {
-          throw new IllegalArgumentException(s"$EXECUTION_ID_KEY is already set")
+          throw new IllegalArgumentException(s"$EXECUTION_ID_KEY is already set: $oldExecutionId")
         } else {
           logWarning(s"$EXECUTION_ID_KEY is already set")
         }
