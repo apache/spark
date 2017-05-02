@@ -54,6 +54,59 @@ object ConstantFolding extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Substitutes [[Attribute Attributes]] which can be statically evaluated with their corresponding
+ * value in conjunctive [[Expression Expressions]]
+ * eg.
+ * {{{
+ *   SELECT * FROM table WHERE i = 5 AND j = i + 3
+ *   ==>  SELECT * FROM table WHERE i = 5 AND j = 8
+ * }}}
+ */
+object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
+
+  def containsNonConjunctionPredicates(expression: Expression): Boolean = expression match {
+    case Not(_) => true
+    case Or(_, _) => true
+    case _ =>
+      var result = false
+      expression.children.foreach {
+        case Not(_) => result = true
+        case Or(_, _) => result = true
+        case other => result = result || containsNonConjunctionPredicates(other)
+      }
+      result
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case and @ (left And right)
+        if !containsNonConjunctionPredicates(left) && !containsNonConjunctionPredicates(right) =>
+
+        val leftEntries = left.collect {
+          case e @ EqualTo(left: AttributeReference, right: Literal) => ((left, right), e)
+          case e @ EqualTo(left: Literal, right: AttributeReference) => ((right, left), e)
+        }
+        val rightEntries = right.collect {
+          case e @ EqualTo(left: AttributeReference, right: Literal) => ((left, right), e)
+          case e @ EqualTo(left: Literal, right: AttributeReference) => ((right, left), e)
+        }
+        val constantsMap = AttributeMap(leftEntries.map(_._1) ++ rightEntries.map(_._1))
+        val predicates = (leftEntries.map(_._2) ++ rightEntries.map(_._2)).toSet
+
+        def replaceConstants(expression: Expression) = expression transform {
+          case a: AttributeReference if constantsMap.contains(a) =>
+            constantsMap.get(a).getOrElse(a)
+        }
+
+        and transform {
+          case e @ EqualTo(_, _) if !predicates.contains(e) &&
+            e.references.exists(ref => constantsMap.contains(ref)) =>
+            replaceConstants(e)
+        }
+    }
+  }
+}
 
 /**
  * Reorder associative integral-type operators and fold all constants into one.
