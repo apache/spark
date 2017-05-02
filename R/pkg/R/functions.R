@@ -3981,6 +3981,7 @@ setMethod("grouping_id",
 #'
 #' @rdname input_file_name
 #' @name input_file_name
+#' @family normal_funcs
 #' @aliases input_file_name,missing-method
 #' @export
 #' @examples \dontrun{
