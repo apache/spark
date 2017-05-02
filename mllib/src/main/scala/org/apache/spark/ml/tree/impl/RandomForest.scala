@@ -1015,11 +1015,11 @@ private[spark] object RandomForest extends Logging {
         Array.empty[Double]
       } else if (possibleSplits <= numSplits) {
         // if possible splits is not enough or just enough, just return all possible splits
-        valueCounts
-          .sliding(2)
-          .map(x => (x(0)._1 + x(1)._1) / 2)
-          .toArray
+        val splits = for {
+          i <- 0 until valueCounts.length - 1
+        } yield (valueCounts(i)._1 + valueCounts(i + 1)._1) / 2
 
+        splits.toArray
       } else {
         // stride between splits
         val stride: Double = numSamples.toDouble / (numSplits + 1)
