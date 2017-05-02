@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -50,15 +50,28 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 
   protected override def generateTable(
       catalog: SessionCatalog,
-      name: TableIdentifier): CatalogTable = {
+      name: TableIdentifier,
+      isDataSource: Boolean): CatalogTable = {
     val storage =
-      CatalogStorageFormat(
-        locationUri = Some(catalog.defaultTablePath(name)),
-        inputFormat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
-        outputFormat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
-        serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
-        compressed = false,
-        properties = Map("serialization.format" -> "1"))
+      if (isDataSource) {
+        val serde = HiveSerDe.sourceToSerDe("parquet")
+        assert(serde.isDefined, "The default format is not Hive compatible")
+        CatalogStorageFormat(
+          locationUri = Some(catalog.defaultTablePath(name)),
+          inputFormat = serde.get.inputFormat,
+          outputFormat = serde.get.outputFormat,
+          serde = serde.get.serde,
+          compressed = false,
+          properties = Map("serialization.format" -> "1"))
+      } else {
+        CatalogStorageFormat(
+          locationUri = Some(catalog.defaultTablePath(name)),
+          inputFormat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
+          outputFormat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
+          serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
+          compressed = false,
+          properties = Map("serialization.format" -> "1"))
+      }
     val metadata = new MetadataBuilder()
       .putString("key", "value")
       .build()
@@ -71,7 +84,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
         .add("col2", "string")
         .add("a", "int")
         .add("b", "int"),
-      provider = Some("hive"),
+      provider = if (isDataSource) Some("parquet") else Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
       tracksPartitionsInCatalog = true)
@@ -105,6 +118,46 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       // View texts are checked separately
       viewText = None
     )
+  }
+
+  test("alter table: set location") {
+    testSetLocation(isDatasourceTable = false)
+  }
+
+  test("alter table: set properties") {
+    testSetProperties(isDatasourceTable = false)
+  }
+
+  test("alter table: unset properties") {
+    testUnsetProperties(isDatasourceTable = false)
+  }
+
+  test("alter table: set serde") {
+    testSetSerde(isDatasourceTable = false)
+  }
+
+  test("alter table: set serde partition") {
+    testSetSerdePartition(isDatasourceTable = false)
+  }
+
+  test("alter table: change column") {
+    testChangeColumn(isDatasourceTable = false)
+  }
+
+  test("alter table: rename partition") {
+    testRenamePartitions(isDatasourceTable = false)
+  }
+
+  test("alter table: drop partition") {
+    testDropPartitions(isDatasourceTable = false)
+  }
+
+  test("alter table: add partition") {
+    testAddPartitions(isDatasourceTable = false)
+  }
+
+  test("drop table") {
+    testDropTable(isDatasourceTable = false)
   }
 
 }
