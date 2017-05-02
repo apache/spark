@@ -29,7 +29,7 @@ These are not classic "POSIX" file systems.
 In order to store hundreds of petabytes of data without any single points of failure,
 object stores replace the classic filesystem directory tree
 with a simpler model of `object-name => data`. To enable remote access, operations
-on objects are usually performed through (slow) HTTP REST operations.
+on objects are usually offered as (slow) HTTP REST operations.
 
 Spark can read and write data in object stores through filesystem connectors implemented
 in Hadoop or provided by the infrastructure suppliers themselves.
@@ -43,23 +43,22 @@ While the stores appear to be filesystems, underneath
 they are still object stores, [and the difference is significant](http://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/filesystem/introduction.html)
 
 They cannot be used as a direct replacement for a cluster filesystem such as HDFS
-*except when this is explicitly stated*.
+*except where this is explicitly stated*.
 
 Key differences are
 
-* Directory renames may be very slow and, on failure, leave the store in an unknown state.
-* Output may only be uploaded when the writing process closes the output stream.
 * Changes to stored objects may not be immediately visible, both in directory listings and actual data access.
 * The means by which directories are emulated may make working with them slow.
-* Seeking within a file may require new REST calls, so be slow. 
+* Rename operations may be very slow and, on failure, leave the store in an unknown state.
+* Seeking within a file may require new REST calls, hurting performance. 
 
-How does affect spark? 
+How does affect Spark? 
 
-1. Reading and writing data can be slower than expected.
+1. Reading and writing data can be significantly slower than working with a normal filesystem.
 1. Some directory structures may be very inefficient to scan during query split calculation.
-1. The output of saved RDD may not be immediately visible to a follow-on query.
-1. The internal mechanism by which Spark commits work when saving an RDD is potentially
-both slow and unreliable.
+1. The output of work may not be immediately visible to a follow-on query.
+1. The rename-based algorithm by which Spark normally commits work when saving an RDD, DataFrame or Dataset
+ is potentially both slow and unreliable.
 
 For these reasons, it is not always safe to use an object store as a direct destination of queries, or as
 an intermediate store in a chain of queries. Consult the documentation of the object store and its
@@ -67,11 +66,12 @@ connector to determine which uses are considered safe.
 
 ### Installation
 
-Provided the relevant libraries are on the classpath, and Spark is configured with the credentials,
-objects can be can be read or written through URLs referencing the data,
-such as `"s3a://landsat-pds/scene_list.gz"`.
+With the relevant libraries on the classpath and Spark configured with the credentials,
+objects can be can be read or written by using their URLs as the path to data.
+For example `sparkContext.textFile("s3a://landsat-pds/scene_list.gz")` will create
+an RDD of the file `scene_list.gz` stored in S3, using the s3a connector.
 
-The libraries can be added to an application's classpath by including the `spark-hadoop-cloud` 
+To add the relevant libraries to an application's classpath, include the `spark-hadoop-cloud` 
 module and its dependencies.
 
 In Maven, add the following to the `pom.xml` file, assuming `spark.version`
@@ -89,18 +89,17 @@ is set to the chosen version of Spark:
 </dependencyManagement>
 {% endhighlight %}
 
-Commercial products based on Spark generally set up the classpath for talking to cloud infrastructures,
-in which case this module may not be needed.
-
+Commercial products based on Apache Spark generally directly set up the classpath
+for talking to cloud infrastructures, in which case this module may not be needed.
 
 ### Authenticating
 
 Spark jobs must authenticate with the object stores to access data within them.
 
 1. When Spark is running in a cloud infrastructure, the credentials are usually automatically set up.
-1. `spark-submit`  picks up the `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`
+1. `spark-submit` reads the `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`
 and `AWS_SESSION_TOKEN` environment variables and sets the associated authentication options
-for the `s3n` and `s3a` filesystem clients.
+for the `s3n` and `s3a` connectors to Amazon S3.
 1. In a Hadoop cluster, settings may be set in the `core-site.xml` file.
 1. Authentication details may be manually added to the Spark configuration in `spark-default.conf`
 1. Alternatively, they can be programmatically set in the `SparkConf` instance used to configure 
@@ -124,16 +123,15 @@ Here are some settings to use when writing to object stores.
 ```
 spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version 2
 spark.hadoop.mapreduce.fileoutputcommitter.cleanup-failures.ignored true
-spark.speculation false
 ```
 
 This uses the "version 2" algorithm for committing files, which does less
-renaming than the "version 1" algorithm.
-Speculative execution is disabled to reduce the risk of invalid output
-—but it may not eliminate it.
+renaming than the "version 1" algorithm, though as it still uses `rename()`
+to commit files, it is still unsafe to use in some environments.
 
-Bear in mind that storing temporary files can run up charges; Delete
+Bear in mind that storing temporary files can run up charges; delete
 directories called `"_temporary"` on a regular basis to avoid this.
+
 
 ### Parquet I/O Settings
 
@@ -157,36 +155,22 @@ spark.sql.orc.cache.stripe.details.size 10000
 spark.sql.hive.metastorePartitionPruning true
 ```
 
-### YARN Scheduler settings
-
-When running Spark in a YARN cluster running in EC2, turning off locality avoids any delays
-waiting for the scheduler to find a node close to the data.
-
-{% highlight xml %}
-<property>
-  <name>yarn.scheduler.capacity.node-locality-delay</name>
-  <value>0</value>
-</property>
-{% endhighlight %}
-
-This must be set in the cluster's `yarn-site.xml` file.
-
-#### <a name="checkpointing"></a>Spark Streaming and object stores
+#### <a name="checkpointing"></a>Spark Streaming and Object Storage
 
 Spark Streaming can monitor files added to object stores, by
-creating a `FileInputDStream` DStream monitoring a path under a bucket through
+creating a `FileInputDStream` to monitor a path in the store through a call to
 `StreamingContext.textFileStream()`.
 
 1. The time to scan for new files is proportional to the number of files
-under the path, not the number of *new* files, and that it can become a slow operation.
+under the path, not the number of *new* files, so it can become a slow operation.
 The size of the window needs to be set to handle this.
 
 1. Files only appear in an object store once they are completely written; there
 is no need for a worklow of write-then-rename to ensure that files aren't picked up
 while they are still being written. Applications can write straight to the monitored directory.
 
-1. Streams should only be checkpointed to an object store considered compatible with
-HDFS. Otherwise the checkpointing will be slow and potentially unreliable.
+1. Streams should only be checkpointed to an store implementing a fast and
+atomic `rename()` operation Otherwise the checkpointing may be slow and potentially unreliable.
 
 ## Further Reading
 
