@@ -85,9 +85,9 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
 
     val codes = Map(
-      "a" -> Array(0.4789249002933502, -0.8670040965080261, -0.05274176970124245),
-      "b" -> Array(-0.3759726583957672, 0.4147680103778839, 0.9749016165733337),
-      "c" -> Array(-0.16657261550426483, -0.08802555501461029, 0.48428893089294434)
+      "a" -> Array(0.4902186989784241, -0.8839443325996399, -0.0797744169831276),
+      "b" -> Array(-0.381089448928833, 0.45100924372673035, 0.9186644554138184),
+      "c" -> Array(-0.1593254804611206, -0.08444130420684814, 0.4444524943828583)
     )
 
     val expected = doc.map { sentence =>
@@ -99,8 +99,9 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val docDF = doc.zip(expected).toDF("text", "expected")
 
     val w2v = new Word2Vec()
-      .setSkipGram(false)
+      .setModel("cbow-ns")
       .setNegativeSamples(2)
+      .setMaxUnigramTableSize(10000)
       .setVectorSize(3)
       .setInputCol("text")
       .setOutputCol("result")
@@ -166,16 +167,17 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
 
     val codes = Map(
-      "a" -> Array(0.4789249002933502, -0.8670040965080261, -0.05274176970124245),
-      "b" -> Array(-0.3759726583957672, 0.4147680103778839, 0.9749016165733337),
-      "c" -> Array(-0.16657261550426483, -0.08802555501461029, 0.48428893089294434)
+      "a" -> Array(0.4902186989784241, -0.8839443325996399, -0.0797744169831276),
+      "b" -> Array(-0.381089448928833, 0.45100924372673035, 0.9186644554138184),
+      "c" -> Array(-0.1593254804611206, -0.08444130420684814, 0.4444524943828583)
     )
     val expectedVectors = codes.toSeq.sortBy(_._1).map { case (w, v) => Vectors.dense(v) }
 
     val docDF = doc.zip(doc).toDF("text", "alsotext")
 
     val model = new Word2Vec()
-      .setSkipGram(false)
+      .setModel("cbow-ns")
+      .setMaxUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(3)
       .setInputCol("text")
@@ -237,7 +239,8 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val docDF = doc.zip(doc).toDF("text", "alsotext")
 
     val model = new Word2Vec()
-      .setSkipGram(false)
+      .setModel("cbow-ns")
+      .setMaxUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(3)
       .setInputCol("text")
@@ -245,7 +248,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setSeed(42L)
       .fit(docDF)
 
-    val expected = Map(("b", -0.5300834774971008), ("c", -0.05626266822218895))
+    val expected = Map(("b", -0.5949568748474121), ("c", -0.0800279974937439))
     val findSynonymsResult = model.findSynonyms("a", 2).rdd.map {
       case Row(w: String, sim: Double) => (w, sim)
     }.collectAsMap()
@@ -311,7 +314,8 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val docDF = doc.zip(doc).toDF("text", "alsotext")
 
     val model = new Word2Vec()
-      .setSkipGram(false)
+      .setModel("cbow-ns")
+      .setMaxUnigramTableSize(10000)
       .setNegativeSamples(5)
       .setVectorSize(3)
       .setWindowSize(2)
@@ -326,7 +330,8 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     // Increase the window size
     val biggerModel = new Word2Vec()
-      .setSkipGram(false)
+      .setModel("cbow-ns")
+      .setMaxUnigramTableSize(10000)
       .setNegativeSamples(5)
       .setVectorSize(3)
       .setInputCol("text")
@@ -358,7 +363,8 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("Word2Vec read/write - CBOW") {
     val t = new Word2Vec()
-      .setSkipGram(false)
+      .setModel("cbow-ns")
+      .setMaxUnigramTableSize(10000)
       .setNegativeSamples(10)
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
@@ -416,7 +422,8 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val ngramDF = ngram.transform(docDF)
 
     val model = new Word2Vec()
-      .setSkipGram(false)
+      .setModel("cbow-ns")
+      .setMaxUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(2)
       .setInputCol("ngrams")
