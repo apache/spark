@@ -1848,7 +1848,11 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
     orderBy(
       agg(
         cube(df, "year", "department"),
-        expr("sum(salary) AS total_salary"), expr("avg(salary) AS average_salary")
+        expr("sum(salary) AS total_salary"),
+        expr("avg(salary) AS average_salary"),
+        alias(grouping_bit(df$year), "grouping_year"),
+        alias(grouping_bit(df$department), "grouping_department"),
+        alias(grouping_id(df$year, df$department), "grouping_id")
       ),
       "year", "department"
     )
@@ -1875,6 +1879,30 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
       mean(c(21000, 32000, 22000)), # 2017
       22000, 32000, 21000 # 2017 each department
     ),
+    grouping_year = c(
+      1, # global
+      1, 1, 1, # by department
+      0, # 2016
+      0, 0, 0, # 2016 by department
+      0, # 2017
+      0, 0, 0 # 2017 by department
+    ),
+    grouping_department = c(
+      1, # global
+      0, 0, 0, # by department
+      1, # 2016
+      0, 0, 0, # 2016 by department
+      1, # 2017
+      0, 0, 0 # 2017 by department
+    ),
+    grouping_id = c(
+      3, #  11
+      2, 2, 2, # 10
+      1, # 01
+      0, 0, 0, # 00
+      1, # 01
+      0, 0, 0 # 00
+    ),
     stringsAsFactors = FALSE
   )
 
@@ -1896,7 +1924,10 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
     orderBy(
       agg(
         rollup(df, "year", "department"),
-        expr("sum(salary) AS total_salary"), expr("avg(salary) AS average_salary")
+        expr("sum(salary) AS total_salary"), expr("avg(salary) AS average_salary"),
+        alias(grouping_bit(df$year), "grouping_year"),
+        alias(grouping_bit(df$department), "grouping_department"),
+        alias(grouping_id(df$year, df$department), "grouping_id")
       ),
       "year", "department"
     )
@@ -1919,6 +1950,27 @@ test_that("test multi-dimensional aggregations with cube and rollup", {
       10000, 15000, 20000, # 2016 each department
       mean(c(21000, 32000, 22000)), # 2017
       22000, 32000, 21000 # 2017 each department
+    ),
+    grouping_year = c(
+      1, # global
+      0, # 2016
+      0, 0, 0, # 2016 each department
+      0, # 2017
+      0, 0, 0 # 2017 each department
+    ),
+    grouping_department = c(
+      1, # global
+      1, # 2016
+      0, 0, 0, # 2016 each department
+      1, # 2017
+      0, 0, 0 # 2017 each department
+    ),
+    grouping_id = c(
+      3, # 11
+      1, # 01
+      0, 0, 0, # 00
+      1, # 01
+      0, 0, 0 # 00
     ),
     stringsAsFactors = FALSE
   )

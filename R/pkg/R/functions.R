@@ -3890,3 +3890,87 @@ setMethod("not",
             jc <- callJStatic("org.apache.spark.sql.functions", "not", x@jc)
             column(jc)
           })
+
+#' grouping_bit
+#'
+#' Indicates whether a specified column in a GROUP BY list is aggregated or not,
+#' returns 1 for aggregated or 0 for not aggregated in the result set.
+#'
+#' Same as \code{GROUPING} in SQL and \code{grouping} function in Scala.
+#'
+#' @param x Column to compute on
+#'
+#' @rdname grouping_bit
+#' @name grouping_bit
+#' @family agg_funcs
+#' @aliases grouping_bit,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(mtcars)
+#'
+#' # With cube
+#' agg(
+#'   cube(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   grouping_bit(df$cyl), grouping_bit(df$gear), grouping_bit(df$am)
+#' )
+#'
+#' # With rollup
+#' agg(
+#'   rollup(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   grouping_bit(df$cyl), grouping_bit(df$gear), grouping_bit(df$am)
+#' )
+#' }
+#' @note grouping_bit since 2.3.0
+setMethod("grouping_bit",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "grouping", x@jc)
+            column(jc)
+          })
+
+#' grouping_id
+#'
+#' Returns the level of grouping.
+#'
+#' Equals to \code{
+#' grouping_bit(c1) * 2^(n - 1) + grouping_bit(c2) * 2^(n - 2)  + ... + grouping_bit(cn)
+#' }
+#'
+#' @param x Column to compute on
+#' @param ... additional Column(s) (optional).
+#'
+#' @rdname grouping_id
+#' @name grouping_id
+#' @family agg_funcs
+#' @aliases grouping_id,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(mtcars)
+#'
+#' # With cube
+#' agg(
+#'   cube(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   grouping_id(df$cyl, df$gear, df$am)
+#' )
+#'
+#' # With rollup
+#' agg(
+#'   rollup(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   grouping_id(df$cyl, df$gear, df$am)
+#' )
+#' }
+#' @note grouping_id since 2.3.0
+setMethod("grouping_id",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "grouping_id", jcols)
+            column(jc)
+          })
