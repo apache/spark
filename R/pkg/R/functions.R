@@ -3871,6 +3871,7 @@ setMethod("posexplode_outer",
 #' @rdname not
 #' @name not
 #' @aliases not,Column-method
+#' @family normal_funcs
 #' @export
 #' @examples \dontrun{
 #' df <- createDataFrame(data.frame(
