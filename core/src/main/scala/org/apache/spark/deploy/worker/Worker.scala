@@ -99,6 +99,13 @@ private[deploy] class Worker(
 
   private val testing: Boolean = sys.props.contains("spark.testing")
   private var master: Option[RpcEndpointRef] = None
+
+  /**
+   * Whether to use the master address in `masterRpcAddresses` if possible. If it's disabled, Worker
+   * will just use the address received from Master.
+   */
+  private val preferConfiguredMasterAddress =
+    conf.getBoolean("spark.worker.preferConfiguredMasterAddress", false)
   /**
    * The master address to connect in case of failure. When the connection is broken, worker will
    * use this address to connect. This is usually just one of `masterRpcAddresses`. However, when
@@ -282,7 +289,8 @@ private[deploy] class Worker(
             if (registerMasterFutures != null) {
               registerMasterFutures.foreach(_.cancel(true))
             }
-            val masterAddress = masterAddressToConnect.get
+            val masterAddress =
+              if (preferConfiguredMasterAddress) masterAddressToConnect.get else masterRef.address
             registerMasterFutures = Array(registerMasterThreadPool.submit(new Runnable {
               override def run(): Unit = {
                 try {
@@ -372,7 +380,11 @@ private[deploy] class Worker(
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
       case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress) =>
-        logInfo("Successfully registered with master " + masterAddress.toSparkURL)
+        if (preferConfiguredMasterAddress) {
+          logInfo("Successfully registered with master " + masterAddress.toSparkURL)
+        } else {
+          logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
+        }
         registered = true
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
         forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
@@ -585,7 +597,8 @@ private[deploy] class Worker(
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-    if (master.exists(_.address == remoteAddress)) {
+    if (master.exists(_.address == remoteAddress) ||
+      masterAddressToConnect.exists(_ == remoteAddress)) {
       logInfo(s"$remoteAddress Disassociated !")
       masterDisconnected()
     }
