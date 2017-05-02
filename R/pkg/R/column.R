@@ -134,7 +134,7 @@ createMethods()
 #'
 #' Set a new name for an object
 #'
-#' @param object object to rename
+#' @param object x a Column or a SparkDataFrame
 #' @param data new name to use
 #'
 #' @rdname alias
