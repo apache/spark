@@ -2352,7 +2352,7 @@ test_that("mutate(), transform(), rename() and names()", {
   detach(airquality)
 })
 
-test("alias on SparkDataFrame", {
+test_that("alias on SparkDataFrame", {
   df <- alias(read.df(jsonPath, "json"), "table")
 
   actual <- sort(collect(select(df, column("table.name")))$name)
