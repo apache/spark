@@ -39,7 +39,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       StructType(Seq(StructField("a", BooleanType), StructField("b", BooleanType))))
   }
 
-  private val nullData = Seq(
+  private lazy val nullData = Seq(
     (Some(1), Some(1)), (Some(1), Some(2)), (Some(1), None), (None, None)).toDF("a", "b")
 
   test("column names with space") {
