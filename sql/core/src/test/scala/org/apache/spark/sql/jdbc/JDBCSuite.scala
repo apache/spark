@@ -727,10 +727,13 @@ class JDBCSuite extends SparkFunSuite
 
   test("OracleDialect jdbc type mapping") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle")
-    val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
-    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
     assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
+      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+    val metadata1 = new MetadataBuilder()
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, metadata1) ==
+      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+    val metadata2 = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata2) ==
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
   }
 

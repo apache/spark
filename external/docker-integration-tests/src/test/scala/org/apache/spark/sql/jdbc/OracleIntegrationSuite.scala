@@ -120,7 +120,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       StructField("string_type", StringType, true),
       StructField("binary_type", BinaryType, true),
       StructField("date_type", DateType, true),
-      StructField("timestamp_type", TimestampType, true)
+      StructField("timestamp_type", TimestampType, true),
+      StructField("decimal_type", DecimalType(31, 20), true)
     ))
 
     val tableName = "test_oracle_general_types"
@@ -135,11 +136,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val binaryVal = Array[Byte](6, 7, 8)
     val dateVal = Date.valueOf("2016-07-26")
     val timestampVal = Timestamp.valueOf("2016-07-26 11:49:45")
+    val decimalVal = new java.math.BigDecimal("123456745.56789012345000000000")
 
     val data = spark.sparkContext.parallelize(Seq(
       Row(
         booleanVal, integerVal, longVal, floatVal, doubleVal, byteVal, shortVal, stringVal,
-        binaryVal, dateVal, timestampVal
+        binaryVal, dateVal, timestampVal, decimalVal
       )))
 
     val dfWrite = spark.createDataFrame(data, schema)
@@ -160,6 +162,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(types(8).equals("class [B"))
     assert(types(9).equals("class java.sql.Date"))
     assert(types(10).equals("class java.sql.Timestamp"))
+    assert(types(11).equals("class java.math.BigDecimal"))
     // verify the value is the inserted correct or not
     val values = rows(0)
     assert(values.getBoolean(0).equals(booleanVal))
@@ -173,6 +176,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(values.getAs[Array[Byte]](8).mkString.equals("678"))
     assert(values.getDate(9).equals(dateVal))
     assert(values.getTimestamp(10).equals(timestampVal))
+    assert(values.getDecimal(11).equals(decimalVal))
   }
 
   test("SPARK-19318: connection property keys should be case-sensitive") {
