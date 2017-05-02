@@ -17,25 +17,29 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
-import java.io.IOException;
+import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
+import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ValuesReaderIntIterator;
+import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.createRLEIterator;
 
+import java.io.IOException;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.column.Encoding;
-import org.apache.parquet.column.page.*;
+import org.apache.parquet.column.page.DataPage;
+import org.apache.parquet.column.page.DataPageV1;
+import org.apache.parquet.column.page.DataPageV2;
+import org.apache.parquet.column.page.DictionaryPage;
+import org.apache.parquet.column.page.PageReader;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
+import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
-
+import org.apache.parquet.schema.Type;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
-
-import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
-import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ValuesReaderIntIterator;
-import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.createRLEIterator;
 
 /**
  * Decoder to return values from a single column.
@@ -90,12 +94,14 @@ public class VectorizedColumnReader {
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
+  private final Type fullType;
 
-  public VectorizedColumnReader(ColumnDescriptor descriptor, PageReader pageReader)
+  public VectorizedColumnReader(ColumnDescriptor descriptor, PageReader pageReader, Type fullType)
       throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
+    this.fullType = fullType;
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
     if (dictionaryPage != null) {
@@ -161,7 +167,7 @@ public class VectorizedColumnReader {
         // the values to add microseconds precision.
         if (column.hasDictionary() || (rowId == 0 &&
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
-            (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64  &&
+            (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64 &&
                column.dataType() != DataTypes.TimestampType) ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.FLOAT ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.DOUBLE ||
@@ -249,14 +255,16 @@ public class VectorizedColumnReader {
 
       case INT64:
         if (column.dataType() == DataTypes.LongType ||
-            column.dataType() == DataTypes.TimestampType ||
+                (column.dataType() == DataTypes.TimestampType
+                        && fullType.getOriginalType() == OriginalType.TIMESTAMP_MICROS) ||
             DecimalType.is64BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
             }
           }
-        } else if (column.dataType() == DataTypes.TimestampType) {
+        } else if (column.dataType() == DataTypes.TimestampType &&
+                fullType.getOriginalType() == OriginalType.TIMESTAMP_MILLIS) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i,
@@ -374,11 +382,13 @@ public class VectorizedColumnReader {
   private void readLongBatch(int rowId, int num, ColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     if (column.dataType() == DataTypes.LongType ||
-        column.dataType() == DataTypes.TimestampType ||
+            (column.dataType() == DataTypes.TimestampType &&
+            fullType.getOriginalType() == OriginalType.TIMESTAMP_MICROS)||
         DecimalType.is64BitDecimalType(column.dataType())) {
       defColumn.readLongs(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-    } else if (column.dataType() == DataTypes.TimestampType) {
+    } else if (column.dataType() == DataTypes.TimestampType &&
+            fullType.getOriginalType() == OriginalType.TIMESTAMP_MILLIS) {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i, DateTimeUtils.fromMillis(dataColumn.readLong()));

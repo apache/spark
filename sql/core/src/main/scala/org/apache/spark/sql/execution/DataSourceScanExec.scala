@@ -389,7 +389,8 @@ case class FileSourceScanExec(
     val format = fsRelation.fileFormat
     val splitter =
       format.buildSplitter(session, fsRelation.location,
-        dataFilters, schema, session.sessionState.newHadoopConf())
+        dataFilters.flatMap(DataSourceStrategy.translateFilter), schema,
+        session.sessionState.newHadoopConf())
 
     val bucketed = partitionFiles.flatMap { case (file, values) =>
       val blockLocations = getBlockLocations(file)
@@ -445,7 +446,8 @@ case class FileSourceScanExec(
     val format = fsRelation.fileFormat
     val splitter =
       format.buildSplitter(session, fsRelation.location,
-        dataFilters, schema, session.sessionState.newHadoopConf())
+        dataFilters.flatMap(DataSourceStrategy.translateFilter), schema,
+        session.sessionState.newHadoopConf())
 
     val splitFiles = partitionFiles.flatMap { case (file, values) =>
       val blockLocations = getBlockLocations(file)

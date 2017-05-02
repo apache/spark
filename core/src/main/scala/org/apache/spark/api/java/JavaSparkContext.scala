@@ -696,8 +696,8 @@ class JavaSparkContext(val sc: SparkContext)
   }
 
   /**
-   * Add a set of conda packages (identified by <a href="
-   * https://conda.io/docs/spec.html#build-version-spec">package match specification</a>
+   * Add a set of conda packages (identified by <a
+   * href="https://conda.io/docs/spec.html#build-version-spec">package match specification</a>
    * for all tasks to be executed on this SparkContext in the future.
    */
   def addCondaPackages(packages: java.util.List[String]): Unit = {

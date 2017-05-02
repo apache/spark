@@ -277,7 +277,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
       columnReaders[i] = new VectorizedColumnReader(columns.get(i),
-          pages.getPageReader(columns.get(i)));
+          pages.getPageReader(columns.get(i)), requestedSchema.getType(i));
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

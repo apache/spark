@@ -87,7 +87,7 @@ object CirclePlugin extends AutoPlugin {
     testOptions := (testOptions in Test).value,
     resourceGenerators := (resourceGenerators in Test).value,
     // NOTE: this is because of dependencies like:
-    //   org.apache.spark:spark-tags:2.2.0-SNAPSHOT:test->test
+    //   org.apache.spark:spark-tags:2.3.0-SNAPSHOT:test->test
     // That somehow don't get resolved properly in the 'circle' ivy configuration even though it extends test
     // To test, copare:
     // > show unsafe/test:fullClasspath

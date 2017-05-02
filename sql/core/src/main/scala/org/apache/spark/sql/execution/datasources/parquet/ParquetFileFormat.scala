@@ -376,9 +376,7 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.PARQUET_BINARY_AS_STRING.key,
       sparkSession.sessionState.conf.isParquetBinaryAsString)
-    hadoopConf.setBoolean(
-      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-      sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+    hadoopConf.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key, int96AsTimestamp)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
       sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis)
@@ -618,6 +616,7 @@ object ParquetFileFormat extends Logging {
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
     val writeTimestampInMillis = sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis
     val writeLegacyParquetFormat = sparkSession.sessionState.conf.writeLegacyParquetFormat
+    val writeTimestampAsInt96 = sparkSession.sessionState.conf.isParquetTimestampAsINT96
     val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
 
     // !! HACK ALERT !!
@@ -662,6 +661,7 @@ object ParquetFileFormat extends Logging {
               assumeBinaryIsString = assumeBinaryIsString,
               assumeInt96IsTimestamp = assumeInt96IsTimestamp,
               writeLegacyParquetFormat = writeLegacyParquetFormat,
+              writeTimestampAsInt96 = writeTimestampAsInt96,
               writeTimestampInMillis = writeTimestampInMillis)
 
           if (footers.isEmpty) {

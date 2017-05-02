@@ -21,6 +21,7 @@
 # with failure (either resolution or compilation); the "q" makes SBT quit.
 ERRORS=$(echo -e "q\n" \
     | build/sbt \
+        -Pcloud \
         -Pkinesis-asl \
         -Pmesos \
         -Pyarn \
