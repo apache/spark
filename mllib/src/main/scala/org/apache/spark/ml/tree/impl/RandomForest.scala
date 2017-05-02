@@ -1016,7 +1016,7 @@ private[spark] object RandomForest extends Logging {
       } else if (possibleSplits <= numSplits) {
         // if possible splits is not enough or just enough, just return all possible splits
         val splits = for {
-          i <- 0 until valueCounts.length - 1
+          i <- 0 until possibleSplits
         } yield (valueCounts(i)._1 + valueCounts(i + 1)._1) / 2
 
         splits.toArray
