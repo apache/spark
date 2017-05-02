@@ -185,7 +185,7 @@ class SQLContext(object):
         :param name: name of the UDF
         :param f: python function
         :param returnType: a :class:`pyspark.sql.types.DataType` object
-        :return a wrapped :class:`UserDefinedFunction` 
+        :return a wrapped :class:`UserDefinedFunction`
 
         >>> strlen = sqlContext.registerFunction("stringLengthString", lambda x: len(x))
         >>> sqlContext.sql("SELECT stringLengthString('test')").collect()

@@ -237,6 +237,7 @@ class Catalog(object):
         :param name: name of the UDF
         :param f: python function
         :param returnType: a :class:`pyspark.sql.types.DataType` object
+        :return a wrapped :class:`UserDefinedFunction`
 
         >>> strlen = spark.catalog.registerFunction("stringLengthString", len)
         >>> spark.sql("SELECT stringLengthString('test')").collect()
