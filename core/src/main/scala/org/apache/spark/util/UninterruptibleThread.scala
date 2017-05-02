@@ -27,7 +27,13 @@ import javax.annotation.concurrent.GuardedBy
  *
  * Note: "runUninterruptibly" should be called only in `this` thread.
  */
-private[spark] class UninterruptibleThread(name: String) extends Thread(name) {
+private[spark] class UninterruptibleThread(
+    target: Runnable,
+    name: String) extends Thread(target, name) {
+
+  def this(name: String) {
+    this(null, name)
+  }
 
   /** A monitor to protect "uninterruptible" and "interrupted" */
   private val uninterruptibleLock = new Object

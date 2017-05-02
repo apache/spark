@@ -25,6 +25,8 @@ import scala.util.control.ControlThrowable
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkContext
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.ExplainCommand
@@ -500,6 +502,70 @@ class StreamSuite extends StreamTest {
       }
     }
   }
+
+  test("calling stop() on a query cancels related jobs") {
+    val input = MemoryStream[Int]
+    val query = input
+      .toDS()
+      .map { i =>
+        while (!org.apache.spark.TaskContext.get().isInterrupted()) {
+          // keep looping till interrupted by query.stop()
+          Thread.sleep(100)
+        }
+        i
+      }
+      .writeStream
+      .format("console")
+      .start()
+
+    input.addData(1)
+    // wait for jobs to start
+    eventually(timeout(streamingTimeout)) {
+      assert(sparkContext.statusTracker.getActiveJobIds().nonEmpty)
+    }
+
+    query.stop()
+    // make sure jobs are stopped
+    eventually(timeout(streamingTimeout)) {
+      assert(sparkContext.statusTracker.getActiveJobIds().isEmpty)
+    }
+  }
+
+  test("batch id is updated correctly in the job description") {
+    val queryName = "memStream"
+    @volatile var jobDescription: String = null
+    def assertDescContainsQueryNameAnd(batch: Integer): Unit = {
+      // wait for listener event to be processed
+      spark.sparkContext.listenerBus.waitUntilEmpty(streamingTimeout.toMillis)
+      assert(jobDescription.contains(queryName) && jobDescription.contains(s"batch = $batch"))
+    }
+
+    spark.sparkContext.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobDescription = jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+      }
+    })
+
+    val input = MemoryStream[Int]
+    val query = input
+      .toDS()
+      .map(_ + 1)
+      .writeStream
+      .format("memory")
+      .queryName(queryName)
+      .start()
+
+    input.addData(1)
+    query.processAllAvailable()
+    assertDescContainsQueryNameAnd(batch = 0)
+    input.addData(2, 3)
+    query.processAllAvailable()
+    assertDescContainsQueryNameAnd(batch = 1)
+    input.addData(4)
+    query.processAllAvailable()
+    assertDescContainsQueryNameAnd(batch = 2)
+    query.stop()
+  }
 }
 
 abstract class FakeSource extends StreamSourceProvider {
@@ -569,7 +635,7 @@ class ThrowingIOExceptionLikeHadoop12074 extends FakeSource {
 
 object ThrowingIOExceptionLikeHadoop12074 {
   /**
-   * A latch to allow the user to wait until [[ThrowingIOExceptionLikeHadoop12074.createSource]] is
+   * A latch to allow the user to wait until `ThrowingIOExceptionLikeHadoop12074.createSource` is
    * called.
    */
   @volatile var createSourceLatch: CountDownLatch = null
@@ -600,7 +666,7 @@ class ThrowingInterruptedIOException extends FakeSource {
 
 object ThrowingInterruptedIOException {
   /**
-   * A latch to allow the user to wait until [[ThrowingInterruptedIOException.createSource]] is
+   * A latch to allow the user to wait until `ThrowingInterruptedIOException.createSource` is
    * called.
    */
   @volatile var createSourceLatch: CountDownLatch = null

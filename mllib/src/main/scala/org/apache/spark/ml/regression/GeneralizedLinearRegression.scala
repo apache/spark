@@ -894,10 +894,10 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   private[regression] object Probit extends Link("probit") {
 
-    override def link(mu: Double): Double = dist.Gaussian(0.0, 1.0).icdf(mu)
+    override def link(mu: Double): Double = dist.Gaussian(0.0, 1.0).inverseCdf(mu)
 
     override def deriv(mu: Double): Double = {
-      1.0 / dist.Gaussian(0.0, 1.0).pdf(dist.Gaussian(0.0, 1.0).icdf(mu))
+      1.0 / dist.Gaussian(0.0, 1.0).pdf(dist.Gaussian(0.0, 1.0).inverseCdf(mu))
     }
 
     override def unlink(eta: Double): Double = dist.Gaussian(0.0, 1.0).cdf(eta)
@@ -1133,7 +1133,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
   private[regression] lazy val link: Link = familyLink.link
 
   /** Number of instances in DataFrame predictions. */
-  private[regression] lazy val numInstances: Long = predictions.count()
+  @Since("2.2.0")
+  lazy val numInstances: Long = predictions.count()
 
   /** The numeric rank of the fitted linear model. */
   @Since("2.0.0")

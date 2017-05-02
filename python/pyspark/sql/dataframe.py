@@ -290,13 +290,15 @@ class DataFrame(object):
         return self._jdf.isStreaming()
 
     @since(1.3)
-    def show(self, n=20, truncate=True):
+    def show(self, n=20, truncate=True, vertical=False):
         """Prints the first ``n`` rows to the console.
 
         :param n: Number of rows to show.
         :param truncate: If set to True, truncate strings longer than 20 chars by default.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
+        :param vertical: If set to True, print output rows vertically (one line
+            per column value).
 
         >>> df
         DataFrame[age: int, name: string]
@@ -314,11 +316,18 @@ class DataFrame(object):
         |  2| Ali|
         |  5| Bob|
         +---+----+
+        >>> df.show(vertical=True)
+        -RECORD 0-----
+         age  | 2
+         name | Alice
+        -RECORD 1-----
+         age  | 5
+         name | Bob
         """
         if isinstance(truncate, bool) and truncate:
-            print(self._jdf.showString(n, 20))
+            print(self._jdf.showString(n, 20, vertical))
         else:
-            print(self._jdf.showString(n, int(truncate)))
+            print(self._jdf.showString(n, int(truncate), vertical))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -1238,7 +1247,7 @@ class DataFrame(object):
             Value to replace null values with.
             If the value is a dict, then `subset` is ignored and `value` must be a mapping
             from column name (string) to replacement value. The replacement value must be
-            an int, long, float, or string.
+            an int, long, float, boolean, or string.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,

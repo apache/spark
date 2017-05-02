@@ -122,6 +122,8 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setMinConfidence(0.5678)
     assert(fpGrowth.getMinSupport === 0.4567)
     assert(model.getMinConfidence === 0.5678)
+    // numPartitions should not have default value.
+    assert(fpGrowth.isDefined(fpGrowth.numPartitions) === false)
     MLTestingUtils.checkCopyAndUids(fpGrowth, model)
     ParamsSuite.checkParams(fpGrowth)
     ParamsSuite.checkParams(model)
