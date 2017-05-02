@@ -55,6 +55,22 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         return self.call("getFreqItemsets").map(lambda x: (FPGrowth.FreqItemset(x[0], x[1])))
 
+    @ignore_unicode_prefix
+    @since("2.2.0")
+    def generateAssociationRules(self, confidence):
+        """
+        Generates association rules for the items in freqItemsets.
+        >>> data = [["a", "b", "c"], ["a", "b", "d", "e"], ["a", "c", "e"], ["a", "c", "f"]]
+        >>> rdd = sc.parallelize(data, 2)
+        >>> model = FPGrowth.train(rdd, 0.6, 2)
+        >>> model.generateAssociationRules(0.9).collect()
+        [Rule(antecedent=[u'c'], consequent=[u'a'], confidence=1.0)]
+
+        :param confidence: minimal confidence of the rules produced
+        """
+        return self.call("getGenerateAssociationRules", confidence)\
+            .map(lambda x: AssociationRules.Rule(x[0], x[1], x[2]))
+
     @classmethod
     @since("2.0.0")
     def load(cls, sc, path):
@@ -97,6 +113,15 @@ class FPGrowth(object):
         Represents an (items, freq) tuple.
 
         .. versionadded:: 1.4.0
+        """
+
+
+class AssociationRules(object):
+    class Rule(namedtuple("Rule", ["antecedent", "consequent", "confidence"])):
+        """
+        Represents an (antecedent, consequent, confidence) tuple.
+
+        .. versionadded:: 2.2.0
         """
 
 
