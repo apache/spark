@@ -474,7 +474,8 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
   }
 
-  test("newProductSeqEncoder with REPL defined class") {
+  // TODO: [SPARK-20548] Fix and re-enable
+  ignore("newProductSeqEncoder with REPL defined class") {
     val output = runInterpreterInPasteMode("local-cluster[1,4,4096]",
       """
       |case class Click(id: Int)
