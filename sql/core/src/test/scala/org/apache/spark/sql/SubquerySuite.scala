@@ -263,12 +263,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(1, 2.0) :: Row(1, 2.0) :: Nil)
 
     checkAnswer(
-      sql("select * from l where a not in (select c from t where b < d)"),
-      Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) :: Nil)
+      sql("select * from l where (a, b) not in (select c, d from t) and a < 4"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Nil)
 
     // Empty sub-query
     checkAnswer(
-      sql("select * from l where a not in (select c from r where c > 10 and b < d)"),
+      sql("select * from l where (a, b) not in (select c, d from r where c > 10)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
       Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
 
@@ -823,6 +823,20 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           |               from t2 lateral view explode(arr_c2) q as c2
                           where t1.c1 = t2.c1)""".stripMargin),
         Row(1) :: Row(0) :: Nil)
+    }
+  }
+
+  test("SPARK-19933 Do not eliminate top-level aliases in sub-queries") {
+    withTempView("t1", "t2") {
+      spark.range(4).createOrReplaceTempView("t1")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t1)"),
+        Row(0) :: Row(1) :: Row(2) :: Row(3) :: Nil)
+
+      spark.range(2).createOrReplaceTempView("t2")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t2)"),
+        Row(0) :: Row(1) :: Nil)
     }
   }
 }

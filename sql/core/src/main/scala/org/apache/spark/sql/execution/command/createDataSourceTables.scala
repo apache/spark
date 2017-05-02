@@ -18,13 +18,11 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.sources.BaseRelation
 
 /**
  * A command used to create a data source table.
@@ -143,8 +141,9 @@ case class CreateDataSourceTableAsSelectCommand(
     val tableName = tableIdentWithDB.unquotedString
 
     var createMetastoreTable = false
-    var existingSchema = Option.empty[StructType]
-    if (sparkSession.sessionState.catalog.tableExists(tableIdentWithDB)) {
+    // We may need to reorder the columns of the query to match the existing table.
+    var reorderedColumns = Option.empty[Seq[NamedExpression]]
+    if (sessionState.catalog.tableExists(tableIdentWithDB)) {
       // Check if we need to throw an exception or just return.
       mode match {
         case SaveMode.ErrorIfExists =>
@@ -157,39 +156,76 @@ case class CreateDataSourceTableAsSelectCommand(
           // Since the table already exists and the save mode is Ignore, we will just return.
           return Seq.empty[Row]
         case SaveMode.Append =>
+          val existingTable = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+
+          if (existingTable.provider.get == DDLUtils.HIVE_PROVIDER) {
+            throw new AnalysisException(s"Saving data in the Hive serde table $tableName is " +
+              "not supported yet. Please use the insertInto() API as an alternative.")
+          }
+
           // Check if the specified data source match the data source of the existing table.
-          val existingProvider = DataSource.lookupDataSource(provider)
+          val existingProvider = DataSource.lookupDataSource(existingTable.provider.get)
+          val specifiedProvider = DataSource.lookupDataSource(table.provider.get)
           // TODO: Check that options from the resolved relation match the relation that we are
           // inserting into (i.e. using the same compression).
-
-          // Pass a table identifier with database part, so that `lookupRelation` won't get temp
-          // views unexpectedly.
-          EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentWithDB)) match {
-            case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
-              // check if the file formats match
-              l.relation match {
-                case r: HadoopFsRelation if r.fileFormat.getClass != existingProvider =>
-                  throw new AnalysisException(
-                    s"The file format of the existing table $tableName is " +
-                      s"`${r.fileFormat.getClass.getName}`. It doesn't match the specified " +
-                      s"format `$provider`")
-                case _ =>
-              }
-              if (query.schema.size != l.schema.size) {
-                throw new AnalysisException(
-                  s"The column number of the existing schema[${l.schema}] " +
-                    s"doesn't match the data schema[${query.schema}]'s")
-              }
-              existingSchema = Some(l.schema)
-            case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
-              existingSchema = Some(s.metadata.schema)
-            case c: CatalogRelation if c.catalogTable.provider == Some(DDLUtils.HIVE_PROVIDER) =>
-              throw new AnalysisException("Saving data in the Hive serde table " +
-                s"${c.catalogTable.identifier} is not supported yet. Please use the " +
-                "insertInto() API as an alternative..")
-            case o =>
-              throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
+          if (existingProvider != specifiedProvider) {
+            throw new AnalysisException(s"The format of the existing table $tableName is " +
+              s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
+              s"`${specifiedProvider.getSimpleName}`.")
           }
+
+          if (query.schema.length != existingTable.schema.length) {
+            throw new AnalysisException(
+              s"The column number of the existing table $tableName" +
+                s"(${existingTable.schema.catalogString}) doesn't match the data schema" +
+                s"(${query.schema.catalogString})")
+          }
+
+          val resolver = sessionState.conf.resolver
+          val tableCols = existingTable.schema.map(_.name)
+
+          reorderedColumns = Some(existingTable.schema.map { f =>
+            query.resolve(Seq(f.name), resolver).getOrElse {
+              val inputColumns = query.schema.map(_.name).mkString(", ")
+              throw new AnalysisException(
+                s"cannot resolve '${f.name}' given input columns: [$inputColumns]")
+            }
+          })
+
+          // In `AnalyzeCreateTable`, we verified the consistency between the user-specified table
+          // definition(partition columns, bucketing) and the SELECT query, here we also need to
+          // verify the the consistency between the user-specified table definition and the existing
+          // table definition.
+
+          // Check if the specified partition columns match the existing table.
+          val specifiedPartCols = CatalogUtils.normalizePartCols(
+            tableName, tableCols, table.partitionColumnNames, resolver)
+          if (specifiedPartCols != existingTable.partitionColumnNames) {
+            throw new AnalysisException(
+              s"""
+                |Specified partitioning does not match that of the existing table $tableName.
+                |Specified partition columns: [${specifiedPartCols.mkString(", ")}]
+                |Existing partition columns: [${existingTable.partitionColumnNames.mkString(", ")}]
+              """.stripMargin)
+          }
+
+          // Check if the specified bucketing match the existing table.
+          val specifiedBucketSpec = table.bucketSpec.map { bucketSpec =>
+            CatalogUtils.normalizeBucketSpec(tableName, tableCols, bucketSpec, resolver)
+          }
+          if (specifiedBucketSpec != existingTable.bucketSpec) {
+            val specifiedBucketString =
+              specifiedBucketSpec.map(_.toString).getOrElse("not bucketed")
+            val existingBucketString =
+              existingTable.bucketSpec.map(_.toString).getOrElse("not bucketed")
+            throw new AnalysisException(
+              s"""
+                |Specified bucketing does not match that of the existing table $tableName.
+                |Specified bucketing: $specifiedBucketString
+                |Existing bucketing: $existingBucketString
+              """.stripMargin)
+          }
+
         case SaveMode.Overwrite =>
           sessionState.catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = true, purge = false)
           // Need to create the table again.
@@ -201,9 +237,9 @@ case class CreateDataSourceTableAsSelectCommand(
     }
 
     val data = Dataset.ofRows(sparkSession, query)
-    val df = existingSchema match {
-      // If we are inserting into an existing table, just use the existing schema.
-      case Some(s) => data.selectExpr(s.fieldNames: _*)
+    val df = reorderedColumns match {
+      // Reorder the columns of the query to match the existing table.
+      case Some(cols) => data.select(cols.map(Column(_)): _*)
       case None => data
     }
 
@@ -224,7 +260,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = Some(table))
 
     val result = try {
-      dataSource.write(mode, df)
+      dataSource.writeAndRead(mode, df)
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table $tableName in $mode mode", ex)

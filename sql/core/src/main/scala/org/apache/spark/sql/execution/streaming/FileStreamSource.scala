@@ -64,23 +64,29 @@ class FileStreamSource(
 
   private val fileSortOrder = if (sourceOptions.latestFirst) {
       logWarning(
-        """'latestFirst' is true. New files will be processed first.
-          |It may affect the watermark value""".stripMargin)
+        """'latestFirst' is true. New files will be processed first, which may affect the watermark
+          |value. In addition, 'maxFileAge' will be ignored.""".stripMargin)
       implicitly[Ordering[Long]].reverse
     } else {
       implicitly[Ordering[Long]]
     }
 
+  private val maxFileAgeMs: Long = if (sourceOptions.latestFirst && maxFilesPerBatch.isDefined) {
+    Long.MaxValue
+  } else {
+    sourceOptions.maxFileAgeMs
+  }
+
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
   // Visible for testing and debugging in production.
-  val seenFiles = new SeenFilesMap(sourceOptions.maxFileAgeMs)
+  val seenFiles = new SeenFilesMap(maxFileAgeMs)
 
   metadataLog.allFiles().foreach { entry =>
     seenFiles.add(entry.path, entry.timestamp)
   }
   seenFiles.purge()
 
-  logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAge = ${sourceOptions.maxFileAgeMs}")
+  logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAgeMs = $maxFileAgeMs")
 
   /**
    * Returns the maximum offset that can be retrieved from the source.

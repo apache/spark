@@ -305,6 +305,10 @@ case class LoadDataCommand(
         isOverwrite,
         holdDDLTime = false)
     }
+
+    // Refresh the metadata cache to ensure the data visible to the users
+    catalog.refreshTable(targetTable.identifier)
+
     Seq.empty[Row]
   }
 }

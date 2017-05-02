@@ -213,6 +213,8 @@ cp -r "$SPARK_HOME/data" "$DISTDIR"
 if [ "$MAKE_PIP" == "true" ]; then
   echo "Building python distribution package"
   pushd "$SPARK_HOME/python" > /dev/null
+  # Delete the egg info file if it exists, this can cache older setup files.
+  rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
   python setup.py sdist
   popd > /dev/null
 else

@@ -35,13 +35,11 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-// $example off$
 
-// $example on:untyped_ops$
 // col("...") is preferable to df.col("...")
 import static org.apache.spark.sql.functions.callUDF;
 import static org.apache.spark.sql.functions.col;
-// $example off:untyped_ops$
+// $example off$
 
 public class JavaTokenizerExample {
   public static void main(String[] args) {

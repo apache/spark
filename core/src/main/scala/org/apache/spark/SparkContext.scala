@@ -944,12 +944,11 @@ class SparkContext(config: SparkConf) extends Logging {
       classOf[LongWritable],
       classOf[BytesWritable],
       conf = conf)
-    val data = br.map { case (k, v) =>
-      val bytes = v.getBytes
+    br.map { case (k, v) =>
+      val bytes = v.copyBytes()
       assert(bytes.length == recordLength, "Byte array does not have correct length")
       bytes
     }
-    data
   }
 
   /**
@@ -1276,7 +1275,7 @@ class SparkContext(config: SparkConf) extends Logging {
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name))
+    val acc = new Accumulator(initialValue, param, Option(name))
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1305,7 +1304,7 @@ class SparkContext(config: SparkConf) extends Logging {
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T])
     : Accumulable[R, T] = {
-    val acc = new Accumulable(initialValue, param, Some(name))
+    val acc = new Accumulable(initialValue, param, Option(name))
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1340,7 +1339,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note Accumulators must be registered before use, or it will throw exception.
    */
   def register(acc: AccumulatorV2[_, _], name: String): Unit = {
-    acc.register(this, name = Some(name))
+    acc.register(this, name = Option(name))
   }
 
   /**
@@ -1728,10 +1727,18 @@ class SparkContext(config: SparkConf) extends Logging {
           // A JAR file which exists only on the driver node
           case null | "file" =>
             try {
+              val file = new File(uri.getPath)
+              if (!file.exists()) {
+                throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
+              }
+              if (file.isDirectory) {
+                throw new IllegalArgumentException(
+                  s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
+              }
               env.rpcEnv.fileServer.addJar(new File(uri.getPath))
             } catch {
-              case exc: FileNotFoundException =>
-                logError(s"Jar not found at $path")
+              case NonFatal(e) =>
+                logError(s"Failed to add $path to Spark environment", e)
                 null
             }
           // A JAR file which exists locally on every worker node
@@ -2336,6 +2343,13 @@ object SparkContext extends Logging {
         setActiveContext(new SparkContext(), allowMultipleContexts = false)
       }
       activeContext.get()
+    }
+  }
+
+  /** Return the current active [[SparkContext]] if any. */
+  private[spark] def getActive: Option[SparkContext] = {
+    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      Option(activeContext.get())
     }
   }
 

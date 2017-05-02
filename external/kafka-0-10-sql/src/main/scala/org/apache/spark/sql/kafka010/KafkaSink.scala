@@ -17,16 +17,27 @@
 
 package org.apache.spark.sql.kafka010
 
-import org.apache.kafka.common.TopicPartition
+import java.{util => ju}
 
-/*
- * Values that can be specified for config startingOffsets
- */
-private[kafka010] sealed trait StartingOffsets
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.execution.streaming.Sink
 
-private[kafka010] case object EarliestOffsets extends StartingOffsets
+private[kafka010] class KafkaSink(
+    sqlContext: SQLContext,
+    executorKafkaParams: ju.Map[String, Object],
+    topic: Option[String]) extends Sink with Logging {
+  @volatile private var latestBatchId = -1L
 
-private[kafka010] case object LatestOffsets extends StartingOffsets
+  override def toString(): String = "KafkaSink"
 
-private[kafka010] case class SpecificOffsets(
-  partitionOffsets: Map[TopicPartition, Long]) extends StartingOffsets
+  override def addBatch(batchId: Long, data: DataFrame): Unit = {
+    if (batchId <= latestBatchId) {
+      logInfo(s"Skipping already committed batch $batchId")
+    } else {
+      KafkaWriter.write(sqlContext.sparkSession,
+        data.queryExecution, executorKafkaParams, topic)
+      latestBatchId = batchId
+    }
+  }
+}

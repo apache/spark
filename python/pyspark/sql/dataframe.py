@@ -516,7 +516,15 @@ class DataFrame(object):
         Similar to coalesce defined on an :class:`RDD`, this operation results in a
         narrow dependency, e.g. if you go from 1000 partitions to 100 partitions,
         there will not be a shuffle, instead each of the 100 new partitions will
-        claim 10 of the current partitions.
+        claim 10 of the current partitions. If a larger number of partitions is requested,
+        it will stay at the current number of partitions.
+
+        However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
+        this may result in your computation taking place on fewer nodes than
+        you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+        you can call repartition(). This will add a shuffle step, but means the
+        current upstream partitions will be executed in parallel (per whatever
+        the current partitioning is).
 
         >>> df.coalesce(1).rdd.getNumPartitions()
         1
@@ -730,8 +738,9 @@ class DataFrame(object):
             a join expression (Column), or a list of Columns.
             If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
-        :param how: str, default 'inner'.
-            One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+        :param how: str, default ``inner``. Must be one of: ``inner``, ``cross``, ``outer``,
+            ``full``, ``full_outer``, ``left``, ``left_outer``, ``right``, ``right_outer``,
+            ``left_semi``, and ``left_anti``.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 

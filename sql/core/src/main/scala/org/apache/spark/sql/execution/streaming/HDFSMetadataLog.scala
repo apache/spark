@@ -63,8 +63,34 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   val metadataPath = new Path(path)
   protected val fileManager = createFileManager()
 
-  if (!fileManager.exists(metadataPath)) {
-    fileManager.mkdirs(metadataPath)
+  runUninterruptiblyIfLocal {
+    if (!fileManager.exists(metadataPath)) {
+      fileManager.mkdirs(metadataPath)
+    }
+  }
+
+  private def runUninterruptiblyIfLocal[T](body: => T): T = {
+    if (fileManager.isLocalFileSystem && Thread.currentThread.isInstanceOf[UninterruptibleThread]) {
+      // When using a local file system, some file system APIs like "create" or "mkdirs" must be
+      // called in [[org.apache.spark.util.UninterruptibleThread]] so that interrupts can be
+      // disabled.
+      //
+      // This is because there is a potential dead-lock in Hadoop "Shell.runCommand" before
+      // 2.5.0 (HADOOP-10622). If the thread running "Shell.runCommand" is interrupted, then
+      // the thread can get deadlocked. In our case, file system APIs like "create" or "mkdirs"
+      // will call "Shell.runCommand" to set the file permission if using the local file system,
+      // and can get deadlocked if the stream execution thread is stopped by interrupt.
+      //
+      // Hence, we use "runUninterruptibly" here to disable interrupts here. (SPARK-14131)
+      Thread.currentThread.asInstanceOf[UninterruptibleThread].runUninterruptibly {
+        body
+      }
+    } else {
+      // For a distributed file system, such as HDFS or S3, if the network is broken, write
+      // operations may just hang until timeout. We should enable interrupts to allow stopping
+      // the query fast.
+      body
+    }
   }
 
   /**
@@ -109,43 +135,20 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written
-      if (fileManager.isLocalFileSystem) {
-        Thread.currentThread match {
-          case ut: UninterruptibleThread =>
-            // When using a local file system, "writeBatch" must be called on a
-            // [[org.apache.spark.util.UninterruptibleThread]] so that interrupts can be disabled
-            // while writing the batch file. This is because there is a potential dead-lock in
-            // Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622). If the thread running
-            // "Shell.runCommand" is interrupted, then the thread can get deadlocked. In our case,
-            // `writeBatch` creates a file using HDFS API and will call "Shell.runCommand" to set
-            // the file permission if using the local file system, and can get deadlocked if the
-            // stream execution thread is stopped by interrupt. Hence, we make sure that
-            // "writeBatch" is called on [[UninterruptibleThread]] which allows us to disable
-            // interrupts here. Also see SPARK-14131.
-            ut.runUninterruptibly { writeBatch(batchId, metadata, serialize) }
-          case _ =>
-            throw new IllegalStateException(
-              "HDFSMetadataLog.add() on a local file system must be executed on " +
-                "a o.a.spark.util.UninterruptibleThread")
-        }
-      } else {
-        // For a distributed file system, such as HDFS or S3, if the network is broken, write
-        // operations may just hang until timeout. We should enable interrupts to allow stopping
-        // the query fast.
-        writeBatch(batchId, metadata, serialize)
+      runUninterruptiblyIfLocal {
+        writeBatch(batchId, metadata)
       }
       true
     }
   }
 
-  def writeTempBatch(metadata: T, writer: (T, OutputStream) => Unit = serialize): Option[Path] = {
-    var nextId = 0
+  private def writeTempBatch(metadata: T): Option[Path] = {
     while (true) {
       val tempPath = new Path(metadataPath, s".${UUID.randomUUID.toString}.tmp")
       try {
         val output = fileManager.create(tempPath)
         try {
-          writer(metadata, output)
+          serialize(metadata, output)
           return Some(tempPath)
         } finally {
           IOUtils.closeQuietly(output)
@@ -164,7 +167,6 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           // big problem because it requires the attacker must have the permission to write the
           // metadata path. In addition, the old Streaming also have this issue, people can create
           // malicious checkpoint files to crash a Streaming application too.
-          nextId += 1
       }
     }
     None
@@ -176,8 +178,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
    * valid behavior, we still need to prevent it from destroying the files.
    */
-  private def writeBatch(batchId: Long, metadata: T, writer: (T, OutputStream) => Unit): Unit = {
-    val tempPath = writeTempBatch(metadata, writer).getOrElse(
+  private def writeBatch(batchId: Long, metadata: T): Unit = {
+    val tempPath = writeTempBatch(metadata).getOrElse(
       throw new IllegalStateException(s"Unable to create temp batch file $batchId"))
     try {
       // Try to commit the batch
@@ -193,12 +195,6 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       case e: IOException if isFileAlreadyExistsException(e) =>
         // If "rename" fails, it means some other "HDFSMetadataLog" has committed the batch.
         // So throw an exception to tell the user this is not a valid behavior.
-        throw new ConcurrentModificationException(
-          s"Multiple HDFSMetadataLog are using $path", e)
-      case e: FileNotFoundException =>
-        // Sometimes, "create" will succeed when multiple writers are calling it at the same
-        // time. However, only one writer can call "rename" successfully, others will get
-        // FileNotFoundException because the first writer has removed it.
         throw new ConcurrentModificationException(
           s"Multiple HDFSMetadataLog are using $path", e)
     } finally {
@@ -235,6 +231,11 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       val input = fileManager.open(batchMetadataFile)
       try {
         Some(deserialize(input))
+      } catch {
+        case ise: IllegalStateException =>
+          // re-throw the exception with the log file path added
+          throw new IllegalStateException(
+            s"Failed to read log file $batchMetadataFile. ${ise.getMessage}", ise)
       } finally {
         IOUtils.closeQuietly(input)
       }
@@ -307,6 +308,37 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           s"inconsistent under failures.")
         new FileSystemManager(metadataPath, hadoopConf)
     }
+  }
+
+  /**
+   * Parse the log version from the given `text` -- will throw exception when the parsed version
+   * exceeds `maxSupportedVersion`, or when `text` is malformed (such as "xyz", "v", "v-1",
+   * "v123xyz" etc.)
+   */
+  private[sql] def parseVersion(text: String, maxSupportedVersion: Int): Int = {
+    if (text.length > 0 && text(0) == 'v') {
+      val version =
+        try {
+          text.substring(1, text.length).toInt
+        } catch {
+          case _: NumberFormatException =>
+            throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
+              s"version from $text.")
+        }
+      if (version > 0) {
+        if (version > maxSupportedVersion) {
+          throw new IllegalStateException(s"UnsupportedLogVersion: maximum supported log version " +
+            s"is v${maxSupportedVersion}, but encountered v$version. The log file was produced " +
+            s"by a newer version of Spark and cannot be read by this version. Please upgrade.")
+        } else {
+          return version
+        }
+      }
+    }
+
+    // reaching here means we failed to read the correct log version
+    throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
+      s"version from $text.")
   }
 }
 

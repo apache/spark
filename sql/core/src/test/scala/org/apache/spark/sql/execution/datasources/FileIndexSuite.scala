@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
 
 class FileIndexSuite extends SharedSQLContext {
 
@@ -176,6 +177,47 @@ class FileIndexSuite extends SharedSQLContext {
       assert(catalog1.allFiles().nonEmpty)
       assert(catalog2.allFiles().nonEmpty)
     }
+  }
+
+  test("refresh for InMemoryFileIndex with FileStatusCache") {
+    withTempDir { dir =>
+      val fileStatusCache = FileStatusCache.getOrCreate(spark)
+      val dirPath = new Path(dir.getAbsolutePath)
+      val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+      val catalog =
+        new InMemoryFileIndex(spark, Seq(dirPath), Map.empty, None, fileStatusCache) {
+          def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
+          def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
+        }
+
+      val file = new File(dir, "text.txt")
+      stringToFile(file, "text")
+      assert(catalog.leafDirPaths.isEmpty)
+      assert(catalog.leafFilePaths.isEmpty)
+
+      catalog.refresh()
+
+      assert(catalog.leafFilePaths.size == 1)
+      assert(catalog.leafFilePaths.head == fs.makeQualified(new Path(file.getAbsolutePath)))
+
+      assert(catalog.leafDirPaths.size == 1)
+      assert(catalog.leafDirPaths.head == fs.makeQualified(dirPath))
+    }
+  }
+
+  test("SPARK-20280 - FileStatusCache with a partition with very many files") {
+    /* fake the size, otherwise we need to allocate 2GB of data to trigger this bug */
+    class MyFileStatus extends FileStatus with KnownSizeEstimation {
+      override def estimatedSize: Long = 1000 * 1000 * 1000
+    }
+    /* files * MyFileStatus.estimatedSize should overflow to negative integer
+     * so, make it between 2bn and 4bn
+     */
+    val files = (1 to 3).map { i =>
+      new MyFileStatus()
+    }
+    val fileStatusCache = FileStatusCache.getOrCreate(spark)
+    fileStatusCache.putLeafFiles(new Path("/tmp", "abc"), files.toArray)
   }
 }
 

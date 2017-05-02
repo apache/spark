@@ -260,7 +260,7 @@ object which contains information about our
 application. 
 
 Our application depends on the Spark API, so we'll also include an sbt configuration file, 
-`simple.sbt`, which explains that Spark is a dependency. This file also adds a repository that 
+`build.sbt`, which explains that Spark is a dependency. This file also adds a repository that 
 Spark depends on:
 
 {% highlight scala %}
@@ -273,7 +273,7 @@ scalaVersion := "{{site.SCALA_VERSION}}"
 libraryDependencies += "org.apache.spark" %% "spark-core" % "{{site.SPARK_VERSION}}"
 {% endhighlight %}
 
-For sbt to work correctly, we'll need to layout `SimpleApp.scala` and `simple.sbt`
+For sbt to work correctly, we'll need to layout `SimpleApp.scala` and `build.sbt`
 according to the typical directory structure. Once that is in place, we can create a JAR package
 containing the application's code, then use the `spark-submit` script to run our program.
 
@@ -281,7 +281,7 @@ containing the application's code, then use the `spark-submit` script to run our
 # Your directory layout should look like this
 $ find .
 .
-./simple.sbt
+./build.sbt
 ./src
 ./src/main
 ./src/main/scala

@@ -18,12 +18,12 @@
 package org.apache.spark.ui
 
 import java.net.{BindException, ServerSocket}
-import java.net.URI
-import javax.servlet.http.HttpServletRequest
+import java.net.{URI, URL}
+import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 
-import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -167,6 +167,7 @@ class UISuite extends SparkFunSuite {
       val boundPort = serverInfo.boundPort
       assert(server.getState === "STARTED")
       assert(boundPort != 0)
+      assert(serverInfo.securePort.isDefined)
       intercept[BindException] {
         socket = new ServerSocket(boundPort)
       }
@@ -228,8 +229,59 @@ class UISuite extends SparkFunSuite {
     assert(newHeader === null)
   }
 
+  test("http -> https redirect applies to all URIs") {
+    var serverInfo: ServerInfo = null
+    try {
+      val servlet = new HttpServlet() {
+        override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+          res.sendError(HttpServletResponse.SC_OK)
+        }
+      }
+
+      def newContext(path: String): ServletContextHandler = {
+        val ctx = new ServletContextHandler()
+        ctx.setContextPath(path)
+        ctx.addServlet(new ServletHolder(servlet), "/root")
+        ctx
+      }
+
+      val (conf, sslOptions) = sslEnabledConf()
+      serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions,
+        Seq[ServletContextHandler](newContext("/"), newContext("/test1")),
+        conf)
+      assert(serverInfo.server.getState === "STARTED")
+
+      val testContext = newContext("/test2")
+      serverInfo.addHandler(testContext)
+      testContext.start()
+
+      val httpPort = serverInfo.boundPort
+
+      val tests = Seq(
+        ("http", serverInfo.boundPort, HttpServletResponse.SC_FOUND),
+        ("https", serverInfo.securePort.get, HttpServletResponse.SC_OK))
+
+      tests.foreach { case (scheme, port, expected) =>
+        val urls = Seq(
+          s"$scheme://localhost:$port/root",
+          s"$scheme://localhost:$port/test1/root",
+          s"$scheme://localhost:$port/test2/root")
+        urls.foreach { url =>
+          val (rc, redirectUrl) = TestUtils.httpResponseCodeAndURL(new URL(url))
+          assert(rc === expected, s"Unexpected status $rc for $url")
+          if (rc == HttpServletResponse.SC_FOUND) {
+            assert(
+              TestUtils.httpResponseCode(new URL(redirectUrl.get)) === HttpServletResponse.SC_OK)
+          }
+        }
+      }
+    } finally {
+      stopServer(serverInfo)
+    }
+  }
+
   def stopServer(info: ServerInfo): Unit = {
-    if (info != null && info.server != null) info.server.stop
+    if (info != null) info.stop()
   }
 
   def closeSocket(socket: ServerSocket): Unit = {

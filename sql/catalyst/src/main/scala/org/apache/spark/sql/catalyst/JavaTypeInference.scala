@@ -334,7 +334,11 @@ object JavaTypeInference {
    */
   def serializerFor(beanClass: Class[_]): CreateNamedStruct = {
     val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
-    serializerFor(inputObject, TypeToken.of(beanClass)).asInstanceOf[CreateNamedStruct]
+    val nullSafeInput = AssertNotNull(inputObject, Seq("top level input bean"))
+    serializerFor(nullSafeInput, TypeToken.of(beanClass)) match {
+      case expressions.If(_, _, s: CreateNamedStruct) => s
+      case other => CreateNamedStruct(expressions.Literal("value") :: other :: Nil)
+    }
   }
 
   private def serializerFor(inputObject: Expression, typeToken: TypeToken[_]): Expression = {
@@ -417,7 +421,7 @@ object JavaTypeInference {
         case other =>
           val properties = getJavaBeanProperties(other)
           if (properties.length > 0) {
-            CreateNamedStruct(properties.flatMap { p =>
+            val nonNullOutput = CreateNamedStruct(properties.flatMap { p =>
               val fieldName = p.getName
               val fieldType = typeToken.method(p.getReadMethod).getReturnType
               val fieldValue = Invoke(
@@ -426,6 +430,9 @@ object JavaTypeInference {
                 inferExternalType(fieldType.getRawType))
               expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType) :: Nil
             })
+
+            val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
+            expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
           } else {
             throw new UnsupportedOperationException(
               s"Cannot infer type for class ${other.getName} because it is not bean-compliant")

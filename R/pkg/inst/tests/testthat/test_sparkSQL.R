@@ -60,6 +60,7 @@ unsetHiveContext <- function() {
 
 # Tests for SparkSQL functions in SparkR
 
+filesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 sparkSession <- sparkR.session()
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
@@ -196,6 +197,26 @@ test_that("create DataFrame from RDD", {
   expect_equal(dtypes(df), list(c("name", "string"), c("age", "int"), c("height", "float")))
   expect_equal(as.list(collect(where(df, df$name == "John"))),
                list(name = "John", age = 19L, height = 176.5))
+  expect_equal(getNumPartitions(df), 1)
+
+  df <- as.DataFrame(cars, numPartitions = 2)
+  expect_equal(getNumPartitions(df), 2)
+  df <- createDataFrame(cars, numPartitions = 3)
+  expect_equal(getNumPartitions(df), 3)
+  # validate limit by num of rows
+  df <- createDataFrame(cars, numPartitions = 60)
+  expect_equal(getNumPartitions(df), 50)
+  # validate when 1 < (length(coll) / numSlices) << length(coll)
+  df <- createDataFrame(cars, numPartitions = 20)
+  expect_equal(getNumPartitions(df), 20)
+
+  df <- as.DataFrame(data.frame(0))
+  expect_is(df, "SparkDataFrame")
+  df <- createDataFrame(list(list(1)))
+  expect_is(df, "SparkDataFrame")
+  df <- as.DataFrame(data.frame(0), numPartitions = 2)
+  # no data to partition, goes to 1
+  expect_equal(getNumPartitions(df), 1)
 
   setHiveContext(sc)
   sql("CREATE TABLE people (name string, age double, height float)")
@@ -213,7 +234,8 @@ test_that("createDataFrame uses files for large objects", {
   # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
   conf <- callJMethod(sparkSession, "conf")
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
-  df <- suppressWarnings(createDataFrame(iris))
+  df <- suppressWarnings(createDataFrame(iris, numPartitions = 3))
+  expect_equal(getNumPartitions(df), 3)
 
   # Resetting the conf back to default value
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
@@ -704,7 +726,7 @@ test_that("objectFile() works with row serialization", {
   objectPath <- tempfile(pattern = "spark-test", fileext = ".tmp")
   df <- read.json(jsonPath)
   dfRDD <- toRDD(df)
-  saveAsObjectFile(coalesce(dfRDD, 1L), objectPath)
+  saveAsObjectFile(coalesceRDD(dfRDD, 1L), objectPath)
   objectIn <- objectFile(sc, objectPath)
 
   expect_is(objectIn, "RDD")
@@ -986,6 +1008,18 @@ test_that("select operators", {
   expect_is(df[[2]], "Column")
   expect_is(df[["age"]], "Column")
 
+  expect_warning(df[[1:2]],
+                 "Subset index has length > 1. Only the first index is used.")
+  expect_is(suppressWarnings(df[[1:2]]), "Column")
+  expect_warning(df[[c("name", "age")]],
+                 "Subset index has length > 1. Only the first index is used.")
+  expect_is(suppressWarnings(df[[c("name", "age")]]), "Column")
+
+  expect_warning(df[[1:2]] <- df[[1]],
+                 "Subset index has length > 1. Only the first index is used.")
+  expect_warning(df[[c("name", "age")]] <- df[[1]],
+                 "Subset index has length > 1. Only the first index is used.")
+
   expect_is(df[, 1, drop = F], "SparkDataFrame")
   expect_equal(columns(df[, 1, drop = F]), c("name"))
   expect_equal(columns(df[, "age", drop = F]), c("age"))
@@ -1000,6 +1034,37 @@ test_that("select operators", {
   df$age2 <- df$age * 2
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
+  df$age2 <- df[["age"]] * 3
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == df$age * 3)), 2)
+
+  df$age2 <- 21
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 21)), 3)
+
+  df$age2 <- c(22)
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 22)), 3)
+
+  expect_error(df$age3 <- c(22, NA),
+              "value must be a Column, literal value as atomic in length of 1, or NULL")
+
+  df[["age2"]] <- 23
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 23)), 3)
+
+  df[[3]] <- 24
+  expect_equal(columns(df), c("name", "age", "age2"))
+  expect_equal(count(where(df, df$age2 == 24)), 3)
+
+  df[[3]] <- df$age
+  expect_equal(count(where(df, df$age2 == df$age)), 2)
+
+  df[["age2"]] <- df[["name"]]
+  expect_equal(count(where(df, df$age2 == df$name)), 3)
+
+  expect_error(df[["age3"]] <- c(22, 23),
+              "value must be a Column, literal value as atomic in length of 1, or NULL")
 
   # Test parameter drop
   expect_equal(class(df[, 1]) == "SparkDataFrame", T)
@@ -1176,7 +1241,7 @@ test_that("column functions", {
   c16 <- is.nan(c) + isnan(c) + isNaN(c)
   c17 <- cov(c, c1) + cov("c", "c1") + covar_samp(c, c1) + covar_samp("c", "c1")
   c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
-  c19 <- spark_partition_id()
+  c19 <- spark_partition_id() + coalesce(c) + coalesce(c1, c2, c3)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1245,9 +1310,9 @@ test_that("column functions", {
 
   # Test first(), last()
   df <- read.json(jsonPath)
-  expect_equal(collect(select(df, first(df$age)))[[1]], NA)
+  expect_equal(collect(select(df, first(df$age)))[[1]], NA_real_)
   expect_equal(collect(select(df, first(df$age, TRUE)))[[1]], 30)
-  expect_equal(collect(select(df, first("age")))[[1]], NA)
+  expect_equal(collect(select(df, first("age")))[[1]], NA_real_)
   expect_equal(collect(select(df, first("age", TRUE)))[[1]], 30)
   expect_equal(collect(select(df, last(df$age)))[[1]], 19)
   expect_equal(collect(select(df, last(df$age, TRUE)))[[1]], 19)
@@ -1776,6 +1841,13 @@ test_that("withColumn() and withColumnRenamed()", {
   newDF <- withColumn(df, "age", df$age + 2)
   expect_equal(length(columns(newDF)), 2)
   expect_equal(first(filter(newDF, df$name != "Michael"))$age, 32)
+
+  newDF <- withColumn(df, "age", 18)
+  expect_equal(length(columns(newDF)), 2)
+  expect_equal(first(newDF)$age, 18)
+
+  expect_error(withColumn(df, "age", list("a")),
+              "Literal value must be atomic in length of 1")
 
   newDF2 <- withColumnRenamed(df, "age", "newerAge")
   expect_equal(length(columns(newDF2)), 2)
@@ -2422,15 +2494,18 @@ test_that("repartition by columns on DataFrame", {
     ("Please, specify the number of partitions and/or a column\\(s\\)", retError), TRUE)
 
   # repartition by column and number of partitions
-  actual <- repartition(df, 3L, col = df$"a")
+  actual <- repartition(df, 3, col = df$"a")
 
-  # since we cannot access the number of partitions from dataframe, checking
-  # that at least the dimensions are identical
+  # Checking that at least the dimensions are identical
   expect_identical(dim(df), dim(actual))
+  expect_equal(getNumPartitions(actual), 3L)
 
   # repartition by number of partitions
   actual <- repartition(df, 13L)
   expect_identical(dim(df), dim(actual))
+  expect_equal(getNumPartitions(actual), 13L)
+
+  expect_equal(getNumPartitions(coalesce(actual, 1L)), 1L)
 
   # a test case with a column and dapply
   schema <-  structType(structField("a", "integer"), structField("avg", "double"))
@@ -2444,6 +2519,25 @@ test_that("repartition by columns on DataFrame", {
 
   # Number of partitions is equal to 2
   expect_equal(nrow(df1), 2)
+})
+
+test_that("coalesce, repartition, numPartitions", {
+  df <- as.DataFrame(cars, numPartitions = 5)
+  expect_equal(getNumPartitions(df), 5)
+  expect_equal(getNumPartitions(coalesce(df, 3)), 3)
+  expect_equal(getNumPartitions(coalesce(df, 6)), 5)
+
+  df1 <- coalesce(df, 3)
+  expect_equal(getNumPartitions(df1), 3)
+  expect_equal(getNumPartitions(coalesce(df1, 6)), 5)
+  expect_equal(getNumPartitions(coalesce(df1, 4)), 4)
+  expect_equal(getNumPartitions(coalesce(df1, 2)), 2)
+
+  df2 <- repartition(df1, 10)
+  expect_equal(getNumPartitions(df2), 10)
+  expect_equal(getNumPartitions(coalesce(df2, 13)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 7)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 3)), 3)
 })
 
 test_that("gapply() and gapplyCollect() on a DataFrame", {
@@ -2613,7 +2707,7 @@ test_that("randomSplit", {
   expect_true(all(sapply(abs(counts / num - weights / sum(weights)), function(e) { e < 0.05 })))
 })
 
-test_that("Setting and getting config on SparkSession", {
+test_that("Setting and getting config on SparkSession, sparkR.conf(), sparkR.uiWebUrl()", {
   # first, set it to a random but known value
   conf <- callJMethod(sparkSession, "conf")
   property <- paste0("spark.testing.", as.character(runif(1)))
@@ -2637,6 +2731,9 @@ test_that("Setting and getting config on SparkSession", {
   expect_equal(appNameValue, "sparkSession test")
   expect_equal(testValue, value)
   expect_error(sparkR.conf("completely.dummy"), "Config 'completely.dummy' is not set")
+
+  url <- sparkR.uiWebUrl()
+  expect_equal(substr(url, 1, 7), "http://")
 })
 
 test_that("enableHiveSupport on SparkSession", {
@@ -2703,6 +2800,79 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
 
   expect_warning(read.json(jsonPath, a = 1, 2, 3, "a"),
                  "Unnamed arguments ignored: 2, 3, a.")
+})
+
+test_that("Collect on DataFrame when NAs exists at the top of a timestamp column", {
+  ldf <- data.frame(col1 = c(0, 1, 2),
+                   col2 = c(as.POSIXct("2017-01-01 00:00:01"),
+                            NA,
+                            as.POSIXct("2017-01-01 12:00:01")),
+                   col3 = c(as.POSIXlt("2016-01-01 00:59:59"),
+                            NA,
+                            as.POSIXlt("2016-01-01 12:01:01")))
+  sdf1 <- createDataFrame(ldf)
+  ldf1 <- collect(sdf1)
+  expect_equal(dtypes(sdf1), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf1$col1), "numeric")
+  expect_equal(class(ldf1$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf1$col3), c("POSIXct", "POSIXt"))
+
+  # Columns with NAs at the top
+  sdf2 <- filter(sdf1, "col1 > 1")
+  ldf2 <- collect(sdf2)
+  expect_equal(dtypes(sdf2), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf2$col1), "numeric")
+  expect_equal(class(ldf2$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf2$col3), c("POSIXct", "POSIXt"))
+
+  # Columns with only NAs, the type will also be cast to PRIMITIVE_TYPE
+  sdf3 <- filter(sdf1, "col1 == 0")
+  ldf3 <- collect(sdf3)
+  expect_equal(dtypes(sdf3), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf3$col1), "numeric")
+  expect_equal(class(ldf3$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
+})
+
+compare_list <- function(list1, list2) {
+  # get testthat to show the diff by first making the 2 lists equal in length
+  expect_equal(length(list1), length(list2))
+  l <- max(length(list1), length(list2))
+  length(list1) <- l
+  length(list2) <- l
+  expect_equal(sort(list1, na.last = TRUE), sort(list2, na.last = TRUE))
+}
+
+# This should always be the **very last test** in this test file.
+test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
+  skip_on_cran()
+
+  # Check that it is not creating any extra file.
+  # Does not check the tempdir which would be cleaned up after.
+  filesAfter <- list.files(path = sparkRDir, all.files = TRUE)
+
+  expect_true(length(sparkRFilesBefore) > 0)
+  # first, ensure derby.log is not there
+  expect_false("derby.log" %in% filesAfter)
+  # second, ensure only spark-warehouse is created when calling SparkSession, enableHiveSupport = F
+  # note: currently all other test files have enableHiveSupport = F, so we capture the list of files
+  # before creating a SparkSession with enableHiveSupport = T at the top of this test file
+  # (filesBefore). The test here is to compare that (filesBefore) against the list of files before
+  # any test is run in run-all.R (sparkRFilesBefore).
+  # sparkRWhitelistSQLDirs is also defined in run-all.R, and should contain only 2 whitelisted dirs,
+  # here allow the first value, spark-warehouse, in the diff, everything else should be exactly the
+  # same as before any test is run.
+  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRWhitelistSQLDirs[[1]]))
+  # third, ensure only spark-warehouse and metastore_db are created when enableHiveSupport = T
+  # note: as the note above, after running all tests in this file while enableHiveSupport = T, we
+  # check the list of files again. This time we allow both whitelisted dirs to be in the diff.
+  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRWhitelistSQLDirs))
 })
 
 unlink(parquetPath)

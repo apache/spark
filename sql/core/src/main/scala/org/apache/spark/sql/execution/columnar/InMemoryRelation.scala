@@ -85,12 +85,6 @@ case class InMemoryRelation(
     buildBuffers()
   }
 
-  def recache(): Unit = {
-    _cachedColumnBuffers.unpersist()
-    _cachedColumnBuffers = null
-    buildBuffers()
-  }
-
   private def buildBuffers(): Unit = {
     val output = child.output
     val cached = child.execute().mapPartitionsInternal { rowIterator =>

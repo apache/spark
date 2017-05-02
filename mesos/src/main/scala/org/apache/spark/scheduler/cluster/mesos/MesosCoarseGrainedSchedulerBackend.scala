@@ -54,14 +54,17 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   with org.apache.mesos.Scheduler
   with MesosSchedulerUtils {
 
-  val MAX_SLAVE_FAILURES = 2     // Blacklist a slave after this many failures
+  // Blacklist a slave after this many failures
+  private val MAX_SLAVE_FAILURES = 2
 
-  // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
-  val maxCores = conf.get("spark.cores.max", Int.MaxValue.toString).toInt
+  private val maxCoresOption = conf.getOption("spark.cores.max").map(_.toInt)
 
-  val useFetcherCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false)
+  // Maximum number of cores to acquire
+  private val maxCores = maxCoresOption.getOrElse(Int.MaxValue)
 
-  val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
+  private val useFetcherCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false)
+
+  private val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
 
   private[this] val shutdownTimeoutMS =
     conf.getTimeAsMs("spark.mesos.coarse.shutdownTimeout", "10s")
@@ -75,10 +78,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private val shuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
 
   // Cores we have acquired with each Mesos task ID
-  val coresByTaskId = new mutable.HashMap[String, Int]
-  val gpusByTaskId = new mutable.HashMap[String, Int]
-  var totalCoresAcquired = 0
-  var totalGpusAcquired = 0
+  private val coresByTaskId = new mutable.HashMap[String, Int]
+  private val gpusByTaskId = new mutable.HashMap[String, Int]
+  private var totalCoresAcquired = 0
+  private var totalGpusAcquired = 0
 
   // SlaveID -> Slave
   // This map accumulates entries for the duration of the job.  Slaves are never deleted, because
@@ -108,7 +111,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   // may lead to deadlocks since the superclass might also try to lock
   private val stateLock = new ReentrantLock
 
-  val extraCoresPerExecutor = conf.getInt("spark.mesos.extra.cores", 0)
+  private val extraCoresPerExecutor = conf.getInt("spark.mesos.extra.cores", 0)
 
   // Offer constraints
   private val slaveOfferConstraints =
@@ -140,7 +143,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       securityManager.isSaslEncryptionEnabled())
   }
 
-  var nextMesosTaskId = 0
+  private var nextMesosTaskId = 0
 
   @volatile var appId: String = _
 
@@ -257,7 +260,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
-    totalCoresAcquired >= maxCores * minRegisteredRatio
+    totalCoreCount.get >= maxCoresOption.getOrElse(0) * minRegisteredRatio
   }
 
   override def disconnected(d: org.apache.mesos.SchedulerDriver) {}

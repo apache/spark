@@ -62,8 +62,20 @@ public class TransportContext {
   private final RpcHandler rpcHandler;
   private final boolean closeIdleConnections;
 
-  private final MessageEncoder encoder;
-  private final MessageDecoder decoder;
+  /**
+   * Force to create MessageEncoder and MessageDecoder so that we can make sure they will be created
+   * before switching the current context class loader to ExecutorClassLoader.
+   *
+   * Netty's MessageToMessageEncoder uses Javassist to generate a matcher class and the
+   * implementation calls "Class.forName" to check if this calls is already generated. If the
+   * following two objects are created in "ExecutorClassLoader.findClass", it will cause
+   * "ClassCircularityError". This is because loading this Netty generated class will call
+   * "ExecutorClassLoader.findClass" to search this class, and "ExecutorClassLoader" will try to use
+   * RPC to load it and cause to load the non-exist matcher class again. JVM will report
+   * `ClassCircularityError` to prevent such infinite recursion. (See SPARK-17714)
+   */
+  private static final MessageEncoder ENCODER = MessageEncoder.INSTANCE;
+  private static final MessageDecoder DECODER = MessageDecoder.INSTANCE;
 
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
     this(conf, rpcHandler, false);
@@ -75,8 +87,6 @@ public class TransportContext {
       boolean closeIdleConnections) {
     this.conf = conf;
     this.rpcHandler = rpcHandler;
-    this.encoder = new MessageEncoder();
-    this.decoder = new MessageDecoder();
     this.closeIdleConnections = closeIdleConnections;
   }
 
@@ -135,9 +145,9 @@ public class TransportContext {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
       channel.pipeline()
-        .addLast("encoder", encoder)
+        .addLast("encoder", ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
-        .addLast("decoder", decoder)
+        .addLast("decoder", DECODER)
         .addLast("idleStateHandler", new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.

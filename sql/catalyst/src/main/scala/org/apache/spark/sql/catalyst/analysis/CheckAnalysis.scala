@@ -21,7 +21,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.SimpleCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.UsingJoin
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -44,6 +43,16 @@ trait CheckAnalysis extends PredicateHelper {
     exprs.flatMap(_.collect {
       case e: Generator => e
     }).length > 1
+  }
+
+  protected def hasMapType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[MapType])
+  }
+
+  protected def mapColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
+    case _: Intersect | _: Except | _: Distinct =>
+      plan.output.find(a => hasMapType(a.dataType))
+    case _ => None
   }
 
   private def checkLimitClause(limitExpr: Expression): Unit = {
@@ -117,66 +126,71 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(s"Window specification $s is not valid because $m")
               case None => w
             }
-          case s @ ScalarSubquery(query, conditions, _)
+
+          case s @ ScalarSubquery(query, conditions, _) =>
             // If no correlation, the output must be exactly one column
-            if (conditions.isEmpty && query.output.size != 1) =>
+            if (conditions.isEmpty && query.output.size != 1) {
               failAnalysis(
                 s"Scalar subquery must return only one column, but got ${query.output.size}")
+            } else if (conditions.nonEmpty) {
+              // Collect the columns from the subquery for further checking.
+              var subqueryColumns = conditions.flatMap(_.references).filter(query.output.contains)
 
-          case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
-
-            // Collect the columns from the subquery for further checking.
-            var subqueryColumns = conditions.flatMap(_.references).filter(query.output.contains)
-
-            def checkAggregate(agg: Aggregate): Unit = {
-              // Make sure correlated scalar subqueries contain one row for every outer row by
-              // enforcing that they are aggregates which contain exactly one aggregate expressions.
-              // The analyzer has already checked that subquery contained only one output column,
-              // and added all the grouping expressions to the aggregate.
-              val aggregates = agg.expressions.flatMap(_.collect {
-                case a: AggregateExpression => a
-              })
-              if (aggregates.isEmpty) {
-                failAnalysis("The output of a correlated scalar subquery must be aggregated")
-              }
-
-              // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
-              // are not part of the correlated columns.
-              val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
-              val correlatedCols = AttributeSet(subqueryColumns)
-              val invalidCols = groupByCols -- correlatedCols
-              // GROUP BY columns must be a subset of columns in the predicates
-              if (invalidCols.nonEmpty) {
-                failAnalysis(
-                  "A GROUP BY clause in a scalar correlated subquery " +
-                    "cannot contain non-correlated columns: " +
-                    invalidCols.mkString(","))
-              }
-            }
-
-            // Skip subquery aliases added by the Analyzer and the SQLBuilder.
-            // For projects, do the necessary mapping and skip to its child.
-            def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
-              case s: SubqueryAlias => cleanQuery(s.child)
-              case p: Project =>
-                // SPARK-18814: Map any aliases to their AttributeReference children
-                // for the checking in the Aggregate operators below this Project.
-                subqueryColumns = subqueryColumns.map {
-                  xs => p.projectList.collectFirst {
-                    case e @ Alias(child : AttributeReference, _) if e.exprId == xs.exprId =>
-                      child
-                  }.getOrElse(xs)
+              def checkAggregate(agg: Aggregate): Unit = {
+                // Make sure correlated scalar subqueries contain one row for every outer row by
+                // enforcing that they are aggregates containing exactly one aggregate expression.
+                // The analyzer has already checked that subquery contained only one output column,
+                // and added all the grouping expressions to the aggregate.
+                val aggregates = agg.expressions.flatMap(_.collect {
+                  case a: AggregateExpression => a
+                })
+                if (aggregates.isEmpty) {
+                  failAnalysis("The output of a correlated scalar subquery must be aggregated")
                 }
 
-                cleanQuery(p.child)
-              case child => child
-            }
+                // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
+                // are not part of the correlated columns.
+                val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
+                val correlatedCols = AttributeSet(subqueryColumns)
+                val invalidCols = groupByCols -- correlatedCols
+                // GROUP BY columns must be a subset of columns in the predicates
+                if (invalidCols.nonEmpty) {
+                  failAnalysis(
+                    "A GROUP BY clause in a scalar correlated subquery " +
+                      "cannot contain non-correlated columns: " +
+                      invalidCols.mkString(","))
+                }
+              }
 
-            cleanQuery(query) match {
-              case a: Aggregate => checkAggregate(a)
-              case Filter(_, a: Aggregate) => checkAggregate(a)
-              case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
+              // Skip subquery aliases added by the Analyzer and the SQLBuilder.
+              // For projects, do the necessary mapping and skip to its child.
+              def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
+                case s: SubqueryAlias => cleanQuery(s.child)
+                case p: Project =>
+                  // SPARK-18814: Map any aliases to their AttributeReference children
+                  // for the checking in the Aggregate operators below this Project.
+                  subqueryColumns = subqueryColumns.map {
+                    xs => p.projectList.collectFirst {
+                      case e @ Alias(child : AttributeReference, _) if e.exprId == xs.exprId =>
+                        child
+                    }.getOrElse(xs)
+                  }
+
+                  cleanQuery(p.child)
+                case child => child
+              }
+
+              cleanQuery(query) match {
+                case a: Aggregate => checkAggregate(a)
+                case Filter(_, a: Aggregate) => checkAggregate(a)
+                case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
+              }
             }
+            checkAnalysis(query)
+            s
+
+          case s: SubqueryExpression =>
+            checkAnalysis(s.plan)
             s
         }
 
@@ -196,7 +210,7 @@ trait CheckAnalysis extends PredicateHelper {
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          case f @ Filter(condition, child) =>
+          case Filter(condition, _) =>
             splitConjunctivePredicates(condition).foreach {
               case _: PredicateSubquery | Not(_: PredicateSubquery) =>
               case e if PredicateSubquery.hasNullAwarePredicateWithinNot(e) =>
@@ -252,6 +266,11 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
             def checkValidGroupingExprs(expr: Expression): Unit = {
+              if (expr.find(_.isInstanceOf[AggregateExpression]).isDefined) {
+                failAnalysis(
+                  "aggregate functions are not allowed in GROUP BY, but found " + expr.sql)
+              }
+
               // Check if the data type of expr is orderable.
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 failAnalysis(
@@ -269,8 +288,8 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-            aggregateExprs.foreach(checkValidAggregateExpression)
             groupingExprs.foreach(checkValidGroupingExprs)
+            aggregateExprs.foreach(checkValidAggregateExpression)
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>
@@ -369,6 +388,14 @@ trait CheckAnalysis extends PredicateHelper {
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
+
+          // TODO: although map type is not orderable, technically map type should be able to be
+          // used in equality comparison, remove this type check once we support it.
+          case o if mapColumnInSetOperation(o).isDefined =>
+            val mapCol = mapColumnInSetOperation(o).get
+            failAnalysis("Cannot have map type columns in DataFrame which calls " +
+              s"set operations(intersect, except, etc.), but the type of column ${mapCol.name} " +
+              "is " + mapCol.dataType.simpleString)
 
           case s: SimpleCatalogRelation =>
             failAnalysis(

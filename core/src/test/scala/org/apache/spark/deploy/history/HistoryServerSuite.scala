@@ -20,7 +20,8 @@ import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipInputStream
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
+import javax.servlet._
+import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -68,11 +69,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   private var server: HistoryServer = null
   private var port: Int = -1
 
-  def init(): Unit = {
+  def init(extraConf: (String, String)*): Unit = {
     val conf = new SparkConf()
       .set("spark.history.fs.logDirectory", logDir)
       .set("spark.history.fs.update.interval", "0")
       .set("spark.testing", "true")
+    conf.setAll(extraConf)
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
     val securityManager = new SecurityManager(conf)
@@ -543,8 +545,43 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     assert(jobcount === getNumJobs("/jobs"))
 
     // no need to retain the test dir now the tests complete
-    logDir.deleteOnExit();
+    logDir.deleteOnExit()
+  }
 
+  test("ui and api authorization checks") {
+    val appId = "local-1430917381535"
+    val owner = "irashid"
+    val admin = "root"
+    val other = "alice"
+
+    stop()
+    init(
+      "spark.ui.filters" -> classOf[FakeAuthFilter].getName(),
+      "spark.history.ui.acls.enable" -> "true",
+      "spark.history.ui.admin.acls" -> admin)
+
+    val tests = Seq(
+      (owner, HttpServletResponse.SC_OK),
+      (admin, HttpServletResponse.SC_OK),
+      (other, HttpServletResponse.SC_FORBIDDEN),
+      // When the remote user is null, the code behaves as if auth were disabled.
+      (null, HttpServletResponse.SC_OK))
+
+    val port = server.boundPort
+    val testUrls = Seq(
+      s"http://localhost:$port/api/v1/applications/$appId/1/jobs",
+      s"http://localhost:$port/history/$appId/1/jobs/",
+      s"http://localhost:$port/api/v1/applications/$appId/logs",
+      s"http://localhost:$port/api/v1/applications/$appId/1/logs",
+      s"http://localhost:$port/api/v1/applications/$appId/2/logs")
+
+    tests.foreach { case (user, expectedCode) =>
+      testUrls.foreach { url =>
+        val headers = if (user != null) Seq(FakeAuthFilter.FAKE_HTTP_USER -> user) else Nil
+        val sc = TestUtils.httpResponseCode(new URL(url), headers = headers)
+        assert(sc === expectedCode, s"Unexpected status code $sc for $url (user = $user)")
+      }
+    }
   }
 
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
@@ -628,4 +665,27 @@ object HistoryServerSuite {
         "got code: " + code + " when getting " + path + " w/ error: " + error)
     }
   }
+}
+
+/**
+ * A filter used for auth tests; sets the request's user to the value of the "HTTP_USER" header.
+ */
+class FakeAuthFilter extends Filter {
+
+  override def destroy(): Unit = { }
+
+  override def init(config: FilterConfig): Unit = { }
+
+  override def doFilter(req: ServletRequest, res: ServletResponse, chain: FilterChain): Unit = {
+    val hreq = req.asInstanceOf[HttpServletRequest]
+    val wrapped = new HttpServletRequestWrapper(hreq) {
+      override def getRemoteUser(): String = hreq.getHeader(FakeAuthFilter.FAKE_HTTP_USER)
+    }
+    chain.doFilter(wrapped, res)
+  }
+
+}
+
+object FakeAuthFilter {
+  val FAKE_HTTP_USER = "HTTP_USER"
 }

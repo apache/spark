@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records.{ContainerId, Resource}
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
-import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
@@ -83,7 +82,8 @@ private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], rack
 private[yarn] class LocalityPreferredContainerPlacementStrategy(
     val sparkConf: SparkConf,
     val yarnConf: Configuration,
-    val resource: Resource) {
+    val resource: Resource,
+    resolver: SparkRackResolver) {
 
   /**
    * Calculate each container's node locality and rack locality
@@ -129,9 +129,9 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       val largestRatio = updatedHostToContainerCount.values.max
       // Round the ratio of preferred locality to the number of locality required container
       // number, which is used for locality preferred host calculating.
-      var preferredLocalityRatio = updatedHostToContainerCount.mapValues { ratio =>
+      var preferredLocalityRatio = updatedHostToContainerCount.map { case(k, ratio) =>
         val adjustedRatio = ratio.toDouble * requiredLocalityAwareContainerNum / largestRatio
-        adjustedRatio.ceil.toInt
+        (k, adjustedRatio.ceil.toInt)
       }
 
       for (i <- 0 until requiredLocalityAwareContainerNum) {
@@ -139,13 +139,13 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
         // still be allocated with new container request.
         val hosts = preferredLocalityRatio.filter(_._2 > 0).keys.toArray
         val racks = hosts.map { h =>
-          RackResolver.resolve(yarnConf, h).getNetworkLocation
+          resolver.resolve(yarnConf, h)
         }.toSet
         containerLocalityPreferences += ContainerLocalityPreferences(hosts, racks.toArray)
 
         // Minus 1 each time when the host is used. When the current ratio is 0,
         // which means all the required ratio is satisfied, this host will not be allocated again.
-        preferredLocalityRatio = preferredLocalityRatio.mapValues(_ - 1)
+        preferredLocalityRatio = preferredLocalityRatio.map { case (k, v) => (k, v - 1) }
       }
     }
 
@@ -218,7 +218,8 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
 
     val possibleTotalContainerNum = pendingHostToContainerCount.values.sum
     val localityMatchedPendingNum = localityMatchedPendingAllocations.size.toDouble
-    pendingHostToContainerCount.mapValues(_ * localityMatchedPendingNum / possibleTotalContainerNum)
-      .toMap
+    pendingHostToContainerCount.map { case (k, v) =>
+      (k, v * localityMatchedPendingNum / possibleTotalContainerNum)
+    }.toMap
   }
 }

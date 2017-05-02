@@ -195,6 +195,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       recoverFromCheckpointLocation: Boolean,
       trigger: Trigger,
       triggerClock: Clock): StreamingQueryWrapper = {
+    var deleteCheckpointOnStop = false
     val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
       new Path(userSpecified).toUri.toString
     }.orElse {
@@ -203,6 +204,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       }
     }.getOrElse {
       if (useTempCheckpointLocation) {
+        // Delete the temp checkpoint when a query is being stopped without errors.
+        deleteCheckpointOnStop = true
         Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
       } else {
         throw new AnalysisException(
@@ -230,6 +233,12 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
     }
 
+    if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
+      throw new AnalysisException(
+        s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
+          "is not supported in streaming DataFrames/Datasets")
+    }
+
     new StreamingQueryWrapper(new StreamExecution(
       sparkSession,
       userSpecifiedName.orNull,
@@ -238,7 +247,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       sink,
       trigger,
       triggerClock,
-      outputMode))
+      outputMode,
+      deleteCheckpointOnStop))
   }
 
   /**

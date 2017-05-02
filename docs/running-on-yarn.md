@@ -506,7 +506,7 @@ Spark supports integrating with other security-aware services through Java Servi
 `java.util.ServiceLoader`). To do that, implementations of `org.apache.spark.deploy.yarn.security.ServiceCredentialProvider`
 should be available to Spark by listing their names in the corresponding file in the jar's
 `META-INF/services` directory. These plug-ins can be disabled by setting
-`spark.yarn.security.tokens.{service}.enabled` to `false`, where `{service}` is the name of
+`spark.yarn.security.credentials.{service}.enabled` to `false`, where `{service}` is the name of
 credential provider.
 
 ## Configuring the External Shuffle Service
@@ -570,8 +570,8 @@ the Spark configuration must be set to disable token collection for the services
 The Spark configuration must include the lines:
 
 ```
-spark.yarn.security.tokens.hive.enabled   false
-spark.yarn.security.tokens.hbase.enabled  false
+spark.yarn.security.credentials.hive.enabled   false
+spark.yarn.security.credentials.hbase.enabled  false
 ```
 
 The configuration option `spark.yarn.access.namenodes` must be unset.

@@ -91,6 +91,16 @@ objectFile <- function(sc, path, minPartitions = NULL) {
 #' will write it to disk and send the file name to JVM. Also to make sure each slice is not
 #' larger than that limit, number of slices may be increased.
 #'
+#' In 2.2.0 we are changing how the numSlices are used/computed to handle
+#' 1 < (length(coll) / numSlices) << length(coll) better, and to get the exact number of slices.
+#' This change affects both createDataFrame and spark.lapply.
+#' In the specific one case that it is used to convert R native object into SparkDataFrame, it has
+#' always been kept at the default of 1. In the case the object is large, we are explicitly setting
+#' the parallism to numSlices (which is still 1).
+#'
+#' Specifically, we are changing to split positions to match the calculation in positions() of
+#' ParallelCollectionRDD in Spark.
+#'
 #' @param sc SparkContext to use
 #' @param coll collection to parallelize
 #' @param numSlices number of partitions to create in the RDD
@@ -107,6 +117,8 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # TODO: bound/safeguard numSlices
   # TODO: unit tests for if the split works for all primitives
   # TODO: support matrix, data frame, etc
+
+  # Note, for data.frame, createDataFrame turns it into a list before it calls here.
   # nolint start
   # suppress lintr warning: Place a space before left parenthesis, except in a function call.
   if ((!is.list(coll) && !is.vector(coll)) || is.data.frame(coll)) {
@@ -128,12 +140,29 @@ parallelize <- function(sc, coll, numSlices = 1) {
   objectSize <- object.size(coll)
 
   # For large objects we make sure the size of each slice is also smaller than sizeLimit
-  numSlices <- max(numSlices, ceiling(objectSize / sizeLimit))
-  if (numSlices > length(coll))
-    numSlices <- length(coll)
+  numSerializedSlices <- max(numSlices, ceiling(objectSize / sizeLimit))
+  if (numSerializedSlices > length(coll))
+    numSerializedSlices <- length(coll)
 
-  sliceLen <- ceiling(length(coll) / numSlices)
-  slices <- split(coll, rep(1: (numSlices + 1), each = sliceLen)[1:length(coll)])
+  # Generate the slice ids to put each row
+  # For instance, for numSerializedSlices of 22, length of 50
+  #  [1]  0  0  2  2  4  4  6  6  6  9  9 11 11 13 13 15 15 15 18 18 20 20 22 22 22
+  # [26] 25 25 27 27 29 29 31 31 31 34 34 36 36 38 38 40 40 40 43 43 45 45 47 47 47
+  # Notice the slice group with 3 slices (ie. 6, 15, 22) are roughly evenly spaced.
+  # We are trying to reimplement the calculation in the positions method in ParallelCollectionRDD
+  splits <- if (numSerializedSlices > 0) {
+    unlist(lapply(0: (numSerializedSlices - 1), function(x) {
+      # nolint start
+      start <- trunc((x * length(coll)) / numSerializedSlices)
+      end <- trunc(((x + 1) * length(coll)) / numSerializedSlices)
+      # nolint end
+      rep(start, end - start)
+    }))
+  } else {
+    1
+  }
+
+  slices <- split(coll, splits)
 
   # Serialize each slice: obtain a list of raws, or a list of lists (slices) of
   # 2-tuples of raws
@@ -301,7 +330,13 @@ spark.addFile <- function(path, recursive = FALSE) {
 #'}
 #' @note spark.getSparkFilesRootDirectory since 2.1.0
 spark.getSparkFilesRootDirectory <- function() {
-  callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")
+  if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
+    # Running on driver.
+    callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")
+  } else {
+    # Running on worker.
+    Sys.getenv("SPARKR_SPARKFILES_ROOT_DIR")
+  }
 }
 
 #' Get the absolute path of a file added through spark.addFile.
@@ -316,7 +351,13 @@ spark.getSparkFilesRootDirectory <- function() {
 #'}
 #' @note spark.getSparkFiles since 2.1.0
 spark.getSparkFiles <- function(fileName) {
-  callJStatic("org.apache.spark.SparkFiles", "get", as.character(fileName))
+  if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
+    # Running on driver.
+    callJStatic("org.apache.spark.SparkFiles", "get", as.character(fileName))
+  } else {
+    # Running on worker.
+    file.path(spark.getSparkFilesRootDirectory(), as.character(fileName))
+  }
 }
 
 #' Run a function over a list of elements, distributing the computations with Spark

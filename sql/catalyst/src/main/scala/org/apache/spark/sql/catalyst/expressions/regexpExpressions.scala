@@ -68,7 +68,30 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
  * Simple RegEx pattern matching function
  */
 @ExpressionDescription(
-  usage = "str _FUNC_ pattern - Returns true if `str` matches `pattern`, or false otherwise.")
+  usage = "str _FUNC_ pattern - Returns true if str matches pattern, " +
+    "null if any arguments are null, false otherwise.",
+  extended = """
+    Arguments:
+      str - a string expression
+      pattern - a string expression. The pattern is a string which is matched literally, with
+        exception to the following special symbols:
+
+          _ matches any one character in the input (similar to . in posix regular expressions)
+
+          % matches zero or more characters in the input (similar to .* in posix regular
+          expressions)
+
+        The escape character is '\'. If an escape character precedes a special symbol or another
+        escape character, the following character is matched literally. It is invalid to escape
+        any other character.
+
+    Examples:
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
+      true
+
+    See also:
+      Use RLIKE to match with standard regular expressions.
+""")
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 

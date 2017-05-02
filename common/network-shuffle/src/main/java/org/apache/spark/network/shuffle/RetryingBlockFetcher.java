@@ -57,7 +57,8 @@ public class RetryingBlockFetcher {
      * {@link org.apache.spark.network.client.TransportClientFactory} in order to fix connection
      * issues.
      */
-    void createAndStart(String[] blockIds, BlockFetchingListener listener) throws IOException;
+    void createAndStart(String[] blockIds, BlockFetchingListener listener)
+         throws IOException, InterruptedException;
   }
 
   /** Shared executor service used for waiting and retrying. */

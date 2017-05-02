@@ -2015,4 +2015,20 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
     attempt.isSuccess && attempt.get == 0
   }
+
+  test("SPARK-19912 String literals should be escaped for Hive metastore partition pruning") {
+    withTable("spark_19912") {
+      Seq(
+        (1, "p1", "q1"),
+        (2, "'", "q2"),
+        (3, "\"", "q3"),
+        (4, "p1\" and q=\"q1", "q4")
+      ).toDF("a", "p", "q").write.partitionBy("p", "q").saveAsTable("spark_19912")
+
+      val table = spark.table("spark_19912")
+      checkAnswer(table.filter($"p" === "'").select($"a"), Row(2))
+      checkAnswer(table.filter($"p" === "\"").select($"a"), Row(3))
+      checkAnswer(table.filter($"p" === "p1\" and q=\"q1").select($"a"), Row(4))
+    }
+  }
 }

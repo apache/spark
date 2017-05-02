@@ -22,7 +22,9 @@ import scala.util.control.ControlThrowable
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -238,7 +240,7 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  testQuietly("fatal errors from a source should be sent to the user") {
+  testQuietly("handle fatal errors thrown from the stream thread") {
     for (e <- Seq(
       new VirtualMachineError {},
       new ThreadDeath,
@@ -259,8 +261,11 @@ class StreamSuite extends StreamTest {
         override def stop(): Unit = {}
       }
       val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(source))
-      // These error are fatal errors and should be ignored in `testStream` to not fail the test.
       testStream(df)(
+        // `ExpectFailure(isFatalError = true)` verifies two things:
+        // - Fatal errors can be propagated to `StreamingQuery.exception` and
+        //   `StreamingQuery.awaitTermination` like non fatal errors.
+        // - Fatal errors can be caught by UncaughtExceptionHandler.
         ExpectFailure(isFatalError = true)(ClassTag(e.getClass))
       )
     }
@@ -274,10 +279,24 @@ class StreamSuite extends StreamTest {
 
   test("explain") {
     val inputData = MemoryStream[String]
-    val df = inputData.toDS().map(_ + "foo")
-    // Test `explain` not throwing errors
-    df.explain()
-    val q = df.writeStream.queryName("memory_explain").format("memory").start()
+    val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
+
+    // Test `df.explain`
+    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explainString =
+      spark.sessionState
+        .executePlan(explain)
+        .executedPlan
+        .executeCollect()
+        .map(_.getString(0))
+        .mkString("\n")
+    assert(explainString.contains("StateStoreRestore"))
+    assert(explainString.contains("StreamingRelation"))
+    assert(!explainString.contains("LocalTableScan"))
+
+    // Test StreamingQuery.display
+    val q = df.writeStream.queryName("memory_explain").outputMode("complete").format("memory")
+      .start()
       .asInstanceOf[StreamingQueryWrapper]
       .streamingQuery
     try {
@@ -291,14 +310,44 @@ class StreamSuite extends StreamTest {
       // `extended = false` only displays the physical plan.
       assert("LocalRelation".r.findAllMatchIn(explainWithoutExtended).size === 0)
       assert("LocalTableScan".r.findAllMatchIn(explainWithoutExtended).size === 1)
+      // Use "StateStoreRestore" to verify that it does output a streaming physical plan
+      assert(explainWithoutExtended.contains("StateStoreRestore"))
 
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
       assert("LocalRelation".r.findAllMatchIn(explainWithExtended).size === 3)
       assert("LocalTableScan".r.findAllMatchIn(explainWithExtended).size === 1)
+      // Use "StateStoreRestore" to verify that it does output a streaming physical plan
+      assert(explainWithExtended.contains("StateStoreRestore"))
     } finally {
       q.stop()
+    }
+  }
+
+  test("SPARK-19065: dropDuplicates should not create expressions using the same id") {
+    withTempPath { testPath =>
+      val data = Seq((1, 2), (2, 3), (3, 4))
+      data.toDS.write.mode("overwrite").json(testPath.getCanonicalPath)
+      val schema = spark.read.json(testPath.getCanonicalPath).schema
+      val query = spark
+        .readStream
+        .schema(schema)
+        .json(testPath.getCanonicalPath)
+        .dropDuplicates("_1")
+        .writeStream
+        .format("memory")
+        .queryName("testquery")
+        .outputMode("complete")
+        .start()
+      try {
+        query.processAllAvailable()
+        if (query.exception.isDefined) {
+          throw query.exception.get
+        }
+      } finally {
+        query.stop()
+      }
     }
   }
 }

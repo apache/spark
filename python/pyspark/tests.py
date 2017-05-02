@@ -58,6 +58,7 @@ else:
     from StringIO import StringIO
 
 
+from pyspark import keyword_only
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
@@ -970,6 +971,12 @@ class RDDTests(ReusedPySparkTestCase):
         l = a.coalesce(num_partitions, True).glom().map(len).collect()
         zeros = len([x for x in l if x == 0])
         self.assertTrue(zeros == 0)
+
+    def test_repartition_on_textfile(self):
+        path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
+        rdd = self.sc.textFile(path)
+        result = rdd.repartition(1).collect()
+        self.assertEqual(u"Hello World!", result[0])
 
     def test_distinct(self):
         rdd = self.sc.parallelize((1, 2, 3)*10, 10)
@@ -1970,6 +1977,26 @@ class SparkSubmitTests(unittest.TestCase):
         self.assertEqual(0, proc.returncode)
         self.assertIn("[2, 4, 6]", out.decode('utf-8'))
 
+    def test_user_configuration(self):
+        """Make sure user configuration is respected (SPARK-19307)"""
+        script = self.createTempFile("test.py", """
+            |from pyspark import SparkConf, SparkContext
+            |
+            |conf = SparkConf().set("spark.test_config", "1")
+            |sc = SparkContext(conf = conf)
+            |try:
+            |    if sc._conf.get("spark.test_config") != "1":
+            |        raise Exception("Cannot find spark.test_config in SparkContext's conf.")
+            |finally:
+            |    sc.stop()
+            """)
+        proc = subprocess.Popen(
+            [self.sparkSubmit, "--master", "local", script],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode, msg="Process failed with error:\n {0}".format(out))
+
 
 class ContextTests(unittest.TestCase):
 
@@ -2073,6 +2100,44 @@ class ConfTests(unittest.TestCase):
             rdd = sc.parallelize(l, 4)
             self.assertEqual(sorted(l), rdd.sortBy(lambda x: x).collect())
             sc.stop()
+
+
+class KeywordOnlyTests(unittest.TestCase):
+    class Wrapped(object):
+        @keyword_only
+        def set(self, x=None, y=None):
+            if "x" in self._input_kwargs:
+                self._x = self._input_kwargs["x"]
+            if "y" in self._input_kwargs:
+                self._y = self._input_kwargs["y"]
+            return x, y
+
+    def test_keywords(self):
+        w = self.Wrapped()
+        x, y = w.set(y=1)
+        self.assertEqual(y, 1)
+        self.assertEqual(y, w._y)
+        self.assertIsNone(x)
+        self.assertFalse(hasattr(w, "_x"))
+
+    def test_non_keywords(self):
+        w = self.Wrapped()
+        self.assertRaises(TypeError, lambda: w.set(0, y=1))
+
+    def test_kwarg_ownership(self):
+        # test _input_kwargs is owned by each class instance and not a shared static variable
+        class Setter(object):
+            @keyword_only
+            def set(self, x=None, other=None, other_x=None):
+                if "other" in self._input_kwargs:
+                    self._input_kwargs["other"].set(x=self._input_kwargs["other_x"])
+                self._x = self._input_kwargs["x"]
+
+        a = Setter()
+        b = Setter()
+        a.set(x=1, other=b, other_x=2)
+        self.assertEqual(a._x, 1)
+        self.assertEqual(b._x, 2)
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")

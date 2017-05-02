@@ -66,8 +66,8 @@ class InMemoryFileIndex(
   }
 
   override def refresh(): Unit = {
-    refresh0()
     fileStatusCache.invalidateAll()
+    refresh0()
   }
 
   private def refresh0(): Unit = {

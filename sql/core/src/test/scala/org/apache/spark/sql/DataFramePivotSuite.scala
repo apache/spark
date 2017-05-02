@@ -200,7 +200,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
 
   test("pivot preserves aliases if given") {
     assertResult(
-      Array("year", "dotNET_foo", "dotNET_avg(`earnings`)", "Java_foo", "Java_avg(`earnings`)")
+      Array("year", "dotNET_foo", "dotNET_avg(earnings)", "Java_foo", "Java_avg(earnings)")
     )(
       courseSales.groupBy($"year")
         .pivot("course", Seq("dotNET", "Java"))

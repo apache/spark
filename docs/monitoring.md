@@ -27,8 +27,8 @@ in the UI to persisted storage.
 
 ## Viewing After the Fact
 
-If Spark is run on Mesos or YARN, it is still possible to construct the UI of an
-application through Spark's history server, provided that the application's event logs exist.
+It is still possible to construct the UI of an application through Spark's history server, 
+provided that the application's event logs exist.
 You can start the history server by executing:
 
     ./sbin/start-history-server.sh
@@ -170,6 +170,28 @@ The history server can be configured as follows:
     </td>
   </tr>
   <tr>
+    <td>spark.history.ui.admin.acls</td>
+    <td>empty</td>
+    <td>
+      Comma separated list of users/administrators that have view access to all the Spark applications in
+      history server. By default only the users permitted to view the application at run-time could
+      access the related application history, with this, configured users/administrators could also
+      have the permission to access it.
+      Putting a "*" in the list means any user can have the privilege of admin.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.ui.admin.acls.groups</td>
+    <td>empty</td>
+    <td>
+      Comma separated list of groups that have view access to all the Spark applications in
+      history server. By default only the groups permitted to view the application at run-time could
+      access the related application history, with this, configured groups could also
+      have the permission to access it.
+      Putting a "*" in the list means any group can have the privilege of admin.
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.fs.cleaner.enabled</td>
     <td>false</td>
     <td>
@@ -235,7 +257,7 @@ In the API, an application is referenced by its application ID, `[app-id]`.
 When running on YARN, each application may have multiple attempts, but there are attempt IDs
 only for applications in cluster mode, not applications in client mode. Applications in YARN cluster mode
 can be identified by their `[attempt-id]`. In the API listed below, when running in YARN cluster mode,
-`[app-id]` will actually be `[base-app-id]/[attempt-id]`, where `[base-app-id]` is the YARN application ID.
+`[app-id]` will actually be `[base-app-id]/[attempt-id]`, where `[base-app-id]` is the YARN application ID.
 
 <table class="table">
   <tr><th>Endpoint</th><th>Meaning</th></tr>
@@ -256,7 +278,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[app-id]/jobs</code></td>
     <td>
       A list of all jobs for a given application.
-      <br><code>?status=[complete|succeeded|failed]</code> list only jobs in the specific state.
+      <br><code>?status=[running|succeeded|failed|unknown]</code> list only jobs in the specific state.
     </td>
   </tr>
   <tr>
@@ -266,12 +288,12 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/stages</code></td>
     <td>A list of all stages for a given application.</td>
+    <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
     <td>
       A list of all attempts for the given stage.
-      <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
     </td>
   </tr>
   <tr>

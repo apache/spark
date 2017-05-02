@@ -199,7 +199,7 @@ in interactive mode by running `build/sbt`, and then run all build commands at t
 prompt. For more recommendations on reducing build time, refer to the
 [Useful Developer Tools page](http://spark.apache.org/developer-tools.html).
 
-## Encrypted Filesystems
+## Encrypted Filesystems
 
 When building on an encrypted filesystem (if your home directory is encrypted, for example), then the Spark build might fail with a "Filename too long" error. As a workaround, add the following in the configuration args of the `scala-maven-plugin` in the project `pom.xml`:
 
@@ -302,7 +302,7 @@ Once installed, the `docker` service needs to be started, if not already running
 On Linux, this can be done by `sudo service docker start`.
 
     ./build/mvn install -DskipTests
-    ./build/mvn -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
+    ./build/mvn test -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
 
 or
 

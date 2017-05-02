@@ -145,7 +145,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       .set("spark.yarn.dist.jars", ADDED)
     val client = createClient(sparkConf, args = Array("--jar", USER))
     doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
-      any(classOf[Path]), anyShort(), anyBoolean(), any())
+      any(classOf[Path]), anyShort(), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
 
     val tempDir = Utils.createTempDir()
     try {
@@ -251,11 +251,11 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       Some(Seq(s"local:${jar4.getPath()}", s"local:${single.getAbsolutePath()}/*")))
 
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar1.toURI())), anyShort(),
-      anyBoolean(), any())
+      any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar2.toURI())), anyShort(),
-      anyBoolean(), any())
+      any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar3.toURI())), anyShort(),
-      anyBoolean(), any())
+      any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
 
     val cp = classpath(client)
     cp should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
@@ -273,7 +273,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
 
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), anyShort(),
-      anyBoolean(), any())
+      any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
 
     sparkConf.set(SPARK_ARCHIVE, LOCAL_SCHEME + ":" + archive.getPath())

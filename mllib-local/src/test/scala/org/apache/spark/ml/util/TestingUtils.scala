@@ -207,7 +207,7 @@ object TestingUtils {
       if (r.fun(x, r.y, r.eps)) {
         throw new TestFailedException(
           s"Did not expect \n$x\n and \n${r.y}\n to be within " +
-            "${r.eps}${r.method} for all elements.", 0)
+            s"${r.eps}${r.method} for all elements.", 0)
       }
       true
     }

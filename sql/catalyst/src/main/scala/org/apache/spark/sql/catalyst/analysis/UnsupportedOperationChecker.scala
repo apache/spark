@@ -73,7 +73,7 @@ object UnsupportedOperationChecker {
                 s"streaming DataFrames/DataSets")(plan)
         }
 
-      case InternalOutputModes.Complete | InternalOutputModes.Update if aggregates.isEmpty =>
+      case InternalOutputModes.Complete if aggregates.isEmpty =>
         throwError(
           s"$outputMode output mode not supported when there are no streaming aggregations on " +
             s"streaming DataFrames/Datasets")(plan)
@@ -87,7 +87,7 @@ object UnsupportedOperationChecker {
      * data.
      */
     def containsCompleteData(subplan: LogicalPlan): Boolean = {
-      val aggs = plan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+      val aggs = subplan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
       // Either the subplan has no streaming source, or it has aggregation with Complete mode
       !subplan.isStreaming || (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
     }
@@ -103,9 +103,8 @@ object UnsupportedOperationChecker {
           }
           throwErrorIf(
             child.isStreaming && distinctAggExprs.nonEmpty,
-            "Distinct aggregations are not supported on streaming DataFrames/Datasets, unless " +
-              "it is on aggregated DataFrame/Dataset in Complete output mode. Consider using " +
-              "approximate distinct aggregation (e.g. approx_count_distinct() instead of count()).")
+            "Distinct aggregations are not supported on streaming DataFrames/Datasets. Consider " +
+              "using approx_count_distinct() instead.")
 
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
@@ -167,7 +166,7 @@ object UnsupportedOperationChecker {
           throwError("Limits are not supported on streaming DataFrames/Datasets")
 
         case Sort(_, _, _) if !containsCompleteData(subPlan) =>
-          throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on" +
+          throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on " +
             "aggregated DataFrame/Dataset in Complete output mode")
 
         case Sample(_, _, _, _, child) if child.isStreaming =>

@@ -25,10 +25,15 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.MetadataBuilder
 
-class RemoveAliasOnlyProjectSuite extends PlanTest with PredicateHelper {
+class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("RemoveAliasOnlyProject", FixedPoint(50), RemoveAliasOnlyProject) :: Nil
+    val batches = Batch(
+      "RemoveAliasOnlyProject",
+      FixedPoint(50),
+      PushProjectionThroughUnion,
+      RemoveRedundantAliases,
+      RemoveRedundantProject) :: Nil
   }
 
   test("all expressions in project list are aliased child output") {
@@ -42,7 +47,8 @@ class RemoveAliasOnlyProjectSuite extends PlanTest with PredicateHelper {
     val relation = LocalRelation('a.int, 'b.int)
     val query = relation.select('b as 'b, 'a as 'a).analyze
     val optimized = Optimize.execute(query)
-    comparePlans(optimized, query)
+    val expected = relation.select('b, 'a).analyze
+    comparePlans(optimized, expected)
   }
 
   test("some expressions in project list are aliased child output") {
@@ -56,14 +62,16 @@ class RemoveAliasOnlyProjectSuite extends PlanTest with PredicateHelper {
     val relation = LocalRelation('a.int, 'b.int)
     val query = relation.select('b as 'b, 'a).analyze
     val optimized = Optimize.execute(query)
-    comparePlans(optimized, query)
+    val expected = relation.select('b, 'a).analyze
+    comparePlans(optimized, expected)
   }
 
   test("some expressions in project list are not Alias or Attribute") {
     val relation = LocalRelation('a.int, 'b.int)
     val query = relation.select('a as 'a, 'b + 1).analyze
     val optimized = Optimize.execute(query)
-    comparePlans(optimized, query)
+    val expected = relation.select('a, 'b + 1).analyze
+    comparePlans(optimized, expected)
   }
 
   test("some expressions in project list are aliased child output but with metadata") {
@@ -73,5 +81,47 @@ class RemoveAliasOnlyProjectSuite extends PlanTest with PredicateHelper {
     val query = relation.select(aliasWithMeta, 'b).analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, query)
+  }
+
+  test("retain deduplicating alias in self-join") {
+    val relation = LocalRelation('a.int)
+    val fragment = relation.select('a as 'a)
+    val query = fragment.select('a as 'a).join(fragment.select('a as 'a)).analyze
+    val optimized = Optimize.execute(query)
+    val expected = relation.join(relation.select('a as 'a)).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("alias removal should not break after push project through union") {
+    val r1 = LocalRelation('a.int)
+    val r2 = LocalRelation('b.int)
+    val query = r1.select('a as 'a).union(r2.select('b as 'b)).select('a).analyze
+    val optimized = Optimize.execute(query)
+    val expected = r1.union(r2)
+    comparePlans(optimized, expected)
+  }
+
+  test("remove redundant alias from aggregate") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = relation.groupBy('a as 'a)('a as 'a, sum('b)).analyze
+    val optimized = Optimize.execute(query)
+    val expected = relation.groupBy('a)('a, sum('b)).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("remove redundant alias from window") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = relation.window(Seq('b as 'b), Seq('a as 'a), Seq()).analyze
+    val optimized = Optimize.execute(query)
+    val expected = relation.window(Seq('b), Seq('a), Seq()).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("do not remove output attributes from a subquery") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = Subquery(relation.select('a as "a", 'b as "b").where('b < 10).select('a).analyze)
+    val optimized = Optimize.execute(query)
+    val expected = Subquery(relation.select('a as "a", 'b).where('b < 10).select('a).analyze)
+    comparePlans(optimized, expected)
   }
 }

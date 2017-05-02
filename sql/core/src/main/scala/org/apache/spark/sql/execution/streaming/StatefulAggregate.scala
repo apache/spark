@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.TaskContext
 
 
 /** Used to identify the state store for a given operator. */
@@ -149,6 +150,13 @@ case class StateStoreSaveExec(
         val numOutputRows = longMetric("numOutputRows")
         val numTotalStateRows = longMetric("numTotalStateRows")
         val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+
+        // Abort the state store in case of error
+        TaskContext.get().addTaskCompletionListener(_ => {
+          if (!store.hasCommitted) {
+            store.abort()
+          }
+        })
 
         outputMode match {
           // Update and output all rows in the StateStore.

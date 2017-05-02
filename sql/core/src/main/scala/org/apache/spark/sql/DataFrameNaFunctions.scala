@@ -128,6 +128,12 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in numeric columns with `value`.
    *
+   * @since 2.1.1
+   */
+  def fill(value: Long): DataFrame = fill(value, df.columns)
+
+  /**
+   * Returns a new `DataFrame` that replaces null or NaN values in numeric columns with `value`.
    * @since 1.3.1
    */
   def fill(value: Double): DataFrame = fill(value, df.columns)
@@ -143,6 +149,14 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns.
    * If a specified column is not a numeric column, it is ignored.
    *
+   * @since 2.1.1
+   */
+  def fill(value: Long, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
+
+  /**
+   * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns.
+   * If a specified column is not a numeric column, it is ignored.
+   *
    * @since 1.3.1
    */
   def fill(value: Double, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
@@ -151,20 +165,18 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
    * numeric columns. If a specified column is not a numeric column, it is ignored.
    *
+   * @since 2.1.1
+   */
+  def fill(value: Long, cols: Seq[String]): DataFrame = fillValue(value, cols)
+
+  /**
+   * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
+   * numeric columns. If a specified column is not a numeric column, it is ignored.
+   *
    * @since 1.3.1
    */
-  def fill(value: Double, cols: Seq[String]): DataFrame = {
-    val columnEquals = df.sparkSession.sessionState.analyzer.resolver
-    val projections = df.schema.fields.map { f =>
-      // Only fill if the column is part of the cols list.
-      if (f.dataType.isInstanceOf[NumericType] && cols.exists(col => columnEquals(f.name, col))) {
-        fillCol[Double](f, value)
-      } else {
-        df.col(f.name)
-      }
-    }
-    df.select(projections : _*)
-  }
+  def fill(value: Double, cols: Seq[String]): DataFrame = fillValue(value, cols)
+
 
   /**
    * Returns a new `DataFrame` that replaces null values in specified string columns.
@@ -180,18 +192,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 1.3.1
    */
-  def fill(value: String, cols: Seq[String]): DataFrame = {
-    val columnEquals = df.sparkSession.sessionState.analyzer.resolver
-    val projections = df.schema.fields.map { f =>
-      // Only fill if the column is part of the cols list.
-      if (f.dataType.isInstanceOf[StringType] && cols.exists(col => columnEquals(f.name, col))) {
-        fillCol[String](f, value)
-      } else {
-        df.col(f.name)
-      }
-    }
-    df.select(projections : _*)
-  }
+  def fill(value: String, cols: Seq[String]): DataFrame = fillValue(value, cols)
 
   /**
    * Returns a new `DataFrame` that replaces null values.
@@ -210,7 +211,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 1.3.1
    */
-  def fill(valueMap: java.util.Map[String, Any]): DataFrame = fill0(valueMap.asScala.toSeq)
+  def fill(valueMap: java.util.Map[String, Any]): DataFrame = fillMap(valueMap.asScala.toSeq)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null values.
@@ -230,7 +231,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 1.3.1
    */
-  def fill(valueMap: Map[String, Any]): DataFrame = fill0(valueMap.toSeq)
+  def fill(valueMap: Map[String, Any]): DataFrame = fillMap(valueMap.toSeq)
 
   /**
    * Replaces values matching keys in `replacement` map with the corresponding values.
@@ -368,7 +369,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     df.select(projections : _*)
   }
 
-  private def fill0(values: Seq[(String, Any)]): DataFrame = {
+  private def fillMap(values: Seq[(String, Any)]): DataFrame = {
     // Error handling
     values.foreach { case (colName, replaceValue) =>
       // Check column name exists
@@ -409,7 +410,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
         nanvl(df.col(quotedColName), lit(null)) // nanvl only supports these types
       case _ => df.col(quotedColName)
     }
-    coalesce(colValue, lit(replacement)).cast(col.dataType).as(col.name)
+    coalesce(colValue, lit(replacement).cast(col.dataType)).as(col.name)
   }
 
   /**
@@ -434,5 +435,39 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     case v: Int => v.toDouble
     case v => throw new IllegalArgumentException(
       s"Unsupported value type ${v.getClass.getName} ($v).")
+  }
+
+  /**
+   * Returns a new `DataFrame` that replaces null or NaN values in specified
+   * numeric, string columns. If a specified column is not a numeric, string column,
+   * it is ignored.
+   */
+  private def fillValue[T](value: T, cols: Seq[String]): DataFrame = {
+    // the fill[T] which T is  Long/Double,
+    // should apply on all the NumericType Column, for example:
+    // val input = Seq[(java.lang.Integer, java.lang.Double)]((null, 164.3)).toDF("a","b")
+    // input.na.fill(3.1)
+    // the result is (3,164.3), not (null, 164.3)
+    val targetType = value match {
+      case _: Double | _: Long => NumericType
+      case _: String => StringType
+      case _ => throw new IllegalArgumentException(
+        s"Unsupported value type ${value.getClass.getName} ($value).")
+    }
+
+    val columnEquals = df.sparkSession.sessionState.analyzer.resolver
+    val projections = df.schema.fields.map { f =>
+      val typeMatches = (targetType, f.dataType) match {
+        case (NumericType, dt) => dt.isInstanceOf[NumericType]
+        case (StringType, dt) => dt == StringType
+      }
+      // Only fill if the column is part of the cols list.
+      if (typeMatches && cols.exists(col => columnEquals(f.name, col))) {
+        fillCol[T](f, value)
+      } else {
+        df.col(f.name)
+      }
+    }
+    df.select(projections : _*)
   }
 }

@@ -137,7 +137,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
   }
 
 
-  test("registering as a table in Append output mode - supported") {
+  test("registering as a table in Append output mode") {
     val input = MemoryStream[Int]
     val query = input.toDF().writeStream
       .format("memory")
@@ -160,7 +160,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     query.stop()
   }
 
-  test("registering as a table in Complete output mode - supported") {
+  test("registering as a table in Complete output mode") {
     val input = MemoryStream[Int]
     val query = input.toDF()
       .groupBy("value")
@@ -186,18 +186,27 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     query.stop()
   }
 
-  test("registering as a table in Update output mode - not supported") {
+  test("registering as a table in Update output mode") {
     val input = MemoryStream[Int]
-    val df = input.toDF()
-      .groupBy("value")
-      .count()
-    intercept[AnalysisException] {
-      df.writeStream
-        .format("memory")
-        .outputMode("update")
-        .queryName("memStream")
-        .start()
-    }
+    val query = input.toDF().writeStream
+      .format("memory")
+      .outputMode("update")
+      .queryName("memStream")
+      .start()
+    input.addData(1, 2, 3)
+    query.processAllAvailable()
+
+    checkDataset(
+      spark.table("memStream").as[Int],
+      1, 2, 3)
+
+    input.addData(4, 5, 6)
+    query.processAllAvailable()
+    checkDataset(
+      spark.table("memStream").as[Int],
+      1, 2, 3, 4, 5, 6)
+
+    query.stop()
   }
 
   test("MemoryPlan statistics") {

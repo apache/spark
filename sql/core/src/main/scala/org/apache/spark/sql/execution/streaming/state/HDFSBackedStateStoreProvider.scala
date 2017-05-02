@@ -203,7 +203,7 @@ private[state] class HDFSBackedStateStoreProvider(
     /**
      * Whether all updates have been committed
      */
-    override private[state] def hasCommitted: Boolean = {
+    override private[streaming] def hasCommitted: Boolean = {
       state == COMMITTED
     }
 
@@ -255,7 +255,18 @@ private[state] class HDFSBackedStateStoreProvider(
   private def commitUpdates(newVersion: Long, map: MapType, tempDeltaFile: Path): Path = {
     synchronized {
       val finalDeltaFile = deltaFile(newVersion)
-      if (!fs.rename(tempDeltaFile, finalDeltaFile)) {
+
+      // scalastyle:off
+      // Renaming a file atop an existing one fails on HDFS
+      // (http://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/filesystem/filesystem.html).
+      // Hence we should either skip the rename step or delete the target file. Because deleting the
+      // target file will break speculation, skipping the rename step is the only choice. It's still
+      // semantically correct because Structured Streaming requires rerunning a batch should
+      // generate the same output. (SPARK-19677)
+      // scalastyle:on
+      if (fs.exists(finalDeltaFile)) {
+        fs.delete(tempDeltaFile, true)
+      } else if (!fs.rename(tempDeltaFile, finalDeltaFile)) {
         throw new IOException(s"Failed to rename $tempDeltaFile to $finalDeltaFile")
       }
       loadedMaps.put(newVersion, map)

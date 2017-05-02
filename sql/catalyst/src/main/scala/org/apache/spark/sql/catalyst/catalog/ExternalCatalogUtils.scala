@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.catalog
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 
 object ExternalCatalogUtils {
@@ -106,17 +108,20 @@ object ExternalCatalogUtils {
       partitionColumnNames: Seq[String],
       tablePath: Path): Path = {
     val partitionPathStrings = partitionColumnNames.map { col =>
-      val partitionValue = spec(col)
-      val partitionString = if (partitionValue == null) {
-        DEFAULT_PARTITION_NAME
-      } else {
-        escapePathName(partitionValue)
-      }
-      escapePathName(col) + "=" + partitionString
+      getPartitionPathString(col, spec(col))
     }
     partitionPathStrings.foldLeft(tablePath) { (totalPath, nextPartPath) =>
       new Path(totalPath, nextPartPath)
     }
+  }
+
+  def getPartitionPathString(col: String, value: String): String = {
+    val partitionString = if (value == null || value.isEmpty) {
+      DEFAULT_PARTITION_NAME
+    } else {
+      escapePathName(value)
+    }
+    escapePathName(col) + "=" + partitionString
   }
 }
 
@@ -131,6 +136,41 @@ object CatalogUtils {
       case (key, value) if key.toLowerCase == "url" && value.toLowerCase.contains("password") =>
         (key, "###")
       case o => o
+    }
+  }
+
+  def normalizePartCols(
+      tableName: String,
+      tableCols: Seq[String],
+      partCols: Seq[String],
+      resolver: Resolver): Seq[String] = {
+    partCols.map(normalizeColumnName(tableName, tableCols, _, "partition", resolver))
+  }
+
+  def normalizeBucketSpec(
+      tableName: String,
+      tableCols: Seq[String],
+      bucketSpec: BucketSpec,
+      resolver: Resolver): BucketSpec = {
+    val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec
+    val normalizedBucketCols = bucketColumnNames.map { colName =>
+      normalizeColumnName(tableName, tableCols, colName, "bucket", resolver)
+    }
+    val normalizedSortCols = sortColumnNames.map { colName =>
+      normalizeColumnName(tableName, tableCols, colName, "sort", resolver)
+    }
+    BucketSpec(numBuckets, normalizedBucketCols, normalizedSortCols)
+  }
+
+  private def normalizeColumnName(
+      tableName: String,
+      tableCols: Seq[String],
+      colName: String,
+      colType: String,
+      resolver: Resolver): String = {
+    tableCols.find(resolver(_, colName)).getOrElse {
+      throw new AnalysisException(s"$colType column $colName is not defined in table $tableName, " +
+        s"defined table columns are: ${tableCols.mkString(", ")}")
     }
   }
 }
