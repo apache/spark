@@ -3977,7 +3977,7 @@ setMethod("grouping_id",
 
 #' input_file_name
 #'
-#' Creates a string column for the file name of the current Spark task.
+#' Creates a string column with the input file name for a given row
 #'
 #' @rdname input_file_name
 #' @name input_file_name
