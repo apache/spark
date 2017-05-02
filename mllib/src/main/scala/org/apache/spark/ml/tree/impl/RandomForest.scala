@@ -1015,11 +1015,9 @@ private[spark] object RandomForest extends Logging {
         Array.empty[Double]
       } else if (possibleSplits <= numSplits) {
         // if possible splits is not enough or just enough, just return all possible splits
-        val splits = for {
-          i <- 0 until possibleSplits
-        } yield (valueCounts(i)._1 + valueCounts(i + 1)._1) / 2
-
-        splits.toArray
+        (1 to possibleSplits)
+          .map(index => (valueCounts(index - 1)._1 + valueCounts(index)._1) / 2.0)
+          .toArray
       } else {
         // stride between splits
         val stride: Double = numSamples.toDouble / (numSplits + 1)
@@ -1044,10 +1042,8 @@ private[spark] object RandomForest extends Logging {
           // makes the gap between currentCount and targetCount smaller,
           // previous value is a split threshold.
           if (previousGap < currentGap) {
-            val pre = valueCounts(index - 1)
-            val cur = valueCounts(index)
             // perhaps weighted mean will be used later, see SPARK-16957 and Github PR 17556.
-            splitsBuilder += (pre._1 + cur._1) / 2
+            splitsBuilder += (valueCounts(index - 1)._1 + valueCounts(index)._1) / 2.0
             targetCount += stride
           }
           index += 1
