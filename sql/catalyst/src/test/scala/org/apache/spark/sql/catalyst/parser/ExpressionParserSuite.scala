@@ -167,6 +167,11 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a = b is not null", ('a === 'b).isNotNull)
   }
 
+  test("is distinct expressions") {
+    assertEqual("a is distinct from b", !('a <=> 'b))
+    assertEqual("a is not distinct from b", 'a <=> 'b)
+  }
+
   test("binary arithmetic expressions") {
     // Simple operations
     assertEqual("a * b", 'a * 'b)

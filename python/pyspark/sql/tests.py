@@ -982,7 +982,7 @@ class SQLTests(ReusedPySparkTestCase):
         cbool = (ci & ci), (ci | ci), (~ci)
         self.assertTrue(all(isinstance(c, Column) for c in cbool))
         css = cs.contains('a'), cs.like('a'), cs.rlike('a'), cs.asc(), cs.desc(),\
-            cs.startswith('a'), cs.endswith('a')
+            cs.startswith('a'), cs.endswith('a'), ci.eqNullSafe(cs)
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
         self.assertRaisesRegexp(ValueError,
@@ -1710,6 +1710,10 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(row.name, "haha")
         self.assertEqual(row.age, None)
         self.assertEqual(row.height, None)
+
+        # fillna with dictionary for boolean types
+        row = self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna({"a": True}).first()
+        self.assertEqual(row.a, True)
 
     def test_bitwise_operations(self):
         from pyspark.sql import functions

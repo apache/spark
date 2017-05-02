@@ -856,6 +856,10 @@ setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
 #' @export
 setGeneric("over", function(x, window) { standardGeneric("over") })
 
+#' @rdname eq_null_safe
+#' @export
+setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
+
 ###################### WindowSpec Methods ##########################
 
 #' @rdname partitionBy
@@ -1016,6 +1020,10 @@ setGeneric("encode", function(x, charset) { standardGeneric("encode") })
 #' @export
 setGeneric("explode", function(x) { standardGeneric("explode") })
 
+#' @rdname explode_outer
+#' @export
+setGeneric("explode_outer", function(x) { standardGeneric("explode_outer") })
+
 #' @rdname expr
 #' @export
 setGeneric("expr", function(x) { standardGeneric("expr") })
@@ -1150,6 +1158,10 @@ setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
 #' @export
 setGeneric("negate", function(x) { standardGeneric("negate") })
 
+#' @rdname not
+#' @export
+setGeneric("not", function(x) { standardGeneric("not") })
+
 #' @rdname next_day
 #' @export
 setGeneric("next_day", function(y, x) { standardGeneric("next_day") })
@@ -1174,6 +1186,10 @@ setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
 #' @rdname posexplode
 #' @export
 setGeneric("posexplode", function(x) { standardGeneric("posexplode") })
+
+#' @rdname posexplode_outer
+#' @export
+setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer") })
 
 #' @rdname quarter
 #' @export
@@ -1502,7 +1518,7 @@ setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml")
 
 #' @rdname awaitTermination
 #' @export
-setGeneric("awaitTermination", function(x, timeout) { standardGeneric("awaitTermination") })
+setGeneric("awaitTermination", function(x, timeout = NULL) { standardGeneric("awaitTermination") })
 
 #' @rdname isActive
 #' @export
