@@ -102,7 +102,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val rows = df.collect()
     assert(rows.size == 1)
     val row = rows(0)
-    // The main point of the below lines is not to make sure that these Oracle types are
+    // The main point of the below assertions is not to make sure that these Oracle types are
     // mapped to decimal types, but to make sure that the returned values are correct.
     // A value > 1 from DECIMAL(1) is correct:
     assert(row.getDecimal(0).compareTo(BigDecimal.valueOf(4)) == 0)
