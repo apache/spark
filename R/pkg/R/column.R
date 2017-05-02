@@ -149,7 +149,7 @@ createMethods()
 #'   df, alias(df$Sepal_Length, "slength"), alias(df$Petal_Length, "plength")
 #' ))
 #' }
-#' @note alias since 1.4.0
+#' @note alias(Column) since 1.4.0
 setMethod("alias",
           signature(object = "Column"),
           function(object, data) {

@@ -3759,7 +3759,7 @@ setMethod("hint",
 #' head(select(df, column("mtcars.mpg")))
 #' head(join(df, avg_mpg, column("mtcars.cyl") == column("avg_mpg.cyl")))
 #' }
-#' @note alias since 2.3.0
+#' @note alias(SparkDataFrame) since 2.3.0
 setMethod("alias",
           signature(object = "SparkDataFrame"),
           function(object, data) {
