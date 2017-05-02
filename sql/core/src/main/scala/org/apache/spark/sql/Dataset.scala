@@ -1885,11 +1885,8 @@ class Dataset[T] private[sql](
   /**
    * Returns a new Dataset by adding columns or replacing the existing columns that has
    * the same names.
-   *
-   * @group untypedrel
-   * @since 2.3.0
    */
-  def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
+  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
     assert(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
