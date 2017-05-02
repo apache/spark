@@ -1366,6 +1366,11 @@ test_that("column functions", {
   expect_equal(collect(df2)[[3, 1]], FALSE)
   expect_equal(collect(df2)[[3, 2]], TRUE)
 
+  # Test that input_file_name()
+  actual_names <- sort(collect(distinct(select(df, input_file_name()))))
+  expect_equal(length(actual_names), 1)
+  expect_equal(basename(actual_names[1, 1]), basename(jsonPath))
+
   df3 <- select(df, between(df$name, c("Apache", "Spark")))
   expect_equal(collect(df3)[[1, 1]], TRUE)
   expect_equal(collect(df3)[[2, 1]], FALSE)
@@ -1654,18 +1659,6 @@ test_that("greatest() and least() on a DataFrame", {
   df <- createDataFrame(l)
   expect_equal(collect(select(df, greatest(df$a, df$b)))[, 1], c(2, 4))
   expect_equal(collect(select(df, least(df$a, df$b)))[, 1], c(1, 3))
-})
-
-test_that("input_file_name()", {
-  path <- tempfile(pattern = "input_file_name_test", fileext = ".txt")
-  write.table(iris[1:50, ], path, row.names = FALSE, col.names = FALSE)
-
-  df <- read.text(path)
-  actual_names <- sort(collect(distinct(select(df, input_file_name()))))
-  expect_equal(length(actual_names), 1)
-  expect_equal(basename(actual_names[1, 1]), basename(path))
-
-  unlink(path)
 })
 
 test_that("time windowing (window()) with all inputs", {
