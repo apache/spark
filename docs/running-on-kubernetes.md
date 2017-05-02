@@ -9,6 +9,7 @@ currently limited and not well-tested. This should not be used in production env
 ## Prerequisites
 
 * You must have a running Kubernetes cluster with access configured to it using [kubectl](https://kubernetes.io/docs/user-guide/prereqs/). If you do not already have a working Kubernetes cluster, you may setup a test cluster on your local machine using [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
+  * We recommend that minikube be updated to the most recent version (0.18.0 at the time of this documentation), as some earlier versions may not start up the kubernetes cluster with all the necessary components.
 * You must have appropriate permissions to create and list [pods](https://kubernetes.io/docs/user-guide/pods/), [nodes](https://kubernetes.io/docs/admin/node/) and [services](https://kubernetes.io/docs/user-guide/services/) in your cluster. You can verify that you can list these resources by running `kubectl get nodes`, `kubectl get pods` and `kubectl get svc` which should give you a list of nodes, pods and services (if any) respectively.
 * You must have a spark distribution with Kubernetes support. This may be obtained from the [release tarball](https://github.com/apache-spark-on-k8s/spark/releases) or by [building Spark with Kubernetes support](../resource-managers/kubernetes/README.md#building-spark-with-kubernetes-support).
 
