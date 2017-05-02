@@ -534,6 +534,7 @@ predicate
     | NOT? kind=IN '(' query ')'
     | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
     | IS NOT? kind=NULL
+    | IS NOT? kind=DISTINCT FROM right=valueExpression
     ;
 
 valueExpression
