@@ -244,10 +244,18 @@ package object config {
     ConfigBuilder("spark.redaction.regex")
       .doc("Regex to decide which Spark configuration properties and environment variables in " +
         "driver and executor environments contain sensitive information. When this regex matches " +
-        "a property, its value is redacted from the environment UI and various logs like YARN " +
-        "and event logs.")
-      .stringConf
-      .createWithDefault("(?i)secret|password")
+        "a property key or value, the value is redacted from the environment UI and various logs " +
+        "like YARN and event logs.")
+      .regexConf
+      .createWithDefault("(?i)secret|password".r)
+
+  private[spark] val STRING_REDACTION_PATTERN =
+    ConfigBuilder("spark.redaction.string.regex")
+      .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
+        "information. When this regex matches a string part, that string part is replaced by a " +
+        "dummy value. This is currently used to redact the output of SQL explain commands.")
+      .regexConf
+      .createOptional
 
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")
@@ -264,4 +272,10 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val CHECKPOINT_COMPRESS =
+    ConfigBuilder("spark.checkpoint.compress")
+      .doc("Whether to compress RDD checkpoints. Generally a good idea. Compression will use " +
+        "spark.io.compression.codec.")
+      .booleanConf
+      .createWithDefault(false)
 }

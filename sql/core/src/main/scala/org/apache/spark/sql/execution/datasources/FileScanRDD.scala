@@ -101,9 +101,7 @@ class FileScanRDD(
         // Kill the task in case it has been marked as killed. This logic is from
         // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
         // to avoid performance overhead.
-        if (context.isInterrupted()) {
-          throw new TaskKilledException
-        }
+        context.killTaskIfInterrupted()
         (currentIterator != null && currentIterator.hasNext) || nextIterator()
       }
       def next(): Object = {

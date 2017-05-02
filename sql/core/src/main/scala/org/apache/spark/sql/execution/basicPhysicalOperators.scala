@@ -331,10 +331,11 @@ case class SampleExec(
 case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   extends LeafExecNode with CodegenSupport {
 
-  def start: Long = range.start
-  def step: Long = range.step
-  def numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
-  def numElements: BigInt = range.numElements
+  val start: Long = range.start
+  val end: Long = range.end
+  val step: Long = range.step
+  val numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
+  val numElements: BigInt = range.numElements
 
   override val output: Seq[Attribute] = range.output
 
@@ -342,8 +343,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numGeneratedRows" -> SQLMetrics.createMetric(sparkContext, "number of generated rows"))
 
-  // output attributes should not affect the results
-  override lazy val cleanArgs: Seq[Any] = Seq(start, step, numSlices, numElements)
+  override lazy val canonicalized: SparkPlan = {
+    RangeExec(range.canonicalized.asInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Range])
+  }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
@@ -462,9 +464,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     $number = $batchEnd;
       |   }
       |
-      |   if ($taskContext.isInterrupted()) {
-      |     throw new TaskKilledException();
-      |   }
+      |   $taskContext.killTaskIfInterrupted();
       |
       |   long $nextBatchTodo;
       |   if ($numElementsTodo > ${batchSize}L) {
@@ -539,7 +539,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       }
   }
 
-  override def simpleString: String = range.simpleString
+  override def simpleString: String = s"Range ($start, $end, step=$step, splits=$numSlices)"
 }
 
 /**
@@ -607,11 +607,6 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def sameResult(o: SparkPlan): Boolean = o match {
-    case s: SubqueryExec => child.sameResult(s.child)
-    case _ => false
-  }
-
   @transient
   private lazy val relationFuture: Future[Array[InternalRow]] = {
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
@@ -628,13 +623,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
         longMetric("dataSize") += dataSize
 
-        // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
-        // directly without setting an execution id. We should be tolerant to it.
-        if (executionId != null) {
-          sparkContext.listenerBus.post(SparkListenerDriverAccumUpdates(
-            executionId.toLong, metrics.values.map(m => m.id -> m.value).toSeq))
-        }
-
+        SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
         rows
       }
     }(SubqueryExec.executionContext)

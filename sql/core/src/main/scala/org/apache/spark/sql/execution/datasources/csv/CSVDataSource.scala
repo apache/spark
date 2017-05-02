@@ -49,15 +49,26 @@ abstract class CSVDataSource extends Serializable {
       conf: Configuration,
       file: PartitionedFile,
       parser: UnivocityParser,
-      parsedOptions: CSVOptions): Iterator[InternalRow]
+      schema: StructType): Iterator[InternalRow]
 
   /**
    * Infers the schema from `inputPaths` files.
    */
-  def infer(
+  final def inferSchema(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions): Option[StructType]
+      parsedOptions: CSVOptions): Option[StructType] = {
+    if (inputPaths.nonEmpty) {
+      Some(infer(sparkSession, inputPaths, parsedOptions))
+    } else {
+      None
+    }
+  }
+
+  protected def infer(
+      sparkSession: SparkSession,
+      inputPaths: Seq[FileStatus],
+      parsedOptions: CSVOptions): StructType
 
   /**
    * Generates a header from the given row which is null-safe and duplicate-safe.
@@ -115,26 +126,26 @@ object TextInputCSVDataSource extends CSVDataSource {
       conf: Configuration,
       file: PartitionedFile,
       parser: UnivocityParser,
-      parsedOptions: CSVOptions): Iterator[InternalRow] = {
+      schema: StructType): Iterator[InternalRow] = {
     val lines = {
       val linesReader = new HadoopFileLinesReader(file, conf)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
       linesReader.map { line =>
-        new String(line.getBytes, 0, line.getLength, parsedOptions.charset)
+        new String(line.getBytes, 0, line.getLength, parser.options.charset)
       }
     }
 
-    val shouldDropHeader = parsedOptions.headerFlag && file.start == 0
-    UnivocityParser.parseIterator(lines, shouldDropHeader, parser)
+    val shouldDropHeader = parser.options.headerFlag && file.start == 0
+    UnivocityParser.parseIterator(lines, shouldDropHeader, parser, schema)
   }
 
   override def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions): Option[StructType] = {
+      parsedOptions: CSVOptions): StructType = {
     val csv = createBaseDataset(sparkSession, inputPaths, parsedOptions)
     val maybeFirstLine = CSVUtils.filterCommentAndEmpty(csv, parsedOptions).take(1).headOption
-    Some(inferFromDataset(sparkSession, csv, maybeFirstLine, parsedOptions))
+    inferFromDataset(sparkSession, csv, maybeFirstLine, parsedOptions)
   }
 
   /**
@@ -192,17 +203,18 @@ object WholeFileCSVDataSource extends CSVDataSource {
       conf: Configuration,
       file: PartitionedFile,
       parser: UnivocityParser,
-      parsedOptions: CSVOptions): Iterator[InternalRow] = {
+      schema: StructType): Iterator[InternalRow] = {
     UnivocityParser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, file.filePath),
-      parsedOptions.headerFlag,
-      parser)
+      parser.options.headerFlag,
+      parser,
+      schema)
   }
 
   override def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions): Option[StructType] = {
+      parsedOptions: CSVOptions): StructType = {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
     csv.flatMap { lines =>
       UnivocityParser.tokenizeStream(
@@ -221,10 +233,10 @@ object WholeFileCSVDataSource extends CSVDataSource {
             parsedOptions.headerFlag,
             new CsvParser(parsedOptions.asParserSettings))
         }
-        Some(CSVInferSchema.infer(tokenRDD, header, parsedOptions))
+        CSVInferSchema.infer(tokenRDD, header, parsedOptions)
       case None =>
         // If the first row could not be read, just return the empty schema.
-        Some(StructType(Nil))
+        StructType(Nil)
     }
   }
 

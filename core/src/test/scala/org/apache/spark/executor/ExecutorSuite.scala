@@ -44,6 +44,7 @@ import org.apache.spark.scheduler.{FakeTask, ResultTask, TaskDescription}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.UninterruptibleThread
 
 class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar with Eventually {
 
@@ -110,14 +111,14 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       }
       // we know the task will be started, but not yet deserialized, because of the latches we
       // use in mockExecutorBackend.
-      executor.killAllTasks(true)
+      executor.killAllTasks(true, "test")
       executorSuiteHelper.latch2.countDown()
       if (!executorSuiteHelper.latch3.await(5, TimeUnit.SECONDS)) {
         fail("executor did not send second status update in time")
       }
 
       // `testFailedReason` should be `TaskKilled`; `taskState` should be `KILLED`
-      assert(executorSuiteHelper.testFailedReason === TaskKilled)
+      assert(executorSuiteHelper.testFailedReason === TaskKilled("test"))
       assert(executorSuiteHelper.taskState === TaskState.KILLED)
     }
     finally {
@@ -156,6 +157,18 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
 
     val failReason = runTaskAndGetFailReason(taskDescription)
     assert(failReason.isInstanceOf[FetchFailed])
+  }
+
+  test("Executor's worker threads should be UninterruptibleThread") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("executor thread test")
+      .set("spark.ui.enabled", "false")
+    sc = new SparkContext(conf)
+    val executorThread = sc.parallelize(Seq(1), 1).map { _ =>
+      Thread.currentThread.getClass.getName
+    }.collect().head
+    assert(executorThread === classOf[UninterruptibleThread].getName)
   }
 
   test("SPARK-19276: OOMs correctly handled with a FetchFailure") {

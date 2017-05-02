@@ -308,6 +308,21 @@ numCyl <- summarize(groupBy(carsDF, carsDF$cyl), count = n(carsDF$cyl))
 head(numCyl)
 ```
 
+Use `cube` or `rollup` to compute subtotals across multiple dimensions.
+
+```{r}
+mean(cube(carsDF, "cyl", "gear", "am"), "mpg")
+```
+
+generates groupings for {(`cyl`, `gear`, `am`), (`cyl`, `gear`), (`cyl`), ()}, while 
+
+```{r}
+mean(rollup(carsDF, "cyl", "gear", "am"), "mpg")
+```
+
+generates groupings for all possible combinations of grouping columns.
+
+
 #### Operating on Columns
 
 SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.
@@ -505,6 +520,10 @@ SparkR supports the following machine learning models and algorithms.
 
 * Alternating Least Squares (ALS)
 
+#### Frequent Pattern Mining
+
+* FP-growth
+
 #### Statistics
 
 * Kolmogorov-Smirnov Test
@@ -672,6 +691,7 @@ gaussian | identity, log, inverse
 binomial | logit, probit, cloglog (complementary log-log)
 poisson | log, identity, sqrt
 gamma | inverse, identity, log
+tweedie | power link function
 
 There are three ways to specify the `family` argument.
 
@@ -679,7 +699,11 @@ There are three ways to specify the `family` argument.
 
 * Family function, e.g. `family = binomial`.
 
-* Result returned by a family function, e.g. `family = poisson(link = log)`
+* Result returned by a family function, e.g. `family = poisson(link = log)`.
+
+* Note that there are two ways to specify the tweedie family:
+  a) Set `family = "tweedie"` and specify the `var.power` and `link.power`
+  b) When package `statmod` is loaded, the tweedie family is specified using the family definition therein, i.e., `tweedie()`.
 
 For more information regarding the families and their link functions, see the Wikipedia page [Generalized Linear Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
 
@@ -693,6 +717,18 @@ When doing prediction, a new column called `prediction` will be appended. Let's 
 ```{r}
 gaussianFitted <- predict(gaussianGLM, carsDF)
 head(select(gaussianFitted, "model", "prediction", "mpg", "wt", "hp"))
+```
+
+The following is the same fit using the tweedie family:
+```{r}
+tweedieGLM1 <- spark.glm(carsDF, mpg ~ wt + hp, family = "tweedie", var.power = 0.0)
+summary(tweedieGLM1)
+```
+We can try other distributions in the tweedie family, for example, a compound Poisson distribution with a log link:
+```{r}
+tweedieGLM2 <- spark.glm(carsDF, mpg ~ wt + hp, family = "tweedie",
+                         var.power = 1.2, link.power = 0.0)
+summary(tweedieGLM2)
 ```
 
 #### Isotonic Regression
@@ -887,6 +923,37 @@ Make predictions.
 ```{r}
 predicted <- predict(model, df)
 head(predicted)
+```
+
+#### FP-growth
+
+`spark.fpGrowth` executes FP-growth algorithm to mine frequent itemsets on a `SparkDataFrame`. `itemsCol` should be an array of values.
+
+```{r}
+df <- selectExpr(createDataFrame(data.frame(rawItems = c(
+  "T,R,U", "T,S", "V,R", "R,U,T,V", "R,S", "V,S,U", "U,R", "S,T", "V,R", "V,U,S",
+  "T,V,U", "R,V", "T,S", "T,S", "S,T", "S,U", "T,R", "V,R", "S,V", "T,S,U"
+))), "split(rawItems, ',') AS items")
+
+fpm <- spark.fpGrowth(df, minSupport = 0.2, minConfidence = 0.5)
+```
+
+`spark.freqItemsets` method can be used to retrieve a `SparkDataFrame` with the frequent itemsets.
+
+```{r}
+head(spark.freqItemsets(fpm))
+```
+
+`spark.associationRules` returns a `SparkDataFrame` with the association rules.
+
+```{r}
+head(spark.associationRules(fpm))
+```
+
+We can make predictions based on the `antecedent`.
+
+```{r}
+head(predict(fpm, df))
 ```
 
 #### Kolmogorov-Smirnov Test

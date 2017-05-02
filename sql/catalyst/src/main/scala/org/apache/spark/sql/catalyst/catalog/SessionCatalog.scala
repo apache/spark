@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
+import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.util.{Failure, Success, Try}
 
 import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
@@ -35,6 +37,8 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{StructField, StructType}
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
@@ -48,12 +52,13 @@ object SessionCatalog {
  * This class must be thread-safe.
  */
 class SessionCatalog(
-    externalCatalog: ExternalCatalog,
+    val externalCatalog: ExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
     functionRegistry: FunctionRegistry,
-    conf: CatalystConf,
+    conf: SQLConf,
     hadoopConf: Configuration,
-    parser: ParserInterface) extends Logging {
+    parser: ParserInterface,
+    functionResourceLoader: FunctionResourceLoader) extends Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -61,15 +66,15 @@ class SessionCatalog(
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
-      conf: CatalystConf) {
+      conf: SQLConf) {
     this(
       externalCatalog,
       new GlobalTempViewManager("global_temp"),
       functionRegistry,
       conf,
       new Configuration(),
-      CatalystSqlParser)
-    functionResourceLoader = DummyFunctionResourceLoader
+      CatalystSqlParser,
+      DummyFunctionResourceLoader)
   }
 
   // For testing only.
@@ -77,7 +82,7 @@ class SessionCatalog(
     this(
       externalCatalog,
       new SimpleFunctionRegistry,
-      SimpleCatalystConf(caseSensitiveAnalysis = true))
+      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
   }
 
   /** List of temporary tables, mapping from table name to their logical plan. */
@@ -89,9 +94,7 @@ class SessionCatalog(
   // check whether the temporary table or function exists, then, if not, operate on
   // the corresponding item in the current database.
   @GuardedBy("this")
-  protected var currentDb = formatDatabaseName(DEFAULT_DATABASE)
-
-  @volatile var functionResourceLoader: FunctionResourceLoader = _
+  protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
@@ -112,14 +115,14 @@ class SessionCatalog(
    * Format table name, taking into account case sensitivity.
    */
   protected[this] def formatTableName(name: String): String = {
-    if (conf.caseSensitiveAnalysis) name else name.toLowerCase
+    if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
   }
 
   /**
    * Format database name, taking into account case sensitivity.
    */
   protected[this] def formatDatabaseName(name: String): String = {
-    if (conf.caseSensitiveAnalysis) name else name.toLowerCase
+    if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
   }
 
   /**
@@ -159,6 +162,20 @@ class SessionCatalog(
     if (tableExists(name)) {
       val db = name.database.getOrElse(currentDb)
       throw new TableAlreadyExistsException(db = db, table = name.table)
+    }
+  }
+
+  private def checkDuplication(fields: Seq[StructField]): Unit = {
+    val columnNames = if (conf.caseSensitiveAnalysis) {
+      fields.map(_.name)
+    } else {
+      fields.map(_.name.toLowerCase)
+    }
+    if (columnNames.distinct.length != columnNames.length) {
+      val duplicateColumns = columnNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => x
+      }
+      throw new AnalysisException(s"Found duplicate column(s): ${duplicateColumns.mkString(", ")}")
     }
   }
   // ----------------------------------------------------------------------------
@@ -293,6 +310,47 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(tableIdentifier)
     externalCatalog.alterTable(newTableDefinition)
+  }
+
+  /**
+   * Alter the schema of a table identified by the provided table identifier. The new schema
+   * should still contain the existing bucket columns and partition columns used by the table. This
+   * method will also update any Spark SQL-related parameters stored as Hive table properties (such
+   * as the schema itself).
+   *
+   * @param identifier TableIdentifier
+   * @param newSchema Updated schema to be used for the table (must contain existing partition and
+   *                  bucket columns, and partition columns need to be at the end)
+   */
+  def alterTableSchema(
+      identifier: TableIdentifier,
+      newSchema: StructType): Unit = {
+    val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(identifier.table)
+    val tableIdentifier = TableIdentifier(table, Some(db))
+    requireDbExists(db)
+    requireTableExists(tableIdentifier)
+    checkDuplication(newSchema)
+
+    val catalogTable = externalCatalog.getTable(db, table)
+    val oldSchema = catalogTable.schema
+
+    // not supporting dropping columns yet
+    val nonExistentColumnNames = oldSchema.map(_.name).filterNot(columnNameResolved(newSchema, _))
+    if (nonExistentColumnNames.nonEmpty) {
+      throw new AnalysisException(
+        s"""
+           |Some existing schema fields (${nonExistentColumnNames.mkString("[", ",", "]")}) are
+           |not present in the new schema. We don't support dropping columns yet.
+         """.stripMargin)
+    }
+
+    // assuming the newSchema has all partition columns at the end as required
+    externalCatalog.alterTableSchema(db, table, newSchema)
+  }
+
+  private def columnNameResolved(schema: StructType, colName: String): Boolean = {
+    schema.fields.map(_.name).exists(conf.resolver(_, colName))
   }
 
   /**
@@ -993,7 +1051,7 @@ class SessionCatalog(
    *
    * This performs reflection to decide what type of [[Expression]] to return in the builder.
    */
-  def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
+  protected def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
     // TODO: at least support UDAFs here
     throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
   }
@@ -1003,25 +1061,24 @@ class SessionCatalog(
    * by a tuple (resource type, resource uri).
    */
   def loadFunctionResources(resources: Seq[FunctionResource]): Unit = {
-    if (functionResourceLoader == null) {
-      throw new IllegalStateException("functionResourceLoader has not yet been initialized")
-    }
     resources.foreach(functionResourceLoader.loadResource)
   }
 
   /**
-   * Create a temporary function.
-   * This assumes no database is specified in `funcDefinition`.
+   * Registers a temporary or permanent function into a session-specific [[FunctionRegistry]]
    */
-  def createTempFunction(
-      name: String,
-      info: ExpressionInfo,
-      funcDefinition: FunctionBuilder,
-      ignoreIfExists: Boolean): Unit = {
-    if (functionRegistry.lookupFunctionBuilder(name).isDefined && !ignoreIfExists) {
-      throw new TempFunctionAlreadyExistsException(name)
+  def registerFunction(
+      funcDefinition: CatalogFunction,
+      ignoreIfExists: Boolean,
+      functionBuilder: Option[FunctionBuilder] = None): Unit = {
+    val func = funcDefinition.identifier
+    if (functionRegistry.functionExists(func.unquotedString) && !ignoreIfExists) {
+      throw new AnalysisException(s"Function $func already exists")
     }
-    functionRegistry.registerFunction(name, info, funcDefinition)
+    val info = new ExpressionInfo(funcDefinition.className, func.database.orNull, func.funcName)
+    val builder =
+      functionBuilder.getOrElse(makeFunctionBuilder(func.unquotedString, funcDefinition.className))
+    functionRegistry.registerFunction(func.unquotedString, info, builder)
   }
 
   /**
@@ -1045,7 +1102,7 @@ class SessionCatalog(
     name.database.isEmpty &&
       functionRegistry.functionExists(name.funcName) &&
       !FunctionRegistry.builtin.functionExists(name.funcName) &&
-      !hiveFunctions.contains(name.funcName.toLowerCase)
+      !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
   }
 
   protected def failFunctionLookup(name: String): Nothing = {
@@ -1126,12 +1183,7 @@ class SessionCatalog(
     // catalog. So, it is possible that qualifiedName is not exactly the same as
     // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
     // At here, we preserve the input from the user.
-    val info = new ExpressionInfo(
-      catalogFunction.className,
-      qualifiedName.database.orNull,
-      qualifiedName.funcName)
-    val builder = makeFunctionBuilder(qualifiedName.unquotedString, catalogFunction.className)
-    createTempFunction(qualifiedName.unquotedString, info, builder, ignoreIfExists = false)
+    registerFunction(catalogFunction.copy(identifier = qualifiedName), ignoreIfExists = false)
     // Now, we need to create the Expression.
     functionRegistry.lookupFunction(qualifiedName.unquotedString, children)
   }
@@ -1151,15 +1203,25 @@ class SessionCatalog(
   def listFunctions(db: String, pattern: String): Seq[(FunctionIdentifier, String)] = {
     val dbName = formatDatabaseName(db)
     requireDbExists(dbName)
-    val dbFunctions = externalCatalog.listFunctions(dbName, pattern)
-      .map { f => FunctionIdentifier(f, Some(dbName)) }
-    val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)
-      .map { f => FunctionIdentifier(f) }
+    val dbFunctions = externalCatalog.listFunctions(dbName, pattern).map { f =>
+      FunctionIdentifier(f, Some(dbName)) }
+    val loadedFunctions =
+      StringUtils.filterPattern(functionRegistry.listFunction(), pattern).map { f =>
+        // In functionRegistry, function names are stored as an unquoted format.
+        Try(parser.parseFunctionIdentifier(f)) match {
+          case Success(e) => e
+          case Failure(_) =>
+            // The names of some built-in functions are not parsable by our parser, e.g., %
+            FunctionIdentifier(f)
+        }
+      }
     val functions = dbFunctions ++ loadedFunctions
+    // The session catalog caches some persistent functions in the FunctionRegistry
+    // so there can be duplicates.
     functions.map {
       case f if FunctionRegistry.functionSet.contains(f.funcName) => (f, "SYSTEM")
       case f => (f, "USER")
-    }
+    }.distinct
   }
 
 
@@ -1175,6 +1237,7 @@ class SessionCatalog(
    */
   def reset(): Unit = synchronized {
     setCurrentDatabase(DEFAULT_DATABASE)
+    externalCatalog.setCurrentDatabase(DEFAULT_DATABASE)
     listDatabases().filter(_ != DEFAULT_DATABASE).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
@@ -1202,28 +1265,16 @@ class SessionCatalog(
   }
 
   /**
-   * Create a new [[SessionCatalog]] with the provided parameters. `externalCatalog` and
-   * `globalTempViewManager` are `inherited`, while `currentDb` and `tempTables` are copied.
+   * Copy the current state of the catalog to another catalog.
+   *
+   * This function is synchronized on this [[SessionCatalog]] (the source) to make sure the copied
+   * state is consistent. The target [[SessionCatalog]] is not synchronized, and should not be
+   * because the target [[SessionCatalog]] should not be published at this point. The caller must
+   * synchronize on the target if this assumption does not hold.
    */
-  def newSessionCatalogWith(
-      conf: CatalystConf,
-      hadoopConf: Configuration,
-      functionRegistry: FunctionRegistry,
-      parser: ParserInterface): SessionCatalog = {
-    val catalog = new SessionCatalog(
-      externalCatalog,
-      globalTempViewManager,
-      functionRegistry,
-      conf,
-      hadoopConf,
-      parser)
-
-    synchronized {
-      catalog.currentDb = currentDb
-      // copy over temporary tables
-      tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2))
-    }
-
-    catalog
+  private[sql] def copyStateTo(target: SessionCatalog): Unit = synchronized {
+    target.currentDb = currentDb
+    // copy over temporary tables
+    tempTables.foreach(kv => target.tempTables.put(kv._1, kv._2))
   }
 }
