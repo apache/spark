@@ -31,7 +31,7 @@ sealed abstract class Node extends Serializable {
   //       code into the new API and deprecate the old API.  SPARK-3727
 
   /** Prediction a leaf node makes, or which an internal node would make if it were a leaf node */
-  def prediction: Double
+  def prediction: Double 
 
   /** Impurity measure at this node (for training data) */
   def impurity: Double
