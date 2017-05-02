@@ -475,6 +475,22 @@ class Column(val expr: Expression) extends Logging {
   def eqNullSafe(other: Any): Column = this <=> other
 
   /**
+   * Equality test that is safe for null values.
+   *
+   * @group java_expr_ops
+   * @since 2.3.0
+   */
+  def isNotDistinctFrom(other: Any): Column = eqNullSafe(other)
+
+  /**
+   * Inequality test that is safe for null values.
+   *
+   * @group java_expr_ops
+   * @since 2.3.0
+   */
+  def isDistinctFrom(other: Any): Column = withExpr { Not(EqualNullSafe(expr, lit(other).expr)) }
+
+  /**
    * Evaluates a list of conditions and returns one of multiple possible result expressions.
    * If otherwise is not defined at the end, null is returned for unmatched conditions.
    *
