@@ -148,36 +148,38 @@ class FileStreamSinkSuite extends StreamTest {
   }
 
   test("partitioned writing and batch reading with 'basePath'") {
-    val inputData = MemoryStream[Int]
-    val ds = inputData.toDS()
+    withTempDir { outputDir =>
+      withTempDir { checkpointDir =>
+        val outputPath = outputDir.getAbsolutePath
+        val inputData = MemoryStream[Int]
+        val ds = inputData.toDS()
 
-    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
-    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+        var query: StreamingQuery = null
 
-    var query: StreamingQuery = null
+        try {
+          query =
+            ds.map(i => (i, -i, i * 1000))
+              .toDF("id1", "id2", "value")
+              .writeStream
+              .partitionBy("id1", "id2")
+              .option("checkpointLocation", checkpointDir.getAbsolutePath)
+              .format("parquet")
+              .start(outputPath)
 
-    try {
-      query =
-        ds.map(i => (i, -i, i * 1000))
-          .toDF("id1", "id2", "value")
-          .writeStream
-          .partitionBy("id1", "id2")
-          .option("checkpointLocation", checkpointDir)
-          .format("parquet")
-          .start(outputDir)
+          inputData.addData(1, 2, 3)
+          failAfter(streamingTimeout) {
+            query.processAllAvailable()
+          }
 
-      inputData.addData(1, 2, 3)
-      failAfter(streamingTimeout) {
-        query.processAllAvailable()
-      }
-
-      val readIn = spark.read.option("basePath", outputDir).parquet(s"$outputDir/*/*")
-      checkDatasetUnorderly(
-        readIn.as[(Int, Int, Int)],
-        (1000, 1, -1), (2000, 2, -2), (3000, 3, -3))
-    } finally {
-      if (query != null) {
-        query.stop()
+          val readIn = spark.read.option("basePath", outputPath).parquet(s"$outputDir/*/*")
+          checkDatasetUnorderly(
+            readIn.as[(Int, Int, Int)],
+            (1000, 1, -1), (2000, 2, -2), (3000, 3, -3))
+        } finally {
+          if (query != null) {
+            query.stop()
+          }
+        }
       }
     }
   }
@@ -305,10 +307,11 @@ class FileStreamSinkSuite extends StreamTest {
   }
 
   test("FileStreamSink.ancestorIsMetadataDirectory()") {
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
     def assertAncestorIsMetadataDirectory(path: String): Unit =
-      assert(FileStreamSink.ancestorIsMetadataDirectory(new Path(path)))
+      assert(FileStreamSink.ancestorIsMetadataDirectory(new Path(path), hadoopConf))
     def assertAncestorIsNotMetadataDirectory(path: String): Unit =
-      assert(!FileStreamSink.ancestorIsMetadataDirectory(new Path(path)))
+      assert(!FileStreamSink.ancestorIsMetadataDirectory(new Path(path), hadoopConf))
 
     assertAncestorIsMetadataDirectory(s"/${FileStreamSink.metadataDir}")
     assertAncestorIsMetadataDirectory(s"/${FileStreamSink.metadataDir}/")

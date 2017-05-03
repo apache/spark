@@ -61,17 +61,14 @@ object FileStreamSink extends Logging {
    *  - ancestorIsMetadataDirectory(/.../_spark_metadata/0) => true
    *  - ancestorIsMetadataDirectory(/a/b/c) => false
    */
-  def ancestorIsMetadataDirectory(path: Path): Boolean = {
-    require(path.isAbsolute, s"$path is required to be absolute")
-    var currentPath = path
-    var finished = false
-    while (!finished) {
+  def ancestorIsMetadataDirectory(path: Path, hadoopConf: Configuration): Boolean = {
+    val fs = path.getFileSystem(hadoopConf)
+    var currentPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    while (currentPath != null) {
       if (currentPath.getName == FileStreamSink.metadataDir) {
         return true
-      } else if (currentPath.getParent != null) {
-        currentPath = currentPath.getParent
       } else {
-        finished = true
+        currentPath = currentPath.getParent
       }
     }
     return false
