@@ -135,22 +135,25 @@ class JavaParams(JavaWrapper, Params):
                 paramMap.put([pair])
         return paramMap
 
-    def _transfer_params_from_java(self):
+    def _create_params_from_java(self):
         """
-        Transforms the embedded params from the companion Java object.
+        SPARK-10931: Temporary fix to create params that are defined in the Java obj but not here
         """
-        sc = SparkContext._active_spark_context
-
-        # SPARK-10931: Temporary fix to add params when loading model
         java_params = list(self._java_obj.params())
         from pyspark.ml.param import Param
         for java_param in java_params:
             java_param_name = java_param.name()
             if not hasattr(self, java_param_name):
                 param = Param(self, java_param_name, java_param.doc())
+                setattr(param, "created_from_java_param", True)
                 setattr(self, java_param_name, param)
-                self._params = None
-        # end SPARK-10931 temporary fix
+                self._params = None  # need to reset so self.params will discover new params
+
+    def _transfer_params_from_java(self):
+        """
+        Transforms the embedded params from the companion Java object.
+        """
+        sc = SparkContext._active_spark_context
 
         for param in self.params:
             if self._java_obj.hasParam(param.name):
@@ -216,6 +219,11 @@ class JavaParams(JavaWrapper, Params):
             # Load information from java_stage to the instance.
             py_stage = py_type()
             py_stage._java_obj = java_stage
+
+            # SPARK-10931: Temporary fix so that persisted models would own params from Estimator
+            if issubclass(py_type, JavaModel):
+                py_stage._create_params_from_java()
+
             py_stage._resetUid(java_stage.uid())
             py_stage._transfer_params_from_java()
         elif hasattr(py_type, "_from_java"):
@@ -276,14 +284,12 @@ class JavaEstimator(JavaParams, Estimator):
     def _fit(self, dataset):
         java_model = self._fit_java(dataset)
         model = self._create_model(java_model)
+
         # SPARK-10931: This is a temporary fix to allow models to own params
         # from estimators. Eventually, these params should be in models through
         # using common base classes between estimators and models.
-        for param in self.params:
-            if not hasattr(model, param.name) and java_model.hasParam(param.name):
-                setattr(model, param.name, param)
-                model._params = None
-        # end SPARK-10931 temporary fix
+        model._create_params_from_java()
+
         return self._copyValues(model)
 
 
