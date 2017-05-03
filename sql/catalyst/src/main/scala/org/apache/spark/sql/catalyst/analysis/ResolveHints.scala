@@ -86,7 +86,13 @@ object ResolveHints {
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case h: Hint if BROADCAST_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
-        applyBroadcastHint(h.child, h.parameters.toSet)
+        if (h.parameters.isEmpty) {
+          // If there is no table alias specified, turn the entire subtree into a BroadcastHint.
+          BroadcastHint(h.child)
+        } else {
+          // Otherwise, find within the subtree query plans that should be broadcasted.
+          applyBroadcastHint(h.child, h.parameters.toSet)
+        }
     }
   }
 
