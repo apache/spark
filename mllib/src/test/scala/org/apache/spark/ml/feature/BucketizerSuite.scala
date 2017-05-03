@@ -26,6 +26,9 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
+
 
 class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -165,19 +168,23 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
   test("Bucket non-double features") {
     val splits = Array(-3.0, 0.0, 3.0)
-    val validData: Array[Int] = Array(-2, -1, 0, 1, 2)
-    val expectedBuckets = Array(0.0, 0.0, 0.0, 1.0, 1.0)
-    val dataFrame: DataFrame = validData.zip(expectedBuckets).toSeq.toDF("feature", "expected")
+    val data = Array(-2.0, -1.0, 0.0, 1.0, 2.0)
+    val expectedBuckets = Array(0.0, 0.0, 1.0, 1.0, 1.0)
+    val dataFrame: DataFrame = data.zip(expectedBuckets).toSeq.toDF("feature", "expected")
 
     val bucketizer: Bucketizer = new Bucketizer()
       .setInputCol("feature")
       .setOutputCol("result")
       .setSplits(splits)
 
-    bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
-      case Row(x: Double, y: Double) =>
-        assert(x === y,
-          s"The feature value is not correct after bucketing.  Expected $y but found $x")
+    val types = Seq(ShortType, IntegerType, LongType, FloatType)
+    for (mType <- types) {
+      val df = dataFrame.withColumn("feature", col("feature").cast(mType))
+      bucketizer.transform(df).select("result", "expected").collect().foreach {
+        case Row(x: Double, y: Double) =>
+          assert(x === y, "The feature value is not correct after bucketing in type " +
+            mType.toString + ". " + s"Expected $y but found $x.")
+      }
     }
   }
 }
