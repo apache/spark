@@ -363,14 +363,11 @@ class ALSModel private[ml] (
    * relatively efficient, the approach implemented here is significantly more efficient.
    *
    * This approach groups factors into blocks and computes the top-k elements per block,
-   * using Level 1 BLAS (dot) and an efficient BoundedPriorityQueue. It then computes the
+   * using Level 1 BLAS (dot) and an efficient [[BoundedPriorityQueue]]. It then computes the
    * global top-k by aggregating the per block top-k elements with a [[TopByKeyAggregator]].
    * This significantly reduces the size of intermediate and shuffle data.
    * This is the DataFrame equivalent to the approach used in
    * [[org.apache.spark.mllib.recommendation.MatrixFactorizationModel]].
-   *
-   * Compared with BLAS.dot, the hand-written version used below is more efficient than a call
-   * to the native BLAS backend and the same performance as the fallback F2jBLAS backend.
    *
    * @param srcFactors src factors for which to generate recommendations
    * @param dstFactors dst factors used to make recommendations
@@ -397,12 +394,15 @@ class ALSModel private[ml] (
         val n = math.min(dstIter.size, num)
         val output = new Array[(Int, Int, Float)](m * n)
         var j = 0
+        val pq = new BoundedPriorityQueue[(Int, Float)](num)(Ordering.by(_._2))
         srcIter.foreach { case (srcId, srcFactor) =>
-          val pq = new BoundedPriorityQueue[(Int, Float)](num)(Ordering.by(_._2))
           dstIter.foreach { case (dstId, dstFactor) =>
             /**
              * The below code is equivalent to
              * val score = blas.sdot(rank, srcFactor, 1, dstFactor, 1)
+             * Compared with BLAS.dot, the hand-written version used below is more efficient than
+             * a call to the native BLAS backend and the same performance as the fallback
+             * F2jBLAS backend.
              */
             var score = 0.0f
             var k = 0
@@ -420,6 +420,7 @@ class ALSModel private[ml] (
             i += 1
           }
           j += n
+          pq.clear()
         }
         output.toSeq
       }
