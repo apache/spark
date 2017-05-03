@@ -90,6 +90,7 @@ object ResolveHints {
           // If there is no table alias specified, turn the entire subtree into a BroadcastHint.
           BroadcastHint(h.child)
         } else {
+          // Otherwise, find within the subtree query plans that should be broadcasted.
           applyBroadcastHint(h.child, h.parameters.toSet)
         }
     }
