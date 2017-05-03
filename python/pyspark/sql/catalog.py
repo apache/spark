@@ -247,12 +247,12 @@ class Catalog(object):
         [Row(stringLengthString(text)=u'3')]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> strlen = spark.catalog.registerFunction("stringLengthInt", len, IntegerType())
+        >>> _ = spark.catalog.registerFunction("stringLengthInt", len, IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> strlen = spark.udf.register("stringLengthInt", len, IntegerType())
+        >>> _ = spark.udf.register("stringLengthInt", len, IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """

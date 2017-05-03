@@ -195,12 +195,12 @@ class SQLContext(object):
         [Row(stringLengthString(text)=u'3')]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> strlen = sqlContext.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> _ = sqlContext.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> strlen = sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> _ = sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """
