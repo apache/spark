@@ -82,7 +82,9 @@ object RRunner {
     if (initialized.tryAcquire(backendTimeout, TimeUnit.SECONDS)) {
       // Launch R
       val returnCode = try {
-        val builder = new ProcessBuilder((Seq(rCommand, rFileNormalized) ++ otherArgs).asJava)
+        val rCommandWithArgs = Seq(rCommand, "--no-save", "--no-site-file", "--no-environ",
+          "--no-restore", rFileNormalized) ++ otherArgs
+        val builder = new ProcessBuilder(rCommandWithArgs.asJava)
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
         env.put("SPARKR_BACKEND_CONNECTION_TIMEOUT", backendConnectionTimeout)

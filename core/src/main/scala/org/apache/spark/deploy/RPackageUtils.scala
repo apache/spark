@@ -36,7 +36,8 @@ private[deploy] object RPackageUtils extends Logging {
   private final val hasRPackage = "Spark-HasRPackage"
 
   /** Base of the shell command used in order to install R packages. */
-  private final val baseInstallCmd = Seq("R", "CMD", "INSTALL", "-l")
+  private final val baseInstallCmd = Seq("R", "--no-save", "--no-site-file", "--no-environ",
+    "--no-restore", "CMD", "INSTALL", "-l")
 
   /** R source code should exist under R/pkg in a jar. */
   private final val RJarEntries = "R/pkg"
