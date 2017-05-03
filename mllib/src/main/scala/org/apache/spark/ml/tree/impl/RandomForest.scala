@@ -1042,7 +1042,6 @@ private[spark] object RandomForest extends Logging {
           // makes the gap between currentCount and targetCount smaller,
           // previous value is a split threshold.
           if (previousGap < currentGap) {
-            // perhaps weighted mean will be used later, see SPARK-16957 and Github PR 17556.
             splitsBuilder += (valueCounts(index - 1)._1 + valueCounts(index)._1) / 2.0
             targetCount += stride
           }
