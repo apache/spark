@@ -417,9 +417,9 @@ class ALSModel private[ml] (
           while (i < n) {
             val (dstId, score) = pqIter.next()
             output(j + i) = (srcId, dstId, score)
-            i +=1
+            i += 1
           }
-          j +=1
+          j += n
         }
         output.toSeq
       }
