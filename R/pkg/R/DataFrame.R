@@ -3737,6 +3737,7 @@ setMethod("rollup",
 #'
 #' head(join(df, hint(avg_mpg, "broadcast"), df$cyl == avg_mpg$cyl))
 #' }
+#' @note hint since 2.2.0
 setMethod("hint",
           signature(x = "SparkDataFrame", name = "character"),
           function(x, name, ...) {
