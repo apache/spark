@@ -130,13 +130,6 @@ createMethods <- function() {
 
 createMethods()
 
-#' alias
-#'
-#' Set a new name for an object. Equivalent to SQL "AS" keyword.
-#'
-#' @param object x a Column or a SparkDataFrame
-#' @param data new name to use
-#'
 #' @rdname alias
 #' @name alias
 #' @aliases alias,Column-method
