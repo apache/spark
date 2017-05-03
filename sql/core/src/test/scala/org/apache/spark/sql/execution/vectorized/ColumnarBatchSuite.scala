@@ -327,9 +327,26 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val reference = mutable.ArrayBuffer.empty[Float]
 
       val column = ColumnVector.allocate(1024, FloatType, memMode)
-      var idx = 0
 
-      val values = (1.0f :: 2.0f :: 3.0f :: 4.0f :: 5.0f :: Nil).toArray
+      var values = (.1f :: .2f :: .3f :: .4f :: .5f :: Nil).toArray
+      column.appendFloats(2, values, 0)
+      reference += .1f
+      reference += .2f
+
+      column.appendFloats(3, values, 2)
+      reference += .3f
+      reference += .4f
+      reference += .5f
+
+      column.appendFloats(6, .6f)
+      (1 to 6).foreach(_ => reference += .6f)
+
+      column.appendFloat(.7f)
+      reference += .7f
+
+      var idx = column.elementsAppended
+
+      values = (1.0f :: 2.0f :: 3.0f :: 4.0f :: 5.0f :: Nil).toArray
       column.putFloats(idx, 2, values, 0)
       reference += 1.0f
       reference += 2.0f
@@ -401,9 +418,26 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val reference = mutable.ArrayBuffer.empty[Double]
 
       val column = ColumnVector.allocate(1024, DoubleType, memMode)
-      var idx = 0
 
-      val values = (1.0 :: 2.0 :: 3.0 :: 4.0 :: 5.0 :: Nil).toArray
+      var values = (.1 :: .2 :: .3 :: .4 :: .5 :: Nil).toArray
+      column.appendDoubles(2, values, 0)
+      reference += .1
+      reference += .2
+
+      column.appendDoubles(3, values, 2)
+      reference += .3
+      reference += .4
+      reference += .5
+
+      column.appendDoubles(6, .6)
+      (1 to 6).foreach(_ => reference += .6)
+
+      column.appendDouble(.7)
+      reference += .7
+
+      var idx = column.elementsAppended
+
+      values = (1.0 :: 2.0 :: 3.0 :: 4.0 :: 5.0 :: Nil).toArray
       column.putDoubles(idx, 2, values, 0)
       reference += 1.0
       reference += 2.0
