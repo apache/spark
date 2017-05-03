@@ -320,6 +320,80 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
+  test("Float APIs") {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+      val seed = System.currentTimeMillis()
+      val random = new Random(seed)
+      val reference = mutable.ArrayBuffer.empty[Float]
+
+      val column = ColumnVector.allocate(1024, FloatType, memMode)
+      var idx = 0
+
+      val values = (1.0f :: 2.0f :: 3.0f :: 4.0f :: 5.0f :: Nil).toArray
+      column.putFloats(idx, 2, values, 0)
+      reference += 1.0f
+      reference += 2.0f
+      idx += 2
+
+      column.putFloats(idx, 3, values, 2)
+      reference += 3.0f
+      reference += 4.0f
+      reference += 5.0f
+      idx += 3
+
+      val buffer = new Array[Byte](8)
+      Platform.putFloat(buffer, Platform.BYTE_ARRAY_OFFSET, 2.234f)
+      Platform.putFloat(buffer, Platform.BYTE_ARRAY_OFFSET + 4, 1.123f)
+
+      if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
+        // Ensure array contains Little Endian floats
+        val bb = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN)
+        Platform.putFloat(buffer, Platform.BYTE_ARRAY_OFFSET, bb.getFloat(0))
+        Platform.putFloat(buffer, Platform.BYTE_ARRAY_OFFSET + 4, bb.getFloat(4))
+      }
+
+      column.putFloats(idx, 1, buffer, 4)
+      column.putFloats(idx + 1, 1, buffer, 0)
+      reference += 1.123f
+      reference += 2.234f
+      idx += 2
+
+      column.putFloats(idx, 2, buffer, 0)
+      reference += 2.234f
+      reference += 1.123f
+      idx += 2
+
+      while (idx < column.capacity) {
+        val single = random.nextBoolean()
+        if (single) {
+          val v = random.nextFloat()
+          column.putFloat(idx, v)
+          reference += v
+          idx += 1
+        } else {
+          val n = math.min(random.nextInt(column.capacity / 20), column.capacity - idx)
+          val v = random.nextFloat()
+          column.putFloats(idx, n, v)
+          var i = 0
+          while (i < n) {
+            reference += v
+            i += 1
+          }
+          idx += n
+        }
+      }
+
+      reference.zipWithIndex.foreach { v =>
+        assert(v._1 == column.getFloat(v._2), "Seed = " + seed + " MemMode=" + memMode)
+        if (memMode == MemoryMode.OFF_HEAP) {
+          val addr = column.valuesNativeAddress()
+          assert(v._1 == Platform.getFloat(null, addr + 4 * v._2))
+        }
+      }
+      column.close
+    }}
+  }
+
   test("Double APIs") {
     (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
       val seed = System.currentTimeMillis()
@@ -346,8 +420,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, 1.123)
 
       if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
-        // Ensure array contains Liitle Endian doubles
-        var bb = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN)
+        // Ensure array contains Little Endian doubles
+        val bb = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN)
         Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, bb.getDouble(0))
         Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, bb.getDouble(8))
       }
