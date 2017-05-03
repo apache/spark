@@ -449,7 +449,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _ui =
       if (conf.getBoolean("spark.ui.enabled", true)) {
-        Some(SparkUI.createLiveUI(this, _conf, listenerBus, SPARK_VERSION, _jobProgressListener,
+        Some(SparkUI.createLiveUI(this, _conf, listenerBus, _jobProgressListener,
           _env.securityManager, appName, startTime = startTime))
       } else {
         // For tests, do not enable the UI

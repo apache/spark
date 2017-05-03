@@ -244,19 +244,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       applications.get(appId).flatMap { appInfo =>
         appInfo.attempts.find(_.attemptId == attemptId).flatMap { attempt =>
           val replayBus = new ReplayListenerBus()
-          val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
-          val appListener = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
-
           val ui = {
             val conf = this.conf.clone()
             val appSecManager = new SecurityManager(conf)
             SparkUI.createHistoryUI(conf, replayBus, appSecManager,
-              appListener.appSparkVersion.getOrElse(""), appInfo.name,
-              HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
+              appInfo.name, HistoryServer.getAttemptURI(appId, attempt.attemptId),
+              attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
 
+          val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
+
+          val appListener = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
+
           if (appListener.appId.isDefined) {
+            ui.setAppSparkVersion(appListener.appSparkVersion.getOrElse(""))
             ui.getSecurityManager.setAcls(HISTORY_UI_ACLS_ENABLE)
             // make sure to set admin acls before view acls so they are properly picked up
             val adminAcls = HISTORY_UI_ADMIN_ACLS + "," + appListener.adminAcls.getOrElse("")
@@ -469,8 +471,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           lastUpdated,
           appListener.sparkUser.getOrElse(NOT_STARTED),
           appCompleted,
-          fileStatus.getLen(),
-          appListener.appSparkVersion.getOrElse("")
+          appListener.appSparkVersion.getOrElse(""),
+          fileStatus.getLen()
         )
         fileToAppInfo(logPath) = attemptInfo
         logDebug(s"Application log ${attemptInfo.logPath} loaded successfully: $attemptInfo")
@@ -743,7 +745,6 @@ private[history] object FsHistoryProvider {
  *
  * @param logPath path to the log file, or, for a legacy log, its directory
  * @param name application name
- * @param appSparkVersion application spark version
  * @param appId application ID
  * @param attemptId optional attempt ID
  * @param startTime start time (from playback)
@@ -764,8 +765,8 @@ private class FsApplicationAttemptInfo(
     lastUpdated: Long,
     sparkUser: String,
     completed: Boolean,
-    val fileSize: Long,
-    appSparkVersion: String)
+    appSparkVersion: String,
+    val fileSize: Long)
   extends ApplicationAttemptInfo(
       attemptId, startTime, endTime, lastUpdated, sparkUser, completed, appSparkVersion) {
 
