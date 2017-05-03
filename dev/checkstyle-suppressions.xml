@@ -44,4 +44,8 @@
               files="src/main/java/org/apache/hive/service/server/ThreadWithGarbageCleanup.java"/>
     <suppress checks="MethodName"
               files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/OutputMode.java"/>
+    <suppress checks="MethodName"
+              files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/GroupStateTimeout.java"/>
+    <suppress checks="MethodName"
+              files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
 </suppressions>
