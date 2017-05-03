@@ -71,7 +71,7 @@ objects can be can be read or written by using their URLs as the path to data.
 For example `sparkContext.textFile("s3a://landsat-pds/scene_list.gz")` will create
 an RDD of the file `scene_list.gz` stored in S3, using the s3a connector.
 
-To add the relevant libraries to an application's classpath, include the `spark-hadoop-cloud` 
+To add the relevant libraries to an application's classpath, include the `hadoop-cloud` 
 module and its dependencies.
 
 In Maven, add the following to the `pom.xml` file, assuming `spark.version`
@@ -82,7 +82,7 @@ is set to the chosen version of Spark:
   ...
   <dependency>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-hadoop-cloud_2.11</artifactId>
+    <artifactId>hadoop-cloud_2.11</artifactId>
     <version>${spark.version}</version>
   </dependency>
   ...
@@ -118,16 +118,26 @@ consult the relevant documentation.
 
 ### Recommended settings for writing to object stores
 
-Here are some settings to use when writing to object stores. 
+For object stores whose consistency model means that rename-based commits are safe
+use the `FileOutputCommitter` v2 algorithm for performance:
 
 ```
 spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version 2
+```
+
+
+This does less renaming at the end of a job than the "version 1" algorithm.
+As it still uses `rename()` to commit files, it is unsafe to use
+when the object store does not have consistent metadata/listings.
+
+The committer can also be set to ignore failures when cleaning up temporary
+files; this reduces the risk that a transient network problem is escalated into a 
+job failure:
+
+```
 spark.hadoop.mapreduce.fileoutputcommitter.cleanup-failures.ignored true
 ```
 
-This uses the "version 2" algorithm for committing files, which does less
-renaming than the "version 1" algorithm, though as it still uses `rename()`
-to commit files, it may be unsafe to use.
 
 As storing temporary files can run up charges; delete
 directories called `"_temporary"` on a regular basis to avoid this.

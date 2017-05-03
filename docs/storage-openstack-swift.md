@@ -21,7 +21,7 @@ Although not mandatory, it is recommended to configure the proxy server of Swift
 # Dependencies
 
 The Spark application should include <code>hadoop-openstack</code> dependency, which can
-be done by including the `spark-hadoop-cloud` module for the specific version of spark used.
+be done by including the `hadoop-cloud` module for the specific version of spark used.
 For example, for Maven support, add the following to the <code>pom.xml</code> file:
 
 {% highlight xml %}
@@ -29,7 +29,7 @@ For example, for Maven support, add the following to the <code>pom.xml</code> fi
   ...
   <dependency>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-hadoop-cloud_2.11</artifactId>
+    <artifactId>hadoop-cloud_2.11</artifactId>
     <version>${spark.version}</version>
   </dependency>
   ...
