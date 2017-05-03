@@ -65,6 +65,6 @@ struct<>
 org.apache.spark.sql.AnalysisException
 Some resolved attribute(s) are not present among the available attributes
 for a query.
-t2b#x is not in min(t2a)#x,t2c#x. 
+t2b#x is not in min(t2a)#x,t2c#x.
 The failed query was for operator
- !Filter t2c#x IN (list#x [t2b#x]);
+!Filter t2c#x IN (list#x [t2b#x]);

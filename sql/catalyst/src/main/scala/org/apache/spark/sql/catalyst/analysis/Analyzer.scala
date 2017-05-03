@@ -99,6 +99,8 @@ class Analyzer(
 
   def resolver: Resolver = conf.resolver
 
+  def checkAnalysis(plan: LogicalPlan): Unit = checkAnalysisWithConf(plan, conf)
+
   protected val fixedPoint = FixedPoint(maxIterations)
 
   /**

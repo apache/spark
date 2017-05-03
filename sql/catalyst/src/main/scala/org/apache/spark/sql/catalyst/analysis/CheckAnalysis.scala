@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -72,7 +73,9 @@ trait CheckAnalysis extends PredicateHelper {
     }
   }
 
-  def checkAnalysis(plan: LogicalPlan): Unit = {
+  def checkAnalysis(plan: LogicalPlan): Unit
+
+  def checkAnalysisWithConf(plan: LogicalPlan, conf: SQLConf): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
@@ -179,11 +182,11 @@ trait CheckAnalysis extends PredicateHelper {
                 case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
               }
             }
-            checkAnalysis(query)
+            checkAnalysisWithConf(query, conf)
             s
 
           case s: SubqueryExpression =>
-            checkAnalysis(s.plan)
+            checkAnalysisWithConf(s.plan, conf)
             s
         }
 
@@ -336,20 +339,15 @@ trait CheckAnalysis extends PredicateHelper {
 
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
+            val resolver = conf.resolver
+            val commonAttrs = o.missingInput.filter(x =>
+              o.inputSet.exists(y => resolver(x.name, y.name)))
             val missingAttributes = o.missingInput.mkString(",")
             val availableAttributes = o.inputSet.mkString(",")
-            val missingAttributesHelper = o.missingInput.map(a => (a.name, a.exprId.id))
-
-            val availableAttributesHelper = o.inputSet.map(a => (a.name, a.exprId.id))
-
-            val common = (missingAttributesHelper ++ availableAttributesHelper).groupBy(_._1)
-            val commonNames = common.map(x => (x._1, x._2.toSet))
-              .filter(_._2.size > 1)
-              .map(_._1)
-
-            val repeatedNameHint = if (commonNames.size > 0) {
-              s"\n|Observe that attribute(s) ${commonNames.mkString(",")} appear in your " +
-                "query with at least two different hashes, but same name."
+            val repeatedNameHint = if (commonAttrs.size > 0) {
+              val commonNames = commonAttrs.map(_.name).mkString(",")
+              s"""\n|Observe that attribute(s) $commonNames appear in two
+                  |different datasets, with the same name"""
             } else {
               ""
             }
@@ -357,9 +355,9 @@ trait CheckAnalysis extends PredicateHelper {
             failAnalysis(
               s"""Some resolved attribute(s) are not present among the available attributes
                 |for a query.
-                |$missingAttributes is not in $availableAttributes. $repeatedNameHint
+                |$missingAttributes is not in $availableAttributes.$repeatedNameHint
                 |The failed query was for operator
-                | ${operator.simpleString}""".stripMargin)
+                |${operator.simpleString}""".stripMargin)
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(

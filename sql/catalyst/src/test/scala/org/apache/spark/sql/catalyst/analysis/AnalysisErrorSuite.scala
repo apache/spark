@@ -402,16 +402,21 @@ class AnalysisErrorSuite extends AnalysisTest {
     val aId = Array[String](attrA.name, attrA.exprId.id.toString)
     val otherA = AttributeReference("a", LongType)(exprId = ExprId(2))
     val otherAId = Array[String](otherA.name, otherA.exprId.id.toString)
+    val bAlias = Alias(sum(attrA), "b")() :: Nil
     val plan = Aggregate(
         Nil,
-        Alias(sum(attrA), "b")() :: Nil,
+        bAlias,
         LocalRelation(otherA))
 
     assert(plan.resolved)
 
     val errorMsg = s"""Some resolved attribute(s) are not present among the available attributes
                      |for a query.
-                     |${aId.mkString("#")}L is not in ${otherAId.mkString("#")}L."""
+                     |${aId.mkString("#")}L is not in ${otherAId.mkString("#")}L.
+                     |Observe that attribute(s) a appear in two
+                     |different datasets, with the same name
+                     |The failed query was for operator
+                     |!Aggregate [${bAlias.mkString("#")}]""".stripMargin
 
 
     assertAnalysisError(plan, errorMsg :: Nil)
