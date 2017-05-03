@@ -247,8 +247,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val ui = {
             val conf = this.conf.clone()
             val appSecManager = new SecurityManager(conf)
-            SparkUI.createHistoryUI(conf, replayBus, appSecManager,
-              appInfo.name, HistoryServer.getAttemptURI(appId, attempt.attemptId),
+            SparkUI.createHistoryUI(conf, replayBus, appSecManager, appInfo.name,
+              HistoryServer.getAttemptURI(appId, attempt.attemptId),
               attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
@@ -471,8 +471,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           lastUpdated,
           appListener.sparkUser.getOrElse(NOT_STARTED),
           appCompleted,
-          appListener.appSparkVersion.getOrElse(""),
-          fileStatus.getLen()
+          fileStatus.getLen(),
+          appListener.appSparkVersion.getOrElse("")
         )
         fileToAppInfo(logPath) = attemptInfo
         logDebug(s"Application log ${attemptInfo.logPath} loaded successfully: $attemptInfo")
@@ -765,8 +765,8 @@ private class FsApplicationAttemptInfo(
     lastUpdated: Long,
     sparkUser: String,
     completed: Boolean,
-    appSparkVersion: String,
-    val fileSize: Long)
+    val fileSize: Long,
+    appSparkVersion: String)
   extends ApplicationAttemptInfo(
       attemptId, startTime, endTime, lastUpdated, sparkUser, completed, appSparkVersion) {
 

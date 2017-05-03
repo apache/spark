@@ -60,7 +60,7 @@ private[spark] class SparkUI private (
 
   var appId: String = _
 
-  var appSparkVersion = ""
+  var appSparkVersion = org.apache.spark.SPARK_VERSION
 
   private var streamingJobProgressListener: Option[SparkListener] = None
 
@@ -179,8 +179,8 @@ private[spark] object SparkUI {
       appName: String,
       basePath: String,
       startTime: Long): SparkUI = {
-    val sparkUI = create(None, conf, listenerBus, securityManager, appName, basePath,
-      startTime = startTime)
+    val sparkUI = create(
+      None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
 
     val listenerFactories = ServiceLoader.load(classOf[SparkHistoryListenerFactory],
       Utils.getContextOrSparkClassLoader).asScala
@@ -226,8 +226,8 @@ private[spark] object SparkUI {
     listenerBus.addListener(storageListener)
     listenerBus.addListener(operationGraphListener)
 
-    new SparkUI(sc, conf, securityManager, environmentListener,
-      storageStatusListener, executorsListener, _jobProgressListener, storageListener,
-      operationGraphListener, appName, basePath, startTime)
+    new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
+      executorsListener, _jobProgressListener, storageListener, operationGraphListener,
+      appName, basePath, startTime)
   }
 }
