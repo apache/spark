@@ -162,6 +162,24 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setSplits(Array(0.1, 0.8, 0.9))
     testDefaultReadWrite(t)
   }
+
+  test("Bucket non-double features") {
+    val splits = Array(-3.0, 0.0, 3.0)
+    val validData: Array[Int] = Array(-2, -1, 0, 1, 2)
+    val expectedBuckets = Array(0.0, 0.0, 0.0, 1.0, 1.0)
+    val dataFrame: DataFrame = validData.zip(expectedBuckets).toSeq.toDF("feature", "expected")
+
+    val bucketizer: Bucketizer = new Bucketizer()
+      .setInputCol("feature")
+      .setOutputCol("result")
+      .setSplits(splits)
+
+    bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
+      case Row(x: Double, y: Double) =>
+        assert(x === y,
+          s"The feature value is not correct after bucketing.  Expected $y but found $x")
+    }
+  }
 }
 
 private object BucketizerSuite extends SparkFunSuite {
