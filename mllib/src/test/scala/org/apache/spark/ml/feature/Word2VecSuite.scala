@@ -99,7 +99,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val docDF = doc.zip(expected).toDF("text", "expected")
 
     val w2v = new Word2Vec()
-      .setModel("cbow-ns")
+      .setSolver("cbow-ns")
       .setNegativeSamples(2)
       .setMaxUnigramTableSize(10000)
       .setVectorSize(3)
@@ -176,7 +176,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val docDF = doc.zip(doc).toDF("text", "alsotext")
 
     val model = new Word2Vec()
-      .setModel("cbow-ns")
+      .setSolver("cbow-ns")
       .setMaxUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(3)
@@ -239,7 +239,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val docDF = doc.zip(doc).toDF("text", "alsotext")
 
     val model = new Word2Vec()
-      .setModel("cbow-ns")
+      .setSolver("cbow-ns")
       .setMaxUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(3)
@@ -314,7 +314,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val docDF = doc.zip(doc).toDF("text", "alsotext")
 
     val model = new Word2Vec()
-      .setModel("cbow-ns")
+      .setSolver("cbow-ns")
       .setMaxUnigramTableSize(10000)
       .setNegativeSamples(5)
       .setVectorSize(3)
@@ -330,7 +330,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     // Increase the window size
     val biggerModel = new Word2Vec()
-      .setModel("cbow-ns")
+      .setSolver("cbow-ns")
       .setMaxUnigramTableSize(10000)
       .setNegativeSamples(5)
       .setVectorSize(3)
@@ -363,7 +363,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("Word2Vec read/write - CBOW") {
     val t = new Word2Vec()
-      .setModel("cbow-ns")
+      .setSolver("cbow-ns")
       .setMaxUnigramTableSize(10000)
       .setNegativeSamples(10)
       .setInputCol("myInputCol")
@@ -422,7 +422,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val ngramDF = ngram.transform(docDF)
 
     val model = new Word2Vec()
-      .setModel("cbow-ns")
+      .setSolver("cbow-ns")
       .setMaxUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(2)

@@ -41,7 +41,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * Params for [[Word2Vec]] and [[Word2VecModel]].
  */
 private[feature] trait Word2VecBase extends Params
-  with HasInputCol with HasOutputCol with HasMaxIter with HasStepSize with HasSeed {
+  with HasInputCol with HasOutputCol with HasMaxIter with HasStepSize with HasSeed with HasSolver {
   // We currently support SkipGram with Hierarchical Softmax and
   // Continuous Bag of Words with Negative Sampling
   private val supportedModels = Array("sg-hs", "cbow-ns")
@@ -109,14 +109,6 @@ private[feature] trait Word2VecBase extends Params
     "(in words) of each sentence in the input data. Any sentence longer than this threshold will " +
     "be divided into chunks up to the size (> 0)", ParamValidators.gt(0))
   setDefault(maxSentenceLength -> 1000)
-
-  /**
-   * Choose the model to use for generating word embeddings
-   * Default: sg-hs (Use Skip-Gram with Hierarchical softmax)
-   * @group param
-   */
-  final val model = new Param[String](this, "model", "", ParamValidators.inArray(supportedModels))
-  setDefault(model -> "sg-hs")
 
   /**
    * Number of negative samples to use with CBOW based estimation.
@@ -208,7 +200,13 @@ final class Word2Vec @Since("1.4.0") (
 
   /** @group setParam */
   @Since("2.2.0")
-  def setModel(value: String): this.type = set(model, value)
+  val solvers = Set("sg-hs", "cbow-ns")
+  def setSolver(value: String): this.type = {
+    require(solvers.contains(value),
+      s"Solver $value was not supported. Supported options: ${solvers.mkString(", ")}")
+    set(solver, value)
+  }
+  setDefault(solver -> "sg-hs")
 
   /** @group setParam */
   @Since("2.2.0")
@@ -222,7 +220,7 @@ final class Word2Vec @Since("1.4.0") (
   override def fit(dataset: Dataset[_]): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
-    val wordVectors = if ($(model) == "sg-hs") {
+    val wordVectors = if (getSolver == "sg-hs") {
         new feature.Word2Vec()
           .setLearningRate($(stepSize))
           .setMinCount($(minCount))
