@@ -154,7 +154,6 @@ class JavaParams(JavaWrapper, Params):
         Transforms the embedded params from the companion Java object.
         """
         sc = SparkContext._active_spark_context
-
         for param in self.params:
             if self._java_obj.hasParam(param.name):
                 java_param = self._java_obj.getParam(param.name)
