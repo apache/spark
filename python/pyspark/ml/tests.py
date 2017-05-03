@@ -450,15 +450,6 @@ class ParamTests(PySparkTestCase):
                     java_default, py_default,
                     "Java default %s != python default %s of param %s for Params %s"
                     % (str(java_default), str(py_default), p.name, str(py_stage)))
-        '''
-        test_self.assertTrue(isinstance(obj, Params))
-        params = obj.params
-        paramNames = [p.name for p in params]
-        test_self.assertEqual(paramNames, sorted(paramNames))
-        for p in params:
-            test_self.assertEqual(p.parent, obj.uid)
-            test_self.assertEqual(obj.getParam(p.name), p)
-        '''
 
 
 class EvaluatorTests(SparkSessionTestCase):
