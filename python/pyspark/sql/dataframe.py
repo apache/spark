@@ -380,7 +380,7 @@ class DataFrame(object):
         jdf = self._jdf.withWatermark(eventTime, delayThreshold)
         return DataFrame(jdf, self.sql_ctx)
 
-    @since(2.3)
+    @since(2.2)
     def hint(self, name, *parameters):
         """Specifies some hint on the current DataFrame.
 
