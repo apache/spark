@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
@@ -201,6 +202,9 @@ private[spark] class BlockManager(
   private var lastPeerFetchTime = 0L
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
+
+  // Record the removable block.
+  private lazy val removableBlocks = ConcurrentHashMap.newKeySet[BlockId]()
 
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
@@ -1475,6 +1479,39 @@ private[spark] class BlockManager(
     blockInfoManager.removeBlock(blockId)
     if (tellMaster) {
       reportBlockStatus(blockId, BlockStatus.empty)
+    }
+  }
+
+  /**
+   * Whether the block is removable.
+   */
+  def isRemovable(blockId: BlockId): Boolean = {
+    removableBlocks.contains(blockId)
+  }
+
+  /**
+   * Try to remove the block without blocking. Mark it as removable if it is use.
+   */
+  def removeOrMarkAsRemovable(blockId: BlockId, tellMaster: Boolean = true): Unit = {
+    blockInfoManager.lockForWriting(blockId, false) match {
+      case None =>
+        blockInfoManager.synchronized {
+          blockInfoManager.get(blockId) match {
+            case None =>
+              // The block has already been removed; do nothing.
+              logWarning(s"Asked to remove block $blockId, which does not exist")
+              removableBlocks.remove(blockId)
+            case Some(_) =>
+              // The block is in use, mark it as removable.
+              logDebug(s"Marking block $blockId as removable")
+              removableBlocks.add(blockId)
+          }
+        }
+      case Some(info) =>
+        logDebug(s"Removing block $blockId")
+        removableBlocks.remove(blockId)
+        removeBlockInternal(blockId, tellMaster = tellMaster && info.tellMaster)
+        addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
     }
   }
 
