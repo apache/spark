@@ -168,7 +168,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("example  ", "  example", "example"))
 
     checkAnswer(
-      df.select(ltrim("e", $"c"), rtrim("e", $"c"), trim("e", $"c")),
+      df.select(ltrim($"c", "e"), rtrim($"c", "e"), trim("e", $"c")),
       Row("xample", "exampl", "xampl"))
 
     checkAnswer(

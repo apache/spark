@@ -2338,7 +2338,7 @@ object functions {
    * @group string_funcs
    * @since 2.0.0
    */
-  def ltrim(trimChar: String, e: Column): Column =
+  def ltrim(e: Column, trimChar: String): Column =
     withExpr { StringTrimLeft(Seq(Literal(trimChar), e.expr))}
 
   /**
@@ -2423,7 +2423,7 @@ object functions {
    * @group string_funcs
    * @since 2.0.0
    */
-  def rtrim(trimChar: String, e: Column): Column =
+  def rtrim(e: Column, trimChar: String): Column =
     withExpr { StringTrimRight(Seq(Literal(trimChar), e.expr))}
 
   /**
