@@ -383,11 +383,11 @@ class DataFrame(object):
     @since(2.3)
     def hint(self, name, *parameters):
         """Specifies some hint on the current DataFrame.
-        
+
         :param name: A name of the hint.
         :param parameters: Optional parameters.
-        :return: 
-        
+        :return: :class:`DataFrame`
+
         >>> df.join(df2.hint("broadcast"), "name").show()
         +----+---+------+
         |name|age|height|
