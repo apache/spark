@@ -934,7 +934,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       }
     }
 
-    if (metadata.tableType == EXTERNAL) {
+    if (metadata.tableType == EXTERNAL || metadata.tableType == MANAGED) {
       storage.locationUri.foreach { uri =>
         builder ++= s"LOCATION '$uri'\n"
       }
