@@ -25,11 +25,11 @@ If you wish to use pre-built docker images, you may use the images published in 
 <tr><th>Component</th><th>Image</th></tr>
 <tr>
   <td>Spark Driver Image</td>
-  <td><code>kubespark/spark-driver:v2.1.0-kubernetes-0.1.0-rc1</code></td>
+  <td><code>kubespark/spark-driver:v2.1.0-kubernetes-0.1.0-alpha.2</code></td>
 </tr>
 <tr>
   <td>Spark Executor Image</td>
-  <td><code>kubespark/spark-executor:v2.1.0-kubernetes-0.1.0-rc1</code></td>
+  <td><code>kubespark/spark-executor:v2.1.0-kubernetes-0.1.0-alpha.2</code></td>
 </tr>
 </table>
 
@@ -45,7 +45,7 @@ For example, if the registry host is `registry-host` and the registry is listeni
     docker build -t registry-host:5000/spark-executor:latest -f dockerfiles/executor/Dockerfile .
     docker push registry-host:5000/spark-driver:latest
     docker push registry-host:5000/spark-executor:latest
-    
+
 ## Submitting Applications to Kubernetes
 
 Kubernetes applications can be executed via `spark-submit`. For example, to compute the value of pi, assuming the images
@@ -58,8 +58,8 @@ are set up as described above:
       --kubernetes-namespace default \
       --conf spark.executor.instances=5 \
       --conf spark.app.name=spark-pi \
-      --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.1.0-kubernetes-0.1.0-rc1 \
-      --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.1.0-kubernetes-0.1.0-rc1 \
+      --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.1.0-kubernetes-0.1.0-alpha.2 \
+      --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.1.0-kubernetes-0.1.0-alpha.2 \
       examples/jars/spark_examples_2.11-2.2.0.jar
 
 The Spark master, specified either via passing the `--master` command line argument to `spark-submit` or by setting
@@ -79,7 +79,7 @@ In the above example, the specific Kubernetes cluster can be used with spark sub
 
 Note that applications can currently only be executed in cluster mode, where the driver and its executors are running on
 the cluster.
- 
+
 ### Specifying input files
 
 Spark supports specifying JAR paths that are either on the submitting host's disk, or are located on the disk of the
@@ -109,8 +109,8 @@ If our local proxy were listening on port 8001, we would have our submission loo
       --kubernetes-namespace default \
       --conf spark.executor.instances=5 \
       --conf spark.app.name=spark-pi \
-      --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.1.0-kubernetes-0.1.0-rc1 \
-      --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.1.0-kubernetes-0.1.0-rc1 \
+      --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.1.0-kubernetes-0.1.0-alpha.2 \
+      --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.1.0-kubernetes-0.1.0-alpha.2 \
       examples/jars/spark_examples_2.11-2.2.0.jar
 
 Communication between Spark and Kubernetes clusters is performed using the fabric8 kubernetes-client library.
