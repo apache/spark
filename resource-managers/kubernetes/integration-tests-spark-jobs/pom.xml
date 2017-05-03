@@ -27,6 +27,9 @@
   <artifactId>spark-kubernetes-integration-tests-spark-jobs_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Kubernetes Integration Tests Spark Jobs</name>
+  <properties>
+    <sbt.project.name>kubernetes-integration-tests-spark-jobs</sbt.project.name>
+  </properties>
 
   <dependencies>
     <dependency>

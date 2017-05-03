@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, Container, 
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
 import org.hamcrest.{BaseMatcher, Description}
-import org.mockito.Matchers.{any, anyVararg, argThat, startsWith, eq => mockitoEq}
+import org.mockito.Matchers.{any, anyVararg, argThat, eq => mockitoEq, startsWith}
 import org.mockito.Mockito.when
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
