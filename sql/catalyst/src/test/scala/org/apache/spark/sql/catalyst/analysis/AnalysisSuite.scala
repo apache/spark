@@ -447,7 +447,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("tbl.a")),
         AnalysisBarrier(SubqueryAlias("tbl", testRelation))),
-      Project(testRelation.output, testRelation))
+      Project(testRelation.output, SubqueryAlias("tbl", testRelation)))
 
     // Make sure we won't resolve the plans wrapped in an [[AnalysisBarrier]]
     val barrier = AnalysisBarrier(Project(Seq(UnresolvedAttribute("tbl.b")),

@@ -909,34 +909,7 @@ case class Deduplicate(
 }
 
 /** A logical plan for setting a barrier of analysis */
-case class AnalysisBarrier(child: LogicalPlan) extends UnaryNode {
+case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
   override def output: Seq[Attribute] = child.output
-
   override def analyzed: Boolean = true
-
-  override def transformUp(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
-    transformBarrier(rule)
-  }
-
-  override def transformDown(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
-    transformBarrier(rule)
-  }
-
-  private def transformBarrier(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
-    val afterRule = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse(this, identity[LogicalPlan])
-    }
-    val childAfterRule = CurrentOrigin.withOrigin(child.origin) {
-      rule.applyOrElse(child, identity[LogicalPlan])
-    }
-
-    if ((child fastEquals childAfterRule) && (this fastEquals afterRule)) {
-      this
-    } else if (this fastEquals afterRule) {
-      AnalysisBarrier(childAfterRule)
-    } else {
-      // The only rule that can change barrier node is the rule to remove it.
-      childAfterRule
-    }
-  }
 }
