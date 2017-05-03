@@ -154,6 +154,7 @@ class StreamSuite extends StreamTest {
           .start()
           .asInstanceOf[StreamingQueryWrapper]
           .streamingQuery
+      query.awaitInitialization(streamingTimeout.toMillis)
       val executionRelations =
         query
           .logicalPlan
