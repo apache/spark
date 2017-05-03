@@ -166,7 +166,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     testDefaultReadWrite(t)
   }
 
-  test("Bucket non-double features") {
+  test("Bucket non-double numeric features") {
     val splits = Array(-3.0, 0.0, 3.0)
     val data = Array(-2.0, -1.0, 0.0, 1.0, 2.0)
     val expectedBuckets = Array(0.0, 0.0, 1.0, 1.0, 1.0)
