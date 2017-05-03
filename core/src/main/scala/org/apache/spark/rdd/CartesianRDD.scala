@@ -110,7 +110,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     def removeBlock(blockId: BlockId,
         readCachedBlock: Boolean): Unit = {
       if (!readCachedBlock) {
-        SparkEnv.get.blockManager.removeBlock(blockId, true, false)
+        SparkEnv.get.blockManager.removeBlock(blockId, true)
       }
     }
 

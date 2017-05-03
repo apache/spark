@@ -1448,14 +1448,10 @@ private[spark] class BlockManager(
 
   /**
    * Remove a block from both memory and disk.
-   * @param blocking if true (default), this call will block until the lock is acquired. If false,
-   *                 this call will return immediately if the lock acquisition fails.
    */
-  def removeBlock(blockId: BlockId,
-      tellMaster: Boolean = true,
-      blocking: Boolean = true): Unit = {
+  def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {
     logDebug(s"Removing block $blockId")
-    blockInfoManager.lockForWriting(blockId, blocking) match {
+    blockInfoManager.lockForWriting(blockId) match {
       case None =>
         // The block has already been removed; do nothing.
         logWarning(s"Asked to remove block $blockId, which does not exist")
