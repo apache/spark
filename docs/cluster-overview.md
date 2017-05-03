@@ -75,6 +75,14 @@ Spark gives control over resource allocation both _across_ applications (at the 
 manager) and _within_ applications (if multiple computations are happening on the same SparkContext).
 The [job scheduling overview](job-scheduling.html) describes this in more detail.
 
+# REST Interface
+
+Spark provides REST Interface in Cluster Mode.
+Submit a corresponding driver to the Master with parameters specified in the request.
+Kill the corresponding driver to the Master with parameters specified in the request.
+Get the status of the corresponding driver from the Master with parameters specified in the request.
+The [REST Interface overview](rest-interface.html) describes this in more detail.
+
 # Glossary
 
 The following table summarizes terms you'll see used to refer to cluster concepts:
