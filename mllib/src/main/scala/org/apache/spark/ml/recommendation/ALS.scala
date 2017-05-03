@@ -944,14 +944,33 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   private type FactorBlock = Array[Array[Float]]
 
   /**
-   * Out-link blocks that store information about which columns of the items factor matrix are
-   * required to calculate which rows of the users factor matrix, and vice versa.
+   * A mapping of the columns of the items factor matrix that are needed when calculating each row
+   * of the users factor matrix, and vice versa.
    *
    * Specifically, when calculating a user factor vector, since only those columns of the items
    * factor matrix that correspond to the items that that user has rated are needed, we can avoid
    * having to repeatedly copy the entire items factor matrix to each worker later in the algorithm
    * by precomputing these dependencies for all users, storing them in an RDD of `OutBlock`s.  The
    * items' dependencies on the columns of the users factor matrix is computed similarly.
+   *
+   * =Example=
+   *
+   * Using the example provided in the `InBlock` Scaladoc, `userOutBlocks` would look like the
+   * following:
+   *
+   * {{{ userOutBlocks.collect() == Seq(
+   *       0 -> Array(Array(0, 1), Array(0, 1)),
+   *       1 -> Array(Array(0), Array(0))) }}}
+   *
+   * The data structure encodes the following information:
+   *
+   *   *  There are ratings with user IDs 0 and 6 (encoded in `Array(0, 1)`, where 0 and 1 are the
+   *   indices of the user IDs 0 and 6 on partition 0) whose item IDs map to partitions 0 and 1
+   *   (represented by the fact that `Array(0, 1)` appears in both the 0th and 1st positions).
+   *
+   *   *  There are ratings with user ID 3 (encoded in `Array(0)`, where 0 is the index of the user
+   *   ID 3 on partition 1) whose item IDs map to partitions 0 and 1 (represented by the fact that
+   *   `Array(0)` appears in both the 0th and 1st positions).
    */
   private type OutBlock = Array[Array[Int]]
 
