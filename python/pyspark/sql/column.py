@@ -224,7 +224,39 @@ class Column(object):
        https://spark.apache.org/docs/latest/sql-programming-guide.html#nan-semantics
     .. versionadded:: 2.3.0
     """
+    _isNotDistinctFrom_doc = _eqNullSafe_doc.replace("eqNullSafe", "isNotDistinctFrom")
+    _isDistinctFrom_doc = """
+    Inequality test that is safe for null values.
+
+    :param other: a value or :class:`Column`
+
+    >>> from pyspark.sql import Row
+    >>> df1 = spark.createDataFrame([
+    ...     Row(id=1, value='foo'),
+    ...     Row(id=2, value=None)
+    ... ])
+    >>> df1.select(
+    ...     df1['value'] != 'foo',
+    ...     df1['value'].isDistinctFrom('foo'),
+    ...     df1['value'].isDistinctFrom(None)
+    ... ).show()
+    +-------------------+---------------------+----------------------+
+    |(NOT (value = foo))|(NOT (value <=> foo))|(NOT (value <=> NULL))|
+    +-------------------+---------------------+----------------------+
+    |              false|                false|                  true|
+    |               null|                 true|                 false|
+    +-------------------+---------------------+----------------------+
+
+    .. note:: Unlike Pandas, PySpark doesn't consider NaN values to be NULL.
+       See the `NaN Semantics`_ for details.
+    .. _NaN Semantics:
+       https://spark.apache.org/docs/latest/sql-programming-guide.html#nan-semantics
+    .. versionadded:: 2.3.0
+    """
+
     eqNullSafe = _bin_op("eqNullSafe", _eqNullSafe_doc)
+    isNotDistinctFrom = _bin_op("isNotDistinctFrom", _isNotDistinctFrom_doc)
+    isDistinctFrom = _bin_op("isDistinctFrom", _isDistinctFrom_doc)
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
