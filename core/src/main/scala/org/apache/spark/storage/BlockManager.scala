@@ -1490,11 +1490,13 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Try to remove the block without blocking. Mark it as removable if it is use.
+   * Try to remove the block without blocking. Mark it as removable if it is in use.
    */
   def removeOrMarkAsRemovable(blockId: BlockId, tellMaster: Boolean = true): Unit = {
+    // Try to lock for writing without blocking.
     blockInfoManager.lockForWriting(blockId, false) match {
       case None =>
+        // Because lock in unblocking manner, so the block may not exist or be used by other tasks.
         blockInfoManager.synchronized {
           blockInfoManager.get(blockId) match {
             case None =>
@@ -1532,6 +1534,7 @@ private[spark] class BlockManager(
       // Closing should be idempotent, but maybe not for the NioBlockTransferService.
       shuffleClient.close()
     }
+    removableBlocks.clear()
     diskBlockManager.stop()
     rpcEnv.stop(slaveEndpoint)
     blockInfoManager.clear()

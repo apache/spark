@@ -672,7 +672,6 @@ abstract class RDD[T: ClassTag](
    * elements (a, b) where a is in `this` and b is in `other`.
    */
   def cartesian[U: ClassTag](other: RDD[U]): RDD[(T, U)] = withScope {
-    logInfo("---------------> In cartesian method")
     new CartesianRDD(sc, this, other)
   }
 

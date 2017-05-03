@@ -78,6 +78,14 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
       yield (x, y)
   }
 
+  /**
+   * Try to get the block from the local, if not local, then get from the remote and cache it in
+   * local.
+   *
+   * Because the Block may be used by another task in the same executor, so when the task is
+   * complete, we try to remove the block in a non-blocking manner, otherwise it will be marked
+   * as removable.
+    */
   private def getOrCacheBlock(
       rdd: RDD[U],
       partition: Partition,
