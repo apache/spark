@@ -572,6 +572,10 @@ setGeneric("first", function(x, ...) { standardGeneric("first") })
 #' @export
 setGeneric("group_by", function(x, ...) { standardGeneric("group_by") })
 
+#' @rdname hint
+#' @export
+setGeneric("hint", function(x, name, ...) { standardGeneric("hint") })
+
 #' @rdname groupBy
 #' @export
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
