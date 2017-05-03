@@ -18,9 +18,13 @@
 package org.apache.spark.sql.test
 
 import java.io.File
+import java.util.Locale
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
+import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.sources._
@@ -40,7 +44,6 @@ object LastOptions {
     saveMode = null
   }
 }
-
 
 /** Dummy provider. */
 class DefaultSource
@@ -107,6 +110,20 @@ class DefaultSourceWithoutUserSpecifiedSchema
   }
 }
 
+object MessageCapturingCommitProtocol {
+  val commitMessages = new ConcurrentLinkedQueue[TaskCommitMessage]()
+}
+
+class MessageCapturingCommitProtocol(jobId: String, path: String)
+    extends HadoopMapReduceCommitProtocol(jobId, path) {
+
+  // captures commit messages for testing
+  override def onTaskCommit(msg: TaskCommitMessage): Unit = {
+    MessageCapturingCommitProtocol.commitMessages.offer(msg)
+  }
+}
+
+
 class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
   import testImplicits._
 
@@ -128,7 +145,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         .start()
     }
     Seq("'writeStream'", "only", "streaming Dataset/DataFrame").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -260,13 +277,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     var w = df.write.partitionBy("value")
     var e = intercept[AnalysisException](w.jdbc(null, null, null))
     Seq("jdbc", "partitioning").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
 
     w = df.write.bucketBy(2, "value")
     e = intercept[AnalysisException](w.jdbc(null, null, null))
     Seq("jdbc", "bucketing").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -289,6 +306,19 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     spark.read.format("org.apache.spark.sql.test").load(dir, dir, dir)
     spark.read.format("org.apache.spark.sql.test").load(Seq(dir, dir): _*)
     Option(dir).map(spark.read.format("org.apache.spark.sql.test").load)
+  }
+
+  test("write path implements onTaskCommit API correctly") {
+    withSQLConf(
+        "spark.sql.sources.commitProtocolClass" ->
+          classOf[MessageCapturingCommitProtocol].getCanonicalName) {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        MessageCapturingCommitProtocol.commitMessages.clear()
+        spark.range(10).repartition(10).write.mode("overwrite").parquet(path)
+        assert(MessageCapturingCommitProtocol.commitMessages.size() == 10)
+      }
+    }
   }
 
   test("read a data source that does not extend SchemaRelationProvider") {
@@ -356,7 +386,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
     // Reader, with user specified schema, should just apply user schema on the file data
     val e = intercept[AnalysisException] { spark.read.schema(userSchema).textFile() }
-    assert(e.getMessage.toLowerCase.contains("user specified schema not supported"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains(
+      "user specified schema not supported"))
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir) }
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir, dir) }
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(Seq(dir, dir): _*) }
@@ -370,9 +401,11 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val schema = df.schema
 
     // Reader, without user specified schema
-    intercept[IllegalArgumentException] {
+    val message = intercept[AnalysisException] {
       testRead(spark.read.csv(), Seq.empty, schema)
-    }
+    }.getMessage
+    assert(message.contains("Unable to infer schema for CSV. It must be specified manually."))
+
     testRead(spark.read.csv(dir), data, schema)
     testRead(spark.read.csv(dir, dir), data ++ data, schema)
     testRead(spark.read.csv(Seq(dir, dir): _*), data ++ data, schema)

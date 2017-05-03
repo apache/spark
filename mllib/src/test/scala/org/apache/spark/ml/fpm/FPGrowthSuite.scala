@@ -17,9 +17,10 @@
 package org.apache.spark.ml.fpm
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -85,24 +86,6 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(prediction.select("prediction").where("id=3").first().getSeq[String](0).isEmpty)
   }
 
-  test("FPGrowth parameter check") {
-    val fpGrowth = new FPGrowth().setMinSupport(0.4567)
-    val model = fpGrowth.fit(dataset)
-      .setMinConfidence(0.5678)
-    assert(fpGrowth.getMinSupport === 0.4567)
-    assert(model.getMinConfidence === 0.5678)
-  }
-
-  test("read/write") {
-    def checkModelData(model: FPGrowthModel, model2: FPGrowthModel): Unit = {
-      assert(model.freqItemsets.sort("items").collect() ===
-        model2.freqItemsets.sort("items").collect())
-    }
-    val fPGrowth = new FPGrowth()
-    testEstimatorAndModelReadWrite(fPGrowth, dataset, FPGrowthSuite.allParamSettings,
-      FPGrowthSuite.allParamSettings, checkModelData)
-  }
-
   test("FPGrowth prediction should not contain duplicates") {
     // This should generate rule 1 -> 3, 2 -> 3
     val dataset = spark.createDataFrame(Seq(
@@ -116,6 +99,48 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     ).first().getAs[Seq[String]]("prediction")
 
     assert(prediction === Seq("3"))
+  }
+
+  test("FPGrowthModel setMinConfidence should affect rules generation and transform") {
+    val model = new FPGrowth().setMinSupport(0.1).setMinConfidence(0.1).fit(dataset)
+    val oldRulesNum = model.associationRules.count()
+    val oldPredict = model.transform(dataset)
+
+    model.setMinConfidence(0.8765)
+    assert(oldRulesNum > model.associationRules.count())
+    assert(!model.transform(dataset).collect().toSet.equals(oldPredict.collect().toSet))
+
+    // association rules should stay the same for same minConfidence
+    model.setMinConfidence(0.1)
+    assert(oldRulesNum === model.associationRules.count())
+    assert(model.transform(dataset).collect().toSet.equals(oldPredict.collect().toSet))
+  }
+
+  test("FPGrowth parameter check") {
+    val fpGrowth = new FPGrowth().setMinSupport(0.4567)
+    val model = fpGrowth.fit(dataset)
+      .setMinConfidence(0.5678)
+    assert(fpGrowth.getMinSupport === 0.4567)
+    assert(model.getMinConfidence === 0.5678)
+    // numPartitions should not have default value.
+    assert(fpGrowth.isDefined(fpGrowth.numPartitions) === false)
+    MLTestingUtils.checkCopyAndUids(fpGrowth, model)
+    ParamsSuite.checkParams(fpGrowth)
+    ParamsSuite.checkParams(model)
+  }
+
+  test("read/write") {
+    def checkModelData(model: FPGrowthModel, model2: FPGrowthModel): Unit = {
+      assert(model.freqItemsets.collect().toSet.equals(
+        model2.freqItemsets.collect().toSet))
+      assert(model.associationRules.collect().toSet.equals(
+        model2.associationRules.collect().toSet))
+      assert(model.setMinConfidence(0.9).associationRules.collect().toSet.equals(
+        model2.setMinConfidence(0.9).associationRules.collect().toSet))
+    }
+    val fPGrowth = new FPGrowth()
+    testEstimatorAndModelReadWrite(fPGrowth, dataset, FPGrowthSuite.allParamSettings,
+      FPGrowthSuite.allParamSettings, checkModelData)
   }
 }
 

@@ -607,7 +607,7 @@ class DAGScheduler(
    * @param resultHandler callback to pass each result to
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
    *
-   * @throws Exception when the job fails
+   * @note Throws `Exception` when the job fails
    */
   def runJob[T, U](
       rdd: RDD[T],
@@ -644,7 +644,7 @@ class DAGScheduler(
    *
    * @param rdd target RDD to run tasks on
    * @param func a function to run on each partition of the RDD
-   * @param evaluator [[ApproximateEvaluator]] to receive the partial results
+   * @param evaluator `ApproximateEvaluator` to receive the partial results
    * @param callSite where in the user program this job was called
    * @param timeout maximum time to wait for the job, in milliseconds
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
@@ -736,6 +736,15 @@ class DAGScheduler(
    */
   def cancelStage(stageId: Int, reason: Option[String]) {
     eventProcessLoop.post(StageCancelled(stageId, reason))
+  }
+
+  /**
+   * Kill a given task. It will be retried.
+   *
+   * @return Whether the task was successfully killed.
+   */
+  def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Boolean = {
+    taskScheduler.killTaskAttempt(taskId, interruptThread, reason)
   }
 
   /**
@@ -1353,7 +1362,7 @@ class DAGScheduler(
       case TaskResultLost =>
         // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
-      case _: ExecutorLostFailure | TaskKilled | UnknownReason =>
+      case _: ExecutorLostFailure | _: TaskKilled | UnknownReason =>
         // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
         // will abort the job.
     }

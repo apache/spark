@@ -766,7 +766,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("header", "true")
         .load(iso8601timestampsPath)
 
-      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ", Locale.US)
+      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US)
       val expectedTimestamps = timestamps.collect().map { r =>
         // This should be ISO8601 formatted string.
         Row(iso8501.format(r.toSeq.head))
@@ -992,9 +992,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
     Seq(false, true).foreach { wholeFile =>
       val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
+      // We use `PERMISSIVE` mode by default if invalid string is given.
       val df1 = spark
         .read
-        .option("mode", "PERMISSIVE")
+        .option("mode", "abcd")
         .option("wholeFile", wholeFile)
         .schema(schema)
         .csv(testFile(valueMalformedFile))
@@ -1008,7 +1009,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val schemaWithCorrField1 = schema.add(columnNameOfCorruptRecord, StringType)
       val df2 = spark
         .read
-        .option("mode", "PERMISSIVE")
+        .option("mode", "Permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
         .option("wholeFile", wholeFile)
         .schema(schemaWithCorrField1)
@@ -1025,7 +1026,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .add("b", TimestampType)
       val df3 = spark
         .read
-        .option("mode", "PERMISSIVE")
+        .option("mode", "permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
         .option("wholeFile", wholeFile)
         .schema(schemaWithCorrField2)
@@ -1116,4 +1117,61 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(df2.schema === schema)
   }
 
+  test("ignoreLeadingWhiteSpace and ignoreTrailingWhiteSpace options - read") {
+    val input = " a,b  , c "
+
+    // For reading, default of both `ignoreLeadingWhiteSpace` and`ignoreTrailingWhiteSpace`
+    // are `false`. So, these are excluded.
+    val combinations = Seq(
+      (true, true),
+      (false, true),
+      (true, false))
+
+    // Check if read rows ignore whitespaces as configured.
+    val expectedRows = Seq(
+      Row("a", "b", "c"),
+      Row(" a", "b", " c"),
+      Row("a", "b  ", "c "))
+
+    combinations.zip(expectedRows)
+      .foreach { case ((ignoreLeadingWhiteSpace, ignoreTrailingWhiteSpace), expected) =>
+        val df = spark.read
+          .option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
+          .option("ignoreTrailingWhiteSpace", ignoreTrailingWhiteSpace)
+          .csv(Seq(input).toDS())
+
+        checkAnswer(df, expected)
+      }
+  }
+
+  test("SPARK-18579: ignoreLeadingWhiteSpace and ignoreTrailingWhiteSpace options - write") {
+    val df = Seq((" a", "b  ", " c ")).toDF()
+
+    // For writing, default of both `ignoreLeadingWhiteSpace` and `ignoreTrailingWhiteSpace`
+    // are `true`. So, these are excluded.
+    val combinations = Seq(
+      (false, false),
+      (false, true),
+      (true, false))
+
+    // Check if written lines ignore each whitespaces as configured.
+    val expectedLines = Seq(
+      " a,b  , c ",
+      " a,b, c",
+      "a,b  ,c ")
+
+    combinations.zip(expectedLines)
+      .foreach { case ((ignoreLeadingWhiteSpace, ignoreTrailingWhiteSpace), expected) =>
+        withTempPath { path =>
+          df.write
+            .option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
+            .option("ignoreTrailingWhiteSpace", ignoreTrailingWhiteSpace)
+            .csv(path.getAbsolutePath)
+
+          // Read back the written lines.
+          val readBack = spark.read.text(path.getAbsolutePath)
+          checkAnswer(readBack, Row(expected))
+        }
+      }
+  }
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
+import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 import org.apache.spark.util.Utils
 
@@ -301,8 +302,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
       StopStream,
       StartStream(ProcessingTime(100), clock),
       waitUntilBatchProcessed,
-      AdvanceManualClock(100),
-      waitUntilBatchProcessed,
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
         11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
@@ -492,7 +491,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
         reader.load()
       }
       expectedMsgs.foreach { m =>
-        assert(ex.getMessage.toLowerCase.contains(m.toLowerCase))
+        assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
       }
     }
 
@@ -525,7 +524,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
           .option(s"$key", value)
         reader.load()
       }
-      assert(ex.getMessage.toLowerCase.contains("not supported"))
+      assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("not supported"))
     }
 
     testUnsupportedConfig("kafka.group.id")
