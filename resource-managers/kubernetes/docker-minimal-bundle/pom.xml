@@ -31,7 +31,7 @@
   <packaging>pom</packaging>
 
   <properties>
-    <sbt.project.name>docker-minimal-bundle</sbt.project.name>
+    <sbt.project.name>kubernetes-docker-minimal-bundle</sbt.project.name>
     <build.testJarPhase>none</build.testJarPhase>
     <build.copyDependenciesPhase>pre-integration-test</build.copyDependenciesPhase>
   </properties>

@@ -96,7 +96,8 @@ class ResourceStagingServerSslOptionsProviderSuite extends SparkFunSuite with Be
       .set("spark.ssl.kubernetes.resourceStagingServer.keyStore", keyStoreFile.getAbsolutePath)
       .set("spark.ssl.kubernetes.resourceStagingServer.keyStorePasswordFile",
         keyStorePasswordFile.getAbsolutePath)
-      .set("spark.ssl.kubernetes.resourceStagingServer.keyPasswordFile", keyPasswordFile.getAbsolutePath)
+      .set("spark.ssl.kubernetes.resourceStagingServer.keyPasswordFile",
+        keyPasswordFile.getAbsolutePath)
     val sslOptions = sslOptionsProvider.getSslOptions
     assert(sslOptions.keyStorePassword === Some("keyStorePassword"),
       "Incorrect keyStore password or it was not set.")

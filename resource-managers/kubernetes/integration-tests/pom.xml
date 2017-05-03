@@ -25,6 +25,9 @@
   </parent>
 
   <artifactId>spark-kubernetes-integration-tests_2.11</artifactId>
+  <properties>
+    <sbt.project.name>kubernetes-integration-tests</sbt.project.name>
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project Kubernetes Integration Tests</name>
   <properties>
