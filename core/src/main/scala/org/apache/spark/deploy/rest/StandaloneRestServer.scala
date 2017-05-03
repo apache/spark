@@ -75,15 +75,15 @@ private[rest] class StandaloneKillRequestServlet(masterEndpoint: RpcEndpointRef,
     Some(submissionIds).getOrElse("").split(",").map(submissionId => {
     val response = masterEndpoint.askSync[DeployMessages.KillDriverResponse] (
     DeployMessages.RequestKillDriver(submissionId))
-    if(k.submissionId.nonEmpty) {
+    if(k.submissionId != null && k.submissionId.nonEmpty) {
       k.submissionId = k.submissionId.concat(",").concat(submissionId)
     } else {
       k.submissionId = submissionId
     }
-    if(k.message.nonEmpty) {
-      k.message = response.message
-    } else {
+    if(k.message != null && k.message.nonEmpty) {
       k.message = k.message.concat(",").concat(response.message)
+    } else {
+      k.message = response.message
     }
     k.success = response.success
     })
