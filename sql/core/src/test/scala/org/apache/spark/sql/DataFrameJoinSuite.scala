@@ -151,7 +151,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
   }
 
-  test("broadcast join hint using braodcast function") {
+  test("broadcast join hint using broadcast function") {
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
 
