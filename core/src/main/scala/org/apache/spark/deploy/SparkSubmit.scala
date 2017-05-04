@@ -24,7 +24,6 @@ import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.Properties
 

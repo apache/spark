@@ -66,7 +66,6 @@ abstract class BaseYarnClusterSuite
 
   def newYarnConfig(): YarnConfiguration
 
-
   override def beforeAll() {
     super.beforeAll()
     oldSystemProperties = SerializationUtils.clone(System.getProperties)

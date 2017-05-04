@@ -135,8 +135,7 @@ public class SparkLauncher {
   }
 
   /**
-   * Specifies that Spark Submit be launched as a daemon thread. Please note
-   * this feature is currently supported only for YARN cluster deployment mode.
+   * Specifies that Spark Submit be launched as a daemon thread.
    *
    * @since 2.2.0
    * @param launchAsThread Whether to launch the Spark application in a new thread in
@@ -500,8 +499,8 @@ public class SparkLauncher {
    * @return A process handle for the Spark app.
    */
   public Process launch() throws IOException {
-    checkArgument(launchAsThread == false,
-        "Use StartApplication method to launch application in a Thread");
+    checkArgument(!launchAsThread,
+        "Use startApplication method to launch application in a thread");
     Process childProc = createBuilder().start();
     if (redirectToLog) {
       String loggerName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
@@ -511,7 +510,8 @@ public class SparkLauncher {
   }
 
   private String getAppName() throws IOException {
-    String appName = launchAsThread ? null : builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
+    String appName = launchAsThread ? null
+        : builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
     if (appName == null) {
       if (builder.appName != null) {
         appName = builder.appName;
