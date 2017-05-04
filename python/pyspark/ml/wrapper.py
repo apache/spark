@@ -283,12 +283,6 @@ class JavaEstimator(JavaParams, Estimator):
     def _fit(self, dataset):
         java_model = self._fit_java(dataset)
         model = self._create_model(java_model)
-
-        # SPARK-10931: This is a temporary fix to allow models to own params
-        # from estimators. Eventually, these params should be in models through
-        # using common base classes between estimators and models.
-        model._create_params_from_java()
-
         return self._copyValues(model)
 
 
@@ -333,4 +327,10 @@ class JavaModel(JavaTransformer, Model):
         """
         super(JavaModel, self).__init__(java_model)
         if java_model is not None:
+
+            # SPARK-10931: This is a temporary fix to allow models to own params
+            # from estimators. Eventually, these params should be in models through
+            # using common base classes between estimators and models.
+            self._create_params_from_java()
+
             self._resetUid(java_model.uid())
