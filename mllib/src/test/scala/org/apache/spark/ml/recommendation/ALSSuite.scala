@@ -742,6 +742,13 @@ class ALSSuite
       assert(recs(0).fieldIndex("rating") == 1)
     }
   }
+
+  test("SPARK-18268: ALS with empty RDD should fail with better message") {
+    val ratings = sc.parallelize(Array.empty[Rating[Int]])
+    intercept[IllegalArgumentException] {
+      ALS.train(ratings)
+    }
+  }
 }
 
 class ALSCleanerSuite extends SparkFunSuite {
