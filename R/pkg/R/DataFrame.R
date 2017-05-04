@@ -3749,6 +3749,7 @@ setMethod("hint",
 #' alias
 #'
 #' @aliases alias,SparkDataFrame-method
+#' @family SparkDataFrame functions
 #' @rdname alias
 #' @name alias
 #' @examples
