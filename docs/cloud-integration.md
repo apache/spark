@@ -64,6 +64,9 @@ For these reasons, it is not always safe to use an object store as a direct dest
 an intermediate store in a chain of queries. Consult the documentation of the object store and its
 connector to determine which uses are considered safe.
 
+In particular: *without some form of consistency layer, Amazon S3 cannot
+be safely used as the direct destination of work with the normal rename-based committer.*
+
 ### Installation
 
 With the relevant libraries on the classpath and Spark configured with valid credentials,
