@@ -23,6 +23,7 @@ sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", 
 
 test_that("convertJListToRList() gives back (deserializes) the original JLists
           of strings and integers", {
+  skip_on_cran()
   # It's hard to manually create a Java List using rJava, since it does not
   # support generics well. Instead, we rely on collectRDD() returning a
   # JList.
@@ -40,6 +41,7 @@ test_that("convertJListToRList() gives back (deserializes) the original JLists
 })
 
 test_that("serializeToBytes on RDD", {
+  skip_on_cran()
   # File content
   mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
@@ -167,6 +169,7 @@ test_that("convertToJSaveMode", {
 })
 
 test_that("captureJVMException", {
+  skip_on_cran()
   method <- "getSQLDataType"
   expect_error(tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", method,
                                     "unknown"),
@@ -177,6 +180,8 @@ test_that("captureJVMException", {
 })
 
 test_that("hashCode", {
+  skip_on_cran()
+
   expect_error(hashCode("bc53d3605e8a5b7de1e8e271c2317645"), NA)
 })
 
