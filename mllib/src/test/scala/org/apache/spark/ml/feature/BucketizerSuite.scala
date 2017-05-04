@@ -29,7 +29,6 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
-
 class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
@@ -166,7 +165,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     testDefaultReadWrite(t)
   }
 
-  test("Bucket non-double numeric features") {
+  test("Bucket numeric features") {
     val splits = Array(-3.0, 0.0, 3.0)
     val data = Array(-2.0, -1.0, 0.0, 1.0, 2.0)
     val expectedBuckets = Array(0.0, 0.0, 1.0, 1.0, 1.0)
@@ -177,12 +176,13 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCol("result")
       .setSplits(splits)
 
-    val types = Seq(ShortType, IntegerType, LongType, FloatType)
+    val types = Seq(ShortType, IntegerType, LongType, FloatType, DoubleType,
+      ByteType, DecimalType(10, 0))
     for (mType <- types) {
       val df = dataFrame.withColumn("feature", col("feature").cast(mType))
       bucketizer.transform(df).select("result", "expected").collect().foreach {
         case Row(x: Double, y: Double) =>
-          assert(x === y, "The feature value is not correct after bucketing in type " +
+          assert(x === y, "The result is not correct after bucketing in type " +
             mType.toString + ". " + s"Expected $y but found $x.")
       }
     }
