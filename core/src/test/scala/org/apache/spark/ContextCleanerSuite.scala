@@ -44,7 +44,7 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
 {
   implicit val defaultTimeout = timeout(10000 millis)
   val conf = new SparkConf()
-    .setMaster("local[2]")
+    .setMaster("local[4]")
     .setAppName("ContextCleanerSuite")
     .set("spark.cleaner.referenceTracking.blocking", "true")
     .set("spark.cleaner.referenceTracking.blocking.shuffle", "true")
