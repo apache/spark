@@ -283,7 +283,8 @@ private[spark] object EventLoggingListener extends Logging {
    *
    * @param logStream Raw output stream to the event log file.
    */
-  def initEventLog(logStream: OutputStream, testing: Boolean, loggedEvents: ArrayBuffer[JValue]): Unit = {
+  def initEventLog(logStream: OutputStream, testing: Boolean,
+                   loggedEvents: ArrayBuffer[JValue]): Unit = {
     val metadata = SparkListenerLogStart(SPARK_VERSION)
     val eventJson = JsonProtocol.logStartToJson(metadata)
     val metadataJson = compact(eventJson) + "\n"
