@@ -39,6 +39,8 @@ jsc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext",
 # Tests
 
 test_that("parallelize() on simple vectors and lists returns an RDD", {
+  skip_on_cran()
+
   numVectorRDD <- parallelize(jsc, numVector, 1)
   numVectorRDD2 <- parallelize(jsc, numVector, 10)
   numListRDD <- parallelize(jsc, numList, 1)
@@ -66,6 +68,8 @@ test_that("parallelize() on simple vectors and lists returns an RDD", {
 })
 
 test_that("collect(), following a parallelize(), gives back the original collections", {
+  skip_on_cran()
+
   numVectorRDD <- parallelize(jsc, numVector, 10)
   expect_equal(collectRDD(numVectorRDD), as.list(numVector))
 
@@ -86,6 +90,8 @@ test_that("collect(), following a parallelize(), gives back the original collect
 })
 
 test_that("regression: collect() following a parallelize() does not drop elements", {
+  skip_on_cran()
+
   # 10 %/% 6 = 1, ceiling(10 / 6) = 2
   collLen <- 10
   numPart <- 6
@@ -95,6 +101,8 @@ test_that("regression: collect() following a parallelize() does not drop element
 })
 
 test_that("parallelize() and collect() work for lists of pairs (pairwise data)", {
+  skip_on_cran()
+
   # use the pairwise logical to indicate pairwise data
   numPairsRDDD1 <- parallelize(jsc, numPairs, 1)
   numPairsRDDD2 <- parallelize(jsc, numPairs, 2)
