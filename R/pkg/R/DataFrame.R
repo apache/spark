@@ -3741,7 +3741,7 @@ setMethod("rollup",
 setMethod("hint",
           signature(x = "SparkDataFrame", name = "character"),
           function(x, name, ...) {
-            parameters <-list(...)
+            parameters <- list(...)
             stopifnot(all(sapply(parameters, is.character)))
             jdf <- callJMethod(x@sdf, "hint", name, parameters)
             dataFrame(jdf)
