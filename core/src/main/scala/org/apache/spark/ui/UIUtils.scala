@@ -545,5 +545,6 @@ private[spark] object UIUtils extends Logging {
       // Remove new lines and single quotes, followed by escaping HTML version 4.0
       StringEscapeUtils.escapeHtml4(
         NEWLINE_AND_SINGLE_QUOTE_REGEX.replaceAllIn(requestParameter, ""))
+    }
   }
 }

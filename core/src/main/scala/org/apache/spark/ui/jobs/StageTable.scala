@@ -51,7 +51,8 @@ private[ui] class StageTableBase(
   val parameterStageSortColumn = UIUtils.stripXSS(request.getParameter(stageTag + ".sort"))
   val parameterStageSortDesc = UIUtils.stripXSS(request.getParameter(stageTag + ".desc"))
   val parameterStagePageSize = UIUtils.stripXSS(request.getParameter(stageTag + ".pageSize"))
-  val parameterStagePrevPageSize = UIUtils.stripXSS(request.getParameter(stageTag + ".prevPageSize"))
+  val parameterStagePrevPageSize =
+    UIUtils.stripXSS(request.getParameter(stageTag + ".prevPageSize"))
 
   val stagePage = Option(parameterStagePage).map(_.toInt).getOrElse(1)
   val stageSortColumn = Option(parameterStageSortColumn).map { sortColumn =>

@@ -40,7 +40,9 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     val driverId = Option(UIUtils.stripXSS(request.getParameter("driverId")))
     val logType = UIUtils.stripXSS(request.getParameter("logType"))
     val offset = Option(UIUtils.stripXSS(request.getParameter("offset"))).map(_.toLong)
-    val byteLength = Option(UIUtils.stripXSS(request.getParameter("byteLength"))).map(_.toInt).getOrElse(defaultBytes)
+    val byteLength =
+      Option(UIUtils.stripXSS(request.getParameter("byteLength"))).map(_.toInt)
+      .getOrElse(defaultBytes)
 
     val logDir = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
@@ -63,7 +65,9 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     val driverId = Option(UIUtils.stripXSS(request.getParameter("driverId")))
     val logType = UIUtils.stripXSS(request.getParameter("logType"))
     val offset = Option(UIUtils.stripXSS(request.getParameter("offset"))).map(_.toLong)
-    val byteLength = Option(UIUtils.stripXSS(request.getParameter("byteLength"))).map(_.toInt).getOrElse(defaultBytes)
+    val byteLength =
+      Option(UIUtils.stripXSS(request.getParameter("byteLength"))).map(_.toInt)
+      .getOrElse(defaultBytes)
 
     val (logDir, params, pageName) = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
