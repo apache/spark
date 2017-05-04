@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.types.StructType
@@ -333,6 +334,32 @@ abstract class ExternalCatalog
     postToAll(RenameFunctionPreEvent(db, oldName, newName))
     doRenameFunction(db, oldName, newName)
     postToAll(RenameFunctionEvent(db, oldName, newName))
+  }
+
+  final def checkSchemaContainsBucketingColumns(
+      bucketSpec: BucketSpec,
+      schema: StructType): Unit = {
+    val nonExistentBucketColumns =
+      bucketSpec.bucketColumnNames.filterNot(col => schema.map(_.name).contains(col))
+
+    if (nonExistentBucketColumns.nonEmpty) {
+      throw new AnalysisException(
+        s"""
+           |Some existing bucketing columns are not present in the new schema :
+           |(${nonExistentBucketColumns.mkString("[", ",", "]")})
+         """.stripMargin)
+    }
+
+    val nonExistentSortColumns =
+      bucketSpec.sortColumnNames.filterNot(col => schema.map(_.name).contains(col))
+
+    if (nonExistentSortColumns.nonEmpty) {
+      throw new AnalysisException(
+        s"""
+           |Some existing sort columns are not present in the new schema :
+           |(${nonExistentSortColumns.mkString("[", ",", "]")})
+         """.stripMargin)
+    }
   }
 
   protected def doRenameFunction(db: String, oldName: String, newName: String): Unit

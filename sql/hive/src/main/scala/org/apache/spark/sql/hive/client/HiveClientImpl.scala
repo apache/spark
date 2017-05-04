@@ -388,16 +388,7 @@ private[hive] class HiveClientImpl(
         val allAscendingSorted = sortColumnOrders.forall(_.getOrder == HIVE_COLUMN_ORDER_ASC)
 
         val sortColumnNames = if (allAscendingSorted) {
-          sortColumnOrders.map { sortOrder =>
-            val columnName = sortOrder.getCol
-
-            if (!cols.exists(_.name.equalsIgnoreCase(columnName))) {
-              throw new AnalysisException(s"No match found for sort column name = $columnName " +
-                s"in table $dbName.$tableName. " +
-                s"Known table columns are ${cols.mkString("[", ", ", "]")}")
-            }
-            columnName
-          }
+          sortColumnOrders.map(_.getCol)
         } else {
           Seq()
         }

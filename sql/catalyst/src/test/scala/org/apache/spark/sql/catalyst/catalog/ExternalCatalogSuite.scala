@@ -247,13 +247,27 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     val tbl1 = catalog.getTable("db2", "tbl1")
     val newSchema = StructType(Seq(
-      StructField("new_field_1", IntegerType),
+      StructField("col1", IntegerType),
       StructField("new_field_2", StringType),
       StructField("a", IntegerType),
       StructField("b", StringType)))
     catalog.alterTableSchema("db2", "tbl1", newSchema)
     val newTbl1 = catalog.getTable("db2", "tbl1")
     assert(newTbl1.schema == newSchema)
+  }
+
+  test("alter table schema : removing bucketing column is not allowed") {
+    val catalog = newBasicCatalog()
+    val tbl1 = catalog.getTable("db2", "tbl1")
+    val newSchema = StructType(Seq(
+      StructField("new_field_1", IntegerType),
+      StructField("new_field_2", StringType),
+      StructField("a", IntegerType),
+      StructField("b", StringType)))
+
+    intercept[AnalysisException] {
+      catalog.alterTableSchema("db2", "tbl1", newSchema)
+    }
   }
 
   test("get table") {

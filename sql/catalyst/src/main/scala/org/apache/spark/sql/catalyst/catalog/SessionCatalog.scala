@@ -345,6 +345,10 @@ class SessionCatalog(
          """.stripMargin)
     }
 
+    if (catalogTable.bucketSpec.isDefined) {
+      externalCatalog.checkSchemaContainsBucketingColumns(catalogTable.bucketSpec.get, newSchema)
+    }
+
     // assuming the newSchema has all partition columns at the end as required
     externalCatalog.alterTableSchema(db, table, newSchema)
   }
