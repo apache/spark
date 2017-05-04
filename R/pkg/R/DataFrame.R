@@ -3642,3 +3642,33 @@ setMethod("checkpoint",
             df <- callJMethod(x@sdf, "checkpoint", as.logical(eager))
             dataFrame(df)
           })
+
+#' hint
+#'
+#' Specifies execution plan hint and return a new SparkDataFrame.
+#'
+#' @param x a SparkDataFrame.
+#' @param name a name of the hint.
+#' @param ... optional parameters for the hint.
+#' @return A SparkDataFrame.
+#' @family SparkDataFrame functions
+#' @aliases hint,SparkDataFrame,character-method
+#' @rdname hint
+#' @name hint
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(mtcars)
+#' avg_mpg <- mean(groupBy(createDataFrame(mtcars), "cyl"), "mpg")
+#'
+#' head(join(df, hint(avg_mpg, "broadcast"), df$cyl == avg_mpg$cyl))
+#' }
+#' @note hint since 2.2.0
+setMethod("hint",
+          signature(x = "SparkDataFrame", name = "character"),
+          function(x, name, ...) {
+            parameters <- list(...)
+            stopifnot(all(sapply(parameters, is.character)))
+            jdf <- callJMethod(x@sdf, "hint", name, parameters)
+            dataFrame(jdf)
+          })
