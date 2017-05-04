@@ -29,22 +29,30 @@ intPairs <- list(list(1L, -1), list(2L, 100), list(2L, 1), list(1L, 200))
 intRdd <- parallelize(sc, intPairs, 2L)
 
 test_that("get number of partitions in RDD", {
+  skip_on_cran()
+
   expect_equal(getNumPartitionsRDD(rdd), 2)
   expect_equal(getNumPartitionsRDD(intRdd), 2)
 })
 
 test_that("first on RDD", {
+  skip_on_cran()
+
   expect_equal(firstRDD(rdd), 1)
   newrdd <- lapply(rdd, function(x) x + 1)
   expect_equal(firstRDD(newrdd), 2)
 })
 
 test_that("count and length on RDD", {
-   expect_equal(countRDD(rdd), 10)
-   expect_equal(lengthRDD(rdd), 10)
+  skip_on_cran()
+
+  expect_equal(countRDD(rdd), 10)
+  expect_equal(lengthRDD(rdd), 10)
 })
 
 test_that("count by values and keys", {
+  skip_on_cran()
+
   mods <- lapply(rdd, function(x) { x %% 3 })
   actual <- countByValue(mods)
   expected <- list(list(0, 3L), list(1, 4L), list(2, 3L))
@@ -56,30 +64,40 @@ test_that("count by values and keys", {
 })
 
 test_that("lapply on RDD", {
+  skip_on_cran()
+
   multiples <- lapply(rdd, function(x) { 2 * x })
   actual <- collectRDD(multiples)
   expect_equal(actual, as.list(nums * 2))
 })
 
 test_that("lapplyPartition on RDD", {
+  skip_on_cran()
+
   sums <- lapplyPartition(rdd, function(part) { sum(unlist(part)) })
   actual <- collectRDD(sums)
   expect_equal(actual, list(15, 40))
 })
 
 test_that("mapPartitions on RDD", {
+  skip_on_cran()
+
   sums <- mapPartitions(rdd, function(part) { sum(unlist(part)) })
   actual <- collectRDD(sums)
   expect_equal(actual, list(15, 40))
 })
 
 test_that("flatMap() on RDDs", {
+  skip_on_cran()
+
   flat <- flatMap(intRdd, function(x) { list(x, x) })
   actual <- collectRDD(flat)
   expect_equal(actual, rep(intPairs, each = 2))
 })
 
 test_that("filterRDD on RDD", {
+  skip_on_cran()
+
   filtered.rdd <- filterRDD(rdd, function(x) { x %% 2 == 0 })
   actual <- collectRDD(filtered.rdd)
   expect_equal(actual, list(2, 4, 6, 8, 10))
@@ -95,6 +113,8 @@ test_that("filterRDD on RDD", {
 })
 
 test_that("lookup on RDD", {
+  skip_on_cran()
+
   vals <- lookup(intRdd, 1L)
   expect_equal(vals, list(-1, 200))
 
@@ -103,6 +123,8 @@ test_that("lookup on RDD", {
 })
 
 test_that("several transformations on RDD (a benchmark on PipelinedRDD)", {
+  skip_on_cran()
+
   rdd2 <- rdd
   for (i in 1:12)
     rdd2 <- lapplyPartitionsWithIndex(
@@ -117,6 +139,8 @@ test_that("several transformations on RDD (a benchmark on PipelinedRDD)", {
 })
 
 test_that("PipelinedRDD support actions: cache(), persist(), unpersist(), checkpoint()", {
+  skip_on_cran()
+
   # RDD
   rdd2 <- rdd
   # PipelinedRDD
@@ -158,6 +182,8 @@ test_that("PipelinedRDD support actions: cache(), persist(), unpersist(), checkp
 })
 
 test_that("reduce on RDD", {
+  skip_on_cran()
+
   sum <- reduce(rdd, "+")
   expect_equal(sum, 55)
 
@@ -167,6 +193,8 @@ test_that("reduce on RDD", {
 })
 
 test_that("lapply with dependency", {
+  skip_on_cran()
+
   fa <- 5
   multiples <- lapply(rdd, function(x) { fa * x })
   actual <- collectRDD(multiples)
@@ -175,6 +203,8 @@ test_that("lapply with dependency", {
 })
 
 test_that("lapplyPartitionsWithIndex on RDDs", {
+  skip_on_cran()
+
   func <- function(partIndex, part) { list(partIndex, Reduce("+", part)) }
   actual <- collectRDD(lapplyPartitionsWithIndex(rdd, func), flatten = FALSE)
   expect_equal(actual, list(list(0, 15), list(1, 40)))
@@ -191,10 +221,14 @@ test_that("lapplyPartitionsWithIndex on RDDs", {
 })
 
 test_that("sampleRDD() on RDDs", {
+  skip_on_cran()
+
   expect_equal(unlist(collectRDD(sampleRDD(rdd, FALSE, 1.0, 2014L))), nums)
 })
 
 test_that("takeSample() on RDDs", {
+  skip_on_cran()
+
   # ported from RDDSuite.scala, modified seeds
   data <- parallelize(sc, 1:100, 2L)
   for (seed in 4:5) {
@@ -237,6 +271,8 @@ test_that("takeSample() on RDDs", {
 })
 
 test_that("mapValues() on pairwise RDDs", {
+  skip_on_cran()
+
   multiples <- mapValues(intRdd, function(x) { x * 2 })
   actual <- collectRDD(multiples)
   expected <- lapply(intPairs, function(x) {
@@ -246,6 +282,8 @@ test_that("mapValues() on pairwise RDDs", {
 })
 
 test_that("flatMapValues() on pairwise RDDs", {
+  skip_on_cran()
+
   l <- parallelize(sc, list(list(1, c(1, 2)), list(2, c(3, 4))))
   actual <- collectRDD(flatMapValues(l, function(x) { x }))
   expect_equal(actual, list(list(1, 1), list(1, 2), list(2, 3), list(2, 4)))
@@ -258,6 +296,8 @@ test_that("flatMapValues() on pairwise RDDs", {
 })
 
 test_that("reduceByKeyLocally() on PairwiseRDDs", {
+  skip_on_cran()
+
   pairs <- parallelize(sc, list(list(1, 2), list(1.1, 3), list(1, 4)), 2L)
   actual <- reduceByKeyLocally(pairs, "+")
   expect_equal(sortKeyValueList(actual),
@@ -271,6 +311,8 @@ test_that("reduceByKeyLocally() on PairwiseRDDs", {
 })
 
 test_that("distinct() on RDDs", {
+  skip_on_cran()
+
   nums.rep2 <- rep(1:10, 2)
   rdd.rep2 <- parallelize(sc, nums.rep2, 2L)
   uniques <- distinctRDD(rdd.rep2)
@@ -279,21 +321,29 @@ test_that("distinct() on RDDs", {
 })
 
 test_that("maximum() on RDDs", {
+  skip_on_cran()
+
   max <- maximum(rdd)
   expect_equal(max, 10)
 })
 
 test_that("minimum() on RDDs", {
+  skip_on_cran()
+
   min <- minimum(rdd)
   expect_equal(min, 1)
 })
 
 test_that("sumRDD() on RDDs", {
+  skip_on_cran()
+
   sum <- sumRDD(rdd)
   expect_equal(sum, 55)
 })
 
 test_that("keyBy on RDDs", {
+  skip_on_cran()
+
   func <- function(x) { x * x }
   keys <- keyBy(rdd, func)
   actual <- collectRDD(keys)
@@ -301,6 +351,8 @@ test_that("keyBy on RDDs", {
 })
 
 test_that("repartition/coalesce on RDDs", {
+  skip_on_cran()
+
   rdd <- parallelize(sc, 1:20, 4L) # each partition contains 5 elements
 
   # repartition
@@ -322,6 +374,8 @@ test_that("repartition/coalesce on RDDs", {
 })
 
 test_that("sortBy() on RDDs", {
+  skip_on_cran()
+
   sortedRdd <- sortBy(rdd, function(x) { x * x }, ascending = FALSE)
   actual <- collectRDD(sortedRdd)
   expect_equal(actual, as.list(sort(nums, decreasing = TRUE)))
@@ -333,6 +387,8 @@ test_that("sortBy() on RDDs", {
 })
 
 test_that("takeOrdered() on RDDs", {
+  skip_on_cran()
+
   l <- list(10, 1, 2, 9, 3, 4, 5, 6, 7)
   rdd <- parallelize(sc, l)
   actual <- takeOrdered(rdd, 6L)
@@ -345,6 +401,8 @@ test_that("takeOrdered() on RDDs", {
 })
 
 test_that("top() on RDDs", {
+  skip_on_cran()
+
   l <- list(10, 1, 2, 9, 3, 4, 5, 6, 7)
   rdd <- parallelize(sc, l)
   actual <- top(rdd, 6L)
@@ -357,6 +415,8 @@ test_that("top() on RDDs", {
 })
 
 test_that("fold() on RDDs", {
+  skip_on_cran()
+
   actual <- fold(rdd, 0, "+")
   expect_equal(actual, Reduce("+", nums, 0))
 
@@ -366,6 +426,8 @@ test_that("fold() on RDDs", {
 })
 
 test_that("aggregateRDD() on RDDs", {
+  skip_on_cran()
+
   rdd <- parallelize(sc, list(1, 2, 3, 4))
   zeroValue <- list(0, 0)
   seqOp <- function(x, y) { list(x[[1]] + y, x[[2]] + 1) }
@@ -379,6 +441,8 @@ test_that("aggregateRDD() on RDDs", {
 })
 
 test_that("zipWithUniqueId() on RDDs", {
+  skip_on_cran()
+
   rdd <- parallelize(sc, list("a", "b", "c", "d", "e"), 3L)
   actual <- collectRDD(zipWithUniqueId(rdd))
   expected <- list(list("a", 0), list("b", 1), list("c", 4),
@@ -393,6 +457,8 @@ test_that("zipWithUniqueId() on RDDs", {
 })
 
 test_that("zipWithIndex() on RDDs", {
+  skip_on_cran()
+
   rdd <- parallelize(sc, list("a", "b", "c", "d", "e"), 3L)
   actual <- collectRDD(zipWithIndex(rdd))
   expected <- list(list("a", 0), list("b", 1), list("c", 2),
@@ -407,24 +473,32 @@ test_that("zipWithIndex() on RDDs", {
 })
 
 test_that("glom() on RDD", {
+  skip_on_cran()
+
   rdd <- parallelize(sc, as.list(1:4), 2L)
   actual <- collectRDD(glom(rdd))
   expect_equal(actual, list(list(1, 2), list(3, 4)))
 })
 
 test_that("keys() on RDDs", {
+  skip_on_cran()
+
   keys <- keys(intRdd)
   actual <- collectRDD(keys)
   expect_equal(actual, lapply(intPairs, function(x) { x[[1]] }))
 })
 
 test_that("values() on RDDs", {
+  skip_on_cran()
+
   values <- values(intRdd)
   actual <- collectRDD(values)
   expect_equal(actual, lapply(intPairs, function(x) { x[[2]] }))
 })
 
 test_that("pipeRDD() on RDDs", {
+  skip_on_cran()
+
   actual <- collectRDD(pipeRDD(rdd, "more"))
   expected <- as.list(as.character(1:10))
   expect_equal(actual, expected)
@@ -442,6 +516,8 @@ test_that("pipeRDD() on RDDs", {
 })
 
 test_that("zipRDD() on RDDs", {
+  skip_on_cran()
+
   rdd1 <- parallelize(sc, 0:4, 2)
   rdd2 <- parallelize(sc, 1000:1004, 2)
   actual <- collectRDD(zipRDD(rdd1, rdd2))
@@ -471,6 +547,8 @@ test_that("zipRDD() on RDDs", {
 })
 
 test_that("cartesian() on RDDs", {
+  skip_on_cran()
+
   rdd <- parallelize(sc, 1:3)
   actual <- collectRDD(cartesian(rdd, rdd))
   expect_equal(sortKeyValueList(actual),
@@ -514,6 +592,8 @@ test_that("cartesian() on RDDs", {
 })
 
 test_that("subtract() on RDDs", {
+  skip_on_cran()
+
   l <- list(1, 1, 2, 2, 3, 4)
   rdd1 <- parallelize(sc, l)
 
@@ -541,6 +621,8 @@ test_that("subtract() on RDDs", {
 })
 
 test_that("subtractByKey() on pairwise RDDs", {
+  skip_on_cran()
+
   l <- list(list("a", 1), list("b", 4),
             list("b", 5), list("a", 2))
   rdd1 <- parallelize(sc, l)
@@ -570,6 +652,8 @@ test_that("subtractByKey() on pairwise RDDs", {
 })
 
 test_that("intersection() on RDDs", {
+  skip_on_cran()
+
   # intersection with self
   actual <- collectRDD(intersection(rdd, rdd))
   expect_equal(sort(as.integer(actual)), nums)
@@ -586,6 +670,8 @@ test_that("intersection() on RDDs", {
 })
 
 test_that("join() on pairwise RDDs", {
+  skip_on_cran()
+
   rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
   rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
   actual <- collectRDD(joinRDD(rdd1, rdd2, 2L))
@@ -610,6 +696,8 @@ test_that("join() on pairwise RDDs", {
 })
 
 test_that("leftOuterJoin() on pairwise RDDs", {
+  skip_on_cran()
+
   rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
   rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
   actual <- collectRDD(leftOuterJoin(rdd1, rdd2, 2L))
@@ -640,6 +728,8 @@ test_that("leftOuterJoin() on pairwise RDDs", {
 })
 
 test_that("rightOuterJoin() on pairwise RDDs", {
+  skip_on_cran()
+
   rdd1 <- parallelize(sc, list(list(1, 2), list(1, 3)))
   rdd2 <- parallelize(sc, list(list(1, 1), list(2, 4)))
   actual <- collectRDD(rightOuterJoin(rdd1, rdd2, 2L))
@@ -667,6 +757,8 @@ test_that("rightOuterJoin() on pairwise RDDs", {
 })
 
 test_that("fullOuterJoin() on pairwise RDDs", {
+  skip_on_cran()
+
   rdd1 <- parallelize(sc, list(list(1, 2), list(1, 3), list(3, 3)))
   rdd2 <- parallelize(sc, list(list(1, 1), list(2, 4)))
   actual <- collectRDD(fullOuterJoin(rdd1, rdd2, 2L))
@@ -698,6 +790,8 @@ test_that("fullOuterJoin() on pairwise RDDs", {
 })
 
 test_that("sortByKey() on pairwise RDDs", {
+  skip_on_cran()
+
   numPairsRdd <- map(rdd, function(x) { list (x, x) })
   sortedRdd <- sortByKey(numPairsRdd, ascending = FALSE)
   actual <- collectRDD(sortedRdd)
@@ -747,6 +841,8 @@ test_that("sortByKey() on pairwise RDDs", {
 })
 
 test_that("collectAsMap() on a pairwise RDD", {
+  skip_on_cran()
+
   rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
   vals <- collectAsMap(rdd)
   expect_equal(vals, list(`1` = 2, `3` = 4))
@@ -765,11 +861,15 @@ test_that("collectAsMap() on a pairwise RDD", {
 })
 
 test_that("show()", {
+  skip_on_cran()
+
   rdd <- parallelize(sc, list(1:10))
   expect_output(showRDD(rdd), "ParallelCollectionRDD\\[\\d+\\] at parallelize at RRDD\\.scala:\\d+")
 })
 
 test_that("sampleByKey() on pairwise RDDs", {
+  skip_on_cran()
+
   rdd <- parallelize(sc, 1:2000)
   pairsRDD <- lapply(rdd, function(x) { if (x %% 2 == 0) list("a", x) else list("b", x) })
   fractions <- list(a = 0.2, b = 0.1)
@@ -794,6 +894,8 @@ test_that("sampleByKey() on pairwise RDDs", {
 })
 
 test_that("Test correct concurrency of RRDD.compute()", {
+  skip_on_cran()
+
   rdd <- parallelize(sc, 1:1000, 100)
   jrdd <- getJRDD(lapply(rdd, function(x) { x }), "row")
   zrdd <- callJMethod(jrdd, "zip", jrdd)
