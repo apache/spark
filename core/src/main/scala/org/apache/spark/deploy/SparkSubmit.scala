@@ -20,15 +20,18 @@ package org.apache.spark.deploy
 import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
+import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
+import javax.ws.rs.core.UriBuilder
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.Properties
 
 import org.apache.commons.lang3.StringUtils
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
@@ -306,6 +309,15 @@ object SparkSubmit extends CommandLineUtils {
     // Spark Packages may contain R source code inside the jar.
     if (args.isR && !StringUtils.isBlank(args.jars)) {
       RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
+    }
+
+    // In client mode of local/standalone cluster, download remotes files.
+    if ((clusterManager == STANDALONE || clusterManager == LOCAL) && deployMode == CLIENT) {
+      val hadoopConf = new HadoopConfiguration()
+      args.primaryResource = Option(args.primaryResource).map(downloadFile(_, hadoopConf)).orNull
+      args.jars = Option(args.jars).map(downloadFileList(_, hadoopConf)).orNull
+      args.pyFiles = Option(args.pyFiles).map(downloadFileList(_, hadoopConf)).orNull
+      args.files = Option(args.files).map(downloadFileList(_, hadoopConf)).orNull
     }
 
     // Require all python files to be local, so we can add them to the PYTHONPATH
@@ -824,6 +836,43 @@ object SparkSubmit extends CommandLineUtils {
                       .flatMap(_.split(","))
                       .mkString(",")
     if (merged == "") null else merged
+  }
+
+  /**
+   * Download a list of remote files to temp local files. If the file is local, the original file
+   * will be returned.
+   * @param fileList A comma separated file list, it cannot be null.
+   * @return A comma separated local files list.
+   */
+  private[deploy] def downloadFileList(
+      fileList: String,
+      hadoopConf: HadoopConfiguration): String = {
+    fileList.split(",").map(downloadFile(_, hadoopConf)).mkString(",")
+  }
+
+  /**
+   * Download remote file to a temporary local file. If the file is local, the original file
+   * will be returned.
+   */
+  private[deploy] def downloadFile(path: String, hadoopConf: HadoopConfiguration): String = {
+    val uri = Utils.resolveURI(path)
+    uri.getScheme match {
+      case "file" | "local" =>
+        path
+
+      case _ =>
+        val fs = FileSystem.get(uri, hadoopConf)
+        val tmpFile = new File(Files.createTempDirectory("tmp").toFile, uri.getPath)
+        // scalastyle:off println
+        printStream.println(s"Downloading ${uri.toString} to ${tmpFile.getAbsolutePath}.")
+        // scalastyle:on println
+        fs.copyToLocalFile(new Path(uri), new Path(tmpFile.getAbsolutePath))
+        UriBuilder
+          .fromPath(tmpFile.getAbsolutePath)
+          .scheme("file")
+          .build()
+          .toString
+    }
   }
 }
 
