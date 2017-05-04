@@ -284,8 +284,8 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
      * arrays required for intermediate result storage, as well as a high sensitivity to the
      * block size used.
      * The following approach still groups factors into blocks, but instead computes the
-     * top-k elements per block, using Level 1 BLAS (dot) and an efficient
-     * BoundedPriorityQueue. This avoids any large intermediate data structures and results
+     * top-k elements per block, using a simple dot product (instead of gemm) and an efficient
+     * [[BoundedPriorityQueue]]. This avoids any large intermediate data structures and results
      * in significantly reduced GC pressure as well as shuffle data, which far outweighs
      * any cost incurred from not using Level 3 BLAS operations.
      */
@@ -297,9 +297,10 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       val pq = new BoundedPriorityQueue[(Int, Double)](n)(Ordering.by(_._2))
       srcIter.foreach { case (srcId, srcFactor) =>
         dstIter.foreach { case (dstId, dstFactor) =>
-          /**
-           * Compared with BLAS.dot, the hand-written version below is more efficient than a call
-           * to the native BLAS backend and the same performance as the fallback F2jBLAS backend.
+          /*
+           * The below code is equivalent to
+           *    `val score = blas.ddot(rank, srcFactor, 1, dstFactor, 1)`
+           * This handwritten version is as or more efficient as BLAS calls in this case.
            */
           var score: Double = 0
           var k = 0
@@ -307,7 +308,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
             score += srcFactor(k) * dstFactor(k)
             k += 1
           }
-          pq += ((dstId, score))
+          pq += dstId -> score
         }
         val pqIter = pq.iterator
         var i = 0
@@ -325,10 +326,11 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
 
   /**
    * Blockifies features to improve the efficiency of cartesian product
+   * TODO: SPARK-20443 - expose blockSize as a param?
    */
   private def blockify(
-      features: RDD[(Int, Array[Double])]): RDD[Seq[(Int, Array[Double])]] = {
-    val blockSize = 4096 // TODO: tune the block size
+      features: RDD[(Int, Array[Double])],
+      blockSize: Int = 4096): RDD[Seq[(Int, Array[Double])]] = {
     features.mapPartitions { iter =>
       iter.grouped(blockSize)
     }
