@@ -85,8 +85,9 @@ class ObjectAggregationIterator(
 
   override final def next(): UnsafeRow = {
     val entry = aggBufferIterator.next()
+    val res = generateOutput(entry.groupingKey, entry.aggregationBuffer)
     numOutputRows += 1
-    generateOutput(entry.groupingKey, entry.aggregationBuffer)
+    res
   }
 
   /**
