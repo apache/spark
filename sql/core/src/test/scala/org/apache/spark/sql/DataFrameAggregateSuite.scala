@@ -361,6 +361,65 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(0, null))
   }
 
+  test("approx_percentile functions") {
+    val df = (1 to 100).toDF("num")
+
+    // with accuracy specified
+    checkAnswer(
+      df.select(
+        approx_percentile($"num", 0.1d, accuracy = 10),
+        approx_percentile("num", 0.2d, accuracy = 10),
+        approx_percentile($"num", Array(0.3d, 0.4d, 0.5d), accuracy = 10),
+        approx_percentile("num", Array(0.6d, 0.7d, 0.8d), accuracy = 10)
+      ),
+      Seq(Row(1.0, 12.0, Seq(23.0, 33.0, 41.0), Seq(55.0, 62.0, 73.0))) // results are stable
+    )
+
+    // with default accuracy
+    checkAnswer(
+      df.select(
+        approx_percentile($"num", 0.1d),
+        approx_percentile("num", 0.2d),
+        approx_percentile($"num", Array(0.3d, 0.4d, 0.5d)),
+        approx_percentile("num", Array(0.6d, 0.7d, 0.8d))
+      ),
+      Seq(Row(10.0, 20.0, Seq(30.0, 40.0, 50.0), Seq(60.0, 70.0, 80.0))) // results are stable
+    )
+  }
+
+  test("approx_percentile functions with empty inputs") {
+    val df = (1 to 100).toDF("num").where($"num" > 200)
+
+    checkAnswer(
+      df.select(approx_percentile($"num", Array(0.5d))),
+      Seq(Row(null))
+    )
+
+    checkAnswer(
+      df.select(approx_percentile($"num", 0.5d)),
+      Seq(Row(null))
+    )
+  }
+
+  test("approx_percentile functions with malformed params") {
+    val df = (1 to 100).toDF("num")
+
+    var e = intercept[AnalysisException] {
+      df.select(approx_percentile($"num", Array(-1.0, 0.0, 0.5)))
+    }
+    assert(e.getMessage().contains("must be between 0.0 and 1.0"))
+
+    e = intercept[AnalysisException] {
+      df.select(approx_percentile($"num", -1.0))
+    }
+    assert(e.getMessage().contains("must be between 0.0 and 1.0"))
+
+    e = intercept[AnalysisException] {
+      df.select(approx_percentile($"num", 1.0, -100))
+    }
+    assert(e.getMessage().contains("must be a positive integer literal"))
+  }
+
   test("stddev") {
     val testData2ADev = math.sqrt(4.0 / 5.0)
     checkAnswer(

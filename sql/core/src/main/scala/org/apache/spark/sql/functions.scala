@@ -627,6 +627,201 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns the approximate percentiles of a column at the given
+   * percentages. A percentile is a watermark value below which a given percentage of the column
+   * values fall. For example, the percentile of column `col` at percentage 50% is the median of
+   * column `col`.
+   *
+   * @param col numeric column to compute approximate percentile values on
+   * @param percentages an array of double values representing the percentages requested; each
+   *                    percentage value must be between 0.0 and 1.0
+   * @param accuracy approximation accuracy at the cost of memory; higher value yields better
+   *                 accuracy, the default value is DEFAULT_PERCENTILE_ACCURACY
+   *
+   * @return the approximate percentile array of column `col` at the given percentage array
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def approx_percentile(col: Column, percentages: Array[Double], accuracy: Int): Column =
+    withAggregateFunction {
+      new ApproximatePercentile(
+        col.expr, CreateArray(percentages.map(Literal(_))), Literal(accuracy))
+    }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns the approximate percentiles of a column at the given
+   * percentages. A percentile is a watermark value below which a given percentage of the column
+   * values fall. For example, the percentile of column `col` at percentage 50% is the median of
+   * column `col`.
+   *
+   * @param columnName numeric column to compute approximate percentile values on
+   * @param percentages an array of double values representing the percentages requested; each
+   *                    percentage value must be between 0.0 and 1.0
+   * @param accuracy approximation accuracy at the cost of memory; higher value yields better
+   *                 accuracy, the default value is DEFAULT_PERCENTILE_ACCURACY
+   *
+   * @return the approximate percentile array of column `col` at the given percentage array
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def approx_percentile(columnName: String, percentages: Array[Double], accuracy: Int): Column = {
+    approx_percentile(Column(columnName), percentages, accuracy)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns the approximate percentiles of a column at the given
+   * percentages. A percentile is a watermark value below which a given percentage of the column
+   * values fall. For example, the percentile of column `col` at percentage 50% is the median of
+   * column `col`.
+   *
+   * @param col numeric column to compute approximate percentile values on
+   * @param percentages an array of double values representing the percentages requested; each
+   *                    percentage value must be between 0.0 and 1.0
+   *
+   * @return the approximate percentile array of column `col` at the given percentage array
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def approx_percentile(col: Column, percentages: Array[Double]): Column = withAggregateFunction {
+    new ApproximatePercentile(col.expr, CreateArray(percentages.map(v => Literal(v))))
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns the approximate percentiles of a column at the given
+   * percentages. A percentile is a watermark value below which a given percentage of the column
+   * values fall. For example, the percentile of column `col` at percentage 50% is the median of
+   * column `col`.
+   *
+   * @param columnName numeric column to compute approximate percentile values on
+   * @param percentages an array of double values representing the percentages requested; each
+   *                    percentage value must be between 0.0 and 1.0
+   *
+   * @return the approximate percentile array of column `col` at the given percentage array
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def approx_percentile(columnName: String, percentages: Array[Double]): Column = {
+    approx_percentile(Column(columnName), percentages)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns the approximate percentile of a column at the given
+   * percentage. A percentile is a watermark value below which a given percentage of the column
+   * values fall. For example, the percentile of column `col` at percentage 50% is the median of
+   * column `col`.
+   *
+   * @param col numeric column to compute approximate percentile value on
+   * @param percentage a double value representing the percentage requested; the percentage value
+   *                   must be between 0.0 and 1.0
+   * @param accuracy approximation accuracy at the cost of memory; higher value yields better
+   *                 accuracy, the default value is DEFAULT_PERCENTILE_ACCURACY
+   *
+   * @return the approximate percentile of column `col` at the given percentage
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def approx_percentile(col: Column, percentage: Double, accuracy: Int): Column =
+    withAggregateFunction {
+      new ApproximatePercentile(col.expr, Literal(percentage), Literal(accuracy))
+    }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns the approximate percentile of a column at the given
+   * percentage. A percentile is a watermark value below which a given percentage of the column
+   * values fall. For example, the percentile of column `col` at percentage 50% is the median of
+   * column `col`.
+   *
+   * @param columnName numeric column to compute approximate percentile value on
+   * @param percentage a double value representing the percentage requested; the percentage value
+   *                   must be between 0.0 and 1.0
+   * @param accuracy approximation accuracy at the cost of memory; higher value yields better
+   *                 accuracy, the default value is DEFAULT_PERCENTILE_ACCURACY
+   *
+   * @return the approximate percentile of column `col` at the given percentage
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def approx_percentile(columnName: String, percentage: Double, accuracy: Int): Column = {
+    approx_percentile(Column(columnName), percentage, accuracy)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns the approximate percentile of a column at the given
+   * percentage. A percentile is a watermark value below which a given percentage of the column
+   * values fall. For example, the percentile of column `col` at percentage 50% is the median of
+   * column `col`.
+   *
+   * @param col numeric column to compute approximate percentile value on
+   * @param percentage a double value representing the percentage requested; the percentage value
+   *                   must be between 0.0 and 1.0
+   *
+   * @return the approximate percentile of column `col` at the given percentage
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def approx_percentile(col: Column, percentage: Double): Column = withAggregateFunction {
+    new ApproximatePercentile(col.expr, Literal(percentage))
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns the approximate percentile of a column at the given
+   * percentage. A percentile is a watermark value below which a given percentage of the column
+   * values fall. For example, the percentile of column `col` at percentage 50% is the median of
+   * column `col`.
+   *
+   * @param columnName numeric column to compute approximate percentile value on
+   * @param percentage a double value representing the percentage requested; the percentage value
+   *                   must be between 0.0 and 1.0
+   *
+   * @return the approximate percentile of column `col` at the given percentage
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def approx_percentile(columnName: String, percentage: Double): Column = {
+    approx_percentile(Column(columnName), percentage)
+  }
+
+  /**
    * Aggregate function: returns the skewness of the values in a group.
    *
    * @group agg_funcs
