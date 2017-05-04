@@ -345,12 +345,13 @@ class ALSModel private[ml] (
   }
 
   /**
-   * Returns top `numItems` items recommended for each user in the input data set.
+   * Returns top `numItems` items recommended for each unique user id in the input data set.
    * @param dataset a Dataset containing a column of user ids. The column name must match `userCol`.
    * @param numItems max number of recommendations for each user.
    * @return a DataFrame of (userCol: Int, recommendations), where recommendations are
    *         stored as an array of (itemCol: Int, rating: Float) Rows.
    */
+  @Since("2.3.0")
   def recommendForUserSubset(dataset: Dataset[_], numItems: Int): DataFrame = {
     val srcFactorSubset = getSourceFactorSubset(dataset, userFactors, $(userCol))
     recommendForAll(srcFactorSubset, itemFactors, $(userCol), $(itemCol), numItems)
@@ -368,12 +369,13 @@ class ALSModel private[ml] (
   }
 
   /**
-   * Returns top `numUsers` users recommended for each item in the input data set.
+   * Returns top `numUsers` users recommended for each unique item id in the input data set.
    * @param dataset a Dataset containing a column of item ids. The column name must match `itemCol`.
    * @param numUsers max number of recommendations for each item.
    * @return a DataFrame of (itemCol: Int, recommendations), where recommendations are
    *         stored as an array of (userCol: Int, rating: Float) Rows.
    */
+  @Since("2.3.0")
   def recommendForItemSubset(dataset: Dataset[_], numUsers: Int): DataFrame = {
     val srcFactorSubset = getSourceFactorSubset(dataset, itemFactors, $(itemCol))
     recommendForAll(srcFactorSubset, userFactors, $(itemCol), $(userCol), numUsers)
@@ -389,9 +391,9 @@ class ALSModel private[ml] (
    *         the factor DataFrame.
    */
   private def getSourceFactorSubset(
-    dataset: Dataset[_],
-    factors: DataFrame,
-    column: String): DataFrame = {
+      dataset: Dataset[_],
+      factors: DataFrame,
+      column: String): DataFrame = {
     dataset.select(column)
       .join(factors, dataset(column) === factors("id"))
       .select(factors("id"), factors("features"))
