@@ -3744,7 +3744,7 @@ setMethod("hint",
             stopifnot(all(sapply(parameters, is.character)))
             jdf <- callJMethod(x@sdf, "hint", name, parameters)
             dataFrame(jdf)
-		  })
+          })
 
 #' alias
 #'
