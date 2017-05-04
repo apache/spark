@@ -73,7 +73,7 @@ private[feature] trait ImputerParams extends Params with HasInputCols with HasOu
       s" and outputCols(${$(outputCols).length}) should have the same length")
     val outputFields = $(inputCols).zip($(outputCols)).map { case (inputCol, outputCol) =>
       val inputField = schema(inputCol)
-      SchemaUtils.checkColumnTypes(schema, inputCol, Seq(DoubleType, FloatType))
+      SchemaUtils.checkNumericType(schema, inputCol)
       StructField(outputCol, inputField.dataType, inputField.nullable)
     }
     StructType(schema ++ outputFields)
