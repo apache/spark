@@ -3718,7 +3718,7 @@ setMethod("rollup",
 
 #' hint
 #'
-#' Hint and return a new SparkDataFrame
+#' Specifies execution plan hint and return a new SparkDataFrame.
 #'
 #' @param x a SparkDataFrame.
 #' @param name a name of the hint.
