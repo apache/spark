@@ -55,10 +55,12 @@ test_that("read.stream, write.stream, awaitTermination, stopQuery", {
   q <- write.stream(counts, "memory", queryName = "people", outputMode = "complete")
 
   expect_false(awaitTermination(q, 5 * 1000))
+  callJMethod(q@ssq, "processAllAvailable")
   expect_equal(head(sql("SELECT count(*) FROM people"))[[1]], 3)
 
   writeLines(mockLinesNa, jsonPathNa)
   awaitTermination(q, 5 * 1000)
+  callJMethod(q@ssq, "processAllAvailable")
   expect_equal(head(sql("SELECT count(*) FROM people"))[[1]], 6)
 
   stopQuery(q)
@@ -75,6 +77,7 @@ test_that("print from explain, lastProgress, status, isActive", {
   q <- write.stream(counts, "memory", queryName = "people2", outputMode = "complete")
 
   awaitTermination(q, 5 * 1000)
+  callJMethod(q@ssq, "processAllAvailable")
 
   expect_equal(capture.output(explain(q))[[1]], "== Physical Plan ==")
   expect_true(any(grepl("\"description\" : \"MemorySink\"", capture.output(lastProgress(q)))))
@@ -99,6 +102,7 @@ test_that("Stream other format", {
   q <- write.stream(counts, "memory", queryName = "people3", outputMode = "complete")
 
   expect_false(awaitTermination(q, 5 * 1000))
+  callJMethod(q@ssq, "processAllAvailable")
   expect_equal(head(sql("SELECT count(*) FROM people3"))[[1]], 3)
 
   expect_equal(queryName(q), "people3")
