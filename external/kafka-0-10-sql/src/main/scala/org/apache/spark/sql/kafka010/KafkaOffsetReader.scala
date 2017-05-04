@@ -64,6 +64,10 @@ private[kafka010] class KafkaOffsetReader(
   })
   val execContext = ExecutionContext.fromExecutorService(kafkaReaderThread)
 
+  /** Causion: place these prior to the creation of consumer! see SPARK-xxx */
+  private var groupId: String = null
+  private var nextId = 0
+
   /**
    * Place [[groupId]] and [[nextId]] here so that they are initialized before any consumer is
    * created -- see SPARK-19564.
