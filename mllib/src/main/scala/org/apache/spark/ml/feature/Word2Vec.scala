@@ -120,9 +120,25 @@ private[feature] trait Word2VecBase extends Params
     "to use with CBOW estimation", ParamValidators.gt(0))
   setDefault(negativeSamples -> 15)
 
-  final val maxUnigramTableSize = new IntParam(this, "maxUnigramTableSize", "Max table size to " +
+  /**
+   * Unigram table size. The unigram table is used to generate negative samples.
+   * This parameter is ignored for SkipGram based estimation.
+   * Default: 100 million
+   * @group param
+   */
+  final val unigramTableSize = new IntParam(this, "unigramTableSize", "Max table size to " +
     "use for generating negative samples", ParamValidators.gt(1))
-  setDefault(maxUnigramTableSize -> 100*1000*1000)
+  setDefault(unigramTableSize -> 100*1000*1000)
+
+  /**
+   * Sample threshold (parameter t <a href="https://arxiv.org/pdf/1310.4546.pdf"> here </a>)
+   * This parameter is ignored for SkipGram based estimation.
+   * Default: 0.0
+   * @group param
+   */
+  final val sample = new DoubleParam(this, "samplingThreshold", "Sampling threshold to reduce " +
+    "with high frequencies", ParamValidators.gtEq(0.0))
+  setDefault(sample -> 0.0)
 
   /** @group getParam */
   def getMaxSentenceLength: Int = $(maxSentenceLength)
@@ -214,7 +230,11 @@ final class Word2Vec @Since("1.4.0") (
 
   /** @group setParam */
   @Since("2.2.0")
-  def setMaxUnigramTableSize(value: Int): this.type = set(maxUnigramTableSize, value)
+  def setMaxUnigramTableSize(value: Int): this.type = set(unigramTableSize, value)
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setSample(value: Double): this.type = set(sample, value)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): Word2VecModel = {
@@ -262,7 +282,11 @@ final class Word2Vec @Since("1.4.0") (
     table
   }
 
-  case class Vocabulary(totalWordCount: Long, vocabMap: Map[String, Int], unigramTable: Array[Int])
+  case class Vocabulary(
+    totalWordCount: Long,
+    vocabMap: Map[String, Int],
+    unigramTable: Array[Int],
+    samplingTable: Array[Float])
   private def generateVocab[S <: Iterable[String]](input: RDD[S], minCount: Int):
       Vocabulary = {
     val sc = input.context
@@ -274,22 +298,32 @@ final class Word2Vec @Since("1.4.0") (
       .filter{case (w, c) => c >= minCount}
       .collect()
       .sortWith{case ((w1, c1), (w2, c2)) => c1 > c2}
+      .zipWithIndex
 
-    val totalWordCount = sortedWordCounts.map(_._2).sum
+    val totalWordCount = sortedWordCounts.map(_._1._2).sum
 
-    val vocabMap = sortedWordCounts.zipWithIndex.map{case ((w, c), i) =>
+    val vocabMap = sortedWordCounts.map{case ((w, c), i) =>
       w -> i
     }.toMap
 
-    val weights = sortedWordCounts.map(x => scala.math.pow(x._2, power))
+    val samplingTable = new Array[Float](vocabMap.size)
+
+    if ($(sample) > 0.0) {
+      sortedWordCounts.foreach { case ((w, c), i) =>
+        val samplingRatio = $(sample) * totalWordCount / c
+        samplingTable.update(i, (math.sqrt(samplingRatio) + samplingRatio).toFloat)
+      }
+    }
+
+    val weights = sortedWordCounts.map{ case((_, x), _) => scala.math.pow(x, power)}
     val totalWeight = weights.sum
 
-    val normalizedCumWeights = weights.scanLeft(0.0)(_ + _).tail.map(x => (x / totalWeight))
+    val normalizedCumWeights = weights.scanLeft(0.0)(_ + _).tail.map(x => x / totalWeight)
 
-    val maxUnigramTableSize = $(this.maxUnigramTableSize)
+    val maxUnigramTableSize = $(this.unigramTableSize)
     val unigramTable = generateUnigramTable(normalizedCumWeights, maxUnigramTableSize)
 
-    Vocabulary(totalWordCount, vocabMap, unigramTable)
+    Vocabulary(totalWordCount, vocabMap, unigramTable, samplingTable)
   }
 
   /**
@@ -307,7 +341,8 @@ final class Word2Vec @Since("1.4.0") (
    * @return Estimated word2vec model
    */
   private def fitCBOW[S <: Iterable[String]](input: RDD[S]): feature.Word2VecModel = {
-    val Vocabulary(totalWordCount, vocabMap, uniTable) = generateVocab(input, $(minCount))
+    val Vocabulary(totalWordCount, vocabMap, uniTable, sampleTable) =
+      generateVocab(input, $(minCount))
     val vocabSize = vocabMap.size
     val negativeSamples = $(this.negativeSamples)
     assert(negativeSamples < vocabSize,
@@ -324,12 +359,15 @@ final class Word2Vec @Since("1.4.0") (
 
     val vocabMapBroadcast = sc.broadcast(vocabMap)
     val unigramTableBroadcast = sc.broadcast(uniTable)
+    val sampleTableBroadcast = sc.broadcast(sampleTable)
 
     val windowSize = $(this.windowSize)
     val maxSentenceLength = $(this.maxSentenceLength)
     val numPartitions = $(this.numPartitions)
 
-    val digitSentences = input.flatMap{sentence =>
+    val sample = $(this.sample)
+
+    val digitSentences = input.flatMap { sentence =>
       val wordIndexes = sentence.flatMap(vocabMapBroadcast.value.get)
       wordIndexes.grouped(maxSentenceLength).map(_.toArray)
     }.repartition(numPartitions).cache()
@@ -347,10 +385,12 @@ final class Word2Vec @Since("1.4.0") (
       val syn0bc = sc.broadcast(syn0Global)
       val syn1bc = sc.broadcast(syn1Global)
 
-      val partialFits = digitSentences.mapPartitionsWithIndex{ case (i_, iter) =>
+      val partialFits = digitSentences.mapPartitionsWithIndex { case (i_, iter) =>
         logInfo(s"Iteration: $iteration, Partition: $i_")
         val random = new XORShiftRandom(seed ^ ((i_ + 1) << 16) ^ ((-iteration - 1) << 8))
-        val contextWordPairs = iter.flatMap(generateContextWordPairs(_, windowSize, random))
+        val contextWordPairs = iter.flatMap { s =>
+          generateContextWordPairs(s, windowSize, sample > 0.0, sampleTableBroadcast.value, random)
+        }
 
         val groupedBatches = contextWordPairs.grouped(batchSize)
 
@@ -481,6 +521,7 @@ final class Word2Vec @Since("1.4.0") (
     digitSentences.unpersist()
     vocabMapBroadcast.destroy()
     unigramTableBroadcast.destroy()
+    sampleTableBroadcast.destroy()
 
     new feature.Word2VecModel(vocabMap, syn0Global)
   }
@@ -496,8 +537,15 @@ final class Word2Vec @Since("1.4.0") (
   private def generateContextWordPairs(
       sentence: Array[Int],
       window: Int,
+      sample: Boolean,
+      samplingTable: Array[Float],
       random: XORShiftRandom): Iterator[(Array[Int], Int)] = {
-    sentence.iterator.zipWithIndex.map {case (word, i) =>
+    val reducedSentence = if (sample) {
+      sentence.filter(i => samplingTable(i) > random.nextFloat)
+    } else {
+      sentence
+    }
+    reducedSentence.iterator.zipWithIndex.map {case (word, i) =>
       val b = window - random.nextInt(window) // (window - a) in original code
       // pick b words around the current word index
       val start = math.max(0, i - b) // c in original code, floor ar 0
