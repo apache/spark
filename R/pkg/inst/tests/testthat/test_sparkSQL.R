@@ -1402,6 +1402,11 @@ test_that("column functions", {
   expect_equal(collect(df2)[[3, 1]], FALSE)
   expect_equal(collect(df2)[[3, 2]], TRUE)
 
+  # Test that input_file_name()
+  actual_names <- sort(collect(distinct(select(df, input_file_name()))))
+  expect_equal(length(actual_names), 1)
+  expect_equal(basename(actual_names[1, 1]), basename(jsonPath))
+
   df3 <- select(df, between(df$name, c("Apache", "Spark")))
   expect_equal(collect(df3)[[1, 1]], TRUE)
   expect_equal(collect(df3)[[2, 1]], FALSE)

@@ -1080,6 +1080,12 @@ setGeneric("hypot", function(y, x) { standardGeneric("hypot") })
 #' @export
 setGeneric("initcap", function(x) { standardGeneric("initcap") })
 
+#' @param x empty. Should be used with no argument.
+#' @rdname input_file_name
+#' @export
+setGeneric("input_file_name",
+           function(x = "missing") { standardGeneric("input_file_name") })
+
 #' @rdname instr
 #' @export
 setGeneric("instr", function(y, x) { standardGeneric("instr") })
