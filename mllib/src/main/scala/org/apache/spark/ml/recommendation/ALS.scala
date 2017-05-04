@@ -363,9 +363,9 @@ class ALSModel private[ml] (
    * relatively efficient, the approach implemented here is significantly more efficient.
    *
    * This approach groups factors into blocks and computes the top-k elements per block,
-   * using Level 1 BLAS (dot) and an efficient [[BoundedPriorityQueue]]. It then computes the
-   * global top-k by aggregating the per block top-k elements with a [[TopByKeyAggregator]].
-   * This significantly reduces the size of intermediate and shuffle data.
+   * using a simple dot product (instead of gemm) and an efficient [[BoundedPriorityQueue]].
+   * It then computes the global top-k by aggregating the per block top-k elements with
+   * a [[TopByKeyAggregator]]. This significantly reduces the size of intermediate and shuffle data.
    * This is the DataFrame equivalent to the approach used in
    * [[org.apache.spark.mllib.recommendation.MatrixFactorizationModel]].
    *
@@ -397,12 +397,10 @@ class ALSModel private[ml] (
         val pq = new BoundedPriorityQueue[(Int, Float)](num)(Ordering.by(_._2))
         srcIter.foreach { case (srcId, srcFactor) =>
           dstIter.foreach { case (dstId, dstFactor) =>
-            /**
+            /*
              * The below code is equivalent to
-             * val score = blas.sdot(rank, srcFactor, 1, dstFactor, 1)
-             * Compared with BLAS.dot, the hand-written version used below is more efficient than
-             * a call to the native BLAS backend and the same performance as the fallback
-             * F2jBLAS backend.
+             *    `val score = blas.sdot(rank, srcFactor, 1, dstFactor, 1)`
+             * This handwritten version is as or more efficient as BLAS calls in this case.
              */
             var score = 0.0f
             var k = 0
@@ -410,7 +408,7 @@ class ALSModel private[ml] (
               score += srcFactor(k) * dstFactor(k)
               k += 1
             }
-            pq += { (dstId, score) }
+            pq += dstId -> score
           }
           val pqIter = pq.iterator
           var i = 0
@@ -434,15 +432,16 @@ class ALSModel private[ml] (
         .add(dstOutputColumn, IntegerType)
         .add("rating", FloatType)
     )
-    recs.select($"id" as srcOutputColumn, $"recommendations" cast arrayType)
+    recs.select($"id".as(srcOutputColumn), $"recommendations".cast(arrayType))
   }
 
   /**
    * Blockifies factors to improve the efficiency of cross join
+   * TODO: SPARK-20443 - expose blockSize as a param?
    */
   private def blockify(
-    factors: Dataset[(Int, Array[Float])],
-    /* TODO make blockSize a param? */blockSize: Int = 4096): Dataset[Seq[(Int, Array[Float])]] = {
+      factors: Dataset[(Int, Array[Float])],
+      blockSize: Int = 4096): Dataset[Seq[(Int, Array[Float])]] = {
     import factors.sparkSession.implicits._
     factors.mapPartitions(_.grouped(blockSize))
   }
