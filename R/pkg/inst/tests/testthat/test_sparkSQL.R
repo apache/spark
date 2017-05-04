@@ -1229,6 +1229,10 @@ test_that("select with column", {
   expect_equal(columns(select(df5, column("table.name"))), "name")
   expect_equal(columns(select(df5, "table.name")), "name")
 
+  # Test that stats::alias is not masked
+  expect_is(alias(aov(yield ~ block + N*P*K, npk)), "listof")
+
+
   expect_error(select(df, c("name", "age"), "name"),
                 "To select multiple columns, use a character vector or list for col")
 })
