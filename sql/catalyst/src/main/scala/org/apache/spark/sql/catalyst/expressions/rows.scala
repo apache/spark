@@ -109,11 +109,13 @@ trait BaseGenericInternalRow extends InternalRow {
               return false
             }
           case f1: Float if java.lang.Float.isNaN(f1) =>
-            if (!o2.isInstanceOf[Float] || ! java.lang.Float.isNaN(o2.asInstanceOf[Float])) {
+            if (!(o2.isInstanceOf[Float] && java.lang.Float.isNaN(o2.asInstanceOf[Float]) ||
+              o2.isInstanceOf[Double] && java.lang.Double.isNaN(o2.asInstanceOf[Double]))) {
               return false
             }
           case d1: Double if java.lang.Double.isNaN(d1) =>
-            if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
+            if (!(o2.isInstanceOf[Float] && java.lang.Float.isNaN(o2.asInstanceOf[Float]) ||
+              o2.isInstanceOf[Double] && java.lang.Double.isNaN(o2.asInstanceOf[Double]))) {
               return false
             }
           case _ => if (o1 != o2) {
@@ -142,7 +144,13 @@ trait BaseGenericInternalRow extends InternalRow {
             case s: Short => s.toInt
             case i: Int => i
             case l: Long => (l ^ (l >>> 32)).toInt
-            case f: Float => java.lang.Float.floatToIntBits(f)
+            case f: Float =>
+              if (f.isInstanceOf[Float] && java.lang.Float.isNaN(f.asInstanceOf[Float])) {
+                val b = java.lang.Double.doubleToLongBits(Double.NaN)
+                (b ^ (b >>> 32)).toInt
+              } else {
+                java.lang.Float.floatToIntBits(f)
+              }
             case d: Double =>
               val b = java.lang.Double.doubleToLongBits(d)
               (b ^ (b >>> 32)).toInt
