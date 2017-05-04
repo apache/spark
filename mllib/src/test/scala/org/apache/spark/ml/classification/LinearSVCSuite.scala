@@ -75,21 +75,25 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("Linear SVC binary classification") {
-    val svm = new LinearSVC()
-    val model = svm.fit(smallBinaryDataset)
-    assert(model.transform(smallValidationDataset)
-      .where("prediction=label").count() > nPoints * 0.8)
-    val sparseModel = svm.fit(smallSparseBinaryDataset)
-    checkModels(model, sparseModel)
+    LinearSVC.supportedOptimizers.foreach { opt =>
+      val svm = new LinearSVC().setOptimizer(opt)
+      val model = svm.fit(smallBinaryDataset)
+      assert(model.transform(smallValidationDataset)
+        .where("prediction=label").count() > nPoints * 0.8)
+      val sparseModel = svm.fit(smallSparseBinaryDataset)
+      checkModels(model, sparseModel)
+    }
   }
 
   test("Linear SVC binary classification with regularization") {
-    val svm = new LinearSVC()
-    val model = svm.setRegParam(0.1).fit(smallBinaryDataset)
-    assert(model.transform(smallValidationDataset)
-      .where("prediction=label").count() > nPoints * 0.8)
-    val sparseModel = svm.fit(smallSparseBinaryDataset)
-    checkModels(model, sparseModel)
+    LinearSVC.supportedOptimizers.foreach { opt =>
+      val svm = new LinearSVC().setOptimizer(opt).setMaxIter(10)
+      val model = svm.setRegParam(0.1).fit(smallBinaryDataset)
+      assert(model.transform(smallValidationDataset)
+        .where("prediction=label").count() > nPoints * 0.8)
+      val sparseModel = svm.fit(smallSparseBinaryDataset)
+      checkModels(model, sparseModel)
+    }
   }
 
   test("params") {
@@ -112,6 +116,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(lsvc.getFeaturesCol === "features")
     assert(lsvc.getPredictionCol === "prediction")
     assert(lsvc.getRawPredictionCol === "rawPrediction")
+    assert(lsvc.getOptimizer === "lbfgs")
     val model = lsvc.setMaxIter(5).fit(smallBinaryDataset)
     model.transform(smallBinaryDataset)
       .select("label", "prediction", "rawPrediction")
@@ -154,22 +159,23 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
   test("linearSVC with sample weights") {
     def modelEquals(m1: LinearSVCModel, m2: LinearSVCModel): Unit = {
-      assert(m1.coefficients ~== m2.coefficients absTol 0.05)
+      assert(m1.coefficients ~== m2.coefficients absTol 0.07)
       assert(m1.intercept ~== m2.intercept absTol 0.05)
     }
-
-    val estimator = new LinearSVC().setRegParam(0.01).setTol(0.01)
-    val dataset = smallBinaryDataset
-    MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
-      dataset.as[LabeledPoint], estimator, modelEquals)
-    MLTestingUtils.testOutliersWithSmallWeights[LinearSVCModel, LinearSVC](
-      dataset.as[LabeledPoint], estimator, 2, modelEquals, outlierRatio = 3)
-    MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
-      dataset.as[LabeledPoint], estimator, modelEquals, 42L)
+    LinearSVC.supportedOptimizers.foreach { opt =>
+      val estimator = new LinearSVC().setRegParam(0.02).setTol(0.01).setOptimizer(opt)
+      val dataset = smallBinaryDataset
+      MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
+        dataset.as[LabeledPoint], estimator, modelEquals)
+      MLTestingUtils.testOutliersWithSmallWeights[LinearSVCModel, LinearSVC](
+        dataset.as[LabeledPoint], estimator, 2, modelEquals, outlierRatio = 3)
+      MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
+        dataset.as[LabeledPoint], estimator, modelEquals, 42L)
+    }
   }
 
-  test("linearSVC comparison with R e1071 and scikit-learn") {
-    val trainer1 = new LinearSVC()
+  test("linearSVC OWLQN comparison with R e1071 and scikit-learn") {
+    val trainer1 = new LinearSVC().setOptimizer("owlqn")
       .setRegParam(0.00002) // set regParam = 2.0 / datasize / c
       .setMaxIter(200)
       .setTol(1e-4)
@@ -221,6 +227,25 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val interceptSK = 7.36947518
     assert(model1.intercept ~== interceptSK relTol 1E-3)
     assert(model1.coefficients ~== coefficientsSK relTol 4E-3)
+  }
+
+  test("linearSVC LBFGS comparison with R e1071 and scikit-learn") {
+    val trainer1 = new LinearSVC().setOptimizer("LBFGS")
+      .setRegParam(0.00003)
+      .setMaxIter(200)
+      .setTol(1e-4)
+    val model1 = trainer1.fit(binaryDataset)
+
+    // refer to last unit test for R and python code
+    val coefficientsR = Vectors.dense(7.310338, 14.89741, 22.21005, 29.83508)
+    val interceptR = 7.440177
+    assert(model1.intercept ~== interceptR relTol 2E-2)
+    assert(model1.coefficients ~== coefficientsR relTol 1E-2)
+
+    val coefficientsSK = Vectors.dense(7.24690165, 14.77029087, 21.99924004, 29.5575729)
+    val interceptSK = 7.36947518
+    assert(model1.intercept ~== interceptSK relTol 1E-2)
+    assert(model1.coefficients ~== coefficientsSK relTol 1E-2)
   }
 
   test("read/write: SVM") {

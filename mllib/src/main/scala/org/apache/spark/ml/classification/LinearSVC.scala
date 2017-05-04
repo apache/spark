@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
-import breeze.optimize.{CachedDiffFunction, DiffFunction, OWLQN => BreezeOWLQN}
+import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS,
+  OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -42,7 +45,21 @@ import org.apache.spark.sql.functions.{col, lit}
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasThreshold with HasAggregationDepth
+  with HasThreshold with HasAggregationDepth {
+
+  /**
+   * The optimization algorithm for LinearSVC.
+   * Supported options: "lbfgs" and "owlqn".
+   * (default: "lbfgs")
+   * @group param
+   */
+  final val optimizer: Param[String] = new Param[String](this, "optimizer", "The optimization" +
+    " algorithm to be used", ParamValidators.inArray[String](LinearSVC.supportedOptimizers))
+
+  /** @group getParam */
+  final def getOptimizer: String = $(optimizer)
+
+}
 
 /**
  * :: Experimental ::
@@ -59,6 +76,8 @@ class LinearSVC @Since("2.2.0") (
     @Since("2.2.0") override val uid: String)
   extends Classifier[Vector, LinearSVC, LinearSVCModel]
   with LinearSVCParams with DefaultParamsWritable {
+
+  import LinearSVC._
 
   @Since("2.2.0")
   def this() = this(Identifiable.randomUID("linearsvc"))
@@ -145,6 +164,15 @@ class LinearSVC @Since("2.2.0") (
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
+  /**
+   * Set optimizer for LinearSVC. Supported options: "lbfgs" and "owlqn".
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setOptimizer(value: String): this.type = set(optimizer, value.toLowerCase(Locale.ROOT))
+  setDefault(optimizer -> "lbfgs")
+
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
@@ -205,15 +233,21 @@ class LinearSVC @Since("2.2.0") (
       val costFun = new LinearSVCCostFun(instances, $(fitIntercept),
         $(standardization), bcFeaturesStd, regParamL2, $(aggregationDepth))
 
-      def regParamL1Fun = (index: Int) => 0D
-      val optimizer = new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
+      val optimizerAlgo = $(optimizer) match {
+        case LBFGS => new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
+        case OWLQN =>
+          def regParamL1Fun = (index: Int) => 0D
+          new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
+        case _ => throw new SparkException ("unexpected optimizer: " + $(optimizer))
+      }
+
       val initialCoefWithIntercept = Vectors.zeros(numFeaturesPlusIntercept)
 
-      val states = optimizer.iterations(new CachedDiffFunction(costFun),
+      val states = optimizerAlgo.iterations(new CachedDiffFunction(costFun),
         initialCoefWithIntercept.asBreeze.toDenseVector)
 
       val scaledObjectiveHistory = mutable.ArrayBuilder.make[Double]
-      var state: optimizer.State = null
+      var state: optimizerAlgo.State = null
       while (states.hasNext) {
         state = states.next()
         scaledObjectiveHistory += state.adjustedValue
@@ -257,6 +291,15 @@ class LinearSVC @Since("2.2.0") (
 
 @Since("2.2.0")
 object LinearSVC extends DefaultParamsReadable[LinearSVC] {
+
+  /** String name for Limited-memory BFGS. */
+  private[classification] val LBFGS: String = "lbfgs".toLowerCase(Locale.ROOT)
+
+  /** String name for Orthant-Wise Limited-memory Quasi-Newton. */
+  private[classification] val OWLQN: String = "owlqn".toLowerCase(Locale.ROOT)
+
+  /* Set of optimizers that LinearSVC supports */
+  private[classification] val supportedOptimizers = Array(LBFGS, OWLQN)
 
   @Since("2.2.0")
   override def load(path: String): LinearSVC = super.load(path)
