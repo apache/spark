@@ -2182,6 +2182,18 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
 
   unlink(jsonPath2)
   unlink(jsonPath3)
+
+  # Join with broadcast hint
+  df1 <- sql("SELECT * FROM range(10e10)")
+  df2 <- sql("SELECT * FROM range(10e10)")
+
+  execution_plan <- capture.output(explain(join(df1, df2, df1$id == df2$id)))
+  expect_false(any(grepl("BroadcastHashJoin", execution_plan)))
+
+  execution_plan_hint <- capture.output(
+    explain(join(df1, hint(df2, "broadcast"), df1$id == df2$id))
+  )
+  expect_true(any(grepl("BroadcastHashJoin", execution_plan_hint)))
 })
 
 test_that("toJSON() on DataFrame", {
