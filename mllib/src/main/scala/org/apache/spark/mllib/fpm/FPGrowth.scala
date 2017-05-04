@@ -49,7 +49,8 @@ import org.apache.spark.storage.StorageLevel
  */
 @Since("1.3.0")
 class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
-    @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]])
+    @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]],
+    @Since("2.0.0") val dataSize: Long)
   extends Saveable with Serializable {
   /**
    * Generates association rules for the `Item`s in [[freqItemsets]].
@@ -58,7 +59,7 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
   @Since("1.5.0")
   def generateAssociationRules(confidence: Double): RDD[AssociationRules.Rule[Item]] = {
     val associationRules = new AssociationRules(confidence)
-    associationRules.run(freqItemsets)
+    associationRules.run(freqItemsets, dataSize)
   }
 
   /**
@@ -102,7 +103,8 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val metadata = compact(render(
-        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
+          ("dataSize" -> model.dataSize)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Get the type of item class
@@ -128,19 +130,20 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
-
+      val dataSize = (metadata \ "dataSize").extract[Long]
       val freqItemsets = spark.read.parquet(Loader.dataPath(path))
       val sample = freqItemsets.select("items").head().get(0)
-      loadImpl(freqItemsets, sample)
+      loadImpl(freqItemsets, sample, dataSize)
     }
 
-    def loadImpl[Item: ClassTag](freqItemsets: DataFrame, sample: Item): FPGrowthModel[Item] = {
+    def loadImpl[Item: ClassTag](freqItemsets: DataFrame, sample: Item,
+        dataSize: Long): FPGrowthModel[Item] = {
       val freqItemsetsRDD = freqItemsets.select("items", "freq").rdd.map { x =>
         val items = x.getAs[Seq[Item]](0).toArray
         val freq = x.getLong(1)
         new FreqItemset(items, freq)
       }
-      new FPGrowthModel(freqItemsetsRDD)
+      new FPGrowthModel(freqItemsetsRDD, dataSize)
     }
   }
 }
@@ -215,7 +218,7 @@ class FPGrowth private (
     val partitioner = new HashPartitioner(numParts)
     val freqItems = genFreqItems(data, minCount, partitioner)
     val freqItemsets = genFreqItemsets(data, minCount, freqItems, partitioner)
-    new FPGrowthModel(freqItemsets)
+    new FPGrowthModel(freqItemsets, count)
   }
 
   /**

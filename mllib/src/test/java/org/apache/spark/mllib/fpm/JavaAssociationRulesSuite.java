@@ -36,6 +36,7 @@ public class JavaAssociationRulesSuite extends SharedSparkSession {
       new FreqItemset<>(new String[]{"a", "b"}, 12L)
     ));
 
-    JavaRDD<AssociationRules.Rule<String>> results = (new AssociationRules()).run(freqItemsets);
+    JavaRDD<AssociationRules.Rule<String>> results = (new AssociationRules()).run(
+      freqItemsets, 50L);
   }
 }
