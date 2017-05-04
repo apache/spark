@@ -606,7 +606,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     if (isNewFormat) {
       val newFormatStream = new FileOutputStream(file)
       Utils.tryWithSafeFinally {
-        EventLoggingListener.initEventLog(newFormatStream)
+        EventLoggingListener.initEventLog(newFormatStream, false, null)
       } {
         newFormatStream.close()
       }
