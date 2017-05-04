@@ -37,6 +37,8 @@ strList <- list("Dexter Morgan: Blood. Sometimes it sets my teeth on edge and ",
 strListRDD <- parallelize(sc, strList, 4)
 
 test_that("groupByKey for integers", {
+  skip_on_cran()
+
   grouped <- groupByKey(intRdd, 2L)
 
   actual <- collectRDD(grouped)
@@ -46,6 +48,8 @@ test_that("groupByKey for integers", {
 })
 
 test_that("groupByKey for doubles", {
+  skip_on_cran()
+
   grouped <- groupByKey(doubleRdd, 2L)
 
   actual <- collectRDD(grouped)
@@ -55,6 +59,8 @@ test_that("groupByKey for doubles", {
 })
 
 test_that("reduceByKey for ints", {
+  skip_on_cran()
+
   reduced <- reduceByKey(intRdd, "+", 2L)
 
   actual <- collectRDD(reduced)
@@ -64,6 +70,8 @@ test_that("reduceByKey for ints", {
 })
 
 test_that("reduceByKey for doubles", {
+  skip_on_cran()
+
   reduced <- reduceByKey(doubleRdd, "+", 2L)
   actual <- collectRDD(reduced)
 
@@ -72,6 +80,8 @@ test_that("reduceByKey for doubles", {
 })
 
 test_that("combineByKey for ints", {
+  skip_on_cran()
+
   reduced <- combineByKey(intRdd, function(x) { x }, "+", "+", 2L)
 
   actual <- collectRDD(reduced)
@@ -81,6 +91,8 @@ test_that("combineByKey for ints", {
 })
 
 test_that("combineByKey for doubles", {
+  skip_on_cran()
+
   reduced <- combineByKey(doubleRdd, function(x) { x }, "+", "+", 2L)
   actual <- collectRDD(reduced)
 
@@ -89,6 +101,8 @@ test_that("combineByKey for doubles", {
 })
 
 test_that("combineByKey for characters", {
+  skip_on_cran()
+
   stringKeyRDD <- parallelize(sc,
                               list(list("max", 1L), list("min", 2L),
                                    list("other", 3L), list("max", 4L)), 2L)
@@ -101,6 +115,8 @@ test_that("combineByKey for characters", {
 })
 
 test_that("aggregateByKey", {
+  skip_on_cran()
+
   # test aggregateByKey for int keys
   rdd <- parallelize(sc, list(list(1, 1), list(1, 2), list(2, 3), list(2, 4)))
 
@@ -129,6 +145,8 @@ test_that("aggregateByKey", {
 })
 
 test_that("foldByKey", {
+  skip_on_cran()
+
   # test foldByKey for int keys
   folded <- foldByKey(intRdd, 0, "+", 2L)
 
@@ -172,6 +190,8 @@ test_that("foldByKey", {
 })
 
 test_that("partitionBy() partitions data correctly", {
+  skip_on_cran()
+
   # Partition by magnitude
   partitionByMagnitude <- function(key) { if (key >= 3) 1 else 0 }
 
@@ -187,6 +207,8 @@ test_that("partitionBy() partitions data correctly", {
 })
 
 test_that("partitionBy works with dependencies", {
+  skip_on_cran()
+
   kOne <- 1
   partitionByParity <- function(key) { if (key %% 2 == kOne) 7 else 4 }
 
@@ -205,6 +227,8 @@ test_that("partitionBy works with dependencies", {
 })
 
 test_that("test partitionBy with string keys", {
+  skip_on_cran()
+
   words <- flatMap(strListRDD, function(line) { strsplit(line, " ")[[1]] })
   wordCount <- lapply(words, function(word) { list(word, 1L) })
 

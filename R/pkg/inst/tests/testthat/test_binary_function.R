@@ -29,6 +29,8 @@ rdd <- parallelize(sc, nums, 2L)
 mockFile <- c("Spark is pretty.", "Spark is awesome.")
 
 test_that("union on two RDDs", {
+  skip_on_cran()
+
   actual <- collectRDD(unionRDD(rdd, rdd))
   expect_equal(actual, as.list(rep(nums, 2)))
 
@@ -51,6 +53,8 @@ test_that("union on two RDDs", {
 })
 
 test_that("cogroup on two RDDs", {
+  skip_on_cran()
+
   rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
   rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
   cogroup.rdd <- cogroup(rdd1, rdd2, numPartitions = 2L)
@@ -69,6 +73,8 @@ test_that("cogroup on two RDDs", {
 })
 
 test_that("zipPartitions() on RDDs", {
+  skip_on_cran()
+
   rdd1 <- parallelize(sc, 1:2, 2L)  # 1, 2
   rdd2 <- parallelize(sc, 1:4, 2L)  # 1:2, 3:4
   rdd3 <- parallelize(sc, 1:6, 2L)  # 1:3, 4:6
