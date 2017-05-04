@@ -3723,7 +3723,6 @@ setMethod("rollup",
 #' @param x a SparkDataFrame.
 #' @param name a name of the hint.
 #' @param ... additional argument(s) passed to the method.
-#'
 #' @return A SparkDataFrame.
 #' @family SparkDataFrame functions
 #' @aliases hint,SparkDataFrame,character-method
