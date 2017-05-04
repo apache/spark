@@ -222,7 +222,7 @@ case class InsertIntoHiveTable(
     val externalCatalog = sparkSession.sharedState.externalCatalog
     val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
     val hadoopConf = sessionState.newHadoopConf()
-    val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
+    val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging") + "/.hive-staging"
     val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
 
     val hiveQlTable = HiveClientImpl.toHiveTable(table)
