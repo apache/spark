@@ -133,6 +133,13 @@ class UIUtilsSuite extends SparkFunSuite {
     assert(decoded2 === decodeURLParameter(decoded2))
   }
 
+  test("SPARK-20393: Prevent newline characters in parameters.") {
+    val encoding = "Encoding:base64%0d%0a%0d%0aPGh0bWw%2bjcmlwdD48L2h0bWw%2b"
+    val stripEncoding = "Encoding:base64PGh0bWw%2bjcmlwdD48L2h0bWw%2b"
+
+    assert(stripEncoding === stripXSS(encoding))
+  }
+
   test("SPARK-20393: Prevent script from parameters running on page.") {
     val scriptAlert = """>"'><script>alert(401)<%2Fscript>"""
     val stripScriptAlert = "&gt;&quot;&gt;&lt;script&gt;alert(401)&lt;%2Fscript&gt;"

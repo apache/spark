@@ -35,7 +35,7 @@ private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
-  private val NEWLINE_AND_SINGLE_QUOTE_REGEX = "(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)"
+  private val NEWLINE_AND_SINGLE_QUOTE_REGEX = raw"(?i)(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)".r
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -544,6 +544,6 @@ private[spark] object UIUtils extends Logging {
     } else {
       // Remove new lines and single quotes, followed by escaping HTML version 4.0
       StringEscapeUtils.escapeHtml4(
-        requestParameter.replaceAll(NEWLINE_AND_SINGLE_QUOTE_REGEX, ""))
+        NEWLINE_AND_SINGLE_QUOTE_REGEX.replaceAllIn(requestParameter, ""))
   }
 }
