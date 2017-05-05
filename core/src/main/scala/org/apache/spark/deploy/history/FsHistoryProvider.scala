@@ -445,7 +445,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val newAttempts = try {
       val eventsFilter: ReplayEventsFilter = { eventString =>
         eventString.startsWith(APPL_START_EVENT_PREFIX) ||
-          eventString.startsWith(APPL_END_EVENT_PREFIX)
+          eventString.startsWith(APPL_END_EVENT_PREFIX) ||
+          eventString.startsWith(LOG_START_EVENT_PREFIX)
       }
 
       val logPath = fileStatus.getPath()
@@ -738,6 +739,8 @@ private[history] object FsHistoryProvider {
   private val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
 
   private val APPL_END_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationEnd\""
+
+  private val LOG_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerLogStart\""
 }
 
 /**
