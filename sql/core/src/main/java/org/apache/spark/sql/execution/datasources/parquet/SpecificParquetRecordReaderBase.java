@@ -66,6 +66,7 @@ import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructType$;
 import org.apache.spark.util.AccumulatorV2;
+import scala.Option;
 
 /**
  * Base class for custom RecordReaders for Parquet that directly materialize to `T`.
