@@ -59,8 +59,8 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
     import _hc.implicits._
     val df1 = (1 to 20).map { i => (i, i) }.toDF("a", "x")
     val df2 = (1 to 100).map { i => (i, i % 10, i % 2 == 0) }.toDF("a", "b", "c")
-      .select($"a", $"b")
       .filter($"a" > 10 && $"b" > 6 && $"c")
+      .select($"a", $"b")
     val df3 = df1.join(df2, "a")
     val res = df3.collect()
     val expected = Seq((18, 18, 8)).toDF("a", "x", "b").collect()
