@@ -395,6 +395,7 @@ setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 #' @rdname alias
 #' @param object x a Column or a SparkDataFrame
 #' @param data new name to use
+#' @return a Column or a SparkDataFrame
 NULL
 
 #' @rdname arrange
