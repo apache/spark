@@ -47,12 +47,37 @@ case class UserDefinedFunction protected[sql] (
     dataType: DataType,
     inputTypes: Option[Seq[DataType]]) {
 
+  private var _nullable: Boolean = true
+
+  def nullable: Boolean = _nullable
+
   /**
    * Returns an expression that invokes the UDF, using the given arguments.
    *
    * @since 1.3.0
    */
   def apply(exprs: Column*): Column = {
-    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes.getOrElse(Nil)))
+    Column(ScalaUDF(
+      f,
+      dataType,
+      exprs.map(_.expr),
+      inputTypes.getOrElse(Nil),
+      nullable = _nullable))
+  }
+
+  private def copyAll(): UserDefinedFunction = {
+    val udf = copy()
+    udf._nullable = _nullable
+    udf
+  }
+
+  protected[sql] def withNullability(nullable: Boolean): UserDefinedFunction = {
+    if (nullable == _nullable) {
+      this
+    } else {
+      val udf = copyAll()
+      udf._nullable = nullable
+      udf
+    }
   }
 }
