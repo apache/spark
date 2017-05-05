@@ -178,7 +178,7 @@ class Dataset[T] private[sql](
   @transient private[sql] val logicalPlan: LogicalPlan = {
     // For various commands (like DDL) and queries with side effects, we force query execution
     // to happen right away to let these side effects take place eagerly.
-    queryExecution.analyzed match {
+    val analyzed = queryExecution.analyzed match {
       case c: Command =>
         LocalRelation(c.output, queryExecution.executedPlan.executeCollect())
       case u @ Union(children) if children.forall(_.isInstanceOf[Command]) =>
@@ -186,6 +186,8 @@ class Dataset[T] private[sql](
       case _ =>
         queryExecution.analyzed
     }
+    // Wrap analyzed logical plan with an analysis barrier so we won't traverse/resolve it again.
+    AnalysisBarrier(analyzed)
   }
 
   /**
@@ -356,10 +358,7 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = {
-    val plan = AnalysisBarrier(logicalPlan)
-    new Dataset[Row](sparkSession, plan, RowEncoder(schema))
-  }
+  def toDF(): DataFrame = new Dataset[Row](sparkSession, queryExecution, RowEncoder(schema))
 
   /**
    * :: Experimental ::
@@ -474,7 +473,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
+  def isLocal: Boolean = logicalPlan.asInstanceOf[AnalysisBarrier].child.isInstanceOf[LocalRelation]
 
   /**
    * Returns true if this Dataset contains one or more sources that continuously
@@ -705,7 +704,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def join(right: Dataset[_]): DataFrame = withPlan {
-    Join(AnalysisBarrier(logicalPlan), right.logicalPlan, joinType = Inner, None)
+    Join(logicalPlan, right.logicalPlan, joinType = Inner, None)
   }
 
   /**
@@ -788,8 +787,8 @@ class Dataset[T] private[sql](
 
     withPlan {
       Join(
-        AnalysisBarrier(joined.left),
-        AnalysisBarrier(joined.right),
+        joined.left,
+        joined.right,
         UsingJoin(JoinType(joinType), usingColumns),
         None)
     }
@@ -844,9 +843,8 @@ class Dataset[T] private[sql](
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
     val plan = withPlan(
-      Join(AnalysisBarrier(logicalPlan), right.logicalPlan, JoinType(joinType),
-        Some(joinExprs.expr)))
-          .queryExecution.analyzed.asInstanceOf[Join]
+      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr)))
+      .queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.
     if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
@@ -854,8 +852,8 @@ class Dataset[T] private[sql](
     }
 
     // If left/right have no output set intersection, return the plan.
-    val lanalyzed = withPlan(AnalysisBarrier(this.logicalPlan)).queryExecution.analyzed
-    val ranalyzed = withPlan(AnalysisBarrier(right.logicalPlan)).queryExecution.analyzed
+    val lanalyzed = withPlan(this.logicalPlan).queryExecution.analyzed
+    val ranalyzed = withPlan(right.logicalPlan).queryExecution.analyzed
     if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
       return withPlan(plan)
     }
@@ -887,7 +885,7 @@ class Dataset[T] private[sql](
    * @since 2.1.0
    */
   def crossJoin(right: Dataset[_]): DataFrame = withPlan {
-    Join(AnalysisBarrier(logicalPlan), right.logicalPlan, joinType = Cross, None)
+    Join(logicalPlan, right.logicalPlan, joinType = Cross, None)
   }
 
   /**
@@ -1138,7 +1136,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = withPlan {
-    Project(cols.map(_.named), AnalysisBarrier(logicalPlan))
+    Project(cols.map(_.named), logicalPlan)
   }
 
   /**
@@ -1816,7 +1814,7 @@ class Dataset[T] private[sql](
 
     withPlan {
       Generate(generator, join = true, outer = false,
-        qualifier = None, generatorOutput = Nil, AnalysisBarrier(logicalPlan))
+        qualifier = None, generatorOutput = Nil, logicalPlan)
     }
   }
 
@@ -1857,7 +1855,7 @@ class Dataset[T] private[sql](
 
     withPlan {
       Generate(generator, join = true, outer = false,
-        qualifier = None, generatorOutput = Nil, AnalysisBarrier(logicalPlan))
+        qualifier = None, generatorOutput = Nil, logicalPlan)
     }
   }
 

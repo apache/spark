@@ -206,7 +206,7 @@ object TypeCoercion {
    * instances higher in the query tree.
    */
   object PropagateTypes extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
 
       // No propagation required for leaf nodes.
       case q: LogicalPlan if q.children.isEmpty => q
@@ -261,7 +261,7 @@ object TypeCoercion {
    */
   object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case p if p.analyzed => p
 
       case s @ SetOperation(left, right) if s.childrenResolved &&
