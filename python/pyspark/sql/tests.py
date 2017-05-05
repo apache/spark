@@ -982,7 +982,7 @@ class SQLTests(ReusedPySparkTestCase):
         cbool = (ci & ci), (ci | ci), (~ci)
         self.assertTrue(all(isinstance(c, Column) for c in cbool))
         css = cs.contains('a'), cs.like('a'), cs.rlike('a'), cs.asc(), cs.desc(),\
-            cs.startswith('a'), cs.endswith('a')
+            cs.startswith('a'), cs.endswith('a'), ci.eqNullSafe(cs)
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
         self.assertRaisesRegexp(ValueError,
@@ -1905,6 +1905,22 @@ class SQLTests(ReusedPySparkTestCase):
 
         # planner should not crash without a join
         broadcast(df1)._jdf.queryExecution().executedPlan()
+
+    def test_generic_hints(self):
+        from pyspark.sql import DataFrame
+
+        df1 = self.spark.range(10e10).toDF("id")
+        df2 = self.spark.range(10e10).toDF("id")
+
+        self.assertIsInstance(df1.hint("broadcast"), DataFrame)
+        self.assertIsInstance(df1.hint("broadcast", []), DataFrame)
+
+        # Dummy rules
+        self.assertIsInstance(df1.hint("broadcast", "foo", "bar"), DataFrame)
+        self.assertIsInstance(df1.hint("broadcast", ["foo", "bar"]), DataFrame)
+
+        plan = df1.join(df2.hint("broadcast"), "id")._jdf.queryExecution().executedPlan()
+        self.assertEqual(1, plan.toString().count("BroadcastHashJoin"))
 
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]

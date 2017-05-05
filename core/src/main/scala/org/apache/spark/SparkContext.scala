@@ -1739,6 +1739,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Return information about blocks stored in all of the slaves
    */
   @DeveloperApi
+  @deprecated("This method may change or be removed in a future release.", "2.2.0")
   def getExecutorStorageStatus: Array[StorageStatus] = {
     assertNotStopped()
     env.blockManager.master.getStorageStatus
@@ -1965,6 +1966,9 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       SparkEnv.set(null)
     }
+    // Clear this `InheritableThreadLocal`, or it will still be inherited in child threads even this
+    // `SparkContext` is stopped.
+    localProperties.remove()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()
