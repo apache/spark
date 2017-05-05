@@ -617,10 +617,14 @@ private[spark] class BlockManager(
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     val locs = Random.shuffle(master.getLocations(blockId))
     val (preferredLocs, otherLocs) = locs.partition { loc => blockManagerId.host == loc.host }
-    val (sameRackLocs, differentRackLocs) = otherLocs.partition {
-      loc => blockManagerId.topologyInfo == loc.topologyInfo
+    blockManagerId.topologyInfo match {
+      case None => preferredLocs ++ otherLocs
+      case Some(_) =>
+        val (sameRackLocs, differentRackLocs) = otherLocs.partition {
+          loc => blockManagerId.topologyInfo == loc.topologyInfo
+        }
+        preferredLocs ++ sameRackLocs ++ differentRackLocs
     }
-    preferredLocs ++ sameRackLocs ++ differentRackLocs
   }
 
   /**

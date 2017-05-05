@@ -497,7 +497,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("optimize a location order of blocks without topology information") {
-    val localHost = Utils.localHostName()
+    val localHost = "localhost"
     val otherHost = "otherHost"
     val bmMaster = mock(classOf[BlockManagerMaster])
     val bmId1 = BlockManagerId("id1", localHost, 1)
@@ -512,7 +512,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("optimize a location order of blocks with topology information") {
-    val localHost = Utils.localHostName()
+    val localHost = "localhost"
     val otherHost = "otherHost"
     val localRack = "localRack"
     val otherRack = "otherRack"
@@ -527,6 +527,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .thenReturn(Seq(bmId1, bmId2, bmId5, bmId3, bmId4))
 
     val blockManager = makeBlockManager(128, "exec", bmMaster)
+    blockManager.blockManagerId =
+      BlockManagerId(SparkContext.DRIVER_IDENTIFIER, localHost, 1, Some(localRack))
     val getLocations = PrivateMethod[Seq[BlockManagerId]]('getLocations)
     val locations = blockManager invokePrivate getLocations(BroadcastBlockId(0))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost, otherHost, otherHost))
