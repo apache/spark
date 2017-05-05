@@ -129,7 +129,7 @@ class VectorsSuite extends SparkMLFunSuite {
     // Check for case when sparse vector is non-empty but the values are empty
     val vec9 = Vectors.sparse(100, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
     assert(vec9.argmax === 0)
-    
+
     val vec10 = Vectors.sparse(1, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
     assert(vec10.argmax === 0)
   }
