@@ -40,19 +40,19 @@ and the classic operations on them such as list, delete and rename.
 ### Important: Cloud Object Stores are Not Real Filesystems
 
 While the stores appear to be filesystems, underneath
-they are still object stores, [and the difference is significant](http://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/filesystem/introduction.html)
+they are still object stores, [and the difference is significant](https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/filesystem/introduction.html)
 
 They cannot be used as a direct replacement for a cluster filesystem such as HDFS
 *except where this is explicitly stated*.
 
-Key differences are
+Key differences are:
 
 * Changes to stored objects may not be immediately visible, both in directory listings and actual data access.
 * The means by which directories are emulated may make working with them slow.
 * Rename operations may be very slow and, on failure, leave the store in an unknown state.
 * Seeking within a file may require new HTTP calls, hurting performance. 
 
-How does affect Spark? 
+How does this affect Spark? 
 
 1. Reading and writing data can be significantly slower than working with a normal filesystem.
 1. Some directory structures may be very inefficient to scan during query split calculation.
@@ -111,7 +111,7 @@ the application's `SparkContext`.
 *Important: never check authentication secrets into source code repositories,
 especially public ones*
 
-Consult [the Hadoop documentation](http://hadoop.apache.org/docs/current/) for the relevant
+Consult [the Hadoop documentation](https://hadoop.apache.org/docs/current/) for the relevant
 configuration and security options.
 
 ## Configuring
@@ -128,7 +128,6 @@ use the `FileOutputCommitter` v2 algorithm for performance:
 spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version 2
 ```
 
-
 This does less renaming at the end of a job than the "version 1" algorithm.
 As it still uses `rename()` to commit files, it is unsafe to use
 when the object store does not have consistent metadata/listings.
@@ -141,10 +140,8 @@ job failure:
 spark.hadoop.mapreduce.fileoutputcommitter.cleanup-failures.ignored true
 ```
 
-
 As storing temporary files can run up charges; delete
 directories called `"_temporary"` on a regular basis to avoid this.
-
 
 ### Parquet I/O Settings
 
@@ -193,11 +190,11 @@ atomic `rename()` operation Otherwise the checkpointing may be slow and potentia
 
 Here is the documentation on the standard connectors both from Apache and the cloud providers.
 
-* [OpenStack Swift](http://hadoop.apache.org/docs/current/hadoop-openstack/index.html). Hadoop 2.6+
-* [Azure Blob Storage](http://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html). Since Hadoop 2.7
-* [Azure Data Lake](http://hadoop.apache.org/docs/current/hadoop-azure-datalake/index.html). Since Hadoop 2.8
-* [Amazon S3 via S3A and S3N](http://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html). Hadoop 2.6+
-* [Amazon EMR File System (EMRFS)](http://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-fs.html). From Amazon
+* [OpenStack Swift](https://hadoop.apache.org/docs/current/hadoop-openstack/index.html). Hadoop 2.6+
+* [Azure Blob Storage](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html). Since Hadoop 2.7
+* [Azure Data Lake](https://hadoop.apache.org/docs/current/hadoop-azure-datalake/index.html). Since Hadoop 2.8
+* [Amazon S3 via S3A and S3N](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html). Hadoop 2.6+
+* [Amazon EMR File System (EMRFS)](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-fs.html). From Amazon
 * [Google Cloud Storage Connector for Spark and Hadoop](https://cloud.google.com/hadoop/google-cloud-storage-connector). From Google
 
 
