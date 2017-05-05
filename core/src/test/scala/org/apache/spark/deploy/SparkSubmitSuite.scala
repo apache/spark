@@ -21,8 +21,10 @@ import java.io._
 import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable.ArrayBuffer
+import scala.io.Source
 
 import com.google.common.io.ByteStreams
+import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
@@ -34,6 +36,7 @@ import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.TestUtils.JavaSourceFromString
+import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.util.{CommandLineUtils, ResetSystemProperties, Utils}
 
 
@@ -402,6 +405,37 @@ class SparkSubmitSuite
       "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
+  }
+
+  test("launch simple application with spark-submit with redaction") {
+    val testDir = Utils.createTempDir()
+    testDir.deleteOnExit()
+    val testDirPath = new Path(testDir.getAbsolutePath())
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val fileSystem = Utils.getHadoopFileSystem("/",
+      SparkHadoopUtil.get.newConfiguration(new SparkConf()))
+    try {
+      val args = Seq(
+        "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local",
+        "--conf", "spark.ui.enabled=false",
+        "--conf", "spark.master.rest.enabled=false",
+        "--conf", "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD=secret_password",
+        "--conf", "spark.eventLog.enabled=true",
+        "--conf", "spark.eventLog.testing=true",
+        "--conf", s"spark.eventLog.dir=${testDirPath.toUri.toString}",
+        "--conf", "spark.hadoop.fs.defaultFS=unsupported://example.com",
+        unusedJar.toString)
+      runSparkSubmit(args)
+      val listStatus = fileSystem.listStatus(testDirPath)
+      val logData = EventLoggingListener.openEventLog(listStatus.last.getPath, fileSystem)
+      Source.fromInputStream(logData).getLines().foreach { line =>
+        assert(!line.contains("secret_password"))
+      }
+    } finally {
+      Utils.deleteRecursively(testDir)
+    }
   }
 
   test("includes jars passed in through --jars") {

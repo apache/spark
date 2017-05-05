@@ -372,8 +372,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>(?i)secret|password</td>
   <td>
     Regex to decide which Spark configuration properties and environment variables in driver and
-    executor environments contain sensitive information. When this regex matches a property, its
-    value is redacted from the environment UI and various logs like YARN and event logs.
+    executor environments contain sensitive information. When this regex matches a property key or
+    value, the value is redacted from the environment UI and various logs like YARN and event logs.
   </td>
 </tr>
 <tr>
@@ -2149,6 +2149,20 @@ showDF(properties, numRows = 200, truncate = FALSE)
 
 </table>
 
+### GraphX
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.graphx.pregel.checkpointInterval</code></td>
+  <td>-1</td>
+  <td>
+    Checkpoint interval for graph and message in Pregel. It used to avoid stackOverflowError due to long lineage chains
+  after lots of iterations. The checkpoint is disabled by default.
+  </td>
+</tr>
+</table>
+
 ### Deploy
 
 <table class="table">
@@ -2256,8 +2270,8 @@ should be included on Spark's classpath:
 * `hdfs-site.xml`, which provides default behaviors for the HDFS client.
 * `core-site.xml`, which sets the default filesystem name.
 
-The location of these configuration files varies across CDH and HDP versions, but
-a common location is inside of `/etc/hadoop/conf`. Some tools, such as Cloudera Manager, create
+The location of these configuration files varies across Hadoop versions, but
+a common location is inside of `/etc/hadoop/conf`. Some tools create
 configurations on-the-fly, but offer a mechanisms to download copies of them.
 
 To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/spark-env.sh`
