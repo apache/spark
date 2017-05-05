@@ -18,6 +18,8 @@
 context("functions in client.R")
 
 test_that("adding spark-testing-base as a package works", {
+  skip_on_cran()
+
   args <- generateSparkSubmitArgs("", "", "", "",
                                   "holdenk:spark-testing-base:1.3.0_0.0.5")
   expect_equal(gsub("[[:space:]]", "", args),
@@ -26,16 +28,22 @@ test_that("adding spark-testing-base as a package works", {
 })
 
 test_that("no package specified doesn't add packages flag", {
+  skip_on_cran()
+
   args <- generateSparkSubmitArgs("", "", "", "", "")
   expect_equal(gsub("[[:space:]]", "", args),
                "")
 })
 
 test_that("multiple packages don't produce a warning", {
+  skip_on_cran()
+
   expect_warning(generateSparkSubmitArgs("", "", "", "", c("A", "B")), NA)
 })
 
 test_that("sparkJars sparkPackages as character vectors", {
+  skip_on_cran()
+
   args <- generateSparkSubmitArgs("", "", c("one.jar", "two.jar", "three.jar"), "",
                                   c("com.databricks:spark-avro_2.10:2.0.1"))
   expect_match(args, "--jars one.jar,two.jar,three.jar")

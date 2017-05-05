@@ -297,8 +297,8 @@ case class Lower(child: Expression) extends UnaryExpression with String2StringEx
 }
 
 /** A base trait for functions that compare two strings, returning a boolean. */
-trait StringPredicate extends Predicate with ImplicitCastInputTypes {
-  self: BinaryExpression =>
+abstract class StringPredicate extends BinaryExpression
+  with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
   def compare(l: UTF8String, r: UTF8String): Boolean
 
@@ -313,8 +313,7 @@ trait StringPredicate extends Predicate with ImplicitCastInputTypes {
 /**
  * A function that returns true if the string `left` contains the string `right`.
  */
-case class Contains(left: Expression, right: Expression)
-    extends BinaryExpression with StringPredicate {
+case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
@@ -324,8 +323,7 @@ case class Contains(left: Expression, right: Expression)
 /**
  * A function that returns true if the string `left` starts with the string `right`.
  */
-case class StartsWith(left: Expression, right: Expression)
-    extends BinaryExpression with StringPredicate {
+case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
@@ -335,8 +333,7 @@ case class StartsWith(left: Expression, right: Expression)
 /**
  * A function that returns true if the string `left` ends with the string `right`.
  */
-case class EndsWith(left: Expression, right: Expression)
-    extends BinaryExpression with StringPredicate {
+case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
@@ -1122,7 +1119,7 @@ case class StringSpace(child: Expression)
   """)
 // scalastyle:on line.size.limit
 case class Substring(str: Expression, pos: Expression, len: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(str: Expression, pos: Expression) = {
     this(str, pos, Literal(Integer.MAX_VALUE))

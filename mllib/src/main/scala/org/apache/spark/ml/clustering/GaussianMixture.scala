@@ -472,7 +472,7 @@ class GaussianMixture @Since("2.0.0") (
        */
       val cov = {
         val ss = new DenseVector(new Array[Double](numFeatures)).asBreeze
-        slice.foreach(xi => ss += (xi.asBreeze - mean.asBreeze) :^ 2.0)
+        slice.foreach(xi => ss += (xi.asBreeze - mean.asBreeze) ^:^ 2.0)
         val diagVec = Vectors.fromBreeze(ss)
         BLAS.scal(1.0 / numSamples, diagVec)
         val covVec = new DenseVector(Array.fill[Double](

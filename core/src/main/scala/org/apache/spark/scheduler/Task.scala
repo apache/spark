@@ -89,8 +89,8 @@ private[spark] abstract class Task[T](
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
-    if (_killed) {
-      kill(interruptThread = false)
+    if (_reasonIfKilled != null) {
+      kill(interruptThread = false, _reasonIfKilled)
     }
 
     new CallerContext(
@@ -149,7 +149,7 @@ private[spark] abstract class Task[T](
 
   def preferredLocations: Seq[TaskLocation] = Nil
 
-  // Map output tracker epoch. Will be set by TaskScheduler.
+  // Map output tracker epoch. Will be set by TaskSetManager.
   var epoch: Long = -1
 
   // Task context, to be initialized in run().
@@ -158,17 +158,17 @@ private[spark] abstract class Task[T](
   // The actual Thread on which the task is running, if any. Initialized in run().
   @volatile @transient private var taskThread: Thread = _
 
-  // A flag to indicate whether the task is killed. This is used in case context is not yet
-  // initialized when kill() is invoked.
-  @volatile @transient private var _killed = false
+  // If non-null, this task has been killed and the reason is as specified. This is used in case
+  // context is not yet initialized when kill() is invoked.
+  @volatile @transient private var _reasonIfKilled: String = null
 
   protected var _executorDeserializeTime: Long = 0
   protected var _executorDeserializeCpuTime: Long = 0
 
   /**
-   * Whether the task has been killed.
+   * If defined, this task has been killed and this option contains the reason.
    */
-  def killed: Boolean = _killed
+  def reasonIfKilled: Option[String] = Option(_reasonIfKilled)
 
   /**
    * Returns the amount of time spent deserializing the RDD and function to be run.
@@ -182,14 +182,11 @@ private[spark] abstract class Task[T](
    */
   def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
     if (context != null) {
-      context.taskMetrics.internalAccums.filter { a =>
-        // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
-        // value will be updated at driver side.
-        // Note: internal accumulators representing task metrics always count failed values
-        !a.isZero || a.name == Some(InternalAccumulator.RESULT_SIZE)
-      // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not filter
-      // them out.
-      } ++ context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
+      // Note: internal accumulators representing task metrics always count failed values
+      context.taskMetrics.nonZeroInternalAccums() ++
+        // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not
+        // filter them out.
+        context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
     } else {
       Seq.empty
     }
@@ -201,10 +198,11 @@ private[spark] abstract class Task[T](
    * be called multiple times.
    * If interruptThread is true, we will also call Thread.interrupt() on the Task's executor thread.
    */
-  def kill(interruptThread: Boolean) {
-    _killed = true
+  def kill(interruptThread: Boolean, reason: String) {
+    require(reason != null)
+    _reasonIfKilled = reason
     if (context != null) {
-      context.markInterrupted()
+      context.markInterrupted(reason)
     }
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()

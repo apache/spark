@@ -155,11 +155,8 @@ public class TaskMemoryManager {
         for (MemoryConsumer c: consumers) {
           if (c != consumer && c.getUsed() > 0 && c.getMode() == mode) {
             long key = c.getUsed();
-            List<MemoryConsumer> list = sortedConsumers.get(key);
-            if (list == null) {
-              list = new ArrayList<>(1);
-              sortedConsumers.put(key, list);
-            }
+            List<MemoryConsumer> list =
+                sortedConsumers.computeIfAbsent(key, k -> new ArrayList<>(1));
             list.add(c);
           }
         }

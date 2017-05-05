@@ -21,12 +21,14 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * Test basic expression parsing. If a type of expression is supported it should be tested here.
+ * Test basic expression parsing.
+ * If the type of an expression is supported it should be tested here.
  *
  * Please note that some of the expressions test don't have to be sound expressions, only their
  * structure needs to be valid. Unsound expressions should be caught by the Analyzer or
@@ -165,6 +167,11 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a = b is not null", ('a === 'b).isNotNull)
   }
 
+  test("is distinct expressions") {
+    assertEqual("a is distinct from b", !('a <=> 'b))
+    assertEqual("a is not distinct from b", 'a <=> 'b)
+  }
+
   test("binary arithmetic expressions") {
     // Simple operations
     assertEqual("a * b", 'a * 'b)
@@ -209,6 +216,7 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
     assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
     assertEqual("`select`(all a, b)", 'select.function('a, 'b))
+    assertEqual("foo(a as x, b as e)", 'foo.function('a as 'x, 'b as 'e))
   }
 
   test("window function expressions") {
@@ -278,6 +286,7 @@ class ExpressionParserSuite extends PlanTest {
     // Note that '(a)' will be interpreted as a nested expression.
     assertEqual("(a, b)", CreateStruct(Seq('a, 'b)))
     assertEqual("(a, b, c)", CreateStruct(Seq('a, 'b, 'c)))
+    assertEqual("(a as b, b as c)", CreateStruct(Seq('a as 'b, 'b as 'c)))
   }
 
   test("scalar sub-query") {
@@ -545,5 +554,12 @@ class ExpressionParserSuite extends PlanTest {
     // Function identifier contains countious backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
     assertEqual(complexName2.quotedString, UnresolvedAttribute("fo``o.ba``r"))
+  }
+
+  test("SPARK-19526 Support ignore nulls keywords for first and last") {
+    assertEqual("first(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
+    assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
+    assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
+    assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 }

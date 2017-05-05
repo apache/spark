@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.io.File
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
-import java.util.{Calendar, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -32,6 +32,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
 import org.apache.spark.sql.functions._
@@ -475,7 +476,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       assert(partDf.schema.map(_.name) === Seq("intField", "stringField"))
 
       path.listFiles().foreach { f =>
-        if (!f.getName.startsWith("_") && f.getName.toLowerCase().endsWith(".parquet")) {
+        if (!f.getName.startsWith("_") &&
+            f.getName.toLowerCase(Locale.ROOT).endsWith(".parquet")) {
           // when the input is a path to a parquet file
           val df = spark.read.parquet(f.getCanonicalPath)
           assert(df.schema.map(_.name) === Seq("intField", "stringField"))
@@ -483,7 +485,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       }
 
       path.listFiles().foreach { f =>
-        if (!f.getName.startsWith("_") && f.getName.toLowerCase().endsWith(".parquet")) {
+        if (!f.getName.startsWith("_") &&
+            f.getName.toLowerCase(Locale.ROOT).endsWith(".parquet")) {
           // when the input is a path to a parquet file but `basePath` is overridden to
           // the base path containing partitioning directories
           val df = spark
@@ -708,10 +711,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
 
     withTempPath { dir =>
-      df.write.option("timeZone", "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(spark.read.option("timeZone", "GMT").load(dir.toString).select(fields: _*), row)
+      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .load(dir.toString).select(fields: _*), row)
     }
   }
 
@@ -749,10 +753,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
 
     withTempPath { dir =>
-      df.write.option("timeZone", "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name))
-      checkAnswer(spark.read.option("timeZone", "GMT").load(dir.toString).select(fields: _*), row)
+      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .load(dir.toString).select(fields: _*), row)
     }
   }
 

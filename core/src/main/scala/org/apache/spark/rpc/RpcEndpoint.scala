@@ -35,7 +35,7 @@ private[spark] trait RpcEnvFactory {
  *
  * The life-cycle of an endpoint is:
  *
- * constructor -> onStart -> receive* -> onStop
+ * {@code constructor -> onStart -> receive* -> onStop}
  *
  * Note: `receive` can be called concurrently. If you want `receive` to be thread-safe, please use
  * [[ThreadSafeRpcEndpoint]]
@@ -63,16 +63,16 @@ private[spark] trait RpcEndpoint {
   }
 
   /**
-   * Process messages from [[RpcEndpointRef.send]] or [[RpcCallContext.reply)]]. If receiving a
-   * unmatched message, [[SparkException]] will be thrown and sent to `onError`.
+   * Process messages from `RpcEndpointRef.send` or `RpcCallContext.reply`. If receiving a
+   * unmatched message, `SparkException` will be thrown and sent to `onError`.
    */
   def receive: PartialFunction[Any, Unit] = {
     case _ => throw new SparkException(self + " does not implement 'receive'")
   }
 
   /**
-   * Process messages from [[RpcEndpointRef.ask]]. If receiving a unmatched message,
-   * [[SparkException]] will be thrown and sent to `onError`.
+   * Process messages from `RpcEndpointRef.ask`. If receiving a unmatched message,
+   * `SparkException` will be thrown and sent to `onError`.
    */
   def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case _ => context.sendFailure(new SparkException(self + " won't reply anything"))
