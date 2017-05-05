@@ -95,10 +95,6 @@ private[spark] class SparkUI private (
     appId = id
   }
 
-  def setAppSparkVersion(version: String): Unit = {
-    appSparkVersion = version
-  }
-
   /** Stop the server behind this web interface. Only valid after bind(). */
   override def stop() {
     super.stop()
