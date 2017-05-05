@@ -38,10 +38,12 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   private final LevelDBTypeInfo.Index index;
   private final byte[] indexKeyPrefix;
   private final byte[] end;
+  private final long max;
 
   private boolean checkedNext;
   private T next;
   private boolean closed;
+  private long count;
 
   LevelDBIterator(LevelDB db, KVStoreView<T> params) throws Exception {
     this.db = db;
@@ -51,6 +53,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
     this.indexKeyPrefix = index.keyPrefix();
+    this.max = params.max;
 
     byte[] firstKey;
     if (params.first != null) {
@@ -66,14 +69,27 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     }
     it.seek(firstKey);
 
+    byte[] end = null;
     if (ascending) {
-      this.end = index.end();
+      end = params.last != null ? index.end(params.last) : index.end();
     } else {
-      this.end = null;
+      if (params.last != null) {
+        end = index.start(params.last);
+      }
       if (it.hasNext()) {
-        it.next();
+        // When descending, the caller may have set up the start of iteration at a non-existant
+        // entry that is guaranteed to be after the desired entry. For example, if you have a
+        // compound key (a, b) where b is a, integer, you may seek to the end of the elements that
+        // have the same "a" value by specifying Integer.MAX_VALUE for "b", and that value may not
+        // exist in the database. So need to check here whether the next value actually belongs to
+        // the set being returned by the iterator before advancing.
+        byte[] nextKey = it.peekNext().getKey();
+        if (compare(nextKey, indexKeyPrefix) <= 0) {
+          it.next();
+        }
       }
     }
+    this.end = end;
 
     if (params.skip > 0) {
       skip(params.skip);
@@ -147,6 +163,10 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   }
 
   private T loadNext() {
+    if (count >= max) {
+      return null;
+    }
+
     try {
       while (true) {
         boolean hasNext = ascending ? it.hasNext() : it.hasPrev();
@@ -173,10 +193,15 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
           return null;
         }
 
-        // If there's a known end key and it's found, stop.
-        if (end != null && Arrays.equals(nextKey, end)) {
-          return null;
+        // If there's a known end key and iteration has gone past it, stop.
+        if (end != null) {
+          int comp = compare(nextKey, end) * (ascending ? 1 : -1);
+          if (comp > 0) {
+            return null;
+          }
         }
+
+        count++;
 
         // Next element is part of the iteration, return it.
         if (index == null || index.isCopy()) {
@@ -226,6 +251,19 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     }
 
     return dest;
+  }
+
+  private int compare(byte[] a, byte[] b) {
+    int diff = 0;
+    int minLen = Math.min(a.length, b.length);
+    for (int i = 0; i < minLen; i++) {
+      diff += (a[i] - b[i]);
+      if (diff != 0) {
+        return diff;
+      }
+    }
+
+    return a.length - b.length;
   }
 
 }

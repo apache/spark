@@ -152,110 +152,169 @@ public class DBIteratorSuite {
 
   @Test
   public void naturalIndex() throws Exception {
-    testIteration(NATURAL_ORDER, view(), null);
+    testIteration(NATURAL_ORDER, view(), null, null);
   }
 
   @Test
   public void refIndex() throws Exception {
-    testIteration(REF_INDEX_ORDER, view().index("id"), null);
+    testIteration(REF_INDEX_ORDER, view().index("id"), null, null);
   }
 
   @Test
   public void copyIndex() throws Exception {
-    testIteration(COPY_INDEX_ORDER, view().index("name"), null);
+    testIteration(COPY_INDEX_ORDER, view().index("name"), null, null);
   }
 
   @Test
   public void numericIndex() throws Exception {
-    testIteration(NUMERIC_INDEX_ORDER, view().index("int"), null);
+    testIteration(NUMERIC_INDEX_ORDER, view().index("int"), null, null);
   }
 
   @Test
   public void naturalIndexDescending() throws Exception {
-    testIteration(NATURAL_ORDER, view().reverse(), null);
+    testIteration(NATURAL_ORDER, view().reverse(), null, null);
   }
 
   @Test
   public void refIndexDescending() throws Exception {
-    testIteration(REF_INDEX_ORDER, view().index("id").reverse(), null);
+    testIteration(REF_INDEX_ORDER, view().index("id").reverse(), null, null);
   }
 
   @Test
   public void copyIndexDescending() throws Exception {
-    testIteration(COPY_INDEX_ORDER, view().index("name").reverse(), null);
+    testIteration(COPY_INDEX_ORDER, view().index("name").reverse(), null, null);
   }
 
   @Test
   public void numericIndexDescending() throws Exception {
-    testIteration(NUMERIC_INDEX_ORDER, view().index("int").reverse(), null);
+    testIteration(NUMERIC_INDEX_ORDER, view().index("int").reverse(), null, null);
   }
 
   @Test
   public void naturalIndexWithStart() throws Exception {
-    CustomType1 first = pickFirst();
-    testIteration(NATURAL_ORDER, view().first(first.key), first);
+    CustomType1 first = pickLimit();
+    testIteration(NATURAL_ORDER, view().first(first.key), first, null);
   }
 
   @Test
   public void refIndexWithStart() throws Exception {
-    CustomType1 first = pickFirst();
-    testIteration(REF_INDEX_ORDER, view().index("id").first(first.id), first);
+    CustomType1 first = pickLimit();
+    testIteration(REF_INDEX_ORDER, view().index("id").first(first.id), first, null);
   }
 
   @Test
   public void copyIndexWithStart() throws Exception {
-    CustomType1 first = pickFirst();
-    testIteration(COPY_INDEX_ORDER, view().index("name").first(first.name), first);
+    CustomType1 first = pickLimit();
+    testIteration(COPY_INDEX_ORDER, view().index("name").first(first.name), first, null);
   }
 
   @Test
   public void numericIndexWithStart() throws Exception {
-    CustomType1 first = pickFirst();
-    testIteration(NUMERIC_INDEX_ORDER, view().index("int").first(first.num), first);
+    CustomType1 first = pickLimit();
+    testIteration(NUMERIC_INDEX_ORDER, view().index("int").first(first.num), first, null);
   }
 
   @Test
   public void naturalIndexDescendingWithStart() throws Exception {
-    CustomType1 first = pickFirst();
-    testIteration(NATURAL_ORDER, view().reverse().first(first.key), first);
+    CustomType1 first = pickLimit();
+    testIteration(NATURAL_ORDER, view().reverse().first(first.key), first, null);
   }
 
   @Test
   public void refIndexDescendingWithStart() throws Exception {
-    CustomType1 first = pickFirst();
-    testIteration(REF_INDEX_ORDER, view().reverse().index("id").first(first.id), first);
+    CustomType1 first = pickLimit();
+    testIteration(REF_INDEX_ORDER, view().reverse().index("id").first(first.id), first, null);
   }
 
   @Test
   public void copyIndexDescendingWithStart() throws Exception {
-    CustomType1 first = pickFirst();
-    testIteration(COPY_INDEX_ORDER, view().reverse().index("name").first(first.name),
-      first);
+    CustomType1 first = pickLimit();
+    testIteration(COPY_INDEX_ORDER, view().reverse().index("name").first(first.name), first, null);
   }
 
   @Test
   public void numericIndexDescendingWithStart() throws Exception {
-    CustomType1 first = pickFirst();
-    testIteration(NUMERIC_INDEX_ORDER, view().reverse().index("int").first(first.num),
-      first);
+    CustomType1 first = pickLimit();
+    testIteration(NUMERIC_INDEX_ORDER, view().reverse().index("int").first(first.num), first, null);
   }
 
   @Test
   public void naturalIndexWithSkip() throws Exception {
-    testIteration(NATURAL_ORDER, view().skip(RND.nextInt(allEntries.size() / 2)), null);
+    testIteration(NATURAL_ORDER, view().skip(RND.nextInt(allEntries.size() / 2)), null, null);
   }
 
   @Test
   public void refIndexWithSkip() throws Exception {
     testIteration(REF_INDEX_ORDER, view().index("id").skip(RND.nextInt(allEntries.size() / 2)),
-      null);
+      null, null);
   }
 
   @Test
   public void copyIndexWithSkip() throws Exception {
     testIteration(COPY_INDEX_ORDER, view().index("name").skip(RND.nextInt(allEntries.size() / 2)),
-      null);
+      null, null);
   }
+
+  @Test
+  public void naturalIndexWithMax() throws Exception {
+    testIteration(NATURAL_ORDER, view().max(RND.nextInt(allEntries.size() / 2)), null, null);
+  }
+
+  @Test
+  public void copyIndexWithMax() throws Exception {
+    testIteration(COPY_INDEX_ORDER, view().index("name").max(RND.nextInt(allEntries.size() / 2)),
+      null, null);
+  }
+
+  @Test
+  public void naturalIndexWithLast() throws Exception {
+    CustomType1 last = pickLimit();
+    testIteration(NATURAL_ORDER, view().last(last.key), null, last);
+  }
+
+  @Test
+  public void refIndexWithLast() throws Exception {
+    CustomType1 last = pickLimit();
+    testIteration(REF_INDEX_ORDER, view().index("id").last(last.id), null, last);
+  }
+
+  @Test
+  public void copyIndexWithLast() throws Exception {
+    CustomType1 last = pickLimit();
+    testIteration(COPY_INDEX_ORDER, view().index("name").last(last.name), null, last);
+  }
+
+  @Test
+  public void numericIndexWithLast() throws Exception {
+    CustomType1 last = pickLimit();
+    testIteration(NUMERIC_INDEX_ORDER, view().index("int").last(last.num), null, last);
+  }
+
+  @Test
+  public void naturalIndexDescendingWithLast() throws Exception {
+    CustomType1 last = pickLimit();
+    testIteration(NATURAL_ORDER, view().reverse().last(last.key), null, last);
+  }
+
+  @Test
+  public void refIndexDescendingWithLast() throws Exception {
+    CustomType1 last = pickLimit();
+    testIteration(REF_INDEX_ORDER, view().reverse().index("id").last(last.id), null, last);
+  }
+
+  @Test
+  public void copyIndexDescendingWithLast() throws Exception {
+    CustomType1 last = pickLimit();
+    testIteration(COPY_INDEX_ORDER, view().reverse().index("name").last(last.name),
+      null, last);
+  }
+
+  @Test
+  public void numericIndexDescendingWithLast() throws Exception {
+    CustomType1 last = pickLimit();
+    testIteration(NUMERIC_INDEX_ORDER, view().reverse().index("int").last(last.num),
+      null, last);
+   }
 
   @Test
   public void testRefWithIntNaturalKey() throws Exception {
@@ -272,8 +331,8 @@ public class DBIteratorSuite {
     }
   }
 
-  private CustomType1 pickFirst() {
-    // Picks a first element that has clashes with other elements in the given index.
+  private CustomType1 pickLimit() {
+    // Picks an element that has clashes with other elements in the given index.
     return clashingEntries.get(RND.nextInt(clashingEntries.size()));
   }
 
@@ -297,20 +356,30 @@ public class DBIteratorSuite {
   private void testIteration(
       final BaseComparator order,
       final KVStoreView<CustomType1> params,
-      final CustomType1 first) throws Exception {
+      final CustomType1 first,
+      final CustomType1 last) throws Exception {
     List<CustomType1> indexOrder = sortBy(order.fallback());
     if (!params.ascending) {
       indexOrder = Lists.reverse(indexOrder);
     }
 
     Iterable<CustomType1> expected = indexOrder;
+    BaseComparator expectedOrder = params.ascending ? order : order.reverse();
+
     if (first != null) {
-      final BaseComparator expectedOrder = params.ascending ? order : order.reverse();
       expected = Iterables.filter(expected, v -> expectedOrder.compare(first, v) <= 0);
+    }
+
+    if (last != null) {
+      expected = Iterables.filter(expected, v -> expectedOrder.compare(v, last) <= 0);
     }
 
     if (params.skip > 0) {
       expected = Iterables.skip(expected, (int) params.skip);
+    }
+
+    if (params.max != Long.MAX_VALUE) {
+      expected = Iterables.limit(expected, (int) params.max);
     }
 
     List<CustomType1> actual = collect(params);

@@ -43,7 +43,9 @@ public abstract class KVStoreView<T> implements Iterable<T> {
   boolean ascending = true;
   String index = KVIndex.NATURAL_INDEX_NAME;
   Object first = null;
+  Object last = null;
   long skip = 0L;
+  long max = Long.MAX_VALUE;
 
   public KVStoreView(Class<T> type) {
     this.type = type;
@@ -74,7 +76,25 @@ public abstract class KVStoreView<T> implements Iterable<T> {
   }
 
   /**
-   * Skips a number of elements in the resulting iterator.
+   * Stops iteration at the given value of the chosen index.
+   */
+  public KVStoreView<T> last(Object value) {
+    this.last = value;
+    return this;
+  }
+
+  /**
+   * Stops iteration after a number of elements has been retrieved.
+   */
+  public KVStoreView<T> max(long max) {
+    Preconditions.checkArgument(max > 0L, "max must be positive.");
+    this.max = max;
+    return this;
+  }
+
+  /**
+   * Skips a number of elements at the start of iteration. Skipped elements are not accounted
+   * when using {@link #max(long)}.
    */
   public KVStoreView<T> skip(long n) {
     this.skip = n;
