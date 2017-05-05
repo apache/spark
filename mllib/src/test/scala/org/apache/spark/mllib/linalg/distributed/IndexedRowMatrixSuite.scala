@@ -110,9 +110,11 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
 
     assert(blockMat.blocks.map { case (_, matrix: Matrix) =>
-      matrix.isInstanceOf[DenseMatrix]}.reduce(_ && _))
+      matrix.isInstanceOf[DenseMatrix]
+    }.reduce(_ && _))
     assert(blockMat2.blocks.map { case (_, matrix: Matrix) =>
-      matrix.isInstanceOf[DenseMatrix]}.reduce(_ && _))
+      matrix.isInstanceOf[DenseMatrix]
+    }.reduce(_ && _))
   }
 
   test("toBlockMatrix sparse backing") {
@@ -139,9 +141,11 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(blockMat2.toBreeze() === idxRowMatSparse.toBreeze())
 
     assert(blockMat.blocks.map { case (_, matrix: Matrix) =>
-      matrix.isInstanceOf[SparseMatrix]}.reduce(_ && _))
+      matrix.isInstanceOf[SparseMatrix]
+    }.reduce(_ && _))
     assert(blockMat2.blocks.map { case (_, matrix: Matrix) =>
-      matrix.isInstanceOf[SparseMatrix]}.reduce(_ && _))
+      matrix.isInstanceOf[SparseMatrix]
+    }.reduce(_ && _))
   }
 
   test("toBlockMatrix mixed backing") {
