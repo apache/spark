@@ -41,7 +41,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   /* invalid json with leading nulls would trigger java.io.CharConversionException
    in Jackson's JsonFactory.createParser(byte[]) due to RFC-4627 encoding detection */
-  val badJson = "\0\0\0A\1AAA"
+  val badJson = "\u0000\u0000\u0000A\u0001AAA"
 
   test("$.store.bicycle") {
     checkEvaluation(
@@ -451,6 +451,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       JsonToStructs(schema, Map.empty, Literal.create(null, StringType), gmtId),
       null
     )
+  }
+
+  test("SPARK-20549: from_json bad UTF-8") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    checkEvaluation(
+      JsonToStructs(schema, Map.empty, Literal(badJson), gmtId),
+      null)
   }
 
   test("from_json with timestamp") {

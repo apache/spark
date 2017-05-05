@@ -576,6 +576,10 @@ setGeneric("group_by", function(x, ...) { standardGeneric("group_by") })
 #' @export
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
 
+#' @rdname hint
+#' @export
+setGeneric("hint", function(x, name, ...) { standardGeneric("hint") })
+
 #' @rdname insertInto
 #' @export
 setGeneric("insertInto", function(x, tableName, ...) { standardGeneric("insertInto") })
@@ -1052,6 +1056,14 @@ setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") 
 #' @export
 setGeneric("greatest", function(x, ...) { standardGeneric("greatest") })
 
+#' @rdname grouping_bit
+#' @export
+setGeneric("grouping_bit", function(x) { standardGeneric("grouping_bit") })
+
+#' @rdname grouping_id
+#' @export
+setGeneric("grouping_id", function(x, ...) { standardGeneric("grouping_id") })
+
 #' @rdname hex
 #' @export
 setGeneric("hex", function(x) { standardGeneric("hex") })
@@ -1067,6 +1079,12 @@ setGeneric("hypot", function(y, x) { standardGeneric("hypot") })
 #' @rdname initcap
 #' @export
 setGeneric("initcap", function(x) { standardGeneric("initcap") })
+
+#' @param x empty. Should be used with no argument.
+#' @rdname input_file_name
+#' @export
+setGeneric("input_file_name",
+           function(x = "missing") { standardGeneric("input_file_name") })
 
 #' @rdname instr
 #' @export

@@ -801,6 +801,14 @@ public abstract class ColumnVector implements AutoCloseable {
     return result;
   }
 
+  public final int appendFloats(int length, float[] src, int offset) {
+    reserve(elementsAppended + length);
+    int result = elementsAppended;
+    putFloats(elementsAppended, length, src, offset);
+    elementsAppended += length;
+    return result;
+  }
+
   public final int appendDouble(double v) {
     reserve(elementsAppended + 1);
     putDouble(elementsAppended, v);

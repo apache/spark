@@ -255,6 +255,8 @@ test_that("spark.lda with libsvm", {
 })
 
 test_that("spark.lda with text input", {
+  skip_on_cran()
+
   text <- read.text(absoluteSparkPath("data/mllib/sample_lda_data.txt"))
   model <- spark.lda(text, optimizer = "online", features = "value")
 
@@ -297,6 +299,8 @@ test_that("spark.lda with text input", {
 })
 
 test_that("spark.posterior and spark.perplexity", {
+  skip_on_cran()
+
   text <- read.text(absoluteSparkPath("data/mllib/sample_lda_data.txt"))
   model <- spark.lda(text, features = "value", k = 3)
 
