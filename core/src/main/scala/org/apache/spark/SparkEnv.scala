@@ -247,13 +247,8 @@ object SparkEnv extends Logging {
       securityManager, clientMode = !isDriver)
 
     // Figure out which port RpcEnv actually bound to in case the original port is 0 or occupied.
-    // In the non-driver case, the RPC env's address may be null since it may not be listening
-    // for incoming connections.
     if (isDriver) {
       conf.set("spark.driver.port", rpcEnv.address.port.toString)
-    } else if (rpcEnv.address != null) {
-      conf.set("spark.executor.port", rpcEnv.address.port.toString)
-      logInfo(s"Setting spark.executor.port to: ${rpcEnv.address.port.toString}")
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
