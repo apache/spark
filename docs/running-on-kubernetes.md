@@ -189,7 +189,7 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td>
     The namespace that will be used for running the driver and executor pods. When using
     <code>spark-submit</code> in cluster mode, this can also be passed to <code>spark-submit</code> via the
-    <code>--kubernetes-namespace</code> command line argument.
+    <code>--kubernetes-namespace</code> command line argument. The namespace must already exist.
   </td>
 </tr>
 <tr>
