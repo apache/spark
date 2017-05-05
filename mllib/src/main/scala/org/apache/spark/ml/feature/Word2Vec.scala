@@ -37,9 +37,6 @@ import org.apache.spark.util.{Utils, VersionUtils}
  */
 private[feature] trait Word2VecBase extends Params
   with HasInputCol with HasOutputCol with HasMaxIter with HasStepSize with HasSeed with HasSolver {
-  // We currently support SkipGram with Hierarchical Softmax and
-  // Continuous Bag of Words with Negative Sampling
-  private val supportedModels = Array("sg-hs", "cbow-ns")
 
   /**
    * The dimension of the code that you want to transform from words.
