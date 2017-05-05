@@ -36,6 +36,8 @@ object MimaExcludes {
 
   // Exclude rules for 2.3.x
   lazy val v23excludes = v22excludes ++ Seq(
+    // [SPARK-20495][SQL] Add StorageLevel to cacheTable API
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.cacheTable")
   )
 
   // Exclude rules for 2.2.x

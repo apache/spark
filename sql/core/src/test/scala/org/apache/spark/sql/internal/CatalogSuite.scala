@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -535,4 +536,11 @@ class CatalogSuite
       .createTempView("fork_table", Range(1, 2, 3, 4), overrideIfExists = true)
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
   }
+
+  test("cacheTable with storage level") {
+    createTempTable("my_temp_table")
+    spark.catalog.cacheTable("my_temp_table", StorageLevel.DISK_ONLY)
+    assert(spark.table("my_temp_table").storageLevel == StorageLevel.DISK_ONLY)
+  }
+
 }
