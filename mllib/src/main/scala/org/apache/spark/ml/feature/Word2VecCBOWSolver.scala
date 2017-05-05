@@ -144,7 +144,7 @@ object Word2VecCBOWSolver extends Logging {
             batchTime = System.nanoTime
             logDebug(s"Partition: $i_, Batch time: $currentBatchTime ms, batch speed: " +
               s"${batchWordCount / currentBatchTime * 1000} words/s")
-            logInfo(s"Partition: $i_, Cumulative time: $timeTaken ms, cumulative speed: " +
+            logDebug(s"Partition: $i_, Cumulative time: $timeTaken ms, cumulative speed: " +
               s"${wordCount / timeTaken * 1000} words/s")
           }
 
