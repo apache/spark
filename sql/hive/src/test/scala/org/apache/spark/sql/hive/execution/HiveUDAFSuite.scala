@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.hive.ql.udf.UDAFPercentile
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDAFEvaluator, GenericUDAFMax}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.{AggregationBuffer, Mode}
 import org.apache.hadoop.hive.ql.util.JavaDataModel
@@ -26,7 +27,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectIns
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -83,6 +84,21 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       Row(0, Row(1, 1)),
       Row(1, Row(1, 1))
     ))
+  }
+
+  test("non-deterministic children expressions of UDAF") {
+    withTempView("view1") {
+      spark.range(1).selectExpr("id as x", "id as y").createTempView("view1")
+      withUserDefinedFunction("testUDAFPercentile" -> true) {
+        // non-deterministic children of Hive UDAF
+        sql(s"CREATE TEMPORARY FUNCTION testUDAFPercentile AS '${classOf[UDAFPercentile].getName}'")
+        val e1 = intercept[AnalysisException] {
+          sql("SELECT testUDAFPercentile(x, rand()) from view1 group by y")
+        }.getMessage
+        assert(Seq("nondeterministic expression",
+          "should not appear in the arguments of an aggregate function").forall(e1.contains))
+      }
+    }
   }
 }
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.IOException
-import java.net.URI
+import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -31,9 +31,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.hive.orc.OrcFileFormat
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 
 /**
@@ -133,7 +135,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
       } else if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
         try {
           val hadoopConf = session.sessionState.newHadoopConf()
-          val tablePath = new Path(new URI(table.location))
+          val tablePath = new Path(table.location)
           val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
           fs.getContentSummary(tablePath).getLength
         } catch {
@@ -167,6 +169,55 @@ object HiveAnalysis extends Rule[LogicalPlan] {
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
       CreateHiveTableAsSelectCommand(tableDesc, query, mode)
+  }
+}
+
+/**
+ * Relation conversion from metastore relations to data source relations for better performance
+ *
+ * - When writing to non-partitioned Hive-serde Parquet/Orc tables
+ * - When scanning Hive-serde Parquet/ORC tables
+ *
+ * This rule must be run before all other DDL post-hoc resolution rules, i.e.
+ * `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
+ */
+case class RelationConversions(
+    conf: SQLConf,
+    sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
+  private def isConvertible(relation: CatalogRelation): Boolean = {
+    val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
+      serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+  }
+
+  private def convert(relation: CatalogRelation): LogicalRelation = {
+    val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    if (serde.contains("parquet")) {
+      val options = Map(ParquetOptions.MERGE_SCHEMA ->
+        conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
+      sessionCatalog.metastoreCatalog
+        .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
+    } else {
+      val options = Map[String, String]()
+      sessionCatalog.metastoreCatalog
+        .convertToLogicalRelation(relation, options, classOf[OrcFileFormat], "orc")
+    }
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transformUp {
+      // Write path
+      case InsertIntoTable(r: CatalogRelation, partition, query, overwrite, ifNotExists)
+        // Inserting into partitioned table is not supported in Parquet/Orc data source (yet).
+        if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
+          !r.isPartitioned && isConvertible(r) =>
+        InsertIntoTable(convert(r), partition, query, overwrite, ifNotExists)
+
+      // Read path
+      case relation: CatalogRelation
+          if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
+        convert(relation)
+    }
   }
 }
 

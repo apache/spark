@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
+import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -68,7 +69,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   }
 
   // name of function in java.lang.Math
-  def funcName: String = name.toLowerCase
+  def funcName: String = name.toLowerCase(Locale.ROOT)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
@@ -124,7 +125,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.${name.toLowerCase}($c1, $c2)")
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      s"java.lang.Math.${name.toLowerCase(Locale.ROOT)}($c1, $c2)")
   }
 }
 
@@ -1024,7 +1026,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
     child.dataType match {
       case _: DecimalType =>
         val decimal = input1.asInstanceOf[Decimal]
-        if (decimal.changePrecision(decimal.precision, _scale, mode)) decimal else null
+        decimal.toPrecision(decimal.precision, _scale, mode).orNull
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType =>

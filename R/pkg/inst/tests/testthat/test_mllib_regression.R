@@ -23,6 +23,8 @@ context("MLlib regression algorithms, except for tree-based algorithms")
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
 test_that("formula of spark.glm", {
+  skip_on_cran()
+
   training <- suppressWarnings(createDataFrame(iris))
   # directly calling the spark API
   # dot minus and intercept vs native glm
@@ -76,6 +78,24 @@ test_that("spark.glm and predict", {
   model <- glm(y ~ x, family = Gamma, df)
   out <- capture.output(print(summary(model)))
   expect_true(any(grepl("Dispersion parameter for gamma family", out)))
+
+  # tweedie family
+  model <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species,
+                     family = "tweedie", var.power = 1.2, link.power = 0.0)
+  prediction <- predict(model, training)
+  expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
+  vals <- collect(select(prediction, "prediction"))
+
+  # manual calculation of the R predicted values to avoid dependence on statmod
+  #' library(statmod)
+  #' rModel <- glm(Sepal.Width ~ Sepal.Length + Species, data = iris,
+  #'             family = tweedie(var.power = 1.2, link.power = 0.0))
+  #' print(coef(rModel))
+
+  rCoef <- c(0.6455409, 0.1169143, -0.3224752, -0.3282174)
+  rVals <- exp(as.numeric(model.matrix(Sepal.Width ~ Sepal.Length + Species,
+                                       data = iris) %*% rCoef))
+  expect_true(all(abs(rVals - vals) < 1e-5), rVals - vals)
 
   # Test stats::predict is working
   x <- rnorm(15)
@@ -177,6 +197,8 @@ test_that("spark.glm summary", {
 })
 
 test_that("spark.glm save/load", {
+  skip_on_cran()
+
   training <- suppressWarnings(createDataFrame(iris))
   m <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species)
   s <- summary(m)
@@ -204,6 +226,8 @@ test_that("spark.glm save/load", {
 })
 
 test_that("formula of glm", {
+  skip_on_cran()
+
   training <- suppressWarnings(createDataFrame(iris))
   # dot minus and intercept vs native glm
   model <- glm(Sepal_Width ~ . - Species + 0, data = training)
@@ -230,10 +254,12 @@ test_that("formula of glm", {
 })
 
 test_that("glm and predict", {
+  skip_on_cran()
+
   training <- suppressWarnings(createDataFrame(iris))
   # gaussian family
   model <- glm(Sepal_Width ~ Sepal_Length + Species, data = training)
-               prediction <- predict(model, training)
+  prediction <- predict(model, training)
   expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
   vals <- collect(select(prediction, "prediction"))
   rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
@@ -249,6 +275,24 @@ test_that("glm and predict", {
                                         data = iris, family = poisson(link = identity)), iris))
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 
+  # tweedie family
+  model <- glm(Sepal_Width ~ Sepal_Length + Species, data = training,
+               family = "tweedie", var.power = 1.2, link.power = 0.0)
+  prediction <- predict(model, training)
+  expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
+  vals <- collect(select(prediction, "prediction"))
+
+  # manual calculation of the R predicted values to avoid dependence on statmod
+  #' library(statmod)
+  #' rModel <- glm(Sepal.Width ~ Sepal.Length + Species, data = iris,
+  #'             family = tweedie(var.power = 1.2, link.power = 0.0))
+  #' print(coef(rModel))
+
+  rCoef <- c(0.6455409, 0.1169143, -0.3224752, -0.3282174)
+  rVals <- exp(as.numeric(model.matrix(Sepal.Width ~ Sepal.Length + Species,
+                                   data = iris) %*% rCoef))
+  expect_true(all(abs(rVals - vals) < 1e-5), rVals - vals)
+
   # Test stats::predict is working
   x <- rnorm(15)
   y <- x + rnorm(15)
@@ -256,6 +300,8 @@ test_that("glm and predict", {
 })
 
 test_that("glm summary", {
+  skip_on_cran()
+
   # gaussian family
   training <- suppressWarnings(createDataFrame(iris))
   stats <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training))
@@ -305,6 +351,8 @@ test_that("glm summary", {
 })
 
 test_that("glm save/load", {
+  skip_on_cran()
+
   training <- suppressWarnings(createDataFrame(iris))
   m <- glm(Sepal_Width ~ Sepal_Length + Species, data = training)
   s <- summary(m)

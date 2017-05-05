@@ -53,18 +53,22 @@ import org.apache.spark.sql.types._
  *        affects Parquet write path.
  * @param writeTimestampAsInt96 Whether to use serialize Timestamps in legacy INT96 format for
  *        forwards compatibility.
+ * @param writeTimestampInMillis Whether to write timestamp values as INT64 annotated by logical
+ *        type TIMESTAMP_MILLIS.
  */
 private[parquet] class ParquetSchemaConverter(
     assumeBinaryIsString: Boolean = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
     assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
     writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get,
-    writeTimestampAsInt96: Boolean = SQLConf.PARQUET_TIMESTAMP_AS_INT96.defaultValue.get) {
+    writeTimestampAsInt96: Boolean = SQLConf.PARQUET_TIMESTAMP_AS_INT96.defaultValue.get,
+    writeTimestampInMillis: Boolean = SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
     assumeInt96IsTimestamp = conf.isParquetINT96AsTimestamp,
     writeLegacyParquetFormat = conf.writeLegacyParquetFormat,
-    writeTimestampAsInt96 = conf.isParquetTimestampAsINT96)
+    writeTimestampAsInt96 = conf.isParquetTimestampAsINT96,
+    writeTimestampInMillis = conf.isParquetINT64AsTimestampMillis)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
@@ -72,7 +76,9 @@ private[parquet] class ParquetSchemaConverter(
     writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
       SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get.toString).toBoolean,
     writeTimestampAsInt96 = conf.get(SQLConf.PARQUET_TIMESTAMP_AS_INT96.key,
-      SQLConf.PARQUET_TIMESTAMP_AS_INT96.defaultValue.get.toString).toBoolean)
+      SQLConf.PARQUET_TIMESTAMP_AS_INT96.defaultValue.get.toString).toBoolean,
+    writeTimestampInMillis = conf.get(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
+      SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.defaultValue.get.toString).toBoolean)
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -165,7 +171,7 @@ private[parquet] class ParquetSchemaConverter(
           case DECIMAL => makeDecimalType(Decimal.MAX_LONG_DIGITS)
           case UINT_64 => typeNotSupported()
           case TIMESTAMP_MICROS => TimestampType
-          case TIMESTAMP_MILLIS => typeNotImplemented()
+          case TIMESTAMP_MILLIS => TimestampType
           case _ => illegalType()
         }
 
@@ -375,6 +381,9 @@ private[parquet] class ParquetSchemaConverter(
       // from Spark 1.5.0, we resort to a timestamp type with 100 ns precision so that we can store
       // a timestamp into a `Long`.  This design decision is subject to change though, for example,
       // we may resort to microsecond precision in the future.
+      case TimestampType if writeTimestampInMillis =>
+        Types.primitive(INT64, repetition).as(TIMESTAMP_MILLIS).named(field.name)
+
       case TimestampType if writeTimestampAsInt96 =>
         Types.primitive(INT96, repetition).named(field.name)
 

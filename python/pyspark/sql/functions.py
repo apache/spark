@@ -1327,8 +1327,8 @@ def encode(col, charset):
 @since(1.5)
 def format_number(col, d):
     """
-    Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places,
-    and returns the result as a string.
+    Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
+    with HALF_EVEN round mode, and returns the result as a string.
 
     :param col: the column name of the numeric value to be formatted
     :param d: the N decimal places
@@ -1675,8 +1675,8 @@ def array(*cols):
 @since(1.5)
 def array_contains(col, value):
     """
-    Collection function: returns True if the array contains the given value. The collection
-    elements and value must be of the same type.
+    Collection function: returns null if the array is null, true if the array contains the
+    given value, and false otherwise.
 
     :param col: name of column containing array
     :param value: value to check for in array
@@ -1774,10 +1774,11 @@ def json_tuple(col, *fields):
 def from_json(col, schema, options={}):
     """
     Parses a column containing a JSON string into a [[StructType]] or [[ArrayType]]
-    with the specified schema. Returns `null`, in the case of an unparseable string.
+    of [[StructType]]s with the specified schema. Returns `null`, in the case of an unparseable
+    string.
 
     :param col: string column in json format
-    :param schema: a StructType or ArrayType to use when parsing the json column
+    :param schema: a StructType or ArrayType of StructType to use when parsing the json column
     :param options: options to control parsing. accepts the same options as the json datasource
 
     >>> from pyspark.sql.types import *
@@ -1802,10 +1803,10 @@ def from_json(col, schema, options={}):
 @since(2.1)
 def to_json(col, options={}):
     """
-    Converts a column containing a [[StructType]] into a JSON string. Throws an exception,
-    in the case of an unsupported type.
+    Converts a column containing a [[StructType]] or [[ArrayType]] of [[StructType]]s into a
+    JSON string. Throws an exception, in the case of an unsupported type.
 
-    :param col: name of column containing the struct
+    :param col: name of column containing the struct or array of the structs
     :param options: options to control converting. accepts the same options as the json datasource
 
     >>> from pyspark.sql import Row
@@ -1814,6 +1815,10 @@ def to_json(col, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
     [Row(json=u'{"age":2,"name":"Alice"}')]
+    >>> data = [(1, [Row(name='Alice', age=2), Row(name='Bob', age=3)])]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'[{"age":2,"name":"Alice"},{"age":3,"name":"Bob"}]')]
     """
 
     sc = SparkContext._active_spark_context

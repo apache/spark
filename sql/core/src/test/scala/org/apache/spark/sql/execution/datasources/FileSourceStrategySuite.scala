@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
   import testImplicits._
 
-  protected override val sparkConf = new SparkConf().set("spark.default.parallelism", "1")
+  protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")
 
   test("unpartitioned table, single partition") {
     val table =
@@ -395,7 +395,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
         val fileCatalog = new InMemoryFileIndex(
           sparkSession = spark,
-          rootPaths = Seq(new Path(tempDir)),
+          rootPathsSpecified = Seq(new Path(tempDir)),
           parameters = Map.empty[String, String],
           partitionSchema = None)
         // This should not fail.

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -30,7 +31,8 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -541,7 +543,7 @@ object JdbcUtils extends Logging {
     case ArrayType(et, _) =>
       // remove type length parameters from end of type name
       val typeName = getJdbcType(et, dialect).databaseTypeDefinition
-        .toLowerCase.split("\\(")(0)
+        .toLowerCase(Locale.ROOT).split("\\(")(0)
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         val array = conn.createArrayOf(
           typeName,
@@ -650,8 +652,17 @@ object JdbcUtils extends Logging {
       case e: SQLException =>
         val cause = e.getNextException
         if (cause != null && e.getCause != cause) {
+          // If there is no cause already, set 'next exception' as cause. If cause is null,
+          // it *may* be because no cause was set yet
           if (e.getCause == null) {
-            e.initCause(cause)
+            try {
+              e.initCause(cause)
+            } catch {
+              // Or it may be null because the cause *was* explicitly initialized, to *null*,
+              // in which case this fails. There is no other way to detect it.
+              // addSuppressed in this case as well.
+              case _: IllegalStateException => e.addSuppressed(cause)
+            }
           } else {
             e.addSuppressed(cause)
           }
@@ -680,16 +691,68 @@ object JdbcUtils extends Logging {
   /**
    * Compute the schema string for this RDD.
    */
-  def schemaString(schema: StructType, url: String): String = {
+  def schemaString(
+      df: DataFrame,
+      url: String,
+      createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
-    schema.fields foreach { field =>
+    val userSpecifiedColTypesMap = createTableColumnTypes
+      .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
+      .getOrElse(Map.empty[String, String])
+    df.schema.fields.foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
-      val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
+      val typ = userSpecifiedColTypesMap
+        .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
     }
     if (sb.length < 2) "" else sb.substring(2)
+  }
+
+  /**
+   * Parses the user specified createTableColumnTypes option value string specified in the same
+   * format as create table ddl column types, and returns Map of field name and the data type to
+   * use in-place of the default data type.
+   */
+  private def parseUserSpecifiedCreateTableColumnTypes(
+      df: DataFrame,
+      createTableColumnTypes: String): Map[String, String] = {
+    def typeName(f: StructField): String = {
+      // char/varchar gets translated to string type. Real data type specified by the user
+      // is available in the field metadata as HIVE_TYPE_STRING
+      if (f.metadata.contains(HIVE_TYPE_STRING)) {
+        f.metadata.getString(HIVE_TYPE_STRING)
+      } else {
+        f.dataType.catalogString
+      }
+    }
+
+    val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
+    val nameEquality = df.sparkSession.sessionState.conf.resolver
+
+    // checks duplicate columns in the user specified column types.
+    userSchema.fieldNames.foreach { col =>
+      val duplicatesCols = userSchema.fieldNames.filter(nameEquality(_, col))
+      if (duplicatesCols.size >= 2) {
+        throw new AnalysisException(
+          "Found duplicate column(s) in createTableColumnTypes option value: " +
+            duplicatesCols.mkString(", "))
+      }
+    }
+
+    // checks if user specified column names exist in the DataFrame schema
+    userSchema.fieldNames.foreach { col =>
+      df.schema.find(f => nameEquality(f.name, col)).getOrElse {
+        throw new AnalysisException(
+          s"createTableColumnTypes option column $col not found in schema " +
+            df.schema.catalogString)
+      }
+    }
+
+    val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
+    val isCaseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    if (isCaseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 
   /**
@@ -726,9 +789,10 @@ object JdbcUtils extends Logging {
    */
   def createTable(
       conn: Connection,
-      schema: StructType,
+      df: DataFrame,
       options: JDBCOptions): Unit = {
-    val strSchema = schemaString(schema, options.url)
+    val strSchema = schemaString(
+      df, options.url, options.createTableColumnTypes)
     val table = options.table
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.

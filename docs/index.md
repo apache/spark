@@ -18,7 +18,7 @@ Users can also download a "Hadoop free" binary and run Spark with any Hadoop ver
 Scala and Java users can include Spark in their projects using its Maven coordinates and in the future Python users can also install Spark from PyPI.
 
 
-If you'd like to build Spark from 
+If you'd like to build Spark from
 source, visit [Building Spark](building-spark.html).
 
 
@@ -32,8 +32,8 @@ uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scal
 
 Note that support for Java 7 was removed as of Spark 2.2.0.
 
-Note that support for Python 2.6 is deprecated as of Spark 2.0.0, and support for 
-Scala 2.10 and versions of Hadoop before 2.6 are deprecated as of Spark 2.1.0, and may be 
+Note that support for Python 2.6 is deprecated as of Spark 2.0.0, and support for
+Scala 2.10 and versions of Hadoop before 2.6 are deprecated as of Spark 2.1.0, and may be
 removed in Spark 2.2.0.
 
 # Running the Examples and Shell

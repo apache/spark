@@ -29,6 +29,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions.{col, regexp_replace}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -127,6 +128,22 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsFile))
 
     verifyCars(cars, withHeader = true, checkTypes = true)
+  }
+
+  test("simple csv test with string dataset") {
+    val csvDataset = spark.read.text(testFile(carsFile)).as[String]
+    val cars = spark.read
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .csv(csvDataset)
+
+    verifyCars(cars, withHeader = true, checkTypes = true)
+
+    val carsWithoutHeader = spark.read
+      .option("header", "false")
+      .csv(csvDataset)
+
+    verifyCars(carsWithoutHeader, withHeader = false, checkTypes = false)
   }
 
   test("test inferring booleans") {
@@ -276,7 +293,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .load(testFile(carsFile)).collect()
       }
 
-      assert(exception.getMessage.contains("Malformed line in FAILFAST mode: 2015,Chevy,Volt"))
+      assert(exception.getMessage.contains("Malformed CSV record"))
     }
   }
 
@@ -749,7 +766,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("header", "true")
         .load(iso8601timestampsPath)
 
-      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ", Locale.US)
+      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US)
       val expectedTimestamps = timestamps.collect().map { r =>
         // This should be ISO8601 formatted string.
         Row(iso8501.format(r.toSeq.head))
@@ -896,7 +913,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .format("csv")
         .option("header", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option("timeZone", "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -918,7 +935,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("header", "true")
         .option("inferSchema", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option("timeZone", "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .load(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)
@@ -975,9 +992,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
     Seq(false, true).foreach { wholeFile =>
       val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
+      // We use `PERMISSIVE` mode by default if invalid string is given.
       val df1 = spark
         .read
-        .option("mode", "PERMISSIVE")
+        .option("mode", "abcd")
         .option("wholeFile", wholeFile)
         .schema(schema)
         .csv(testFile(valueMalformedFile))
@@ -991,7 +1009,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val schemaWithCorrField1 = schema.add(columnNameOfCorruptRecord, StringType)
       val df2 = spark
         .read
-        .option("mode", "PERMISSIVE")
+        .option("mode", "Permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
         .option("wholeFile", wholeFile)
         .schema(schemaWithCorrField1)
@@ -1008,7 +1026,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .add("b", TimestampType)
       val df3 = spark
         .read
-        .option("mode", "PERMISSIVE")
+        .option("mode", "permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
         .option("wholeFile", wholeFile)
         .schema(schemaWithCorrField2)
@@ -1077,17 +1095,83 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("Empty file produces empty dataframe with empty schema - wholeFile option") {
-    withTempPath { path =>
-      path.createNewFile()
-
+  test("Empty file produces empty dataframe with empty schema") {
+    Seq(false, true).foreach { wholeFile =>
       val df = spark.read.format("csv")
         .option("header", true)
-        .option("wholeFile", true)
-        .load(path.getAbsolutePath)
+        .option("wholeFile", wholeFile)
+        .load(testFile(emptyFile))
 
       assert(df.schema === spark.emptyDataFrame.schema)
       checkAnswer(df, spark.emptyDataFrame)
     }
+  }
+
+  test("Empty string dataset produces empty dataframe and keep user-defined schema") {
+    val df1 = spark.read.csv(spark.emptyDataset[String])
+    assert(df1.schema === spark.emptyDataFrame.schema)
+    checkAnswer(df1, spark.emptyDataFrame)
+
+    val schema = StructType(StructField("a", StringType) :: Nil)
+    val df2 = spark.read.schema(schema).csv(spark.emptyDataset[String])
+    assert(df2.schema === schema)
+  }
+
+  test("ignoreLeadingWhiteSpace and ignoreTrailingWhiteSpace options - read") {
+    val input = " a,b  , c "
+
+    // For reading, default of both `ignoreLeadingWhiteSpace` and`ignoreTrailingWhiteSpace`
+    // are `false`. So, these are excluded.
+    val combinations = Seq(
+      (true, true),
+      (false, true),
+      (true, false))
+
+    // Check if read rows ignore whitespaces as configured.
+    val expectedRows = Seq(
+      Row("a", "b", "c"),
+      Row(" a", "b", " c"),
+      Row("a", "b  ", "c "))
+
+    combinations.zip(expectedRows)
+      .foreach { case ((ignoreLeadingWhiteSpace, ignoreTrailingWhiteSpace), expected) =>
+        val df = spark.read
+          .option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
+          .option("ignoreTrailingWhiteSpace", ignoreTrailingWhiteSpace)
+          .csv(Seq(input).toDS())
+
+        checkAnswer(df, expected)
+      }
+  }
+
+  test("SPARK-18579: ignoreLeadingWhiteSpace and ignoreTrailingWhiteSpace options - write") {
+    val df = Seq((" a", "b  ", " c ")).toDF()
+
+    // For writing, default of both `ignoreLeadingWhiteSpace` and `ignoreTrailingWhiteSpace`
+    // are `true`. So, these are excluded.
+    val combinations = Seq(
+      (false, false),
+      (false, true),
+      (true, false))
+
+    // Check if written lines ignore each whitespaces as configured.
+    val expectedLines = Seq(
+      " a,b  , c ",
+      " a,b, c",
+      "a,b  ,c ")
+
+    combinations.zip(expectedLines)
+      .foreach { case ((ignoreLeadingWhiteSpace, ignoreTrailingWhiteSpace), expected) =>
+        withTempPath { path =>
+          df.write
+            .option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
+            .option("ignoreTrailingWhiteSpace", ignoreTrailingWhiteSpace)
+            .csv(path.getAbsolutePath)
+
+          // Read back the written lines.
+          val readBack = spark.read.text(path.getAbsolutePath)
+          checkAnswer(readBack, Row(expected))
+        }
+      }
   }
 }

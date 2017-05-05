@@ -19,8 +19,8 @@ package org.apache.spark.deploy.kubernetes.integrationtest.sslutil
 import java.io.{File, FileOutputStream, OutputStreamWriter}
 import java.math.BigInteger
 import java.nio.file.Files
-import java.security.cert.X509Certificate
 import java.security.{KeyPair, KeyPairGenerator, KeyStore, SecureRandom}
+import java.security.cert.X509Certificate
 import java.util.{Calendar, Random}
 import javax.security.auth.x500.X500Principal
 

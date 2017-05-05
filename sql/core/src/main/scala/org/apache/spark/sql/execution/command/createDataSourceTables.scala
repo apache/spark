@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.net.URI
+
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -54,7 +58,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
-    val pathOption = table.storage.locationUri.map("path" -> _)
+    val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
     // Fill in some default table options from the session conf
     val tableWithDefaultOptions = table.copy(
       identifier = table.identifier.copy(
@@ -69,7 +73,8 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         className = table.provider.get,
         bucketSpec = table.bucketSpec,
         options = table.storage.properties ++ pathOption,
-        catalogTable = Some(tableWithDefaultOptions)).resolveRelation()
+        // As discussed in SPARK-19583, we don't check if the location is existed
+        catalogTable = Some(tableWithDefaultOptions)).resolveRelation(checkFilesExist = false)
 
     val partitionColumnNames = if (table.schema.nonEmpty) {
       table.partitionColumnNames
@@ -175,12 +180,12 @@ case class CreateDataSourceTableAsSelectCommand(
   private def saveDataIntoTable(
       session: SparkSession,
       table: CatalogTable,
-      tableLocation: Option[String],
+      tableLocation: Option[URI],
       data: LogicalPlan,
       mode: SaveMode,
       tableExists: Boolean): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
-    val pathOption = tableLocation.map("path" -> _)
+    val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
       session,
       className = table.provider.get,

@@ -66,7 +66,6 @@ import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructType$;
 import org.apache.spark.util.AccumulatorV2;
-import org.apache.spark.util.LongAccumulator;
 import scala.Option;
 
 /**
@@ -162,14 +161,16 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
     this.totalRowCount = this.reader.getRecordCount();
     // For test purpose.
-    // If the predefined accumulator exists, the row group number to read will be updated
-    // to the accumulator. So we can check if the row groups are filtered or not in test case.
+    // If the last external accumulator is `NumRowGroupsAccumulator`, the row group number to read
+    // will be updated to the accumulator. So we can check if the row groups are filtered or not
+    // in test case.
     TaskContext taskContext = TaskContext$.MODULE$.get();
     if (taskContext != null) {
-      Option<AccumulatorV2<?, ?>> accu = taskContext.taskMetrics()
-        .lookForAccumulatorByName("numRowGroups");
-      if (accu.isDefined()) {
-        ((LongAccumulator)accu.get()).add((long)blocks.size());
+      Option<AccumulatorV2<?, ?>> accu = taskContext.taskMetrics().externalAccums().lastOption();
+      if (accu.isDefined() && accu.get().getClass().getSimpleName().equals("NumRowGroupsAcc")) {
+        @SuppressWarnings("unchecked")
+        AccumulatorV2<Integer, Integer> intAccum = (AccumulatorV2<Integer, Integer>) accu.get();
+        intAccum.add(blocks.size());
       }
     }
   }
@@ -206,6 +207,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     config.set("spark.sql.parquet.binaryAsString", "false");
     config.set("spark.sql.parquet.int96AsTimestamp", "false");
     config.set("spark.sql.parquet.writeLegacyFormat", "false");
+    config.set("spark.sql.parquet.int64AsTimestampMillis", "false");
 
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();

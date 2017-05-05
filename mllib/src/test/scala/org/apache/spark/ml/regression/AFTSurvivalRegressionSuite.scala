@@ -83,8 +83,7 @@ class AFTSurvivalRegressionSuite
       .setQuantilesCol("quantiles")
       .fit(datasetUnivariate)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(aftr, model)
 
     model.transform(datasetUnivariate)
       .select("label", "prediction", "quantiles")
@@ -419,7 +418,8 @@ class AFTSurvivalRegressionSuite
     }
     val aft = new AFTSurvivalRegression()
     testEstimatorAndModelReadWrite(aft, datasetMultivariate,
-      AFTSurvivalRegressionSuite.allParamSettings, checkModelData)
+      AFTSurvivalRegressionSuite.allParamSettings, AFTSurvivalRegressionSuite.allParamSettings,
+      checkModelData)
   }
 
   test("SPARK-15892: Incorrectly merged AFTAggregator with zero total count") {

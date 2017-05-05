@@ -16,6 +16,10 @@
  */
 package org.apache.spark.sql.execution
 
+import java.util.Locale
+
+import scala.language.reflectiveCalls
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -24,11 +28,12 @@ class QueryExecutionSuite extends SharedSQLContext {
   test("toString() exception/error handling") {
     val badRule = new SparkStrategy {
       var mode: String = ""
-      override def apply(plan: LogicalPlan): Seq[SparkPlan] = mode.toLowerCase match {
-        case "exception" => throw new AnalysisException(mode)
-        case "error" => throw new Error(mode)
-        case _ => Nil
-      }
+      override def apply(plan: LogicalPlan): Seq[SparkPlan] =
+        mode.toLowerCase(Locale.ROOT) match {
+          case "exception" => throw new AnalysisException(mode)
+          case "error" => throw new Error(mode)
+          case _ => Nil
+        }
     }
     spark.experimental.extraStrategies = badRule :: Nil
 

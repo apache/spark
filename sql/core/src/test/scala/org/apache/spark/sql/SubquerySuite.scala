@@ -622,7 +622,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-15370: COUNT bug with attribute ref in subquery input and output ") {
     checkAnswer(
-      sql("select l.b, (select (r.c + count(*)) is null from r where l.a = r.c) from l"),
+      sql(
+        """
+          |select l.b, (select (r.c + count(*)) is null
+          |from r
+          |where l.a = r.c group by r.c) from l
+        """.stripMargin),
       Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
         Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
   }
@@ -817,12 +822,49 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         sql(
           """
-          | select c2
-          | from t1
-          | where exists (select *
-          |               from t2 lateral view explode(arr_c2) q as c2
-                          where t1.c1 = t2.c1)""".stripMargin),
+          | SELECT c2
+          | FROM t1
+          | WHERE EXISTS (SELECT *
+          |               FROM t2 LATERAL VIEW explode(arr_c2) q AS c2
+                          WHERE t1.c1 = t2.c1)""".stripMargin),
         Row(1) :: Row(0) :: Nil)
+
+      val msg1 = intercept[AnalysisException] {
+        sql(
+          """
+            | SELECT c1
+            | FROM t2
+            | WHERE EXISTS (SELECT *
+            |               FROM t1 LATERAL VIEW explode(t2.arr_c2) q AS c2
+            |               WHERE t1.c1 = t2.c1)
+          """.stripMargin)
+      }
+      assert(msg1.getMessage.contains(
+        "Expressions referencing the outer query are not supported outside of WHERE/HAVING"))
     }
+  }
+
+  test("SPARK-19933 Do not eliminate top-level aliases in sub-queries") {
+    withTempView("t1", "t2") {
+      spark.range(4).createOrReplaceTempView("t1")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t1)"),
+        Row(0) :: Row(1) :: Row(2) :: Row(3) :: Nil)
+
+      spark.range(2).createOrReplaceTempView("t2")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t2)"),
+        Row(0) :: Row(1) :: Nil)
+    }
+  }
+
+  test("ListQuery and Exists should work even no correlated references") {
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c AND (r.d in (select d from r) OR l.a >= 1)"),
+      Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) ::
+        Row(2, 1.0, 2, 3.0) :: Row(3.0, 3.0, 3, 2.0) :: Row(6, null, 6, null) :: Nil)
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c + 1 AND (exists (select * from r) OR l.a = r.c)"),
+      Row(3, 3.0, 2, 3.0) :: Row(3, 3.0, 2, 3.0) :: Nil)
   }
 }

@@ -17,19 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.{ServiceConfigurationError, ServiceLoader}
+import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
-import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -539,15 +538,16 @@ object DataSource {
                 // Found the data source using fully qualified path
                 dataSource
               case Failure(error) =>
-                if (provider1.toLowerCase == "orc" ||
+                if (provider1.toLowerCase(Locale.ROOT) == "orc" ||
                   provider1.startsWith("org.apache.spark.sql.hive.orc")) {
                   throw new AnalysisException(
                     "The ORC data source must be used with Hive support enabled")
-                } else if (provider1.toLowerCase == "avro" ||
+                } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
                   provider1 == "com.databricks.spark.avro") {
                   throw new AnalysisException(
-                    s"Failed to find data source: ${provider1.toLowerCase}. Please find an Avro " +
-                      "package at http://spark.apache.org/third-party-projects.html")
+                    s"Failed to find data source: ${provider1.toLowerCase(Locale.ROOT)}. " +
+                    "Please find an Avro package at " +
+                    "http://spark.apache.org/third-party-projects.html")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider1. Please find packages at " +
@@ -596,7 +596,8 @@ object DataSource {
    */
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
     val path = CaseInsensitiveMap(options).get("path")
-    val optionsWithoutPath = options.filterKeys(_.toLowerCase != "path")
-    CatalogStorageFormat.empty.copy(locationUri = path, properties = optionsWithoutPath)
+    val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
+    CatalogStorageFormat.empty.copy(
+      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath)
   }
 }

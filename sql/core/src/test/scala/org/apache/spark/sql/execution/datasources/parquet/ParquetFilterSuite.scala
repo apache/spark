@@ -34,7 +34,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{AccumulatorContext, LongAccumulator}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -505,19 +505,17 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         val path = s"${dir.getCanonicalPath}/table"
         (1 to 1024).map(i => (101, i)).toDF("a", "b").write.parquet(path)
 
-        Seq(("true", (x: Long) => x == 0), ("false", (x: Long) => x > 0))
+        Seq(("true", (x: Integer) => x == 0), ("false", (x: Integer) => x > 0))
           .foreach { case (push, func) =>
             withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> push) {
-              val accu = new LongAccumulator
-              accu.register(sparkContext, Some("numRowGroups"))
+              val accu = new NumRowGroupsAcc
+              sparkContext.register(accu)
 
               val df = spark.read.parquet(path).filter("a < 100")
               df.foreachPartition(_.foreach(v => accu.add(0)))
               df.collect
 
-              val numRowGroups = AccumulatorContext.lookForAccumulatorByName("numRowGroups")
-              assert(numRowGroups.isDefined)
-              assert(func(numRowGroups.get.asInstanceOf[LongAccumulator].value))
+              assert(func(accu.value))
               AccumulatorContext.remove(accu.id)
             }
           }
@@ -592,4 +590,28 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       }
     }
   }
+}
+
+class NumRowGroupsAcc extends AccumulatorV2[Integer, Integer] {
+  private var _sum = 0
+
+  override def isZero: Boolean = _sum == 0
+
+  override def copy(): AccumulatorV2[Integer, Integer] = {
+    val acc = new NumRowGroupsAcc()
+    acc._sum = _sum
+    acc
+  }
+
+  override def reset(): Unit = _sum = 0
+
+  override def add(v: Integer): Unit = _sum += v
+
+  override def merge(other: AccumulatorV2[Integer, Integer]): Unit = other match {
+    case a: NumRowGroupsAcc => _sum += a._sum
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+  }
+
+  override def value: Integer = _sum
 }
