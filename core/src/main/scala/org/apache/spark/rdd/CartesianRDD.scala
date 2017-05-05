@@ -73,9 +73,12 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
     val currSplit = split.asInstanceOf[CartesianPartition]
-    for (x <- rdd1.iterator(currSplit.s1, context);
-         y <- getOrCacheBlock(rdd2, currSplit.s2, context, StorageLevel.MEMORY_AND_DISK))
-      yield (x, y)
+    val (iter2, readCachedBlock) =
+      getOrCacheBlock(rdd2, currSplit.s2, context, StorageLevel.MEMORY_AND_DISK)
+    val resultIter = for (x <- rdd1.iterator(currSplit.s1, context); y <- iter2) yield (x, y)
+
+    CompletionIterator[(T, U), Iterator[(T, U)]](resultIter,
+      removeBlock(RDDBlockId(rdd2.id, currSplit.s2.index), readCachedBlock))
   }
 
   /**
@@ -90,7 +93,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
       rdd: RDD[U],
       partition: Partition,
       context: TaskContext,
-      level: StorageLevel): Iterator[U] = {
+      level: StorageLevel): (Iterator[U], Boolean) = {
     val blockId = RDDBlockId(rdd.id, partition.index)
     var readCachedBlock = true
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
@@ -115,15 +118,15 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
         new InterruptibleIterator(context, iter.asInstanceOf[Iterator[U]])
     }
 
-    def removeBlock(blockId: BlockId,
-        readCachedBlock: Boolean): Unit = {
-      val blockManager = SparkEnv.get.blockManager
-      if (!readCachedBlock || blockManager.isRemovable(blockId)) {
-        blockManager.removeOrMarkAsRemovable(blockId, true)
-      }
-    }
+    (iterator, readCachedBlock)
+  }
 
-    CompletionIterator[U, Iterator[U]](iterator, removeBlock(blockId, readCachedBlock))
+  private def removeBlock(blockId: BlockId,
+                  readCachedBlock: Boolean): Unit = {
+    val blockManager = SparkEnv.get.blockManager
+    if (!readCachedBlock || blockManager.isRemovable(blockId)) {
+      blockManager.removeOrMarkAsRemovable(blockId, true)
+    }
   }
 
   override def getDependencies: Seq[Dependency[_]] = List(
