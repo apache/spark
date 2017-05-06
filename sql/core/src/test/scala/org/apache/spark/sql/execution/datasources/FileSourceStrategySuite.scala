@@ -496,10 +496,9 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     // Check `a1` access pushes the predicate.
     checkDataFilters(Set(IsNotNull("a1"), EqualTo("a1", 1)))
 
-    // TODO: reenable check below once we update to latest master
-    //    checkScan(table.where("a2.c1 = 1"))(_ => ())
-    //    // Check `a2.c1` access does not push the predicate.
-    //    checkDataFilters(Set(IsNotNull("a2")))
+    checkScan(table.where("a2.c1 = 1"))(_ => ())
+    // Check `a2.c1` access does not push the predicate.
+    checkDataFilters(Set(IsNotNull("a2")))
   }
 
   // Helpers for checking the arguments passed to the FileFormat.
