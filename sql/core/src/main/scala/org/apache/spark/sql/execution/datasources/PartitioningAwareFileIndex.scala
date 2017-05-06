@@ -43,6 +43,7 @@ abstract class PartitioningAwareFileIndex(
     userPartitionSchema: Option[StructType],
     fileStatusCache: FileStatusCache = NoopCache) extends FileIndex with Logging {
   import PartitioningAwareFileIndex.BASE_PATH_PARAM
+  import PartitioningAwareFileIndex.PARTITION_PATH_TEMPLATE_PARAM
 
   /** Returns the specification of the partitions inferred from the data. */
   def partitionSpec(): PartitionSpec
@@ -133,6 +134,7 @@ abstract class PartitioningAwareFileIndex(
           leafDirs,
           typeInference = false,
           basePaths = basePaths,
+          partitionTemplatePath = partitionTemplatePath,
           timeZoneId = timeZoneId)
 
         // Without auto inference, all of value in the `row` should be null or in StringType,
@@ -154,6 +156,7 @@ abstract class PartitioningAwareFileIndex(
           leafDirs,
           typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
           basePaths = basePaths,
+          partitionTemplatePath = partitionTemplatePath,
           timeZoneId = timeZoneId)
     }
   }
@@ -230,6 +233,18 @@ abstract class PartitioningAwareFileIndex(
     }
   }
 
+  private def partitionTemplatePath: Option[String] = {
+    parameters.get(PARTITION_PATH_TEMPLATE_PARAM) match {
+      case Some(userDefinedTemplate) =>
+        assert(parameters.get(BASE_PATH_PARAM).isDefined,
+          s"Option '$PARTITION_PATH_TEMPLATE_PARAM' must be set along side " +
+          s"Option '$BASE_PATH_PARAM'")
+        Some(userDefinedTemplate)
+
+      case None => None
+    }
+  }
+
   // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
   // counted as data files, so that they shouldn't participate partition discovery.
   private def isDataPath(path: Path): Boolean = {
@@ -240,4 +255,5 @@ abstract class PartitioningAwareFileIndex(
 
 object PartitioningAwareFileIndex {
   val BASE_PATH_PARAM = "basePath"
+  val PARTITION_PATH_TEMPLATE_PARAM = "partitionTemplate"
 }

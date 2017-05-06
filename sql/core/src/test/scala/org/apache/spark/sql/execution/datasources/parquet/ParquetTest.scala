@@ -122,6 +122,23 @@ private[sql] trait ParquetTest extends SQLTestUtils {
     partDir
   }
 
+  protected def makeImplicitPartitionDir(
+                                  basePath: File,
+                                  defaultPartitionName: String,
+                                  partitionCols: (String, Any)*): File = {
+    val partNames = partitionCols.map { case (k, v) =>
+      val valueString = if (v == null || v == "") defaultPartitionName else v.toString
+      s"$valueString"
+    }
+
+    val partDir = partNames.foldLeft(basePath) { (parent, child) =>
+      new File(parent, child)
+    }
+
+    assert(partDir.mkdirs(), s"Couldn't create directory $partDir")
+    partDir
+  }
+
   protected def writeMetadata(
       schema: StructType, path: Path, configuration: Configuration): Unit = {
     val parquetSchema = new ParquetSchemaConverter().convert(schema)
