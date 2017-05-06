@@ -24,7 +24,7 @@ import java.util.{Calendar, GregorianCalendar, Properties}
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.DataSourceScanExec
@@ -929,10 +929,10 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("unsupported types") {
-    var e = intercept[SQLException] {
+    var e = intercept[SparkException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
     }.getMessage
-    assert(e.contains("Unsupported type TIMESTAMP_WITH_TIMEZONE"))
+    assert(e.contains("java.lang.UnsupportedOperationException: unimplemented"))
     e = intercept[SQLException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY", new Properties()).collect()
     }.getMessage
