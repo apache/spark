@@ -1350,7 +1350,7 @@ class SparkContext(config: SparkConf) extends Logging {
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name))
+    val acc = new Accumulator(initialValue, param, Option(name))
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1379,7 +1379,7 @@ class SparkContext(config: SparkConf) extends Logging {
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T])
     : Accumulable[R, T] = {
-    val acc = new Accumulable(initialValue, param, Some(name))
+    val acc = new Accumulable(initialValue, param, Option(name))
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1414,7 +1414,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note Accumulators must be registered before use, or it will throw exception.
    */
   def register(acc: AccumulatorV2[_, _], name: String): Unit = {
-    acc.register(this, name = Some(name))
+    acc.register(this, name = Option(name))
   }
 
   /**
@@ -1734,6 +1734,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Return information about blocks stored in all of the slaves
    */
   @DeveloperApi
+  @deprecated("This method may change or be removed in a future release.", "2.2.0")
   def getExecutorStorageStatus: Array[StorageStatus] = {
     assertNotStopped()
     env.blockManager.master.getStorageStatus
@@ -1938,6 +1939,9 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       SparkEnv.set(null)
     }
+    // Clear this `InheritableThreadLocal`, or it will still be inherited in child threads even this
+    // `SparkContext` is stopped.
+    localProperties.remove()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()

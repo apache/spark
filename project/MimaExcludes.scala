@@ -34,6 +34,12 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 2.3.x
+  lazy val v23excludes = v22excludes ++ Seq(
+    // [SPARK-20495][SQL] Add StorageLevel to cacheTable API
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.cacheTable")
+  )
+
   // Exclude rules for 2.2.x
   lazy val v22excludes = v21excludes ++ Seq(
     // [SPARK-19652][UI] Do auth checks for REST API access.
@@ -1003,6 +1009,7 @@ object MimaExcludes {
   }
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("2.3") => v23excludes
     case v if v.startsWith("2.2") => v22excludes
     case v if v.startsWith("2.1") => v21excludes
     case v if v.startsWith("2.0") => v20excludes

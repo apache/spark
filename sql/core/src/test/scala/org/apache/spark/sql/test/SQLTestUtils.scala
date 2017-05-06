@@ -20,13 +20,15 @@ package org.apache.spark.sql.test
 import java.io.File
 import java.net.URI
 import java.nio.file.Files
-import java.util.UUID
+import java.util.{Locale, UUID}
 
+import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
@@ -49,7 +51,7 @@ import org.apache.spark.util.{UninterruptibleThread, Utils}
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
 private[sql] trait SQLTestUtils
-  extends SparkFunSuite
+  extends SparkFunSuite with Eventually
   with BeforeAndAfterAll
   with SQLTestData { self =>
 
@@ -139,6 +141,15 @@ private[sql] trait SQLTestUtils
   }
 
   /**
+   * Waits for all tasks on all executors to be finished.
+   */
+  protected def waitForTasksToFinish(): Unit = {
+    eventually(timeout(10.seconds)) {
+      assert(spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+  /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
    * returns.
    *
@@ -146,7 +157,11 @@ private[sql] trait SQLTestUtils
    */
   protected def withTempDir(f: File => Unit): Unit = {
     val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
+    try f(dir) finally {
+      // wait for all tasks to finish before deleting files
+      waitForTasksToFinish()
+      Utils.deleteRecursively(dir)
+    }
   }
 
   /**
@@ -222,9 +237,36 @@ private[sql] trait SQLTestUtils
 
     try f(dbName) finally {
       if (spark.catalog.currentDatabase == dbName) {
-        spark.sql(s"USE ${DEFAULT_DATABASE}")
+        spark.sql(s"USE $DEFAULT_DATABASE")
       }
       spark.sql(s"DROP DATABASE $dbName CASCADE")
+    }
+  }
+
+  /**
+   * Drops database `dbName` after calling `f`.
+   */
+  protected def withDatabase(dbNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      dbNames.foreach { name =>
+        spark.sql(s"DROP DATABASE IF EXISTS $name")
+      }
+      spark.sql(s"USE $DEFAULT_DATABASE")
+    }
+  }
+
+  /**
+   * Enables Locale `language` before executing `f`, then switches back to the default locale of JVM
+   * after `f` returns.
+   */
+  protected def withLocale(language: String)(f: => Unit): Unit = {
+    val originalLocale = Locale.getDefault
+    try {
+      // Add Locale setting
+      Locale.setDefault(new Locale(language))
+      f
+    } finally {
+      Locale.setDefault(originalLocale)
     }
   }
 

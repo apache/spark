@@ -34,8 +34,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 abstract class AbstractSqlParser extends ParserInterface with Logging {
 
   /** Creates/Resolves DataType for a given SQL string. */
-  def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
-    // TODO add this to the parser interface.
+  override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())
   }
 
@@ -50,8 +49,10 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   }
 
   /** Creates FunctionIdentifier for a given SQL string. */
-  def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = parse(sqlText) { parser =>
-    astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
+  override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
+    parse(sqlText) { parser =>
+      astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
+    }
   }
 
   /**

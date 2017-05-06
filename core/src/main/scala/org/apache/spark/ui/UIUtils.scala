@@ -446,7 +446,7 @@ private[spark] object UIUtils extends Logging {
       val xml = XML.loadString(s"""<span class="description-input">$desc</span>""")
 
       // Verify that this has only anchors and span (we are wrapping in span)
-      val allowedNodeLabels = Set("a", "span")
+      val allowedNodeLabels = Set("a", "span", "br")
       val illegalNodes = xml \\ "_"  filterNot { case node: Node =>
         allowedNodeLabels.contains(node.label)
       }
