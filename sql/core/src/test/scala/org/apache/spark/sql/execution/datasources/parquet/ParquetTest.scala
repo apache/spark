@@ -105,13 +105,14 @@ private[sql] trait ParquetTest extends SQLTestUtils {
     df.write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
   }
 
-  protected def makePartitionDir(
+  private def makePartitionDir(
       basePath: File,
       defaultPartitionName: String,
+      valueOnlyNamedDir: Boolean,
       partitionCols: (String, Any)*): File = {
     val partNames = partitionCols.map { case (k, v) =>
       val valueString = if (v == null || v == "") defaultPartitionName else v.toString
-      s"$k=$valueString"
+      if (valueOnlyNamedDir) valueString else s"$k=$valueString"
     }
 
     val partDir = partNames.foldLeft(basePath) { (parent, child) =>
@@ -122,21 +123,18 @@ private[sql] trait ParquetTest extends SQLTestUtils {
     partDir
   }
 
-  protected def makeImplicitPartitionDir(
-                                  basePath: File,
-                                  defaultPartitionName: String,
-                                  partitionCols: (String, Any)*): File = {
-    val partNames = partitionCols.map { case (k, v) =>
-      val valueString = if (v == null || v == "") defaultPartitionName else v.toString
-      s"$valueString"
-    }
+  protected def makeValueOnlyNamedPartitionDir(
+      basePath: File,
+      defaultPartitionName: String,
+      partitionCols: (String, Any)*): File = {
+    makePartitionDir(basePath, defaultPartitionName, true, partitionCols: _*)
+  }
 
-    val partDir = partNames.foldLeft(basePath) { (parent, child) =>
-      new File(parent, child)
-    }
-
-    assert(partDir.mkdirs(), s"Couldn't create directory $partDir")
-    partDir
+  protected def makeKeyValueNamedPartitionDir(
+      basePath: File,
+      defaultPartitionName: String,
+      partitionCols: (String, Any)*): File = {
+    makePartitionDir(basePath, defaultPartitionName, false, partitionCols: _*)
   }
 
   protected def writeMetadata(

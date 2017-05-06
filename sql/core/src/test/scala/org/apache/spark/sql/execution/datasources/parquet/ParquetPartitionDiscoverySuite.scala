@@ -470,7 +470,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         pi <- Seq(1, 2)
         ps <- Seq("foo", "bar")
       } {
-        val dir = makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
+        val dir = makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
         makeParquetFile(
           (1 to 10).map(i => ParquetData(i, i.toString)),
           dir)
@@ -522,7 +522,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         pi <- Seq(1, 2)
         ps <- Seq("foo", "bar")
       } {
-        val dir = makeImplicitPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
+        val dir = makeValueOnlyNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
         makeParquetFile(
           (1 to 10).map(i => ParquetData(i, i.toString)),
           dir)
@@ -575,7 +575,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     withTempDir { base =>
       val pi = 1
       val ps = "foo"
-      val path = makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
+      val path = makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
       makeParquetFile(
         (1 to 10).map(i => ParquetData(i, i.toString)), path)
 
@@ -618,7 +618,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       } {
         makeParquetFile(
           (1 to 10).map(i => ParquetDataWithKey(i, pi, i.toString, ps)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
+          makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
       spark.read.parquet(base.getCanonicalPath).createOrReplaceTempView("t")
@@ -666,7 +666,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       } {
         makeParquetFile(
           (1 to 10).map(i => ParquetData(i, i.toString)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
+          makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
       val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
@@ -706,7 +706,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       } {
         makeParquetFile(
           (1 to 10).map(i => ParquetDataWithKey(i, pi, i.toString, ps)),
-          makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
+          makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
       val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
@@ -735,11 +735,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     withTempDir { base =>
       makeParquetFile(
         (1 to 10).map(i => Tuple1(i)).toDF("intField"),
-        makePartitionDir(base, defaultPartitionName, "pi" -> 1))
+        makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> 1))
 
       makeParquetFile(
         (1 to 10).map(i => (i, i.toString)).toDF("intField", "stringField"),
-        makePartitionDir(base, defaultPartitionName, "pi" -> 2))
+        makeKeyValueNamedPartitionDir(base, defaultPartitionName, "pi" -> 2))
 
       spark
         .read
