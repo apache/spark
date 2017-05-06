@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>spark-parent_2.11</artifactId>
+    <version>2.2.0-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>spark-hadoop-cloud_2.11</artifactId>
+  <packaging>jar</packaging>
+  <name>Spark Project Cloud Integration</name>
+  <description>
+    Contains support for cloud infrastructures, specifically the Hadoop JARs and
+    transitive dependencies needed to interact with the infrastructures.
+
+    Any project which explicitly depends upon the spark-hadoop-cloud artifact will get the
+    dependencies; the exact versions of which will depend upon the hadoop version Spark was compiled
+    against.
+
+    The imports of transitive dependencies are managed to make them consistent
+    with those of the Spark build.
+
+    WARNING: the signatures of methods in the AWS and Azure SDKs do change between
+    versions: use exactly the same version with which the Hadoop JARs were
+    built.
+  </description>
+  <properties>
+    <sbt.project.name>hadoop-cloud</sbt.project.name>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-aws</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-openstack</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <!--
+    Add joda time to ensure that anything downstream which doesn't pull in spark-hive
+    gets the correct joda time artifact, so doesn't have auth failures on later Java 8 JVMs
+    -->
+    <dependency>
+      <groupId>joda-time</groupId>
+      <artifactId>joda-time</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <!-- explicitly declare the jackson artifacts desired -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-cbor</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <!--Explicit declaration to force in Spark version into transitive dependencies -->
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <!--Explicit declaration to force in Spark version into transitive dependencies -->
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+  </dependencies>
+
+  <profiles>
+
+    <profile>
+      <id>hadoop-2.7</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-azure</artifactId>
+          <scope>${hadoop.deps.scope}</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+
+  </profiles>
+
+</project>
