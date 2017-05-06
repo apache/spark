@@ -1032,6 +1032,7 @@ class Analyzer(
   object ResolveMissingReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
+      case sa @ Sort(_, _, AnalysisBarrier(child: Aggregate)) => sa
       case sa @ Sort(_, _, child: Aggregate) => sa
 
       case s @ Sort(order, _, child) if child.resolved =>
@@ -1107,6 +1108,8 @@ class Analyzer(
           throw new AnalysisException(s"Can't add $missingAttrs to $d")
         case u: UnaryNode =>
           u.withNewChildren(addMissingAttr(u.child, missingAttrs) :: Nil)
+        case AnalysisBarrier(subPlan) =>
+          AnalysisBarrier(addMissingAttr(subPlan, missingAttrs))
         case other =>
           throw new AnalysisException(s"Can't add $missingAttrs to $other")
       }
@@ -1125,6 +1128,7 @@ class Analyzer(
         plan match {
           case u: UnaryNode if !u.isInstanceOf[SubqueryAlias] =>
             resolveExpressionRecursively(resolved, u.child)
+          case AnalysisBarrier(subPlan) => resolveExpressionRecursively(resolved, subPlan)
           case other => resolved
         }
       }
@@ -1535,6 +1539,8 @@ class Analyzer(
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+      case filter @ Filter(havingCondition, AnalysisBarrier(aggregate: Aggregate)) =>
+        apply(Filter(havingCondition, aggregate)).mapChildren(AnalysisBarrier(_))
       case filter @ Filter(havingCondition,
              aggregate @ Aggregate(grouping, originalAggExprs, child))
           if aggregate.resolved =>
@@ -1594,6 +1600,8 @@ class Analyzer(
           case ae: AnalysisException => filter
         }
 
+      case sort @ Sort(sortOrder, global, AnalysisBarrier(aggregate: Aggregate)) =>
+        apply(Sort(sortOrder, global, aggregate)).mapChildren(AnalysisBarrier(_))
       case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved =>
 
         // Try resolving the ordering as though it is in the aggregate clause.

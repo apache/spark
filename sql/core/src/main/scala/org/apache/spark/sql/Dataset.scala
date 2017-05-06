@@ -189,7 +189,7 @@ class Dataset[T] private[sql](
   }
 
   // Wrap analyzed logical plan with an analysis barrier so we won't traverse/resolve it again.
-  @transient private val planBarrier: AnalysisBarrier = AnalysisBarrier(logicalPlan)
+  @transient private val planBarrier: LogicalPlan = AnalysisBarrier(logicalPlan)
 
   /**
    * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
@@ -1743,7 +1743,7 @@ class Dataset[T] private[sql](
   def union(other: Dataset[T]): Dataset[T] = withSetOperator {
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(planBarrier, other.planBarrier))
+    CombineUnions(Union(logicalPlan, other.logicalPlan)).mapChildren(AnalysisBarrier(_))
   }
 
   /**
