@@ -976,12 +976,12 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    * In summary, the data structure encodes the following information:
    *
    *   *  There are ratings with user IDs 0 and 6 (encoded in `Array(0, 1)`, where 0 and 1 are the
-   *      indices of the user IDs 0 and 6 on partition 0) whose item IDs map to partitions 0 and 1
-   *      (represented by the fact that `Array(0, 1)` appears in both the 0th and 1st positions).
+   *   indices of the user IDs 0 and 6 on partition 0) whose item IDs map to partitions 0 and 1
+   *   (represented by the fact that `Array(0, 1)` appears in both the 0th and 1st positions).
    *
    *   *  There are ratings with user ID 3 (encoded in `Array(0)`, where 0 is the index of the user
-   *      ID 3 on partition 1) whose item IDs map to partitions 0 and 1 (represented by the fact
-   *      that `Array(0)` appears in both the 0th and 1st positions).
+   *   ID 3 on partition 1) whose item IDs map to partitions 0 and 1 (represented by the fact that
+   *   `Array(0)` appears in both the 0th and 1st positions).
    */
   private type OutBlock = Array[Array[Int]]
 
