@@ -820,7 +820,7 @@ head(select(fitted, "Class", "prediction"))
 
 `spark.gaussianMixture` fits multivariate [Gaussian Mixture Model](https://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model) (GMM) against a `SparkDataFrame`. [Expectation-Maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm) (EM) is used to approximate the maximum likelihood estimator (MLE) of the model.
 
-We use a simulated example to demostrate the usage.
+We use a simulated example to demonstrate the usage.
 ```{r}
 X1 <- data.frame(V1 = rnorm(4), V2 = rnorm(4))
 X2 <- data.frame(V1 = rnorm(6, 3), V2 = rnorm(6, 4))
