@@ -576,6 +576,10 @@ setGeneric("group_by", function(x, ...) { standardGeneric("group_by") })
 #' @export
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
 
+#' @rdname hint
+#' @export
+setGeneric("hint", function(x, name, ...) { standardGeneric("hint") })
+
 #' @rdname insertInto
 #' @export
 setGeneric("insertInto", function(x, tableName, ...) { standardGeneric("insertInto") })
@@ -856,6 +860,10 @@ setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
 #' @export
 setGeneric("over", function(x, window) { standardGeneric("over") })
 
+#' @rdname eq_null_safe
+#' @export
+setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
+
 ###################### WindowSpec Methods ##########################
 
 #' @rdname partitionBy
@@ -1016,6 +1024,10 @@ setGeneric("encode", function(x, charset) { standardGeneric("encode") })
 #' @export
 setGeneric("explode", function(x) { standardGeneric("explode") })
 
+#' @rdname explode_outer
+#' @export
+setGeneric("explode_outer", function(x) { standardGeneric("explode_outer") })
+
 #' @rdname expr
 #' @export
 setGeneric("expr", function(x) { standardGeneric("expr") })
@@ -1044,6 +1056,14 @@ setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") 
 #' @export
 setGeneric("greatest", function(x, ...) { standardGeneric("greatest") })
 
+#' @rdname grouping_bit
+#' @export
+setGeneric("grouping_bit", function(x) { standardGeneric("grouping_bit") })
+
+#' @rdname grouping_id
+#' @export
+setGeneric("grouping_id", function(x, ...) { standardGeneric("grouping_id") })
+
 #' @rdname hex
 #' @export
 setGeneric("hex", function(x) { standardGeneric("hex") })
@@ -1059,6 +1079,12 @@ setGeneric("hypot", function(y, x) { standardGeneric("hypot") })
 #' @rdname initcap
 #' @export
 setGeneric("initcap", function(x) { standardGeneric("initcap") })
+
+#' @param x empty. Should be used with no argument.
+#' @rdname input_file_name
+#' @export
+setGeneric("input_file_name",
+           function(x = "missing") { standardGeneric("input_file_name") })
 
 #' @rdname instr
 #' @export
@@ -1150,6 +1176,10 @@ setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
 #' @export
 setGeneric("negate", function(x) { standardGeneric("negate") })
 
+#' @rdname not
+#' @export
+setGeneric("not", function(x) { standardGeneric("not") })
+
 #' @rdname next_day
 #' @export
 setGeneric("next_day", function(y, x) { standardGeneric("next_day") })
@@ -1174,6 +1204,10 @@ setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
 #' @rdname posexplode
 #' @export
 setGeneric("posexplode", function(x) { standardGeneric("posexplode") })
+
+#' @rdname posexplode_outer
+#' @export
+setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer") })
 
 #' @rdname quarter
 #' @export
@@ -1502,7 +1536,7 @@ setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml")
 
 #' @rdname awaitTermination
 #' @export
-setGeneric("awaitTermination", function(x, timeout) { standardGeneric("awaitTermination") })
+setGeneric("awaitTermination", function(x, timeout = NULL) { standardGeneric("awaitTermination") })
 
 #' @rdname isActive
 #' @export

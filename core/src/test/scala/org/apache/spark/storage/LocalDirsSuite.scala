@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.File
+import java.io.{File, IOException}
 
 import org.scalatest.BeforeAndAfter
 
@@ -33,9 +33,13 @@ class LocalDirsSuite extends SparkFunSuite with BeforeAndAfter {
     Utils.clearLocalRootDirs()
   }
 
+  after {
+    Utils.clearLocalRootDirs()
+  }
+
   test("Utils.getLocalDir() returns a valid directory, even if some local dirs are missing") {
     // Regression test for SPARK-2974
-    assert(!new File("/NONEXISTENT_DIR").exists())
+    assert(!new File("/NONEXISTENT_PATH").exists())
     val conf = new SparkConf(false)
       .set("spark.local.dir", s"/NONEXISTENT_PATH,${System.getProperty("java.io.tmpdir")}")
     assert(new File(Utils.getLocalDir(conf)).exists())
@@ -43,7 +47,7 @@ class LocalDirsSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("SPARK_LOCAL_DIRS override also affects driver") {
     // Regression test for SPARK-2975
-    assert(!new File("/NONEXISTENT_DIR").exists())
+    assert(!new File("/NONEXISTENT_PATH").exists())
     // spark.local.dir only contains invalid directories, but that's not a problem since
     // SPARK_LOCAL_DIRS will override it on both the driver and workers:
     val conf = new SparkConfWithEnv(Map("SPARK_LOCAL_DIRS" -> System.getProperty("java.io.tmpdir")))
@@ -51,4 +55,17 @@ class LocalDirsSuite extends SparkFunSuite with BeforeAndAfter {
     assert(new File(Utils.getLocalDir(conf)).exists())
   }
 
+  test("Utils.getLocalDir() throws an exception if any temporary directory cannot be retrieved") {
+    val path1 = "/NONEXISTENT_PATH_ONE"
+    val path2 = "/NONEXISTENT_PATH_TWO"
+    assert(!new File(path1).exists())
+    assert(!new File(path2).exists())
+    val conf = new SparkConf(false).set("spark.local.dir", s"$path1,$path2")
+    val message = intercept[IOException] {
+      Utils.getLocalDir(conf)
+    }.getMessage
+    // If any temporary directory could not be retrieved under the given paths above, it should
+    // throw an exception with the message that includes the paths.
+    assert(message.contains(s"$path1,$path2"))
+  }
 }

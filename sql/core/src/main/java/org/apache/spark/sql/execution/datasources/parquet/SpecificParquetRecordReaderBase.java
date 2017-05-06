@@ -66,7 +66,6 @@ import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructType$;
 import org.apache.spark.util.AccumulatorV2;
-import org.apache.spark.util.LongAccumulator;
 
 /**
  * Base class for custom RecordReaders for Parquet that directly materialize to `T`.
@@ -160,7 +159,9 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     if (taskContext != null) {
       Option<AccumulatorV2<?, ?>> accu = taskContext.taskMetrics().externalAccums().lastOption();
       if (accu.isDefined() && accu.get().getClass().getSimpleName().equals("NumRowGroupsAcc")) {
-        ((AccumulatorV2<Integer, Integer>)accu.get()).add(blocks.size());
+        @SuppressWarnings("unchecked")
+        AccumulatorV2<Integer, Integer> intAccum = (AccumulatorV2<Integer, Integer>) accu.get();
+        intAccum.add(blocks.size());
       }
     }
   }

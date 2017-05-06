@@ -25,6 +25,8 @@ import scala.util.control.ControlThrowable
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkContext
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.ExplainCommand
@@ -67,6 +69,27 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two")),
       AddData(inputData, 4),
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two"), Row(4, 4, "four")))
+  }
+
+  test("SPARK-20432: union one stream with itself") {
+    val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load().select("a")
+    val unioned = df.union(df)
+    withTempDir { outputDir =>
+      withTempDir { checkpointDir =>
+        val query =
+          unioned
+            .writeStream.format("parquet")
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .start(outputDir.getAbsolutePath)
+        try {
+          query.processAllAvailable()
+          val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
+          checkDatasetUnorderly[Long](outputDf, (0L to 10L).union((0L to 10L)).toArray: _*)
+        } finally {
+          query.stop()
+        }
+      }
+    }
   }
 
   test("union two streams") {
@@ -118,6 +141,33 @@ class StreamSuite extends StreamTest {
     val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
     assertDF(df)
     assertDF(df)
+  }
+
+  test("Within the same streaming query, one StreamingRelation should only be transformed to one " +
+    "StreamingExecutionRelation") {
+    val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
+    var query: StreamExecution = null
+    try {
+      query =
+        df.union(df)
+          .writeStream
+          .format("memory")
+          .queryName("memory")
+          .start()
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+      query.awaitInitialization(streamingTimeout.toMillis)
+      val executionRelations =
+        query
+          .logicalPlan
+          .collect { case ser: StreamingExecutionRelation => ser }
+      assert(executionRelations.size === 2)
+      assert(executionRelations.distinct.size === 1)
+    } finally {
+      if (query != null) {
+        query.stop()
+      }
+    }
   }
 
   test("unsupported queries") {
@@ -499,6 +549,70 @@ class StreamSuite extends StreamTest {
         }
       }
     }
+  }
+
+  test("calling stop() on a query cancels related jobs") {
+    val input = MemoryStream[Int]
+    val query = input
+      .toDS()
+      .map { i =>
+        while (!org.apache.spark.TaskContext.get().isInterrupted()) {
+          // keep looping till interrupted by query.stop()
+          Thread.sleep(100)
+        }
+        i
+      }
+      .writeStream
+      .format("console")
+      .start()
+
+    input.addData(1)
+    // wait for jobs to start
+    eventually(timeout(streamingTimeout)) {
+      assert(sparkContext.statusTracker.getActiveJobIds().nonEmpty)
+    }
+
+    query.stop()
+    // make sure jobs are stopped
+    eventually(timeout(streamingTimeout)) {
+      assert(sparkContext.statusTracker.getActiveJobIds().isEmpty)
+    }
+  }
+
+  test("batch id is updated correctly in the job description") {
+    val queryName = "memStream"
+    @volatile var jobDescription: String = null
+    def assertDescContainsQueryNameAnd(batch: Integer): Unit = {
+      // wait for listener event to be processed
+      spark.sparkContext.listenerBus.waitUntilEmpty(streamingTimeout.toMillis)
+      assert(jobDescription.contains(queryName) && jobDescription.contains(s"batch = $batch"))
+    }
+
+    spark.sparkContext.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobDescription = jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+      }
+    })
+
+    val input = MemoryStream[Int]
+    val query = input
+      .toDS()
+      .map(_ + 1)
+      .writeStream
+      .format("memory")
+      .queryName(queryName)
+      .start()
+
+    input.addData(1)
+    query.processAllAvailable()
+    assertDescContainsQueryNameAnd(batch = 0)
+    input.addData(2, 3)
+    query.processAllAvailable()
+    assertDescContainsQueryNameAnd(batch = 1)
+    input.addData(4)
+    query.processAllAvailable()
+    assertDescContainsQueryNameAnd(batch = 2)
+    query.stop()
   }
 }
 
