@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, PreparedStatement}
 
 import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.types._
 
 /**
@@ -33,6 +34,18 @@ import org.apache.spark.sql.types._
 @DeveloperApi
 @InterfaceStability.Evolving
 case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
+
+/**
+ * :: DeveloperApi ::
+ * the duplicate key columns and update columns send to the database
+ * values to the database.
+ * @param upsertConditionColumns The duplicate key columns
+ * @param upsertUpdateColumns The columns to be updated
+ */
+@DeveloperApi
+@InterfaceStability.Evolving
+case class UpsertInfo(val upsertConditionColumns: Array[String],
+                      val upsertUpdateColumns: Array[String])
 
 /**
  * :: DeveloperApi ::
@@ -130,6 +143,23 @@ abstract class JdbcDialect extends Serializable {
    * None: The behavior of TRUNCATE TABLE is unknown (default).
    */
   def isCascadingTruncateTable(): Option[Boolean] = None
+
+  /**
+   * Generate a PreparedStatement that performs UPSERT operation
+   *
+   * @param conn The connection object
+   * @param table The target table
+   * @param rddSchema The schema for the table
+   * @param upsertParam The parameter contains upsert feature related information.
+   * @return PreparedStatement
+   */
+  def upsertStatement(
+      conn: Connection,
+      table: String,
+      rddSchema: StructType,
+      upsertParam: UpsertInfo = UpsertInfo(Array(), Array())): PreparedStatement = {
+    throw new UnsupportedOperationException("UPSERT operation is not implemented.")
+  }
 }
 
 /**

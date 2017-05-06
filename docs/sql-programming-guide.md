@@ -518,7 +518,8 @@ file directly with SQL.
 Save operations can optionally take a `SaveMode`, that specifies how to handle existing data if
 present. It is important to realize that these save modes do not utilize any locking and are not
 atomic. Additionally, when performing an `Overwrite`, the data will be deleted before writing out the
-new data.
+new data. When performing an `Append`, there is an option to enable the UPSERT feature for JDBC datasources, currently
+only MySQL and Postgres.  
 
 <table class="table">
 <tr><th>Scala/Java</th><th>Any Language</th><th>Meaning</th></tr>
@@ -1230,6 +1231,24 @@ the following case-insensitive options:
      The database column data types to use instead of the defaults, when creating the table. Data type information should be specified in the same format as CREATE TABLE columns syntax (e.g: <code>"name CHAR(64), comments VARCHAR(1024)")</code>. The specified types should be valid spark sql data types. This option applies only to writing.
     </td>
   </tr>  
+  
+  <tr>
+      <td><code>upsert, upsertConditionColumn, upsertUpdateColumn </code></td>
+      <td>
+        These options are JDBC writer related options. They describe how to
+        use UPSERT feature for different JDBC dialects. Right now, this feature implemented in MySQL, Postgres 
+        JDBC dialects. The upsert option is applicable only when <code>SaveMode.Append</code> is enabled,
+        in Overwrite mode, the existing table will be dropped or truncated first, including the unique constraints 
+        or primary key, before the insertion. So, UPSERT scenario is not applicable.
+        <code>upsertConditionColumn</code> are columns used to match existing rows. They are usually unique constraint/primary
+        key columns. This option is required by PostgreSQL datasource. This option is not applicable for MySQL datasource,
+        since the datasource will automatically use any existing unique constraint.
+        <code>upsertUpdateColumn</code> are columns updated with the input data set when existing rows are matched. It is required 
+        by MySQL datasource.
+        Be aware that if the input data set has duplicate rows, the upsert operation is
+        non-deterministic, it is documented at the [upsert(merge) wiki:](https://en.wikipedia.org/wiki/Merge_(SQL)).
+      </td>
+  </tr>
 </table>
 
 <div class="codetabs">
