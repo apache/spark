@@ -76,7 +76,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
   test("Linear SVC binary classification") {
     LinearSVC.supportedOptimizers.foreach { opt =>
-      val svm = new LinearSVC().setOptimizer(opt)
+      val svm = new LinearSVC().setSolver(opt)
       val model = svm.fit(smallBinaryDataset)
       assert(model.transform(smallValidationDataset)
         .where("prediction=label").count() > nPoints * 0.8)
@@ -87,7 +87,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
   test("Linear SVC binary classification with regularization") {
     LinearSVC.supportedOptimizers.foreach { opt =>
-      val svm = new LinearSVC().setOptimizer(opt).setMaxIter(10)
+      val svm = new LinearSVC().setSolver(opt).setMaxIter(10)
       val model = svm.setRegParam(0.1).fit(smallBinaryDataset)
       assert(model.transform(smallValidationDataset)
         .where("prediction=label").count() > nPoints * 0.8)
@@ -116,7 +116,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(lsvc.getFeaturesCol === "features")
     assert(lsvc.getPredictionCol === "prediction")
     assert(lsvc.getRawPredictionCol === "rawPrediction")
-    assert(lsvc.getOptimizer === "lbfgs")
+    assert(lsvc.getSolver === "owlqn")
     val model = lsvc.setMaxIter(5).fit(smallBinaryDataset)
     model.transform(smallBinaryDataset)
       .select("label", "prediction", "rawPrediction")
@@ -163,7 +163,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       assert(m1.intercept ~== m2.intercept absTol 0.05)
     }
     LinearSVC.supportedOptimizers.foreach { opt =>
-      val estimator = new LinearSVC().setRegParam(0.02).setTol(0.01).setOptimizer(opt)
+      val estimator = new LinearSVC().setRegParam(0.02).setTol(0.01).setSolver(opt)
       val dataset = smallBinaryDataset
       MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
         dataset.as[LabeledPoint], estimator, modelEquals)
@@ -175,7 +175,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("linearSVC OWLQN comparison with R e1071 and scikit-learn") {
-    val trainer1 = new LinearSVC().setOptimizer("owlqn")
+    val trainer1 = new LinearSVC().setSolver(LinearSVC.OWLQN)
       .setRegParam(0.00002) // set regParam = 2.0 / datasize / c
       .setMaxIter(200)
       .setTol(1e-4)
@@ -229,8 +229,8 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(model1.coefficients ~== coefficientsSK relTol 4E-3)
   }
 
-  test("linearSVC LBFGS comparison with R e1071 and scikit-learn") {
-    val trainer1 = new LinearSVC().setOptimizer("LBFGS")
+  test("linearSVC L-BFGS comparison with R e1071 and scikit-learn") {
+    val trainer1 = new LinearSVC().setSolver(LinearSVC.LBFGS)
       .setRegParam(0.00003)
       .setMaxIter(200)
       .setTol(1e-4)
