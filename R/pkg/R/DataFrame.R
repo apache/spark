@@ -3752,6 +3752,7 @@ setMethod("hint",
 #' @family SparkDataFrame functions
 #' @rdname alias
 #' @name alias
+#' @export
 #' @examples
 #' \dontrun{
 #' df <- alias(createDataFrame(mtcars), "mtcars")
