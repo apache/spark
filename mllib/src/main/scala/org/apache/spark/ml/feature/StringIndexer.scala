@@ -122,7 +122,7 @@ class StringIndexer @Since("1.4.0") (
   /** @group setParam */
   @Since("2.2.0")
   def setStringOrderType(value: String): this.type = set(stringOrderType, value)
-  setDefault(stringOrderType, "freq_desc")
+  setDefault(stringOrderType, StringIndexer.FREQ_DESC)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -138,11 +138,11 @@ class StringIndexer @Since("1.4.0") (
     val values = dataset.na.drop(Array($(inputCol)))
       .select(col($(inputCol)).cast(StringType))
       .rdd.map(_.getString(0))
-    val labels = $(stringOrderType) match {
-      case "freq_desc" => values.countByValue().toSeq.sortBy(-_._2).map(_._1).toArray
-      case "freq_asc" => values.countByValue().toSeq.sortBy(_._2).map(_._1).toArray
-      case "alphabet_desc" => values.distinct.collect.sortWith(_ > _)
-      case "alphabet_asc" => values.distinct.collect.sortWith(_ < _)
+    val labels = $(stringOrderType).toLowerCase match {
+      case StringIndexer.FREQ_DESC => values.countByValue().toSeq.sortBy(-_._2).map(_._1).toArray
+      case StringIndexer.FREQ_ASC => values.countByValue().toSeq.sortBy(_._2).map(_._1).toArray
+      case StringIndexer.ALPHABET_DESC => values.distinct.collect.sortWith(_ > _)
+      case StringIndexer.ALPHABET_ASC => values.distinct.collect.sortWith(_ < _)
     }
     copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
@@ -163,8 +163,12 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
+  private[feature] val FREQ_DESC: String = "freq_desc"
+  private[feature] val FREQ_ASC: String = "freq_asc"
+  private[feature] val ALPHABET_DESC: String = "alphabet_desc"
+  private[feature] val ALPHABET_ASC: String = "alphabet_asc"
   private[feature] val supportedStringOrderType: Array[String] =
-    Array("freq_desc", "freq_asc", "alphabet_desc", "alphabet_asc")
+    Array(FREQ_DESC, FREQ_ASC, ALPHABET_DESC, ALPHABET_ASC)
 
   @Since("1.6.0")
   override def load(path: String): StringIndexer = super.load(path)
