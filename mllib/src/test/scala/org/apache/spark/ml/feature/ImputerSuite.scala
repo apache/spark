@@ -53,11 +53,11 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
 
   test("Imputer for Float with missing Value -1.0") {
     val df = spark.createDataFrame( Seq(
-      (0, 1.0F, 1.0F, 1.0F),
-      (1, 3.0F, 3.0F, 3.0F),
-      (2, 10.0F, 10.0F, 10.0F),
-      (3, 10.0F, 10.0F, 10.0F),
-      (4, -1.0F, 6.0F, 3.0F)
+      (0, 1.0F, 1.0, 1.0),
+      (1, 3.0F, 3.0, 3.0),
+      (2, 10.0F, 10.0, 10.0),
+      (3, 10.0F, 10.0, 10.0),
+      (4, -1.0F, 6.0, 3.0)
     )).toDF("id", "value", "expected_mean_value", "expected_median_value")
     val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
       .setMissingValue(-1)
@@ -182,8 +182,8 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
     val df = spark.createDataFrame( Seq(
       (0, 1.0, 1.0, 1.0),
       (1, 11.0, 11.0, 11.0),
-      (2, 1.5, 1.5, 1.5),
-      (3, Double.NaN, 4.5, 1.5)
+      (2, 3.0, 3.0, 3.0),
+      (3, Double.NaN, 5.0, 3.0)
     )).toDF("id", "value1", "expected_mean_value1", "expected_median_value1")
     val imputer = new Imputer()
       .setInputCols(Array("value1"))
@@ -194,8 +194,6 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
     for (mType <- types) {
       val df2 = df.withColumn("value1", col("value1").cast(mType))
         .withColumn("value1", when(col("value1").equalTo(0), null).otherwise(col("value1")))
-        .withColumn("expected_mean_value1", col("expected_mean_value1").cast(mType))
-        .withColumn("expected_median_value1", col("expected_median_value1").cast(mType))
       ImputerSuite.iterateStrategyTest(imputer, df2)
     }
   }
@@ -214,14 +212,8 @@ object ImputerSuite {
       val resultDF = model.transform(df)
       imputer.getInputCols.zip(imputer.getOutputCols).foreach { case (inputCol, outputCol) =>
         resultDF.select(s"expected_${strategy}_$inputCol", outputCol).collect().foreach {
-          case Row(exp: Float, out: Float) =>
-            assert((exp.isNaN && out.isNaN) || (exp == out),
-              s"Imputed values differ. Expected: $exp, actual: $out")
           case Row(exp: Double, out: Double) =>
             assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
-              s"Imputed values differ. Expected: $exp, actual: $out")
-          case Row(exp, out) =>
-            assert(exp == out,
               s"Imputed values differ. Expected: $exp, actual: $out")
         }
       }
