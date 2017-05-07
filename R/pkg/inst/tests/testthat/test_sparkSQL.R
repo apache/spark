@@ -3387,7 +3387,7 @@ compare_list <- function(list1, list2) {
 
 # This should always be the **very last test** in this test file.
 test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
-  skip_on_cran()
+  skip_on_cran() # skip because when run from R CMD check SPARK_HOME is not the current directory
 
   # Check that it is not creating any extra file.
   # Does not check the tempdir which would be cleaned up after.
