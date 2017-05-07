@@ -564,12 +564,13 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @since(2.3)
-    def bucketBy(self, numBuckets, *cols):
+    def bucketBy(self, numBuckets, col, *cols):
         """Buckets the output by the given columns.If specified,
         the output is laid out on the file system similar to Hive's bucketing scheme.
 
         :param numBuckets: the number of buckets to save
-        :param cols: name of columns
+        :param col: a name of a column, or a list of names.
+        :param cols: additional names (optional). If `col` is a list it should be empty.
 
         .. note:: Applicable for file-based data sources in combination with
                   :py:meth:`DataFrameWriter.saveAsTable`.
@@ -579,26 +580,27 @@ class DataFrameWriter(OptionUtils):
         ...     .mode("overwrite")
         ...     .saveAsTable('bucketed_table'))
         """
-        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]
-
         if not isinstance(numBuckets, int):
             raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
 
-        if not all(isinstance(c, basestring) for c in cols):
-            raise TypeError("cols argument should be a string or a sequence of strings.")
+        if isinstance(col, (list, tuple)):
+            if cols:
+                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
 
-        col = cols[0]
-        cols = cols[1:]
+            col, cols = col[0], col[1:]
+
+        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+            raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.bucketBy(numBuckets, col, _to_seq(self._spark._sc, cols))
         return self
 
     @since(2.3)
-    def sortBy(self, *cols):
+    def sortBy(self, col, *cols):
         """Sorts the output in each bucket by the given columns on the file system.
 
-        :param cols: name of columns
+        :param col: a name of a column, or a list of names.
+        :param cols: additional names (optional). If `col` is a list it should be empty.
 
         >>> (df.write.format('parquet')
         ...     .bucketBy(100, 'year', 'month')
@@ -606,14 +608,14 @@ class DataFrameWriter(OptionUtils):
         ...     .mode("overwrite")
         ...     .saveAsTable('sorted_bucketed_table'))
         """
-        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]
+        if isinstance(col, (list, tuple)):
+            if cols:
+                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
 
-        if not all(isinstance(c, basestring) for c in cols):
-            raise TypeError("cols argument should be a string or a sequence of strings.")
+            col, cols = col[0], col[1:]
 
-        col = cols[0]
-        cols = cols[1:]
+        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+            raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.sortBy(col, _to_seq(self._spark._sc, cols))
         return self
