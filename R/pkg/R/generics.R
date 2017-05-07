@@ -389,13 +389,13 @@ setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 
 #' alias
 #'
-#' Returns a new SparkDataFrame or Column with an alias set. Equivalent to SQL "AS" keyword.
+#' Returns a new SparkDataFrame or a Column with an alias set. Equivalent to SQL "AS" keyword.
 #'
 #' @name alias
 #' @rdname alias
-#' @param object x a Column or a SparkDataFrame
+#' @param object x a SparkDataFrame or a Column
 #' @param data new name to use
-#' @return a Column or a SparkDataFrame
+#' @return a SparkDataFrame or a Column
 NULL
 
 #' @rdname arrange
