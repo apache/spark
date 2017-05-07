@@ -355,7 +355,9 @@ trait CheckAnalysis extends PredicateHelper {
    * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
    */
   private def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
-    def checkAggregate(conditions: Seq[Expression], query: LogicalPlan, agg: Aggregate): Unit = {
+    def checkAggregateInScalarSubquery(
+        conditions: Seq[Expression],
+        query: LogicalPlan, agg: Aggregate): Unit = {
       // Make sure correlated scalar subqueries contain one row for every outer row by
       // enforcing that they are aggregates containing exactly one aggregate expression.
       val aggregates = agg.expressions.flatMap(_.collect {
@@ -384,9 +386,9 @@ trait CheckAnalysis extends PredicateHelper {
 
     // Skip subquery aliases added by the Analyzer.
     // For projects, do the necessary mapping and skip to its child.
-    def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
-      case s: SubqueryAlias => cleanQuery(s.child)
-      case p: Project => cleanQuery(p.child)
+    def cleanScalarQuery(p: LogicalPlan): LogicalPlan = p match {
+      case s: SubqueryAlias => cleanScalarQuery(s.child)
+      case p: Project => cleanScalarQuery(p.child)
       case child => child
     }
 
@@ -402,10 +404,10 @@ trait CheckAnalysis extends PredicateHelper {
         }
 
         if (conditions.nonEmpty) {
-          cleanQuery(query) match {
-            case a: Aggregate => checkAggregate(conditions, query, a)
-            case Filter(_, a: Aggregate) => checkAggregate(conditions, query, a)
-            case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
+          cleanScalarQuery(query) match {
+            case a: Aggregate => checkAggregateInScalarSubquery(conditions, query, a)
+            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(conditions, query, a)
+            case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")
           }
 
           // Only certain operators are allowed to host subquery expression containing
@@ -413,15 +415,16 @@ trait CheckAnalysis extends PredicateHelper {
           plan match {
             case _: Filter | _: Aggregate | _: Project => // Ok
             case other => failAnalysis(
-              s"Correlated scalar sub-queries can only be used in a " +
+              "Correlated scalar sub-queries can only be used in a " +
                 s"Filter/Aggregate/Project: $plan")
           }
         }
 
-      case inOrExistsSubquery =>
+      case inSubqueryOrExistsSubquery =>
         plan match {
           case _: Filter => // Ok
-          case _ => failAnalysis(s"Predicate sub-queries can only be used in a Filter: $plan")
+          case _ =>
+            failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in a Filter: $plan")
         }
     }
 
@@ -450,7 +453,7 @@ trait CheckAnalysis extends PredicateHelper {
                  |Aggregate expression: ${SubExprUtils.stripOuterReference(a).sql},
                  |Outer references: ${outer.map(_.sql).mkString(", ")},
                  |Local references: ${local.map(_.sql).mkString(", ")}.
-                 """.stripMargin.replace("\n", " ").trim()
+               """.stripMargin.replace("\n", " ").trim()
             failAnalysis(msg)
           }
         case _ =>
@@ -507,7 +510,7 @@ trait CheckAnalysis extends PredicateHelper {
       }
     }
 
-    var foundNonEqualCorrelatedPred : Boolean = false
+    var foundNonEqualCorrelatedPred: Boolean = false
 
     // Simplify the predicates before validating any unsupported correlation patterns
     // in the plan.

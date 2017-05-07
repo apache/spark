@@ -1256,9 +1256,9 @@ class Analyzer(
     }
 
     /**
-     * Resolves the subquery. The subquery is resolved using its outer plans. This method
-     * will resolve the subquery by alternating between the regular analyzer and by applying the
-     * resolveOuterReferences rule.
+     * Resolves the subquery plan that is referenced in a subquery expression. The normal
+     * attribute references are resolved using regular analyzer and the outer references are
+     * resolved from the outer plans using the resolveOuterReferences method.
      *
      * Outer references from the correlated predicates are updated as children of
      * Subquery expression.
@@ -1309,11 +1309,6 @@ class Analyzer(
         case e @ Exists(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(e, plans)(Exists(_, _, exprId))
         case In(value, Seq(l @ ListQuery(sub, _, exprId))) if value.resolved && !sub.resolved =>
-          // Get the left hand side expressions.
-          val expressions = value match {
-            case cns : CreateNamedStruct => cns.valExprs
-            case expr => Seq(expr)
-          }
           val expr = resolveSubQuery(l, plans)(ListQuery(_, _, exprId))
           In(value, Seq(expr))
       }

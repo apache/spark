@@ -139,7 +139,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   require(list != null, "list should not be null")
   override def checkInputDataTypes(): TypeCheckResult = {
     list match {
-      case ListQuery(sub, _, _) :: Nil =>
+      case ListQuery(sub, _, exprId) :: Nil =>
         val valExprs = value match {
           case cns: CreateNamedStruct => cns.valExprs
           case expr => Seq(expr)
@@ -149,11 +149,14 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
             s"""
                |The number of columns the left hand side of an IN subquery does not match the
                |number of columns in the output of subquery.
-               |Left side:
-               |${valExprs.length}.
-               |Right side:
-               |${sub.output.length}.
-           """.stripMargin)
+               |#columns in left hand side: ${valExprs.length}.
+               |#columns in right hand side: ${sub.output.length}.
+               |Left side columns:
+               |[${valExprs.map(_.sql).mkString(", ")}].
+               |Right side columns:
+               |[${sub.output.map(_.sql).mkString(", ")}].
+               |Subquery expression id: #${exprId.id}
+             """.stripMargin)
         } else {
           val mismatchedColumns = valExprs.zip(sub.output).flatMap {
             case (l, r) if l.dataType != r.dataType =>
@@ -171,6 +174,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
                  |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
                  |Right side:
                  |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
+                 |Subquery expression id: #${exprId.id}
                """.stripMargin)
           } else {
             TypeCheckResult.TypeCheckSuccess
