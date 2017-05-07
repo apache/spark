@@ -783,6 +783,10 @@ private[deploy] class Master(
       exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }
+    val failedApps = apps.find(p => p.driver.address.host == worker.endpoint.address.host)
+    for (app <- failedApps) {
+      finishApplication(app)
+    }
     for (driver <- worker.drivers.values) {
       if (driver.desc.supervise) {
         logInfo(s"Re-launching ${driver.id}")
@@ -796,11 +800,14 @@ private[deploy] class Master(
   }
 
   private def relaunchDriver(driver: DriverInfo) {
-    driver.worker = None
-    driver.state = DriverState.RELAUNCHING
-    waitingDrivers += driver
+    removeDriver(driver.id, DriverState.RELAUNCHING, None)
+    val newDriver = createDriver(driver.desc)
+    persistenceEngine.addDriver(newDriver)
+    drivers.add(newDriver)
+    waitingDrivers += newDriver
+
     schedule()
-  }
+
 
   private def createApplication(desc: ApplicationDescription, driver: RpcEndpointRef):
       ApplicationInfo = {
