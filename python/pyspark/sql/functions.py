@@ -1917,6 +1917,19 @@ class UserDefinedFunction(object):
         sc = SparkContext._active_spark_context
         return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
 
+    def _wrapped(self):
+        """
+        Wrap this udf with a function and attach docstring from func
+        """
+        @functools.wraps(self.func)
+        def wrapper(*args):
+            return self(*args)
+
+        wrapper.func = self.func
+        wrapper.returnType = self.returnType
+
+        return wrapper
+
 
 @since(1.3)
 def udf(f=None, returnType=StringType()):
@@ -1951,15 +1964,7 @@ def udf(f=None, returnType=StringType()):
     """
     def _udf(f, returnType=StringType()):
         udf_obj = UserDefinedFunction(f, returnType)
-
-        @functools.wraps(f)
-        def wrapper(*args):
-            return udf_obj(*args)
-
-        wrapper.func = udf_obj.func
-        wrapper.returnType = udf_obj.returnType
-
-        return wrapper
+        return udf_obj._wrapped()
 
     # decorator @udf, @udf() or @udf(dataType())
     if f is None or isinstance(f, (str, DataType)):
