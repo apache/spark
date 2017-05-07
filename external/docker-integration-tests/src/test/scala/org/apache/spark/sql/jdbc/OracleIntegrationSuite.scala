@@ -192,7 +192,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     checkRow(sql("SELECT * FROM datetime1 where id = 1").head())
   }
 
-  test("SPARK-20557: column type TIMEZONE with TIME STAMP should be recognized") {
+  test("SPARK-20557: column type TIMESTAMP with TIME ZONE should be recognized") {
     val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
     val rows = dfRead.collect()
     val types = rows(0).toSeq.map(x => x.getClass.toString)

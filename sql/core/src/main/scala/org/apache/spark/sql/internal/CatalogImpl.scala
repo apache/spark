@@ -33,7 +33,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
 
-
 /**
  * Internal implementation of the user-facing `Catalog`.
  */
