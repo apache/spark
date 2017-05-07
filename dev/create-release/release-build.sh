@@ -163,8 +163,8 @@ if [[ "$1" == "package" ]]; then
     export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
 
-    # Write out the NAME and VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
-    # to dev0 to be closer to PEP440. We use the NAME as a "local version".
+    # Write out the VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
+    # to dev0 to be closer to PEP440.
     PYSPARK_VERSION=`echo "$SPARK_VERSION" |  sed -r "s/-/./" | sed -r "s/SNAPSHOT/dev0/"`
     echo "__version__='$PYSPARK_VERSION'" > python/pyspark/version.py
 
