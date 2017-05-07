@@ -130,19 +130,19 @@ createMethods <- function() {
 
 createMethods()
 
-#' alias
-#'
-#' Set a new name for a column
-#'
-#' @param object Column to rename
-#' @param data new name to use
-#'
 #' @rdname alias
 #' @name alias
 #' @aliases alias,Column-method
 #' @family colum_func
 #' @export
-#' @note alias since 1.4.0
+#' @examples \dontrun{
+#' df <- createDataFrame(iris)
+#'
+#' head(select(
+#'   df, alias(df$Sepal_Length, "slength"), alias(df$Petal_Length, "plength")
+#' ))
+#' }
+#' @note alias(Column) since 1.4.0
 setMethod("alias",
           signature(object = "Column"),
           function(object, data) {
