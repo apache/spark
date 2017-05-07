@@ -2671,16 +2671,15 @@ object functions {
     UnixTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
   }
 
-  // scalastyle:off line.size.limit
   /**
    * Converts time string with given pattern to Unix timestamp (in seconds).
    * Returns `null` if fails.
    *
-   * @see <a href="http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html">Customizing Formats</a>
+   * @see <a href="http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html">
+   * Customizing Formats</a>
    * @group datetime_funcs
    * @since 1.5.0
    */
-  // scalastyle:on
   def unix_timestamp(s: Column, p: String): Column = withExpr { UnixTimestamp(s.expr, Literal(p)) }
 
   /**
