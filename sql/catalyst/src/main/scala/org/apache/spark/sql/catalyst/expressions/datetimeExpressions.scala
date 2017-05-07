@@ -488,7 +488,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
  * Deterministic version of [[UnixTimestamp]], must have at least one parameter.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, pattern]) - Returns the UNIX timestamp of the give time.",
+  usage = "_FUNC_(expr[, pattern]) - Returns the UNIX timestamp of the given time.",
   extended = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
@@ -1225,8 +1225,8 @@ case class ParseToTimestamp(left: Expression, format: Expression, child: Express
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-  this(left, format, Cast(UnixTimestamp(left, format), TimestampType))
-}
+    this(left, format, Cast(UnixTimestamp(left, format), TimestampType))
+  }
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def sql: String = s"$prettyName(${left.sql}, ${format.sql})"

@@ -423,7 +423,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Parses a given UTF8 date string to the corresponding a corresponding [[Int]] value.
+   * Parses a given UTF8 date string to a corresponding [[Int]] value.
    * The return type is [[Option]] in order to distinguish between 0 and null. The following
    * formats are allowed:
    *

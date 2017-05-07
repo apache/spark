@@ -2491,10 +2491,10 @@ object functions {
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
-   * A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
-   * pattern letters of `java.text.SimpleDateFormat` can be used.
+   * A pattern `dd.MM.yyyy` would return a string like `18.03.1993`.
+   * All pattern letters of `java.text.SimpleDateFormat` can be used.
    *
-   * @note Use when ever possible specialized functions like [[year]]. These benefit from a
+   * @note Use specialized functions like [[year]] whenever possible as they benefit from a
    * specialized implementation.
    *
    * @group datetime_funcs
@@ -2647,7 +2647,11 @@ object functions {
   }
 
   /**
-   * Gets current Unix timestamp in seconds.
+   * Returns the current Unix timestamp (in seconds).
+   *
+   * @note All calls of `unix_timestamp` within the same query return the same value
+   * (i.e. the current timestamp is calculated at the start of query evaluation).
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2657,7 +2661,9 @@ object functions {
 
   /**
    * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
-   * using the default timezone and the default locale, return null if fail.
+   * using the default timezone and the default locale.
+   * Returns `null` if fails.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2666,13 +2672,15 @@ object functions {
   }
 
   /**
-   * Convert time string with given pattern
-   * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
-   * to Unix time stamp (in seconds), return null if fail.
+   * Converts time string with given pattern to Unix timestamp (in seconds).
+   * Returns `null` if fails.
+   *
+   * @see <a href="http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html">
+   * Customizing Formats</a>
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def unix_timestamp(s: Column, p: String): Column = withExpr {UnixTimestamp(s.expr, Literal(p)) }
+  def unix_timestamp(s: Column, p: String): Column = withExpr { UnixTimestamp(s.expr, Literal(p)) }
 
   /**
    * Convert time string to a Unix timestamp (in seconds).
