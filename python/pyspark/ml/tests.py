@@ -71,6 +71,34 @@ from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 ser = PickleSerializer()
 
 
+def generate_multinomial_logistic_input(
+        weights, x_mean, x_variance, add_intercept, n_points, seed=None):
+    """Creates multinomial logistic dataset"""
+
+    if seed:
+        np.random.seed(seed)
+    n_features = x_mean.shape[0]
+
+    x = np.random.randn(n_points, n_features)
+    x = x * np.sqrt(x_variance) + x_mean
+
+    if add_intercept:
+        x = np.hstack([x, np.ones((n_points, 1))])
+
+    # Compute margins
+    margins = np.hstack([np.zeros((n_points, 1)), x.dot(weights.T)])
+    # Shift to avoid overflow and compute probs
+    probs = np.exp(np.subtract(margins, margins.max(axis=1).reshape(n_points, -1)))
+    # Compute cumulative prob
+    cum_probs = np.cumsum(probs / probs.sum(axis=1).reshape(n_points, -1), axis=1)
+    # Asign class
+    classes = np.apply_along_axis(
+        lambda x: np.searchsorted(cum_probs[1, ], np.random.random()),
+        axis=1, arr=cum_probs)
+    return [(float(label), DenseVector(features))
+            for (label, features) in list(zip(classes, x[:, :-int(add_intercept)]))]
+
+
 class MLlibTestCase(unittest.TestCase):
     def setUp(self):
         self.sc = SparkContext('local[4]', "MLlib tests")
@@ -831,6 +859,96 @@ class PersistenceTest(SparkSessionTestCase):
             rmtree(path)
         except OSError:
             pass
+
+    def logistic_regression_check_thresholds(self):
+        self.assertIsInstance(
+            LogisticRegression(threshold=0.5, thresholds=[0.5, 0.5]),
+            LogisticRegressionModel
+        )
+
+        self.assertRaisesRegexp(
+            ValueError,
+            "Logistic Regression getThreshold found inconsistent.*$",
+            LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
+        )
+
+    def test_binomial_logistic_regression_bounds(self):
+        x_mean = np.array([5.843, 3.057, 3.758, 1.199])
+        x_variance = np.array([0.6856, 0.1899, 3.116, 0.581])
+
+        coefficients = np.array(
+            [[-0.57997, 0.912083, -0.371077, -0.819866, 2.688191]]
+        )
+
+        dataset = self.spark.createDataFrame(
+            generate_multinomial_logistic_input(
+                coefficients, x_mean, x_variance, True, 1000),
+            ["label", "features"]
+        )
+
+        lower_bounds_on_coefficients = Matrices.dense(1, 4, [0.0, -1.0, 0.0, -1.0])
+        upper_bounds_on_coefficients = Matrices.dense(1, 4, [0.0, 1.0, 1.0, 0.0])
+        lower_bounds_on_intercepts = Vectors.dense([0.0])
+        upper_bounds_on_intercepts = Vectors.dense([1.0])
+
+        lr = LogisticRegression(
+            standardization=True, fitIntercept=True,
+            lowerBoundsOnCoefficients=lower_bounds_on_coefficients,
+            upperBoundsOnCoefficients=upper_bounds_on_coefficients,
+            lowerBoundsOnIntercepts=lower_bounds_on_intercepts,
+            upperBoundsOnIntercepts=upper_bounds_on_intercepts
+        )
+
+        lrm = lr.fit(dataset)
+
+        self.assertIsInstance(lrm, LogisticRegressionModel)
+        self.assertTrue(np.all(
+            lower_bounds_on_coefficients.toArray() <= lrm.coefficientMatrix.toArray()
+        ))
+
+        self.assertTrue(np.all(
+            lrm.coefficientMatrix.toArray() <= upper_bounds_on_coefficients.toArray()
+        ))
+
+    def test_multinomial_regression_bounds(self):
+        x_mean = np.array([5.843, 3.057, 3.758, 1.199])
+        x_variance = np.array([0.6856, 0.1899, 3.116, 0.581])
+
+        coefficients = np.array([
+            [-0.57997, 0.912083, -0.371077, -0.819866, 2.688191],
+            [-0.16624, -0.84355, -0.048509, -0.301789, 4.170682]
+        ])
+
+        dataset = self.spark.createDataFrame(
+            generate_multinomial_logistic_input(
+                coefficients, x_mean, x_variance, True, 1000),
+            ["label", "features"]
+        )
+
+        lower_bounds_on_coefficients = Matrices.dense(3, 4, np.repeat(-10.0, 12))
+        upper_bounds_on_coefficients = Matrices.dense(3, 4, np.repeat(10.0, 12))
+        lower_bounds_on_intercepts = Vectors.dense(np.repeat(-3.0, 3))
+        upper_bounds_on_intercepts = Vectors.dense(np.repeat(3.0, 3))
+
+        lr = LogisticRegression(
+            standardization=True, fitIntercept=True,
+            lowerBoundsOnCoefficients=lower_bounds_on_coefficients,
+            upperBoundsOnCoefficients=upper_bounds_on_coefficients,
+            lowerBoundsOnIntercepts=lower_bounds_on_intercepts,
+            upperBoundsOnIntercepts=upper_bounds_on_intercepts
+        )
+
+        lrm = lr.fit(dataset)
+
+        self.assertIsInstance(lrm, LogisticRegressionModel)
+
+        self.assertTrue(np.all(
+            lower_bounds_on_coefficients.toArray() <= lrm.coefficientMatrix.toArray()
+        ))
+
+        self.assertTrue(np.all(
+            lrm.coefficientMatrix.toArray() <= upper_bounds_on_coefficients.toArray()
+        ))
 
     def _compare_params(self, m1, m2, param):
         """

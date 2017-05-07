@@ -27,7 +27,7 @@ import numpy as np
 
 from py4j.java_gateway import JavaObject
 
-from pyspark.ml.linalg import DenseVector, Vector
+from pyspark.ml.linalg import DenseVector, Vector, Matrix
 from pyspark.ml.util import Identifiable
 
 
@@ -168,6 +168,15 @@ class TypeConverters(object):
             if all(map(lambda v: TypeConverters._is_numeric(v), value)):
                 return DenseVector(value)
         raise TypeError("Could not convert %s to vector" % value)
+
+    @staticmethod
+    def toMatrix(value):
+        """
+        Convert a value to ML Matrix, if possible
+        """
+        if isinstance(value, Matrix):
+            return value
+        raise TypeError("Could not convert %s to Matrix" % value)
 
     @staticmethod
     def toFloat(value):
