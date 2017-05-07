@@ -682,6 +682,13 @@ private[spark] class BlockManager(
     None
   }
 
+  /**
+    * Get a block from the block manager (either local or remote).
+    *
+    * This acquires a read lock on the block if the block was stored locally and does not acquire
+    * any locks if the block was fetched from a remote block manager. The read lock will
+    * automatically be freed once the result's `data` iterator is fully consumed.
+    */
   def get[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
     getOrCacheRemote(blockId, false, Some(StorageLevel.NONE))
   }
@@ -713,8 +720,12 @@ private[spark] class BlockManager(
         if (cacheRemote) {
           assert(storageLevel.isDefined && storageLevel.get.isValid,
             "The storage level is invalid.")
-          putIterator(blockId, blockResult.data, storageLevel.get)
-          logInfo(s"Cache bock $blockId fetched from remotely")
+          val putResult = putIterator(blockId, blockResult.data, storageLevel.get) match {
+            case true => "success"
+            case false => "fail"
+          }
+
+          logInfo(s"Cache bock $blockId fetched from remotely $putResult")
         }
         return remote
       case None =>
