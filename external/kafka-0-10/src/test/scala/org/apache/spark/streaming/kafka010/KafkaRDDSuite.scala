@@ -102,6 +102,23 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("basic scala API") {
+    val topic = s"topicbasic-${Random.nextInt}-${System.currentTimeMillis}"
+    kafkaTestUtils.createTopic(topic)
+    val messages = Array("the", "quick", "brown", "fox")
+    kafkaTestUtils.sendMessages(topic, messages)
+
+    val kafkaParams = getKafkaParams().asScala
+
+    val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
+
+    val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams, offsetRanges, preferredHosts)
+      .map(_.value)
+
+    val received = rdd.collect.toSet
+    assert(received === messages.toSet)
+  }
+
   test("iterator boundary conditions") {
     // the idea is to find e.g. off-by-one errors between what kafka has available and the rdd
     val topic = s"topicboundary-${Random.nextInt}-${System.currentTimeMillis}"

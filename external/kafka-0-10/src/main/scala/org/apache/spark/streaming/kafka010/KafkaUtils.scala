@@ -19,6 +19,8 @@ package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
 
+import scala.collection.JavaConverters._
+
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
@@ -72,6 +74,31 @@ object KafkaUtils extends Logging {
     val osr = offsetRanges.clone()
 
     new KafkaRDD[K, V](sc, kp, osr, preferredHosts, true)
+  }
+
+  /**
+   * :: Experimental ::
+   * Scala constructor for a batch-oriented interface for consuming from Kafka.
+   * Starting and ending offsets are specified in advance,
+   * so that you can control exactly-once semantics.
+   * @param kafkaParams Kafka
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+   * configuration parameters</a>. Requires "bootstrap.servers" to be set
+   * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+   * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
+   * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
+   *   see [[LocationStrategies]] for more details.
+   * @tparam K type of Kafka message key
+   * @tparam V type of Kafka message value
+   */
+  @Experimental
+  def createRDD[K, V](
+      sc: SparkContext,
+      kafkaParams: collection.Map[String, Object],
+      offsetRanges: Array[OffsetRange],
+      locationStrategy: LocationStrategy
+    ): RDD[ConsumerRecord[K, V]] = {
+    createRDD[K, V](sc, kafkaParams.asJava, offsetRanges, locationStrategy)
   }
 
   /**
