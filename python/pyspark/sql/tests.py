@@ -30,6 +30,8 @@ import pickle
 import functools
 import time
 import datetime
+import array
+import math
 
 import py4j
 try:
@@ -2195,6 +2197,60 @@ class SQLTests(ReusedPySparkTestCase):
                 [bytearray(b'and here is some more')]]
         df = self.spark.createDataFrame(data, schema=schema)
         df.collect()
+
+    # test for SPARK-16542
+    def test_array_types(self):
+        int_types = set(['b', 'h', 'i', 'l'])
+        float_types = set(['f', 'd'])
+        unsupported_types = set(array.typecodes) - int_types - float_types
+
+        def collected(a):
+            row = Row(myarray=a)
+            rdd = self.sc.parallelize([row])
+            df = self.spark.createDataFrame(rdd)
+            return df.collect()[0]["myarray"][0]
+        # test whether pyspark can correctly handle int types
+        for t in int_types:
+            # test positive numbers
+            a = array.array(t, [1])
+            while True:
+                try:
+                    self.assertEqual(collected(a), a[0])
+                    a[0] *= 2
+                except OverflowError:
+                    break
+            # test negative numbers
+            a = array.array(t, [-1])
+            while True:
+                try:
+                    self.assertEqual(collected(a), a[0])
+                    a[0] *= 2
+                except OverflowError:
+                    break
+        # test whether pyspark can correctly handle float types
+        for t in float_types:
+            # test upper bound and precision
+            a = array.array(t, [1.0])
+            while not math.isinf(a[0]):
+                self.assertEqual(collected(a), a[0])
+                a[0] *= 2
+                a[0] += 1
+            # test lower bound
+            a = array.array(t, [1.0])
+            while a[0] != 0:
+                self.assertEqual(collected(a), a[0])
+                a[0] /= 2
+        # test whether pyspark can correctly handle unsupported types
+        for t in unsupported_types:
+            try:
+                a = array.array(t)
+                c = collected(a)
+                self.assertTrue(False)  # if no exception thrown, fail the test
+            except TypeError:
+                pass  # catch the expected exception and do nothing
+            except:
+                # if incorrect exception thrown, fail the test
+                self.assertTrue(False)
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
