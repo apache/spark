@@ -45,6 +45,9 @@ case class ScalaUDF(
     udfName: Option[String] = None)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression {
 
+  // the user-defined functions must be deterministic.
+  final override def deterministic: Boolean = true
+
   override def nullable: Boolean = true
 
   override def toString: String =
