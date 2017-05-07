@@ -806,7 +806,7 @@ private[deploy] class Master(
     waitingDrivers += newDriver
 
     schedule()
-
+  }
 
   private def createApplication(desc: ApplicationDescription, driver: RpcEndpointRef):
       ApplicationInfo = {
