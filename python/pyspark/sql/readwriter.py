@@ -565,7 +565,8 @@ class DataFrameWriter(OptionUtils):
 
     @since(2.3)
     def bucketBy(self, numBuckets, *cols):
-        """Buckets the output by the given columns on the file system.
+        """Buckets the output by the given columns.If specified,
+        the output is laid out on the file system similar to Hive's bucketing scheme.
 
         :param numBuckets: the number of buckets to save
         :param cols: name of columns
