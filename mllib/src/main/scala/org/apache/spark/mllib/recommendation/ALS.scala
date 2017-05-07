@@ -20,7 +20,7 @@ package org.apache.spark.mllib.recommendation
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.recommendation.{ALS => NewALS}
+import org.apache.spark.ml.recommendation.{ALS => NewALS, Rating => NewRating}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -253,7 +253,7 @@ class ALS private (
     }
 
     val (floatUserFactors, floatProdFactors) = NewALS.train[Int](
-      ratings = ratings.map(r => NewALS.Rating(r.user, r.product, r.rating.toFloat)),
+      ratings = ratings.map(r => NewRating(r.user, r.product, r.rating.toFloat)),
       rank = rank,
       numUserBlocks = numUserBlocks,
       numItemBlocks = numProductBlocks,
