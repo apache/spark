@@ -171,7 +171,8 @@
             <property name="allowSamelineMultipleAnnotations" value="true"/>
         </module>
         <module name="MethodName">
-            <property name="format" value="^[a-z][a-z0-9][a-zA-Z0-9_]*$"/>
+            <!-- Exclude Append and Complete were added in SPARK-15517 -->
+            <property name="format" value="^[a-z][a-z0-9][a-zA-Z0-9_]*$|Append|Complete"/>
             <message key="name.invalidPattern"
              value="Method name ''{0}'' must match pattern ''{1}''."/>
         </module>
