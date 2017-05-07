@@ -2547,6 +2547,13 @@
     </profile>
 
     <profile>
+      <id>hadoop-cloud</id>
+      <modules>
+        <module>hadoop-cloud</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>scala-2.10</id>
       <activation>
         <property><name>scala-2.10</name></property>
