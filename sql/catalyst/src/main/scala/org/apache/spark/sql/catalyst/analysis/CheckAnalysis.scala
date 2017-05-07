@@ -386,9 +386,9 @@ trait CheckAnalysis extends PredicateHelper {
 
     // Skip subquery aliases added by the Analyzer.
     // For projects, do the necessary mapping and skip to its child.
-    def cleanScalarQuery(p: LogicalPlan): LogicalPlan = p match {
-      case s: SubqueryAlias => cleanScalarQuery(s.child)
-      case p: Project => cleanScalarQuery(p.child)
+    def cleanQueryInScalarSubquery(p: LogicalPlan): LogicalPlan = p match {
+      case s: SubqueryAlias => cleanQueryInScalarSubquery(s.child)
+      case p: Project => cleanQueryInScalarSubquery(p.child)
       case child => child
     }
 
@@ -404,7 +404,7 @@ trait CheckAnalysis extends PredicateHelper {
         }
 
         if (conditions.nonEmpty) {
-          cleanScalarQuery(query) match {
+          cleanQueryInScalarSubquery(query) match {
             case a: Aggregate => checkAggregateInScalarSubquery(conditions, query, a)
             case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(conditions, query, a)
             case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")

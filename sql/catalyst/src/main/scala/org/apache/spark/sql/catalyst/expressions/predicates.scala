@@ -155,7 +155,6 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
                |[${valExprs.map(_.sql).mkString(", ")}].
                |Right side columns:
                |[${sub.output.map(_.sql).mkString(", ")}].
-               |Subquery expression id: #${exprId.id}
              """.stripMargin)
         } else {
           val mismatchedColumns = valExprs.zip(sub.output).flatMap {
@@ -174,7 +173,6 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
                  |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
                  |Right side:
                  |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
-                 |Subquery expression id: #${exprId.id}
                """.stripMargin)
           } else {
             TypeCheckResult.TypeCheckSuccess
