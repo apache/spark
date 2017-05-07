@@ -2649,7 +2649,7 @@ object functions {
   /**
    * Returns the current Unix timestamp (in seconds).
    *
-   * NOTE: All calls of `unix_timestamp` within the same query return the same value
+   * @note All calls of `unix_timestamp` within the same query return the same value
    * (i.e. the current timestamp is calculated at the start of query evaluation).
    *
    * @group datetime_funcs
