@@ -800,7 +800,7 @@ private[deploy] class Master(
     driver.state = DriverState.RELAUNCHING
     waitingDrivers += driver
     schedule()
-
+  }
 
   private def createApplication(desc: ApplicationDescription, driver: RpcEndpointRef):
       ApplicationInfo = {
