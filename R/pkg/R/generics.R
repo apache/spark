@@ -387,6 +387,17 @@ setGeneric("value", function(bcast) { standardGeneric("value") })
 #' @export
 setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 
+#' alias
+#'
+#' Returns a new SparkDataFrame or a Column with an alias set. Equivalent to SQL "AS" keyword.
+#'
+#' @name alias
+#' @rdname alias
+#' @param object x a SparkDataFrame or a Column
+#' @param data new name to use
+#' @return a SparkDataFrame or a Column
+NULL
+
 #' @rdname arrange
 #' @export
 setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
