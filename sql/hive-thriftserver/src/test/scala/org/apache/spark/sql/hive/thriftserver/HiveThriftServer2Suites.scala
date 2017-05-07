@@ -22,6 +22,7 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -132,6 +133,44 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
             FetchType.QUERY_OUTPUT)
 
           rows_first.numRows()
+        }
+      }
+    }
+  }
+
+  test("Support beeline --hiveconf and --hivevar") {
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val opConf = Map("--hiveconf" -> "a=avalue", "--hivevar" -> "b=bvalue")
+      val sessionHandle = client.openSession(user, "", opConf.asJava)
+
+      withJdbcStatement() { statement =>
+        val resultSet = statement.executeQuery("SET spark.sql.hive.version")
+        resultSet.next()
+        assert(resultSet.getString(1) === "spark.sql.hive.version")
+        assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
+      }
+
+      val queries = opConf.values.map(_.split("=")).map { s =>
+        (s"select ${s(0)}", s(1))
+      }
+
+      queries.foreach { sql =>
+        withJdbcStatement() { statement =>
+          val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+          val operationHandle = client.executeStatement(
+            sessionHandle,
+            sql._1,
+            confOverlay)
+
+          assertResult(sql._2) {
+            val rows_next = client.fetchResults(
+              operationHandle,
+              FetchOrientation.FETCH_NEXT,
+              1,
+              FetchType.QUERY_OUTPUT)
+            rows_next.numRows()
+          }
         }
       }
     }
