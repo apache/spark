@@ -152,7 +152,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       val queries = opConf.values.map(_.split("=")).map { s =>
-        (s"select ${s(0)}", s(1))
+        ("select ${" + s(0) + "}", s(1))
       }
 
       queries.foreach { sql =>
