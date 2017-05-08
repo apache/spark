@@ -937,12 +937,13 @@ private[spark] object Utils extends Logging {
     customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
   }
 
-  def checkHost(host: String, message: String = "") {
-    assert(host.indexOf(':') == -1, message)
+  def checkHost(host: String) {
+    assert(host != null && host.indexOf(':') == -1, s"Expected hostname (not IP) but got $host")
   }
 
-  def checkHostPort(hostPort: String, message: String = "") {
-    assert(hostPort.indexOf(':') != -1, message)
+  def checkHostPort(hostPort: String) {
+    assert(hostPort != null && hostPort.indexOf(':') != -1,
+      s"Expected host and port but got $hostPort")
   }
 
   // Typically, this will be of order of number of nodes in cluster

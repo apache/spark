@@ -55,7 +55,7 @@ private[deploy] class Worker(
   private val host = rpcEnv.address.host
   private val port = rpcEnv.address.port
 
-  Utils.checkHost(host, "Expected hostname")
+  Utils.checkHost(host)
   assert (port > 0)
 
   // A scheduled executor used to send messages at the specified time.
