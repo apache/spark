@@ -1456,9 +1456,11 @@ sealed trait LogisticRegressionSummary extends Serializable {
  */
 sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary {
 
+  @Since("1.5.0")
   /** objective function (scaled loss + regularization) at each iteration. */
   def objectiveHistory: Array[Double]
 
+  @Since("1.5.0")
   /** Number of training iterations. */
   def totalIterations: Int = objectiveHistory.length
 
@@ -1565,15 +1567,13 @@ sealed trait BinaryLogisticRegressionTrainingSummary extends BinaryLogisticRegre
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
-@Experimental
-@Since("2.2.0")
 private class LogisticRegressionTrainingSummaryImpl(
     override val predictions: DataFrame,
     override val probabilityCol: String,
     override val predictionCol: String,
     override val labelCol: String,
     override val featuresCol: String,
-    @Since("1.5.0") val objectiveHistory: Array[Double])
+    val objectiveHistory: Array[Double])
   extends LogisticRegressionSummaryImpl(
     predictions, probabilityCol, predictionCol, labelCol, featuresCol)
   with LogisticRegressionTrainingSummary
@@ -1590,14 +1590,12 @@ private class LogisticRegressionTrainingSummaryImpl(
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  */
-@Experimental
-@Since("2.2.0")
 private class LogisticRegressionSummaryImpl(
-    @Since("2.2.0") @transient override val predictions: DataFrame,
-    @Since("2.2.0") override val probabilityCol: String,
-    @Since("2.2.0") override val predictionCol: String,
-    @Since("2.2.0") override val labelCol: String,
-    @Since("2.2.0") override val featuresCol: String)
+    @transient override val predictions: DataFrame,
+    override val probabilityCol: String,
+    override val predictionCol: String,
+    override val labelCol: String,
+    override val featuresCol: String)
   extends LogisticRegressionSummary
 
 /**
@@ -1613,15 +1611,13 @@ private class LogisticRegressionSummaryImpl(
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
-@Experimental
-@Since("2.2.0")
 private class BinaryLogisticRegressionTrainingSummaryImpl(
     override val predictions: DataFrame,
     override val probabilityCol: String,
     override val predictionCol: String,
     override val labelCol: String,
     override val featuresCol: String,
-    @Since("1.5.0") override val objectiveHistory: Array[Double])
+    override val objectiveHistory: Array[Double])
   extends BinaryLogisticRegressionSummaryImpl(
     predictions, probabilityCol, predictionCol, labelCol, featuresCol)
   with BinaryLogisticRegressionTrainingSummary
@@ -1638,14 +1634,12 @@ private class BinaryLogisticRegressionTrainingSummaryImpl(
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  */
-@Experimental
-@Since("2.2.0")
 private class BinaryLogisticRegressionSummaryImpl(
-    @Since("2.2.0") @transient override val predictions: DataFrame,
-    @Since("2.2.0") override val probabilityCol: String,
-    @Since("2.2.0") override val predictionCol: String,
-    @Since("2.2.0") override val labelCol: String,
-    @Since("2.2.0") override val featuresCol: String)
+    @transient override val predictions: DataFrame,
+    override val probabilityCol: String,
+    override val predictionCol: String,
+    override val labelCol: String,
+    override val featuresCol: String)
   extends LogisticRegressionSummaryImpl(
     predictions, probabilityCol, predictionCol, labelCol, featuresCol)
   with BinaryLogisticRegressionSummary
