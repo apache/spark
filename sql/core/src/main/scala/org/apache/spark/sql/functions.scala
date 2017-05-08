@@ -2704,15 +2704,15 @@ object functions {
   }
 
   /**
-   * Converts the column into DateType.
+   * Converts the column into `DateType` by casting rules to `DateType`.
    *
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def to_date(e: Column): Column = withExpr { ToDate(e.expr) }
+  def to_date(e: Column): Column = withExpr { new ParseToDate(e.expr) }
 
   /**
-   * Converts the column into a DateType with a specified format
+   * Converts the column into a `DateType` with a specified format
    * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
    * return null if fail.
    *

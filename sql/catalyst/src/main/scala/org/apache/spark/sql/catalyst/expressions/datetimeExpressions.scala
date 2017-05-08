@@ -1148,13 +1148,6 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
 /**
  * Returns the date part of a timestamp or string.
  */
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Extracts the date part of the date or timestamp expression `expr`.",
-  extended = """
-    Examples:
-      > SELECT _FUNC_('2009-07-30 04:17:52');
-       2009-07-30
-  """)
 case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   // Implicit casting of spark will accept string in both date and timestamp format, as
@@ -1175,15 +1168,19 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
 /**
  * Parses a column to a date based on the given format.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date_str, fmt) - Parses the `left` expression with the `fmt` expression. Returns null with invalid input.",
+  usage = """
+    _FUNC_(date_str[, fmt]) - Parses the `date_str` expression with the `fmt` expression to
+      a date. Returns null with invalid input. By default, it follows casting rules to a date if
+      the `fmt` is omitted.
+  """,
   extended = """
     Examples:
+      > SELECT _FUNC_('2009-07-30 04:17:52');
+       2009-07-30
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31
   """)
-// scalastyle:on line.size.limit
 case class ParseToDate(left: Expression, format: Option[Expression], child: Expression)
   extends RuntimeReplaceable {
 
@@ -1212,21 +1209,26 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
 /**
  * Parses a column to a timestamp based on the supplied format.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, fmt) - Parses the `left` expression with the `format` expression to a timestamp. Returns null with invalid input.",
+  usage = """
+    _FUNC_(timestamp[, fmt]) - Parses the `timestamp` expression with the `format` expression to
+      a timestamp. Returns null with invalid input. Default `fmt` is 'yyyy-MM-dd HH:mm:ss'.
+  """,
   extended = """
     Examples:
+      > SELECT _FUNC_('2016-12-31 00:12:00');
+       2016-12-31 00:12:00
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
-       2016-12-31 00:00:00.0
+       2016-12-31 00:00:00
   """)
-// scalastyle:on line.size.limit
 case class ParseToTimestamp(left: Expression, format: Expression, child: Expression)
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
     this(left, format, Cast(UnixTimestamp(left, format), TimestampType))
   }
+
+  def this(left: Expression) = this(left, Literal("yyyy-MM-dd HH:mm:ss"))
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def sql: String = s"$prettyName(${left.sql}, ${format.sql})"

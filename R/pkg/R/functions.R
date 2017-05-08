@@ -1752,15 +1752,15 @@ setMethod("toRadians",
 
 #' to_date
 #'
-#' Converts the column into a DateType. You may optionally specify a format
+#' Converts the column into a date column. You may optionally specify a format
 #' according to the rules in:
 #' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
-#' The default format is 'yyyy-MM-dd'.
+#' By default, it follows casting rules to a date if the format is omitted.
 #'
 #' @param x Column to parse.
-#' @param format string to use to parse x Column to DateType. (optional)
+#' @param format string to use to parse x column to a date column. (optional)
 #'
 #' @rdname to_date
 #' @name to_date
@@ -1827,7 +1827,7 @@ setMethod("to_json", signature(x = "Column"),
 
 #' to_timestamp
 #'
-#' Converts the column into a TimestampType. You may optionally specify a format
+#' Converts the column into a timestamp column. You may optionally specify a format
 #' according to the rules in:
 #' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
 #' If the string cannot be parsed according to the specified format (or default),
@@ -1835,7 +1835,7 @@ setMethod("to_json", signature(x = "Column"),
 #' The default format is 'yyyy-MM-dd HH:mm:ss'.
 #'
 #' @param x Column to parse.
-#' @param format string to use to parse x Column to DateType. (optional)
+#' @param format string to use to parse x column to a timestamp column. (optional)
 #'
 #' @rdname to_timestamp
 #' @name to_timestamp
