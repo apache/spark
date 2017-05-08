@@ -71,9 +71,11 @@ import org.apache.hive.service.cli.operation.OperationManager;
 import org.apache.hive.service.cli.thrift.TProtocolVersion;
 import org.apache.hive.service.server.ThreadWithGarbageCleanup;
 
-import static org.apache.hadoop.hive.conf.SystemVariables.*;
+import static org.apache.hadoop.hive.conf.SystemVariables.ENV_PREFIX;
+import static org.apache.hadoop.hive.conf.SystemVariables.HIVECONF_PREFIX;
 import static org.apache.hadoop.hive.conf.SystemVariables.HIVEVAR_PREFIX;
 import static org.apache.hadoop.hive.conf.SystemVariables.METACONF_PREFIX;
+import static org.apache.hadoop.hive.conf.SystemVariables.SYSTEM_PREFIX;
 
 /**
  * HiveSession
