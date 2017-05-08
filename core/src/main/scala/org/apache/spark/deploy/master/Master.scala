@@ -80,7 +80,7 @@ private[deploy] class Master(
   private val waitingDrivers = new ArrayBuffer[DriverInfo]
   private var nextDriverNumber = 0
 
-  Utils.checkHost(address.host, "Expected hostname")
+  Utils.checkHost(address.host)
 
   private val masterMetricsSystem = MetricsSystem.createMetricsSystem("master", conf, securityMgr)
   private val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications", conf,
