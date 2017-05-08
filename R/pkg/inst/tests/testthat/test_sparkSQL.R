@@ -89,6 +89,10 @@ mockLinesComplexType <-
 complexTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesComplexType, complexTypeJsonPath)
 
+if (.Platform$OS.type == "windows") {
+  Sys.setenv(TZ = "GMT")
+}
+
 test_that("calling sparkRSQL.init returns existing SQL context", {
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   expect_equal(suppressWarnings(sparkRSQL.init(sc)), sqlContext)
