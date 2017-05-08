@@ -262,8 +262,8 @@ object FileFormatWriter extends Logging {
     } catch {
       case e: FetchFailedException =>
         throw e
-      case _ =>
-        throw new SparkException("Task failed while writing rows.", e)
+      case t: Throwable =>
+        throw new SparkException("Task failed while writing rows.", t)
     }
   }
 
