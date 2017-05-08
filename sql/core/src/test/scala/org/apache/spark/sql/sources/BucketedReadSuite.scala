@@ -255,14 +255,13 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       bucketedTableTestSpecRight: BucketedTableTestSpec,
       joinType: String = "inner",
       joinCondition: (DataFrame, DataFrame) => Column,
-      returnJoinResult: Boolean = false,
-      expectedResult: Option[Array[Row]] = None): Option[Array[Row]] = {
+      expectedResult: Option[Array[Row]] = None): Array[Row] = {
     val BucketedTableTestSpec(bucketSpecLeft, numPartitionsLeft, shuffleLeft, sortLeft) =
       bucketedTableTestSpecLeft
     val BucketedTableTestSpec(bucketSpecRight, numPartitionsRight, shuffleRight, sortRight) =
       bucketedTableTestSpecRight
 
-    var result: Option[Array[Row]] = None
+    var result: Array[Row] = Array.empty
     withTable("bucketed_table1", "bucketed_table2") {
       def withBucket(
           writer: DataFrameWriter[Row],
@@ -322,9 +321,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         if (expectedResult.isDefined) {
           checkAnswer(joined, expectedResult.get)
         }
-        if (returnJoinResult) {
-          result = Some(joined.collect())
-        }
+        result = joined.collect()
       }
     }
     result
@@ -565,14 +562,13 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
     def testBucketingWithPredicate(
         joinCondition: (DataFrame, DataFrame) => Column,
-        expectedResult: Option[Array[Row]] = None,
-        returnJoinResult: Boolean = false): Option[Array[Row]] = {
+        expectedResult: Option[Array[Row]],
+        returnJoinResult: Boolean = false): Array[Row] = {
       testBucketing(
         bucketedTableTestSpecLeft = bucketedTableTestSpec,
         bucketedTableTestSpecRight = bucketedTableTestSpec,
         joinType = "inner",
         joinCondition = joinCondition,
-        returnJoinResult = returnJoinResult,
         expectedResult = expectedResult
       )
     }
@@ -580,7 +576,10 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     // Irrespective of the ordering of keys in the join predicate, the query plan and
     // query results should always be the same
     val result =
-    testBucketingWithPredicate(joinCondition(Seq("i", "j", "k")), None, returnJoinResult = true)
+      Some(testBucketingWithPredicate(
+        joinCondition(Seq("i", "j", "k")),
+        None,
+        returnJoinResult = true))
 
     testBucketingWithPredicate(joinCondition(Seq("i", "k", "j")), result)
     testBucketingWithPredicate(joinCondition(Seq("j", "k", "i")), result)
