@@ -25,9 +25,10 @@ import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
-import org.apache.commons.lang3.StringEscapeUtils
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
