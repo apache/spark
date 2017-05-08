@@ -166,9 +166,9 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a not regexp 'pattern%'", !('a rlike "pattern%"))
   }
 
-  test("like expressions with NO_UNESCAPED_SQL_STRING") {
+  test("like expressions with ESCAPED_STRING_LITERALS = true") {
     val conf = new SQLConf()
-    conf.setConfString("spark.sql.noUnescapedStringLiteral", "true")
+    conf.setConfString("spark.sql.parser.escapedStringLiterals", "true")
     val parser = new CatalystSqlParser(conf)
     assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
     assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
@@ -462,9 +462,9 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'", "World :)")
   }
 
-  test("strings with NO_UNESCAPED_SQL_STRING") {
+  test("strings with ESCAPED_STRING_LITERALS = true") {
     val conf = new SQLConf()
-    conf.setConfString("spark.sql.noUnescapedStringLiteral", "true")
+    conf.setConfString("spark.sql.parser.escapedStringLiterals", "true")
     val parser = new CatalystSqlParser(conf)
 
     // Single Strings.

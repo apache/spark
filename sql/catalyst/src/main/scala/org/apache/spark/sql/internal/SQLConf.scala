@@ -196,11 +196,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val NO_UNESCAPED_SQL_STRING = buildConf("spark.sql.noUnescapedStringLiteral")
+  val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
-    .doc("Since Spark 2.0, we use unescaped SQL string for string literals including regex. " +
-      "It is different than 1.6 behavior. Enabling this config can use no unescaped SQL string " +
-      "literals and mitigate migration problem.")
+    .doc("When true, string literals (including regex patterns) remains escaped in our SQL " +
+      "parser. The default is false since Spark 2.0. Setting it to true can restore the behavior " +
+      "prior to Spark 2.0.")
     .booleanConf
     .createWithDefault(false)
 
@@ -919,7 +919,7 @@ class SQLConf extends Serializable with Logging {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
-  def noUnescapedStringLiteral: Boolean = getConf(NO_UNESCAPED_SQL_STRING)
+  def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

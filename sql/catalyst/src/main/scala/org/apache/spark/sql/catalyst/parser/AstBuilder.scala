@@ -1409,7 +1409,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Special characters can be escaped by using Hive/C-style escaping.
    */
   private def createString(ctx: StringLiteralContext): String = {
-    if (conf.noUnescapedStringLiteral) {
+    if (conf.escapedStringLiterals) {
       ctx.STRING().asScala.map(stringWithoutUnescape).mkString
     } else {
       ctx.STRING().asScala.map(string).mkString

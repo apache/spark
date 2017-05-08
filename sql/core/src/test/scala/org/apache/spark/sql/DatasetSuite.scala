@@ -1171,7 +1171,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("do not unescaped regex pattern string") {
-    withSQLConf(SQLConf.NO_UNESCAPED_SQL_STRING.key -> "true") {
+    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
       val data = Seq("\u0020\u0021\u0023", "abc")
       val df = data.toDF()
       val rlike1 = df.filter("value rlike '^\\x20[\\x20-\\x23]+$'")

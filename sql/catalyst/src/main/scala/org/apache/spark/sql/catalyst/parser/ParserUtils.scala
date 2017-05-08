@@ -70,6 +70,7 @@ object ParserUtils {
 
   /** Convert a string node into a string without unescaping. */
   def stringWithoutUnescape(node: TerminalNode): String = {
+    // STRING parser rule forces that the input always has quotes at the starting and ending.
     node.getText.slice(1, node.getText.size - 1)
   }
 
