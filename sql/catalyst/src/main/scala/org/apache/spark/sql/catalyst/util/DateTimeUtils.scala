@@ -498,6 +498,11 @@ object DateTimeUtils {
     false
   }
 
+  lazy val validTimezones = TimeZone.getAvailableIDs().toSet
+  def isValidTimezone(timezoneId: String): Boolean = {
+    validTimezones.contains(timezoneId)
+  }
+
   /**
    * Returns the microseconds since year zero (-17999) from microseconds since epoch.
    */

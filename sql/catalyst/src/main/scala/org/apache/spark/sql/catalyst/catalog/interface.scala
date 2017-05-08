@@ -132,10 +132,10 @@ case class CatalogTablePartition(
   /**
    * Given the partition schema, returns a row with that schema holding the partition values.
    */
-  def toRow(partitionSchema: StructType, defaultTimeZondId: String): InternalRow = {
+  def toRow(partitionSchema: StructType, defaultTimeZoneId: String): InternalRow = {
     val caseInsensitiveProperties = CaseInsensitiveMap(storage.properties)
     val timeZoneId = caseInsensitiveProperties.getOrElse(
-      DateTimeUtils.TIMEZONE_OPTION, defaultTimeZondId)
+      DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId)
     InternalRow.fromSeq(partitionSchema.map { field =>
       val partValue = if (spec(field.name) == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) {
         null

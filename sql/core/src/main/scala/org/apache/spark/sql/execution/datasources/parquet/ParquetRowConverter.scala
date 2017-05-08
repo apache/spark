@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
+import java.util.TimeZone
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
 import org.apache.parquet.schema.{GroupType, MessageType, OriginalType, Type}
@@ -34,6 +36,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -117,12 +120,14 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * @param parquetType Parquet schema of Parquet records
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type. User-defined
  *        types should have been expanded.
+ * @param hadoopConf a hadoop Configuration for passing any extra parameters for parquet conversion
  * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class ParquetRowConverter(
     schemaConverter: ParquetSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
+    hadoopConf: Configuration,
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
 
@@ -261,18 +266,18 @@ private[parquet] class ParquetRowConverter(
 
       case TimestampType =>
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
+        // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
+        val sessionTzString = hadoopConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)
+        val sessionTz = Option(sessionTzString).map(TimeZone.getTimeZone(_))
+          .getOrElse(DateTimeUtils.defaultTimeZone())
+        val storageTzString = hadoopConf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
+        val storageTz = Option(storageTzString).map(TimeZone.getTimeZone(_)).getOrElse(sessionTz)
         new ParquetPrimitiveConverter(updater) {
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
-            assert(
-              value.length() == 12,
-              "Timestamps (with nanoseconds) are expected to be stored in 12-byte long binaries, " +
-              s"but got a ${value.length()}-byte binary.")
-
-            val buf = value.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
-            val timeOfDayNanos = buf.getLong
-            val julianDay = buf.getInt
-            updater.setLong(DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos))
+            val timestamp = ParquetRowConverter.binaryToSQLTimestamp(value, sessionTz = sessionTz,
+              storageTz = storageTz)
+            updater.setLong(timestamp)
           }
         }
 
@@ -302,7 +307,7 @@ private[parquet] class ParquetRowConverter(
 
       case t: StructType =>
         new ParquetRowConverter(
-          schemaConverter, parquetType.asGroupType(), t, new ParentContainerUpdater {
+          schemaConverter, parquetType.asGroupType(), t, hadoopConf, new ParentContainerUpdater {
             override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
           })
 
@@ -651,6 +656,7 @@ private[parquet] class ParquetRowConverter(
 }
 
 private[parquet] object ParquetRowConverter {
+
   def binaryToUnscaledLong(binary: Binary): Long = {
     // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here
     // we are using `Binary.toByteBuffer.array()` to steal the underlying byte array without
@@ -673,12 +679,35 @@ private[parquet] object ParquetRowConverter {
     unscaled
   }
 
-  def binaryToSQLTimestamp(binary: Binary): SQLTimestamp = {
+  /**
+   * Converts an int96 to a SQLTimestamp, given both the storage timezone and the local timezone.
+   * The timestamp is really meant to be interpreted as a "floating time", but since we
+   * actually store it as micros since epoch, why we have to apply a conversion when timezones
+   * change.
+   *
+   * @param binary a parquet Binary which holds one int96
+   * @param sessionTz the session timezone.  This will be used to determine how to display the time,
+    *                  and compute functions on the timestamp which involve a timezone, eg. extract
+    *                  the hour.
+   * @param storageTz the timezone which was used to store the timestamp.  This should come from the
+    *                  timestamp table property, or else assume its the same as the sessionTz
+   * @return a timestamp (millis since epoch) which will render correctly in the sessionTz
+   */
+  def binaryToSQLTimestamp(
+      binary: Binary,
+      sessionTz: TimeZone,
+      storageTz: TimeZone): SQLTimestamp = {
     assert(binary.length() == 12, s"Timestamps (with nanoseconds) are expected to be stored in" +
       s" 12-byte long binaries. Found a ${binary.length()}-byte binary instead.")
     val buffer = binary.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
     val timeOfDayNanos = buffer.getLong
     val julianDay = buffer.getInt
-    DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
+    val utcEpochMicros = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
+    // avoid expensive time logic if possible.
+    if (sessionTz.getID() != storageTz.getID()) {
+      DateTimeUtils.convertTz(utcEpochMicros, sessionTz, storageTz)
+    } else {
+      utcEpochMicros
+    }
   }
 }
