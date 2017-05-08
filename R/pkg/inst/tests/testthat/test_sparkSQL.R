@@ -96,6 +96,10 @@ mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}
 mapTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesMapType, mapTypeJsonPath)
 
+if (.Platform$OS.type == "windows") {
+  Sys.setenv(TZ = "GMT")
+}
+
 test_that("calling sparkRSQL.init returns existing SQL context", {
   skip_on_cran()
 
