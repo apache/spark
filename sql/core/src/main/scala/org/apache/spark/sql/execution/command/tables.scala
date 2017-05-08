@@ -1025,3 +1025,5 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     builder.toString()
   }
 }
+
+trait InsertTableCommand extends RunnableCommand
