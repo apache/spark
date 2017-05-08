@@ -677,6 +677,8 @@ test_that("jsonRDD() on a RDD with json string", {
 })
 
 test_that("test tableNames and tables", {
+  # Making sure there are no registered temp tables from previous tests
+  suppressWarnings(sapply(tableNames(), function(tname) { dropTempTable(tname) }))
   df <- read.json(jsonPath)
   createOrReplaceTempView(df, "table1")
   expect_equal(length(tableNames()), 1)
