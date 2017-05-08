@@ -293,10 +293,10 @@ class SparkSqlParserSuite extends PlanTest {
 
   test("pipeline concatenation") {
     val concat = Concat(
-      UnresolvedAttribute("a") ::
-      UnresolvedAttribute("b") ::
+      Concat(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil) ::
       UnresolvedAttribute("c") ::
-      Nil)
+      Nil
+    )
     assertEqual(
       "SELECT a || b || c FROM t",
       Project(UnresolvedAlias(concat) :: Nil, UnresolvedRelation(TableIdentifier("t"))))

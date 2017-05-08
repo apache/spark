@@ -32,3 +32,11 @@ select 1 - 2;
 select 2 * 5;
 select 5 % 3;
 select pmod(-7, 3);
+
+-- check operator precedence
+explain select 'a' || 1 + 2;
+explain select 1 - 2 || 'b';
+explain select 2 * 4  + 3 || 'b';
+explain select 3 + 1 || 'a' || 4 / 2;
+explain select 1 == 1 OR 'a' || 'b' ==  'ab';
+explain select 'a' || 'c' == 'ac' AND 2 == 3;

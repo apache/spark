@@ -913,18 +913,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a [[Concat]] expression for pipeline concatenation.
-   */
-  override def visitConcat(ctx: ConcatContext): Expression = {
-    if (ctx.primaryExpression().size > 1) {
-      val exprs = ctx.primaryExpression().asScala
-      Concat(exprs.map(expression))
-    } else {
-      expression(ctx.primaryExpression(0))
-    }
-  }
-
-  /**
    * Create a predicated expression. A predicated expression is a normal expression with a
    * predicate attached to it, for example:
    * {{{
@@ -1010,6 +998,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         Add(left, right)
       case SqlBaseParser.MINUS =>
         Subtract(left, right)
+      case SqlBaseParser.CONCAT_PIPE =>
+        Concat(left :: right :: Nil)
       case SqlBaseParser.AMPERSAND =>
         BitwiseAnd(left, right)
       case SqlBaseParser.HAT =>
