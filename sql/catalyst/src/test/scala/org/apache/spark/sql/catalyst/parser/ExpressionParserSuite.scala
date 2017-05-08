@@ -483,7 +483,7 @@ class ExpressionParserSuite extends PlanTest {
     // Escaped characters.
     assertEqual("'\0'", "\u0000", parser) // ASCII NUL (X'00')
 
-    // Note: Single quote follows 1.6 parsing behavior when NO_UNESCAPED_SQL_STRING is enabled.
+    // Note: Single quote follows 1.6 parsing behavior when ESCAPED_STRING_LITERALS is enabled.
     val e = intercept[ParseException](parser.parseExpression("'\''"))
     assert(e.message.contains("extraneous input '''"))
 
