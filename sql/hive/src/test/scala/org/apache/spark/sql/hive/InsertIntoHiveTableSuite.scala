@@ -494,4 +494,50 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
         spark.table("t").write.insertInto(tableName)
       }
   }
+
+  /**
+    * Drop named tables if they exist
+    *
+    * @param tableNames tables to drop
+    */
+  def dropTables(tableNames: String*): Unit = {
+    tableNames.foreach { name =>
+      sql(s"DROP TABLE IF EXISTS $name")
+    }
+  }
+
+  test(
+    """SPARK-20594: The staging directory should be appended with ".hive-staging"
+      |to avoid being deleted if we set hive.exec.stagingdir under the table directory
+      |without start with "."""".stripMargin) {
+
+    dropTables("test_table", "test_table1")
+
+    sql("CREATE TABLE test_table (key int, value string)")
+
+    // Add some data.
+    testData.write.mode(SaveMode.Append).insertInto("test_table")
+
+    // Make sure the table has also been updated.
+    checkAnswer(
+      sql("SELECT * FROM test_table"),
+      testData.collect().toSeq
+    )
+
+    sql("CREATE TABLE test_table1 (key int, value string)")
+
+    // Set hive.exec.stagingdir under the table directory without start with ".".
+    sql("set hive.exec.stagingdir=./test")
+
+    // Now overwrite.
+    sql("INSERT OVERWRITE TABLE test_table1 SELECT * FROM test_table")
+
+    // Make sure the table has also been updated.
+    checkAnswer(
+      sql("SELECT * FROM test_table1"),
+      testData.collect().toSeq
+    )
+
+    dropTables("test_table", "test_table1")
+  }
 }
