@@ -32,7 +32,7 @@ import org.apache.spark.mllib.regression.{IsotonicRegressionModel => MLlibIsoton
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit, udf}
-import org.apache.spark.sql.types.{DoubleType, StructType}
+import org.apache.spark.sql.types.{DoubleType, NumericType, StructType}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -84,7 +84,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
       val extract = udf { v: Vector => v(idx) }
       extract(col($(featuresCol)))
     } else {
-      col($(featuresCol))
+      col($(featuresCol)).cast(DoubleType)
     }
     val w = if (hasWeightCol) col($(weightCol)).cast(DoubleType) else lit(1.0)
 
@@ -112,7 +112,9 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
       }
     }
     val featuresType = schema($(featuresCol)).dataType
-    require(featuresType == DoubleType || featuresType.isInstanceOf[VectorUDT])
+    require(featuresType.isInstanceOf[NumericType] || featuresType.isInstanceOf[VectorUDT],
+      s"Column ${$(featuresCol)} must be of type NumericType or VectorUDT," +
+        s" but was actually of type $featuresType")
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
 }
@@ -241,14 +243,14 @@ class IsotonicRegressionModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val predict = dataset.schema($(featuresCol)).dataType match {
-      case DoubleType =>
-        udf { feature: Double => oldModel.predict(feature) }
-      case _: VectorUDT =>
-        val idx = $(featureIndex)
-        udf { features: Vector => oldModel.predict(features(idx)) }
+    if (dataset.schema($(featuresCol)).dataType.isInstanceOf[VectorUDT]) {
+      val idx = $(featureIndex)
+      val predict = udf { features: Vector => oldModel.predict(features(idx)) }
+      dataset.withColumn($(predictionCol), predict(col($(featuresCol))))
+    } else {
+      val predict = udf { feature: Double => oldModel.predict(feature) }
+      dataset.withColumn($(predictionCol), predict(col($(featuresCol)).cast(DoubleType)))
     }
-    dataset.withColumn($(predictionCol), predict(col($(featuresCol))))
   }
 
   @Since("1.5.0")

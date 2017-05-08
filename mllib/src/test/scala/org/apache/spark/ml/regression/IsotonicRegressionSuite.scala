@@ -23,6 +23,8 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types._
 
 class IsotonicRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -187,6 +189,47 @@ class IsotonicRegressionSuite
         assert(expected.boundaries === actual.boundaries)
         assert(expected.predictions === actual.predictions)
       }
+  }
+
+  test("Besides VectorUDT, should support all NumericType features, and not support other types") {
+    val df = generateIsotonicInput(Seq(1, 2, 3))
+    val ir = new IsotonicRegression()
+
+    val expected = ir.fit(df)
+    val expectedPrediction =
+      expected.transform(df).select("prediction").map(_.getDouble(0)).collect()
+
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+
+    types.foreach { t =>
+      val df2 = df.select(col("label"), col("features").cast(t), col("weight"))
+
+      val actual = ir.fit(df2)
+      assert(expected.boundaries === actual.boundaries)
+      assert(expected.predictions === actual.predictions)
+
+      val actualPrediction =
+        actual.transform(df2).select("prediction").map(_.getDouble(0)).collect()
+      assert(expectedPrediction === actualPrediction)
+    }
+
+    val dfWithStringFeatures =
+      df.select(col("label"), col("features").cast(StringType), col("weight"))
+
+    val thrown = intercept[IllegalArgumentException] {
+      ir.fit(dfWithStringFeatures)
+    }
+    assert(thrown.getMessage.contains(
+      "Column features must be of type NumericType or VectorUDT," +
+        " but was actually of type StringType"))
+
+    val thrown2 = intercept[IllegalArgumentException] {
+      expected.transform(dfWithStringFeatures)
+    }
+    assert(thrown2.getMessage.contains(
+      "Column features must be of type NumericType or VectorUDT," +
+        " but was actually of type StringType"))
   }
 }
 
