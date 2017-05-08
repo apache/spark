@@ -22,7 +22,6 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -139,38 +138,15 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("Support beeline --hiveconf and --hivevar") {
-    withCLIServiceClient { client =>
-      val user = System.getProperty("user.name")
-      val opConf = Map("--hiveconf" -> "a=avalue", "--hivevar" -> "b=bvalue")
-      val sessionHandle = client.openSession(user, "", opConf.asJava)
-
-      withJdbcStatement() { statement =>
-        val resultSet = statement.executeQuery("SET spark.sql.hive.version")
-        resultSet.next()
-        assert(resultSet.getString(1) === "spark.sql.hive.version")
-        assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
-      }
-
-      val queries = opConf.values.map(_.split("=")).map { s =>
-        ("select ${" + s(0) + "}", s(1))
-      }
-
-      queries.foreach { sql =>
-        withJdbcStatement() { statement =>
-          val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
-          val operationHandle = client.executeStatement(
-            sessionHandle,
-            sql._1,
-            confOverlay)
-
-          assertResult(sql._2) {
-            val rows_next = client.fetchResults(
-              operationHandle,
-              FetchOrientation.FETCH_NEXT,
-              1,
-              FetchType.QUERY_OUTPUT)
-            rows_next.numRows()
-          }
+    withJdbcStatement() { statement =>
+      executeTest(hiveConfList)
+      executeTest(hiveVarList)
+      def executeTest(hiveList: String): Unit = {
+        hiveList.split(";").foreach{ m =>
+          val kv = m.split("=")
+          val resultSet = statement.executeQuery("select \"${" + kv(0) + "}\"")
+          resultSet.next()
+          assert(resultSet.getString(1) === kv(1))
         }
       }
     }
@@ -781,10 +757,11 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     s"""jdbc:hive2://localhost:$serverPort/
        |default?
        |hive.server2.transport.mode=http;
-       |hive.server2.thrift.http.path=cliservice
+       |hive.server2.thrift.http.path=cliservice;
+       |${hiveConfList}#${hiveVarList}
      """.stripMargin.split("\n").mkString.trim
   } else {
-    s"jdbc:hive2://localhost:$serverPort/"
+    s"jdbc:hive2://localhost:$serverPort/?${hiveConfList}#${hiveVarList}"
   }
 
   def withMultipleConnectionJdbcStatement(tableNames: String*)(fs: (Statement => Unit)*) {
@@ -820,6 +797,8 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   private var listeningPort: Int = _
   protected def serverPort: Int = listeningPort
 
+  protected val hiveConfList = "a=avalue;b=bvalue"
+  protected val hiveVarList = "c=cvalue;d=dvalue"
   protected def user = System.getProperty("user.name")
 
   protected var warehousePath: File = _
