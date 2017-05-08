@@ -22,8 +22,7 @@ import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.ipc.RemoteException
-import org.apache.hadoop.ipc.StandbyException
+import org.apache.hadoop.ipc.{RemoteException, StandbyException}
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
