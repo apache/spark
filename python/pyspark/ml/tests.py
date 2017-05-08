@@ -411,6 +411,7 @@ class ParamTests(PySparkTestCase):
           - set of params exist in Java and Python and are ordered by names
           - param parent has the same UID as the object's UID
           - default param value from Java matches value in Python
+          - optionally check if all params from Java also exist in Python
         """
         py_stage_str = "%s %s" % (type(py_stage), py_stage)
         if not hasattr(py_stage, "_to_java"):
@@ -1370,6 +1371,7 @@ class DefaultValuesTests(PySparkTestCase):
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if not name.endswith('Model') and issubclass(cls, JavaParams)\
                         and not inspect.isabstract(cls):
+                    # NOTE: disable check_params_exist until there is parity with Scala API
                     ParamTests.check_params(self, cls(), check_params_exist=False)
 
 
