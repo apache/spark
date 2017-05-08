@@ -56,9 +56,9 @@ private[security] class HadoopFSCredentialProvider
         dstFs.addDelegationTokens(tokenRenewer, tmpCreds)
       } catch {
         case e: StandbyException =>
-          logWarning(s"Namenode ${dst} is in state standby", e)
+          logWarning(s"Can't get token from ${dst} for it is in state standby", e)
         case e: RemoteException =>
-          logWarning(s"Namenode ${dst} is in state standby", e)
+          logWarning(s"Can't get token from ${dst}", e)
       }
     }
 
@@ -95,9 +95,9 @@ private[security] class HadoopFSCredentialProvider
           dstFs.addDelegationTokens(renewer, creds)
         } catch {
           case e: StandbyException =>
-            logWarning(s"Namenode ${dst} is in state standby", e)
+            logWarning(s"Can't get token from ${dst} for it is in state standby", e)
           case e: RemoteException =>
-            logWarning(s"Namenode ${dst} is in state standby", e)
+            logWarning(s"Can't get token from ${dst}", e)
         }
       }
 
