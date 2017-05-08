@@ -563,6 +563,63 @@ class DataFrameWriter(OptionUtils):
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
         return self
 
+    @since(2.3)
+    def bucketBy(self, numBuckets, col, *cols):
+        """Buckets the output by the given columns.If specified,
+        the output is laid out on the file system similar to Hive's bucketing scheme.
+
+        :param numBuckets: the number of buckets to save
+        :param col: a name of a column, or a list of names.
+        :param cols: additional names (optional). If `col` is a list it should be empty.
+
+        .. note:: Applicable for file-based data sources in combination with
+                  :py:meth:`DataFrameWriter.saveAsTable`.
+
+        >>> (df.write.format('parquet')
+        ...     .bucketBy(100, 'year', 'month')
+        ...     .mode("overwrite")
+        ...     .saveAsTable('bucketed_table'))
+        """
+        if not isinstance(numBuckets, int):
+            raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
+
+        if isinstance(col, (list, tuple)):
+            if cols:
+                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+
+            col, cols = col[0], col[1:]
+
+        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+            raise TypeError("all names should be `str`")
+
+        self._jwrite = self._jwrite.bucketBy(numBuckets, col, _to_seq(self._spark._sc, cols))
+        return self
+
+    @since(2.3)
+    def sortBy(self, col, *cols):
+        """Sorts the output in each bucket by the given columns on the file system.
+
+        :param col: a name of a column, or a list of names.
+        :param cols: additional names (optional). If `col` is a list it should be empty.
+
+        >>> (df.write.format('parquet')
+        ...     .bucketBy(100, 'year', 'month')
+        ...     .sortBy('day')
+        ...     .mode("overwrite")
+        ...     .saveAsTable('sorted_bucketed_table'))
+        """
+        if isinstance(col, (list, tuple)):
+            if cols:
+                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+
+            col, cols = col[0], col[1:]
+
+        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+            raise TypeError("all names should be `str`")
+
+        self._jwrite = self._jwrite.sortBy(col, _to_seq(self._spark._sc, cols))
+        return self
+
     @since(1.4)
     def save(self, path=None, format=None, mode=None, partitionBy=None, **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
