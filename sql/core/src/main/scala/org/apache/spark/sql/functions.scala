@@ -2689,7 +2689,7 @@ object functions {
    * @since 2.2.0
    */
   def to_timestamp(s: Column): Column = withExpr {
-    new ParseToTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+    new ParseToTimestamp(s.expr)
   }
 
   /**
