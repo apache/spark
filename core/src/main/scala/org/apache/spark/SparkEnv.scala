@@ -177,7 +177,7 @@ object SparkEnv extends Logging {
       SparkContext.DRIVER_IDENTIFIER,
       bindAddress,
       advertiseAddress,
-      port,
+      Option(port),
       isLocal,
       numCores,
       ioEncryptionKey,
@@ -194,7 +194,6 @@ object SparkEnv extends Logging {
       conf: SparkConf,
       executorId: String,
       hostname: String,
-      port: Int,
       numCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
       isLocal: Boolean): SparkEnv = {
@@ -203,7 +202,7 @@ object SparkEnv extends Logging {
       executorId,
       hostname,
       hostname,
-      port,
+      None,
       isLocal,
       numCores,
       ioEncryptionKey
@@ -220,7 +219,7 @@ object SparkEnv extends Logging {
       executorId: String,
       bindAddress: String,
       advertiseAddress: String,
-      port: Int,
+      port: Option[Int],
       isLocal: Boolean,
       numUsableCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
@@ -243,7 +242,7 @@ object SparkEnv extends Logging {
     }
 
     val systemName = if (isDriver) driverSystemName else executorSystemName
-    val rpcEnv = RpcEnv.create(systemName, bindAddress, advertiseAddress, port, conf,
+    val rpcEnv = RpcEnv.create(systemName, bindAddress, advertiseAddress, port.getOrElse(-1), conf,
       securityManager, clientMode = !isDriver)
 
     // Figure out which port RpcEnv actually bound to in case the original port is 0 or occupied.
