@@ -553,8 +553,8 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(BRound(bdPi, i), bdResults(i), EmptyRow)
     }
     (8 to 10).foreach { scale =>
-      checkEvaluation(Round(bdPi, scale), null, EmptyRow)
-      checkEvaluation(BRound(bdPi, scale), null, EmptyRow)
+      checkEvaluation(Round(bdPi, scale), bdPi, EmptyRow)
+      checkEvaluation(BRound(bdPi, scale), bdPi, EmptyRow)
     }
 
     DataTypeTestUtils.numericTypes.foreach { dataType =>
