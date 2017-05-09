@@ -53,6 +53,10 @@ case class StreamingSourceRelation(source: Source, output: Seq[Attribute]) exten
   override def toString: String = source.toString
 }
 
+/**
+ * A dummy physical plan for [[StreamingRelation]] to support
+ * [[org.apache.spark.sql.Dataset.explain]]
+ */
 case class StreamingRelationExec(sourceName: String, output: Seq[Attribute]) extends LeafExecNode {
   override def toString: String = sourceName
   override protected def doExecute(): RDD[InternalRow] = {
@@ -65,10 +69,6 @@ case class StreamingRelationWrapper(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
-/**
- * A dummy physical plan for [[StreamingRelation]] to support
- * [[org.apache.spark.sql.Dataset.explain]]
- */
 case class StreamingRelationWrapperExec(child: SparkPlan)
   extends UnaryExecNode {
   override protected def doExecute(): RDD[InternalRow] = child.execute()
