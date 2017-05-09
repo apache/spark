@@ -77,6 +77,8 @@ object ShortestPaths {
   }
 
  /**
+  * Copyright [2017] [Ji Dai, Suning Commerce R&D Center USA at Palo Alto, CA]
+  *
   * Computes shortest paths from the source vertex to all other vertices.
   * Weights of edges in the graph should be positive
   *
