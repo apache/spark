@@ -495,12 +495,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       }
   }
 
-  /**
-    * Drop named tables if they exist
-    *
-    * @param tableNames tables to drop
-    */
-  def dropTables(tableNames: String*): Unit = {
+  private def dropTables(tableNames: String*): Unit = {
     tableNames.foreach { name =>
       sql(s"DROP TABLE IF EXISTS $name")
     }

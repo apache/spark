@@ -97,12 +97,23 @@ case class InsertIntoHiveTable(
     val inputPathUri: URI = inputPath.toUri
     val inputPathName: String = inputPathUri.getPath
     val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
-    val stagingPathName: String =
+    var stagingPathName: String =
       if (inputPathName.indexOf(stagingDir) == -1) {
         new Path(inputPathName, stagingDir).toString
       } else {
         inputPathName.substring(0, inputPathName.indexOf(stagingDir) + stagingDir.length)
       }
+
+    // SPARK-20594: The staging directory should be a child directory starts with "." to avoid
+    // being deleted if we set hive.exec.stagingdir under the table directory.
+    if (FileUtils.isSubDir(new Path(stagingPathName), inputPath, fs)
+      && !stagingPathName.stripPrefix(inputPathName).startsWith(".")) {
+      logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
+        s"with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
+        s"directory.")
+      stagingPathName = new Path(inputPathName, ".hive-staging").toString
+    }
+
     val dir: Path =
       fs.makeQualified(
         new Path(stagingPathName + "_" + executionId + "-" + TaskRunner.getTaskRunnerID))
@@ -222,7 +233,7 @@ case class InsertIntoHiveTable(
     val externalCatalog = sparkSession.sharedState.externalCatalog
     val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
     val hadoopConf = sessionState.newHadoopConf()
-    val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging") + "/.hive-staging"
+    val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
     val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
 
     val hiveQlTable = HiveClientImpl.toHiveTable(table)
