@@ -38,26 +38,26 @@ import org.apache.spark.util.Utils
 
 
 /**
- * Store Arrow data in a form that can be serialized by Spark
+ * Store Arrow data in a form that can be serialized by Spark.
  */
 private[sql] class ArrowPayload(payload: Array[Byte]) extends Serializable {
 
   /**
-   * Create an ArrowPayload from an ArrowRecordBatch and Spark schema
+   * Create an ArrowPayload from an ArrowRecordBatch and Spark schema.
    */
   def this(batch: ArrowRecordBatch, schema: StructType, allocator: BufferAllocator) = {
     this(ArrowConverters.batchToByteArray(batch, schema, allocator))
   }
 
   /**
-   * Convert the ArrowPayload to an ArrowRecordBatch
+   * Convert the ArrowPayload to an ArrowRecordBatch.
    */
   def loadBatch(allocator: BufferAllocator): ArrowRecordBatch = {
     ArrowConverters.byteArrayToBatch(payload, allocator)
   }
 
   /**
-   * Get the ArrowPayload as an Array[Byte]
+   * Get the ArrowPayload as an Array[Byte].
    */
   def toByteArray: Array[Byte] = payload
 }
@@ -93,11 +93,13 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Maps Iterator from InternalRow to ArrowPayload
+   * Maps Iterator from InternalRow to ArrowPayload. Limit ArrowRecordBatch size in ArrowPayload
+   * by setting maxRecordsPerBatch or use 0 to fully consume rowIter.
    */
   private[sql] def toPayloadIterator(
       rowIter: Iterator[InternalRow],
-      schema: StructType): Iterator[ArrowPayload] = {
+      schema: StructType,
+      maxRecordsPerBatch: Int): Iterator[ArrowPayload] = {
     new Iterator[ArrowPayload] {
       private val _allocator = new RootAllocator(Long.MaxValue)
       private var _nextPayload = if (rowIter.nonEmpty) convert() else null
@@ -118,32 +120,37 @@ private[sql] object ArrowConverters {
       }
 
       private def convert(): ArrowPayload = {
-        val batch = internalRowIterToArrowBatch(rowIter, schema, _allocator)
+        val batch = internalRowIterToArrowBatch(rowIter, schema, _allocator, maxRecordsPerBatch)
         new ArrowPayload(batch, schema, _allocator)
       }
     }
   }
 
   /**
-   * Iterate over InternalRows and write to an ArrowRecordBatch.
+   * Iterate over InternalRows and write to an ArrowRecordBatch, stopping when rowIter is consumed
+   * or the number of records in the batch equals maxRecordsInBatch.  If maxRecordsPerBatch is 0,
+   * then rowIter will be fully consumed.
    */
   private def internalRowIterToArrowBatch(
       rowIter: Iterator[InternalRow],
       schema: StructType,
-      allocator: BufferAllocator): ArrowRecordBatch = {
+      allocator: BufferAllocator,
+      maxRecordsPerBatch: Int = 0): ArrowRecordBatch = {
 
     val columnWriters = schema.fields.zipWithIndex.map { case (field, ordinal) =>
-      ColumnWriter(ordinal, allocator, field.dataType).init()
+      ColumnWriter(field.dataType, ordinal, allocator).init()
     }
 
     val writerLength = columnWriters.length
-    while (rowIter.hasNext) {
+    var recordsInBatch = 0
+    while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || recordsInBatch < maxRecordsPerBatch)) {
       val row = rowIter.next()
       var i = 0
       while (i < writerLength) {
         columnWriters(i).write(row)
         i += 1
       }
+      recordsInBatch += 1
     }
 
     val (fieldNodes, bufferArrays) = columnWriters.map(_.finish()).unzip
@@ -158,7 +165,8 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Convert an ArrowRecordBatch to a byte array and close batch
+   * Convert an ArrowRecordBatch to a byte array and close batch to release resources. Once closed,
+   * the batch can no longer be used.
    */
   private[arrow] def batchToByteArray(
       batch: ArrowRecordBatch,
@@ -183,7 +191,7 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Convert a byte array to an ArrowRecordBatch
+   * Convert a byte array to an ArrowRecordBatch.
    */
   private[arrow] def byteArrayToBatch(
       batchBytes: Array[Byte],
@@ -204,7 +212,7 @@ private[sql] object ArrowConverters {
 }
 
 /**
- * Interface for writing InternalRows to Arrow Buffers
+ * Interface for writing InternalRows to Arrow Buffers.
  */
 private[arrow] trait ColumnWriter {
   def init(): this.type
@@ -391,7 +399,11 @@ private[arrow] class TimeStampColumnWriter(
 }
 
 private[arrow] object ColumnWriter {
-  def apply(ordinal: Int, allocator: BufferAllocator, dataType: DataType): ColumnWriter = {
+
+  /**
+   * Create an Arrow ColumnWriter given the type and ordinal of row.
+   */
+  def apply(dataType: DataType, ordinal: Int, allocator: BufferAllocator): ColumnWriter = {
     val dtype = ArrowConverters.sparkTypeToArrowType(dataType)
     dataType match {
       case BooleanType => new BooleanColumnWriter(dtype, ordinal, allocator)

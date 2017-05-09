@@ -2868,8 +2868,9 @@ class Dataset[T] private[sql](
   /** Convert to an RDD of ArrowPayload byte arrays */
   private[sql] def toArrowPayload: RDD[ArrowPayload] = {
     val schema_captured = this.schema
+    val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
     queryExecution.toRdd.mapPartitionsInternal { iter =>
-      ArrowConverters.toPayloadIterator(iter, schema_captured)
+      ArrowConverters.toPayloadIterator(iter, schema_captured, maxRecordsPerBatch)
     }
   }
 }
