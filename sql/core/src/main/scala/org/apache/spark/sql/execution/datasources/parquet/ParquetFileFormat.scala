@@ -632,6 +632,4 @@ object ParquetFileFormat extends Logging {
         Failure(cause)
     }.toOption
   }
-
-  val PARQUET_TIMEZONE_TABLE_PROPERTY = "parquet.mr.int96.write.zone"
 }

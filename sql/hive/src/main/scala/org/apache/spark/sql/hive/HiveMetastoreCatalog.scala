@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode._
 import org.apache.spark.sql.types._
 
@@ -175,7 +174,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             // We don't support hive bucketed tables, only ones we write out.
             bucketSpec = None,
             fileFormat = fileFormat,
-            options = options ++ getStorageTzOptions(relation))(sparkSession = sparkSession)
+            options = options)(sparkSession = sparkSession)
           val created = LogicalRelation(fsRelation, updatedTable)
           tableRelationCache.put(tableIdentifier, created)
           created
@@ -202,7 +201,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 userSpecifiedSchema = Option(dataSchema),
                 // We don't support hive bucketed tables, only ones we write out.
                 bucketSpec = None,
-                options = options ++ getStorageTzOptions(relation),
+                options = options,
                 className = fileType).resolveRelation(),
               table = updatedTable)
 
@@ -221,13 +220,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       case (a1, a2) => a1.withExprId(a2.exprId)
     }
     result.copy(output = newOutput)
-  }
-
-  private def getStorageTzOptions(relation: CatalogRelation): Map[String, String] = {
-    // We add the table timezone to the relation options, which automatically gets injected into the
-    // hadoopConf for the Parquet Converters
-    val storageTzKey = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
-    relation.tableMeta.properties.get(storageTzKey).map(storageTzKey -> _).toMap
   }
 
   private def inferIfNeeded(
