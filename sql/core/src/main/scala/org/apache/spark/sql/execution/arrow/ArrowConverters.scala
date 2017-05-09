@@ -40,15 +40,26 @@ import org.apache.spark.util.Utils
 /**
  * Store Arrow data in a form that can be serialized by Spark
  */
-private[sql] class ArrowPayload(val payload: Array[Byte]) extends Serializable {
+private[sql] class ArrowPayload(payload: Array[Byte]) extends Serializable {
 
+  /**
+   * Create an ArrowPayload from an ArrowRecordBatch and Spark schema
+   */
   def this(batch: ArrowRecordBatch, schema: StructType, allocator: BufferAllocator) = {
     this(ArrowConverters.batchToByteArray(batch, schema, allocator))
   }
 
+  /**
+   * Convert the ArrowPayload to an ArrowRecordBatch
+   */
   def loadBatch(allocator: BufferAllocator): ArrowRecordBatch = {
     ArrowConverters.byteArrayToBatch(payload, allocator)
   }
+
+  /**
+   * Get the ArrowPayload as an Array[Byte]
+   */
+  def toByteArray: Array[Byte] = payload
 }
 
 private[sql] object ArrowConverters {
