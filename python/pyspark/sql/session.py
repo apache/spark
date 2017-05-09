@@ -416,7 +416,8 @@ class SparkSession(object):
 
     @since(2.0)
     @ignore_unicode_prefix
-    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True, numSlices=None):
+    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True,
+                        numSlices=None):
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
 
@@ -446,7 +447,7 @@ class SparkSession(object):
             ``int`` as a short name for ``IntegerType``.
         :param samplingRatio: the sample ratio of rows used for inferring
         :param verifySchema: verify data types of every row against schema.
-        :param numSlices: specify as :class:`int` the number of slices (partitions) to distribute 
+        :param numSlices: specify as :class:`int` the number of slices (partitions) to distribute
             ``data`` across. Applies to ``data`` of :class:`list` or :class:`pandas.DataFrame`.
             Defaults to `self.sparkContext.defaultParallelism`.
         :return: :class:`DataFrame`
