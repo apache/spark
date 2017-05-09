@@ -338,7 +338,7 @@ class SQLContext(object):
             ...
         Py4JJavaError: ...
         """
-        return self.sparkSession.createDataFrame(data, schema, samplingRatio, verifySchema, 
+        return self.sparkSession.createDataFrame(data, schema, samplingRatio, verifySchema,
                                                  numSlices)
 
     @since(1.3)
