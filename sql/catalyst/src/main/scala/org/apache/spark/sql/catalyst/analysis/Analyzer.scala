@@ -2457,6 +2457,16 @@ object CleanupAliases extends Rule[LogicalPlan] {
 }
 
 /**
+ * Ignore event time watermark in batch query, which is only supported in Structured Streaming.
+ * TODO: add this rule into analyzer rule list.
+ */
+object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case EventTimeWatermark(_, _, child) if !child.isStreaming => child
+  }
+}
+
+/**
  * Maps a time column to multiple time windows using the Expand operator. Since it's non-trivial to
  * figure out how many windows a time column can map to, we over-estimate the number of windows and
  * filter out the rows where the time column is not inside the time window.
