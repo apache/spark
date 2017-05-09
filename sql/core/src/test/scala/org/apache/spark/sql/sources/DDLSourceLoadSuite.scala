@@ -19,25 +19,37 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 
 // please note that the META-INF/services had to be modified for the test directory for this to work
 class DDLSourceLoadSuite extends DataSourceTest with SharedSQLContext {
 
-  test("data sources with the same name") {
-    spark.read.format("Fluet da Bomb").load().schema ==
-      StructType(Seq(StructField("stringType", StringType, nullable = false)))
+  test("data sources with the same name - internal data sources") {
+    assert(spark.read.format("Fluet da Bomb").load().schema ==
+      StructType(Seq(StructField("stringType", StringType, nullable = false))))
+  }
+
+  test("data sources with the same name - internal data source/external data source") {
+    assert(spark.read.format("datasource").load().schema ==
+      StructType(Seq(StructField("longType", LongType, nullable = false))))
+  }
+
+  test("data sources with the same name - external data sources") {
+    val e = intercept[RuntimeException] {
+      spark.read.format("Fake external source").load()
+    }
+    assert(e.getMessage.contains("Multiple sources found for Fake external source"))
   }
 
   test("load data source from format alias") {
-    spark.read.format("gathering quorum").load().schema ==
-      StructType(Seq(StructField("stringType", StringType, nullable = false)))
+    assert(spark.read.format("gathering quorum").load().schema ==
+      StructType(Seq(StructField("stringType", StringType, nullable = false))))
   }
 
   test("specify full classname with duplicate formats") {
-    spark.read.format("org.apache.spark.sql.sources.FakeSourceOne")
-      .load().schema == StructType(Seq(StructField("stringType", StringType, nullable = false)))
+    assert(spark.read.format("org.apache.spark.sql.sources.FakeSourceOne")
+      .load().schema == StructType(Seq(StructField("stringType", StringType, nullable = false))))
   }
 
   test("should fail to load ORC without Hive Support") {
@@ -85,5 +97,18 @@ class FakeSourceThree extends RelationProvider with DataSourceRegister {
 
       override def schema: StructType =
         StructType(Seq(StructField("stringType", StringType, nullable = false)))
+    }
+}
+
+class FakeSourceFour extends RelationProvider with DataSourceRegister {
+
+  def shortName(): String = "datasource"
+
+  override def createRelation(cont: SQLContext, param: Map[String, String]): BaseRelation =
+    new BaseRelation {
+      override def sqlContext: SQLContext = cont
+
+      override def schema: StructType =
+        StructType(Seq(StructField("longType", LongType, nullable = false)))
     }
 }
