@@ -17,8 +17,9 @@
 
 package org.apache.spark.ml.feature
 
-import scala.language.existentials
+import java.util.Locale
 
+import scala.language.existentials
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -63,23 +64,25 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
    * Param for how to order labels of string column. The first label after ordering is assigned
    * an index of 0.
    * Options are:
-   *   - 'freq_desc': descending order by label frequency (most frequent label assigned 0)
-   *   - 'freq_asc': ascending order by label frequency (least frequent label assigned 0)
+   *   - 'frequency_desc': descending order by label frequency (most frequent label assigned 0)
+   *   - 'frequency_asc': ascending order by label frequency (least frequent label assigned 0)
    *   - 'alphabet_desc': descending alphabetical order
    *   - 'alphabet_asc': ascending alphabetical order
-   * Default is 'freq_desc'.
+   * Default is 'frequency_desc'.
    *
    * @group param
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
-    "The method used to order values of input column. " +
-      s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
-    (value: String) => StringIndexer.supportedStringOrderType.contains(value.toLowerCase))
+    "how to order labels of string column. " +
+    "The first label after ordering is assigned an index of 0. " +
+    s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
+    (value: String) => StringIndexer.supportedStringOrderType
+      .contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
-  @Since("2.2.0")
-  def getStringOrderType: String = $(stringOrderType)
+  @Since("2.3.0")
+  def getStringOrderType: String = $(stringOrderType).toLowerCase(Locale.ROOT)
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -138,7 +141,7 @@ class StringIndexer @Since("1.4.0") (
     val values = dataset.na.drop(Array($(inputCol)))
       .select(col($(inputCol)).cast(StringType))
       .rdd.map(_.getString(0))
-    val labels = $(stringOrderType).toLowerCase match {
+    val labels = this.getStringOrderType match {
       case StringIndexer.FREQ_DESC => values.countByValue().toSeq.sortBy(-_._2).map(_._1).toArray
       case StringIndexer.FREQ_ASC => values.countByValue().toSeq.sortBy(_._2).map(_._1).toArray
       case StringIndexer.ALPHABET_DESC => values.distinct.collect.sortWith(_ > _)
@@ -163,8 +166,8 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
-  private[feature] val FREQ_DESC: String = "freq_desc"
-  private[feature] val FREQ_ASC: String = "freq_asc"
+  private[feature] val FREQ_DESC: String = "frequency_desc"
+  private[feature] val FREQ_ASC: String = "frequency_asc"
   private[feature] val ALPHABET_DESC: String = "alphabet_desc"
   private[feature] val ALPHABET_ASC: String = "alphabet_asc"
   private[feature] val supportedStringOrderType: Array[String] =
