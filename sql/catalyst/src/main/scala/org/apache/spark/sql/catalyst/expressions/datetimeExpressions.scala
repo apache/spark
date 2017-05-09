@@ -1146,26 +1146,6 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
 }
 
 /**
- * Returns the date part of a timestamp or string.
- */
-case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  // Implicit casting of spark will accept string in both date and timestamp format, as
-  // well as TimestampType.
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = DateType
-
-  override def eval(input: InternalRow): Any = child.eval(input)
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, d => d)
-  }
-
-  override def prettyName: String = "to_date"
-}
-
-/**
  * Parses a column to a date based on the given format.
  */
 @ExpressionDescription(
@@ -1191,13 +1171,13 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
 
   def this(left: Expression) = {
     // backwards compatability
-    this(left, Option(null), ToDate(left))
+    this(left, None, Cast(left, DateType))
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def sql: String = {
     if (format.isDefined) {
-      s"$prettyName(${left.sql}, ${format.get.sql}"
+      s"$prettyName(${left.sql}, ${format.get.sql})"
     } else {
       s"$prettyName(${left.sql})"
     }
@@ -1212,7 +1192,8 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
 @ExpressionDescription(
   usage = """
     _FUNC_(timestamp[, fmt]) - Parses the `timestamp` expression with the `format` expression to
-      a timestamp. Returns null with invalid input. Default `fmt` is 'yyyy-MM-dd HH:mm:ss'.
+      a timestamp. Returns null with invalid input. By default, it follows casting rules to
+      a timestamp if the `fmt` is omitted.
   """,
   extended = """
     Examples:
@@ -1221,17 +1202,23 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31 00:00:00
   """)
-case class ParseToTimestamp(left: Expression, format: Expression, child: Expression)
+case class ParseToTimestamp(left: Expression, format: Option[Expression], child: Expression)
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, format, Cast(UnixTimestamp(left, format), TimestampType))
+    this(left, Option(format), Cast(UnixTimestamp(left, format), TimestampType))
   }
 
-  def this(left: Expression) = this(left, Literal("yyyy-MM-dd HH:mm:ss"))
+  def this(left: Expression) = this(left, None, Cast(left, TimestampType))
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
-  override def sql: String = s"$prettyName(${left.sql}, ${format.sql})"
+  override def sql: String = {
+    if (format.isDefined) {
+      s"$prettyName(${left.sql}, ${format.get.sql})"
+    } else {
+      s"$prettyName(${left.sql})"
+    }
+  }
 
   override def prettyName: String = "to_timestamp"
   override def dataType: DataType = TimestampType

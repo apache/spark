@@ -984,7 +984,7 @@ def to_date(col, format=None):
     using the optionally specified format. Specify formats according to
     `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
-    is omitted.
+    is omitted (equivalent with ``col.cast("date")``).
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_date(df.t).alias('date')).collect()
@@ -1006,9 +1006,10 @@ def to_date(col, format=None):
 def to_timestamp(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
-    using the optionally specified format. Default format is 'yyyy-MM-dd HH:mm:ss'. Specify
-    formats according to
+    using the optionally specified format. Specify formats according to
     `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
+    By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
+    is omitted (equivalent with ``col.cast("timestamp")``).
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_timestamp(df.t).alias('dt')).collect()

@@ -2683,8 +2683,7 @@ object functions {
   def unix_timestamp(s: Column, p: String): Column = withExpr { UnixTimestamp(s.expr, Literal(p)) }
 
   /**
-   * Convert time string to a Unix timestamp (in seconds).
-   * Uses the pattern "yyyy-MM-dd HH:mm:ss" and will return null on failure.
+   * Convert time string to a Unix timestamp (in seconds) by casting rules to `TimestampType`.
    * @group datetime_funcs
    * @since 2.2.0
    */
