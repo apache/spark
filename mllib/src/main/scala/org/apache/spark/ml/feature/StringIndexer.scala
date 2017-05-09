@@ -65,11 +65,11 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
    * Param for how to order labels of string column. The first label after ordering is assigned
    * an index of 0.
    * Options are:
-   *   - 'frequency_desc': descending order by label frequency (most frequent label assigned 0)
-   *   - 'frequency_asc': ascending order by label frequency (least frequent label assigned 0)
-   *   - 'alphabet_desc': descending alphabetical order
-   *   - 'alphabet_asc': ascending alphabetical order
-   * Default is 'frequency_desc'.
+   *   - 'frequencyDesc': descending order by label frequency (most frequent label assigned 0)
+   *   - 'frequencyAsc': ascending order by label frequency (least frequent label assigned 0)
+   *   - 'alphabetDesc': descending alphabetical order
+   *   - 'alphabetAsc': ascending alphabetical order
+   * Default is 'frequencyDesc'.
    *
    * @group param
    */
@@ -78,12 +78,11 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     "how to order labels of string column. " +
     "The first label after ordering is assigned an index of 0. " +
     s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
-    (value: String) => StringIndexer.supportedStringOrderType
-      .contains(value.toLowerCase(Locale.ROOT)))
+    ParamValidators.inArray(StringIndexer.supportedStringOrderType))
 
   /** @group getParam */
   @Since("2.3.0")
-  def getStringOrderType: String = $(stringOrderType).toLowerCase(Locale.ROOT)
+  def getStringOrderType: String = $(stringOrderType)
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -107,7 +106,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
  * If the input column is numeric, we cast it to string and index the string values.
  * The indices are in [0, numLabels). By default, this is ordered by label frequencies
  * so the most frequent label gets index 0. The ordering behavior is controlled by
- * setting stringOrderType.
+ * setting `stringOrderType`.
  *
  * @see `IndexToString` for the inverse transformation
  */
@@ -126,7 +125,7 @@ class StringIndexer @Since("1.4.0") (
   /** @group setParam */
   @Since("2.3.0")
   def setStringOrderType(value: String): this.type = set(stringOrderType, value)
-  setDefault(stringOrderType, StringIndexer.FREQ_DESC)
+  setDefault(stringOrderType, StringIndexer.frequencyDesc)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -142,11 +141,13 @@ class StringIndexer @Since("1.4.0") (
     val values = dataset.na.drop(Array($(inputCol)))
       .select(col($(inputCol)).cast(StringType))
       .rdd.map(_.getString(0))
-    val labels = this.getStringOrderType match {
-      case StringIndexer.FREQ_DESC => values.countByValue().toSeq.sortBy(-_._2).map(_._1).toArray
-      case StringIndexer.FREQ_ASC => values.countByValue().toSeq.sortBy(_._2).map(_._1).toArray
-      case StringIndexer.ALPHABET_DESC => values.distinct.collect.sortWith(_ > _)
-      case StringIndexer.ALPHABET_ASC => values.distinct.collect.sortWith(_ < _)
+    val labels = $(stringOrderType) match {
+      case StringIndexer.frequencyDesc => values.countByValue().toSeq.sortBy(-_._2)
+        .map(_._1).toArray
+      case StringIndexer.frequencyAsc => values.countByValue().toSeq.sortBy(_._2)
+        .map(_._1).toArray
+      case StringIndexer.alphabetDesc => values.distinct.collect.sortWith(_ > _)
+      case StringIndexer.alphabetAsc => values.distinct.collect.sortWith(_ < _)
     }
     copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
@@ -167,12 +168,12 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
-  private[feature] val FREQ_DESC: String = "frequency_desc"
-  private[feature] val FREQ_ASC: String = "frequency_asc"
-  private[feature] val ALPHABET_DESC: String = "alphabet_desc"
-  private[feature] val ALPHABET_ASC: String = "alphabet_asc"
+  private[feature] val frequencyDesc: String = "frequencyDesc"
+  private[feature] val frequencyAsc: String = "frequencyAsc"
+  private[feature] val alphabetDesc: String = "alphabetDesc"
+  private[feature] val alphabetAsc: String = "alphabetAsc"
   private[feature] val supportedStringOrderType: Array[String] =
-    Array(FREQ_DESC, FREQ_ASC, ALPHABET_DESC, ALPHABET_ASC)
+    Array(frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc)
 
   @Since("1.6.0")
   override def load(path: String): StringIndexer = super.load(path)
