@@ -209,7 +209,7 @@ provide such guarantees on the offer stream.
 
 In this mode spark executors will honor port allocation if such is
 provided from the user. Specifically if the user defines
-`spark.executor.port` or `spark.blockManager.port` in Spark configuration,
+`spark.blockManager.port` in Spark configuration,
 the mesos scheduler will check the available offers for a valid port
 range containing the port numbers. If no such range is available it will
 not launch any task. If no restriction is imposed on port numbers by the
