@@ -265,18 +265,18 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                                       typeConverter=TypeConverters.toMatrix)
 
     lowerBoundsOnIntercepts = Param(Params._dummy(), "lowerBoundsOnIntercepts",
-                                   "The lower bounds on intercepts if fitting under bound " +
-                                   "constrained optimization. The bounds vector size must be" +
-                                   "equal with 1 for binomial regression, or the number of" +
-                                   "lasses for multinomial regression.",
-                                   typeConverter=TypeConverters.toVector)
+                                    "The lower bounds on intercepts if fitting under bound "
+                                    "constrained optimization. The bounds vector size must be"
+                                    "equal with 1 for binomial regression, or the number of"
+                                    "lasses for multinomial regression.",
+                                    typeConverter=TypeConverters.toVector)
 
     upperBoundsOnIntercepts = Param(Params._dummy(), "upperBoundsOnIntercepts",
-                                   "The upper bounds on intercepts if fitting under bound " +
-                                   "constrained optimization. The bound vector size must be " +
-                                   "equal with 1 for binomial regression, or the number of " +
-                                   "classes for multinomial regression.",
-                                   typeConverter=TypeConverters.toVector)
+                                    "The upper bounds on intercepts if fitting under bound "
+                                    "constrained optimization. The bound vector size must be "
+                                    "equal with 1 for binomial regression, or the number of "
+                                    "classes for multinomial regression.",
+                                    typeConverter=TypeConverters.toVector)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -292,9 +292,9 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  threshold=0.5, thresholds=None, probabilityCol="probability", \
                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
-                 aggregationDepth=2, family="auto",
-                 lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
-                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):                
+                 aggregationDepth=2, family="auto", \
+                 lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
+                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
@@ -319,8 +319,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                   threshold=0.5, thresholds=None, probabilityCol="probability", \
                   rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
-                  aggregationDepth=2, family="auto",
-                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
+                  aggregationDepth=2, family="auto", \
+                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
                   lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
