@@ -50,7 +50,7 @@ object MemoryStream {
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     extends Source with Logging {
   protected val encoder = encoderFor[A]
-  protected val logicalPlan = StreamingExecutionRelation(this)
+  protected val logicalPlan = StreamingSourceRelation(this)
   protected val output = logicalPlan.output
 
   /**

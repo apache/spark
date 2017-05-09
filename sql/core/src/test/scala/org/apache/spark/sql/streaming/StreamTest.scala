@@ -504,7 +504,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
               def findSourceIndex(plan: LogicalPlan): Option[Int] = {
                 plan
-                  .collect { case StreamingExecutionRelation(s, _) => s }
+                  .collect { case StreamingSourceRelation(s, _) => s }
                   .zipWithIndex
                   .find(_._1 == source)
                   .map(_._2)
@@ -537,7 +537,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             // Get the map of source index to the current source objects
             val indexToSource = currentStream
               .logicalPlan
-              .collect { case StreamingExecutionRelation(s, _) => s }
+              .collect { case StreamingSourceRelation(s, _) => s }
               .zipWithIndex
               .map(_.swap)
               .toMap

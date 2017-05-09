@@ -160,7 +160,7 @@ class StreamSuite extends StreamTest {
       val executionRelations =
         query
           .logicalPlan
-          .collect { case ser: StreamingExecutionRelation => ser }
+          .collect { case ser: StreamingSourceRelation => ser }
       assert(executionRelations.size === 2)
       assert(executionRelations.distinct.size === 1)
     } finally {
@@ -332,7 +332,7 @@ class StreamSuite extends StreamTest {
 
         override def stop(): Unit = {}
       }
-      val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(source))
+      val df = Dataset[Int](sqlContext.sparkSession, StreamingSourceRelation(source))
       testStream(df)(
         // `ExpectFailure(isFatalError = true)` verifies two things:
         // - Fatal errors can be propagated to `StreamingQuery.exception` and
