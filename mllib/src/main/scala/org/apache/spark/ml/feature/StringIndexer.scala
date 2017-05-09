@@ -124,7 +124,7 @@ class StringIndexer @Since("1.4.0") (
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setStringOrderType(value: String): this.type = set(stringOrderType, value)
   setDefault(stringOrderType, StringIndexer.FREQ_DESC)
 
