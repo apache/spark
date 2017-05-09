@@ -20,7 +20,6 @@ package org.apache.spark.launcher
 import scala.util.Properties
 
 import org.apache.spark.SparkConf
-
 /**
  * Exposes methods from the launcher library that are used by the YARN backend.
  */

@@ -125,7 +125,7 @@ public class SparkLauncher {
    * Specifies that Spark Application be stopped if current process goes away.
    * It tries stop/kill Spark Application if launching process goes away.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    * @param autoShutdown Whether to shut down the Spark application if the launcher process goes away.
    * @return This launcher.
    */
@@ -137,7 +137,7 @@ public class SparkLauncher {
   /**
    * Specifies that Spark Submit be launched as a daemon thread.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    * @param launchAsThread Whether to launch the Spark application in a new thread in
    *                       the same process.
    * @return This launcher.
@@ -562,7 +562,7 @@ public class SparkLauncher {
   public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
     if (launchAsThread) {
       checkArgument(builder.childEnv.isEmpty(),
-        "Custom environment variables are not supported while launching in a Thread");
+        "Custom environment variables are not supported while launching in a thread");
       return startApplicationAsThread(listeners);
     }
     return startApplicationAsChildProc(listeners);
