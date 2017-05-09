@@ -246,7 +246,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
 
   import org.apache.spark.mllib.util.Loader._
 
-  @transient private[recommendation] val _f2jBLAS = new F2jBLAS
+  @transient private val _f2jBLAS = new F2jBLAS
 
   /**
    * Makes recommendations for a single user (or product).
