@@ -633,7 +633,7 @@ object CollapseWindow extends Rule[LogicalPlan] {
 object TransposeWindow extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
-        if ps2.containsSlice(ps1) =>
+        if ps1.length < ps2.length && ps2.containsSlice(ps1) =>
       Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
   }
 }
