@@ -47,16 +47,19 @@ class TransposeWindowSuite extends PlanTest {
   val orderSpec2 = Seq(d.desc)
 
   test("flip two adjacent windows with compatible partitions in multiple selects") {
+    val wexpr1 = windowExpr(sum('c), windowSpec(partitionSpec2, Seq.empty, UnspecifiedFrame))
+    val wexpr2 = windowExpr(sum('c), windowSpec(partitionSpec1, Seq.empty, UnspecifiedFrame))
+
     val query = testRelation
-      .select('a, 'b, 'c,  windowExpr(sum('c), windowSpec(partitionSpec2, Seq.empty, UnspecifiedFrame)).as('sum_a_2))
-      .select('a, 'b, 'c, 'sum_a_2, windowExpr(sum('c), windowSpec(partitionSpec1, Seq.empty, UnspecifiedFrame)).as('sum_a_1))
+      .select('a, 'b, 'c,  wexpr1.as('sum_a_2))
+      .select('a, 'b, 'c, 'sum_a_2, wexpr2.as('sum_a_1))
 
     val optimized = Optimize.execute(query.analyze)
 
     val query2 = testRelation
       .select('a, 'b, 'c)
-      .select('a, 'b, 'c,  windowExpr(sum('c), windowSpec(partitionSpec1, Seq.empty, UnspecifiedFrame)).as('sum_a_1))
-      .select('a, 'b, 'c,  windowExpr(sum('c), windowSpec(partitionSpec2, Seq.empty, UnspecifiedFrame)).as('sum_a_2), 'sum_a_1)
+      .select('a, 'b, 'c,  wexpr2.as('sum_a_1))
+      .select('a, 'b, 'c,  wexpr1.as('sum_a_2), 'sum_a_1)
       .select('a, 'b, 'c, 'sum_a_2, 'sum_a_1)
 
     val correctAnswer = Optimize.execute(query2.analyze)
