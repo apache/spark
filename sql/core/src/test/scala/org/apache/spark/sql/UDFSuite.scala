@@ -93,6 +93,13 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(sql("SELECT strLenScala('test')").head().getInt(0) === 4)
   }
 
+  test("UDF defined using UserDefinedFunction") {
+    import functions.udf
+    val foo = udf((x: Int) => x + 1)
+    spark.udf.register("foo", foo)
+    assert(sql("select foo(5)").head().getInt(0) == 6)
+  }
+
   test("ZeroArgument UDF") {
     spark.udf.register("random0", () => { Math.random()})
     assert(sql("SELECT random0()").head().getDouble(0) >= 0.0)
