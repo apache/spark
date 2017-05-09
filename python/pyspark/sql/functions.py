@@ -68,8 +68,7 @@ def _create_window_function(name, doc=''):
     return _
 
 _lit_doc = """
-    Creates a :class:`Column` of literal value. Supports basic types like :class:`IntegerType`,
-    :class:`FloatType`, :class:`BooleanType`, and :class:`StringType`
+    Creates a :class:`Column` of literal value.
 
     >>> df.withColumn('height', lit(5) ).withColumn('spark_user', lit(True) ).collect()
     [Row(age=2, name=u'Alice', height=5, spark_user=True),
@@ -203,13 +202,13 @@ _window_functions = {
 }
 
 for _name, _doc in _functions.items():
-    globals()[_name] = since(1.3)(_create_function(_name, _doc))
+    globals()[_name] = since(1.3)(ignore_unicode_prefix(_create_function(_name, _doc)))
 for _name, _doc in _functions_1_4.items():
     globals()[_name] = since(1.4)(_create_function(_name, _doc))
 for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
-    globals()[_name] = since(1.6)(_create_window_function(_name, _doc))
+    globals()[_name] = since(1.6)(ignore_unicode_prefix(_create_window_function(_name, _doc)))
 for _name, _doc in _functions_1_6.items():
     globals()[_name] = since(1.6)(_create_function(_name, _doc))
 for _name, _doc in _functions_2_1.items():
@@ -220,7 +219,7 @@ del _name, _doc
 @since(1.3)
 def approxCountDistinct(col, rsd=None):
     """
-    .. note:: Deprecated in 2.1, use :func:`approx_count_distinct instead`.
+    .. note:: Deprecated in 2.1, use :func:`approx_count_distinct` instead.
     """
     return approx_count_distinct(col, rsd)
 
@@ -230,7 +229,7 @@ def approx_count_distinct(col, rsd=None):
     """Returns a new :class:`Column` for approximate distinct count of column ``col``.
 
     :param rsd: Residual (float). The approximate count will be within this fraction of the true
-    count. For rsd < 0.01, it is more efficient to use :func:`countDistinct`
+        count. For rsd < 0.01, it is more efficient to use :func:`countDistinct`
 
     >>> df.agg(approx_count_distinct(df.age).alias('distinct_ages')).collect()
     [Row(distinct_ages=2)]
@@ -473,7 +472,7 @@ def monotonically_increasing_id():
 def nanvl(col1, col2):
     """Returns col1 if it is not NaN, or col2 if col1 is NaN.
 
-    Both inputs should be floating point columns (:class:`DoubleType` or FloatType).
+    Both inputs should be floating point columns (:class:`DoubleType` or :class:`FloatType`).
 
     >>> df = spark.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
     >>> df.select(nanvl("a", "b").alias("r1"), nanvl(df.a, df.b).alias("r2")).collect()
@@ -799,7 +798,7 @@ def current_date():
 
 def current_timestamp():
     """
-    Returns the current timestamp as a :class:`TimestampType`column.
+    Returns the current timestamp as a :class:`TimestampType` column.
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.current_timestamp())
@@ -818,9 +817,9 @@ def date_format(date, format):
     .. note:: Use when ever possible specialized functions like `year`. These benefit from a
         specialized implementation.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['time'])
-    >>> df.select(date_format('time', 'MM/dd/yyy').alias('date')).collect()
-    [Row(date=u'04/08/2015')]
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(date_format('dt', 'MM/dd/yyy').alias('dt2')).collect()
+    [Row(dt2=u'04/08/2015')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.date_format(_to_java_column(date), format))
@@ -831,8 +830,8 @@ def year(col):
     """
     Extract the year of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['time'])
-    >>> df.select(year('time').alias('year')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(year('dt').alias('year')).collect()
     [Row(year=2015)]
     """
     sc = SparkContext._active_spark_context
@@ -844,8 +843,8 @@ def quarter(col):
     """
     Extract the quarter of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['time'])
-    >>> df.select(quarter('time').alias('quarter')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(quarter('dt').alias('quarter')).collect()
     [Row(quarter=2)]
     """
     sc = SparkContext._active_spark_context
@@ -857,8 +856,8 @@ def month(col):
     """
     Extract the month of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['time'])
-    >>> df.select(month('time').alias('month')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(month('dt').alias('month')).collect()
     [Row(month=4)]
    """
     sc = SparkContext._active_spark_context
@@ -870,8 +869,8 @@ def dayofmonth(col):
     """
     Extract the day of the month of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['time'])
-    >>> df.select(dayofmonth('time').alias('day')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(dayofmonth('dt').alias('day')).collect()
     [Row(day=8)]
     """
     sc = SparkContext._active_spark_context
@@ -883,8 +882,8 @@ def dayofyear(col):
     """
     Extract the day of the year of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['time'])
-    >>> df.select(dayofyear('time').alias('day')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(dayofyear('dt').alias('day')).collect()
     [Row(day=98)]
     """
     sc = SparkContext._active_spark_context
@@ -896,8 +895,8 @@ def hour(col):
     """
     Extract the hours of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['time'])
-    >>> df.select(hour('time').alias('hour')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
+    >>> df.select(hour('ts').alias('hour')).collect()
     [Row(hour=13)]
     """
     sc = SparkContext._active_spark_context
@@ -909,8 +908,8 @@ def minute(col):
     """
     Extract the minutes of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['time'])
-    >>> df.select(minute('time').alias('minute')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
+    >>> df.select(minute('ts').alias('minute')).collect()
     [Row(minute=8)]
     """
     sc = SparkContext._active_spark_context
@@ -922,8 +921,8 @@ def second(col):
     """
     Extract the seconds of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['time'])
-    >>> df.select(second('time').alias('second')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08 13:08:15',)], ['ts'])
+    >>> df.select(second('ts').alias('second')).collect()
     [Row(second=15)]
     """
     sc = SparkContext._active_spark_context
@@ -935,8 +934,8 @@ def weekofyear(col):
     """
     Extract the week number of a given date as integer.
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['time'])
-    >>> df.select(weekofyear(df.time).alias('week')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(weekofyear(df.dt).alias('week')).collect()
     [Row(week=15)]
     """
     sc = SparkContext._active_spark_context
@@ -948,8 +947,8 @@ def date_add(start, days):
     """
     Returns the date that is `days` days after `start`
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['date'])
-    >>> df.select(date_add(df.date, 1).alias('next_date')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(date_add(df.dt, 1).alias('next_date')).collect()
     [Row(next_date=datetime.date(2015, 4, 9))]
     """
     sc = SparkContext._active_spark_context
@@ -961,8 +960,8 @@ def date_sub(start, days):
     """
     Returns the date that is `days` days before `start`
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['date'])
-    >>> df.select(date_sub(df.date, 1).alias('prev_date')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(date_sub(df.dt, 1).alias('prev_date')).collect()
     [Row(prev_date=datetime.date(2015, 4, 7))]
     """
     sc = SparkContext._active_spark_context
@@ -987,8 +986,8 @@ def add_months(start, months):
     """
     Returns the date that is `months` months after `start`
 
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['date'])
-    >>> df.select(add_months(df.date, 1).alias('next_month')).collect()
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select(add_months(df.dt, 1).alias('next_month')).collect()
     [Row(next_month=datetime.date(2015, 5, 8))]
     """
     sc = SparkContext._active_spark_context
@@ -1017,13 +1016,13 @@ def to_date(col, format=None):
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted (equivalent to ``col.cast("date")``).
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['time'])
-    >>> df.select(to_date(df.time).alias('date')).collect()
-    [Row(date=datetime.date(1997, 2, 28))]
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    >>> df.select(to_date(df.ts).alias('dt')).collect()
+    [Row(dt=datetime.date(1997, 2, 28))]
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['time'])
-    >>> df.select(to_date(df.time, 'yyyy-MM-dd HH:mm:ss').alias('date')).collect()
-    [Row(date=datetime.date(1997, 2, 28))]
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    >>> df.select(to_date(df.ts, 'yyyy-MM-dd HH:mm:ss').alias('dt')).collect()
+    [Row(dt=datetime.date(1997, 2, 28))]
     """
     sc = SparkContext._active_spark_context
     if format is None:
@@ -1042,13 +1041,13 @@ def to_timestamp(col, format=None):
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted (equivalent to ``col.cast("timestamp")``).
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['date'])
-    >>> df.select(to_timestamp(df.date).alias('dt')).collect()
-    [Row(dt=datetime.datetime(1997, 2, 28, 10, 30))]
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['dt'])
+    >>> df.select(to_timestamp(df.dt).alias('ts')).collect()
+    [Row(ts=datetime.datetime(1997, 2, 28, 10, 30))]
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['date'])
-    >>> df.select(to_timestamp(df.date, 'yyyy-MM-dd HH:mm:ss').alias('dt')).collect()
-    [Row(dt=datetime.datetime(1997, 2, 28, 10, 30))]
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['dt'])
+    >>> df.select(to_timestamp(df.dt, 'yyyy-MM-dd HH:mm:ss').alias('ts')).collect()
+    [Row(ts=datetime.datetime(1997, 2, 28, 10, 30))]
     """
     sc = SparkContext._active_spark_context
     if format is None:
@@ -1083,8 +1082,8 @@ def next_day(date, dayOfWeek):
     Day of the week parameter is case insensitive, and accepts:
         "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
 
-    >>> df = spark.createDataFrame([('2015-07-27',)], ['time'])
-    >>> df.select(next_day(df.time, 'Sun').alias('date')).collect()
+    >>> df = spark.createDataFrame([('2015-07-27',)], ['dt'])
+    >>> df.select(next_day(df.dt, 'Sun').alias('date')).collect()
     [Row(date=datetime.date(2015, 8, 2))]
     """
     sc = SparkContext._active_spark_context
@@ -1096,8 +1095,8 @@ def last_day(date):
     """
     Returns the last day of the month which the given date belongs to.
 
-    >>> df = spark.createDataFrame([('1997-02-10',)], ['d'])
-    >>> df.select(last_day(df.d).alias('date')).collect()
+    >>> df = spark.createDataFrame([('1997-02-10',)], ['dt'])
+    >>> df.select(last_day(df.dt).alias('date')).collect()
     [Row(date=datetime.date(1997, 2, 28))]
     """
     sc = SparkContext._active_spark_context
@@ -1128,8 +1127,8 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
 
     if `timestamp` is None, then it returns current timestamp.
 
-    >>> time_df = spark.createDataFrame([('2015-04-08',)], ['date'])
-    >>> time_df.select(unix_timestamp('date', 'yyyy-MM-dd').alias('unix_time')).collect()
+    >>> time_df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> time_df.select(unix_timestamp('dt', 'yyyy-MM-dd').alias('unix_time')).collect()
     [Row(unix_time=1428476400)]
     """
     sc = SparkContext._active_spark_context
@@ -1144,8 +1143,8 @@ def from_utc_timestamp(timestamp, tz):
     Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
     that corresponds to the same time of day in the given timezone.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['time'])
-    >>> df.select(from_utc_timestamp(df.time, "PST").alias('local_time')).collect()
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    >>> df.select(from_utc_timestamp(df.ts, "PST").alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 2, 30))]
     """
     sc = SparkContext._active_spark_context
@@ -1158,8 +1157,8 @@ def to_utc_timestamp(timestamp, tz):
     Given a `timestamp`, which corresponds to a time of day in the timezone `tz`,
     returns another timestamp that corresponds to the same time of day in UTC.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['time'])
-    >>> df.select(to_utc_timestamp(df.time, "PST").alias('utc_time')).collect()
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
     [Row(utc_time=datetime.datetime(1997, 2, 28, 18, 30))]
     """
     sc = SparkContext._active_spark_context
@@ -1323,7 +1322,7 @@ _string_functions = {
 
 
 for _name, _doc in _string_functions.items():
-    globals()[_name] = since(1.5)(_create_function(_name, _doc))
+    globals()[_name] = since(1.5)(ignore_unicode_prefix(_create_function(_name, _doc)))
 del _name, _doc
 
 
