@@ -386,8 +386,8 @@ class RowMatrix @Since("1.0.0") (
 
     // Check matrix is standarized with mean 0
     val mean = computeColumnSummaryStatistics().mean
-    val stdMat = if (mean.toArray.sum < 0.0001) {
-      this
+    val stdMat = if (mean.toArray.sum < 1E-9) {
+      this  // If matrix is already centered in 0, then no need to standarize
     } else {
       // X' = X - µ
       def subPairs = (vPair: (Double, Double)) => vPair._1 - vPair._2
