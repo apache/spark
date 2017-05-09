@@ -387,7 +387,8 @@ class ALSModel private[ml] (
 
   /**
    * Returns a subset of a factor DataFrame limited to only those ids contained
-   * in the input dataset.
+   * in the input dataset. The caller is responsible for removing any duplicate ids
+   * from the dataset.
    * @param dataset input Dataset containing id column to user to filter factors.
    * @param factors factor DataFrame to filter.
    * @param column column name containing the ids in the input dataset.
