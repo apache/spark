@@ -124,7 +124,8 @@ class Analyzer(
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      new SubstituteUnresolvedOrdinals(conf)),
+      new SubstituteUnresolvedOrdinals(conf),
+      EliminateEventTimeWatermark),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       ResolveRelations ::
@@ -2460,12 +2461,9 @@ object CleanupAliases extends Rule[LogicalPlan] {
  * Ignore event time watermark in batch query, which is only supported in Structured Streaming.
  * TODO: add this rule into analyzer rule list.
  */
-object CheckEventTimeWatermark extends Rule[LogicalPlan] {
+object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case EventTimeWatermark(_, _, child) if !child.isStreaming =>
-      logWarning("EventTime watermark is only supported in Structured Streaming but found " +
-        "in batch query, we will ignore it.")
-      child
+    case EventTimeWatermark(_, _, child) if !child.isStreaming => child
   }
 }
 
