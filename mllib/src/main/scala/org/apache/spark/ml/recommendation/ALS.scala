@@ -371,9 +371,9 @@ class ALSModel private[ml] (
   }
 
   /**
-   * Returns top `numUsers` users recommended for each unique item id in the input data set. Note
-   * that if there are duplicate ids in the input dataset, duplicate recommendations will be
-   * returned. The caller is responsible for de-duplicating input ids.
+   * Returns top `numUsers` users recommended for each item id in the input data set. Note that if
+   * there are duplicate ids in the input dataset, duplicate recommendations will be returned.
+   * The caller is responsible for de-duplicating input ids.
    * @param dataset a Dataset containing a column of item ids. The column name must match `itemCol`.
    * @param numUsers max number of recommendations for each item.
    * @return a DataFrame of (itemCol: Int, recommendations), where recommendations are
