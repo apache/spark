@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation}
 import org.apache.spark.sql.types._
 
 object TestRelations {
@@ -64,4 +64,13 @@ object TestRelations {
 
   val mapRelation = LocalRelation(
     AttributeReference("map", MapType(IntegerType, IntegerType))())
+
+  val streamingRelation = TestStreamingRelation(
+    Seq(AttributeReference("a", IntegerType)(),
+      AttributeReference("eventTime", TimestampType)()))
+
+  case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode {
+    def this(attribute: Attribute) = this(Seq(attribute))
+    override def isStreaming: Boolean = true
+  }
 }

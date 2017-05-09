@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 
 class AnalysisSuite extends AnalysisTest with ShouldMatchers {
@@ -440,5 +441,22 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
       caseSensitive = false)
 
     checkAnalysis(SubqueryAlias("tbl", testRelation).as("tbl2"), testRelation)
+  }
+
+  test("Cleanup streaming watermarks for batch query") {
+    val batchRelation = LocalRelation(AttributeReference("eventTime", TimestampType)())
+    val batchPlan = EventTimeWatermark(
+      batchRelation.output.find(_.name == "eventTime").head,
+      CalendarInterval.fromString("interval 10 minutes"),
+      batchRelation)
+    val batchExpected = batchRelation
+    checkAnalysis(batchPlan, batchExpected)
+
+    val streamingPlan = EventTimeWatermark(
+      streamingRelation.output.find(_.name == "eventTime").head,
+      CalendarInterval.fromString("interval 10 minutes"),
+      streamingRelation)
+    val streamingExpected = streamingPlan
+    checkAnalysis(streamingPlan, streamingExpected)
   }
 }
