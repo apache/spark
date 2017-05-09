@@ -46,9 +46,6 @@ import org.apache.spark.util.{Benchmark, Utils}
  * This is in `sql/hive` module in order to compare `sql/core` and `sql/hive` ORC data sources.
  * After removing `sql/hive` ORC data sources, we need to move this into `sql/core` module
  * like the other ORC test suites.
- *
- * To run this:
- *  spark-submit --class <this class> <spark sql/hive test jar>
  */
 object OrcReadBenchmark {
   val conf = new SparkConf()
