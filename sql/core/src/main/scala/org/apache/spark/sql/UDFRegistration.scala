@@ -70,13 +70,29 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @param name the name of the UDAF.
    * @param udaf the UDAF needs to be registered.
    * @return the registered UDAF.
+   *
+   * @since 1.5.0
    */
-  def register(
-      name: String,
-      udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
+  def register(name: String, udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
     def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf)
     functionRegistry.registerFunction(name, builder)
     udaf
+  }
+
+  /**
+   * Register a user-defined function (UDF), for a UDF that's already defined using the DataFrame
+   * API (i.e. of type UserDefinedFunction).
+   *
+   * @param name the name of the UDF.
+   * @param udf the UDF needs to be registered.
+   * @return the registered UDF.
+   *
+   * @since 2.2.0
+   */
+  def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
+    def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
+    functionRegistry.registerFunction(name, builder)
+    udf
   }
 
   // scalastyle:off line.size.limit
