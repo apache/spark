@@ -27,6 +27,7 @@ import scala.util.{Sorting, Try}
 import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
+import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
@@ -363,7 +364,7 @@ class ALSModel private[ml] (
    * relatively efficient, the approach implemented here is significantly more efficient.
    *
    * This approach groups factors into blocks and computes the top-k elements per block,
-   * using a simple dot product (instead of gemm) and an efficient [[BoundedPriorityQueue]].
+   * using dot product and an efficient [[BoundedPriorityQueue]] (instead of gemm).
    * It then computes the global top-k by aggregating the per block top-k elements with
    * a [[TopByKeyAggregator]]. This significantly reduces the size of intermediate and shuffle data.
    * This is the DataFrame equivalent to the approach used in
@@ -393,31 +394,18 @@ class ALSModel private[ml] (
         val m = srcIter.size
         val n = math.min(dstIter.size, num)
         val output = new Array[(Int, Int, Float)](m * n)
-        var j = 0
+        var i = 0
         val pq = new BoundedPriorityQueue[(Int, Float)](num)(Ordering.by(_._2))
         srcIter.foreach { case (srcId, srcFactor) =>
           dstIter.foreach { case (dstId, dstFactor) =>
-            /*
-             * The below code is equivalent to
-             *    `val score = blas.sdot(rank, srcFactor, 1, dstFactor, 1)`
-             * This handwritten version is as or more efficient as BLAS calls in this case.
-             */
-            var score = 0.0f
-            var k = 0
-            while (k < rank) {
-              score += srcFactor(k) * dstFactor(k)
-              k += 1
-            }
+            // We use F2jBLAS which is faster than a call to native BLAS for vector dot product
+            val score = ALSModel._f2jBLAS.sdot(rank, srcFactor, 1, dstFactor, 1)
             pq += dstId -> score
           }
-          val pqIter = pq.iterator
-          var i = 0
-          while (i < n) {
-            val (dstId, score) = pqIter.next()
-            output(j + i) = (srcId, dstId, score)
+          pq.foreach { case (dstId, score) =>
+            output(i) = (srcId, dstId, score)
             i += 1
           }
-          j += n
           pq.clear()
         }
         output.toSeq
@@ -450,6 +438,8 @@ class ALSModel private[ml] (
 
 @Since("1.6.0")
 object ALSModel extends MLReadable[ALSModel] {
+
+  @transient private[recommendation] val _f2jBLAS = new F2jBLAS
 
   private val NaN = "nan"
   private val Drop = "drop"
