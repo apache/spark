@@ -32,7 +32,10 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class OrcRecordIterator extends Iterator[InternalRow] with Logging {
+/**
+ * A RecordIterator returns InternalRow from ORC data source.
+ */
+private[orc] class OrcRecordIterator extends Iterator[InternalRow] with Logging {
 
   /**
    * ORC File Reader.

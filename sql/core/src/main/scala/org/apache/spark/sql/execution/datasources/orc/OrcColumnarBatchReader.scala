@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
 /**
  * To support vectorization in WholeStageCodeGen, this reader returns ColumnarBatch.
  */
-class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBatch] with Logging {
+private[orc] class OrcColumnarBatchReader extends RecordReader[Void, ColumnarBatch] with Logging {
   import OrcColumnarBatchReader._
 
   /**
