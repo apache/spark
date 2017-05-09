@@ -387,7 +387,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("to_date(s)"),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
 
-     // Now with format
+    // now with format
     checkAnswer(
       df.select(to_date(col("t"), "yyyy-MM-dd")),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
@@ -400,12 +400,12 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(to_date(col("s"), "yyyy-MM-dd")),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
 
-    // Now switch format
+    // now switch format
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-dd-MM")),
       Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
 
-    // Invalid format
+    // invalid format
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-hh-MM")),
       Seq(Row(null), Row(null), Row(null)))
@@ -413,7 +413,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(to_date(col("s"), "yyyy-dd-aa")),
       Seq(Row(null), Row(null), Row(null)))
 
-    // February
+    // february
     val x1 = "2016-02-29"
     val x2 = "2017-02-29"
     val df1 = Seq(x1, x2).toDF("x")

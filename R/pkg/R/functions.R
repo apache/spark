@@ -1758,7 +1758,7 @@ setMethod("toRadians",
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a DateType if the format is omitted
-#' (equivalent with \code{cast(df$x, "date")}).
+#' (equivalent to \code{cast(df$x, "date")}).
 #'
 #' @param x Column to parse.
 #' @param format string to use to parse x Column to DateType. (optional)
@@ -1834,7 +1834,7 @@ setMethod("to_json", signature(x = "Column"),
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a TimestampType if the format is omitted
-#' (equivalent with \code{cast(df$x, "timestamp")}).
+#' (equivalent to \code{cast(df$x, "timestamp")}).
 #'
 #' @param x Column to parse.
 #' @param format string to use to parse x Column to TimestampType. (optional)
