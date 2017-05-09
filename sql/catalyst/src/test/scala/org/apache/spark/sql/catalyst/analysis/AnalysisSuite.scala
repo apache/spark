@@ -442,13 +442,15 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   }
 
   test("SPARK-20311 range(N) as alias") {
-    def rangeWithAliases(outputNames: Seq[String]): LogicalPlan = {
-      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(7) :: Nil, outputNames))
+    def rangeWithAliases(args: Seq[Int], outputNames: Seq[String]): LogicalPlan = {
+      SubqueryAlias("t", UnresolvedTableValuedFunction("range", args.map(Literal(_)), outputNames))
         .select(star())
     }
-    assertAnalysisSuccess(rangeWithAliases("a" :: Nil))
+    assertAnalysisSuccess(rangeWithAliases(3 :: Nil, "a" :: Nil))
+    assertAnalysisSuccess(rangeWithAliases(1 :: 4 :: Nil, "b" :: Nil))
+    assertAnalysisSuccess(rangeWithAliases(2 :: 6 :: 2 :: Nil, "c" :: Nil))
     assertAnalysisError(
-      rangeWithAliases("a" :: "b" :: Nil),
+      rangeWithAliases(3 :: Nil, "a" :: "b" :: Nil),
       Seq("expected 1 columns but found 2 columns"))
   }
 }
