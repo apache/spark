@@ -1508,6 +1508,24 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
   }
 
+  test("SPARK-18884 throw an exception when array arguments used in functions.udf") {
+    Seq("true", "false").foreach { codegenEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+        val e1 = intercept[ClassCastException] {
+          udf { (ar1: Array[Int]) => ar1.sum }
+        }
+        assert(e1.getMessage ===
+          "Can't cast Catalyst ArrayType to Array[_], so you should use Seq[_] instead")
+
+        val e2 = intercept[ClassCastException] {
+          spark.udf.register("testUdf", (ar1: Array[Int]) => ar1.sum)
+        }
+        assert(e2.getMessage ===
+          "Can't cast Catalyst ArrayType to Array[_], so you should use Seq[_] instead")
+      }
+    }
+  }
+
   test("SPARK-12398 truncated toString") {
     val df1 = Seq((1L, "row1")).toDF("id", "name")
     assert(df1.toString() === "[id: bigint, name: string]")

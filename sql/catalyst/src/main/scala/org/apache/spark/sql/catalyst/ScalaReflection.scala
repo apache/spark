@@ -763,6 +763,26 @@ object ScalaReflection extends ScalaReflection {
     tpe <:< localTypeOf[Product] || tpe <:< localTypeOf[DefinedByConstructorParams]
   }
 
+  // Throw `ClasCastException` if a given Scala type is not compatible with Catalyst one.
+  // This function is mainly used to validate argument types in user-defined functions.
+  def catalystDataTypeFor[T: TypeTag]: DataType = catalystDataTypeFor(localTypeOf[T])
+
+  private def catalystDataTypeFor(tpe: `Type`): DataType = ScalaReflectionLock.synchronized {
+    tpe match {
+      case t if t <:< localTypeOf[Array[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        // Array[Byte] is only accepted in array types
+        if (schemaFor(elementType).dataType == ByteType) {
+          BinaryType
+        } else {
+          throw new ClassCastException(
+            "Can't cast Catalyst ArrayType to Array[_], so you should use Seq[_] instead")
+        }
+      case _ =>
+        schemaFor(tpe).dataType
+    }
+  }
+
   private val javaKeywords = Set("abstract", "assert", "boolean", "break", "byte", "case", "catch",
     "char", "class", "const", "continue", "default", "do", "double", "else", "extends", "false",
     "final", "finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int",
