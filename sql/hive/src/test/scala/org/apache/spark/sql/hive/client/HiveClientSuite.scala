@@ -101,30 +101,6 @@ class HiveClientSuite extends SparkFunSuite {
       "aa" :: "ab" :: "ba" :: "bb" :: Nil)
   }
 
-  test("getPartitionsByFilter: ds=cast('20170101' as int)") {
-    testMetastorePartitionFiltering(
-      "ds=cast('20170101' as int)",
-      20170101 to 20170101,
-      0 to 23,
-      "aa" :: "ab" :: "ba" :: "bb" :: Nil)
-  }
-
-  test("getPartitionsByFilter: ds=(20170101 + 1)") {
-    testMetastorePartitionFiltering(
-      "ds=(20170101 + 1)",
-      20170102 to 20170102,
-      0 to 23,
-      "aa" :: "ab" :: "ba" :: "bb" :: Nil)
-  }
-
-  test("getPartitionsByFilter: (20170101 + 1)=ds") {
-    testMetastorePartitionFiltering(
-      "(20170101 + 1)=ds",
-      20170102 to 20170102,
-      0 to 23,
-      "aa" :: "ab" :: "ba" :: "bb" :: Nil)
-  }
-
   test("getPartitionsByFilter: ds=20170101 and h=10") {
     testMetastorePartitionFiltering(
       "ds=20170101 and h=10",

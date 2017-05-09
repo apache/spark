@@ -590,27 +590,32 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
       .map(col => col.getName).toSet
 
-    def isFoldable(expr: Expression): Boolean =
-      (expr.dataType.isInstanceOf[IntegralType] || expr.dataType.isInstanceOf[StringType]) &&
-      expr.foldable &&
-      expr.deterministic
+    def isExtractable(expr: Expression): Boolean =
+      expr match {
+        case Literal(_, _: IntegralType) | Literal(_, _: StringType) => true
+        case _ => false
+      }
 
-    def convertFoldable(expr: Expression): String = expr.dataType match {
-      case _: IntegralType => expr.eval(null).toString
-      case _: StringType => quoteStringLiteral(expr.eval(null).toString)
-    }
+    def extractValue(expr: Expression): String =
+      expr match {
+        case Literal(v, _: IntegralType) => v.toString
+        case Literal(v, _: StringType) => quoteStringLiteral(v.toString)
+      }
 
     def convert(filter: Expression): String =
       filter match {
-        case In(a: Attribute, exprs) if exprs.forall(isFoldable) =>
-          val or = exprs.map(expr => s"${a.name} = ${convertFoldable(expr)}").reduce(_ + " or " + _)
+        case In(a: Attribute, exprs) if exprs.forall(isExtractable) =>
+          val or =
+            exprs
+              .map(expr => s"${a.name} = ${extractValue(expr)}")
+              .reduce(_ + " or " + _)
           "(" + or + ")"
         case op @ BinaryComparison(a: Attribute, expr2)
-            if !varcharKeys.contains(a.name) && isFoldable(expr2) =>
-          s"(${a.name} ${op.symbol} ${convertFoldable(expr2)})"
+            if !varcharKeys.contains(a.name) && isExtractable(expr2) =>
+          s"${a.name} ${op.symbol} ${extractValue(expr2)}"
         case op @ BinaryComparison(expr1, a: Attribute)
-            if !varcharKeys.contains(a.name) && isFoldable(expr1) =>
-          s"(${convertFoldable(expr1)} ${op.symbol} ${a.name})"
+            if !varcharKeys.contains(a.name) && isExtractable(expr1) =>
+          s"${extractValue(expr1)} ${op.symbol} ${a.name}"
         case op @ And(expr1, expr2) =>
           s"(${convert(expr1)} and ${convert(expr2)})"
         case op @ Or(expr1, expr2) =>
