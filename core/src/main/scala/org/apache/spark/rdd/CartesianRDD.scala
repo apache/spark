@@ -22,7 +22,8 @@ import java.io.{IOException, ObjectOutputStream}
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import org.apache.spark.util.Utils
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 private[spark]
 class CartesianPartition(
@@ -71,9 +72,75 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
+    val blockManager = SparkEnv.get.blockManager
     val currSplit = split.asInstanceOf[CartesianPartition]
-    for (x <- rdd1.iterator(currSplit.s1, context);
-         y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
+    val blockId2 = RDDBlockId(rdd2.id, currSplit.s2.index)
+    // Whether the block persisted by the user with valid StorageLevel.
+    val persistedInLocal = blockManager.getStatus(blockId2) match {
+      case Some(result) =>
+        // This meaning if the block is cached by the user? If it's valid, it shouldn't be
+        // removed by other task.
+        result.storageLevel.isValid
+      case None => false
+    }
+    var cachedInLocal = false
+
+    // Try to get data from the local, otherwise it will be cached to the local.
+    def getOrElseCache(
+        rdd: RDD[U],
+        partition: Partition,
+        context: TaskContext,
+        level: StorageLevel): Iterator[U] = {
+      // Because the getLocalValues return a CompletionIterator, and it will release the read
+      // block after the iterator finish using. So there should update the flag.
+      cachedInLocal = blockManager.getStatus(blockId2) match {
+        case Some(_) => true
+        case None => false
+      }
+
+      if (persistedInLocal || cachedInLocal) {
+        blockManager.getLocalValues(blockId2) match {
+          case Some(result) =>
+            val existingMetrics = context.taskMetrics().inputMetrics
+            existingMetrics.incBytesRead(result.bytes)
+            return new InterruptibleIterator[U](context, result.data.asInstanceOf[Iterator[U]]) {
+              override def next(): U = {
+                existingMetrics.incRecordsRead(1)
+                delegate.next()
+              }
+            }
+          case None =>
+            if (persistedInLocal) {
+              throw new SparkException(s"Block $blockId2 was not found even though it's persisted")
+            }
+        }
+      }
+
+      val iterator = rdd.iterator(partition, context)
+      val cachedResult = blockManager.putIterator[U](blockId2, iterator, level, false) match {
+        case true =>
+          cachedInLocal = true
+          "successful"
+        case false => "failed"
+      }
+
+      logInfo(s"Cache the block $blockId2 to local $cachedResult.")
+      iterator
+    }
+
+    def removeCachedBlock(): Unit = {
+      val blockManager = SparkEnv.get.blockManager
+      if (!persistedInLocal || cachedInLocal || blockManager.isRemovable(blockId2)) {
+        blockManager.removeOrMarkAsRemovable(blockId2, false)
+      }
+    }
+
+    val resultIter =
+      for (x <- rdd1.iterator(currSplit.s1, context);
+           y <- getOrElseCache(rdd2, currSplit.s2, context, StorageLevel.MEMORY_AND_DISK))
+        yield (x, y)
+
+    CompletionIterator[(T, U), Iterator[(T, U)]](resultIter, removeCachedBlock())
   }
 
   override def getDependencies: Seq[Dependency[_]] = List(
