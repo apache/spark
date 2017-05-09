@@ -122,6 +122,13 @@ class VectorsSuite extends SparkFunSuite with Logging {
 
     val vec8 = Vectors.sparse(5, Array(1, 2), Array(0.0, -1.0))
     assert(vec8.argmax === 0)
+
+    // Check for case when sparse vector is non-empty but the values are empty
+    val vec9 = Vectors.sparse(100, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
+    assert(vec9.argmax === 0)
+
+    val vec10 = Vectors.sparse(1, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
+    assert(vec10.argmax === 0)
   }
 
   test("vector equals") {
