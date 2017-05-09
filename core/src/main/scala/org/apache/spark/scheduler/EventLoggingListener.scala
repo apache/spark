@@ -119,7 +119,7 @@ private[spark] class EventLoggingListener(
       val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
 
-      EventLoggingListener.initEventLog(bstream)
+      EventLoggingListener.initEventLog(bstream, testing, loggedEvents)
       fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
       writer = Some(new PrintWriter(bstream))
       logInfo("Logging events to %s".format(logPath))
@@ -283,10 +283,17 @@ private[spark] object EventLoggingListener extends Logging {
    *
    * @param logStream Raw output stream to the event log file.
    */
-  def initEventLog(logStream: OutputStream): Unit = {
+  def initEventLog(
+      logStream: OutputStream,
+      testing: Boolean,
+      loggedEvents: ArrayBuffer[JValue]): Unit = {
     val metadata = SparkListenerLogStart(SPARK_VERSION)
-    val metadataJson = compact(JsonProtocol.logStartToJson(metadata)) + "\n"
+    val eventJson = JsonProtocol.logStartToJson(metadata)
+    val metadataJson = compact(eventJson) + "\n"
     logStream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
+    if (testing && loggedEvents != null) {
+      loggedEvents += eventJson
+    }
   }
 
   /**

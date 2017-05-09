@@ -160,9 +160,9 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
 /**
  * An internal class that describes the metadata of an event log.
- * This event is not meant to be posted to listeners downstream.
  */
-private[spark] case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
+@DeveloperApi
+case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 /**
  * Interface for creating history listeners defined in other modules like SQL, which are used to

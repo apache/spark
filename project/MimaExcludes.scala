@@ -42,6 +42,9 @@ object MimaExcludes {
 
   // Exclude rules for 2.2.x
   lazy val v22excludes = v21excludes ++ Seq(
+    // [SPARK-20355] Add per application spark version on the history server headerpage
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.this"),
+
     // [SPARK-19652][UI] Do auth checks for REST API access.
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.history.HistoryServer.withSparkUI"),
     ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.status.api.v1.UIRootFromServletContext"),
