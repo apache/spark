@@ -569,21 +569,21 @@ object DataSource extends Logging {
         case head :: Nil =>
           // there is exactly one registered alias
           head.getClass
-        case sources if sources.map(_.getClass.getName).exists(_.startsWith("org.apache.spark")) =>
-          // There are multiple registered aliases for the input. If there is "org.apache.spark"
-          // package in the prefix, we use it considering it is an internal datasource within Spark.
-          val internalSource =
-            sources.find(_.getClass.getName.startsWith("org.apache.spark")).head
-          logWarning(s"Multiple sources found for $provider1 " +
-            s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
-            "please specify the fully qualified class name. " +
-            s"Using the internal datasource (${internalSource.getClass.getName}).")
-          internalSource.getClass
         case sources =>
-          // There are multiple registered aliases for the input
-          sys.error(s"Multiple sources found for $provider1 " +
-            s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
-            "please specify the fully qualified class name.")
+          // There are multiple registered aliases for the input. If there is single datasource
+          // that has "org.apache.spark" package in the prefix, we use it considering it is an
+          // internal datasource within Spark.
+          val sourceNames = sources.map(_.getClass.getName)
+          val internalSources = sources.filter(_.getClass.getName.startsWith("org.apache.spark"))
+          if (internalSources.size == 1) {
+            logWarning(s"Multiple sources found for $provider1 (${sourceNames.mkString(", ")}), " +
+              "please specify the fully qualified class name. " +
+              s"Using the internal datasource (${internalSources.head.getClass.getName}).")
+            internalSources.head.getClass
+          } else {
+            sys.error(s"Multiple sources found for $provider1 (${sourceNames.mkString(", ")}), " +
+              "please specify the fully qualified class name.")
+          }
       }
     } catch {
       case e: ServiceConfigurationError if e.getCause.isInstanceOf[NoClassDefFoundError] =>
