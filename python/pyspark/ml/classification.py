@@ -416,42 +416,42 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         return self.getOrDefault(self.family)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def setLowerBoundsOnCoefficients(self, value):
         """
         Sets the value of :py:attr:`lowerBoundsOnCoefficients`
         """
         return self._set(lowerBoundsOnCoefficients=value)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def getLowerBoundsOnCoefficients(self):
         """
         Gets the value of :py:attr:`lowerBoundsOnCoefficients`
         """
         return self.getOrDefault(self.lowerBoundsOnCoefficients)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def setUpperBoundsOnCoefficients(self, value):
         """
         Sets the value of :py:attr:`upperBoundsOnCoefficients`
         """
         return self._set(upperBoundsOnCoefficients=value)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def getUpperBoundsOnCoefficients(self):
         """
         Gets the value of :py:attr:`upperBoundsOnCoefficients`
         """
         return self.getOrDefault(self.upperBoundsOnCoefficients)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def setLowerBoundsOnIntercepts(self, value):
         """
         Sets the value of :py:attr:`lowerBoundsOnIntercepts`
         """
         return self._set(lowerBoundsOnIntercepts=value)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def getLowerBoundsOnIntercepts(self):
         """
         Gets the value of :py:attr:`lowerBoundsOnIntercepts`
