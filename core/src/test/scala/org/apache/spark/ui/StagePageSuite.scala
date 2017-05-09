@@ -29,6 +29,7 @@ import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.config._
 import org.apache.spark.ui.jobs.{StagePage, StagesTab}
 import org.apache.spark.util.Utils
 
@@ -37,15 +38,13 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
   private val peakExecutionMemory = 10
 
   test("peak execution memory should displayed") {
-    val conf = new SparkConf(false)
-    val html = renderStagePage(conf).toString().toLowerCase(Locale.ROOT)
+    val html = renderStagePage().toString().toLowerCase(Locale.ROOT)
     val targetString = "peak execution memory"
     assert(html.contains(targetString))
   }
 
   test("SPARK-10543: peak execution memory should be per-task rather than cumulative") {
-    val conf = new SparkConf(false)
-    val html = renderStagePage(conf).toString().toLowerCase(Locale.ROOT)
+    val html = renderStagePage().toString().toLowerCase(Locale.ROOT)
     // verify min/25/50/75/max show task value not cumulative values
     assert(html.contains(s"<td>$peakExecutionMemory.0 b</td>" * 5))
   }
@@ -54,7 +53,8 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
    * Render a stage page started with the given conf and return the HTML.
    * This also runs a dummy stage to populate the page with useful content.
    */
-  private def renderStagePage(conf: SparkConf): Seq[Node] = {
+  private def renderStagePage(): Seq[Node] = {
+    val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     val bus = new ReplayListenerBus()
     val store = AppStatusStore.createLiveStore(conf, l => bus.addListener(l))
 

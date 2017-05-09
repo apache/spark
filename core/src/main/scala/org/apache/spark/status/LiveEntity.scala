@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.HashMap
 
+import com.google.common.collect.Interners
+
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
@@ -119,7 +121,7 @@ private class LiveTask(
 
   import LiveEntityHelpers._
 
-  private var recordedMetrics: v1.TaskMetrics = null
+  private var metrics: MetricsTracker = new MetricsTracker()
 
   var errorMessage: Option[String] = None
 
@@ -127,110 +129,107 @@ private class LiveTask(
    * Update the metrics for the task and return the difference between the previous and new
    * values.
    */
-  def updateMetrics(metrics: TaskMetrics): v1.TaskMetrics = {
+  def updateMetrics(metrics: TaskMetrics): MetricsTracker = {
     if (metrics != null) {
-      val old = recordedMetrics
-      recordedMetrics = new v1.TaskMetrics(
-        metrics.executorDeserializeTime,
-        metrics.executorDeserializeCpuTime,
-        metrics.executorRunTime,
-        metrics.executorCpuTime,
-        metrics.resultSize,
-        metrics.jvmGCTime,
-        metrics.resultSerializationTime,
-        metrics.memoryBytesSpilled,
-        metrics.diskBytesSpilled,
-        metrics.peakExecutionMemory,
-        new v1.InputMetrics(
-          metrics.inputMetrics.bytesRead,
-          metrics.inputMetrics.recordsRead),
-        new v1.OutputMetrics(
-          metrics.outputMetrics.bytesWritten,
-          metrics.outputMetrics.recordsWritten),
-        new v1.ShuffleReadMetrics(
-          metrics.shuffleReadMetrics.remoteBlocksFetched,
-          metrics.shuffleReadMetrics.localBlocksFetched,
-          metrics.shuffleReadMetrics.fetchWaitTime,
-          metrics.shuffleReadMetrics.remoteBytesRead,
-          metrics.shuffleReadMetrics.remoteBytesReadToDisk,
-          metrics.shuffleReadMetrics.localBytesRead,
-          metrics.shuffleReadMetrics.recordsRead),
-        new v1.ShuffleWriteMetrics(
-          metrics.shuffleWriteMetrics.bytesWritten,
-          metrics.shuffleWriteMetrics.writeTime,
-          metrics.shuffleWriteMetrics.recordsWritten))
-      if (old != null) calculateMetricsDelta(recordedMetrics, old) else recordedMetrics
+      val old = this.metrics
+      val newMetrics = new MetricsTracker()
+      newMetrics.executorDeserializeTime = metrics.executorDeserializeTime
+      newMetrics.executorDeserializeCpuTime = metrics.executorDeserializeCpuTime
+      newMetrics.executorRunTime = metrics.executorRunTime
+      newMetrics.executorCpuTime = metrics.executorCpuTime
+      newMetrics.resultSize = metrics.resultSize
+      newMetrics.jvmGcTime = metrics.jvmGCTime
+      newMetrics.resultSerializationTime = metrics.resultSerializationTime
+      newMetrics.memoryBytesSpilled = metrics.memoryBytesSpilled
+      newMetrics.diskBytesSpilled = metrics.diskBytesSpilled
+      newMetrics.peakExecutionMemory = metrics.peakExecutionMemory
+      newMetrics.inputBytesRead = metrics.inputMetrics.bytesRead
+      newMetrics.inputRecordsRead = metrics.inputMetrics.recordsRead
+      newMetrics.outputBytesWritten = metrics.outputMetrics.bytesWritten
+      newMetrics.outputRecordsWritten = metrics.outputMetrics.recordsWritten
+      newMetrics.shuffleRemoteBlocksFetched = metrics.shuffleReadMetrics.remoteBlocksFetched
+      newMetrics.shuffleLocalBlocksFetched = metrics.shuffleReadMetrics.localBlocksFetched
+      newMetrics.shuffleFetchWaitTime = metrics.shuffleReadMetrics.fetchWaitTime
+      newMetrics.shuffleRemoteBytesRead = metrics.shuffleReadMetrics.remoteBytesRead
+      newMetrics.shuffleRemoteBytesReadToDisk = metrics.shuffleReadMetrics.remoteBytesReadToDisk
+      newMetrics.shuffleLocalBytesRead = metrics.shuffleReadMetrics.localBytesRead
+      newMetrics.shuffleRecordsRead = metrics.shuffleReadMetrics.recordsRead
+      newMetrics.shuffleBytesWritten = metrics.shuffleWriteMetrics.bytesWritten
+      newMetrics.shuffleWriteTime = metrics.shuffleWriteMetrics.writeTime
+      newMetrics.shuffleRecordsWritten = metrics.shuffleWriteMetrics.recordsWritten
+
+      this.metrics = newMetrics
+      if (old.executorDeserializeTime >= 0L) {
+        old.subtract(newMetrics)
+        old
+      } else {
+        newMetrics
+      }
     } else {
       null
     }
   }
 
-  /**
-   * Return a new TaskMetrics object containing the delta of the various fields of the given
-   * metrics objects. This is currently targeted at updating stage data, so it does not
-   * necessarily calculate deltas for all the fields.
-   */
-  private def calculateMetricsDelta(
-      metrics: v1.TaskMetrics,
-      old: v1.TaskMetrics): v1.TaskMetrics = {
-    val shuffleWriteDelta = new v1.ShuffleWriteMetrics(
-      metrics.shuffleWriteMetrics.bytesWritten - old.shuffleWriteMetrics.bytesWritten,
-      0L,
-      metrics.shuffleWriteMetrics.recordsWritten - old.shuffleWriteMetrics.recordsWritten)
-
-    val shuffleReadDelta = new v1.ShuffleReadMetrics(
-      0L, 0L, 0L,
-      metrics.shuffleReadMetrics.remoteBytesRead - old.shuffleReadMetrics.remoteBytesRead,
-      metrics.shuffleReadMetrics.remoteBytesReadToDisk -
-        old.shuffleReadMetrics.remoteBytesReadToDisk,
-      metrics.shuffleReadMetrics.localBytesRead - old.shuffleReadMetrics.localBytesRead,
-      metrics.shuffleReadMetrics.recordsRead - old.shuffleReadMetrics.recordsRead)
-
-    val inputDelta = new v1.InputMetrics(
-      metrics.inputMetrics.bytesRead - old.inputMetrics.bytesRead,
-      metrics.inputMetrics.recordsRead - old.inputMetrics.recordsRead)
-
-    val outputDelta = new v1.OutputMetrics(
-      metrics.outputMetrics.bytesWritten - old.outputMetrics.bytesWritten,
-      metrics.outputMetrics.recordsWritten - old.outputMetrics.recordsWritten)
-
-    new v1.TaskMetrics(
-      0L, 0L,
-      metrics.executorRunTime - old.executorRunTime,
-      metrics.executorCpuTime - old.executorCpuTime,
-      0L, 0L, 0L,
-      metrics.memoryBytesSpilled - old.memoryBytesSpilled,
-      metrics.diskBytesSpilled - old.diskBytesSpilled,
-      0L,
-      inputDelta,
-      outputDelta,
-      shuffleReadDelta,
-      shuffleWriteDelta)
-  }
-
-  override protected def doUpdate(): Any = {
+  private def buildUpdate(): TaskDataWrapper = {
     val duration = if (info.finished) {
       info.duration
     } else {
       info.timeRunning(lastUpdateTime.getOrElse(System.currentTimeMillis()))
     }
 
-    val task = new v1.TaskData(
+    new TaskDataWrapper(
       info.taskId,
       info.index,
       info.attemptNumber,
-      new Date(info.launchTime),
-      if (info.gettingResult) Some(new Date(info.gettingResultTime)) else None,
-      Some(duration),
-      info.executorId,
-      info.host,
-      info.status,
-      info.taskLocality.toString(),
+      info.launchTime,
+      if (info.gettingResult) info.gettingResultTime else -1L,
+      duration,
+      weakIntern(info.executorId),
+      weakIntern(info.host),
+      weakIntern(info.status),
+      weakIntern(info.taskLocality.toString()),
       info.speculative,
       newAccumulatorInfos(info.accumulables),
       errorMessage,
-      Option(recordedMetrics))
-    new TaskDataWrapper(task, stageId, stageAttemptId)
+
+      metrics.executorDeserializeTime,
+      metrics.executorDeserializeCpuTime,
+      metrics.executorRunTime,
+      metrics.executorCpuTime,
+      metrics.resultSize,
+      metrics.jvmGcTime,
+      metrics.resultSerializationTime,
+      metrics.memoryBytesSpilled,
+      metrics.diskBytesSpilled,
+      metrics.peakExecutionMemory,
+      metrics.inputBytesRead,
+      metrics.inputRecordsRead,
+      metrics.outputBytesWritten,
+      metrics.outputRecordsWritten,
+      metrics.shuffleRemoteBlocksFetched,
+      metrics.shuffleLocalBlocksFetched,
+      metrics.shuffleFetchWaitTime,
+      metrics.shuffleRemoteBytesRead,
+      metrics.shuffleRemoteBytesReadToDisk,
+      metrics.shuffleLocalBytesRead,
+      metrics.shuffleRecordsRead,
+      metrics.shuffleBytesWritten,
+      metrics.shuffleWriteTime,
+      metrics.shuffleRecordsWritten,
+
+      stageId,
+      stageAttemptId)
+  }
+
+  override protected def doUpdate(): Any = {
+    buildUpdate()
+  }
+
+  def updateAndGet(kvstore: KVStore, now: Long): TaskDataWrapper = {
+    val info = buildUpdate()
+    kvstore.write(info)
+    lastWriteTime = now
+    info
   }
 
 }
@@ -313,35 +312,84 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
 
 }
 
-/** Metrics tracked per stage (both total and per executor). */
-private class MetricsTracker {
-  var executorRunTime = 0L
-  var executorCpuTime = 0L
-  var inputBytes = 0L
-  var inputRecords = 0L
-  var outputBytes = 0L
-  var outputRecords = 0L
-  var shuffleReadBytes = 0L
-  var shuffleReadRecords = 0L
-  var shuffleWriteBytes = 0L
-  var shuffleWriteRecords = 0L
-  var memoryBytesSpilled = 0L
-  var diskBytesSpilled = 0L
+private class MetricsTracker(default: Long = -1L) {
+  var executorDeserializeTime = default
+  var executorDeserializeCpuTime = default
+  var executorRunTime = default
+  var executorCpuTime = default
+  var resultSize = default
+  var jvmGcTime = default
+  var resultSerializationTime = default
+  var memoryBytesSpilled = default
+  var diskBytesSpilled = default
+  var peakExecutionMemory = default
+  var inputBytesRead = default
+  var inputRecordsRead = default
+  var outputBytesWritten = default
+  var outputRecordsWritten = default
+  var shuffleRemoteBlocksFetched = default
+  var shuffleLocalBlocksFetched = default
+  var shuffleFetchWaitTime = default
+  var shuffleRemoteBytesRead = default
+  var shuffleRemoteBytesReadToDisk = default
+  var shuffleLocalBytesRead = default
+  var shuffleRecordsRead = default
+  var shuffleBytesWritten = default
+  var shuffleWriteTime = default
+  var shuffleRecordsWritten = default
 
-  def update(delta: v1.TaskMetrics): Unit = {
+  def add(delta: MetricsTracker): Unit = {
+    executorDeserializeTime += delta.executorDeserializeTime
+    executorDeserializeCpuTime += delta.executorDeserializeCpuTime
     executorRunTime += delta.executorRunTime
     executorCpuTime += delta.executorCpuTime
-    inputBytes += delta.inputMetrics.bytesRead
-    inputRecords += delta.inputMetrics.recordsRead
-    outputBytes += delta.outputMetrics.bytesWritten
-    outputRecords += delta.outputMetrics.recordsWritten
-    shuffleReadBytes += delta.shuffleReadMetrics.localBytesRead +
-      delta.shuffleReadMetrics.remoteBytesRead
-    shuffleReadRecords += delta.shuffleReadMetrics.recordsRead
-    shuffleWriteBytes += delta.shuffleWriteMetrics.bytesWritten
-    shuffleWriteRecords += delta.shuffleWriteMetrics.recordsWritten
+    resultSize += delta.resultSize
+    jvmGcTime += delta.jvmGcTime
+    resultSerializationTime += delta.resultSerializationTime
     memoryBytesSpilled += delta.memoryBytesSpilled
     diskBytesSpilled += delta.diskBytesSpilled
+    peakExecutionMemory += delta.peakExecutionMemory
+    inputBytesRead += delta.inputBytesRead
+    inputRecordsRead += delta.inputRecordsRead
+    outputBytesWritten += delta.outputBytesWritten
+    outputRecordsWritten += delta.outputRecordsWritten
+    shuffleRemoteBlocksFetched += delta.shuffleRemoteBlocksFetched
+    shuffleLocalBlocksFetched += delta.shuffleLocalBlocksFetched
+    shuffleFetchWaitTime += delta.shuffleFetchWaitTime
+    shuffleRemoteBytesRead += delta.shuffleRemoteBytesRead
+    shuffleRemoteBytesReadToDisk += delta.shuffleRemoteBytesReadToDisk
+    shuffleLocalBytesRead += delta.shuffleLocalBytesRead
+    shuffleRecordsRead += delta.shuffleRecordsRead
+    shuffleBytesWritten += delta.shuffleBytesWritten
+    shuffleWriteTime += delta.shuffleWriteTime
+    shuffleRecordsWritten += delta.shuffleRecordsWritten
+  }
+
+  def subtract(delta: MetricsTracker): Unit = {
+    executorDeserializeTime -= delta.executorDeserializeTime
+    executorDeserializeCpuTime -= delta.executorDeserializeCpuTime
+    executorRunTime -= delta.executorRunTime
+    executorCpuTime -= delta.executorCpuTime
+    resultSize -= delta.resultSize
+    jvmGcTime -= delta.jvmGcTime
+    resultSerializationTime -= delta.resultSerializationTime
+    memoryBytesSpilled -= delta.memoryBytesSpilled
+    diskBytesSpilled -= delta.diskBytesSpilled
+    peakExecutionMemory -= delta.peakExecutionMemory
+    inputBytesRead -= delta.inputBytesRead
+    inputRecordsRead -= delta.inputRecordsRead
+    outputBytesWritten -= delta.outputBytesWritten
+    outputRecordsWritten -= delta.outputRecordsWritten
+    shuffleRemoteBlocksFetched -= delta.shuffleRemoteBlocksFetched
+    shuffleLocalBlocksFetched -= delta.shuffleLocalBlocksFetched
+    shuffleFetchWaitTime -= delta.shuffleFetchWaitTime
+    shuffleRemoteBytesRead -= delta.shuffleRemoteBytesRead
+    shuffleRemoteBytesReadToDisk -= delta.shuffleRemoteBytesReadToDisk
+    shuffleLocalBytesRead -= delta.shuffleLocalBytesRead
+    shuffleRecordsRead -= delta.shuffleRecordsRead
+    shuffleBytesWritten -= delta.shuffleBytesWritten
+    shuffleWriteTime -= delta.shuffleWriteTime
+    shuffleRecordsWritten -= delta.shuffleRecordsWritten
   }
 
 }
@@ -356,7 +404,7 @@ private class LiveExecutorStageSummary(
   var failedTasks = 0
   var killedTasks = 0
 
-  val metrics = new MetricsTracker()
+  val metrics = new MetricsTracker(default = 0L)
 
   override protected def doUpdate(): Any = {
     val info = new v1.ExecutorStageSummary(
@@ -364,14 +412,14 @@ private class LiveExecutorStageSummary(
       failedTasks,
       succeededTasks,
       killedTasks,
-      metrics.inputBytes,
-      metrics.inputRecords,
-      metrics.outputBytes,
-      metrics.outputRecords,
-      metrics.shuffleReadBytes,
-      metrics.shuffleReadRecords,
-      metrics.shuffleWriteBytes,
-      metrics.shuffleWriteRecords,
+      metrics.inputBytesRead,
+      metrics.inputRecordsRead,
+      metrics.outputBytesWritten,
+      metrics.outputRecordsWritten,
+      metrics.shuffleRemoteBytesRead + metrics.shuffleLocalBytesRead,
+      metrics.shuffleRecordsRead,
+      metrics.shuffleBytesWritten,
+      metrics.shuffleRecordsWritten,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
@@ -402,7 +450,9 @@ private class LiveStage extends LiveEntity {
 
   var firstLaunchTime = Long.MaxValue
 
-  val metrics = new MetricsTracker()
+  var localitySummary: Map[String, Long] = Map()
+
+  val metrics = new MetricsTracker(default = 0L)
 
   val executorSummaries = new HashMap[String, LiveExecutorStageSummary]()
 
@@ -435,14 +485,14 @@ private class LiveStage extends LiveEntity {
       info.completionTime.map(new Date(_)),
       info.failureReason,
 
-      metrics.inputBytes,
-      metrics.inputRecords,
-      metrics.outputBytes,
-      metrics.outputRecords,
-      metrics.shuffleReadBytes,
-      metrics.shuffleReadRecords,
-      metrics.shuffleWriteBytes,
-      metrics.shuffleWriteRecords,
+      metrics.inputBytesRead,
+      metrics.inputRecordsRead,
+      metrics.outputBytesWritten,
+      metrics.outputRecordsWritten,
+      metrics.shuffleLocalBytesRead + metrics.shuffleRemoteBytesRead,
+      metrics.shuffleRecordsRead,
+      metrics.shuffleBytesWritten,
+      metrics.shuffleRecordsWritten,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
 
@@ -459,12 +509,14 @@ private class LiveStage extends LiveEntity {
   }
 
   override protected def doUpdate(): Any = {
-    new StageDataWrapper(toApi(), jobIds)
+    new StageDataWrapper(toApi(), jobIds, localitySummary)
   }
 
 }
 
 private class LiveRDDPartition(val blockName: String) {
+
+  import LiveEntityHelpers._
 
   // Pointers used by RDDPartitionSeq.
   @volatile var prev: LiveRDDPartition = null
@@ -485,7 +537,7 @@ private class LiveRDDPartition(val blockName: String) {
       diskUsed: Long): Unit = {
     value = new v1.RDDPartitionInfo(
       blockName,
-      storageLevel,
+      weakIntern(storageLevel),
       memoryUsed,
       diskUsed,
       executors)
@@ -494,6 +546,8 @@ private class LiveRDDPartition(val blockName: String) {
 }
 
 private class LiveRDDDistribution(exec: LiveExecutor) {
+
+  import LiveEntityHelpers._
 
   val executorId = exec.executorId
   var memoryUsed = 0L
@@ -508,7 +562,7 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
   def toApi(): v1.RDDDataDistribution = {
     if (lastUpdate == null) {
       lastUpdate = new v1.RDDDataDistribution(
-        exec.hostPort,
+        weakIntern(exec.hostPort),
         memoryUsed,
         exec.maxMemory - exec.memoryUsed,
         diskUsed,
@@ -524,7 +578,9 @@ private class LiveRDDDistribution(exec: LiveExecutor) {
 
 private class LiveRDD(val info: RDDInfo) extends LiveEntity {
 
-  var storageLevel: String = info.storageLevel.description
+  import LiveEntityHelpers._
+
+  var storageLevel: String = weakIntern(info.storageLevel.description)
   var memoryUsed = 0L
   var diskUsed = 0L
 
@@ -532,6 +588,10 @@ private class LiveRDD(val info: RDDInfo) extends LiveEntity {
   private val partitionSeq = new RDDPartitionSeq()
 
   private val distributions = new HashMap[String, LiveRDDDistribution]()
+
+  def setStorageLevel(level: String): Unit = {
+    this.storageLevel = weakIntern(level)
+  }
 
   def partition(blockName: String): LiveRDDPartition = {
     partitions.getOrElseUpdate(blockName, {
@@ -593,6 +653,9 @@ private class SchedulerPool(name: String) extends LiveEntity {
 
 private object LiveEntityHelpers {
 
+  private val stringInterner = Interners.newWeakInterner[String]()
+
+
   def newAccumulatorInfos(accums: Iterable[AccumulableInfo]): Seq[v1.AccumulableInfo] = {
     accums
       .filter { acc =>
@@ -604,11 +667,16 @@ private object LiveEntityHelpers {
       .map { acc =>
         new v1.AccumulableInfo(
           acc.id,
-          acc.name.orNull,
+          acc.name.map(weakIntern).orNull,
           acc.update.map(_.toString()),
           acc.value.map(_.toString()).orNull)
       }
       .toSeq
+  }
+
+  /** String interning to reduce the memory usage. */
+  def weakIntern(s: String): String = {
+    stringInterner.intern(s)
   }
 
 }
