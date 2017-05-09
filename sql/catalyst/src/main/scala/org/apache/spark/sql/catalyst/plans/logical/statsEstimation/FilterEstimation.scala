@@ -787,9 +787,8 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
       // decreases; otherwise keep it unchanged.
       val newNdv = EstimationUtils.updateNdv(oldNumRows = rowsBeforeFilter,
         newNumRows = rowsAfterFilter, oldNdv = oriColStat.distinctCount)
-      val colStat = if (updatedMap.contains(attr.exprId)) updatedMap(attr.exprId)._2 else oriColStat
-      val newColStat =
-        if (newNdv != colStat.distinctCount) colStat.copy(distinctCount = newNdv) else colStat
+      val colStat = updatedMap.get(attr.exprId).map(_._2).getOrElse(oriColStat)
+      val newColStat = colStat.copy(distinctCount = newNdv)
       attr -> newColStat
     }
     AttributeMap(newColumnStats.toSeq)
