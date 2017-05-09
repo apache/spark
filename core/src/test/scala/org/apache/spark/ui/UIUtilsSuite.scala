@@ -158,9 +158,9 @@ class UIUtilsSuite extends SparkFunSuite {
 
   test("SPARK-20393: Prevent links from parameters on page.") {
     val link =
-      """stdout'"><iframe+id%3D1131+src%3Dhttp%3A%2F%2Fdemo.testfire.net%2Fphishing.html>"""
+      """stdout'"><iframe+id%3D1131+src%3Dhttp%3A%2F%2Fdemo.test.net%2Fphishing.html>"""
     val stripLink =
-      "stdout&quot;&gt;&lt;iframe+id%3D1131+src%3Dhttp%3A%2F%2Fdemo.testfire.net%2Fphishing.html&gt;"
+      "stdout&quot;&gt;&lt;iframe+id%3D1131+src%3Dhttp%3A%2F%2Fdemo.test.net%2Fphishing.html&gt;"
 
     assert(stripLink === stripXSS(link))
   }
