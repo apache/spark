@@ -687,16 +687,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
       : LogicalPlan = withOrigin(ctx) {
-    val func = ctx.functionTable
-    val aliases = if (func.tableAlias.identifierList != null) {
-      visitIdentifierList(func.tableAlias.identifierList)
-    } else {
-      Seq.empty
-    }
-
-    val tvf = UnresolvedTableValuedFunction(
-      func.identifier.getText, func.expression.asScala.map(expression), aliases)
-    tvf.optionalMap(func.tableAlias.identifier)(aliasPlan)
+    UnresolvedTableValuedFunction(ctx.identifier.getText, ctx.expression.asScala.map(expression))
   }
 
   /**
@@ -714,14 +705,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       }
     }
 
-    val aliases = if (ctx.tableAlias.identifierList != null) {
-      visitIdentifierList(ctx.tableAlias.identifierList)
+    val aliases = if (ctx.identifierList != null) {
+      visitIdentifierList(ctx.identifierList)
     } else {
       Seq.tabulate(rows.head.size)(i => s"col${i + 1}")
     }
 
     val table = UnresolvedInlineTable(aliases, rows)
-    table.optionalMap(ctx.tableAlias.identifier)(aliasPlan)
+    table.optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**

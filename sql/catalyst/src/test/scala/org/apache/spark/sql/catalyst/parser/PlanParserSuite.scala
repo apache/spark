@@ -468,18 +468,7 @@ class PlanParserSuite extends PlanTest {
   test("table valued function") {
     assertEqual(
       "select * from range(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil, Seq.empty).select(star()))
-  }
-
-  test("SPARK-20311 range(N) as alias") {
-    assertEqual(
-      "select * from range(10) AS t",
-      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(10) :: Nil, Seq.empty))
-        .select(star()))
-    assertEqual(
-      "select * from range(7) AS t(a)",
-      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(7) :: Nil, "a" :: Nil))
-        .select(star()))
+      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
   }
 
   test("inline table") {

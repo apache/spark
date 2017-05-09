@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
@@ -439,18 +440,5 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
       caseSensitive = false)
 
     checkAnalysis(SubqueryAlias("tbl", testRelation).as("tbl2"), testRelation)
-  }
-
-  test("SPARK-20311 range(N) as alias") {
-    def rangeWithAliases(args: Seq[Int], outputNames: Seq[String]): LogicalPlan = {
-      SubqueryAlias("t", UnresolvedTableValuedFunction("range", args.map(Literal(_)), outputNames))
-        .select(star())
-    }
-    assertAnalysisSuccess(rangeWithAliases(3 :: Nil, "a" :: Nil))
-    assertAnalysisSuccess(rangeWithAliases(1 :: 4 :: Nil, "b" :: Nil))
-    assertAnalysisSuccess(rangeWithAliases(2 :: 6 :: 2 :: Nil, "c" :: Nil))
-    assertAnalysisError(
-      rangeWithAliases(3 :: Nil, "a" :: "b" :: Nil),
-      Seq("expected 1 columns but found 2 columns"))
   }
 }
