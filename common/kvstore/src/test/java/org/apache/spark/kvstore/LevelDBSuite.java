@@ -80,6 +80,7 @@ public class LevelDBSuite {
     t.key = "key";
     t.id = "id";
     t.name = "name";
+    t.child = "child";
 
     try {
       db.read(CustomType1.class, t.key);
@@ -111,11 +112,13 @@ public class LevelDBSuite {
     t1.key = "key1";
     t1.id = "id";
     t1.name = "name1";
+    t1.child = "child1";
 
     CustomType1 t2 = new CustomType1();
     t2.key = "key2";
     t2.id = "id";
     t2.name = "name2";
+    t2.child = "child2";
 
     db.write(t1);
     db.write(t2);
@@ -125,14 +128,14 @@ public class LevelDBSuite {
     assertEquals(2L, db.count(t1.getClass()));
 
     // There should be one "id" index entry with two values.
-    assertEquals(2, countIndexEntries(t1.getClass(), "id", t1.id));
+    assertEquals(2, db.count(t1.getClass(), "id", t1.id));
 
     // Delete the first entry; now there should be 3 remaining keys, since one of the "name"
     // index entries should have been removed.
     db.delete(t1.getClass(), t1.key);
 
     // Make sure there's a single entry in the "id" index now.
-    assertEquals(1, countIndexEntries(t2.getClass(), "id", t2.id));
+    assertEquals(1, db.count(t2.getClass(), "id", t2.id));
 
     // Delete the remaining entry, make sure all data is gone.
     db.delete(t2.getClass(), t2.key);
@@ -145,6 +148,7 @@ public class LevelDBSuite {
     t1.key = "1";
     t1.id = "id";
     t1.name = "name1";
+    t1.child = "child1";
 
     IntKeyType t2 = new IntKeyType();
     t2.key = 2;
@@ -164,15 +168,15 @@ public class LevelDBSuite {
     assertEquals(t3, db.read(t3.getClass(), t3.key));
 
     // There should be one "id" index with a single entry for each type.
-    assertEquals(1, countIndexEntries(t1.getClass(), "id", t1.id));
-    assertEquals(1, countIndexEntries(t2.getClass(), "id", t2.id));
-    assertEquals(1, countIndexEntries(t3.getClass(), "id", t3.id));
+    assertEquals(1, db.count(t1.getClass(), "id", t1.id));
+    assertEquals(1, db.count(t2.getClass(), "id", t2.id));
+    assertEquals(1, db.count(t3.getClass(), "id", t3.id));
 
     // Delete the first entry; this should not affect the entries for the second type.
     db.delete(t1.getClass(), t1.key);
     assertEquals(0, countKeys(t1.getClass()));
-    assertEquals(1, countIndexEntries(t2.getClass(), "id", t2.id));
-    assertEquals(1, countIndexEntries(t3.getClass(), "id", t3.id));
+    assertEquals(1, db.count(t2.getClass(), "id", t2.id));
+    assertEquals(1, db.count(t3.getClass(), "id", t3.id));
 
     // Delete the remaining entries, make sure all data is gone.
     db.delete(t2.getClass(), t2.key);
@@ -189,6 +193,7 @@ public class LevelDBSuite {
     CustomType1 t = new CustomType1();
     t.id = "id";
     t.name = "name";
+    t.child = "child";
 
     db.setMetadata(t);
     assertEquals(t, db.getMetadata(CustomType1.class));
@@ -197,17 +202,13 @@ public class LevelDBSuite {
     assertNull(db.getMetadata(CustomType1.class));
   }
 
-  private long countIndexEntries(Class<?> type, String index, Object value) throws Exception {
-    LevelDBTypeInfo.Index idx = db.getTypeInfo(type).index(index);
-    return idx.getCount(idx.end());
-  }
-
   @Test
   public void testUpdate() throws Exception {
     CustomType1 t = new CustomType1();
     t.key = "key";
     t.id = "id";
     t.name = "name";
+    t.child = "child";
 
     db.write(t);
 
@@ -216,16 +217,8 @@ public class LevelDBSuite {
     db.write(t);
 
     assertEquals(1, db.count(t.getClass()));
-
-    LevelDBTypeInfo.Index ni = db.getTypeInfo(t.getClass()).index("name");
-    assertEquals(1, ni.getCount(ni.end()));
-    assertEquals(1, ni.getCount(ni.end("anotherName")));
-    try {
-      db.get(ni.end("name"), Integer.class);
-      fail("Should have gotten an exception.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
+    assertEquals(1, db.count(t.getClass(), "name", "anotherName"));
+    assertEquals(0, db.count(t.getClass(), "name", "name"));
   }
 
   private int countKeys(Class<?> type) throws Exception {

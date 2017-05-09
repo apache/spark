@@ -114,4 +114,9 @@ public interface KVStore extends Closeable {
    */
   long count(Class<?> type) throws Exception;
 
+  /**
+   * Returns the number of items of the given type which match the given indexed value.
+   */
+  long count(Class<?> type, String index, Object indexedValue) throws Exception;
+
 }

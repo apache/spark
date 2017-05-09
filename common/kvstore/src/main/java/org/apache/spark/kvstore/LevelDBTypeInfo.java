@@ -27,35 +27,100 @@ import java.util.HashMap;
 import java.util.Map;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 
 /**
  * Holds metadata about app-specific types stored in LevelDB. Serves as a cache for data collected
  * via reflection, to make it cheaper to access it multiple times.
+ *
+ * <p>
+ * The hierarchy of keys stored in LevelDB looks roughly like the following. This hierarchy ensures
+ * that iteration over indices is easy, and that updating values in the store is not overly
+ * expensive. Of note, indices choose using more disk space (one value per key) instead of keeping
+ * lists of pointers, which would be more expensive to update at runtime.
+ * </p>
+ *
+ * <p>
+ * Indentation defines when a sub-key lives under a parent key. In LevelDB, this means the full
+ * key would be the concatenation of everything up to that point in the hierarchy, with each
+ * component separated by a NULL byte.
+ * </p>
+ *
+ * <pre>
+ * +TYPE_NAME
+ *   NATURAL_INDEX
+ *     +NATURAL_KEY
+ *     -
+ *   -NATURAL_INDEX
+ *   INDEX_NAME
+ *     +INDEX_VALUE
+ *       +NATURAL_KEY
+ *     -INDEX_VALUE
+ *     .INDEX_VALUE
+ *       CHILD_INDEX_NAME
+ *         +CHILD_INDEX_VALUE
+ *           NATURAL_KEY_OR_DATA
+ *         -
+ *   -INDEX_NAME
+ * </pre>
+ *
+ * <p>
+ * Entity data (either the entity's natural key or a copy of the data) is stored in all keys
+ * that end with "+NATURAL_KEY". A count of all objects that match a particular top-level index
+ * value is kept at the end marker. A count is also kept at the natural index's end marker,
+ * to make it easy to retrieve the number of all elements of a particular type.
+ * </p>
+ *
+ * <p>
+ * To illustrate, given a type "Foo", with a natural index and a second index called "bar", you'd
+ * have these keys and values in the store for two instances, one with natural key "key1" and the
+ * other "key2", both with value "yes" for "bar":
+ * </p>
+ *
+ * <pre>
+ * Foo __main__ +key1   [data for instance 1]
+ * Foo __main__ +key2   [data for instance 2]
+ * Foo __main__ -       [count of all Foo]
+ * Foo bar +yes +key1   [instance 1 key or data, depending on index type]
+ * Foo bar +yes +key2   [instance 2 key or data, depending on index type]
+ * Foo bar +yes -       [count of all Foo with "bar=yes" ]
+ * </pre>
+ *
+ * <p>
+ * Note that all indexed values are prepended with "+", even if the index itself does not have an
+ * explicit end marker. This allows for easily skipping to the end of an index by telling LevelDB
+ * to seek to the "phantom" end marker of the index.
+ * </p>
+ *
+ * <p>
+ * Child indices are stored after their parent index. In the example above, let's assume there is
+ * a child index "child", whose parent is "bar". If both instances have value "no" for this field,
+ * the data in the store would look something like the following:
+ * </p>
+ *
+ * <pre>
+ * ...
+ * Foo bar +yes -
+ * Foo bar .yes .child +no +key1   [instance 1 key or data, depending on index type]
+ * Foo bar .yes .child +no +key2   [instance 2 key or data, depending on index type]
+ * ...
+ * </pre>
  */
 class LevelDBTypeInfo {
 
-  static final String ENTRY_PREFIX = "+";
-  static final String END_MARKER = "-";
+  static final byte[] END_MARKER = new byte[] { '-' };
+  static final byte ENTRY_PREFIX = (byte) '+';
   static final byte KEY_SEPARATOR = 0x0;
+  static byte TRUE = (byte) '1';
+  static byte FALSE = (byte) '0';
 
-  // These constants are used in the Index.toKey() method below when encoding numbers into keys.
-  // See javadoc for that method for details.
-  private static final char POSITIVE_FILL = '.';
-  private static final char NEGATIVE_FILL = '~';
-  private static final char POSITIVE_MARKER = '=';
-  private static final char NEGATIVE_MARKER = '*';
-
-  @VisibleForTesting
-  static final int BYTE_ENCODED_LEN = String.valueOf(Byte.MAX_VALUE).length() + 1;
-  @VisibleForTesting
-  static final int INT_ENCODED_LEN = String.valueOf(Integer.MAX_VALUE).length() + 1;
-  @VisibleForTesting
-  static final int LONG_ENCODED_LEN = String.valueOf(Long.MAX_VALUE).length() + 1;
-  @VisibleForTesting
-  static final int SHORT_ENCODED_LEN = String.valueOf(Short.MAX_VALUE).length() + 1;
+  private static final byte SECONDARY_IDX_PREFIX = (byte) '.';
+  private static final byte POSITIVE_MARKER = (byte) '=';
+  private static final byte NEGATIVE_MARKER = (byte) '*';
+  private static final byte[] HEX_BYTES = new byte[] {
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
+  };
 
   private final LevelDB db;
   private final Class<?> type;
@@ -68,14 +133,21 @@ class LevelDBTypeInfo {
     this.indices = new HashMap<>();
 
     KVTypeInfo ti = new KVTypeInfo(type);
+
+    // First create the parent indices, then the child indices.
     ti.indices().forEach(idx -> {
-      indices.put(idx.value(), new Index(idx.value(), idx.copy(), ti.getAccessor(idx.value())));
+      if (idx.parent().isEmpty()) {
+        indices.put(idx.value(), new Index(idx, ti.getAccessor(idx.value()), null));
+      }
+    });
+    ti.indices().forEach(idx -> {
+      if (!idx.parent().isEmpty()) {
+        indices.put(idx.value(), new Index(idx, ti.getAccessor(idx.value()),
+          indices.get(idx.parent())));
+      }
     });
 
-    ByteArrayOutputStream typePrefix = new ByteArrayOutputStream();
-    typePrefix.write(utf8(ENTRY_PREFIX));
-    typePrefix.write(alias);
-    this.typePrefix = typePrefix.toByteArray();
+    this.typePrefix = alias;
   }
 
   Class<?> type() {
@@ -83,7 +155,7 @@ class LevelDBTypeInfo {
   }
 
   byte[] keyPrefix() {
-    return buildKey(false);
+    return typePrefix;
   }
 
   Index naturalIndex() {
@@ -101,87 +173,174 @@ class LevelDBTypeInfo {
     return indices.values();
   }
 
-  private byte[] utf8(String s) {
-    return s.getBytes(UTF_8);
+  byte[] buildKey(byte[]... components) {
+    return buildKey(true, components);
   }
 
-  private byte[] buildKey(boolean trim, String... components) {
-    try {
-      ByteArrayOutputStream kos = new ByteArrayOutputStream(typePrefix.length * 2);
-      kos.write(typePrefix);
-      for (int i = 0; i < components.length; i++) {
-        kos.write(utf8(components[i]));
-        if (!trim || i < components.length - 1) {
-          kos.write(KEY_SEPARATOR);
-        }
-      }
-      return kos.toByteArray();
-    } catch (IOException ioe) {
-      throw Throwables.propagate(ioe);
+  byte[] buildKey(boolean addTypePrefix, byte[]... components) {
+    int len = 0;
+    if (addTypePrefix) {
+      len += typePrefix.length + 1;
     }
+    for (byte[] comp : components) {
+      len += comp.length;
+    }
+    len += components.length - 1;
+
+    byte[] dest = new byte[len];
+    int written = 0;
+
+    if (addTypePrefix) {
+      System.arraycopy(typePrefix, 0, dest, 0, typePrefix.length);
+      dest[typePrefix.length] = KEY_SEPARATOR;
+      written += typePrefix.length + 1;
+    }
+
+    for (byte[] comp : components) {
+      System.arraycopy(comp, 0, dest, written, comp.length);
+      written += comp.length;
+      if (written < dest.length) {
+        dest[written] = KEY_SEPARATOR;
+        written++;
+      }
+    }
+
+    return dest;
   }
 
   /**
-   * Models a single index in LevelDB. Keys are stored under the type's prefix, in sequential
-   * order according to the indexed value. For non-natural indices, the key also contains the
-   * entity's natural key after the indexed value, so that it's possible for multiple entities
-   * to have the same indexed value.
-   *
-   * <p>
-   * An end marker is used to mark where the index ends, and the boundaries of each indexed value
-   * within the index, to make descending iteration faster, at the expense of some disk space and
-   * minor overhead when iterating. A count of the number of indexed entities is kept at the end
-   * marker, so that it can be cleaned up when all entries are removed from the index.
-   * </p>
+   * Models a single index in LevelDB. See top-level class's javadoc for a description of how the
+   * keys are generated.
    */
   class Index {
 
     private final boolean copy;
     private final boolean isNatural;
-    private final String name;
+    private final byte[] name;
     private final KVTypeInfo.Accessor accessor;
+    private final Index parent;
 
-    private Index(String name, boolean copy, KVTypeInfo.Accessor accessor) {
+    private Index(KVIndex self, KVTypeInfo.Accessor accessor, Index parent) {
+      byte[] name = self.value().getBytes(UTF_8);
+      if (parent != null) {
+        byte[] child = new byte[name.length + 1];
+        child[0] = SECONDARY_IDX_PREFIX;
+        System.arraycopy(name, 0, child, 1, name.length);
+      }
+
       this.name = name;
-      this.isNatural = name.equals(KVIndex.NATURAL_INDEX_NAME);
-      this.copy = isNatural || copy;
+      this.isNatural = self.value().equals(KVIndex.NATURAL_INDEX_NAME);
+      this.copy = isNatural || self.copy();
       this.accessor = accessor;
+      this.parent = parent;
     }
 
     boolean isCopy() {
       return copy;
     }
 
+    boolean isChild() {
+      return parent != null;
+    }
+
+    Index parent() {
+      return parent;
+    }
+
+    /**
+     * Creates a key prefix for child indices of this index. This allows the prefix to be
+     * calculated only once, avoiding redundant work when multiple child indices of the
+     * same parent index exist.
+     */
+    byte[] childPrefix(Object value, boolean isEntity) throws Exception {
+      Preconditions.checkState(parent == null, "Not a parent index.");
+      return buildKey(name, toParentKey(isEntity ? getValue(value) : value));
+    }
+
+    Object getValue(Object entity) throws Exception {
+      return accessor.get(entity);
+    }
+
+    private void checkParent(byte[] prefix) {
+      if (prefix != null) {
+        Preconditions.checkState(parent != null, "Parent prefix provided for parent index.");
+      } else {
+        Preconditions.checkState(parent == null, "Parent prefix missing for child index.");
+      }
+    }
+
     /** The prefix for all keys that belong to this index. */
-    byte[] keyPrefix() {
-      return buildKey(false, name);
+    byte[] keyPrefix(byte[] prefix) {
+      checkParent(prefix);
+      return (parent != null) ? buildKey(false, prefix, name) : buildKey(name);
     }
 
     /** The key where to start ascending iteration for entries that match the given value. */
-    byte[] start(Object value) {
-      return buildKey(isNatural, name, toKey(value));
+    byte[] start(byte[] prefix, Object value) {
+      checkParent(prefix);
+      return (parent != null) ? buildKey(false, prefix, name, toKey(value))
+        : buildKey(name, toKey(value));
     }
 
     /** The key for the index's end marker. */
-    byte[] end() {
-      return buildKey(true, name, END_MARKER);
+    byte[] end(byte[] prefix) {
+      checkParent(prefix);
+      return (parent != null) ? buildKey(false, prefix, name, END_MARKER)
+        : buildKey(name, END_MARKER);
     }
 
     /** The key for the end marker for index entries with the given value. */
-    byte[] end(Object value) throws Exception {
-      return buildKey(true, name, toKey(value), END_MARKER);
+    byte[] end(byte[] prefix, Object value) throws Exception {
+      checkParent(prefix);
+      return (parent != null) ? buildKey(false, prefix, name, toKey(value), END_MARKER)
+        : buildKey(name, toKey(value), END_MARKER);
     }
 
     /** The key in the index that identifies the given entity. */
-    byte[] entityKey(Object entity) throws Exception {
-      Object indexValue = accessor.get(entity);
+    byte[] entityKey(byte[] prefix, Object entity) throws Exception {
+      Object indexValue = getValue(entity);
       Preconditions.checkNotNull(indexValue, "Null index value for %s in type %s.",
         name, type.getName());
-      if (isNatural) {
-        return buildKey(true, name, toKey(indexValue));
+      byte[] entityKey = start(prefix, indexValue);
+      if (!isNatural) {
+        entityKey = buildKey(false, entityKey, toKey(naturalIndex().getValue(entity)));
+      }
+      return entityKey;
+    }
+
+    private void addOrRemove(
+        LevelDBWriteBatch batch,
+        Object entity,
+        byte[] data,
+        byte[] prefix) throws Exception {
+      Object indexValue = getValue(entity);
+      Preconditions.checkNotNull(indexValue, "Null index value for %s in type %s.",
+        name, type.getName());
+
+      byte[] entityKey = start(prefix, indexValue);
+      if (!isNatural) {
+        entityKey = buildKey(false, entityKey, toKey(naturalIndex().getValue(entity)));
+      }
+
+      long delta;
+      if (data != null) {
+        byte[] stored = data;
+        if (!copy) {
+          stored = toKey(naturalIndex().getValue(entity));
+        }
+        batch.put(entityKey, stored);
+        delta = 1L;
       } else {
-        Object naturalKey = naturalIndex().accessor.get(entity);
-        return buildKey(true, name, toKey(accessor.get(entity)), toKey(naturalKey));
+        batch.delete(entityKey);
+        delta = -1L;
+      }
+
+      // Only update counts for the natural index or top-level indices, since that's exposed through
+      // the API.
+      if (isNatural) {
+        batch.updateCount(end(prefix), delta);
+      } else if (parent == null) {
+        batch.updateCount(end(prefix, indexValue), delta);
       }
     }
 
@@ -192,15 +351,10 @@ class LevelDBTypeInfo {
      * @param entity The entity being added to the index.
      * @param data Serialized entity to store (when storing the entity, not a reference).
      * @param naturalKey The value's key.
+     * @param prefix The parent index prefix, if this is a child index.
      */
-    void add(LevelDBWriteBatch batch, Object entity, byte[] data) throws Exception {
-      byte[] stored = data;
-      if (!copy) {
-        stored = db.serializer.serialize(toKey(naturalIndex().accessor.get(entity)));
-      }
-      batch.put(entityKey(entity), stored);
-      batch.updateCount(end(accessor.get(entity)), 1L);
-      batch.updateCount(end(), 1L);
+    void add(LevelDBWriteBatch batch, Object entity, byte[] data, byte[] prefix) throws Exception {
+      addOrRemove(batch, entity, data, prefix);
     }
 
     /**
@@ -209,11 +363,10 @@ class LevelDBTypeInfo {
      * @param batch Write batch with other related changes.
      * @param entity The entity being removed, to identify the index entry to modify.
      * @param naturalKey The value's key.
+     * @param prefix The parent index prefix, if this is a child index.
      */
-    void remove(LevelDBWriteBatch batch, Object entity) throws Exception {
-      batch.delete(entityKey(entity));
-      batch.updateCount(end(accessor.get(entity)), -1L);
-      batch.updateCount(end(), -1L);
+    void remove(LevelDBWriteBatch batch, Object entity, byte[] prefix) throws Exception {
+      addOrRemove(batch, entity, null, prefix);
     }
 
     long getCount(byte[] key) throws Exception {
@@ -221,74 +374,74 @@ class LevelDBTypeInfo {
       return data != null ? db.serializer.deserializeLong(data) : 0;
     }
 
+    byte[] toParentKey(Object value) {
+      return toKey(value, SECONDARY_IDX_PREFIX);
+    }
+
+    byte[] toKey(Object value) {
+      return toKey(value, ENTRY_PREFIX);
+    }
+
     /**
      * Translates a value to be used as part of the store key.
      *
      * Integral numbers are encoded as a string in a way that preserves lexicographical
-     * ordering. The string is always as long as the maximum value for the given type (e.g.
-     * 11 characters for integers, including the character for the sign). The first character
-     * represents the sign (with the character for negative coming before the one for positive,
-     * which means you cannot use '-'...). The rest of the value is padded with a value that is
-     * "greater than 9" for negative values, so that for example "-123" comes before "-12" (the
-     * encoded value would look like "*~~~~~~~123"). For positive values, similarly, a value that
-     * is "lower than 0" (".") is used for padding. The fill characters were chosen for readability
-     * when looking at the encoded keys.
+     * ordering. The string is prepended with a marker telling whether the number is negative
+     * or positive ("*" for negative and "=" for positive are used since "-" and "+" have the
+     * opposite of the desired order), and then the number is encoded into a hex string (so
+     * it occupies twice the number of bytes as the original type).
      *
      * Arrays are encoded by encoding each element separately, separated by KEY_SEPARATOR.
      */
-    @VisibleForTesting
-    String toKey(Object value) {
-      StringBuilder sb = new StringBuilder(ENTRY_PREFIX);
+    byte[] toKey(Object value, byte prefix) {
+      final byte[] result;
 
       if (value instanceof String) {
-        sb.append(value);
+        byte[] str = ((String) value).getBytes(UTF_8);
+        result = new byte[str.length + 1];
+        result[0] = prefix;
+        System.arraycopy(str, 0, result, 1, str.length);
       } else if (value instanceof Boolean) {
-        sb.append(((Boolean) value).toString().toLowerCase());
+        result = new byte[] { prefix, (Boolean) value ? TRUE : FALSE };
       } else if (value.getClass().isArray()) {
         int length = Array.getLength(value);
+        byte[][] components = new byte[length][];
         for (int i = 0; i < length; i++) {
-          sb.append(toKey(Array.get(value, i)));
-          sb.append(KEY_SEPARATOR);
+          components[i] = toKey(Array.get(value, i));
         }
-        if (length > 0) {
-          sb.setLength(sb.length() - 1);
-        }
+        result = buildKey(false, components);
       } else {
-        int encodedLen;
+        int bytes;
 
         if (value instanceof Integer) {
-          encodedLen = INT_ENCODED_LEN;
+          bytes = Integer.SIZE;
         } else if (value instanceof Long) {
-          encodedLen = LONG_ENCODED_LEN;
+          bytes = Long.SIZE;
         } else if (value instanceof Short) {
-          encodedLen = SHORT_ENCODED_LEN;
+          bytes = Short.SIZE;
         } else if (value instanceof Byte) {
-          encodedLen = BYTE_ENCODED_LEN;
+          bytes = Byte.SIZE;
         } else {
           throw new IllegalArgumentException(String.format("Type %s not allowed as key.",
             value.getClass().getName()));
         }
 
+        bytes = bytes / Byte.SIZE;
+
+        byte[] key = new byte[bytes * 2 + 2];
         long longValue = ((Number) value).longValue();
-        String strVal;
-        if (longValue == Long.MIN_VALUE) {
-          // Math.abs() overflows for Long.MIN_VALUE.
-          strVal = String.valueOf(longValue).substring(1);
-        } else {
-          strVal = String.valueOf(Math.abs(longValue));
+        key[0] = prefix;
+        key[1] = longValue > 0 ? POSITIVE_MARKER : NEGATIVE_MARKER;
+
+        for (int i = 0; i < key.length - 2; i++) {
+          int masked = (int) ((longValue >>> (4 * i)) & 0xF);
+          key[key.length - i - 1] = HEX_BYTES[masked];
         }
 
-        sb.append(longValue >= 0 ? POSITIVE_MARKER : NEGATIVE_MARKER);
-
-        char fill = longValue >= 0 ? POSITIVE_FILL : NEGATIVE_FILL;
-        for (int i = 0; i < encodedLen - strVal.length() - 1; i++) {
-          sb.append(fill);
-        }
-
-        sb.append(strVal);
+        result = key;
       }
 
-      return sb.toString();
+      return result;
     }
 
   }

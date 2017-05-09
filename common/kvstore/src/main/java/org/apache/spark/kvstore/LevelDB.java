@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.fusesource.leveldbjni.JniDBFactory;
@@ -125,7 +126,7 @@ public class LevelDB implements KVStore {
   @Override
   public <T> T read(Class<T> klass, Object naturalKey) throws Exception {
     Preconditions.checkArgument(naturalKey != null, "Null keys are not allowed.");
-    byte[] key = getTypeInfo(klass).naturalIndex().start(naturalKey);
+    byte[] key = getTypeInfo(klass).naturalIndex().start(null, naturalKey);
     return get(key, klass);
   }
 
@@ -138,23 +139,36 @@ public class LevelDB implements KVStore {
     Preconditions.checkArgument(value != null, "Null values are not allowed.");
     LevelDBTypeInfo ti = getTypeInfo(value.getClass());
 
-    LevelDBWriteBatch batch = new LevelDBWriteBatch(this);
-    try {
+    try (LevelDBWriteBatch batch = new LevelDBWriteBatch(this)) {
       byte[] data = serializer.serialize(value);
       synchronized (ti) {
+        Object existing;
         try {
-          Object existing = get(ti.naturalIndex().entityKey(value), value.getClass());
-          removeInstance(ti, batch, existing);
+          existing = get(ti.naturalIndex().entityKey(null, value), value.getClass());
         } catch (NoSuchElementException e) {
-          // Ignore. No previous value.
+          existing = null;
         }
+
+        PrefixCache cache = new PrefixCache();
+
         for (LevelDBTypeInfo.Index idx : ti.indices()) {
-          idx.add(batch, value, data);
+          // Try to avoid unnecessary writes by only updating copy indices, or indices whose value
+          // has changed.
+          Object indexed = idx.getValue(value);
+          byte[] prefix = cache.getPrefix(idx, indexed);
+          if (existing == null) {
+            idx.add(batch, value, data, prefix);
+          } else {
+            if (idx.isCopy() || !Objects.equal(indexed, idx.getValue(existing))) {
+              byte[] existingPrefix = idx.isChild() ? idx.parent().childPrefix(existing, true)
+                : null;
+              idx.remove(batch, existing, existingPrefix);
+              idx.add(batch, value, data, prefix);
+            }
+          }
         }
         batch.write(sync);
       }
-    } finally {
-      batch.close();
     }
   }
 
@@ -165,20 +179,23 @@ public class LevelDB implements KVStore {
 
   public void delete(Class<?> type, Object naturalKey, boolean sync) throws Exception {
     Preconditions.checkArgument(naturalKey != null, "Null keys are not allowed.");
-    LevelDBWriteBatch batch = new LevelDBWriteBatch(this);
-    try {
+    try (LevelDBWriteBatch batch = new LevelDBWriteBatch(this)) {
       LevelDBTypeInfo ti = getTypeInfo(type);
-      byte[] key = ti.naturalIndex().start(naturalKey);
-      byte[] data = db().get(key);
-      if (data != null) {
-        Object existing = serializer.deserialize(data, type);
-        synchronized (ti) {
-          removeInstance(ti, batch, existing);
+      byte[] key = ti.naturalIndex().start(null, naturalKey);
+      PrefixCache cache = new PrefixCache();
+
+      synchronized (ti) {
+        byte[] data = db().get(key);
+        if (data != null) {
+          Object existing = serializer.deserialize(data, type);
+          for (LevelDBTypeInfo.Index idx : ti.indices()) {
+            idx.remove(batch, existing, cache.getPrefix(idx, idx.getValue(existing)));
+          }
           batch.write(sync);
         }
       }
-    } finally {
-      batch.close();
+    } catch (NoSuchElementException nse) {
+      // Ignore.
     }
   }
 
@@ -199,7 +216,13 @@ public class LevelDB implements KVStore {
   @Override
   public long count(Class<?> type) throws Exception {
     LevelDBTypeInfo.Index idx = getTypeInfo(type).naturalIndex();
-    return idx.getCount(idx.end());
+    return idx.getCount(idx.end(null));
+  }
+
+  @Override
+  public long count(Class<?> type, String index, Object indexedValue) throws Exception {
+    LevelDBTypeInfo.Index idx = getTypeInfo(type).index(index);
+    return idx.getCount(idx.end(null, indexedValue));
   }
 
   @Override
@@ -244,13 +267,6 @@ public class LevelDB implements KVStore {
     return _db;
   }
 
-  private void removeInstance(LevelDBTypeInfo ti, LevelDBWriteBatch batch, Object instance)
-      throws Exception {
-    for (LevelDBTypeInfo.Index idx : ti.indices()) {
-      idx.remove(batch, instance);
-    }
-  }
-
   private byte[] getTypeAlias(Class<?> klass) throws Exception {
     byte[] alias = typeAliases.get(klass.getName());
     if (alias == null) {
@@ -277,6 +293,24 @@ public class LevelDB implements KVStore {
 
     TypeAliases() {
       this(null);
+    }
+
+  }
+
+  private static class PrefixCache {
+
+    private final Map<LevelDBTypeInfo.Index, byte[]> prefixes = new HashMap<>();
+
+    byte[] getPrefix(LevelDBTypeInfo.Index idx, Object entity) throws Exception {
+      byte[] prefix = null;
+      if (idx.isChild()) {
+        prefix = prefixes.get(idx.parent());
+        if (prefix == null) {
+          prefix = idx.parent().childPrefix(entity, true);
+          prefixes.put(idx.parent(), prefix);
+        }
+      }
+      return prefix;
     }
 
   }

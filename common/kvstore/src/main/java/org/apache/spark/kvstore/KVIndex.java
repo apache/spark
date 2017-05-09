@@ -61,6 +61,18 @@ public @interface KVIndex {
   String value() default NATURAL_INDEX_NAME;
 
   /**
+   * The name of the parent index of this index. By default there is no parent index, so the
+   * generated data can be retrieved without having to provide a parent value.
+   *
+   * <p>
+   * If a parent index is defined, iterating over the data using the index will require providing
+   * a single value for the parent index. This serves as a rudimentary way to provide relationships
+   * between entities in the store.
+   * </p>
+   */
+  String parent() default "";
+
+  /**
    * Whether to copy the instance's data to the index, instead of just storing a pointer to the
    * data. The default behavior is to just store a reference; that saves disk space but is slower
    * to read, since there's a level of indirection.

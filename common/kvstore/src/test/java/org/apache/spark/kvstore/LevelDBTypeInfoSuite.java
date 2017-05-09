@@ -27,18 +27,20 @@ public class LevelDBTypeInfoSuite {
   @Test
   public void testIndexAnnotation() throws Exception {
     KVTypeInfo ti = new KVTypeInfo(CustomType1.class);
-    assertEquals(4, ti.indices().count());
+    assertEquals(5, ti.indices().count());
 
     CustomType1 t1 = new CustomType1();
     t1.key = "key";
     t1.id = "id";
     t1.name = "name";
     t1.num = 42;
+    t1.child = "child";
 
     assertEquals(t1.key, ti.getIndexValue(KVIndex.NATURAL_INDEX_NAME, t1));
     assertEquals(t1.id, ti.getIndexValue("id", t1));
     assertEquals(t1.name, ti.getIndexValue("name", t1));
     assertEquals(t1.num, ti.getIndexValue("int", t1));
+    assertEquals(t1.child, ti.getIndexValue("child", t1));
   }
 
   @Test(expected = IllegalArgumentException.class)
@@ -83,14 +85,18 @@ public class LevelDBTypeInfoSuite {
     t3.name = "aaa";
 
     // Make sure entries with conflicting names are sorted correctly.
-    assertBefore(ti.index("name").entityKey(t1), ti.index("name").entityKey(t2));
-    assertBefore(ti.index("name").entityKey(t1), ti.index("name").entityKey(t3));
-    assertBefore(ti.index("name").entityKey(t2), ti.index("name").entityKey(t3));
+    assertBefore(ti.index("name").entityKey(null, t1), ti.index("name").entityKey(null, t2));
+    assertBefore(ti.index("name").entityKey(null, t1), ti.index("name").entityKey(null, t3));
+    assertBefore(ti.index("name").entityKey(null, t2), ti.index("name").entityKey(null, t3));
   }
 
   @Test
   public void testNumEncoding() throws Exception {
     LevelDBTypeInfo.Index idx = newTypeInfo(CustomType1.class).indices().iterator().next();
+
+    assertEquals("+=00000001", new String(idx.toKey(1), UTF_8));
+    assertEquals("+=00000010", new String(idx.toKey(16), UTF_8));
+    assertEquals("+=7fffffff", new String(idx.toKey(Integer.MAX_VALUE), UTF_8));
 
     assertBefore(idx.toKey(1), idx.toKey(2));
     assertBefore(idx.toKey(-1), idx.toKey(2));
@@ -98,29 +104,22 @@ public class LevelDBTypeInfoSuite {
     assertBefore(idx.toKey(-11), idx.toKey(-1));
     assertBefore(idx.toKey(1), idx.toKey(11));
     assertBefore(idx.toKey(Integer.MIN_VALUE), idx.toKey(Integer.MAX_VALUE));
-    assertEquals(LevelDBTypeInfo.INT_ENCODED_LEN + LevelDBTypeInfo.ENTRY_PREFIX.length(),
-      idx.toKey(Integer.MIN_VALUE).length());
 
     assertBefore(idx.toKey(1L), idx.toKey(2L));
     assertBefore(idx.toKey(-1L), idx.toKey(2L));
     assertBefore(idx.toKey(Long.MIN_VALUE), idx.toKey(Long.MAX_VALUE));
-    assertEquals(LevelDBTypeInfo.LONG_ENCODED_LEN + LevelDBTypeInfo.ENTRY_PREFIX.length(),
-      idx.toKey(Long.MIN_VALUE).length());
 
     assertBefore(idx.toKey((short) 1), idx.toKey((short) 2));
     assertBefore(idx.toKey((short) -1), idx.toKey((short) 2));
     assertBefore(idx.toKey(Short.MIN_VALUE), idx.toKey(Short.MAX_VALUE));
-    assertEquals(LevelDBTypeInfo.SHORT_ENCODED_LEN + LevelDBTypeInfo.ENTRY_PREFIX.length(),
-      idx.toKey(Short.MIN_VALUE).length());
 
     assertBefore(idx.toKey((byte) 1), idx.toKey((byte) 2));
     assertBefore(idx.toKey((byte) -1), idx.toKey((byte) 2));
     assertBefore(idx.toKey(Byte.MIN_VALUE), idx.toKey(Byte.MAX_VALUE));
-    assertEquals(LevelDBTypeInfo.BYTE_ENCODED_LEN + LevelDBTypeInfo.ENTRY_PREFIX.length(),
-      idx.toKey(Byte.MIN_VALUE).length());
 
-    assertEquals(LevelDBTypeInfo.ENTRY_PREFIX + "false", idx.toKey(false));
-    assertEquals(LevelDBTypeInfo.ENTRY_PREFIX + "true", idx.toKey(true));
+    byte prefix = LevelDBTypeInfo.ENTRY_PREFIX;
+    assertSame(new byte[] { prefix, LevelDBTypeInfo.FALSE }, idx.toKey(false));
+    assertSame(new byte[] { prefix, LevelDBTypeInfo.TRUE }, idx.toKey(true));
   }
 
   @Test
@@ -145,6 +144,10 @@ public class LevelDBTypeInfoSuite {
 
   private void assertBefore(String str1, String str2) {
     assertTrue(String.format("%s < %s failed", str1, str2), str1.compareTo(str2) < 0);
+  }
+
+  private void assertSame(byte[] key1, byte[] key2) {
+    assertEquals(new String(key1, UTF_8), new String(key2, UTF_8));
   }
 
   public static class NoNaturalIndex {

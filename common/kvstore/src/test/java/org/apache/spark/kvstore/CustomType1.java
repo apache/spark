@@ -33,6 +33,9 @@ public class CustomType1 {
   @KVIndex("int")
   public int num;
 
+  @KVIndex(value = "child", parent = "id")
+  public String child;
+
   @Override
   public boolean equals(Object o) {
     if (o instanceof CustomType1) {

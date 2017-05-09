@@ -17,7 +17,6 @@
 
 package org.apache.spark.kvstore;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -30,7 +29,7 @@ import org.iq80.leveldb.WriteOptions;
  * A wrapper around the LevelDB library's WriteBatch with some extra functionality for keeping
  * track of counts.
  */
-class LevelDBWriteBatch {
+class LevelDBWriteBatch implements AutoCloseable {
 
   private final LevelDB db;
   private final Map<KeyWrapper, Long> deltas;
@@ -83,7 +82,7 @@ class LevelDBWriteBatch {
     db.db().write(batch, new WriteOptions().sync(sync));
   }
 
-  void close() throws IOException {
+  public void close() throws Exception {
     batch.close();
   }
 

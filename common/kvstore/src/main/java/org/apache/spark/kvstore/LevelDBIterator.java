@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.iq80.leveldb.DBIterator;
 
@@ -52,29 +53,38 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     this.type = params.type;
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
-    this.indexKeyPrefix = index.keyPrefix();
     this.max = params.max;
+
+    Preconditions.checkArgument(!index.isChild() || params.parent != null,
+      "Cannot iterate over child index %s without parent value.", params.index);
+    byte[] parent = index.isChild() ? index.parent().childPrefix(params.parent, false) : null;
+
+    this.indexKeyPrefix = index.keyPrefix(parent);
 
     byte[] firstKey;
     if (params.first != null) {
       if (ascending) {
-        firstKey = index.start(params.first);
+        firstKey = index.start(parent, params.first);
       } else {
-        firstKey = index.end(params.first);
+        firstKey = index.end(parent, params.first);
       }
     } else if (ascending) {
-      firstKey = index.keyPrefix();
+      firstKey = index.keyPrefix(parent);
     } else {
-      firstKey = index.end();
+      firstKey = index.end(parent);
     }
     it.seek(firstKey);
 
     byte[] end = null;
     if (ascending) {
-      end = params.last != null ? index.end(params.last) : index.end();
+      if (params.last != null) {
+        end = index.end(parent, params.last);
+      } else {
+        end = index.end(parent);
+      }
     } else {
       if (params.last != null) {
-        end = index.start(params.last);
+        end = index.start(parent, params.last);
       }
       if (it.hasNext()) {
         // When descending, the caller may have set up the start of iteration at a non-existant
@@ -182,15 +192,14 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
           return null;
         }
         byte[] nextKey = nextEntry.getKey();
+        // Next key is not part of the index, stop.
+        if (!startsWith(nextKey, indexKeyPrefix)) {
+          return null;
+        }
 
         // If the next key is an end marker, then skip it.
         if (isEndMarker(nextKey)) {
           continue;
-        }
-
-        // Next key is not part of the index, stop.
-        if (!startsWith(nextKey, indexKeyPrefix)) {
-          return null;
         }
 
         // If there's a known end key and iteration has gone past it, stop.
@@ -207,7 +216,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
         if (index == null || index.isCopy()) {
           return db.serializer.deserialize(nextEntry.getValue(), type);
         } else {
-          byte[] key = stitch(ti.naturalIndex().keyPrefix(), nextEntry.getValue());
+          byte[] key = ti.buildKey(false, ti.naturalIndex().keyPrefix(null), nextEntry.getValue());
           return db.get(key, type);
         }
       }
@@ -234,23 +243,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   private boolean isEndMarker(byte[] key) {
     return (key.length > 2 &&
         key[key.length - 2] == LevelDBTypeInfo.KEY_SEPARATOR &&
-        key[key.length - 1] == (byte) LevelDBTypeInfo.END_MARKER.charAt(0));
-  }
-
-  private byte[] stitch(byte[]... comps) {
-    int len = 0;
-    for (byte[] comp : comps) {
-      len += comp.length;
-    }
-
-    byte[] dest = new byte[len];
-    int written = 0;
-    for (byte[] comp : comps) {
-      System.arraycopy(comp, 0, dest, written, comp.length);
-      written += comp.length;
-    }
-
-    return dest;
+        key[key.length - 1] == LevelDBTypeInfo.END_MARKER[0]);
   }
 
   private int compare(byte[] a, byte[] b) {

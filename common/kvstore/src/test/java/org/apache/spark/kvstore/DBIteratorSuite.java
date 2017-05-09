@@ -77,6 +77,7 @@ public class DBIteratorSuite {
   private final BaseComparator REF_INDEX_ORDER = (t1, t2) -> t1.id.compareTo(t2.id);
   private final BaseComparator COPY_INDEX_ORDER = (t1, t2) -> t1.name.compareTo(t2.name);
   private final BaseComparator NUMERIC_INDEX_ORDER = (t1, t2) -> t1.num - t2.num;
+  private final BaseComparator CHILD_INDEX_ORDER = (t1, t2) -> t1.child.compareTo(t2.child);
 
   @BeforeClass
   public static void setup() throws Exception {
@@ -104,6 +105,7 @@ public class DBIteratorSuite {
       t.id = "id" + i;
       t.name = "name" + RND.nextInt(MAX_ENTRIES);
       t.num = RND.nextInt(MAX_ENTRIES);
+      t.child = "child" + (i % MIN_ENTRIES);
       allEntries.add(t);
       db.write(t);
     }
@@ -122,6 +124,7 @@ public class DBIteratorSuite {
       t.id = first.id;
       t.name = first.name;
       t.num = first.num;
+      t.child = first.child;
       allEntries.add(t);
       clashingEntries.add(t);
       db.write(t);
@@ -135,6 +138,7 @@ public class DBIteratorSuite {
     t.id = first.id;
     t.name = first.name + "a";
     t.num = first.num;
+    t.child = first.child;
     allEntries.add(t);
     db.write(t);
   }
@@ -171,6 +175,12 @@ public class DBIteratorSuite {
   }
 
   @Test
+  public void childIndex() throws Exception {
+    CustomType1 any = pickLimit();
+    testIteration(CHILD_INDEX_ORDER, view().index("child").parent(any.id), null, null);
+  }
+
+  @Test
   public void naturalIndexDescending() throws Exception {
     testIteration(NATURAL_ORDER, view().reverse(), null, null);
   }
@@ -188,6 +198,12 @@ public class DBIteratorSuite {
   @Test
   public void numericIndexDescending() throws Exception {
     testIteration(NUMERIC_INDEX_ORDER, view().index("int").reverse(), null, null);
+  }
+
+  @Test
+  public void childIndexDescending() throws Exception {
+    CustomType1 any = pickLimit();
+    testIteration(CHILD_INDEX_ORDER, view().index("child").parent(any.id).reverse(), null, null);
   }
 
   @Test
@@ -215,6 +231,13 @@ public class DBIteratorSuite {
   }
 
   @Test
+  public void childIndexWithStart() throws Exception {
+    CustomType1 any = pickLimit();
+    testIteration(CHILD_INDEX_ORDER, view().index("child").parent(any.id).first(any.child), null,
+      null);
+  }
+
+  @Test
   public void naturalIndexDescendingWithStart() throws Exception {
     CustomType1 first = pickLimit();
     testIteration(NATURAL_ORDER, view().reverse().first(first.key), first, null);
@@ -239,31 +262,49 @@ public class DBIteratorSuite {
   }
 
   @Test
+  public void childIndexDescendingWithStart() throws Exception {
+    CustomType1 any = pickLimit();
+    testIteration(CHILD_INDEX_ORDER,
+      view().index("child").parent(any.id).first(any.child).reverse(), null, null);
+  }
+
+  @Test
   public void naturalIndexWithSkip() throws Exception {
-    testIteration(NATURAL_ORDER, view().skip(RND.nextInt(allEntries.size() / 2)), null, null);
+    testIteration(NATURAL_ORDER, view().skip(pickCount()), null, null);
   }
 
   @Test
   public void refIndexWithSkip() throws Exception {
-    testIteration(REF_INDEX_ORDER, view().index("id").skip(RND.nextInt(allEntries.size() / 2)),
-      null, null);
+    testIteration(REF_INDEX_ORDER, view().index("id").skip(pickCount()), null, null);
   }
 
   @Test
   public void copyIndexWithSkip() throws Exception {
-    testIteration(COPY_INDEX_ORDER, view().index("name").skip(RND.nextInt(allEntries.size() / 2)),
+    testIteration(COPY_INDEX_ORDER, view().index("name").skip(pickCount()), null, null);
+  }
+
+  @Test
+  public void childIndexWithSkip() throws Exception {
+    CustomType1 any = pickLimit();
+    testIteration(CHILD_INDEX_ORDER, view().index("child").parent(any.id).skip(pickCount()),
       null, null);
   }
 
   @Test
   public void naturalIndexWithMax() throws Exception {
-    testIteration(NATURAL_ORDER, view().max(RND.nextInt(allEntries.size() / 2)), null, null);
+    testIteration(NATURAL_ORDER, view().max(pickCount()), null, null);
   }
 
   @Test
   public void copyIndexWithMax() throws Exception {
-    testIteration(COPY_INDEX_ORDER, view().index("name").max(RND.nextInt(allEntries.size() / 2)),
-      null, null);
+    testIteration(COPY_INDEX_ORDER, view().index("name").max(pickCount()), null, null);
+  }
+
+  @Test
+  public void childIndexWithMax() throws Exception {
+    CustomType1 any = pickLimit();
+    testIteration(CHILD_INDEX_ORDER, view().index("child").parent(any.id).max(pickCount()), null,
+      null);
   }
 
   @Test
@@ -288,6 +329,13 @@ public class DBIteratorSuite {
   public void numericIndexWithLast() throws Exception {
     CustomType1 last = pickLimit();
     testIteration(NUMERIC_INDEX_ORDER, view().index("int").last(last.num), null, last);
+  }
+
+  @Test
+  public void childIndexWithLast() throws Exception {
+    CustomType1 any = pickLimit();
+    testIteration(CHILD_INDEX_ORDER, view().index("child").parent(any.id).last(any.child), null,
+      null);
   }
 
   @Test
@@ -317,6 +365,13 @@ public class DBIteratorSuite {
    }
 
   @Test
+  public void childIndexDescendingWithLast() throws Exception {
+    CustomType1 any = pickLimit();
+    testIteration(CHILD_INDEX_ORDER, view().index("child").parent(any.id).last(any.child).reverse(),
+      null, null);
+  }
+
+  @Test
   public void testRefWithIntNaturalKey() throws Exception {
     LevelDBSuite.IntKeyType i = new LevelDBSuite.IntKeyType();
     i.key = 1;
@@ -334,6 +389,11 @@ public class DBIteratorSuite {
   private CustomType1 pickLimit() {
     // Picks an element that has clashes with other elements in the given index.
     return clashingEntries.get(RND.nextInt(clashingEntries.size()));
+  }
+
+  private int pickCount() {
+    int count = RND.nextInt(allEntries.size() / 2);
+    return Math.max(count, 1);
   }
 
   /**
@@ -365,6 +425,10 @@ public class DBIteratorSuite {
 
     Iterable<CustomType1> expected = indexOrder;
     BaseComparator expectedOrder = params.ascending ? order : order.reverse();
+
+    if (params.parent != null) {
+      expected = Iterables.filter(expected, v -> params.parent.equals(v.id));
+    }
 
     if (first != null) {
       expected = Iterables.filter(expected, v -> expectedOrder.compare(first, v) <= 0);

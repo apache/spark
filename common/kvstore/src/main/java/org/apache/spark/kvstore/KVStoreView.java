@@ -44,6 +44,7 @@ public abstract class KVStoreView<T> implements Iterable<T> {
   String index = KVIndex.NATURAL_INDEX_NAME;
   Object first = null;
   Object last = null;
+  Object parent = null;
   long skip = 0L;
   long max = Long.MAX_VALUE;
 
@@ -64,6 +65,20 @@ public abstract class KVStoreView<T> implements Iterable<T> {
    */
   public KVStoreView<T> index(String name) {
     this.index = Preconditions.checkNotNull(name);
+    return this;
+  }
+
+  /**
+   * Defines the value of the parent index when iterating over a child index. Only elements that
+   * match the parent index's value will be included in the iteration.
+   *
+   * <p>
+   * Required for iterating over child indices, will generate an error if iterating over a
+   * parent-less index.
+   * </p>
+   */
+  public KVStoreView<T> parent(Object value) {
+    this.parent = value;
     return this;
   }
 
