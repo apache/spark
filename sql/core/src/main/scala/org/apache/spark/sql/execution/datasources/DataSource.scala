@@ -481,7 +481,7 @@ case class DataSource(
   }
 }
 
-object DataSource {
+object DataSource extends Logging {
 
   /** A map to maintain backward compatibility in case we move data sources around. */
   private val backwardCompatibilityMap: Map[String, String] = {
@@ -569,6 +569,16 @@ object DataSource {
         case head :: Nil =>
           // there is exactly one registered alias
           head.getClass
+        case sources if sources.map(_.getClass.getName).exists(_.startsWith("org.apache.spark")) =>
+          // There are multiple registered aliases for the input. If there is "org.apache.spark"
+          // package in the prefix, we use it considering it is an internal datasource within Spark.
+          val internalSource =
+            sources.find(_.getClass.getName.startsWith("org.apache.spark")).head
+          logWarning(s"Multiple sources found for $provider1 " +
+            s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
+            "please specify the fully qualified class name. " +
+            s"Using the internal datasource (${internalSource.getClass.getName}).")
+          internalSource.getClass
         case sources =>
           // There are multiple registered aliases for the input
           sys.error(s"Multiple sources found for $provider1 " +
