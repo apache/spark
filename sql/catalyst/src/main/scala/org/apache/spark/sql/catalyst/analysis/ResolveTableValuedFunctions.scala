@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Range}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
 
@@ -59,21 +59,19 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
    * A TVF maps argument lists to resolver functions that accept those arguments. Using a map
    * here allows for function overloading.
    */
-  private type TVF = Map[ArgumentList, (UnresolvedTableValuedFunction, Seq[Any]) => LogicalPlan]
+  private type TVF = Map[ArgumentList, Seq[Any] => LogicalPlan]
 
   /**
    * TVF builder.
    */
-  private def tvf(args: (String, DataType)*)(
-      pf: PartialFunction[(UnresolvedTableValuedFunction, Seq[Any]), LogicalPlan])
-      : (ArgumentList, (UnresolvedTableValuedFunction, Seq[Any]) => LogicalPlan) = {
-    val failAnalysis: PartialFunction[(UnresolvedTableValuedFunction, Seq[Any]), LogicalPlan] = {
-      case (pf: UnresolvedTableValuedFunction, args: Seq[Any]) =>
-        throw new IllegalArgumentException(
-          "Invalid arguments for resolved function: " + args.mkString(", "))
-    }
+  private def tvf(args: (String, DataType)*)(pf: PartialFunction[Seq[Any], LogicalPlan])
+      : (ArgumentList, Seq[Any] => LogicalPlan) = {
     (ArgumentList(args: _*),
-      (tvf: UnresolvedTableValuedFunction, args: Seq[Any]) => pf.orElse(failAnalysis)(tvf, args))
+     pf orElse {
+       case args =>
+         throw new IllegalArgumentException(
+           "Invalid arguments for resolved function: " + args.mkString(", "))
+     })
   }
 
   /**
@@ -82,52 +80,37 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
   private val builtinFunctions: Map[String, TVF] = Map(
     "range" -> Map(
       /* range(end) */
-      tvf("end" -> LongType) { case (tvf, args @ Seq(end: Long)) =>
-        validateInputDimension(tvf, 1)
-        Range(0, end, 1, None, tvf.outputNames.headOption)
+      tvf("end" -> LongType) { case Seq(end: Long) =>
+        Range(0, end, 1, None)
       },
 
       /* range(start, end) */
-      tvf("start" -> LongType, "end" -> LongType) {
-        case (tvf, args @ Seq(start: Long, end: Long)) =>
-          validateInputDimension(tvf, 1)
-          Range(start, end, 1, None, tvf.outputNames.headOption)
+      tvf("start" -> LongType, "end" -> LongType) { case Seq(start: Long, end: Long) =>
+        Range(start, end, 1, None)
       },
 
       /* range(start, end, step) */
       tvf("start" -> LongType, "end" -> LongType, "step" -> LongType) {
-        case (tvf, args @ Seq(start: Long, end: Long, step: Long)) =>
-          validateInputDimension(tvf, 1)
-          Range(start, end, step, None, tvf.outputNames.headOption)
+        case Seq(start: Long, end: Long, step: Long) =>
+          Range(start, end, step, None)
       },
 
       /* range(start, end, step, numPartitions) */
       tvf("start" -> LongType, "end" -> LongType, "step" -> LongType,
           "numPartitions" -> IntegerType) {
-        case (tvf, args @ Seq(start: Long, end: Long, step: Long, numPartitions: Int)) =>
-          validateInputDimension(tvf, 1)
-          Range(start, end, step, Some(numPartitions), tvf.outputNames.headOption)
+        case Seq(start: Long, end: Long, step: Long, numPartitions: Int) =>
+          Range(start, end, step, Some(numPartitions))
       })
   )
 
-  private def validateInputDimension(tvf: UnresolvedTableValuedFunction, expectedNumCols: Int)
-    : Unit = {
-    if (tvf.outputNames.nonEmpty) {
-      val numCols = tvf.outputNames.size
-      if (numCols != expectedNumCols) {
-        tvf.failAnalysis(s"expected $expectedNumCols columns but found $numCols columns")
-      }
-    }
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
-      builtinFunctions.get(u.functionName.toLowerCase(Locale.ROOT)) match {
+      val resolvedFunc = builtinFunctions.get(u.functionName.toLowerCase(Locale.ROOT)) match {
         case Some(tvf) =>
           val resolved = tvf.flatMap { case (argList, resolver) =>
             argList.implicitCast(u.functionArgs) match {
               case Some(casted) =>
-                Some(resolver(u, casted.map(_.eval())))
+                Some(resolver(casted.map(_.eval())))
               case _ =>
                 None
             }
@@ -141,6 +124,22 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
           }
         case _ =>
           u.failAnalysis(s"could not resolve `${u.functionName}` to a table-valued function")
+      }
+
+      // If alias names assigned, add `Project` with the aliases
+      if (u.outputNames.nonEmpty) {
+        val outputAttrs = resolvedFunc.output
+        // Checks if the number of the aliases is equal to expected one
+        if (u.outputNames.size != outputAttrs.size) {
+          u.failAnalysis(s"expected ${outputAttrs.size} columns but " +
+            s"found ${u.outputNames.size} columns")
+        }
+        val aliases = outputAttrs.zip(u.outputNames).map {
+          case (attr, name) => Alias(attr, name)()
+        }
+        Project(aliases, resolvedFunc)
+      } else {
+        resolvedFunc
       }
   }
 }

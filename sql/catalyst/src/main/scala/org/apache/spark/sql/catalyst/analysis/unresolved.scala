@@ -66,7 +66,10 @@ case class UnresolvedInlineTable(
 /**
  * A table-valued function, e.g.
  * {{{
- *   select * from range(10);
+ *   select id from range(10);
+ *
+ *   // Assign alias names
+ *   select t.a from range(10) t(a);
  * }}}
  */
 case class UnresolvedTableValuedFunction(
