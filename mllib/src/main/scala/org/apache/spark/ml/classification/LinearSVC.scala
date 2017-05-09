@@ -159,7 +159,12 @@ class LinearSVC @Since("2.2.0") (
    * @group setParam
    */
   @Since("2.2.0")
-  def setSolver(value: String): this.type = set(solver, value.toLowerCase(Locale.ROOT))
+  def setSolver(value: String): this.type = {
+    val lowercaseValue = value.toLowerCase(Locale.ROOT)
+    require(supportedOptimizers.contains(lowercaseValue),
+      s"Solver $value was not supported. Supported options: l-bfgs, owlqn")
+    set(solver, lowercaseValue)
+  }
   setDefault(solver -> "owlqn")
 
   @Since("2.2.0")
