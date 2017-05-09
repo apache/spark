@@ -19,16 +19,15 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 
 // please note that the META-INF/services had to be modified for the test directory for this to work
 class DDLSourceLoadSuite extends DataSourceTest with SharedSQLContext {
 
   test("data sources with the same name") {
-    intercept[RuntimeException] {
-      spark.read.format("Fluet da Bomb").load()
-    }
+    spark.read.format("Fluet da Bomb").load().schema ==
+      StructType(Seq(StructField("stringType", StringType, nullable = false)))
   }
 
   test("load data source from format alias") {
@@ -63,7 +62,7 @@ class FakeSourceOne extends RelationProvider with DataSourceRegister {
     }
 }
 
-class FakeSourceTwo extends RelationProvider  with DataSourceRegister {
+class FakeSourceTwo extends RelationProvider with DataSourceRegister {
 
   def shortName(): String = "Fluet da Bomb"
 
@@ -72,7 +71,7 @@ class FakeSourceTwo extends RelationProvider  with DataSourceRegister {
       override def sqlContext: SQLContext = cont
 
       override def schema: StructType =
-        StructType(Seq(StructField("stringType", StringType, nullable = false)))
+        StructType(Seq(StructField("integerType", IntegerType, nullable = false)))
     }
 }
 
