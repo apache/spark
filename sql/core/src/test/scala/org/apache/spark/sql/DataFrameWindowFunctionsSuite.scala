@@ -468,4 +468,25 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       spark.read.schema(sampleSchema).json(input.toDS()).select(c0, c1).foreach { _ => () }
     }
   }
+  
+  test("window functions in multiple selects") {
+    val df = Seq(
+      ("S1", "P1", 100),
+      ("S1", "P1", 700),
+      ("S2", "P1", 200),
+      ("S2", "P2", 300)
+    ).toDF("sno", "pno", "qty")
+
+    val w1 = Window.partitionBy("sno")
+    val w2 = Window.partitionBy("sno", "pno")
+
+    checkAnswer(
+      df.select($"sno", $"pno", $"qty", sum($"qty").over(w2).alias("sum_qty_2"))
+        .select($"sno", $"pno", $"qty", col("sum_qty_2"), sum("qty").over(w1).alias("sum_qty_1")),
+      Seq(
+        Row("S1", "P1", 100, 800, 800),
+        Row("S1", "P1", 700, 800, 800),
+        Row("S2", "P1", 200, 200, 500),
+        Row("S2", "P2", 300, 300, 500)))
+  }
 }

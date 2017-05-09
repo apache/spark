@@ -25,11 +25,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 
-class FlipWindowSuite extends PlanTest {
+class TransposeWindowSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("CollapseProject", FixedPoint(100), CollapseProject, RemoveRedundantProject) ::
-      Batch("FlipWindow", Once, CollapseWindow, FlipWindow) :: Nil
+      Batch("FlipWindow", Once, CollapseWindow, TransposeWindow) :: Nil
   }
 
   val testRelation = LocalRelation('a.string, 'b.string, 'c.int, 'd.string)
@@ -51,13 +51,13 @@ class FlipWindowSuite extends PlanTest {
       .select('a, 'b, 'c,  windowExpr(sum('c), windowSpec(partitionSpec2, Seq.empty, UnspecifiedFrame)).as('sum_a_2))
       .select('a, 'b, 'c, 'sum_a_2, windowExpr(sum('c), windowSpec(partitionSpec1, Seq.empty, UnspecifiedFrame)).as('sum_a_1))
 
-    val analyzed = query.analyze
-    val optimized = Optimize.execute(analyzed)
+    val optimized = Optimize.execute(query.analyze)
 
     val query2 = testRelation
-      .select('a, 'b, 'c, windowExpr(sum('c), windowSpec(partitionSpec2, Seq.empty, UnspecifiedFrame)).as('sum_a_2),
-        windowExpr(sum('c), windowSpec(partitionSpec1, Seq.empty, UnspecifiedFrame)).as('sum_a_1)
-      )
+      .select('a, 'b, 'c)
+      .select('a, 'b, 'c,  windowExpr(sum('c), windowSpec(partitionSpec1, Seq.empty, UnspecifiedFrame)).as('sum_a_1))
+      .select('a, 'b, 'c,  windowExpr(sum('c), windowSpec(partitionSpec2, Seq.empty, UnspecifiedFrame)).as('sum_a_2), 'sum_a_1)
+      .select('a, 'b, 'c, 'sum_a_2, 'sum_a_1)
 
     val correctAnswer = Optimize.execute(query2.analyze)
 
@@ -75,6 +75,7 @@ class FlipWindowSuite extends PlanTest {
     val correctAnswer = testRelation
       .window(Seq(sum(c).as('sum_a_1)), partitionSpec1, orderSpec1)
       .window(Seq(sum(c).as('sum_a_2)), partitionSpec2, orderSpec2)
+      .select('a, 'b, 'c, 'd, 'sum_a_2, 'sum_a_1)
 
     comparePlans(optimized, correctAnswer.analyze)
   }

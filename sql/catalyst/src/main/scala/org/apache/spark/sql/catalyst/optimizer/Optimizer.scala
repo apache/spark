@@ -88,7 +88,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       CollapseRepartition,
       CollapseProject,
       CollapseWindow,
-      FlipWindow,
+      TransposeWindow,
       CombineFilters,
       CombineLimits,
       CombineUnions,
@@ -626,15 +626,15 @@ object CollapseWindow extends Rule[LogicalPlan] {
 }
 
 /**
- * Flip Adjacent Window Expressions.
+ * Transpose Adjacent Window Expressions.
  * - If the partition spec of the parent Window expression is a subset of the partition spec
- *   of the child window expression, flip them.
+ *   of the child window expression, transpose them.
  */
-object FlipWindow extends Rule[LogicalPlan] {
+object TransposeWindow extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
         if ps2.containsSlice(ps1) =>
-      Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild))
+      Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
   }
 }
 
