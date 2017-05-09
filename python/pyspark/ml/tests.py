@@ -91,7 +91,7 @@ def generate_multinomial_logistic_input(
     probs = np.exp(np.subtract(margins, margins.max(axis=1).reshape(n_points, -1)))
     # Compute cumulative prob
     cum_probs = np.cumsum(probs / probs.sum(axis=1).reshape(n_points, -1), axis=1)
-    # Asign class
+    # Assign class
     classes = np.apply_along_axis(
         lambda x: np.searchsorted(cum_probs[1, ], np.random.random()),
         axis=1, arr=cum_probs)
