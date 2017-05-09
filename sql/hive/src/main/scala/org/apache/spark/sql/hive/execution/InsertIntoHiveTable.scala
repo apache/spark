@@ -17,20 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
 
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.exec.TaskRunner
 import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.hive.ql.plan.TableDesc
-
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
@@ -107,7 +105,7 @@ case class InsertIntoHiveTable(
     // SPARK-20594: The staging directory should be a child directory starts with "." to avoid
     // being deleted if we set hive.exec.stagingdir under the table directory.
     if (FileUtils.isSubDir(new Path(stagingPathName), inputPath, fs)
-      && !stagingPathName.stripPrefix(inputPathName).startsWith(".")) {
+      && !stagingPathName.stripPrefix(inputPathName).stripPrefix(File.separator).startsWith(".")) {
       logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
         s"with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
         s"directory.")
