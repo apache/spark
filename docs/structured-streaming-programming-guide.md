@@ -901,6 +901,9 @@ Some sinks (e.g. files) may not supported fine-grained updates that Update Mode 
 with them, we have also support Append Mode, where only the *final counts* are written to sink.
 This is illustrated below.
 
+Note that using `withWatermark` on a non-streaming Dataset is no-op. As the watermark should not affect
+any batch query in any way, we will ignore it directly.
+
 ![Watermarking in Append Mode](img/structured-streaming-watermark-append-mode.png)
 
 Similar to the Update Mode earlier, the engine maintains intermediate counts for each window. 
