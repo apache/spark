@@ -864,13 +864,8 @@ class LogisticRegression @Since("1.2.0") (
       numClasses, isMultinomial))
     // TODO: implement summary model for multinomial case
     val m = if (!isMultinomial) {
-      val (summaryModel, probabilityColName) = model.findSummaryModelAndProbabilityCol()
-      val logRegSummary = new BinaryLogisticRegressionTrainingSummary(
-        summaryModel.transform(dataset),
-        probabilityColName,
-        $(labelCol),
-        $(featuresCol),
-        objectiveHistory)
+      val logRegSummary = new BinaryLogisticRegressionTrainingSummary(dataset, model,
+        $(labelCol), $(featuresCol), objectiveHistory)
       model.setSummary(Some(logRegSummary))
     } else {
       model
@@ -998,21 +993,6 @@ class LogisticRegressionModel private[spark] (
     throw new SparkException("No training summary available for this LogisticRegressionModel")
   }
 
-  /**
-   * If the probability column is set returns the current model and probability column,
-   * otherwise generates a new column and sets it as the probability column on a new copy
-   * of the current model.
-   */
-  private[classification] def findSummaryModelAndProbabilityCol():
-      (LogisticRegressionModel, String) = {
-    $(probabilityCol) match {
-      case "" =>
-        val probabilityColName = "probability_" + java.util.UUID.randomUUID.toString
-        (copy(ParamMap.empty).setProbabilityCol(probabilityColName), probabilityColName)
-      case p => (this, p)
-    }
-  }
-
   private[classification]
   def setSummary(summary: Option[LogisticRegressionTrainingSummary]): this.type = {
     this.trainingSummary = summary
@@ -1030,10 +1010,7 @@ class LogisticRegressionModel private[spark] (
    */
   @Since("2.0.0")
   def evaluate(dataset: Dataset[_]): LogisticRegressionSummary = {
-    // Handle possible missing or invalid prediction columns
-    val (summaryModel, probabilityColName) = findSummaryModelAndProbabilityCol()
-    new BinaryLogisticRegressionSummary(summaryModel.transform(dataset),
-      probabilityColName, $(labelCol), $(featuresCol))
+    new BinaryLogisticRegressionSummary(dataset, this, $(labelCol), $(featuresCol))
   }
 
   /**
@@ -1343,9 +1320,9 @@ sealed trait LogisticRegressionSummary extends Serializable {
  * :: Experimental ::
  * Logistic regression training results.
  *
- * @param predictions dataframe output by the model's `transform` method.
- * @param probabilityCol field in "predictions" which gives the probability of
- *                       each class as a vector.
+ * @param dataset Dataset to be summarized.
+ * @param origModel Model to be summarized.  This is copied to create an internal
+ *                  model which cannot be modified from outside.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
@@ -1353,12 +1330,12 @@ sealed trait LogisticRegressionSummary extends Serializable {
 @Experimental
 @Since("1.5.0")
 class BinaryLogisticRegressionTrainingSummary private[classification] (
-    predictions: DataFrame,
-    probabilityCol: String,
+    dataset: Dataset[_],
+    origModel: LogisticRegressionModel,
     labelCol: String,
     featuresCol: String,
     @Since("1.5.0") val objectiveHistory: Array[Double])
-  extends BinaryLogisticRegressionSummary(predictions, probabilityCol, labelCol, featuresCol)
+  extends BinaryLogisticRegressionSummary(dataset, origModel, labelCol, featuresCol)
   with LogisticRegressionTrainingSummary {
 
 }
@@ -1367,20 +1344,45 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
  * :: Experimental ::
  * Binary Logistic regression results for a given model.
  *
- * @param predictions dataframe output by the model's `transform` method.
- * @param probabilityCol field in "predictions" which gives the probability of
- *                       each class as a vector.
+ * @param dataset Dataset to be summarized.
+ * @param origModel Model to be summarized.  This is copied to create an internal
+ *                  model which cannot be modified from outside.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  */
 @Experimental
 @Since("1.5.0")
 class BinaryLogisticRegressionSummary private[classification] (
-    @Since("1.5.0") @transient override val predictions: DataFrame,
-    @Since("1.5.0") override val probabilityCol: String,
+    dataset: Dataset[_],
+    origModel: LogisticRegressionModel,
     @Since("1.5.0") override val labelCol: String,
     @Since("1.6.0") override val featuresCol: String) extends LogisticRegressionSummary {
 
+  /**
+   * Field in "predictions" which gives the probability of each class as a vector.
+   * This is set to a new column name if the original model's `probabilityCol` is not set.
+   */
+  @Since("1.5.0")
+  override val probabilityCol: String = {
+    if (origModel.isDefined(origModel.probabilityCol) && origModel.getProbabilityCol != "") {
+      origModel.getProbabilityCol
+    } else {
+      "probability_" + java.util.UUID.randomUUID().toString
+    }
+  }
+
+  /**
+   * Private copy of model to ensure Params are not modified outside this class.
+   * Coefficients is not a deep copy, but that is acceptable.
+   *
+   * NOTE: [[probabilityCol]] must be set correctly before the value of [[model]] is set,
+   *       and [[model]] must be set before [[predictions]] is set!
+   */
+  protected val model: LogisticRegressionModel =
+    origModel.copy(ParamMap.empty).setProbabilityCol(probabilityCol)
+
+  /** predictions output by the model's `transform` method */
+  @Since("1.5.0") @transient override val predictions: DataFrame = model.transform(dataset)
 
   private val sparkSession = predictions.sparkSession
   import sparkSession.implicits._

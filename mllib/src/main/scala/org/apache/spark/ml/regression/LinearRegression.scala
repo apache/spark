@@ -221,15 +221,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       // When it is trained by WeightedLeastSquares, training summary does not
       // attach returned model.
       val lrModel = copyValues(new LinearRegressionModel(uid, model.coefficients, model.intercept))
-      val (summaryModel, predictionColName) = lrModel.findSummaryModelAndPredictionCol()
-      val trainingSummary = new LinearRegressionTrainingSummary(
-        summaryModel.transform(dataset),
-        predictionColName,
-        $(labelCol),
-        $(featuresCol),
-        summaryModel,
-        model.diagInvAtWA.toArray,
-        model.objectiveHistory)
+      val trainingSummary = new LinearRegressionTrainingSummary(dataset,
+        $(labelCol), $(featuresCol), lrModel, model.diagInvAtWA.toArray, model.objectiveHistory)
 
       lrModel.setSummary(Some(trainingSummary))
       instr.logSuccess(lrModel)
@@ -275,17 +268,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         val intercept = yMean
 
         val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
-        // Handle possible missing or invalid prediction columns
-        val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
-
-        val trainingSummary = new LinearRegressionTrainingSummary(
-          summaryModel.transform(dataset),
-          predictionColName,
-          $(labelCol),
-          $(featuresCol),
-          model,
-          Array(0D),
-          Array(0D))
+        val trainingSummary = new LinearRegressionTrainingSummary(dataset,
+          $(labelCol), $(featuresCol), model, Array(0D), Array(0D))
 
         model.setSummary(Some(trainingSummary))
         instr.logSuccess(model)
@@ -400,17 +384,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
-    // Handle possible missing or invalid prediction columns
-    val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
-
-    val trainingSummary = new LinearRegressionTrainingSummary(
-      summaryModel.transform(dataset),
-      predictionColName,
-      $(labelCol),
-      $(featuresCol),
-      model,
-      Array(0D),
-      objectiveHistory)
+    val trainingSummary = new LinearRegressionTrainingSummary(dataset,
+      $(labelCol), $(featuresCol), model, Array(0D), objectiveHistory)
 
     model.setSummary(Some(trainingSummary))
     instr.logSuccess(model)
@@ -477,26 +452,8 @@ class LinearRegressionModel private[ml] (
    */
   @Since("2.0.0")
   def evaluate(dataset: Dataset[_]): LinearRegressionSummary = {
-    // Handle possible missing or invalid prediction columns
-    val (summaryModel, predictionColName) = findSummaryModelAndPredictionCol()
-    new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName,
-      $(labelCol), $(featuresCol), summaryModel, Array(0D))
+    new LinearRegressionSummary(dataset, $(labelCol), $(featuresCol), this, Array(0D))
   }
-
-  /**
-   * If the prediction column is set returns the current model and prediction column,
-   * otherwise generates a new column and sets it as the prediction column on a new copy
-   * of the current model.
-   */
-  private[regression] def findSummaryModelAndPredictionCol(): (LinearRegressionModel, String) = {
-    $(predictionCol) match {
-      case "" =>
-        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString
-        (copy(ParamMap.empty).setPredictionCol(predictionColName), predictionColName)
-      case p => (this, p)
-    }
-  }
-
 
   override protected def predict(features: Vector): Double = {
     dot(features, coefficients) + intercept
@@ -572,22 +529,20 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
  * Linear regression training results. Currently, the training summary ignores the
  * training weights except for the objective trace.
  *
- * @param predictions predictions output by the model's `transform` method.
+ * @param dataset Dataset to be summarized
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 @Since("1.5.0")
 @Experimental
 class LinearRegressionTrainingSummary private[regression] (
-    predictions: DataFrame,
-    predictionCol: String,
+    dataset: Dataset[_],
     labelCol: String,
     featuresCol: String,
     model: LinearRegressionModel,
     diagInvAtWA: Array[Double],
     val objectiveHistory: Array[Double])
   extends LinearRegressionSummary(
-    predictions,
-    predictionCol,
+    dataset,
     labelCol,
     featuresCol,
     model,
@@ -609,21 +564,43 @@ class LinearRegressionTrainingSummary private[regression] (
  * :: Experimental ::
  * Linear regression results evaluated on a dataset.
  *
- * @param predictions predictions output by the model's `transform` method.
- * @param predictionCol Field in "predictions" which gives the predicted value of the label at
- *                      each instance.
  * @param labelCol Field in "predictions" which gives the true label of each instance.
  * @param featuresCol Field in "predictions" which gives the features of each instance as a vector.
  */
 @Since("1.5.0")
 @Experimental
 class LinearRegressionSummary private[regression] (
-    @transient val predictions: DataFrame,
-    val predictionCol: String,
+    dataset: Dataset[_],
     val labelCol: String,
     val featuresCol: String,
     private val privateModel: LinearRegressionModel,
     private val diagInvAtWA: Array[Double]) extends Serializable {
+
+  /**
+   * Field in "predictions" which gives the prediction value of each instance.
+   * This is set to a new column name if the original model's `predictionCol` is not set.
+   */
+  @Since("1.5.0")
+  val predictionCol: String = {
+    if (privateModel.isDefined(privateModel.predictionCol) && privateModel.getPredictionCol != "") {
+      privateModel.getPredictionCol
+    } else {
+      "prediction_" + java.util.UUID.randomUUID().toString
+    }
+  }
+
+  /**
+   * Private copy of model to ensure Params are not modified outside this class.
+   * Coefficients is not a deep copy, but that is acceptable.
+   *
+   * NOTE: [[predictionCol]] must be set correctly before the value of [[model]] is set,
+   *       and [[modelCopy]] must be set before [[predictions]] is set!
+   */
+  protected val modelCopy: LinearRegressionModel =
+    privateModel.copy(ParamMap.empty).setPredictionCol(predictionCol)
+
+  /** predictions output by the model's `transform` method. */
+  @Since("1.5.0") @transient val predictions: DataFrame = modelCopy.transform(dataset)
 
   @transient private val metrics = new RegressionMetrics(
     predictions
