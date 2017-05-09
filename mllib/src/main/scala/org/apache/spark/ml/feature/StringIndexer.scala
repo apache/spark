@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import java.util.Locale
-
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
