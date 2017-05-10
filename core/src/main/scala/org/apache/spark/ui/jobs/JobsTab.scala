@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.scheduler.SchedulingMode
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils}
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
 private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
@@ -40,7 +40,8 @@ private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
-      val jobId = Option(request.getParameter("id")).map(_.toInt)
+      // stripXSS is called first to remove suspicious characters used in XSS attacks
+      val jobId = Option(UIUtils.stripXSS(request.getParameter("id"))).map(_.toInt)
       jobId.foreach { id =>
         if (jobProgresslistener.activeJobs.contains(id)) {
           sc.foreach(_.cancelJob(id))
