@@ -577,8 +577,7 @@ object DataSource extends Logging {
           val internalSources = sources.filter(_.getClass.getName.startsWith("org.apache.spark"))
           if (internalSources.size == 1) {
             logWarning(s"Multiple sources found for $provider1 (${sourceNames.mkString(", ")}), " +
-              "please specify the fully qualified class name. " +
-              s"Using the internal datasource (${internalSources.head.getClass.getName}).")
+              s"defaulting to the internal datasource (${internalSources.head.getClass.getName}).")
             internalSources.head.getClass
           } else {
             sys.error(s"Multiple sources found for $provider1 (${sourceNames.mkString(", ")}), " +
