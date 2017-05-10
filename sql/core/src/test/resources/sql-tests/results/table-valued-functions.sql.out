@@ -106,7 +106,7 @@ struct<plan:string>
 
 
 -- !query 9
-set spark.sql.crossJoin.enabled=true
+SET spark.sql.crossJoin.enabled=true
 -- !query 9 schema
 struct<key:string,value:string>
 -- !query 9 output
@@ -114,7 +114,7 @@ spark.sql.crossJoin.enabled	true
 
 
 -- !query 10
-EXPLAIN EXTENDED select * from range(3) cross join range(3)
+EXPLAIN EXTENDED SELECT * FROM range(3) CROSS JOIN range(3)
 -- !query 10 schema
 struct<plan:string>
 -- !query 10 output
