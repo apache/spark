@@ -267,8 +267,12 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 }
 
 /**
- * Logistic regression. Supports multinomial logistic (softmax) regression and binomial logistic
- * regression.
+ * Logistic regression. Supports:
+ *  - Multinomial logistic (softmax) regression.
+ *  - Binomial logistic regression.
+ *
+ * This class supports fitting traditional logistic regression model by LBFGS/OWLQN and
+ * bound (box) constrained logistic regression model by LBFGSB.
  */
 @Since("1.2.0")
 class LogisticRegression @Since("1.2.0") (

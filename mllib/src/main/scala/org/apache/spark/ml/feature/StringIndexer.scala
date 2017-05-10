@@ -146,7 +146,7 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
  * This is a temporary fix for the case when target labels do not exist during prediction.
  */
 @Since("1.4.0")
-class StringIndexerModel (
+class StringIndexerModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("1.5.0") val labels: Array[String])
   extends Model[StringIndexerModel] with StringIndexerBase with MLWritable {

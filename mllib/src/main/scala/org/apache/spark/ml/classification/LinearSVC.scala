@@ -51,6 +51,7 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
  *   Linear SVM Classifier</a>
  *
  * This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
+ * Only supports L2 regularization currently.
  *
  */
 @Since("2.2.0")
@@ -131,7 +132,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
-  setDefault(threshold -> 0.0)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -148,7 +148,7 @@ class LinearSVC @Since("2.2.0") (
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
-  override protected[classification] def train(dataset: Dataset[_]): LinearSVCModel = {
+  override protected def train(dataset: Dataset[_]): LinearSVCModel = {
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
@@ -264,7 +264,7 @@ object LinearSVC extends DefaultParamsReadable[LinearSVC] {
 
 /**
  * :: Experimental ::
- * SVM Model trained by [[LinearSVC]]
+ * Linear SVM Model trained by [[LinearSVC]]
  */
 @Since("2.2.0")
 @Experimental
