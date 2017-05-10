@@ -49,6 +49,11 @@ case class UserDefinedFunction protected[sql] (
 
   private var _nullable: Boolean = true
 
+  /**
+   * Returns true when the UDF can return a nullable value.
+   *
+   * @since 2.3.0
+   */
   def nullable: Boolean = _nullable
 
   /**
@@ -71,7 +76,12 @@ case class UserDefinedFunction protected[sql] (
     udf
   }
 
-  protected[sql] def withNullability(nullable: Boolean): UserDefinedFunction = {
+  /**
+   * Updates UserDefinedFunction with a given nullability.
+   *
+   * @since 2.3.0
+   */
+  def withNullability(nullable: Boolean): UserDefinedFunction = {
     if (nullable == _nullable) {
       this
     } else {
