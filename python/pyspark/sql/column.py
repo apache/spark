@@ -551,6 +551,27 @@ class Column(object):
         """
         return (self >= lowerBound) & (self <= upperBound)
 
+    @since(1.5)
+    def In(self, *values):
+        """
+        A boolean expression that is evaluated to true if the value of this
+        expression is any of the given columns.
+        NOTE: Normally, we shold name this function the small case `in`. However, `in` is
+        a reserved word in Python. So we can't help naming this the upper case `In`.
+
+        >>> df.select(df.name, df.age, df.age.In(2, 4)).show()
+        +-----+---+---------+
+        | name|age|(age = 2)|
+        +-----+---+---------+
+        |Alice|  2|     true|
+        |  Bob|  5|    false|
+        +-----+---+---------+
+        """
+        for v in values:
+            if self == v:
+                return self == v
+            return self == v
+
     @since(1.4)
     def when(self, condition, value):
         """
