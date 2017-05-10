@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import org.apache.spark.scheduler.SchedulingMode
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils}
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
 private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
