@@ -86,6 +86,13 @@ abstract class StringRegexExpression extends BinaryExpression
         escape character, the following character is matched literally. It is invalid to escape
         any other character.
 
+        Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
+        to match a Tab character "\t", the pattern should be "\\t".
+
+        When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
+        to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
+        enabled, the pattern to match a Tab character should be "\t".
+
     Examples:
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
       true
