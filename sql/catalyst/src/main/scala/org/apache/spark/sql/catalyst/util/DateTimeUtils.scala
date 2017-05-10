@@ -23,6 +23,7 @@ import java.util.{Calendar, Locale, TimeZone}
 import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -96,6 +97,21 @@ object DateTimeUtils {
     val sdf = threadLocalDateFormat.get()
     sdf.setTimeZone(defaultTimeZone())
     sdf
+  }
+
+  private val threadLocalTimeZones = new ThreadLocal[mutable.Map[String, TimeZone]] {
+    override def initialValue(): mutable.Map[String, TimeZone] = mutable.Map.empty
+  }
+
+  def getTimeZone(timeZoneId: String): TimeZone = {
+    val timeZones = threadLocalTimeZones.get()
+    if (timeZones.contains(timeZoneId)) {
+      timeZones(timeZoneId)
+    } else {
+      val timeZone = TimeZone.getTimeZone(timeZoneId)
+      timeZones(timeZoneId) = timeZone
+      timeZone
+    }
   }
 
   def newDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
@@ -407,7 +423,7 @@ object DateTimeUtils {
       Calendar.getInstance(timeZone)
     } else {
       Calendar.getInstance(
-        TimeZone.getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
+        getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
     }
     c.set(Calendar.MILLISECOND, 0)
 
@@ -1027,7 +1043,7 @@ object DateTimeUtils {
    * representation in their timezone.
    */
   def fromUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
-    convertTz(time, TimeZoneGMT, TimeZone.getTimeZone(timeZone))
+    convertTz(time, TimeZoneGMT, getTimeZone(timeZone))
   }
 
   /**
@@ -1035,7 +1051,7 @@ object DateTimeUtils {
    * string representation in their timezone.
    */
   def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
-    convertTz(time, TimeZone.getTimeZone(timeZone), TimeZoneGMT)
+    convertTz(time, getTimeZone(timeZone), TimeZoneGMT)
   }
 
   /**
@@ -1045,5 +1061,6 @@ object DateTimeUtils {
     threadLocalGmtCalendar.remove()
     threadLocalTimestampFormat.remove()
     threadLocalDateFormat.remove()
+    threadLocalTimeZones.remove()
   }
 }
