@@ -144,7 +144,31 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
 }
 
 @ExpressionDescription(
-  usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.")
+  usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.",
+  extended = """
+    Arguments:
+      str - a string expression
+      regexp - a string expression. The pattern string should be a Java regular expression.
+
+        Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL parser.
+        For example, if the `str` parameter is "abc\td", the `regexp` can match it is:
+        "^abc\\\\td$".
+
+    Examples:
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*'
+      true
+
+        There is a SQL config 'spark.sql.parser.escapedStringLiterals' can be used to fallback
+        to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
+        enabled, the `regexp` can match "abc\td" is "^abc\\t$".
+
+    Examples (spark.sql.parser.escapedStringLiterals is enabled):
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\Users.*'
+      true
+
+    See also:
+      Use LIKE to match with simple string pattern.
+""")
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v
