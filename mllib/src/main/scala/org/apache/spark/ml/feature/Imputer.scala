@@ -103,7 +103,7 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
  */
 @Experimental
 @Since("2.2.0")
-class Imputer @Since("2.2.0")(@Since("2.2.0") override val uid: String)
+class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   extends Estimator[ImputerModel] with ImputerParams with DefaultParamsWritable {
 
   @Since("2.2.0")
