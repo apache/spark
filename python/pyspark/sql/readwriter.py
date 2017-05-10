@@ -575,7 +575,7 @@ class DataFrameWriter(OptionUtils):
         .. note:: Applicable for file-based data sources in combination with
                   :py:meth:`DataFrameWriter.saveAsTable`.
 
-        >>> (df.write.format('parquet')
+        >>> (df.write.format('parquet')  # doctest: +SKIP
         ...     .bucketBy(100, 'year', 'month')
         ...     .mode("overwrite")
         ...     .saveAsTable('bucketed_table'))
@@ -602,7 +602,7 @@ class DataFrameWriter(OptionUtils):
         :param col: a name of a column, or a list of names.
         :param cols: additional names (optional). If `col` is a list it should be empty.
 
-        >>> (df.write.format('parquet')
+        >>> (df.write.format('parquet')  # doctest: +SKIP
         ...     .bucketBy(100, 'year', 'month')
         ...     .sortBy('day')
         ...     .mode("overwrite")
