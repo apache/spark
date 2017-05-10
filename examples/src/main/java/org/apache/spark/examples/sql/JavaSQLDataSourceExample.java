@@ -120,6 +120,14 @@ public class JavaSQLDataSourceExample {
     Dataset<Row> sqlDF =
       spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`");
     // $example off:direct_sql$
+    // $example on:write_sorting_and_bucketing$
+    peopleDF.write().bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed");
+    // $example off:write_sorting_and_bucketing$
+    // $example on:write_partitioning$
+    usersDF.write().partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet");
+    // $example off:write_partitioning$
+
+    spark.sql("DROP TABLE IF EXISTS people_bucketed");
   }
 
   private static void runBasicParquetExample(SparkSession spark) {

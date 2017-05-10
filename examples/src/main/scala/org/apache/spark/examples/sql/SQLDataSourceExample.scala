@@ -57,7 +57,7 @@ object SQLDataSourceExample {
     // $example off:write_sorting_and_bucketing$
     // $example on:write_partitioning$
     usersDF.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
-    // $example on:write_partitioning$
+    // $example off:write_partitioning$
 
     spark.sql("DROP TABLE IF EXISTS people_bucketed")
   }
