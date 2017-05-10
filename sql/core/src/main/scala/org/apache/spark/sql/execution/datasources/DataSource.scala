@@ -580,8 +580,8 @@ object DataSource extends Logging {
               s"defaulting to the internal datasource (${internalSources.head.getClass.getName}).")
             internalSources.head.getClass
           } else {
-            sys.error(s"Multiple sources found for $provider1 (${sourceNames.mkString(", ")}), " +
-              "please specify the fully qualified class name.")
+            throw new AnalysisException(s"Multiple sources found for $provider1 " +
+              s"(${sourceNames.mkString(", ")}), please specify the fully qualified class name.")
           }
       }
     } catch {

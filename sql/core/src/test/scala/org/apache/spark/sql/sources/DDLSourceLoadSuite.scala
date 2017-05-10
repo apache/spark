@@ -26,7 +26,7 @@ import org.apache.spark.sql.types._
 class DDLSourceLoadSuite extends DataSourceTest with SharedSQLContext {
 
   test("data sources with the same name - internal data sources") {
-    val e = intercept[RuntimeException] {
+    val e = intercept[AnalysisException] {
       spark.read.format("Fluet da Bomb").load()
     }
     assert(e.getMessage.contains("Multiple sources found for Fluet da Bomb"))
@@ -38,7 +38,7 @@ class DDLSourceLoadSuite extends DataSourceTest with SharedSQLContext {
   }
 
   test("data sources with the same name - external data sources") {
-    val e = intercept[RuntimeException] {
+    val e = intercept[AnalysisException] {
       spark.read.format("Fake external source").load()
     }
     assert(e.getMessage.contains("Multiple sources found for Fake external source"))
