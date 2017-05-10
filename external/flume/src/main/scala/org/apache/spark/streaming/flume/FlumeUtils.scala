@@ -147,7 +147,8 @@ object FlumeUtils {
       storageLevel: StorageLevel
     ): ReceiverInputDStream[SparkFlumeEvent] = {
     createPollingStream(ssc, addresses, storageLevel,
-      DEFAULT_POLLING_BATCH_SIZE, DEFAULT_POLLING_PARALLELISM)
+      ssc.conf.getInt("spark.streaming.receiver.maxRate", DEFAULT_POLLING_BATCH_SIZE),
+      DEFAULT_POLLING_PARALLELISM)
   }
 
   /**
@@ -217,7 +218,8 @@ object FlumeUtils {
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[SparkFlumeEvent] = {
     createPollingStream(jssc, addresses, storageLevel,
-      DEFAULT_POLLING_BATCH_SIZE, DEFAULT_POLLING_PARALLELISM)
+      jssc.ssc.conf.getInt("spark.streaming.receiver.maxRate", DEFAULT_POLLING_BATCH_SIZE),
+      DEFAULT_POLLING_PARALLELISM)
   }
 
   /**
