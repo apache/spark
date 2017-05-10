@@ -36,16 +36,16 @@ import org.apache.spark.sql.types.DataType
  *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
  *                    type coercion. However, that would require more refactoring of the codebase.
  * @param udfName   The user-specified name of this UDF.
+ * @param nullable  True if the UDF can return null value.
  */
 case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
     inputTypes: Seq[DataType] = Nil,
-    udfName: Option[String] = None)
+    udfName: Option[String] = None,
+    nullable: Boolean = true)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression {
-
-  override def nullable: Boolean = true
 
   override def toString: String =
     s"${udfName.map(name => s"UDF:$name").getOrElse("UDF")}(${children.mkString(", ")})"
