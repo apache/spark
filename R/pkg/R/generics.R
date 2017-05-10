@@ -490,6 +490,13 @@ setGeneric("createOrReplaceTempView",
              standardGeneric("createOrReplaceTempView")
            })
 
+#' @rdname createGlobalTempView
+#' @export
+setGeneric("createGlobalTempView",
+function(x, viewName) {
+    standardGeneric("createGlobalTempView")
+})
+
 # @rdname crossJoin
 # @export
 setGeneric("crossJoin", function(x, y) { standardGeneric("crossJoin") })

@@ -501,6 +501,34 @@ setMethod("createOrReplaceTempView",
               invisible(callJMethod(x@sdf, "createOrReplaceTempView", viewName))
           })
 
+#' Creates a global temporary view using the given name.
+#'
+#' Creates a new global temporary view using a SparkDataFrame in the Spark Session.
+#' If a global temporary view with the same name already exists, raises exception.
+#'
+#' @param x A SparkDataFrame
+#' @param viewName A character vector containing the name of the table
+#'
+#' @family SparkDataFrame functions
+#' @rdname createGlobalTempView
+#' @name createGlobalTempView
+#' @aliases createGlobalTempView,SparkDataFrame,character-method
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' createGlobalTempView(df, "json_df")
+#' new_df <- sql("SELECT * FROM global_temp.json_df")
+#'}
+#' @note createGlobalTempView since 2.2.0
+setMethod("createGlobalTempView",
+          signature(x = "SparkDataFrame", viewName = "character"),
+          function(x, viewName) {
+              invisible(callJMethod(x@sdf, "createGlobalTempView", viewName))
+          })
+
 #' (Deprecated) Register Temporary Table
 #'
 #' Registers a SparkDataFrame as a Temporary Table in the SparkSession
