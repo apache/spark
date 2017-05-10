@@ -39,7 +39,8 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val parameterId = request.getParameter("id")
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
+    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val content =
@@ -197,4 +198,3 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     UIUtils.listingTable(headers, generateDataRow, data, fixedWidth = true)
   }
 }
-
