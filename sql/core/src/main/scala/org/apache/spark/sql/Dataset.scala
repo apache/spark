@@ -2804,8 +2804,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
-    val rowSchema = schema
-    import sparkSession.implicits.newStringEncoder
+    val rowSchema = this.schema
     val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
     mapPartitions { iter =>
       val writer = new CharArrayWriter()
@@ -2829,7 +2828,7 @@ class Dataset[T] private[sql](
           json
         }
       }
-    }
+    } (sparkSession.implicits.newStringEncoder)
   }
 
   /**
