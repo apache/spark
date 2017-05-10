@@ -136,8 +136,7 @@ trait CheckAnalysis extends PredicateHelper {
             if (conditions.isEmpty && query.output.size != 1) {
               failAnalysis(
                 s"Scalar subquery must return only one column, but got ${query.output.size}")
-            }
-            else if (conditions.nonEmpty) {
+            } else if (conditions.nonEmpty) {
               def checkAggregate(agg: Aggregate): Unit = {
                 // Make sure correlated scalar subqueries contain one row for every outer row by
                 // enforcing that they are aggregates containing exactly one aggregate expression.
