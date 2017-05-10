@@ -104,14 +104,7 @@ object DateTimeUtils {
   }
 
   def getTimeZone(timeZoneId: String): TimeZone = {
-    val timeZones = threadLocalTimeZones.get()
-    if (timeZones.contains(timeZoneId)) {
-      timeZones(timeZoneId)
-    } else {
-      val timeZone = TimeZone.getTimeZone(timeZoneId)
-      timeZones(timeZoneId) = timeZone
-      timeZone
-    }
+    threadLocalTimeZones.get().getOrElseUpdate(timeZoneId, TimeZone.getTimeZone(timeZoneId))
   }
 
   def newDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
