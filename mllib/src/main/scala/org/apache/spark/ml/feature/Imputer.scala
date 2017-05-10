@@ -182,7 +182,7 @@ object Imputer extends DefaultParamsReadable[Imputer] {
  */
 @Experimental
 @Since("2.2.0")
-class ImputerModel private[ml](
+class ImputerModel private[ml] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") val surrogateDF: DataFrame)
   extends Model[ImputerModel] with ImputerParams with MLWritable {

@@ -132,6 +132,7 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
+  setDefault(threshold -> 0.0)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
