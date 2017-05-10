@@ -17,25 +17,11 @@
 package org.apache.spark.scheduler.cluster.kubernetes
 
 import org.apache.spark.SparkContext
-import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
+import org.apache.spark.scheduler.{TaskSchedulerImpl, TaskSet, TaskSetManager}
 
-private[spark] class KubernetesClusterManager extends ExternalClusterManager {
+private[spark] class KubernetesTaskSchedulerImpl(sc: SparkContext) extends TaskSchedulerImpl(sc) {
 
-  override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
-
-  override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
-    val scheduler = new KubernetesTaskSchedulerImpl(sc)
-    sc.taskScheduler = scheduler
-    scheduler
-  }
-
-  override def createSchedulerBackend(sc: SparkContext, masterURL: String, scheduler: TaskScheduler)
-      : SchedulerBackend = {
-    new KubernetesClusterSchedulerBackend(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl], sc)
-  }
-
-  override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {
-    scheduler.asInstanceOf[TaskSchedulerImpl].initialize(backend)
+  override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
+    new KubernetesTaskSetManager(this, taskSet, maxTaskFailures)
   }
 }
-

@@ -242,7 +242,7 @@ private[spark] class TaskSetManager(
    * Return the pending tasks list for a given host, or an empty list if
    * there is no map entry for that host
    */
-  private def getPendingTasksForHost(host: String): ArrayBuffer[Int] = {
+  protected def getPendingTasksForHost(host: String): ArrayBuffer[Int] = {
     pendingTasksForHost.getOrElse(host, ArrayBuffer())
   }
 
