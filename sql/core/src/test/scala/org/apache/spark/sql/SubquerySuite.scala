@@ -72,7 +72,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("rdd deserialization does not crash [SPARK-15791]") {
+  test("SPARK-15791: rdd deserialization does not crash") {
     sql("select (select 1 as b) as b").rdd.count()
   }
 
@@ -866,5 +866,13 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("select * from l, r where l.a = r.c + 1 AND (exists (select * from r) OR l.a = r.c)"),
       Row(3, 3.0, 2, 3.0) :: Row(3, 3.0, 2, 3.0) :: Nil)
+  }
+
+  test("SPARK-20688: correctly check analysis for scalar sub-queries") {
+    withTempView("t") {
+      Seq(1 -> "a").toDF("i", "j").createTempView("t")
+      val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
+      assert(e.message.contains("cannot resolve '`a`' given input columns: [i, j]"))
+    }
   }
 }
