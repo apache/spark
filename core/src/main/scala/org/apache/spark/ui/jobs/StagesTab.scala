@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import javax.servlet.http.HttpServletRequest
 
 import org.apache.spark.scheduler.SchedulingMode
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils}
 
 /** Web UI showing progress status of all stages in the given SparkContext. */
 private[ui] class StagesTab(parent: SparkUI) extends SparkUITab(parent, "stages") {
@@ -39,7 +39,8 @@ private[ui] class StagesTab(parent: SparkUI) extends SparkUITab(parent, "stages"
   def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
       val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
-      val stageId = Option(request.getParameter("id")).getOrElse("-1").toInt
+      // stripXSS is called first to remove suspicious characters used in XSS attacks
+      val stageId = Option(UIUtils.stripXSS(request.getParameter("id"))).getOrElse("-1").toInt
       if (stageId >= 0 && killFlag && progressListener.activeStages.contains(stageId)) {
         sc.get.cancelStage(stageId)
       }

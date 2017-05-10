@@ -87,16 +87,17 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
-      val parameterId = request.getParameter("id")
+      // stripXSS is called first to remove suspicious characters used in XSS attacks
+      val parameterId = UIUtils.stripXSS(request.getParameter("id"))
       require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-      val parameterAttempt = request.getParameter("attempt")
+      val parameterAttempt = UIUtils.stripXSS(request.getParameter("attempt"))
       require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
 
-      val parameterTaskPage = request.getParameter("task.page")
-      val parameterTaskSortColumn = request.getParameter("task.sort")
-      val parameterTaskSortDesc = request.getParameter("task.desc")
-      val parameterTaskPageSize = request.getParameter("task.pageSize")
+      val parameterTaskPage = UIUtils.stripXSS(request.getParameter("task.page"))
+      val parameterTaskSortColumn = UIUtils.stripXSS(request.getParameter("task.sort"))
+      val parameterTaskSortDesc = UIUtils.stripXSS(request.getParameter("task.desc"))
+      val parameterTaskPageSize = UIUtils.stripXSS(request.getParameter("task.pageSize"))
 
       val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
       val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
