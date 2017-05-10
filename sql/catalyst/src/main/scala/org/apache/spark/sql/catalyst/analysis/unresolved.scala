@@ -66,16 +66,10 @@ case class UnresolvedInlineTable(
 /**
  * A table-valued function, e.g.
  * {{{
- *   select id from range(10);
- *
- *   // Assign alias names
- *   select t.a from range(10) t(a);
+ *   select * from range(10);
  * }}}
  */
-case class UnresolvedTableValuedFunction(
-    functionName: String,
-    functionArgs: Seq[Expression],
-    outputNames: Seq[String])
+case class UnresolvedTableValuedFunction(functionName: String, functionArgs: Seq[Expression])
   extends LeafNode {
 
   override def output: Seq[Attribute] = Nil
