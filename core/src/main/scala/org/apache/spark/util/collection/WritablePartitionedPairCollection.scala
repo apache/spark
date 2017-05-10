@@ -75,16 +75,22 @@ private[spark] object WritablePartitionedPairCollection {
   }
 
   /**
-   * A comparator for (Int, K) pairs that orders them both by their partition ID and a key ordering.
+   * Takes an optional parameter (keyComparator), use if provided
+   * and returns a comparator for the partitions
    */
-  def partitionKeyComparator[K](keyComparator: Comparator[K]): Comparator[(Int, K)] = {
-    new Comparator[(Int, K)] {
-      override def compare(a: (Int, K), b: (Int, K)): Int = {
-        val partitionDiff = a._1 - b._1
-        if (partitionDiff != 0) {
-          partitionDiff
-        } else {
-          keyComparator.compare(a._2, b._2)
+  def getComparator[K](keyComparator: Option[Comparator[K]]): Comparator[(Int, K)] = {
+    if (!keyComparator.isDefined) return partitionComparator
+    else {
+      val theKeyComp = keyComparator.get
+      new Comparator[(Int, K)] {
+        // We know we have a non-empty comparator here
+        override def compare(a: (Int, K), b: (Int, K)): Int = {
+          val partitionDiff = a._1 - b._1
+          if (partitionDiff != 0) {
+            partitionDiff
+          } else {
+            theKeyComp.compare(a._2, b._2)
+          }
         }
       }
     }

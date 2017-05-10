@@ -30,8 +30,7 @@ private[spark] class PartitionedAppendOnlyMap[K, V]
 
   def partitionedDestructiveSortedIterator(keyComparator: Option[Comparator[K]])
     : Iterator[((Int, K), V)] = {
-    val comparator = keyComparator.map(partitionKeyComparator).getOrElse(partitionComparator)
-    destructiveSortedIterator(comparator)
+    destructiveSortedIterator(getComparator(keyComparator))
   }
 
   def insert(partition: Int, key: K, value: V): Unit = {
