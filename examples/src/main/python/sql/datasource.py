@@ -35,10 +35,20 @@ def basic_datasource_example(spark):
     df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
     # $example off:generic_load_save_functions$
 
+    # $example on:write_partitioning$
+    df.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
+    # $example off:write_partitioning$
+
     # $example on:manual_load_options$
     df = spark.read.load("examples/src/main/resources/people.json", format="json")
     df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
     # $example off:manual_load_options$
+
+    # $example on:write_sorting_and_bucketing$
+    df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
+    # $example off:write_sorting_and_bucketing$
+
+    spark.sql("DROP TABLE IF EXISTS people_bucketed")
 
     # $example on:direct_sql$
     df = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
