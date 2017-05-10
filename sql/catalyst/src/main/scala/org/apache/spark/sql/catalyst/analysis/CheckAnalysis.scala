@@ -128,6 +128,8 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
           case s @ ScalarSubquery(query, conditions, _) =>
+            checkAnalysis(query)
+
             // If no correlation, the output must be exactly one column
             if (conditions.isEmpty && query.output.size != 1) {
               failAnalysis(
@@ -186,7 +188,6 @@ trait CheckAnalysis extends PredicateHelper {
                 case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
               }
             }
-            checkAnalysis(query)
             s
 
           case s: SubqueryExpression =>
