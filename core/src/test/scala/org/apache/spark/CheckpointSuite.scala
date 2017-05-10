@@ -114,7 +114,7 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
    * RDDs partitions. So even if the parent RDD is checkpointed and its partitions changed,
    * the generated RDD will remember the partitions and therefore potentially the whole lineage.
    * This function should be called only those RDD whose partitions refer to parent RDD's
-   * partitions (i.e., do not call it on simple RDD like MappedRDD).
+   * partitions (i.e., do not call it on simple RDDs).
    *
    * @param op an operation to run on the RDD
    * @param reliableCheckpoint if true, use reliable checkpoints, otherwise use local checkpoints
@@ -388,7 +388,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     // the parent RDD has been checkpointed and parent partitions have been changed.
     // Note that this test is very specific to the current implementation of CartesianRDD.
     val ones = sc.makeRDD(1 to 100, 10).map(x => x)
-    checkpoint(ones, reliableCheckpoint) // checkpoint that MappedRDD
+    checkpoint(ones, reliableCheckpoint)
     val cartesian = new CartesianRDD(sc, ones, ones)
     val splitBeforeCheckpoint =
       serializeDeserialize(cartesian.partitions.head.asInstanceOf[CartesianPartition])
@@ -411,7 +411,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     // Note that this test is very specific to the current implementation of
     // CoalescedRDDPartitions.
     val ones = sc.makeRDD(1 to 100, 10).map(x => x)
-    checkpoint(ones, reliableCheckpoint) // checkpoint that MappedRDD
+    checkpoint(ones, reliableCheckpoint)
     val coalesced = new CoalescedRDD(ones, 2)
     val splitBeforeCheckpoint =
       serializeDeserialize(coalesced.partitions.head.asInstanceOf[CoalescedRDDPartition])
