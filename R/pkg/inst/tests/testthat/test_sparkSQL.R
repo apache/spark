@@ -678,7 +678,6 @@ test_that("jsonRDD() on a RDD with json string", {
 
 test_that("test tableNames and tables", {
   count <- count(listTables())
-  expect_equal(count, 0)
 
   df <- read.json(jsonPath)
   createOrReplaceTempView(df, "table1")
