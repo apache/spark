@@ -655,7 +655,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           """
             | select c1 from onerow t1
             | where exists (select 1
-            |               from   (select 1 from onerow t2 LIMIT 1)
+            |               from   (select 1 as c1 from onerow t2 LIMIT 1) t2
             |               where  t1.c1=t2.c1)""".stripMargin),
         Row(1) :: Nil)
     }
@@ -866,5 +866,28 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("select * from l, r where l.a = r.c + 1 AND (exists (select * from r) OR l.a = r.c)"),
       Row(3, 3.0, 2, 3.0) :: Row(3, 3.0, 2, 3.0) :: Nil)
+  }
+
+  test("SPARK-20690: Do not add missing attributes through subqueries") {
+    withTempView("onerow") {
+      Seq(1).toDF("c1").createOrReplaceTempView("onerow")
+
+      val e = intercept[AnalysisException] {
+        sql(
+          """
+            | select 1
+            | from   (select 1 from onerow t1 LIMIT 1)
+            | where  t1.c1=1""".stripMargin)
+      }
+      assert(e.message.contains("cannot resolve '`t1.c1`'"))
+
+      checkAnswer(
+        sql(
+          """
+            | select 1
+            | from   (select 1 as c1 from onerow t1 LIMIT 1) t2
+            | where  t2.c1=1""".stripMargin),
+        Row(1) :: Nil)
+    }
   }
 }

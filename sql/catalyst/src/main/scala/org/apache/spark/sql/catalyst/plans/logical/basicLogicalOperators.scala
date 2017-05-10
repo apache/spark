@@ -798,14 +798,26 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
 }
 
+object SubqueryAlias {
+  def apply(alias: String, child: LogicalPlan): SubqueryAlias = SubqueryAlias(Some(alias), child)
+  def apply(child: LogicalPlan): SubqueryAlias = SubqueryAlias(None, child)
+}
+
+/**
+ * Aliased subquery.
+ *
+ * @param alias the alias name for this subquery. If `None` is given, the `output` will have
+ *              empty qualifier.
+ * @param child the LogicalPlan
+ */
 case class SubqueryAlias(
-    alias: String,
+    alias: Option[String],
     child: LogicalPlan)
   extends UnaryNode {
 
   override lazy val canonicalized: LogicalPlan = child.canonicalized
 
-  override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
+  override def output: Seq[Attribute] = child.output.map(_.withQualifier(alias))
 }
 
 /**

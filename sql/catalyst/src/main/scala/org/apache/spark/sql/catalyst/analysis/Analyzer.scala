@@ -1052,7 +1052,7 @@ class Analyzer(
           case ae: AnalysisException => s
         }
 
-      case f @ Filter(cond, child) if child.resolved =>
+      case f @ Filter(cond, child) if !f.resolved && child.resolved =>
         try {
           val newCond = resolveExpressionRecursively(cond, child)
           val requiredAttrs = newCond.references.filter(_.resolved)

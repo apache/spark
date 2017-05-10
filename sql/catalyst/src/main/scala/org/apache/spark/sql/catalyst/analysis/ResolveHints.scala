@@ -58,7 +58,7 @@ object ResolveHints {
         plan match {
           case u: UnresolvedRelation if toBroadcast.exists(resolver(_, u.tableIdentifier.table)) =>
             BroadcastHint(plan)
-          case r: SubqueryAlias if toBroadcast.exists(resolver(_, r.alias)) =>
+          case SubqueryAlias(Some(alias), _) if toBroadcast.exists(resolver(_, alias)) =>
             BroadcastHint(plan)
 
           case _: BroadcastHint | _: View | _: With | _: SubqueryAlias =>

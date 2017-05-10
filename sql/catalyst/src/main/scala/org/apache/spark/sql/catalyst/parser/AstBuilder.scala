@@ -101,7 +101,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     query.optional(ctx.ctes) {
       val ctes = ctx.ctes.namedQuery.asScala.map { nCtx =>
         val namedQuery = visitNamedQuery(nCtx)
-        (namedQuery.alias, namedQuery)
+        (namedQuery.alias.get, namedQuery)
       }
       // Check for duplicate names.
       checkDuplicateKeys(ctes, ctx)
@@ -732,9 +732,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryNoWith)
+    val query = plan(ctx.queryNoWith)
       .optionalMap(ctx.sample)(withSample)
-      .optionalMap(ctx.strictIdentifier)(aliasPlan)
+    if (ctx.strictIdentifier != null) {
+      aliasPlan(ctx.strictIdentifier, query)
+    } else {
+      SubqueryAlias(query)
+    }
   }
 
   /**
