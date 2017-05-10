@@ -53,3 +53,13 @@ set spark.sql.groupByAliases=false;
 
 -- Check analysis exceptions
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k;
+
+-- turn on group by aliases (for remaining tests)
+set spark.sql.groupByAliases=true;
+
+-- Aggregate with empty input and non-empty GroupBy expressions.
+SELECT a, COUNT(1) FROM testData WHERE false GROUP BY a;
+
+-- Aggregate with empty input and empty GroupBy expressions.
+SELECT COUNT(1) FROM testData WHERE false;
+SELECT 1 FROM (SELECT COUNT(1) FROM testData WHERE false) t;
