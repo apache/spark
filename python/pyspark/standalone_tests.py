@@ -25,13 +25,6 @@ from __future__ import print_function
 import os
 import sys
 
-from pyspark.sql import SparkSession
-
-if 'numpy' in sys.modules:
-    from pyspark.ml.param import Params
-    from pyspark.mllib.linalg import *
-else:
-    print("Skipping pyspark ml import tests, missing numpy")
 
 if sys.version >= "3":
     from io import StringIO
@@ -41,11 +34,21 @@ else:
 if __name__ == "__main__":
     gateway_already_started = "PYSPARK_GATEWAY_PORT" in os.environ
     if not gateway_already_started:
+        print("redirecting stdout and stderr")
         _old_stdout = sys.stdout
         _old_stderr = sys.stderr
         # Verify stdout/stderr overwrite support for jupyter
         sys.stdout = new_stdout = StringIO()
         sys.stderr = new_stderr = StringIO()
+
+
+    from pyspark.sql import SparkSession
+    if 'numpy' in sys.modules:
+        from pyspark.ml.param import Params
+        from pyspark.mllib.linalg import *
+    else:
+        print("Skipping pyspark ml import tests, missing numpy")
+
 
     spark = SparkSession\
         .builder\
@@ -72,6 +75,7 @@ if __name__ == "__main__":
 
         if logs.find("'str' object has no attribute 'startsWith'") == -1:
             print("Failed to find helpful error message, redirect failed?")
+            print("logs were {0}".format(logs))
             sys.exit(-1)
     print("Successfully ran pip sanity check")
 
