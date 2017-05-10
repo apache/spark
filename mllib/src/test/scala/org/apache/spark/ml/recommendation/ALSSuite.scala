@@ -738,6 +738,28 @@ class ALSSuite
     }
   }
 
+  test("recommendForUserSubset") {
+    val spark = this.spark
+    import spark.implicits._
+    val model = getALSModel
+    val numItems = model.itemFactors.count
+    val expected = Map(
+      0 -> Array((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
+      2 -> Array((3, 51f), (5, 45f), (4, 30f), (6, 18f))
+    )
+    val userSubset = expected.keys.toSeq.toDF("user")
+    val numUsersSubset = userSubset.count
+
+    Seq(2, 4, 6).foreach { k =>
+      val n = math.min(k, numItems).toInt
+      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val topItems = model.recommendForUserSubset(userSubset, k)
+      assert(topItems.count() == numUsersSubset)
+      assert(topItems.columns.contains("user"))
+      checkRecommendations(topItems, expectedUpToN, "item")
+    }
+  }
+
   test("recommendForAllItems with k <, = and > num_users") {
     val model = getALSModel
     val numUsers = model.userFactors.count
