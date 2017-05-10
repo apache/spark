@@ -224,8 +224,7 @@ case class InnerOuterEstimation(conf: SQLConf, join: Join) extends Logging {
         } else {
           updateNdv(oldNumRows = rightRows, newNumRows = outputRows, oldNdv = oldNdv)
         }
-        val newColStat =
-          if (newNdv != oldNdv) oldColStat.copy(distinctCount = newNdv) else oldColStat
+        val newColStat = oldColStat.copy(distinctCount = newNdv)
         // TODO: support nullCount updates for specific outer joins
         outputAttrStats += a -> newColStat
       }
