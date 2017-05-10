@@ -198,7 +198,7 @@ object SQLConf {
 
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
-    .doc("When true, string literals (including regex patterns) remains escaped in our SQL " +
+    .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
       "parser. The default is false since Spark 2.0. Setting it to true can restore the behavior " +
       "prior to Spark 2.0.")
     .booleanConf
