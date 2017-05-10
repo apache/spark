@@ -43,6 +43,18 @@ object EstimationUtils {
       avgLen = dataType.defaultSize, maxLen = dataType.defaultSize)
   }
 
+  /**
+   * Updates (scales down) the number of distinct values if the number of rows decreases after
+   * some operation (such as filter, join). Otherwise keep it unchanged.
+   */
+  def updateNdv(oldNumRows: BigInt, newNumRows: BigInt, oldNdv: BigInt): BigInt = {
+    if (newNumRows < oldNumRows) {
+      ceil(BigDecimal(oldNdv) * BigDecimal(newNumRows) / BigDecimal(oldNumRows))
+    } else {
+      oldNdv
+    }
+  }
+
   def ceil(bigDecimal: BigDecimal): BigInt = bigDecimal.setScale(0, RoundingMode.CEILING).toBigInt()
 
   /** Get column stats for output attributes. */
