@@ -581,6 +581,46 @@ Starting from Spark 2.1, persistent datasource tables have per-partition metadat
 
 Note that partition information is not gathered by default when creating external datasource tables (those with a `path` option). To sync the partition information in the metastore, you can invoke `MSCK REPAIR TABLE`.
 
+### Bucketing, Sorting and Partitioning
+
+For file-based data source it is also possible to bucket and and sort or partition the output. 
+Bucketing and sorting is applicable only to persistent tables:
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+{% include_example write_sorting_and_bucketing scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example write_sorting_and_bucketing java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example write_sorting_and_bucketing python/sql/datasource.py %}
+</div>
+
+</div>
+
+while partitioning can be used with both `save` and `saveAsTable`:
+
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+{% include_example write_partitioning scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example write_partitioning java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example write_partitioning python/sql/datasource.py %}
+</div>
+
+</div>
+
 ## Parquet Files
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
