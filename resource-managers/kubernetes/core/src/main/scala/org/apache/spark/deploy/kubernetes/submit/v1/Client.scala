@@ -538,7 +538,9 @@ private[spark] class Client(
   private class DriverEndpointsReadyWatcher(resolvedDriverEndpoints: SettableFuture[Endpoints])
       extends Watcher[Endpoints] {
     override def eventReceived(action: Action, endpoints: Endpoints): Unit = {
-      if ((action == Action.ADDED) || (action == Action.MODIFIED)
+      if ((action == Action.ADDED || action == Action.MODIFIED)
+          && (endpoints != null)
+          && (endpoints.getSubsets != null)
           && endpoints.getSubsets.asScala.nonEmpty
           && endpoints.getSubsets.asScala.exists(_.getAddresses.asScala.nonEmpty)
           && !resolvedDriverEndpoints.isDone) {
@@ -554,7 +556,7 @@ private[spark] class Client(
   private class DriverServiceReadyWatcher(resolvedDriverService: SettableFuture[Service])
       extends Watcher[Service] {
     override def eventReceived(action: Action, service: Service): Unit = {
-      if ((action == Action.ADDED) || (action == Action.MODIFIED)
+      if ((action == Action.ADDED || action == Action.MODIFIED)
           && !resolvedDriverService.isDone) {
         resolvedDriverService.set(service)
       }
