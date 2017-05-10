@@ -75,14 +75,6 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     val blockManager = SparkEnv.get.blockManager
     val currSplit = split.asInstanceOf[CartesianPartition]
     val blockId2 = RDDBlockId(rdd2.id, currSplit.s2.index)
-    // Whether the block persisted by the user with valid StorageLevel.
-    val persistedInLocal = blockManager.getStatus(blockId2) match {
-      case Some(result) =>
-        // This meaning if the block is cached by the user? If it's valid, it shouldn't be
-        // removed by other task.
-        result.storageLevel.isValid
-      case None => false
-    }
     var cachedInLocal = false
 
     // Try to get data from the local, otherwise it will be cached to the local.
@@ -91,45 +83,58 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
         partition: Partition,
         context: TaskContext,
         level: StorageLevel): Iterator[U] = {
-      // Because the getLocalValues return a CompletionIterator, and it will release the read
-      // block after the iterator finish using. So there should update the flag.
-      cachedInLocal = blockManager.getStatus(blockId2) match {
-        case Some(_) => true
-        case None => false
+      getLocalValues() match {
+        case Some(result) =>
+          cachedInLocal = true
+          return result
+        case None =>
+          cachedInLocal = false
       }
 
-      if (persistedInLocal || cachedInLocal) {
-        blockManager.getLocalValues(blockId2) match {
-          case Some(result) =>
-            val existingMetrics = context.taskMetrics().inputMetrics
-            existingMetrics.incBytesRead(result.bytes)
-            return new InterruptibleIterator[U](context, result.data.asInstanceOf[Iterator[U]]) {
+      val iterator = rdd.iterator(partition, context)
+      // Keep read lock, because next we need read it.
+      val cachedResult = blockManager.putIterator[U](blockId2, iterator, level, false,
+          true) match {
+        case true =>
+          cachedInLocal = true
+          "successful"
+        case false =>
+          cachedInLocal = false
+          "failed"
+      }
+
+      logInfo(s"Cache the block $blockId2 to local $cachedResult.")
+      getLocalValues() match {
+        // We don't need release the read lock, it will release after the iterator completion.
+        case Some(result) => result
+        case None =>
+          throw new SparkException(s"Block $blockId2 was not found even though it's read-locked")
+      }
+    }
+
+    def getLocalValues(): Option[Iterator[U]] = {
+      blockManager.getLocalValues(blockId2) match {
+        case Some(result) =>
+          val existingMetrics = context.taskMetrics().inputMetrics
+          existingMetrics.incBytesRead(result.bytes)
+          val localIter =
+            new InterruptibleIterator[U](context, result.data.asInstanceOf[Iterator[U]]) {
               override def next(): U = {
                 existingMetrics.incRecordsRead(1)
                 delegate.next()
               }
-            }
-          case None =>
-            if (persistedInLocal) {
-              throw new SparkException(s"Block $blockId2 was not found even though it's persisted")
-            }
-        }
+          }
+          Some(localIter)
+        case None =>
+          None
       }
-
-      val iterator = rdd.iterator(partition, context)
-      val cachedResult = blockManager.putIterator[U](blockId2, iterator, level, false) match {
-        case true =>
-          cachedInLocal = true
-          "successful"
-        case false => "failed"
-      }
-
-      logInfo(s"Cache the block $blockId2 to local $cachedResult.")
-      iterator
     }
 
     def removeCachedBlock(): Unit = {
       val blockManager = SparkEnv.get.blockManager
+      // Whether the block it persisted by the user.
+      val persistedInLocal =
+        blockManager.master.getLocations(blockId2).contains(blockManager.blockManagerId)
       if (!persistedInLocal || cachedInLocal || blockManager.isRemovable(blockId2)) {
         blockManager.removeOrMarkAsRemovable(blockId2, false)
       }

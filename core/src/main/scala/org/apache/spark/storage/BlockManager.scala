@@ -791,9 +791,11 @@ private[spark] class BlockManager(
       blockId: BlockId,
       values: Iterator[T],
       level: StorageLevel,
-      tellMaster: Boolean = true): Boolean = {
+      tellMaster: Boolean = true,
+      keepReadLock: Boolean = false): Boolean = {
     require(values != null, "Values is null")
-    doPutIterator(blockId, () => values, level, implicitly[ClassTag[T]], tellMaster) match {
+    doPutIterator(blockId, () => values, level, implicitly[ClassTag[T]], tellMaster,
+        keepReadLock)match {
       case None =>
         true
       case Some(iter) =>
