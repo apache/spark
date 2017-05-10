@@ -84,10 +84,11 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    * Returns the name of this accumulator, can only be called after registration.
    */
   final def name: Option[String] = {
+    assertMetadataNotNull()
+
     if (atDriverSide) {
-      AccumulatorContext.get(id).flatMap(_.metadata.name)
+      metadata.name.orElse(AccumulatorContext.get(id).flatMap(_.metadata.name))
     } else {
-      assertMetadataNotNull()
       metadata.name
     }
   }
@@ -165,9 +166,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
       }
       val copyAcc = copyAndReset()
       assert(copyAcc.isZero, "copyAndReset must return a zero value copy")
-      val isInternalAcc =
-        (name.isDefined && name.get.startsWith(InternalAccumulator.METRICS_PREFIX)) ||
-          getClass.getSimpleName == "SQLMetric"
+      val isInternalAcc = name.isDefined && name.get.startsWith(InternalAccumulator.METRICS_PREFIX)
       if (isInternalAcc) {
         // Do not serialize the name of internal accumulator and send it to executor.
         copyAcc.metadata = metadata.copy(name = None)
