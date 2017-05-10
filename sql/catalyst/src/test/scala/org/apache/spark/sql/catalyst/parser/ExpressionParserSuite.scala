@@ -428,99 +428,76 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("strings") {
-    // The SQL commands when ESCAPED_STRING_LITERALS = false (default behavior)
-    val sqlCommands = Seq(
-      // Single Strings.
-      "\"hello\"",
-      "'hello'",
-      // Multi-Strings.
-      "\"hello\" 'world'",
-      "'hello' \" \" 'world'",
-      // 'LIKE' string literals.
-      "'pattern%'",
-      "'no-pattern\\%'",
-      "'pattern\\\\%'",
-      "'pattern\\\\\\%'",
-      // Escaped characters.
-      "'\\0'",
-      "'\\\"'",
-      "'\\b'",
-      "'\\n'",
-      "'\\r'",
-      "'\\t'",
-      // Octals
-      "'\\110\\145\\154\\154\\157\\041'",
-      // Unicode
-      "'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'")
+    Seq(true, false).foreach { escape =>
+      val conf = new SQLConf()
+      conf.setConfString(SQLConf.ESCAPED_STRING_LITERALS.key, escape.toString)
+      val parser = new CatalystSqlParser(conf)
 
-    // The SQL commands when ESCAPED_STRING_LITERALS = true
-    val fallbackSqlCommands = Seq(
+      // tests that have same result whatever the conf is
       // Single Strings.
-      "\"hello\"",
-      "'hello'",
-      // Multi-Strings.
-      "\"hello\" 'world'",
-      "'hello' \" \" 'world'",
-      // 'LIKE' string literals.
-      "'pattern%'",
-      "'no-pattern\\%'",
-      "'pattern\\%'",
-      "'pattern\\\\%'",
-      // Escaped characters.
-      "'\0'",
-      "'\"'",
-      "'\b'",
-      "'\n'",
-      "'\r'",
-      "'\t'",
-      // Octals
-      "'\110\145\154\154\157\041'",
-      // Unicode
-      "'\u0057\u006F\u0072\u006C\u0064\u0020\u003A\u0029'")
+      assertEqual("\"hello\"", "hello", parser)
+      assertEqual("'hello'", "hello", parser)
 
-    val expectedResults = Seq(
-      // Single Strings.
-      "hello",
-      "hello",
       // Multi-Strings.
-      "helloworld",
-      "hello world",
+      assertEqual("\"hello\" 'world'", "helloworld", parser)
+      assertEqual("'hello' \" \" 'world'", "hello world", parser)
+
       // 'LIKE' string literals. Notice that an escaped '%' is the same as an escaped '\' and a
       // regular '%'; to get the correct result you need to add another escaped '\'.
       // TODO figure out if we shouldn't change the ParseUtils.unescapeSQLString method?
-      "pattern%",
-      "no-pattern\\%",
-      "pattern\\%",
-      "pattern\\\\%",
-      // Escaped characters.
-      // See: http://dev.mysql.com/doc/refman/5.7/en/string-literals.html
-      "\u0000", // ASCII NUL (X'00')
-      "\"",     // Double quote
-      "\b",     // Backspace
-      "\n",     // Newline
-      "\r",     // Carriage return
-      "\t",     // Tab character
-      // Octals
-      "Hello!",
-      // Unicode
-      "World :)")
+      assertEqual("'pattern%'", "pattern%", parser)
+      assertEqual("'no-pattern\\%'", "no-pattern\\%", parser)
 
-    val tests = Seq(("false", sqlCommands), ("true", fallbackSqlCommands))
+      // tests that have different result regarding the conf
+      if (escape) {
+        // When SQLConf.ESCAPED_STRING_LITERALS is enabled, string literal parsing fallbacks to
+        // Spark 1.6 behavior.
 
-    tests.map { case (escapedStringLiterals, commands) =>
-      val conf = new SQLConf()
-      conf.setConfString(SQLConf.ESCAPED_STRING_LITERALS.key, escapedStringLiterals)
-      val parser = new CatalystSqlParser(conf)
-      commands.zip(expectedResults).foreach { case (sqlCommand, expected) =>
-        assertEqual(sqlCommand, expected, parser)
-      }
-      if (escapedStringLiterals == "false") {
-        assertEqual("'\\''", "\'", parser)     // Single quote
-        assertEqual("'\\Z'", "\u001A", parser) // ASCII 26 - CTRL + Z (EOF on windows)
-      } else {
+        // 'LIKE' string literals.
+        assertEqual("'pattern\\\\%'", "pattern\\\\%", parser)
+        assertEqual("'pattern\\\\\\%'", "pattern\\\\\\%", parser)
+
+        // Escaped characters.
+        assertEqual("'\0'", "\u0000", parser) // ASCII NUL (X'00')
+
         // Note: Single quote follows 1.6 parsing behavior when ESCAPED_STRING_LITERALS is enabled.
         val e = intercept[ParseException](parser.parseExpression("'\''"))
         assert(e.message.contains("extraneous input '''"))
+
+        assertEqual("'\"'", "\"", parser)     // Double quote
+        assertEqual("'\b'", "\b", parser)     // Backspace
+        assertEqual("'\n'", "\n", parser)     // Newline
+        assertEqual("'\r'", "\r", parser)     // Carriage return
+        assertEqual("'\t'", "\t", parser)     // Tab character
+
+        // Octals
+        assertEqual("'\110\145\154\154\157\041'", "Hello!", parser)
+        // Unicode
+        assertEqual("'\u0057\u006F\u0072\u006C\u0064\u0020\u003A\u0029'", "World :)", parser)
+      } else {
+        // Default behavior
+
+        // 'LIKE' string literals.
+        assertEqual("'pattern\\\\%'", "pattern\\%", parser)
+        assertEqual("'pattern\\\\\\%'", "pattern\\\\%", parser)
+
+        // Escaped characters.
+        // See: http://dev.mysql.com/doc/refman/5.7/en/string-literals.html
+        assertEqual("'\\0'", "\u0000", parser) // ASCII NUL (X'00')
+        assertEqual("'\\''", "\'", parser)     // Single quote
+        assertEqual("'\\\"'", "\"", parser)    // Double quote
+        assertEqual("'\\b'", "\b", parser)     // Backspace
+        assertEqual("'\\n'", "\n", parser)     // Newline
+        assertEqual("'\\r'", "\r", parser)     // Carriage return
+        assertEqual("'\\t'", "\t", parser)     // Tab character
+        assertEqual("'\\Z'", "\u001A", parser) // ASCII 26 - CTRL + Z (EOF on windows)
+
+        // Octals
+        assertEqual("'\\110\\145\\154\\154\\157\\041'", "Hello!", parser)
+
+        // Unicode
+        assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'", "World :)",
+          parser)
       }
 
     }

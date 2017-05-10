@@ -1170,7 +1170,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(ds, WithMapInOption(Some(Map(1 -> 1))))
   }
 
-  test("do not unescaped regex pattern string") {
+  test("SPARK-20399: do not unescaped regex pattern when ESCAPED_STRING_LITERALS is enabled") {
     withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
       val data = Seq("\u0020\u0021\u0023", "abc")
       val df = data.toDF()
