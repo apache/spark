@@ -46,6 +46,27 @@ class MatricesSuite extends SparkFunSuite {
     }
   }
 
+  test("breeze conversion bug") {
+    // (2, 0, 0)
+    // (2, 0, 0)
+    val mat1Brz = Matrices.sparse(2, 3, Array(0, 2, 2, 2), Array(0, 1), Array(2, 2)).asBreeze
+    // (2, 1E-15, 1E-15)
+    // (2, 1E-15, 1E-15
+    val mat2Brz = Matrices.sparse(2, 3, Array(0, 2, 4, 6), Array(0, 0, 0, 1, 1, 1), Array(2, 1E-15, 1E-15, 2, 1E-15, 1E-15)).asBreeze
+    // The following shouldn't break
+    val t01 = mat1Brz - mat1Brz
+    val t02 = mat2Brz - mat2Brz
+    val t02Brz = Matrices.fromBreeze(t02)
+    val t01Brz = Matrices.fromBreeze(t01)
+
+    val t1Brz = mat1Brz - mat2Brz
+    val t2Brz = mat2Brz - mat1Brz
+    // The following ones should break
+    val t1 = Matrices.fromBreeze(t1Brz)
+    val t2 = Matrices.fromBreeze(t2Brz)
+
+  }
+
   test("sparse matrix construction") {
     val m = 3
     val n = 4
