@@ -21,16 +21,18 @@ import java.nio.ByteBuffer
 import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
 import scala.reflect.ClassTag
+
 import org.mockito.{Matchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
+
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod

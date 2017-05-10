@@ -85,25 +85,21 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
         level: StorageLevel): Iterator[U] = {
       getLocalValues() match {
         case Some(result) =>
-          cachedInLocal = true
           return result
-        case None =>
-          cachedInLocal = false
+        case None => // do nothing
       }
 
       val iterator = rdd.iterator(partition, context)
-      // Keep read lock, because next we need read it.
-      val cachedResult = blockManager.putIterator[U](blockId2, iterator, level, false,
-          true) match {
-        case true =>
-          cachedInLocal = true
-          "successful"
+      // Keep read lock, because next we need read it. And don't tell master.
+      blockManager.putIterator[U](blockId2, iterator, level, false, true) match {
+        case true => cachedInLocal = true
         case false =>
-          cachedInLocal = false
-          "failed"
+          // There shouldn't a error caused by put in memory, because we use MEMORY_AND_DISK to
+          // cache it.
+          throw new SparkException(s"Cache block $blockId2 in local failed even though it's $level")
       }
 
-      logInfo(s"Cache the block $blockId2 to local $cachedResult.")
+      logInfo(s"Cache the block $blockId2 to local successful.")
       getLocalValues() match {
         // We don't need release the read lock, it will release after the iterator completion.
         case Some(result) => result
@@ -112,6 +108,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
       }
     }
 
+    // Get block from local, and update the metrics.
     def getLocalValues(): Option[Iterator[U]] = {
       blockManager.getLocalValues(blockId2) match {
         case Some(result) =>
@@ -135,7 +132,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
       // Whether the block it persisted by the user.
       val persistedInLocal =
         blockManager.master.getLocations(blockId2).contains(blockManager.blockManagerId)
-      if (!persistedInLocal || cachedInLocal || blockManager.isRemovable(blockId2)) {
+      if (!persistedInLocal && (cachedInLocal || blockManager.isRemovable(blockId2))) {
         blockManager.removeOrMarkAsRemovable(blockId2, false)
       }
     }
