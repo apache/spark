@@ -1003,18 +1003,30 @@ class Analyzer(
    */
   object ResolveAggAliasInGroupBy extends Rule[LogicalPlan] {
 
+    // This is a strict check though, we put this to apply the rule only in alias expressions
+    private def notResolvableByChild(attrName: String, child: LogicalPlan): Boolean =
+      !child.output.exists(a => resolver(a.name, attrName))
+
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case agg @ Aggregate(groups, aggs, child)
           if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
-            groups.exists(_.isInstanceOf[UnresolvedAttribute]) =>
-        // This is a strict check though, we put this to apply the rule only in alias expressions
-        def notResolvableByChild(attrName: String): Boolean =
-          !child.output.exists(a => resolver(a.name, attrName))
-        agg.copy(groupingExpressions = groups.map {
-          case u: UnresolvedAttribute if notResolvableByChild(u.name) =>
+            groups.exists(!_.resolved) =>
+        agg.copy(groupingExpressions = groups.map { _.transform {
+            case u: UnresolvedAttribute if notResolvableByChild(u.name, child) =>
+              aggs.find(ne => resolver(ne.name, u.name)).getOrElse(u)
+          }
+        })
+
+      case gs @ GroupingSets(selectedGroups, groups, child, aggs)
+          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+            (selectedGroups :+ groups).exists(_.exists(_.isInstanceOf[UnresolvedAttribute])) =>
+        def mayResolveAttrByAggregateExprs(exprs: Seq[Expression]): Seq[Expression] = exprs.map {
+          case u: UnresolvedAttribute if notResolvableByChild(u.name, child) =>
             aggs.find(ne => resolver(ne.name, u.name)).getOrElse(u)
           case e => e
-        })
+        }
+        gs.copy(selectedGroupByExprs = selectedGroups.map(mayResolveAttrByAggregateExprs),
+          groupByExprs = mayResolveAttrByAggregateExprs(groups))
     }
   }
 
