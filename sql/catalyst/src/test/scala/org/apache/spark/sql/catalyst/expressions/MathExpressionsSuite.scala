@@ -41,7 +41,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
    * @tparam T Generic type for primitives
    */
   private def testLeaf[T](
-      e: () => Expression,
+      e: () => Expression,       
       c: T): Unit = {
     checkEvaluation(e(), c, EmptyRow)
     checkEvaluation(e(), c, create_row(null))
