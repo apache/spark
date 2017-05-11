@@ -255,7 +255,7 @@ class LogisticRegressionSuite
   }
 
   test("thresholds prediction") {
-    val blr = new LogisticRegression().setFamily("binomial")
+    val blr = new LogisticRegression().setFamily("BiNomial")
     val binaryModel = blr.fit(smallBinaryDataset)
 
     binaryModel.setThreshold(1.0)
@@ -269,7 +269,7 @@ class LogisticRegressionSuite
     assert(binaryOnePredictions.forall(_.getDouble(0) === 1.0))
 
 
-    val mlr = new LogisticRegression().setFamily("multinomial")
+    val mlr = new LogisticRegression().setFamily("MulTinoMial")
     val model = mlr.fit(smallMultinomialDataset)
     val basePredictions = model.transform(smallMultinomialDataset).select("prediction").collect()
 

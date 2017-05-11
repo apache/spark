@@ -173,7 +173,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("fit & transform with Online LDA") {
-    val lda = new LDA().setK(k).setSeed(1).setOptimizer("online").setMaxIter(2)
+    val lda = new LDA().setK(k).setSeed(1).setOptimizer("oNlIne").setMaxIter(2)
     val model = lda.fit(dataset)
 
     MLTestingUtils.checkCopyAndUids(lda, model)
@@ -218,7 +218,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("fit & transform with EM LDA") {
-    val lda = new LDA().setK(k).setSeed(1).setOptimizer("em").setMaxIter(2)
+    val lda = new LDA().setK(k).setSeed(1).setOptimizer("eM").setMaxIter(2)
     val model_ = lda.fit(dataset)
 
     MLTestingUtils.checkCopyAndUids(lda, model_)
