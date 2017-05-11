@@ -1168,6 +1168,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(WithMapInOption(Some(Map(1 -> 1)))).toDS()
     checkDataset(ds, WithMapInOption(Some(Map(1 -> 1))))
   }
+
+  test("do not unescaped regex pattern string") {
+    val data = Seq("\u0020\u0021\u0023", "abc")
+    val df = data.toDF()
+    val rlike1 = df.filter("value rlike '^\\x20[\\x20-\\x23]+$'")
+    val rlike2 = df.filter($"value".rlike("^\\x20[\\x20-\\x23]+$"))
+    val rlike3 = df.filter("value rlike '^\\\\x20[\\\\x20-\\\\x23]+$'")
+    checkAnswer(rlike1, rlike2)
+    assert(rlike3.count() == 0)
+  }
 }
 
 case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])

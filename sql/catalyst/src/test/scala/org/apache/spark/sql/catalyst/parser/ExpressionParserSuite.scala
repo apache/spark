@@ -158,6 +158,11 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a not rlike 'pattern%'", !('a rlike "pattern%"))
     assertEqual("a regexp 'pattern%'", 'a rlike "pattern%")
     assertEqual("a not regexp 'pattern%'", !('a rlike "pattern%"))
+
+    assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$")
+    assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\")
+    assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n")
+    intercept("a rlike 'pattern\\'", "mismatched input")
   }
 
   test("is null expressions") {
