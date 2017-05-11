@@ -37,11 +37,14 @@ import org.apache.spark.util._
 private class ShuffleStatus(numPartitions: Int) {
 
   /**
-   * List of [[MapStatus]] for each partition. The index of the array is the map partition id,
-   * and each value in the array is the list of possible [[MapStatus]] for a partition
-   * (a single task might run multiple times).
+   * [[MapStatus]] for each partition. The index of the array is the map partition id.
+   * Each value in the array is the [[MapStatus]] for a partition, or null if the partition
+   * is not available. Even though in theory a task may run multiple times (due to speculation,
+   * stage retries, etc., in practice the likelihood of a map output being available at multiple
+   * locations is so small that we choose to ignore that case and store only a single location
+   * for each output.
    */
-  private[this] val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
+  private[this] val mapStatuses = new Array[MapStatus](numPartitions)
   private[this] var cachedSerializedMapStatus: Array[Byte] = _
   private[this] var cachedSerializedBroadcast: Broadcast[Array[Byte]] = _
   private[this] var _numAvailableOutputs: Int = 0
@@ -51,22 +54,21 @@ private class ShuffleStatus(numPartitions: Int) {
   }
 
   def addMapOutput(mapId: Int, status: MapStatus): Unit = synchronized {
-    val prevList = outputLocs(mapId)
-    outputLocs(mapId) = status :: prevList
-    if (prevList == Nil) {
+    if (mapStatuses(mapId) == null) {
       _numAvailableOutputs += 1
+      invalidateSerializedMapOutputStatusCache()
+    } else {
+      // TODO(josh) log?
     }
-    removeBroadcast()
+    mapStatuses(mapId) = status
   }
 
   def removeMapOutput(mapId: Int, bmAddress: BlockManagerId): Unit = synchronized {
-    val prevList = outputLocs(mapId)
-    val newList = prevList.filterNot(_.location == bmAddress)
-    outputLocs(mapId) = newList
-    if (prevList != Nil && newList == Nil) {
+    if (mapStatuses(mapId) != null && mapStatuses(mapId).location == bmAddress) {
       _numAvailableOutputs -= 1
+      mapStatuses(mapId) = null
+      invalidateSerializedMapOutputStatusCache()
     }
-    removeBroadcast()
   }
 
   /**
@@ -75,17 +77,13 @@ private class ShuffleStatus(numPartitions: Int) {
    * registered with this execId.
    */
   def removeOutputsOnExecutor(execId: String): Unit = synchronized {
-    var becameUnavailable = false
-    for (partition <- 0 until outputLocs.length) {
-      val prevList = outputLocs(partition)
-      val newList = prevList.filterNot(_.location.executorId == execId)
-      outputLocs(partition) = newList
-      if (prevList != Nil && newList == Nil) {
-        becameUnavailable = true
+    for (mapId <- 0 until mapStatuses.length) {
+      if (mapStatuses(mapId) != null && mapStatuses(mapId).location.executorId == execId) {
         _numAvailableOutputs -= 1
+        mapStatuses(mapId) = null
+        invalidateSerializedMapOutputStatusCache()
       }
     }
-    removeBroadcast()
   }
 
   /**
@@ -98,18 +96,11 @@ private class ShuffleStatus(numPartitions: Int) {
 
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   def findMissingPartitions(): Seq[Int] = synchronized {
-    val missing = (0 until numPartitions).filter(id => outputLocs(id).isEmpty)
+    val missing = (0 until numPartitions).filter(id => mapStatuses(id) == null)
     assert(missing.size == numPartitions - _numAvailableOutputs,
       s"${missing.size} missing, expected ${numPartitions - _numAvailableOutputs}")
     missing
   }
-
-  /**
-   * Returns an array of [[MapStatus]] (index by partition id). For each partition, the returned
-   * value contains only one (i.e. the first) [[MapStatus]]. If there is no entry for the partition,
-   * that position is filled with null.
-   */
-  private def mapStatuses: Array[MapStatus] = outputLocs.map(_.headOption.orNull)
 
   def serializedMapStatus(
       broadcastManager: BroadcastManager,
@@ -124,11 +115,11 @@ private class ShuffleStatus(numPartitions: Int) {
     cachedSerializedMapStatus
   }
 
-  def withOutputLocs[T](f: Array[List[MapStatus]] => T): T = synchronized {
-    f(outputLocs)
+  def withMapStatuses[T](f: Array[MapStatus] => T): T = synchronized {
+    f(mapStatuses)
   }
 
-  def removeBroadcast(): Unit = synchronized {
+  def invalidateSerializedMapOutputStatusCache(): Unit = synchronized {
     if (cachedSerializedBroadcast != null) {
       cachedSerializedBroadcast.destroy()
       cachedSerializedBroadcast = null
@@ -352,7 +343,7 @@ private[spark] class MapOutputTrackerMaster(
   /** Unregister shuffle data */
   def unregisterShuffle(shuffleId: Int) {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
-      shuffleStatus.removeBroadcast()
+      shuffleStatus.invalidateSerializedMapOutputStatusCache()
     }
   }
 
@@ -381,22 +372,22 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId).map(_.findMissingPartitions())
   }
 
-  /**
+/**
    * Return statistics about all of the outputs for a given shuffle.
    */
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
-    shuffleStatuses(dep.shuffleId).withOutputLocs { outputLocs =>
+    shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
-      for (
-        mapOutputs <- outputLocs;
-        s <- mapOutputs.headOption;
-        i <- 0 until totalSizes.length
-      ) {
-        totalSizes(i) += s.getSizeForBlock(i)
+      for (s <- statuses) {
+        for (i <- 0 until totalSizes.length) {
+          totalSizes(i) += s.getSizeForBlock(i)
+        }
       }
       new MapOutputStatistics(dep.shuffleId, totalSizes)
     }
   }
+
+
 
   /**
    * Return the preferred hosts on which to run the given map output partition in a given shuffle,
@@ -441,14 +432,14 @@ private[spark] class MapOutputTrackerMaster(
 
     val shuffleStatus = shuffleStatuses.get(shuffleId).orNull
     if (shuffleStatus != null) {
-      shuffleStatus.withOutputLocs { statuses =>
+      shuffleStatus.withMapStatuses { statuses =>
         if (statuses.nonEmpty) {
           // HashMap to add up sizes of all blocks at the same location
           val locs = new HashMap[BlockManagerId, Long]
           var totalOutputSize = 0L
           var mapIdx = 0
           while (mapIdx < statuses.length) {
-            val status = statuses(mapIdx).headOption.orNull
+            val status = statuses(mapIdx)
             // status may be null here if we are called between registerShuffle, which creates an
             // array with null entries for each output, and registerMapOutputs, which populates it
             // with valid status entries. This is possible if one thread schedules a job which
@@ -494,8 +485,7 @@ private[spark] class MapOutputTrackerMaster(
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     shuffleStatuses.get(shuffleId) match {
       case Some (shuffleStatus) =>
-        shuffleStatus.withOutputLocs { outputLocs =>
-          val statuses = outputLocs.map(_.headOption.orNull)
+        shuffleStatus.withMapStatuses { statuses =>
           MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
         }
       case None =>
