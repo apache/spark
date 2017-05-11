@@ -41,6 +41,9 @@ private[spark] sealed trait MapStatus {
    */
   def getSizeForBlock(reduceId: Int): Long
 
+  /**
+   * The number of outputs for the map task.
+   */
   def numberOfOutput: Long
 }
 

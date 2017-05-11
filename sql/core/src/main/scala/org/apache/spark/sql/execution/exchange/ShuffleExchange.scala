@@ -221,7 +221,7 @@ object ShuffleExchange {
           override def numPartitions: Int = 1
           override def getPartition(key: Any): Int = 0
         }
-      case LocalPartitioning(prev, numParts) =>
+      case LocalPartitioning(_, numParts) =>
         new Partitioner {
           override def numPartitions: Int = numParts
           override def getPartition(key: Any): Int = key.asInstanceOf[Int]
