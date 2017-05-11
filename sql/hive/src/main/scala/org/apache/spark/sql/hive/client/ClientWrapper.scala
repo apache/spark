@@ -19,10 +19,12 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.util.{Map => JMap}
+import java.net.URL
 
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
 
+import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf
@@ -582,6 +584,12 @@ private[hive] class ClientWrapper(
   }
 
   def addJar(path: String): Unit = {
+    try {
+       URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory);
+    } catch {
+       // Factory can only be set once per JVM
+       case e: java.lang.Error if e.getMessage contains "factory already defined" => logDebug("Factory already define", e)
+    }
     val uri = new Path(path).toUri
     val jarURL = if (uri.getScheme == null) {
       // `path` is a local file path without a URL scheme
