@@ -737,6 +737,7 @@ test_that(
   expect_is(newdf, "SparkDataFrame")
   expect_equal(count(newdf), 1)
   expect_true(dropGlobalTempView("global_table1"))
+  expect_false(dropGlobalTempView("global_table1"))
 })
 
 test_that("test cache, uncache and clearCache", {

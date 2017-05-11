@@ -504,7 +504,12 @@ setMethod("createOrReplaceTempView",
 #' Creates a global temporary view using the given name.
 #'
 #' Creates a new global temporary view using a SparkDataFrame in the Spark Session.
-#' If a global temporary view with the same name already exists, raises exception.
+#' Global temporary view is cross-session while a temporary view is not. Its lifetime
+#' is the lifetime of the Spark application, i.e. it will be automatically dropped
+#' when the application terminates. It's tied to a system preserved database `global_temp`,
+#' and we must use the qualified name to refer a global temporary view, e.g.
+#' `SELECT * FROM global_temp.view1`. If a global temporary view with the same name
+#' already exists, it raises exception.
 #'
 #' @param x A SparkDataFrame
 #' @param viewName A character vector containing the name of the table
