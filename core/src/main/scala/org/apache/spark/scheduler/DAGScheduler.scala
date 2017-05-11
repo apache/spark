@@ -1204,7 +1204,8 @@ class DAGScheduler(
               // The epoch of the task is acceptable (i.e., the task was launched after the most
               // recent failure we're aware of for the executor), so mark the task's output as
               // available.
-              shuffleStage.addOutputLoc(smt.partitionId, status)
+              mapOutputTracker.registerMapOutput(
+                shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
               // Remove the task's partition from pending partitions. This may have already been
               // done above, but will not have been done yet in cases where the task attempt was
               // from an earlier attempt of the stage (i.e., not the attempt that's currently
@@ -1221,16 +1222,13 @@ class DAGScheduler(
               logInfo("waiting: " + waitingStages)
               logInfo("failed: " + failedStages)
 
-              // We supply true to increment the epoch number here in case this is a
+              // Increment the epoch number here in case this is a
               // recomputation of the map outputs. In that case, some nodes may have cached
               // locations with holes (from when we detected the error) and will need the
               // epoch incremented to refetch them.
               // TODO: Only increment the epoch number if this is not the first time
               //       we registered these map outputs.
-              mapOutputTracker.registerMapOutputs(
-                shuffleStage.shuffleDep.shuffleId,
-                shuffleStage.outputLocInMapOutputTrackerFormat(),
-                changeEpoch = true)
+              mapOutputTracker.incrementEpoch()
 
               clearCacheLocs()
 
@@ -1330,7 +1328,6 @@ class DAGScheduler(
           }
           // Mark the map whose fetch failed as broken in the map stage
           if (mapId != -1) {
-            mapStage.removeOutputLoc(mapId, bmAddress)
             mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
           }
 
@@ -1380,17 +1377,7 @@ class DAGScheduler(
 
       if (filesLost || !env.blockManager.externalShuffleServiceEnabled) {
         logInfo("Shuffle files lost for executor: %s (epoch %d)".format(execId, currentEpoch))
-        // TODO: This will be really slow if we keep accumulating shuffle map stages
-        for ((shuffleId, stage) <- shuffleIdToMapStage) {
-          stage.removeOutputsOnExecutor(execId)
-          mapOutputTracker.registerMapOutputs(
-            shuffleId,
-            stage.outputLocInMapOutputTrackerFormat(),
-            changeEpoch = true)
-        }
-        if (shuffleIdToMapStage.isEmpty) {
-          mapOutputTracker.incrementEpoch()
-        }
+        mapOutputTracker.removeOutputsOnExecutor(execId)
         clearCacheLocs()
       }
     } else {
