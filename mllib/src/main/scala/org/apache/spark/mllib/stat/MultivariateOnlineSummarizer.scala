@@ -252,6 +252,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       if (nnz(i) < totalCnt) {
         if (currMax(i) < 0.0) currMax(i) = 0.0
       } else if (currMax(i) < currMin(i)) {
+        currMin(i) = Double.NaN
         currMax(i) = Double.NaN
       }
       i += 1
@@ -273,6 +274,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         if (currMin(i) > 0.0) currMin(i) = 0.0
       } else if (currMax(i) < currMin(i)) {
         currMin(i) = Double.NaN
+        currMax(i) = Double.NaN
       }
       i += 1
     }
