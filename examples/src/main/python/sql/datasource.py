@@ -64,6 +64,7 @@ def basic_datasource_example(spark):
     spark.sql("DROP TABLE IF EXISTS people_bucketed")
     spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
 
+
 def parquet_example(spark):
     # $example on:basic_parquet_example$
     peopleDF = spark.read.json("examples/src/main/resources/people.json")
