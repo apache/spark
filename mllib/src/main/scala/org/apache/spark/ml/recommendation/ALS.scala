@@ -27,7 +27,6 @@ import scala.util.{Sorting, Try}
 import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
@@ -36,6 +35,7 @@ import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContex
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -399,7 +399,7 @@ class ALSModel private[ml] (
         srcIter.foreach { case (srcId, srcFactor) =>
           dstIter.foreach { case (dstId, dstFactor) =>
             // We use F2jBLAS which is faster than a call to native BLAS for vector dot product
-            val score = ALSModel._f2jBLAS.sdot(rank, srcFactor, 1, dstFactor, 1)
+            val score = BLAS.f2jBLAS.sdot(rank, srcFactor, 1, dstFactor, 1)
             pq += dstId -> score
           }
           pq.foreach { case (dstId, score) =>
@@ -438,8 +438,6 @@ class ALSModel private[ml] (
 
 @Since("1.6.0")
 object ALSModel extends MLReadable[ALSModel] {
-
-  @transient private[recommendation] val _f2jBLAS = new F2jBLAS
 
   private val NaN = "nan"
   private val Drop = "drop"
