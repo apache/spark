@@ -46,6 +46,10 @@ private class ShuffleStatus(numPartitions: Int) {
   private[this] var cachedSerializedBroadcast: Broadcast[Array[Byte]] = _
   private[this] var _numAvailableOutputs: Int = 0
 
+  def hasCachedSerializedBroadcast: Boolean = synchronized {
+    cachedSerializedBroadcast != null
+  }
+
   def addMapOutput(mapId: Int, status: MapStatus): Unit = synchronized {
     val prevList = outputLocs(mapId)
     outputLocs(mapId) = status :: prevList
@@ -82,10 +86,6 @@ private class ShuffleStatus(numPartitions: Int) {
       }
     }
     removeBroadcast()
-//    if (becameUnavailable) {
-//      logInfo("%s is now unavailable on executor %s (%d/%d, %s)".format(
-//        this, execId, _numAvailableOutputs, numPartitions, isAvailable))
-//    }
   }
 
   /**
@@ -325,7 +325,9 @@ private[spark] class MapOutputTrackerMaster(
   private val PoisonPill = new GetMapOutputMessage(-99, null)
 
   // Exposed for testing
-  private[spark] def getNumCachedSerializedBroadcast = 0 // TODO(josh)
+  private[spark] def getNumCachedSerializedBroadcast: Int = {
+    shuffleStatuses.valuesIterator.count(_.hasCachedSerializedBroadcast)
+  }
 
   def registerShuffle(shuffleId: Int, numMaps: Int) {
     if (shuffleStatuses.put(shuffleId, new ShuffleStatus(numMaps)).isDefined) {
