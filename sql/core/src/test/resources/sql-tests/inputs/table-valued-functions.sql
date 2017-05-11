@@ -26,5 +26,4 @@ select * from RaNgE(2);
 EXPLAIN select * from RaNgE(2);
 
 -- cross-join table valued functions
-SET spark.sql.crossJoin.enabled=true;
 EXPLAIN EXTENDED SELECT * FROM range(3) CROSS JOIN range(3);
