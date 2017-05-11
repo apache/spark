@@ -261,7 +261,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
  * @param rank rank of the matrix factorization model
  * @param userFactors a DataFrame that stores user factors in two columns: `id` and `features`
  * @param itemFactors a DataFrame that stores item factors in two columns: `id` and `features`
- * @param blockSize Number of records for each block, adjust this parameter to improve
+ * @param blockSize number of records for each block, adjust this parameter to improve
  *                  the efficiency of cartesian product
  */
 @Since("1.3.0")
