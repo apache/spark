@@ -39,6 +39,17 @@ def basic_datasource_example(spark):
     df.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
     # $example off:write_partitioning$
 
+    # $example on:write_partition_and_bucket$
+    df = spark.read.parquet("examples/src/main/resources/users.parquet")
+    (df
+        .write
+        .partitionBy("favorite_color")
+        .bucketBy(42, "name")
+        .saveAsTable("people_partitioned_bucketed"))
+    # $example off:write_partition_and_bucket$
+
+    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
+
     # $example on:manual_load_options$
     df = spark.read.load("examples/src/main/resources/people.json", format="json")
     df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
