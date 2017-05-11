@@ -187,7 +187,8 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
     val listener = parent.jobProgresslistener
 
     listener.synchronized {
-      val parameterId = request.getParameter("id")
+      // stripXSS is called first to remove suspicious characters used in XSS attacks
+      val parameterId = UIUtils.stripXSS(request.getParameter("id"))
       require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
       val jobId = parameterId.toInt

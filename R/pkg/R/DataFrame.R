@@ -194,6 +194,7 @@ setMethod("isLocal",
 #'                 20 characters will be truncated. However, if set greater than zero,
 #'                 truncates strings longer than \code{truncate} characters and all cells
 #'                 will be aligned right.
+#' @param vertical whether print output rows vertically (one line per column value).
 #' @param ... further arguments to be passed to or from other methods.
 #' @family SparkDataFrame functions
 #' @aliases showDF,SparkDataFrame-method
@@ -210,12 +211,13 @@ setMethod("isLocal",
 #' @note showDF since 1.4.0
 setMethod("showDF",
           signature(x = "SparkDataFrame"),
-          function(x, numRows = 20, truncate = TRUE) {
+          function(x, numRows = 20, truncate = TRUE, vertical = FALSE) {
             if (is.logical(truncate) && truncate) {
-              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(20))
+              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(20), vertical)
             } else {
               truncate2 <- as.numeric(truncate)
-              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(truncate2))
+              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(truncate2),
+                               vertical)
             }
             cat(s)
           })
@@ -1321,7 +1323,7 @@ setMethod("toRDD",
 #' Groups the SparkDataFrame using the specified columns, so we can run aggregation on them.
 #'
 #' @param x a SparkDataFrame.
-#' @param ... variable(s) (character names(s) or Column(s)) to group on.
+#' @param ... character name(s) or Column(s) to group on.
 #' @return A GroupedData.
 #' @family SparkDataFrame functions
 #' @aliases groupBy,SparkDataFrame-method
@@ -1337,6 +1339,7 @@ setMethod("toRDD",
 #'   agg(groupBy(df, "department", "gender"), salary="avg", "age" -> "max")
 #' }
 #' @note groupBy since 1.4.0
+#' @seealso \link{agg}, \link{cube}, \link{rollup}
 setMethod("groupBy",
            signature(x = "SparkDataFrame"),
            function(x, ...) {
@@ -3641,4 +3644,128 @@ setMethod("checkpoint",
           function(x, eager = TRUE) {
             df <- callJMethod(x@sdf, "checkpoint", as.logical(eager))
             dataFrame(df)
+          })
+
+#' cube
+#'
+#' Create a multi-dimensional cube for the SparkDataFrame using the specified columns.
+#'
+#' If grouping expression is missing \code{cube} creates a single global aggregate and is equivalent to
+#' direct application of \link{agg}.
+#'
+#' @param x a SparkDataFrame.
+#' @param ... character name(s) or Column(s) to group on.
+#' @return A GroupedData.
+#' @family SparkDataFrame functions
+#' @aliases cube,SparkDataFrame-method
+#' @rdname cube
+#' @name cube
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(mtcars)
+#' mean(cube(df, "cyl", "gear", "am"), "mpg")
+#'
+#' # Following calls are equivalent
+#' agg(cube(carsDF), mean(carsDF$mpg))
+#' agg(carsDF, mean(carsDF$mpg))
+#' }
+#' @note cube since 2.3.0
+#' @seealso \link{agg}, \link{groupBy}, \link{rollup}
+setMethod("cube",
+          signature(x = "SparkDataFrame"),
+          function(x, ...) {
+            cols <- list(...)
+            jcol <- lapply(cols, function(x) if (class(x) == "Column") x@jc else column(x)@jc)
+            sgd <- callJMethod(x@sdf, "cube", jcol)
+            groupedData(sgd)
+          })
+
+#' rollup
+#'
+#' Create a multi-dimensional rollup for the SparkDataFrame using the specified columns.
+#'
+#' If grouping expression is missing \code{rollup} creates a single global aggregate and is equivalent to
+#' direct application of \link{agg}.
+#'
+#' @param x a SparkDataFrame.
+#' @param ... character name(s) or Column(s) to group on.
+#' @return A GroupedData.
+#' @family SparkDataFrame functions
+#' @aliases rollup,SparkDataFrame-method
+#' @rdname rollup
+#' @name rollup
+#' @export
+#' @examples
+#'\dontrun{
+#' df <- createDataFrame(mtcars)
+#' mean(rollup(df, "cyl", "gear", "am"), "mpg")
+#'
+#' # Following calls are equivalent
+#' agg(rollup(carsDF), mean(carsDF$mpg))
+#' agg(carsDF, mean(carsDF$mpg))
+#' }
+#' @note rollup since 2.3.0
+#' @seealso \link{agg}, \link{cube}, \link{groupBy}
+setMethod("rollup",
+          signature(x = "SparkDataFrame"),
+          function(x, ...) {
+            cols <- list(...)
+            jcol <- lapply(cols, function(x) if (class(x) == "Column") x@jc else column(x)@jc)
+            sgd <- callJMethod(x@sdf, "rollup", jcol)
+            groupedData(sgd)
+          })
+
+#' hint
+#'
+#' Specifies execution plan hint and return a new SparkDataFrame.
+#'
+#' @param x a SparkDataFrame.
+#' @param name a name of the hint.
+#' @param ... optional parameters for the hint.
+#' @return A SparkDataFrame.
+#' @family SparkDataFrame functions
+#' @aliases hint,SparkDataFrame,character-method
+#' @rdname hint
+#' @name hint
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(mtcars)
+#' avg_mpg <- mean(groupBy(createDataFrame(mtcars), "cyl"), "mpg")
+#'
+#' head(join(df, hint(avg_mpg, "broadcast"), df$cyl == avg_mpg$cyl))
+#' }
+#' @note hint since 2.2.0
+setMethod("hint",
+          signature(x = "SparkDataFrame", name = "character"),
+          function(x, name, ...) {
+            parameters <- list(...)
+            stopifnot(all(sapply(parameters, is.character)))
+            jdf <- callJMethod(x@sdf, "hint", name, parameters)
+            dataFrame(jdf)
+          })
+
+#' alias
+#'
+#' @aliases alias,SparkDataFrame-method
+#' @family SparkDataFrame functions
+#' @rdname alias
+#' @name alias
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- alias(createDataFrame(mtcars), "mtcars")
+#' avg_mpg <- alias(agg(groupBy(df, df$cyl), avg(df$mpg)), "avg_mpg")
+#'
+#' head(select(df, column("mtcars.mpg")))
+#' head(join(df, avg_mpg, column("mtcars.cyl") == column("avg_mpg.cyl")))
+#' }
+#' @note alias(SparkDataFrame) since 2.3.0
+setMethod("alias",
+          signature(object = "SparkDataFrame"),
+          function(object, data) {
+            stopifnot(is.character(data))
+            sdf <- callJMethod(object@sdf, "alias", data)
+            dataFrame(sdf)
           })

@@ -32,7 +32,7 @@ private[spark] class WorkerInfo(
     val webUiAddress: String)
   extends Serializable {
 
-  Utils.checkHost(host, "Expected hostname")
+  Utils.checkHost(host)
   assert (port > 0)
 
   @transient var executors: mutable.HashMap[String, ExecutorDesc] = _ // executorId => info

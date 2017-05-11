@@ -3745,3 +3745,254 @@ setMethod("collect_set",
             jc <- callJStatic("org.apache.spark.sql.functions", "collect_set", x@jc)
             column(jc)
           })
+
+#' split_string
+#'
+#' Splits string on regular expression.
+#'
+#' Equivalent to \code{split} SQL function
+#'
+#' @param x Column to compute on
+#' @param pattern Java regular expression
+#'
+#' @rdname split_string
+#' @family string_funcs
+#' @aliases split_string,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- read.text("README.md")
+#'
+#' head(select(df, split_string(df$value, "\\s+")))
+#'
+#' # This is equivalent to the following SQL expression
+#' head(selectExpr(df, "split(value, '\\\\s+')"))
+#' }
+#' @note split_string 2.3.0
+setMethod("split_string",
+          signature(x = "Column", pattern = "character"),
+          function(x, pattern) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "split", x@jc, pattern)
+            column(jc)
+          })
+
+#' repeat_string
+#'
+#' Repeats string n times.
+#'
+#' Equivalent to \code{repeat} SQL function
+#'
+#' @param x Column to compute on
+#' @param n Number of repetitions
+#'
+#' @rdname repeat_string
+#' @family string_funcs
+#' @aliases repeat_string,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- read.text("README.md")
+#'
+#' first(select(df, repeat_string(df$value, 3)))
+#'
+#' # This is equivalent to the following SQL expression
+#' first(selectExpr(df, "repeat(value, 3)"))
+#' }
+#' @note repeat_string since 2.3.0
+setMethod("repeat_string",
+          signature(x = "Column", n = "numeric"),
+          function(x, n) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "repeat", x@jc, numToInt(n))
+            column(jc)
+          })
+
+#' explode_outer
+#'
+#' Creates a new row for each element in the given array or map column.
+#' Unlike \code{explode}, if the array/map is \code{null} or empty
+#' then \code{null} is produced.
+#'
+#' @param x Column to compute on
+#'
+#' @rdname explode_outer
+#' @name explode_outer
+#' @family collection_funcs
+#' @aliases explode_outer,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(data.frame(
+#'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
+#' ))
+#'
+#' head(select(df, df$id, explode_outer(split_string(df$text, ","))))
+#' }
+#' @note explode_outer since 2.3.0
+setMethod("explode_outer",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "explode_outer", x@jc)
+            column(jc)
+          })
+
+#' posexplode_outer
+#'
+#' Creates a new row for each element with position in the given array or map column.
+#' Unlike \code{posexplode}, if the array/map is \code{null} or empty
+#' then the row (\code{null}, \code{null}) is produced.
+#'
+#' @param x Column to compute on
+#'
+#' @rdname posexplode_outer
+#' @name posexplode_outer
+#' @family collection_funcs
+#' @aliases posexplode_outer,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(data.frame(
+#'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
+#' ))
+#'
+#' head(select(df, df$id, posexplode_outer(split_string(df$text, ","))))
+#' }
+#' @note posexplode_outer since 2.3.0
+setMethod("posexplode_outer",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "posexplode_outer", x@jc)
+            column(jc)
+          })
+
+#' not
+#'
+#' Inversion of boolean expression.
+#'
+#' \code{not} and \code{!} cannot be applied directly to numerical column.
+#' To achieve R-like truthiness column has to be casted to \code{BooleanType}.
+#'
+#' @param x Column to compute on
+#' @rdname not
+#' @name not
+#' @aliases not,Column-method
+#' @family normal_funcs
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(data.frame(
+#'   is_true = c(TRUE, FALSE, NA),
+#'   flag = c(1, 0,  1)
+#' ))
+#'
+#' head(select(df, not(df$is_true)))
+#'
+#' # Explicit cast is required when working with numeric column
+#' head(select(df, not(cast(df$flag, "boolean"))))
+#' }
+#' @note not since 2.3.0
+setMethod("not",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "not", x@jc)
+            column(jc)
+          })
+
+#' grouping_bit
+#'
+#' Indicates whether a specified column in a GROUP BY list is aggregated or not,
+#' returns 1 for aggregated or 0 for not aggregated in the result set.
+#'
+#' Same as \code{GROUPING} in SQL and \code{grouping} function in Scala.
+#'
+#' @param x Column to compute on
+#'
+#' @rdname grouping_bit
+#' @name grouping_bit
+#' @family agg_funcs
+#' @aliases grouping_bit,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(mtcars)
+#'
+#' # With cube
+#' agg(
+#'   cube(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   grouping_bit(df$cyl), grouping_bit(df$gear), grouping_bit(df$am)
+#' )
+#'
+#' # With rollup
+#' agg(
+#'   rollup(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   grouping_bit(df$cyl), grouping_bit(df$gear), grouping_bit(df$am)
+#' )
+#' }
+#' @note grouping_bit since 2.3.0
+setMethod("grouping_bit",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "grouping", x@jc)
+            column(jc)
+          })
+
+#' grouping_id
+#'
+#' Returns the level of grouping.
+#'
+#' Equals to \code{
+#' grouping_bit(c1) * 2^(n - 1) + grouping_bit(c2) * 2^(n - 2)  + ... + grouping_bit(cn)
+#' }
+#'
+#' @param x Column to compute on
+#' @param ... additional Column(s) (optional).
+#'
+#' @rdname grouping_id
+#' @name grouping_id
+#' @family agg_funcs
+#' @aliases grouping_id,Column-method
+#' @export
+#' @examples \dontrun{
+#' df <- createDataFrame(mtcars)
+#'
+#' # With cube
+#' agg(
+#'   cube(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   grouping_id(df$cyl, df$gear, df$am)
+#' )
+#'
+#' # With rollup
+#' agg(
+#'   rollup(df, "cyl", "gear", "am"),
+#'   mean(df$mpg),
+#'   grouping_id(df$cyl, df$gear, df$am)
+#' )
+#' }
+#' @note grouping_id since 2.3.0
+setMethod("grouping_id",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "grouping_id", jcols)
+            column(jc)
+          })
+
+#' input_file_name
+#'
+#' Creates a string column with the input file name for a given row
+#'
+#' @rdname input_file_name
+#' @name input_file_name
+#' @family normal_funcs
+#' @aliases input_file_name,missing-method
+#' @export
+#' @examples \dontrun{
+#' df <- read.text("README.md")
+#'
+#' head(select(df, input_file_name()))
+#' }
+#' @note input_file_name since 2.3.0
+setMethod("input_file_name", signature("missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "input_file_name")
+            column(jc)
+          })
