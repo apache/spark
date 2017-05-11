@@ -208,12 +208,7 @@ sorttable = {
     hasInputs = (typeof node.getElementsByTagName == 'function') &&
                  node.getElementsByTagName('input').length;
 
-    if (node.getAttributeNode("sorttable_customkey") != null) {
-      if(node.getAttributeNode("sorttable_customkey").nodeValue != null) {
-        return node.getAttributeNode("sorttable_customkey").nodeValue;
-      }
-    }
-    else if (typeof node.textContent != 'undefined' && !hasInputs) {
+    if (typeof node.textContent != 'undefined' && !hasInputs) {
       return node.textContent.replace(/^\s+|\s+$/g, '');
     }
     else if (typeof node.innerText != 'undefined' && !hasInputs) {
@@ -221,6 +216,9 @@ sorttable = {
     }
     else if (typeof node.text != 'undefined' && !hasInputs) {
       return node.text.replace(/^\s+|\s+$/g, '');
+    }
+    else if (node.getAttribute("sorttable_customkey") != null) {
+      return node.getAttribute("sorttable_customkey");
     }
     else {
       switch (node.nodeType) {
