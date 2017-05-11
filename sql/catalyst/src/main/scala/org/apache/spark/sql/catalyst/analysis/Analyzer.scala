@@ -1035,7 +1035,8 @@ class Analyzer(
       case sa @ Sort(_, _, AnalysisBarrier(child: Aggregate)) => sa
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, child) if child.resolved =>
+      case s @ Sort(order, _, orgChild) if orgChild.resolved =>
+        val child = CleanupBarriers(orgChild)
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
           val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
@@ -1043,7 +1044,7 @@ class Analyzer(
           if (missingAttrs.nonEmpty) {
             // Add missing attributes and then project them away after the sort.
             Project(child.output,
-              Sort(newOrder, s.global, addMissingAttr(child, missingAttrs)))
+              Sort(newOrder, s.global, AnalysisBarrier(addMissingAttr(child, missingAttrs))))
           } else if (newOrder != order) {
             s.copy(order = newOrder)
           } else {
@@ -1056,7 +1057,8 @@ class Analyzer(
           case ae: AnalysisException => s
         }
 
-      case f @ Filter(cond, child) if child.resolved =>
+      case f @ Filter(cond, orgChild) if orgChild.resolved =>
+        val child = CleanupBarriers(orgChild)
         try {
           val newCond = resolveExpressionRecursively(cond, child)
           val requiredAttrs = newCond.references.filter(_.resolved)
@@ -1064,7 +1066,7 @@ class Analyzer(
           if (missingAttrs.nonEmpty) {
             // Add missing attributes and then project them away.
             Project(child.output,
-              Filter(newCond, addMissingAttr(child, missingAttrs)))
+              Filter(newCond, AnalysisBarrier(addMissingAttr(child, missingAttrs))))
           } else if (newCond != cond) {
             f.copy(condition = newCond)
           } else {
@@ -1108,8 +1110,6 @@ class Analyzer(
           throw new AnalysisException(s"Can't add $missingAttrs to $d")
         case u: UnaryNode =>
           u.withNewChildren(addMissingAttr(u.child, missingAttrs) :: Nil)
-        case AnalysisBarrier(subPlan) =>
-          AnalysisBarrier(addMissingAttr(subPlan, missingAttrs))
         case other =>
           throw new AnalysisException(s"Can't add $missingAttrs to $other")
       }
@@ -1128,7 +1128,6 @@ class Analyzer(
         plan match {
           case u: UnaryNode if !u.isInstanceOf[SubqueryAlias] =>
             resolveExpressionRecursively(resolved, u.child)
-          case AnalysisBarrier(subPlan) => resolveExpressionRecursively(resolved, subPlan)
           case other => resolved
         }
       }
@@ -2469,7 +2468,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
 
 /** Remove the barrier nodes of analysis */
 object CleanupBarriers extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case AnalysisBarrier(child) => child
   }
 }

@@ -46,16 +46,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   /** Returns true if this subtree contains any streaming data sources. */
   def isStreaming: Boolean = children.exists(_.isStreaming == true)
 
-  /**
-   * Recursively transforms the expressions of a tree, skipping nodes that have already
-   * been analyzed.
-   */
-  def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
-    this transformUp {
-      case p => p.transformExpressions(r)
-    }
-  }
-
   /** A cache for the estimated statistics, such that it will only be computed once. */
   private var statsCache: Option[Statistics] = None
 

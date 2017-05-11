@@ -449,7 +449,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
         AnalysisBarrier(SubqueryAlias("tbl", testRelation))),
       Project(testRelation.output, SubqueryAlias("tbl", testRelation)))
 
-    // Make sure we won't resolve the plans wrapped in an [[AnalysisBarrier]]
+    // Verify we won't go through a plan wrapped in a barrier.
+    // Since we wrap an unresolved plan and analyzer won't go through it. It remains unresolved.
     val barrier = AnalysisBarrier(Project(Seq(UnresolvedAttribute("tbl.b")),
       SubqueryAlias("tbl", testRelation)))
     assertAnalysisError(barrier, Seq("cannot resolve '`tbl.b`'"))
