@@ -17,7 +17,7 @@
 
 context("SerDe functionality")
 
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRMaster, enableHiveSupport = FALSE)
 
 test_that("SerDe of primitive types", {
   skip_on_cran()

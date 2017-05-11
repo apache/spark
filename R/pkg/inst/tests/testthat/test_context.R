@@ -69,7 +69,7 @@ test_that("repeatedly starting and stopping SparkR", {
 
 test_that("repeatedly starting and stopping SparkSession", {
   for (i in 1:4) {
-    sparkR.session(enableHiveSupport = FALSE)
+    sparkR.session(master = sparkRMaster, enableHiveSupport = FALSE)
     df <- createDataFrame(data.frame(dummy = 1:i))
     expect_equal(count(df), i)
     sparkR.session.stop()
