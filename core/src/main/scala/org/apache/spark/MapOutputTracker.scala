@@ -125,9 +125,8 @@ private class ShuffleStatus(numPartitions: Int) {
     cachedSerializedMapStatus
   }
 
-  // TODO(josh): we can reduce the number of places this is called in MapOutputTrackerMaster
-  def withStatuses[T](f: Array[MapStatus] => T): T = synchronized {
-    f(mapStatuses)
+  def withOutputLocs[T](f: Array[List[MapStatus]] => T): T = synchronized {
+    f(outputLocs)
   }
 
   def removeBroadcast(): Unit = synchronized {
@@ -382,12 +381,14 @@ private[spark] class MapOutputTrackerMaster(
    * Return statistics about all of the outputs for a given shuffle.
    */
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
-    shuffleStatuses(dep.shuffleId).withStatuses { statuses =>
+    shuffleStatuses(dep.shuffleId).withOutputLocs { outputLocs =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
-      for (s <- statuses) {
-        for (i <- 0 until totalSizes.length) {
-          totalSizes(i) += s.getSizeForBlock(i)
-        }
+      for (
+        mapOutputs <- outputLocs;
+        s <- mapOutputs.headOption;
+        i <- 0 until totalSizes.length
+      ) {
+        totalSizes(i) += s.getSizeForBlock(i)
       }
       new MapOutputStatistics(dep.shuffleId, totalSizes)
     }
@@ -436,14 +437,14 @@ private[spark] class MapOutputTrackerMaster(
 
     val shuffleStatus = shuffleStatuses.get(shuffleId).orNull
     if (shuffleStatus != null) {
-      shuffleStatus.withStatuses { statuses =>
+      shuffleStatus.withOutputLocs { statuses =>
         if (statuses.nonEmpty) {
           // HashMap to add up sizes of all blocks at the same location
           val locs = new HashMap[BlockManagerId, Long]
           var totalOutputSize = 0L
           var mapIdx = 0
           while (mapIdx < statuses.length) {
-            val status = statuses(mapIdx)
+            val status = statuses(mapIdx).headOption.orNull
             // status may be null here if we are called between registerShuffle, which creates an
             // array with null entries for each output, and registerMapOutputs, which populates it
             // with valid status entries. This is possible if one thread schedules a job which
@@ -487,7 +488,8 @@ private[spark] class MapOutputTrackerMaster(
   def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int)
       : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
-    shuffleStatuses(shuffleId).withStatuses { statuses =>
+    shuffleStatuses(shuffleId).withOutputLocs { outputLocs =>
+      val statuses = outputLocs.map(_.headOption.orNull)
       MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
     }
   }
