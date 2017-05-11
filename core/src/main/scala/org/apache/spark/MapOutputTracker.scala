@@ -208,7 +208,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   // For testing
   def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
-  : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+      : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     getMapSizesByExecutorId(shuffleId, reduceId, reduceId + 1)
   }
 
