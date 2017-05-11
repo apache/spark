@@ -583,7 +583,7 @@ Note that partition information is not gathered by default when creating externa
 
 ### Bucketing, Sorting and Partitioning
 
-For file-based data source it is also possible to bucket and and sort or partition the output. 
+For file-based data source it is also possible to bucket and sort or partition the output. 
 Bucketing and sorting is applicable only to persistent tables:
 
 <div class="codetabs">
