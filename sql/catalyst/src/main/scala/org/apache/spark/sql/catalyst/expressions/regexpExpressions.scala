@@ -87,11 +87,11 @@ abstract class StringRegexExpression extends BinaryExpression
         any other character.
 
         Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
-        to match a Tab character "\t", the pattern should be "\\t".
+        to match "\abc", the pattern should be "\\abc".
 
         When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
         to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
-        enabled, the pattern to match a Tab character should be "\t".
+        enabled, the pattern to match "\abc" should be "\abc".
 
     Examples:
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
@@ -158,11 +158,11 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
       regexp - a string expression. The pattern string should be a Java regular expression.
 
         Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL parser.
-        For example, if to match "abc\td", a regular expression for `regexp` can be "^abc\\\\td$".
+        For example, if to match "\abc", a regular expression for `regexp` can be "^\\abc$".
 
         There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to fallback
         to the Spark 1.6 behavior regarding string literal parsing. For example, if the config is
-        enabled, the `regexp` that can match "abc\td" is "^abc\\t$".
+        enabled, the `regexp` that can match "\abc" is "^\abc$".
 
     Examples:
       When spark.sql.parser.escapedStringLiterals is disabled (default).
