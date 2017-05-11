@@ -98,9 +98,11 @@ _functions = {
 _functions_1_4 = {
     # unary math functions
     'acos': 'Computes the cosine inverse of the given value; the returned angle is in the range' +
-            '0.0 through pi. Units in radians.',
-    'asin': 'Computes the sine inverse of the given value; the returned angle is in the range' +
-            '-pi/2 through pi/2. Units in radians.',
+            '0.0 through pi.\n\n:param col: float column, units in radians.',
+    'asin': """Computes the sine inverse of the given value; the returned angle is in the range
+            -pi/2 through pi/2.
+
+            :param col: float column, units in radians.""",
     'atan': 'Computes the tangent inverse of the given value. Units in radians.',
     'cbrt': 'Computes the cube-root of the given value.',
     'ceil': 'Computes the ceiling of the given value.',
@@ -208,9 +210,9 @@ for _name, _doc in _functions_1_4.items():
 for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
-    globals()[_name] = since(1.6)(ignore_unicode_prefix(_create_window_function(_name, _doc)))
+    globals()[_name] = since(1.6)(_create_window_function(_name, _doc))
 for _name, _doc in _functions_1_6.items():
-    globals()[_name] = since(1.6)(_create_function(_name, _doc))
+    globals()[_name] = since(1.6)(ignore_unicode_prefix(_create_function(_name, _doc)))
 for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
 del _name, _doc
@@ -226,7 +228,7 @@ def approxCountDistinct(col, rsd=None):
 
 @since(2.1)
 def approx_count_distinct(col, rsd=None):
-    """Returns a new :class:`Column` for approximate distinct count of column ``col``.
+    """Returns a new :class:`Column` for approximate distinct count of column `col`.
 
     :param rsd: Residual (float). The approximate count will be within this fraction of the true
         count. For rsd < 0.01, it is more efficient to use :func:`countDistinct`
@@ -289,8 +291,7 @@ def coalesce(*cols):
 
 @since(1.6)
 def corr(col1, col2):
-    """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1``
-    and ``col2``.
+    """Returns a new :class:`Column` for the Pearson Correlation Coefficient for `col1` and `col2`.
 
     >>> a = range(20)
     >>> b = [2 * x for x in range(20)]
@@ -304,8 +305,7 @@ def corr(col1, col2):
 
 @since(2.0)
 def covar_pop(col1, col2):
-    """Returns a new :class:`Column` for the population covariance of ``col1``
-    and ``col2``.
+    """Returns a new :class:`Column` for the population covariance of `col1` and `col2`.
 
     >>> a = [1] * 10
     >>> b = [1] * 10
@@ -319,8 +319,7 @@ def covar_pop(col1, col2):
 
 @since(2.0)
 def covar_samp(col1, col2):
-    """Returns a new :class:`Column` for the sample covariance of ``col1``
-    and ``col2``.
+    """Returns a new :class:`Column` for the sample covariance of `col1` and `col2`.
 
     >>> a = [1] * 10
     >>> b = [1] * 10
@@ -334,7 +333,7 @@ def covar_samp(col1, col2):
 
 @since(1.3)
 def countDistinct(col, *cols):
-    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+    """Returns a new :class:`Column` for distinct count of `col` or `cols`.
 
     >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
     [Row(c=2)]
@@ -413,7 +412,7 @@ def input_file_name():
 
 @since(1.6)
 def isnan(col):
-    """An expression that returns true if the column is NaN.
+    """An expression that returns true iff the column is NaN.
 
     >>> df = spark.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
     >>> df.select(isnan("a").alias("r1"), isnan(df.a).alias("r2")).collect()
@@ -425,7 +424,7 @@ def isnan(col):
 
 @since(1.6)
 def isnull(col):
-    """An expression that returns true if the column is null.
+    """An expression that returns true iff the column is null.
 
     >>> df = spark.createDataFrame([(1, None), (None, 2)], ("a", "b"))
     >>> df.select(isnull("a").alias("r1"), isnull(df.a).alias("r2")).collect()
@@ -482,6 +481,7 @@ def nanvl(col1, col2):
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
 
 
+@ignore_unicode_prefix
 @since(1.4)
 def rand(seed=None):
     """Generates a random column with independent and identically distributed (i.i.d.) samples
@@ -499,6 +499,7 @@ def rand(seed=None):
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(1.4)
 def randn(seed=None):
     """Generates a column with independent and identically distributed (i.i.d.) samples from
@@ -1103,6 +1104,7 @@ def last_day(date):
     return Column(sc._jvm.functions.last_day(_to_java_column(date)))
 
 
+@ignore_unicode_prefix
 @since(1.5)
 def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     """
