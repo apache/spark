@@ -631,7 +631,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       val ds2 =
         sql(
           """
-            |SELECT * FROM (SELECT max(c1) FROM t1 GROUP BY c1)
+            |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1)
             |WHERE
             |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
             |OR
@@ -788,7 +788,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       // Scalar subquery and predicate subquery
       sql(
         """
-          |SELECT * FROM (SELECT max(c1) FROM t1 GROUP BY c1)
+          |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1)
           |WHERE
           |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
           |OR
@@ -800,7 +800,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       val cachedDs2 =
         sql(
           """
-            |SELECT * FROM (SELECT max(c1) FROM t1 GROUP BY c1)
+            |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1)
             |WHERE
             |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
             |OR
