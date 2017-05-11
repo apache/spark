@@ -639,6 +639,10 @@ It is possible to use both partitions and buckets for a single table:
 
 </div>
 
+`partitionBy` creates a directory structure as described in the [Partition Discovery](#partition-discovery) section.
+Because of that it has limited applicability to columns with high cardinality. In contrast `bucketBy` distributes
+data across fixed number of buckets and can be used if a number of unique values is unbounded.
+
 ## Parquet Files
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
