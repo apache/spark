@@ -902,7 +902,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       builder ++= partCols.mkString("PARTITIONED BY (", ", ", ")\n")
     }
 
-    if (metadata.bucketSpec.nonEmpty) {
+    if (metadata.bucketSpec.isDefined) {
       val bucketSpec = metadata.bucketSpec.get
       builder ++= s"CLUSTERED BY (${bucketSpec.bucketColumnNames.mkString(",")})\n"
 
