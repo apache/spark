@@ -501,13 +501,8 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       |under the table directory.""".stripMargin) {
 
     withTable("test_table") {
-      spark.range(1).write.saveAsTable("test_table")
 
-      // Make sure the table has also been updated.
-      checkAnswer(
-        sql("SELECT * FROM test_table"),
-        Row(0)
-      )
+      sql("CREATE TABLE test_table (key int)")
 
       // Set hive.exec.stagingdir under the table directory without start with ".".
       sql("set hive.exec.stagingdir=./test")
