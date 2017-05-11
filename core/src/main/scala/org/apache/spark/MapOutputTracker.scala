@@ -490,9 +490,14 @@ private[spark] class MapOutputTrackerMaster(
   def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int)
       : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
-    shuffleStatuses(shuffleId).withOutputLocs { outputLocs =>
-      val statuses = outputLocs.map(_.headOption.orNull)
-      MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
+    shuffleStatuses.get(shuffleId) match {
+      case Some (shuffleStatus) =>
+        shuffleStatus.withOutputLocs { outputLocs =>
+          val statuses = outputLocs.map(_.headOption.orNull)
+          MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
+        }
+      case None =>
+        Seq.empty
     }
   }
 
