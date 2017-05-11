@@ -99,7 +99,6 @@ private class ShuffleStatus(numPartitions: Int) {
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   def findMissingPartitions(): Seq[Int] = synchronized {
     val missing = (0 until numPartitions).filter(id => outputLocs(id).isEmpty)
-    val _numAvailableOutputs = numAvailableOutputs
     assert(missing.size == numPartitions - _numAvailableOutputs,
       s"${missing.size} missing, expected ${numPartitions - _numAvailableOutputs}")
     missing
@@ -371,12 +370,15 @@ private[spark] class MapOutputTrackerMaster(
   def containsShuffle(shuffleId: Int): Boolean = shuffleStatuses.contains(shuffleId)
 
   def getNumAvailableOutputs(shuffleId: Int): Int = {
-    shuffleStatuses(shuffleId).numAvailableOutputs
+    shuffleStatuses.get(shuffleId).map(_.numAvailableOutputs).getOrElse(0)
   }
 
-  /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
-  def findMissingPartitions(shuffleId: Int): Seq[Int] = {
-    shuffleStatuses(shuffleId).findMissingPartitions()
+  /**
+   * Returns the sequence of partition ids that are missing (i.e. needs to be computed), or None
+   * if the MapOutputTrackerMaster doesn't know about this shuffle.
+   */
+  def findMissingPartitions(shuffleId: Int): Option[Seq[Int]] = {
+    shuffleStatuses.get(shuffleId).map(_.findMissingPartitions())
   }
 
   /**
