@@ -107,11 +107,11 @@ case class InsertIntoHiveTable(
     // SPARK-20594: This is a walk-around fix to resolve a Hive bug. Hive requires that the
     // staging directory needs to avoid being deleted when users set hive.exec.stagingdir
     // under the table directory.
-    if (FileUtils.isSubDir(new Path(stagingPathName), inputPath, fs)
-      && !stagingPathName.stripPrefix(inputPathName).stripPrefix(File.separator).startsWith(".")) {
+    if (FileUtils.isSubDir(new Path(stagingPathName), inputPath, fs) &&
+      !stagingPathName.stripPrefix(inputPathName).stripPrefix(File.separator).startsWith(".")) {
       logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
-        s"with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
-        s"directory.")
+        "with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
+        "directory.")
       stagingPathName = new Path(inputPathName, ".hive-staging").toString
     }
 

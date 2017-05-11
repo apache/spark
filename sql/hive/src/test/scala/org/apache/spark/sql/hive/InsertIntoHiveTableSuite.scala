@@ -500,7 +500,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       |staging directory needs to avoid being deleted when users set hive.exec.stagingdir
       |under the table directory.""".stripMargin) {
 
-    withTable("test_table", "test_table1") {
+    withTable("test_table") {
       spark.range(1).write.saveAsTable("test_table")
 
       // Make sure the table has also been updated.
@@ -509,19 +509,19 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
         Row(0)
       )
 
-      sql("CREATE TABLE test_table1 (key int)")
-
       // Set hive.exec.stagingdir under the table directory without start with ".".
       sql("set hive.exec.stagingdir=./test")
 
       // Now overwrite.
-      sql("INSERT OVERWRITE TABLE test_table1 SELECT * FROM test_table")
+      sql("INSERT OVERWRITE TABLE test_table SELECT 1")
 
       // Make sure the table has also been updated.
       checkAnswer(
-        sql("SELECT * FROM test_table1"),
-        Row(0)
+        sql("SELECT * FROM test_table"),
+        Row(1)
       )
+
+      sql("reset")
     }
   }
 }
