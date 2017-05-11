@@ -227,7 +227,7 @@ struct<pmod(-7, 3):int>
 
 
 -- !query 28
-explain select 'a' || 1 + 2
+EXPLAIN SELECT 'a' || 1 + 2
 -- !query 28 schema
 struct<plan:string>
 -- !query 28 output
@@ -237,7 +237,7 @@ struct<plan:string>
 
 
 -- !query 29
-explain select 1 - 2 || 'b'
+EXPLAIN SELECT 1 - 2 || 'b'
 -- !query 29 schema
 struct<plan:string>
 -- !query 29 output
@@ -247,7 +247,7 @@ struct<plan:string>
 
 
 -- !query 30
-explain select 2 * 4  + 3 || 'b'
+EXPLAIN SELECT 2 * 4  + 3 || 'b'
 -- !query 30 schema
 struct<plan:string>
 -- !query 30 output
@@ -257,7 +257,7 @@ struct<plan:string>
 
 
 -- !query 31
-explain select 3 + 1 || 'a' || 4 / 2
+EXPLAIN SELECT 3 + 1 || 'a' || 4 / 2
 -- !query 31 schema
 struct<plan:string>
 -- !query 31 output
@@ -267,7 +267,7 @@ struct<plan:string>
 
 
 -- !query 32
-explain select 1 == 1 OR 'a' || 'b' ==  'ab'
+EXPLAIN SELECT 1 == 1 OR 'a' || 'b' ==  'ab'
 -- !query 32 schema
 struct<plan:string>
 -- !query 32 output
@@ -277,7 +277,7 @@ struct<plan:string>
 
 
 -- !query 33
-explain select 'a' || 'c' == 'ac' AND 2 == 3
+EXPLAIN SELECT 'a' || 'c' == 'ac' AND 2 == 3
 -- !query 33 schema
 struct<plan:string>
 -- !query 33 output
