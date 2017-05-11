@@ -158,7 +158,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
       regexp - a string expression. The pattern string should be a Java regular expression.
 
         Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL parser.
-        For example, if to match "\abc", a regular expression for `regexp` can be "^\\abc$".
+        For example, to match "\abc", a regular expression for `regexp` can be "^\\abc$".
 
         There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to fallback
         to the Spark 1.6 behavior regarding string literal parsing. For example, if the config is
