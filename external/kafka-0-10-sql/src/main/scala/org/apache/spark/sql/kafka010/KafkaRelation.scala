@@ -144,5 +144,6 @@ private[kafka010] class KafkaRelation(
     }
   }
 
-  override def toString: String = "kafka"
+  override def toString: String =
+    s"KafkaRelation(strategy=$strategy, start=$startingOffsets, end=$endingOffsets)"
 }
