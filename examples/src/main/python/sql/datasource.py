@@ -48,8 +48,6 @@ def basic_datasource_example(spark):
         .saveAsTable("people_partitioned_bucketed"))
     # $example off:write_partition_and_bucket$
 
-    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
-
     # $example on:manual_load_options$
     df = spark.read.load("examples/src/main/resources/people.json", format="json")
     df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
@@ -59,12 +57,12 @@ def basic_datasource_example(spark):
     df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
     # $example off:write_sorting_and_bucketing$
 
-    spark.sql("DROP TABLE IF EXISTS people_bucketed")
-
     # $example on:direct_sql$
     df = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
     # $example off:direct_sql$
 
+    spark.sql("DROP TABLE IF EXISTS people_bucketed")
+    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
 
 def parquet_example(spark):
     # $example on:basic_parquet_example$

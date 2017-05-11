@@ -67,6 +67,7 @@ object SQLDataSourceExample {
     // $example off:write_partition_and_bucket$
 
     spark.sql("DROP TABLE IF EXISTS people_bucketed")
+    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
   }
 
   private def runBasicParquetExample(spark: SparkSession): Unit = {

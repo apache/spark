@@ -135,6 +135,7 @@ public class JavaSQLDataSourceExample {
     // $example off:write_partition_and_bucket$
 
     spark.sql("DROP TABLE IF EXISTS people_bucketed");
+    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed");
   }
 
   private static void runBasicParquetExample(SparkSession spark) {
