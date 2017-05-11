@@ -47,6 +47,7 @@ case class UserDefinedFunction protected[sql] (
     dataType: DataType,
     inputTypes: Option[Seq[DataType]]) {
 
+  private var _nameOption: Option[String] = None
   private var _nullable: Boolean = true
 
   /**
@@ -67,13 +68,25 @@ case class UserDefinedFunction protected[sql] (
       dataType,
       exprs.map(_.expr),
       inputTypes.getOrElse(Nil),
+      udfName = _nameOption,
       nullable = _nullable))
   }
 
   private def copyAll(): UserDefinedFunction = {
     val udf = copy()
+    udf._nameOption = _nameOption
     udf._nullable = _nullable
     udf
+  }
+
+  /**
+   * Updates UserDefinedFunction with a given name.
+   *
+   * @since 2.3.0
+   */
+  def withName(name: String): this.type = {
+    this._nameOption = Option(name)
+    this
   }
 
   /**
