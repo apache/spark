@@ -58,7 +58,7 @@ object SQLDataSourceExample {
     // $example on:write_partitioning$
     usersDF.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
     // $example off:write_partitioning$
-    //$example on:write_partition_and_bucket$
+    // $example on:write_partition_and_bucket$
     peopleDF
       .write
       .partitionBy("favorite_color")
