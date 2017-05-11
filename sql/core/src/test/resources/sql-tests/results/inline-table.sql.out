@@ -154,11 +154,30 @@ struct<a:timestamp,b:array<timestamp>>
 
 
 -- !query 17
-SELECT * FROM VALUES ('one', 1), ('three', null) CROSS JOIN VALUES ('one', 1), ('three', null)
+EXPLAIN EXTENDED SELECT * FROM VALUES ('one', 1), ('three', null) CROSS JOIN VALUES ('one', 1), ('three', null)
 -- !query 17 schema
-struct<col1:string,col2:int,col1:string,col2:int>
+struct<plan:string>
 -- !query 17 output
-one	1	one	1
-one	1	three	NULL
-three	NULL	one	1
-three	NULL	three	NULL
+== Parsed Logical Plan ==
+'Project [*]
++- 'Join Cross
+   :- 'UnresolvedInlineTable [col1, col2], [List(one, 1), List(three, null)]
+   +- 'UnresolvedInlineTable [col1, col2], [List(one, 1), List(three, null)]
+
+== Analyzed Logical Plan ==
+col1: string, col2: int, col1: string, col2: int
+Project [col1#x, col2#x, col1#x, col2#x]
++- Join Cross
+   :- LocalRelation [col1#x, col2#x]
+   +- LocalRelation [col1#x, col2#x]
+
+== Optimized Logical Plan ==
+Join Cross
+:- LocalRelation [col1#x, col2#x]
++- LocalRelation [col1#x, col2#x]
+
+== Physical Plan ==
+BroadcastNestedLoopJoin BuildRight, Cross
+:- LocalTableScan [col1#x, col2#x]
++- BroadcastExchange IdentityBroadcastMode
+   +- LocalTableScan [col1#x, col2#x]
