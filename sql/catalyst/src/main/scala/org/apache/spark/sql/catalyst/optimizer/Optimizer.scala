@@ -87,7 +87,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       CollapseRepartition,
       CollapseProject,
       CollapseWindow,
-      CollapseConcat,
       CombineFilters,
       CombineLimits,
       CombineUnions,
@@ -606,31 +605,6 @@ object CollapseWindow extends Rule[LogicalPlan] {
     case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
         if ps1 == ps2 && os1 == os2 && w1.references.intersect(w2.windowOutputSet).isEmpty =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
-  }
-}
-
-/**
- * Collapse nested [[Concat]] expressions.
- */
-object CollapseConcat extends Rule[LogicalPlan] {
-
-  private def extractConcatExprs(e: Concat): Seq[Expression] = {
-    e.children.foldLeft(mutable.ArrayBuffer[Expression]()) { case (exprList, e) =>
-      exprList ++= (e match {
-        case concat: Concat => extractConcatExprs(concat)
-        case _ => e :: Nil
-      })
-    }
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case p @ Project(exprs, _) if exprs.exists(_.collect { case _: Concat => true }.size > 1) =>
-      val projectList = exprs.map { expr =>
-        expr.transformDown {
-          case concat: Concat => Concat(extractConcatExprs(concat))
-        }
-      }.asInstanceOf[Seq[NamedExpression]]
-      p.copy(projectList = projectList)
   }
 }
 
