@@ -879,7 +879,7 @@ private[spark] class PythonAccumulatorV2(
     private val serverPort: Int)
   extends CollectionAccumulator[Array[Byte]] {
 
-  Utils.checkHost(serverHost, "Expected hostname")
+  Utils.checkHost(serverHost)
 
   val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
 

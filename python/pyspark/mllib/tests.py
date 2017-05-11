@@ -23,6 +23,7 @@ import os
 import sys
 import tempfile
 import array as pyarray
+from math import sqrt
 from time import time, sleep
 from shutil import rmtree
 
@@ -54,6 +55,7 @@ from pyspark.mllib.common import _to_java_object_rdd
 from pyspark.mllib.clustering import StreamingKMeans, StreamingKMeansModel
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
+from pyspark.mllib.linalg.distributed import RowMatrix
 from pyspark.mllib.classification import StreamingLogisticRegressionWithSGD
 from pyspark.mllib.recommendation import Rating
 from pyspark.mllib.regression import LabeledPoint, StreamingLinearRegressionWithSGD
@@ -1697,6 +1699,67 @@ class HashingTFTest(MLlibTestCase):
         for i in range(0, n):
             self.assertAlmostEqual(output[i], expected[i], 14, "Error at " + str(i) +
                                    ": expected " + str(expected[i]) + ", got " + str(output[i]))
+
+
+class DimensionalityReductionTests(MLlibTestCase):
+
+    denseData = [
+        Vectors.dense([0.0, 1.0, 2.0]),
+        Vectors.dense([3.0, 4.0, 5.0]),
+        Vectors.dense([6.0, 7.0, 8.0]),
+        Vectors.dense([9.0, 0.0, 1.0])
+    ]
+    sparseData = [
+        Vectors.sparse(3, [(1, 1.0), (2, 2.0)]),
+        Vectors.sparse(3, [(0, 3.0), (1, 4.0), (2, 5.0)]),
+        Vectors.sparse(3, [(0, 6.0), (1, 7.0), (2, 8.0)]),
+        Vectors.sparse(3, [(0, 9.0), (2, 1.0)])
+    ]
+
+    def assertEqualUpToSign(self, vecA, vecB):
+        eq1 = vecA - vecB
+        eq2 = vecA + vecB
+        self.assertTrue(sum(abs(eq1)) < 1e-6 or sum(abs(eq2)) < 1e-6)
+
+    def test_svd(self):
+        denseMat = RowMatrix(self.sc.parallelize(self.denseData))
+        sparseMat = RowMatrix(self.sc.parallelize(self.sparseData))
+        m = 4
+        n = 3
+        for mat in [denseMat, sparseMat]:
+            for k in range(1, 4):
+                rm = mat.computeSVD(k, computeU=True)
+                self.assertEqual(rm.s.size, k)
+                self.assertEqual(rm.U.numRows(), m)
+                self.assertEqual(rm.U.numCols(), k)
+                self.assertEqual(rm.V.numRows, n)
+                self.assertEqual(rm.V.numCols, k)
+
+        # Test that U returned is None if computeU is set to False.
+        self.assertEqual(mat.computeSVD(1).U, None)
+
+        # Test that low rank matrices cannot have number of singular values
+        # greater than a limit.
+        rm = RowMatrix(self.sc.parallelize(tile([1, 2, 3], (3, 1))))
+        self.assertEqual(rm.computeSVD(3, False, 1e-6).s.size, 1)
+
+    def test_pca(self):
+        expected_pcs = array([
+            [0.0, 1.0, 0.0],
+            [sqrt(2.0) / 2.0, 0.0, sqrt(2.0) / 2.0],
+            [sqrt(2.0) / 2.0, 0.0, -sqrt(2.0) / 2.0]
+        ])
+        n = 3
+        denseMat = RowMatrix(self.sc.parallelize(self.denseData))
+        sparseMat = RowMatrix(self.sc.parallelize(self.sparseData))
+        for mat in [denseMat, sparseMat]:
+            for k in range(1, 4):
+                pcs = mat.computePrincipalComponents(k)
+                self.assertEqual(pcs.numRows, n)
+                self.assertEqual(pcs.numCols, k)
+
+                # We can just test the updated principal component for equality.
+                self.assertEqualUpToSign(pcs.toArray()[:, k - 1], expected_pcs[:, k - 1])
 
 
 if __name__ == "__main__":

@@ -593,6 +593,10 @@ The following example shows how to save/load a MLlib model by SparkR.
 </tr>
 </table>
 
+# Structured Streaming
+
+SparkR supports the Structured Streaming API (experimental). Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. For more information see the R API on the [Structured Streaming Programming Guide](structured-streaming-programming-guide.html)
+
 # R Function Name Conflicts
 
 When loading and attaching a new package in R, it is possible to have a name [conflict](https://stat.ethz.ch/R-manual/R-devel/library/base/html/library.html), where a

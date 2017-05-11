@@ -387,6 +387,17 @@ setGeneric("value", function(bcast) { standardGeneric("value") })
 #' @export
 setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 
+#' alias
+#'
+#' Returns a new SparkDataFrame or a Column with an alias set. Equivalent to SQL "AS" keyword.
+#'
+#' @name alias
+#' @rdname alias
+#' @param object x a SparkDataFrame or a Column
+#' @param data new name to use
+#' @return a SparkDataFrame or a Column
+NULL
+
 #' @rdname arrange
 #' @export
 setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
@@ -575,6 +586,10 @@ setGeneric("group_by", function(x, ...) { standardGeneric("group_by") })
 #' @rdname groupBy
 #' @export
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
+
+#' @rdname hint
+#' @export
+setGeneric("hint", function(x, name, ...) { standardGeneric("hint") })
 
 #' @rdname insertInto
 #' @export
@@ -1075,6 +1090,12 @@ setGeneric("hypot", function(y, x) { standardGeneric("hypot") })
 #' @rdname initcap
 #' @export
 setGeneric("initcap", function(x) { standardGeneric("initcap") })
+
+#' @param x empty. Should be used with no argument.
+#' @rdname input_file_name
+#' @export
+setGeneric("input_file_name",
+           function(x = "missing") { standardGeneric("input_file_name") })
 
 #' @rdname instr
 #' @export

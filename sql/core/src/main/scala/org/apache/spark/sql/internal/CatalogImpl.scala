@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -417,6 +418,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def cacheTable(tableName: String): Unit = {
     sparkSession.sharedState.cacheManager.cacheQuery(sparkSession.table(tableName), Some(tableName))
+  }
+
+  /**
+   * Caches the specified table or view with the given storage level.
+   *
+   * @group cachemgmt
+   * @since 2.3.0
+   */
+  override def cacheTable(tableName: String, storageLevel: StorageLevel): Unit = {
+    sparkSession.sharedState.cacheManager.cacheQuery(
+      sparkSession.table(tableName), Some(tableName), storageLevel)
   }
 
   /**

@@ -3715,3 +3715,57 @@ setMethod("rollup",
             sgd <- callJMethod(x@sdf, "rollup", jcol)
             groupedData(sgd)
           })
+
+#' hint
+#'
+#' Specifies execution plan hint and return a new SparkDataFrame.
+#'
+#' @param x a SparkDataFrame.
+#' @param name a name of the hint.
+#' @param ... optional parameters for the hint.
+#' @return A SparkDataFrame.
+#' @family SparkDataFrame functions
+#' @aliases hint,SparkDataFrame,character-method
+#' @rdname hint
+#' @name hint
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(mtcars)
+#' avg_mpg <- mean(groupBy(createDataFrame(mtcars), "cyl"), "mpg")
+#'
+#' head(join(df, hint(avg_mpg, "broadcast"), df$cyl == avg_mpg$cyl))
+#' }
+#' @note hint since 2.2.0
+setMethod("hint",
+          signature(x = "SparkDataFrame", name = "character"),
+          function(x, name, ...) {
+            parameters <- list(...)
+            stopifnot(all(sapply(parameters, is.character)))
+            jdf <- callJMethod(x@sdf, "hint", name, parameters)
+            dataFrame(jdf)
+          })
+
+#' alias
+#'
+#' @aliases alias,SparkDataFrame-method
+#' @family SparkDataFrame functions
+#' @rdname alias
+#' @name alias
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- alias(createDataFrame(mtcars), "mtcars")
+#' avg_mpg <- alias(agg(groupBy(df, df$cyl), avg(df$mpg)), "avg_mpg")
+#'
+#' head(select(df, column("mtcars.mpg")))
+#' head(join(df, avg_mpg, column("mtcars.cyl") == column("avg_mpg.cyl")))
+#' }
+#' @note alias(SparkDataFrame) since 2.3.0
+setMethod("alias",
+          signature(object = "SparkDataFrame"),
+          function(object, data) {
+            stopifnot(is.character(data))
+            sdf <- callJMethod(object@sdf, "alias", data)
+            dataFrame(sdf)
+          })
