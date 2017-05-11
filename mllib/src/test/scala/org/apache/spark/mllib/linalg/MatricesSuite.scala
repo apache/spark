@@ -52,7 +52,10 @@ class MatricesSuite extends SparkFunSuite {
     val mat1Brz = Matrices.sparse(2, 3, Array(0, 2, 2, 2), Array(0, 1), Array(2, 2)).asBreeze
     // (2, 1E-15, 1E-15)
     // (2, 1E-15, 1E-15)
-    val mat2Brz = Matrices.sparse(2, 3, Array(0, 2, 4, 6), Array(0, 0, 0, 1, 1, 1), Array(2, 1E-15, 1E-15, 2, 1E-15, 1E-15)).asBreeze
+    val mat2Brz = Matrices.sparse(2, 3,
+      Array(0, 2, 4, 6),
+      Array(0, 0, 0, 1, 1, 1),
+      Array(2, 1E-15, 1E-15, 2, 1E-15, 1E-15)).asBreeze
     val t1Brz = mat1Brz - mat2Brz
     val t2Brz = mat2Brz - mat1Brz
     // The following operations raise exceptions on un-patch Matrices.fromBreeze
