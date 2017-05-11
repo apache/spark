@@ -2828,7 +2828,7 @@ class Dataset[T] private[sql](
           json
         }
       }
-    } (sparkSession.implicits.newStringEncoder)
+    } (Encoders.STRING)
   }
 
   /**
