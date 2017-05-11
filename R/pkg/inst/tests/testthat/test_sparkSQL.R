@@ -96,6 +96,10 @@ mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}
 mapTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesMapType, mapTypeJsonPath)
 
+if (.Platform$OS.type == "windows") {
+  Sys.setenv(TZ = "GMT")
+}
+
 test_that("calling sparkRSQL.init returns existing SQL context", {
   skip_on_cran()
 
@@ -673,24 +677,27 @@ test_that("jsonRDD() on a RDD with json string", {
 })
 
 test_that("test tableNames and tables", {
+  count <- count(listTables())
+
   df <- read.json(jsonPath)
   createOrReplaceTempView(df, "table1")
-  expect_equal(length(tableNames()), 1)
-  expect_equal(length(tableNames("default")), 1)
+  expect_equal(length(tableNames()), count + 1)
+  expect_equal(length(tableNames("default")), count + 1)
+
   tables <- listTables()
-  expect_equal(count(tables), 1)
+  expect_equal(count(tables), count + 1)
   expect_equal(count(tables()), count(tables))
   expect_true("tableName" %in% colnames(tables()))
   expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
 
   suppressWarnings(registerTempTable(df, "table2"))
   tables <- listTables()
-  expect_equal(count(tables), 2)
+  expect_equal(count(tables), count + 2)
   suppressWarnings(dropTempTable("table1"))
   expect_true(dropTempView("table2"))
 
   tables <- listTables()
-  expect_equal(count(tables), 0)
+  expect_equal(count(tables), count + 0)
 })
 
 test_that(
@@ -1222,6 +1229,16 @@ test_that("select with column", {
   df4 <- select(df, c("name", "age"))
   expect_equal(columns(df4), c("name", "age"))
   expect_equal(count(df4), 3)
+
+  # Test select with alias
+  df5 <- alias(df, "table")
+
+  expect_equal(columns(select(df5, column("table.name"))), "name")
+  expect_equal(columns(select(df5, "table.name")), "name")
+
+  # Test that stats::alias is not masked
+  expect_is(alias(aov(yield ~ block + N * P * K, npk)), "listof")
+
 
   expect_error(select(df, c("name", "age"), "name"),
                 "To select multiple columns, use a character vector or list for col")
@@ -3387,7 +3404,7 @@ compare_list <- function(list1, list2) {
 
 # This should always be the **very last test** in this test file.
 test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
-  skip_on_cran()
+  skip_on_cran() # skip because when run from R CMD check SPARK_HOME is not the current directory
 
   # Check that it is not creating any extra file.
   # Does not check the tempdir which would be cleaned up after.

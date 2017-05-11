@@ -224,10 +224,10 @@
     </profile>
 
     <!--
-     Pull in spark-hadoop-cloud and its associated JARs,
+     Pull in hadoop-cloud and its associated JARs,
     -->
     <profile>
-      <id>cloud</id>
+      <id>hadoop-cloud</id>
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>

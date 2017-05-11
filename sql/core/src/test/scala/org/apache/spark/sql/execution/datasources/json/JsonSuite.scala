@@ -1333,9 +1333,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       case _ => false
     }
 
-    if (containsRDD.isDefined) {
-      fail("Expected logical plan of toJSON to not contain an RDD")
-    }
+    assert(containsRDD.isEmpty, "Expected logical plan of toJSON to not contain an RDD")
   }
 
   test("JSONRelation equality test") {
