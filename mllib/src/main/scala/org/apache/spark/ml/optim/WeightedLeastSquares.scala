@@ -250,20 +250,25 @@ private[ml] class WeightedLeastSquares(
 
     val solution = solver match {
       case cholesky: CholeskySolver =>
-        try {
-          cholesky.solve(bBar, bbBar, ab, aa, aBar)
-        } catch {
-          // if Auto solver is used and Cholesky fails due to singular AtA, then fall back to
-          // Quasi-Newton solver.
-          case _: SingularMatrixException if solverType == WeightedLeastSquares.Auto =>
-            logWarning("Cholesky solver failed due to singular covariance matrix. " +
-              "Retrying with Quasi-Newton solver.")
+        var solution = cholesky.solve(bBar, bbBar, ab, aa, aBar)
+        if (solution.status < 0) {
+          throw new IllegalArgumentException("Cholesky solver failed due to illegal input.")
+        }
+        if (solution.status > 0) {
+          if (solverType == WeightedLeastSquares.Auto) {
+            logWarning("Cholesky solver failed due to singular covariance matrix " +
+              "(e.g. collinear column values). Retrying with Quasi-Newton solver.")
             // ab and aa were modified in place, so reconstruct them
             val _aa = getAtA(aaBarValues, aBarValues)
             val _ab = getAtB(abBarValues, bBar)
             val newSolver = new QuasiNewtonSolver(fitIntercept, maxIter, tol, None)
-            newSolver.solve(bBar, bbBar, _ab, _aa, aBar)
+            solution = newSolver.solve(bBar, bbBar, _ab, _aa, aBar)
+          } else {
+            throw new IllegalArgumentException("Cholesky solver failed due to singular " +
+              "covariance matrix (e.g. collinear column values).")
+          }
         }
+        solution
       case qn: QuasiNewtonSolver =>
         qn.solve(bBar, bbBar, ab, aa, aBar)
     }

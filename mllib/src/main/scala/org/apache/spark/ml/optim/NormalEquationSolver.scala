@@ -33,11 +33,16 @@ import org.apache.spark.mllib.linalg.CholeskyDecomposition
  *              format. None when an optimization program is used to solve the normal equations.
  * @param objectiveHistory Option containing the objective history when an optimization program is
  *                         used to solve the normal equations. None when an analytic solver is used.
+ * @param status Status of the solution. If the solution was produced by [[CholeskySolver]], status
+ *               value greater than 0 indicates singular matrix error; status value less than 0
+ *               indicates illegal input; status == 0 indicates success. If the solution was
+ *               produced by [[QuasiNewtonSolver]], status always return 0 which means success.
  */
 private[optim] class NormalEquationSolution(
     val coefficients: Array[Double],
     val aaInv: Option[Array[Double]],
-    val objectiveHistory: Option[Array[Double]])
+    val objectiveHistory: Option[Array[Double]],
+    val status: Int)
 
 /**
  * Interface for classes that solve the normal equations locally.
@@ -64,11 +69,17 @@ private[optim] class CholeskySolver extends NormalEquationSolver {
       abBar: DenseVector,
       aaBar: DenseVector,
       aBar: DenseVector): NormalEquationSolution = {
-    val k = abBar.size
-    val x = CholeskyDecomposition.solve(aaBar.values, abBar.values)
-    val aaInv = CholeskyDecomposition.inverse(aaBar.values, k)
 
-    new NormalEquationSolution(x, Some(aaInv), None)
+    val k = abBar.size
+    val (x, status1) = CholeskyDecomposition.solve(aaBar.values, abBar.values)
+    if (status1 != 0) {
+      return new NormalEquationSolution(Array(0), None, None, status1)
+    }
+    val (aaInv, status2) = CholeskyDecomposition.inverse(aaBar.values, k)
+    if (status2 != 0) {
+      return new NormalEquationSolution(Array(0), None, None, status2)
+    }
+    new NormalEquationSolution(x, Some(aaInv), None, 0)
   }
 }
 
@@ -110,7 +121,7 @@ private[optim] class QuasiNewtonSolver(
       arrayBuilder += state.adjustedValue
     }
     val x = state.x.toArray.clone()
-    new NormalEquationSolution(x, None, Some(arrayBuilder.result()))
+    new NormalEquationSolution(x, None, Some(arrayBuilder.result()), 0)
   }
 
   /**
@@ -151,14 +162,4 @@ private[optim] class QuasiNewtonSolver(
       (loss, aax.asBreeze.toDenseVector)
     }
   }
-}
-
-/**
- * Exception thrown when solving a linear system Ax = b for which the matrix A is non-invertible
- * (singular).
- */
-private[spark] class SingularMatrixException(message: String, cause: Throwable)
-  extends IllegalArgumentException(message, cause) {
-
-  def this(message: String) = this(message, null)
 }

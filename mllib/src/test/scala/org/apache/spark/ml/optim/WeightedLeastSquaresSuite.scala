@@ -151,7 +151,7 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
 
   test("two collinear features") {
     // Cholesky solver does not handle singular input
-    intercept[SingularMatrixException] {
+    intercept[IllegalArgumentException] {
       new WeightedLeastSquares(fitIntercept = false, regParam = 0.0, elasticNetParam = 0.0,
         standardizeFeatures = false, standardizeLabel = false,
         solverType = WeightedLeastSquares.Cholesky).fit(collinearInstances)
@@ -274,7 +274,7 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
       val wls = new WeightedLeastSquares(fitIntercept, regParam = 0.0, elasticNetParam = 0.0,
         standardizeFeatures = standardization, standardizeLabel = standardization,
         solverType = WeightedLeastSquares.Cholesky)
-      intercept[SingularMatrixException] {
+      intercept[IllegalArgumentException] {
         wls.fit(constantFeaturesInstances)
       }
     }
@@ -283,7 +283,7 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
     val wls = new WeightedLeastSquares(fitIntercept = true, regParam = 0.5, elasticNetParam = 0.0,
       standardizeFeatures = false, standardizeLabel = false,
       solverType = WeightedLeastSquares.Cholesky)
-    intercept[SingularMatrixException] {
+    intercept[IllegalArgumentException] {
       wls.fit(constantFeaturesInstances)
     }
 
