@@ -34,35 +34,68 @@ import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
 
+/**
+ * Helper class used by the [[MapOutputTrackerMaster]] to perform bookkeeping for a single
+ * ShuffleMapStage.
+ *
+ * This class maintains a mapping from mapIds to [[MapStatus]]es. It also maintains a cache of
+ * serialized map statuses in order to speed up tasks' requests for map output statuses.
+ *
+ * All public methods of this class are thread-safe.
+ */
 private class ShuffleStatus(numPartitions: Int) {
+
+  // All accesses to the following state must be guarded with `this.synchronized`.
 
   /**
    * [[MapStatus]] for each partition. The index of the array is the map partition id.
    * Each value in the array is the [[MapStatus]] for a partition, or null if the partition
    * is not available. Even though in theory a task may run multiple times (due to speculation,
-   * stage retries, etc., in practice the likelihood of a map output being available at multiple
+   * stage retries, etc.), in practice the likelihood of a map output being available at multiple
    * locations is so small that we choose to ignore that case and store only a single location
    * for each output.
    */
   private[this] val mapStatuses = new Array[MapStatus](numPartitions)
+
+  /**
+   * The cached result of serializing the map statuses array. This cache is lazily populated when
+   * [[serializedMapStatus]] is called. The cache is invalidated when map outputs are removed.
+   */
   private[this] var cachedSerializedMapStatus: Array[Byte] = _
+
+  /**
+   * Broadcast variable holding serialized map output statuses array. When [[serializedMapStatus]]
+   * serializes the map statuses array it may detect that the result is too large to send in a
+   * single RPC, in which case it places the serialized array into a broadcast variable and then
+   * sends a serialized broadcast variable instead. This variable holds a reference to that
+   * broadcast variable in order to keep it from being garbage collected and to allow for it to be
+   * explicitly destroyed later on when the ShuffleMapStage is garbage-collected.
+   */
   private[this] var cachedSerializedBroadcast: Broadcast[Array[Byte]] = _
+
+  /**
+   * Counter tracking the number of partitions that have output. This is a performance optimization
+   * to avoid having to count the number of non-null entries in the `mapStatuses` array and should
+   * be equivalent to`mapStatuses.count(_ ne null)`.
+   */
   private[this] var _numAvailableOutputs: Int = 0
 
-  def hasCachedSerializedBroadcast: Boolean = synchronized {
-    cachedSerializedBroadcast != null
-  }
-
+  /**
+   * Register a map output. If there is already a registered location for the map output then it
+   * will be replaced by the new location.
+   */
   def addMapOutput(mapId: Int, status: MapStatus): Unit = synchronized {
     if (mapStatuses(mapId) == null) {
       _numAvailableOutputs += 1
-      invalidateSerializedMapOutputStatusCache()
-    } else {
-      // TODO(josh) log?
     }
     mapStatuses(mapId) = status
   }
 
+  /**
+   * Remove the map output which was served by the specified block manager.
+   * This is a no-op if there is no registered map output or if the registered output is from a
+   * different block manager.
+   */
   def removeMapOutput(mapId: Int, bmAddress: BlockManagerId): Unit = synchronized {
     if (mapStatuses(mapId) != null && mapStatuses(mapId).location == bmAddress) {
       _numAvailableOutputs -= 1
@@ -72,9 +105,9 @@ private class ShuffleStatus(numPartitions: Int) {
   }
 
   /**
-   * Removes all shuffle outputs associated with this executor. Note that this will also remove
-   * outputs which are served by an external shuffle server (if one exists), as they are still
-   * registered with this execId.
+   * Removes all map outputs associated with the specified executor. Note that this will also
+   * remove outputs which are served by an external shuffle server (if one exists), as they are
+   * still registered with that execId.
    */
   def removeOutputsOnExecutor(execId: String): Unit = synchronized {
     for (mapId <- 0 until mapStatuses.length) {
@@ -88,13 +121,14 @@ private class ShuffleStatus(numPartitions: Int) {
 
   /**
    * Number of partitions that have shuffle outputs.
-   * This should be kept consistent as `outputLocs.filter(!_.isEmpty).size`.
    */
   def numAvailableOutputs: Int = synchronized {
     _numAvailableOutputs
   }
 
-  /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
+  /**
+   * Returns the sequence of partition ids that are missing (i.e. needs to be computed).
+   */
   def findMissingPartitions(): Seq[Int] = synchronized {
     val missing = (0 until numPartitions).filter(id => mapStatuses(id) == null)
     assert(missing.size == numPartitions - _numAvailableOutputs,
@@ -102,6 +136,15 @@ private class ShuffleStatus(numPartitions: Int) {
     missing
   }
 
+  /**
+   * Serializes the mapStatuses array into an efficient compressed format. See the comments on
+   * [[MapOutputTracker.serializeMapStatuses()]] for more details on the serialization format.
+   *
+   * This method is designed to be called multiple times and implements caching in order to speed
+   * up subsequent requests. If the cache is empty and multiple threads concurrently attempt to
+   * serialize the map statuses then serialization will only be performed in a single thread and all
+   * other threads will block until the cache is populated.
+   */
   def serializedMapStatus(
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
@@ -115,10 +158,22 @@ private class ShuffleStatus(numPartitions: Int) {
     cachedSerializedMapStatus
   }
 
+  // Used in testing.
+  def hasCachedSerializedBroadcast: Boolean = synchronized {
+    cachedSerializedBroadcast != null
+  }
+
+  /**
+   * Helper function which provides thread-safe access to the mapStatuses array.
+   * The function should NOT mutate the array.
+   */
   def withMapStatuses[T](f: Array[MapStatus] => T): T = synchronized {
     f(mapStatuses)
   }
 
+  /**
+   * Clears the cached serialized map output statuses.
+   */
   def invalidateSerializedMapOutputStatusCache(): Unit = synchronized {
     if (cachedSerializedBroadcast != null) {
       cachedSerializedBroadcast.destroy()
@@ -214,6 +269,9 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int)
       : Seq[(BlockManagerId, Seq[(BlockId, Long)])]
 
+  /**
+   * Deletes map output status information for the specified shuffle stage.
+   */
   def unregisterShuffle(shuffleId: Int): Unit
 
   def stop() {}
@@ -221,6 +279,12 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
 /**
  * Driver-side class that keeps track of the location of the map output of a stage.
+ *
+ * The DAGScheduler uses this class to (de)register map output statuses and to look up statistics
+ * for performing locality-aware reduce task scheduling.
+ *
+ * ShuffleMapStage uses this class for tracking available / missing outputs in order to determine
+ * which tasks need to be run.
  */
 private[spark] class MapOutputTrackerMaster(
     conf: SparkConf,
@@ -372,7 +436,7 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId).map(_.findMissingPartitions())
   }
 
-/**
+  /**
    * Return statistics about all of the outputs for a given shuffle.
    */
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
@@ -386,8 +450,6 @@ private[spark] class MapOutputTrackerMaster(
       new MapOutputStatistics(dep.shuffleId, totalSizes)
     }
   }
-
-
 
   /**
    * Return the preferred hosts on which to run the given map output partition in a given shuffle,
@@ -480,6 +542,7 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
+  // This method is only called in local-mode.
   def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int)
       : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
