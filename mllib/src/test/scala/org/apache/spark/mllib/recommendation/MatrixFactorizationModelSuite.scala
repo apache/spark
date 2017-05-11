@@ -75,7 +75,7 @@ class MatrixFactorizationModelSuite extends SparkFunSuite with MLlibTestSparkCon
   test("batch predict API recommendProductsForUsers") {
     val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
     val topK = 10
-    val recommendations = model.recommendProductsForUsers(topK).collectAsMap()
+    val recommendations = model.setBlockSize(2048).recommendProductsForUsers(topK).collectAsMap()
 
     assert(recommendations(0)(0).rating ~== 17.0 relTol 1e-14)
     assert(recommendations(1)(0).rating ~== 39.0 relTol 1e-14)
@@ -84,7 +84,7 @@ class MatrixFactorizationModelSuite extends SparkFunSuite with MLlibTestSparkCon
   test("batch predict API recommendUsersForProducts") {
     val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
     val topK = 10
-    val recommendations = model.recommendUsersForProducts(topK).collectAsMap()
+    val recommendations = model.setBlockSize(2048).recommendUsersForProducts(topK).collectAsMap()
 
     assert(recommendations(2)(0).user == 1)
     assert(recommendations(2)(0).rating ~== 39.0 relTol 1e-14)

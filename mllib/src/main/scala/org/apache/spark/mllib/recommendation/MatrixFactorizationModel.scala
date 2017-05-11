@@ -49,6 +49,8 @@ import org.apache.spark.util.BoundedPriorityQueue
  *                     the features computed for this user.
  * @param productFeatures RDD of tuples where each tuple represents the productId
  *                        and the features computed for this product.
+ * @param blockSize Number of records for each block, adjust this parameter to improve
+ *                  the efficiency of cartesian product
  *
  * @note If you create the model directly using constructor, please be aware that fast prediction
  * requires cached user/product features and their associated partitioners.
@@ -58,7 +60,7 @@ class MatrixFactorizationModel @Since("0.8.0") (
     @Since("0.8.0") val rank: Int,
     @Since("0.8.0") val userFeatures: RDD[(Int, Array[Double])],
     @Since("0.8.0") val productFeatures: RDD[(Int, Array[Double])],
-    @Since("2.3.0") var blockSize: Int = 4096)
+    @Since("2.2.0") var blockSize: Int = 4096)
   extends Saveable with Serializable with Logging {
 
   require(rank > 0)
@@ -277,6 +279,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
    * @param srcFeatures src features to receive recommendations
    * @param dstFeatures dst features used to make recommendations
    * @param num number of recommendations for each record
+   * @param blockSize number of records for each block
    * @return an RDD of (srcId: Int, recommendations), where recommendations are stored as an array
    *         of (dstId, rating) pairs.
    */
@@ -284,7 +287,8 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       rank: Int,
       srcFeatures: RDD[(Int, Array[Double])],
       dstFeatures: RDD[(Int, Array[Double])],
-      num: Int): RDD[(Int, Array[(Int, Double)])] = {
+      num: Int,
+      blockSize: Int = 4096): RDD[(Int, Array[(Int, Double)])] = {
     val srcBlocks = blockify(srcFeatures)
     val dstBlocks = blockify(dstFeatures)
     /**
@@ -336,7 +340,6 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
 
   /**
    * Blockifies features to improve the efficiency of cartesian product
-   * TODO: SPARK-20443 - expose blockSize as a param?
    */
   private def blockify(
       features: RDD[(Int, Array[Double])],
