@@ -344,6 +344,16 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
     assert(eventTimeColumns(0).name === "second")
   }
 
+  test("EventTime watermark should be ignored in batch query.") {
+    val df = testData
+      .withColumn("eventTime", $"key".cast("timestamp"))
+      .withWatermark("eventTime", "1 minute")
+      .select("eventTime")
+      .as[Long]
+
+    checkDataset[Long](df, 1L to 100L: _*)
+  }
+
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
     val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
     assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)

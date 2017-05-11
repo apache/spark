@@ -677,26 +677,27 @@ test_that("jsonRDD() on a RDD with json string", {
 })
 
 test_that("test tableNames and tables", {
-  # Making sure there are no registered temp tables from previous tests
-  suppressWarnings(sapply(tableNames(), function(tname) { dropTempTable(tname) }))
+  count <- count(listTables())
+
   df <- read.json(jsonPath)
   createOrReplaceTempView(df, "table1")
-  expect_equal(length(tableNames()), 1)
-  expect_equal(length(tableNames("default")), 1)
+  expect_equal(length(tableNames()), count + 1)
+  expect_equal(length(tableNames("default")), count + 1)
+
   tables <- listTables()
-  expect_equal(count(tables), 1)
+  expect_equal(count(tables), count + 1)
   expect_equal(count(tables()), count(tables))
   expect_true("tableName" %in% colnames(tables()))
   expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
 
   suppressWarnings(registerTempTable(df, "table2"))
   tables <- listTables()
-  expect_equal(count(tables), 2)
+  expect_equal(count(tables), count + 2)
   suppressWarnings(dropTempTable("table1"))
   expect_true(dropTempView("table2"))
 
   tables <- listTables()
-  expect_equal(count(tables), 0)
+  expect_equal(count(tables), count + 0)
 })
 
 test_that(

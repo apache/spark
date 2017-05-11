@@ -18,9 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
-import java.util.TimeZone;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
@@ -32,7 +30,6 @@ import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
-import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
 
@@ -93,30 +90,11 @@ public class VectorizedColumnReader {
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
-  private final TimeZone storageTz;
-  private final TimeZone sessionTz;
 
-  public VectorizedColumnReader(ColumnDescriptor descriptor, PageReader pageReader,
-                                Configuration conf)
+  public VectorizedColumnReader(ColumnDescriptor descriptor, PageReader pageReader)
       throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
-    // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
-    // The conf is sometimes null in tests.
-    String sessionTzString =
-        conf == null ? null : conf.get(SQLConf.SESSION_LOCAL_TIMEZONE().key());
-    if (sessionTzString == null || sessionTzString.isEmpty()) {
-      sessionTz = DateTimeUtils.defaultTimeZone();
-    } else {
-      sessionTz = TimeZone.getTimeZone(sessionTzString);
-    }
-    String storageTzString =
-        conf == null ? null : conf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY());
-    if (storageTzString == null || storageTzString.isEmpty()) {
-      storageTz = sessionTz;
-    } else {
-      storageTz = TimeZone.getTimeZone(storageTzString);
-    }
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
@@ -311,7 +289,7 @@ public class VectorizedColumnReader {
             // TODO: Convert dictionary of Binaries to dictionary of Longs
             if (!column.isNullAt(i)) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
-              column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v, sessionTz, storageTz));
+              column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
             }
           }
         } else {
@@ -444,7 +422,7 @@ public class VectorizedColumnReader {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i,
               // Read 12 bytes for INT96
-              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12), sessionTz, storageTz));
+              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
         } else {
           column.putNull(rowId + i);
         }

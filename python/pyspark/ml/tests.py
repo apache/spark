@@ -807,6 +807,18 @@ class PersistenceTest(SparkSessionTestCase):
         except OSError:
             pass
 
+    def logistic_regression_check_thresholds(self):
+        self.assertIsInstance(
+            LogisticRegression(threshold=0.5, thresholds=[0.5, 0.5]),
+            LogisticRegressionModel
+        )
+
+        self.assertRaisesRegexp(
+            ValueError,
+            "Logistic Regression getThreshold found inconsistent.*$",
+            LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
+        )
+
     def _compare_params(self, m1, m2, param):
         """
         Compare 2 ML Params instances for the given param, and assert both have the same param value
