@@ -249,8 +249,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
     var i = 0
     while (i < n) {
-      if (currMax(i) < currMin(i)) currMax(i) = Double.NaN
-      else if ((nnz(i) < totalCnt) && (currMax(i) < 0.0)) currMax(i) = 0.0
+      if (nnz(i) < totalCnt) {
+        if (currMax(i) < 0.0) currMax(i) = 0.0
+      } else if (currMax(i) < currMin(i)) {
+        currMax(i) = Double.NaN
+      }
       i += 1
     }
     Vectors.dense(currMax)
@@ -266,8 +269,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
     var i = 0
     while (i < n) {
-      if (currMax(i) < currMin(i)) currMin(i) = Double.NaN
-      else if ((nnz(i) < totalCnt) && (currMin(i) > 0.0)) currMin(i) = 0.0
+      if (nnz(i) < totalCnt) {
+        if (currMin(i) > 0.0) currMin(i) = 0.0
+      } else if (currMax(i) < currMin(i)) {
+        currMin(i) = Double.NaN
+      }
       i += 1
     }
     Vectors.dense(currMin)
