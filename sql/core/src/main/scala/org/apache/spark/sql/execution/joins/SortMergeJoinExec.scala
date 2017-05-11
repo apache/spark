@@ -420,7 +420,8 @@ case class SortMergeJoinExec(
 
     val spillThreshold = getSpillThreshold
 
-    val matchesAccessor = ctx.addMutableState(clsName, matches, s"$matches = new $clsName($spillThreshold);")
+    val matchesAccessor = ctx.addMutableState(
+      clsName, matches, s"$matches = new $clsName($spillThreshold);")
     // Copy the left keys as class members so they could be used in next function call.
     val matchedKeyVars = copyKeys(ctx, leftKeyVars)
 
