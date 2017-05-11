@@ -97,6 +97,7 @@ class DataFrameReader(OptionUtils):
         inference step, and thus speed up data loading.
 
         :param schema: a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
+                       (For example ``col0 INT, col1 DOUBLE``).
         """
         from pyspark.sql import SparkSession
         spark = SparkSession.builder.getOrCreate()
@@ -141,7 +142,7 @@ class DataFrameReader(OptionUtils):
         :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
         :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema
-                       or a DDL-formatted string.
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param options: all other string options
 
         >>> df = spark.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
@@ -186,7 +187,7 @@ class DataFrameReader(OptionUtils):
         :param path: string represents path to the JSON dataset, or a list of paths,
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema or
-                       a DDL-formatted string.
+                       a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
         :param prefersDecimal: infers all floating-point values as a decimal type. If the values
@@ -330,7 +331,7 @@ class DataFrameReader(OptionUtils):
 
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
-                       or a DDL-formatted string.
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param sep: sets the single character as a separator for each field and value.
                     If None is set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
