@@ -31,9 +31,9 @@ sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
 invisible(lapply(sparkRWhitelistSQLDirs,
                  function(x) { unlink(file.path(sparkRDir, x), recursive = TRUE, force = TRUE)}))
 
-sparkRMaster <- "local[1]"
+sparkRTestMaster <- "local[1]"
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
-  sparkRMaster <- ""
+  sparkRTestMaster <- ""
 }
 
 test_package("SparkR")
