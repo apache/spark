@@ -888,6 +888,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             | from   (select 1 as c1 from onerow t1 LIMIT 1) t2
             | where  t2.c1=1""".stripMargin),
         Row(1) :: Nil)
+    }
   }
 
   test("SPARK-20688: correctly check analysis for scalar sub-queries") {
