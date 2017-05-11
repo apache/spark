@@ -46,9 +46,10 @@ We use default settings in which it runs in local mode. It auto downloads Spark 
 
 ```{r, include=FALSE}
 install.spark()
-```
-```{r, message=FALSE, results="hide"}
 sparkR.session(master = "local[1]")
+```
+```{r, eval=FALSE}
+sparkR.session()
 ```
 
 The operations in SparkR are centered around an R class called `SparkDataFrame`. It is a distributed collection of data organized into named columns, which is conceptually equivalent to a table in a relational database or a data frame in R, but with richer optimizations under the hood.
