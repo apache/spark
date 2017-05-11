@@ -503,7 +503,7 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-    override def stop() {
+  override def stop() {
     mapOutputRequests.offer(PoisonPill)
     threadpool.shutdown()
     sendTracker(StopMapOutputTracker)
