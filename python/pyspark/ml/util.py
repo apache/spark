@@ -79,7 +79,8 @@ class MLWriter(object):
     def context(self, sqlContext):
         """
         Sets the SQL context to use for saving.
-        .. note:: Deprecated in 2.1 and will be removed in 2.2, use session instead.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
 
@@ -113,9 +114,10 @@ class JavaMLWriter(MLWriter):
     def context(self, sqlContext):
         """
         Sets the SQL context to use for saving.
-        .. note:: Deprecated in 2.1 and will be removed in 2.2, use session instead.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
-        warnings.warn("Deprecated in 2.1 and will be removed in 2.2, use session instead.")
+        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
         self._jwrite.context(sqlContext._ssql_ctx)
         return self
 
@@ -168,7 +170,8 @@ class MLReader(object):
     def context(self, sqlContext):
         """
         Sets the SQL context to use for loading.
-        .. note:: Deprecated in 2.1 and will be removed in 2.2, use session instead.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
         raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
 
@@ -200,9 +203,10 @@ class JavaMLReader(MLReader):
     def context(self, sqlContext):
         """
         Sets the SQL context to use for loading.
-        .. note:: Deprecated in 2.1 and will be removed in 2.2, use session instead.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
-        warnings.warn("Deprecated in 2.1 and will be removed in 2.2, use session instead.")
+        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
         self._jread.context(sqlContext._ssql_ctx)
         return self
 
