@@ -146,10 +146,10 @@ class TrainValidationSplitSuite
         .addGrid(lr.regParam, Array(0.1, 0.2))
         .build()
     val tvs = new TrainValidationSplitModel("cvUid", lrModel, Array(0.3, 0.6))
-    tvs.set(tvs.estimator, lr)
+    tvs.set(tvs.estimators, Array[org.apache.spark.ml.Estimator[_]](lr))
       .set(tvs.evaluator, evaluator)
       .set(tvs.trainRatio, 0.5)
-      .set(tvs.estimatorParamMaps, paramMaps)
+      .set(tvs.estimatorsParamMaps, Array[Array[org.apache.spark.ml.param.ParamMap]](paramMaps))
       .set(tvs.seed, 42L)
 
     val tvs2 = testDefaultReadWrite(tvs, testParams = false)

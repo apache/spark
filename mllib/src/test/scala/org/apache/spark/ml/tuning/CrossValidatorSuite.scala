@@ -18,11 +18,11 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.{Estimator, Model, Pipeline}
-import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel}
+import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, NaiveBayes}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
-import org.apache.spark.ml.feature.HashingTF
+import org.apache.spark.ml.feature.{Binarizer, HashingTF, Tokenizer}
 import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.param.shared.HasInputCol
@@ -253,10 +253,10 @@ class CrossValidatorSuite
         .addGrid(lr.regParam, Array(0.1, 0.2))
         .build()
     val cv = new CrossValidatorModel("cvUid", lrModel, Array(0.3, 0.6))
-    cv.set(cv.estimator, lr)
+    cv.set(cv.estimators, Array[org.apache.spark.ml.Estimator[_]](lr))
       .set(cv.evaluator, evaluator)
       .set(cv.numFolds, 20)
-      .set(cv.estimatorParamMaps, paramMaps)
+      .set(cv.estimatorsParamMaps, Array[Array[org.apache.spark.ml.param.ParamMap]](paramMaps))
 
     val cv2 = testDefaultReadWrite(cv, testParams = false)
 
@@ -291,6 +291,70 @@ class CrossValidatorSuite
           s" LogisticRegressionModel but found ${other.getClass.getName}")
     }
     assert(cv.avgMetrics === cv2.avgMetrics)
+  }
+
+  test("cross validation with two pipelines: logistic regression and naive bayes") {
+    val training = spark.createDataFrame(Seq(
+      (0L, "a b c d e spark", 1.0),
+      (1L, "b d", 0.0),
+      (2L, "spark f g h", 1.0),
+      (3L, "hadoop mapreduce", 0.0),
+      (4L, "b spark who", 1.0),
+      (5L, "g d a y", 0.0),
+      (6L, "spark fly", 1.0),
+      (7L, "was mapreduce", 0.0),
+      (8L, "e spark program", 1.0),
+      (9L, "a e c l", 0.0),
+      (10L, "spark compile", 1.0),
+      (11L, "hadoop software", 0.0)
+    )).toDF("id", "text", "label")
+
+    val tokenizer = new Tokenizer()
+      .setInputCol("text")
+      .setOutputCol("words")
+    val hashingTF = new HashingTF()
+      .setInputCol(tokenizer.getOutputCol)
+      .setOutputCol("features")
+
+    // Configure an ML pipeline using nb.
+    val nb = new NaiveBayes()
+    val pipeline1 = new Pipeline("p1").setStages(Array(tokenizer, hashingTF, nb))
+    val paramGrid1 = new ParamGridBuilder()
+      .addGrid(hashingTF.numFeatures, Array(10, 100))
+      .build()
+
+    // Configure an ML pipeline using lr.
+    val lr = new LogisticRegression().setMaxIter(10)
+    val pipeline2 = new Pipeline("p2").setStages(Array(tokenizer, hashingTF, lr))
+    val paramGrid2 = new ParamGridBuilder()
+      .addGrid(hashingTF.numFeatures, Array(10, 100))
+      .build()
+
+    // Configure an ML pipeline using nb bernoulli (4 stages)
+    val binarizer = new Binarizer()
+      .setInputCol(hashingTF.getOutputCol)
+      .setOutputCol("binary_features")
+    val nb2 = new NaiveBayes()
+      .setModelType("bernoulli")
+      .setFeaturesCol(binarizer.getOutputCol)
+    val pipeline3 = new Pipeline("p3").setStages(Array(tokenizer, hashingTF, binarizer, nb2))
+    val paramGrid3 = new ParamGridBuilder()
+      .addGrid(hashingTF.numFeatures, Array(10, 100))
+      .build()
+
+    // cross validate with both pipelines
+    val cv = new CrossValidator()
+      .setEstimators(Array(pipeline1, pipeline2, pipeline3))
+      .setEvaluator(new BinaryClassificationEvaluator)
+      .setEstimatorsParamMaps(Array(paramGrid1, paramGrid2, paramGrid3))
+      .setNumFolds(2)
+
+    // Run cross-validation, and choose the best set of parameters.
+    val cvModel = cv.fit(training)
+
+    assert(cvModel.bestModel.uid === "p2")
+    assert(cvModel.bestModel.asInstanceOf[PipelineModel].stages(1)
+      .asInstanceOf[HashingTF].getNumFeatures === 100)
   }
 }
 

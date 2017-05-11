@@ -459,7 +459,7 @@ private[ml] object MetaAlgorithmReadWrite {
     val subStages: Array[Params] = instance match {
       case p: Pipeline => p.getStages.asInstanceOf[Array[Params]]
       case pm: PipelineModel => pm.stages.asInstanceOf[Array[Params]]
-      case v: ValidatorParams => Array(v.getEstimator, v.getEvaluator)
+      case v: ValidatorParams => v.getEstimators ++ Array(v.getEvaluator)
       case ovr: OneVsRest => Array(ovr.getClassifier)
       case ovrModel: OneVsRestModel => Array(ovrModel.getClassifier) ++ ovrModel.models
       case rformModel: RFormulaModel => Array(rformModel.pipelineModel)
