@@ -207,9 +207,11 @@ sorttable = {
 
     hasInputs = (typeof node.getElementsByTagName == 'function') &&
                  node.getElementsByTagName('input').length;
-    
-    if (node.getAttribute("sorttable_customkey") != null) {
-      return node.getAttribute("sorttable_customkey");
+
+    if (node.getAttributeNode("sorttable_customkey") != null) {
+      if(node.getAttributeNode("sorttable_customkey").nodeValue != null) {
+        return node.getAttributeNode("sorttable_customkey").nodeValue;
+      }
     }
     else if (typeof node.textContent != 'undefined' && !hasInputs) {
       return node.textContent.replace(/^\s+|\s+$/g, '');
