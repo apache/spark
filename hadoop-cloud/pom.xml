@@ -28,82 +28,48 @@
 
   <artifactId>spark-hadoop-cloud_2.11</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Cloud Integration through Hadoop Libraries</name>
+  <name>Spark Project Cloud Integration</name>
   <description>
     Contains support for cloud infrastructures, specifically the Hadoop JARs and
-    transitive dependencies needed to interact with the infrastructures,
-    making everything consistent with Spark's other dependencies.
+    transitive dependencies needed to interact with the infrastructures.
+
+    Any project which explicitly depends upon the hadoop-cloud artifact will get the
+    dependencies; the exact versions of which will depend upon the hadoop version Spark was compiled
+    against.
+
+    The imports of transitive dependencies are managed to make them consistent
+    with those of the Spark build.
+
+    WARNING: the signatures of methods in the AWS and Azure SDKs do change between
+    versions: use exactly the same version with which the Hadoop JARs were
+    built.
   </description>
   <properties>
     <sbt.project.name>hadoop-cloud</sbt.project.name>
   </properties>
 
   <dependencies>
-    <!--
-      the AWS module pulls in jackson; its transitive dependencies can create
-      intra-jackson-module version problems.
-      -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-aws</artifactId>
-      <version>${hadoop.version}</version>
       <scope>${hadoop.deps.scope}</scope>
       <exclusions>
         <exclusion>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-common</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-mapper-asl</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-core-asl</artifactId>
-        </exclusion>
-        <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
-          <artifactId>jackson-core</artifactId>
+          <artifactId>*</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>com.fasterxml.jackson.core</groupId>
-          <artifactId>jackson-databind</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.fasterxml.jackson.core</groupId>
-          <artifactId>jackson-annotations</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-openstack</artifactId>
-      <version>${hadoop.version}</version>
-      <scope>${hadoop.deps.scope}</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-common</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>junit</groupId>
-          <artifactId>junit</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.mockito</groupId>
-          <artifactId>mockito-all</artifactId>
+          <groupId>com.fasterxml.jackson.dataformat</groupId>
+          <artifactId>jackson-dataformat-cbor</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
 
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-openstack</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
     <!--
     Add joda time to ensure that anything downstream which doesn't pull in spark-hive
     gets the correct joda time artifact, so doesn't have auth failures on later Java 8 JVMs
@@ -127,7 +93,7 @@
     <dependency>
       <groupId>com.fasterxml.jackson.dataformat</groupId>
       <artifactId>jackson-dataformat-cbor</artifactId>
-      <version>${fasterxml.jackson.version}</version>
+      <scope>${hadoop.deps.scope}</scope>
     </dependency>
     <!--Explicit declaration to force in Spark version into transitive dependencies -->
     <dependency>
@@ -144,42 +110,26 @@
   </dependencies>
 
   <profiles>
-
     <profile>
       <id>hadoop-2.7</id>
-      <!-- Hadoop Azure is a new Jar with -->
       <dependencies>
-
-        <!--
-        Hadoop WASB client only arrived in Hadoop 2.7
-        -->
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-azure</artifactId>
-          <version>${hadoop.version}</version>
           <scope>${hadoop.deps.scope}</scope>
-          <exclusions>
-            <exclusion>
-              <groupId>org.apache.hadoop</groupId>
-              <artifactId>hadoop-common</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>org.codehaus.jackson</groupId>
-              <artifactId>jackson-mapper-asl</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>com.fasterxml.jackson.core</groupId>
-              <artifactId>jackson-core</artifactId>
-            </exclusion>
-            <exclusion>
-              <groupId>com.google.guava</groupId>
-              <artifactId>guava</artifactId>
-            </exclusion>
-          </exclusions>
         </dependency>
       </dependencies>
     </profile>
-
+    <profile>
+      <id>hadoop-palantir</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-azure</artifactId>
+          <scope>${hadoop.deps.scope}</scope>
+        </dependency>
+      </dependencies>
+    </profile>
   </profiles>
 
 </project>

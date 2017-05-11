@@ -2763,13 +2763,6 @@
 
      -->
     <profile>
-      <id>cloud</id>
-      <modules>
-        <module>cloud</module>
-      </modules>
-    </profile>
-
-    <profile>
       <id>hadoop-cloud</id>
       <modules>
         <module>hadoop-cloud</module>

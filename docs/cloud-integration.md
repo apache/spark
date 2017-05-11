@@ -74,7 +74,7 @@ objects can be can be read or written by using their URLs as the path to data.
 For example `sparkContext.textFile("s3a://landsat-pds/scene_list.gz")` will create
 an RDD of the file `scene_list.gz` stored in S3, using the s3a connector.
 
-To add the relevant libraries to an application's classpath, include the `hadoop-cloud`
+To add the relevant libraries to an application's classpath, include the `spark-hadoop-cloud`
 module and its dependencies.
 
 In Maven, add the following to the `pom.xml` file, assuming `spark.version`
@@ -85,7 +85,7 @@ is set to the chosen version of Spark:
   ...
   <dependency>
     <groupId>org.apache.spark</groupId>
-    <artifactId>hadoop-cloud_2.11</artifactId>
+    <artifactId>spark-hadoop-cloud_2.11</artifactId>
     <version>${spark.version}</version>
   </dependency>
   ...
