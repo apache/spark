@@ -71,7 +71,7 @@ private[spark] class Executor(
   private val conf = env.conf
 
   // No ip or host:port - just hostname
-  Utils.checkHost(executorHostname, "Expected executed slave to be a hostname")
+  Utils.checkHost(executorHostname)
   // must not have port specified.
   assert (0 == Utils.parseHostPort(executorHostname)._2)
 

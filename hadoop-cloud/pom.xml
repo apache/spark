@@ -33,7 +33,7 @@
     Contains support for cloud infrastructures, specifically the Hadoop JARs and
     transitive dependencies needed to interact with the infrastructures.
 
-    Any project which explicitly depends upon the spark-hadoop-cloud artifact will get the
+    Any project which explicitly depends upon the hadoop-cloud artifact will get the
     dependencies; the exact versions of which will depend upon the hadoop version Spark was compiled
     against.
 

@@ -2763,9 +2763,9 @@
 
      -->
     <profile>
-      <id>cloud</id>
+      <id>hadoop-cloud</id>
       <modules>
-        <module>cloud</module>
+        <module>hadoop-cloud</module>
       </modules>
     </profile>
 
