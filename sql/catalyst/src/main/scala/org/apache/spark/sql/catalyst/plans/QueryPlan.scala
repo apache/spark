@@ -423,7 +423,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   lazy val allAttributes: AttributeSeq = children.flatMap(_.output)
 }
 
-object QueryPlan {
+object QueryPlan extends PredicateHelper {
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
    * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we
@@ -441,5 +441,15 @@ object QueryPlan {
           ar.withExprId(ExprId(ordinal))
         }
     }.canonicalized.asInstanceOf[T]
+  }
+
+  /** Normalize and reorder the expressions in the given sequence. */
+  def canonicalizeExprSeq(exprSeq: Seq[Expression], output: AttributeSeq): Seq[Expression] = {
+    if (exprSeq.nonEmpty) {
+      val normalizedExprs = QueryPlan.normalizeExprId(exprSeq.reduce(And), output)
+      splitConjunctivePredicates(normalizedExprs)
+    } else {
+      Nil
+    }
   }
 }
