@@ -495,28 +495,14 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       }
   }
 
-  test(
-    """SPARK-20594: This is a walk-around fix to resolve a Hive bug. Hive requires that the
-      |staging directory needs to avoid being deleted when users set hive.exec.stagingdir
-      |under the table directory.""".stripMargin) {
-
-    withTable("test_table") {
-
-      sql("CREATE TABLE test_table (key int)")
-
-      // Set hive.exec.stagingdir under the table directory without start with ".".
-      sql("set hive.exec.stagingdir=./test")
-
-      // Now overwrite.
-      sql("INSERT OVERWRITE TABLE test_table SELECT 1")
-
-      // Make sure the table has also been updated.
-      checkAnswer(
-        sql("SELECT * FROM test_table"),
-        Row(1)
-      )
-
-      sql("reset")
+  test("SPARK-20594: hive.exec.stagingdir was deleted by Hive") {
+    // Set hive.exec.stagingdir under the table directory without start with ".".
+    withSQLConf("hive.exec.stagingdir" -> "./test") {
+      withTable("test_table") {
+        sql("CREATE TABLE test_table (key int)")
+        sql("INSERT OVERWRITE TABLE test_table SELECT 1")
+        checkAnswer(sql("SELECT * FROM test_table"), Row(1))
+      }
     }
   }
 }
