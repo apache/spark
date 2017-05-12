@@ -908,11 +908,7 @@ object CodeGenerator extends Logging {
     // Cache.get() may wrap the original exception. See the following URL
     // http://google.github.io/guava/releases/14.0/api/docs/com/google/common/cache/
     //   Cache.html#get(K,%20java.util.concurrent.Callable)
-    case e : UncheckedExecutionException =>
-      val excChains = ExceptionUtils.getThrowables(e)
-      val exc = if (excChains.length == 1) excChains(0) else excChains(excChains.length - 2)
-      throw exc
-    case e : ExecutionError =>
+    case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
       val excChains = ExceptionUtils.getThrowables(e)
       val exc = if (excChains.length == 1) excChains(0) else excChains(excChains.length - 2)
       throw exc
@@ -973,7 +969,7 @@ object CodeGenerator extends Logging {
       case e: CompileException =>
         val msg = s"failed to compile: $e\n$formatted"
         logError(msg, e)
-        throw new CompileException(msg, e.asInstanceOf[CompileException].getLocation)
+        throw new CompileException(msg, e.getLocation)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
   }

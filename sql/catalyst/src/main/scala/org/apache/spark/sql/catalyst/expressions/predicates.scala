@@ -33,8 +33,8 @@ object InterpretedPredicate {
   def create(expression: Expression): InterpretedPredicate = new InterpretedPredicate(expression)
 }
 
-class InterpretedPredicate(expression: Expression) extends BasePredicate {
-  def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+case class InterpretedPredicate(expression: Expression) extends BasePredicate {
+  override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
 }
 
 /**
