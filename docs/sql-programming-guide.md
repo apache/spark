@@ -619,6 +619,19 @@ while partitioning can be used with both `save` and `saveAsTable`:
 {% include_example write_partitioning python/sql/datasource.py %}
 </div>
 
+<div data-lang="sql"  markdown="1">
+
+{% highlight sql %}
+
+CREATE TABLE users_by_favorite_color(
+  name STRING, 
+  favorite_NUMBERS array<integer>
+) PARTITIONED BY(favorite_color STRING);
+
+{% endhighlight %}
+
+</div>
+
 </div>
 
 It is possible to use both partitions and buckets for a single table:
