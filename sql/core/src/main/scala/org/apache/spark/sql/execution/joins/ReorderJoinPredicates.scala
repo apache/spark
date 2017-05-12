@@ -38,8 +38,9 @@ class ReorderJoinPredicates extends Rule[SparkPlan] {
       leftPartitioning: Partitioning,
       rightPartitioning: Partitioning): (Seq[Expression], Seq[Expression]) = {
 
-    def reorder(expectedOrderOfKeys: Seq[Expression],
-                currentOrderOfKeys: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    def reorder(
+        expectedOrderOfKeys: Seq[Expression],
+        currentOrderOfKeys: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
       val leftKeysBuffer = ArrayBuffer[Expression]()
       val rightKeysBuffer = ArrayBuffer[Expression]()
 
