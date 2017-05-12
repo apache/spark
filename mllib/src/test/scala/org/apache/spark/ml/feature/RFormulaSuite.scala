@@ -129,6 +129,50 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(result.collect() === expected.collect())
   }
 
+  test("encodes string terms with string order type") {
+    val formula = new RFormula().setFormula("id ~ a + b")
+    val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "aaz", 5))
+      .toDF("id", "a", "b")
+
+    val expected = Seq(
+      Seq(
+        (1, "foo", 4, Vectors.dense(0.0, 0.0, 4.0), 1.0),
+        (2, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 2.0),
+        (3, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 3.0),
+        (4, "aaz", 5, Vectors.dense(0.0, 1.0, 5.0), 4.0)
+      ).toDF("id", "a", "b", "features", "label"),
+      Seq(
+        (1, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
+        (2, "bar", 4, Vectors.dense(0.0, 0.0, 4.0), 2.0),
+        (3, "bar", 5, Vectors.dense(0.0, 0.0, 5.0), 3.0),
+        (4, "aaz", 5, Vectors.dense(1.0, 0.0, 5.0), 4.0)
+      ).toDF("id", "a", "b", "features", "label"),
+      Seq(
+        (1, "foo", 4, Vectors.dense(1.0, 0.0, 4.0), 1.0),
+        (2, "bar", 4, Vectors.dense(0.0, 1.0, 4.0), 2.0),
+        (3, "bar", 5, Vectors.dense(0.0, 1.0, 5.0), 3.0),
+        (4, "aaz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0)
+      ).toDF("id", "a", "b", "features", "label"),
+      Seq(
+        (1, "foo", 4, Vectors.dense(0.0, 0.0, 4.0), 1.0),
+        (2, "bar", 4, Vectors.dense(0.0, 1.0, 4.0), 2.0),
+        (3, "bar", 5, Vectors.dense(0.0, 1.0, 5.0), 3.0),
+        (4, "aaz", 5, Vectors.dense(1.0, 0.0, 5.0), 4.0)
+      ).toDF("id", "a", "b", "features", "label")
+    )
+
+    var idx = 0
+    for (orderType <- StringIndexer.supportedStringOrderType) {
+      val model = formula.setStringOrderType(orderType).fit(original)
+      val result = model.transform(original)
+      val resultSchema = model.transformSchema(original.schema)
+
+      assert(result.schema.toString == resultSchema.toString)
+      assert(result.collect() === expected(idx).collect())
+      idx += 1
+    }
+  }
+
   test("index string label") {
     val formula = new RFormula().setFormula("id ~ a + b")
     val original =
