@@ -100,7 +100,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     context.addTaskCompletionListener(_ => throw new Exception("blah"))
 
     intercept[TaskCompletionListenerException] {
-      context.markTaskCompleted()
+      context.markTaskCompleted(None)
     }
 
     verify(listener, times(1)).onTaskCompletion(any())
@@ -231,10 +231,10 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("immediately call a completion listener if the context is completed") {
     var invocations = 0
     val context = TaskContext.empty()
-    context.markTaskCompleted()
+    context.markTaskCompleted(None)
     context.addTaskCompletionListener(_ => invocations += 1)
     assert(invocations == 1)
-    context.markTaskCompleted()
+    context.markTaskCompleted(None)
     assert(invocations == 1)
   }
 
@@ -254,6 +254,36 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(lastError == error)
     assert(invocations == 1)
   }
+
+  test("TaskCompletionListenerException.getMessage should include previousError") {
+    val listenerErrorMessage = "exception in listener"
+    val taskErrorMessage = "exception in task"
+    val e = new TaskCompletionListenerException(
+      Seq(listenerErrorMessage),
+      Some(new RuntimeException(taskErrorMessage)))
+    assert(e.getMessage.contains(listenerErrorMessage) && e.getMessage.contains(taskErrorMessage))
+  }
+
+  test("all TaskCompletionListeners should be called even if some fail or a task") {
+    val context = TaskContext.empty()
+    val listener = mock(classOf[TaskCompletionListener])
+    context.addTaskCompletionListener(_ => throw new Exception("exception in listener1"))
+    context.addTaskCompletionListener(listener)
+    context.addTaskCompletionListener(_ => throw new Exception("exception in listener3"))
+
+    val e = intercept[TaskCompletionListenerException] {
+      context.markTaskCompleted(Some(new Exception("exception in task")))
+    }
+
+    // Make sure listener 2 was called.
+    verify(listener, times(1)).onTaskCompletion(any())
+
+    // also need to check failure in TaskCompletionListener does not mask earlier exception
+    assert(e.getMessage.contains("exception in listener1"))
+    assert(e.getMessage.contains("exception in listener3"))
+    assert(e.getMessage.contains("exception in task"))
+  }
+
 }
 
 private object TaskContextSuite {
