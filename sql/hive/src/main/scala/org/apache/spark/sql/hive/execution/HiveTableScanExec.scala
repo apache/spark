@@ -206,7 +206,7 @@ case class HiveTableScanExec(
     HiveTableScanExec(
       requestedAttributes.map(QueryPlan.normalizeExprId(_, input)),
       relation.canonicalized.asInstanceOf[CatalogRelation],
-      QueryPlan.canonicalizeExprSeq(partitionPruningPred, input))(sparkSession)
+      QueryPlan.normalizePredicates(partitionPruningPred, input))(sparkSession)
   }
 
   override def otherCopyArgs: Seq[AnyRef] = Seq(sparkSession)

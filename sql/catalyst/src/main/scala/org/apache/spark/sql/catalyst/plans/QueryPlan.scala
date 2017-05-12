@@ -444,10 +444,10 @@ object QueryPlan extends PredicateHelper {
   }
 
   /** Normalize and reorder the expressions in the given sequence. */
-  def canonicalizeExprSeq(exprSeq: Seq[Expression], output: AttributeSeq): Seq[Expression] = {
-    if (exprSeq.nonEmpty) {
-      val normalizedExprs = QueryPlan.normalizeExprId(exprSeq.reduce(And), output)
-      splitConjunctivePredicates(normalizedExprs)
+  def normalizePredicates(predicates: Seq[Expression], output: AttributeSeq): Seq[Expression] = {
+    if (predicates.nonEmpty) {
+      val normalized = normalizeExprId(predicates.reduce(And), output)
+      splitConjunctivePredicates(normalized)
     } else {
       Nil
     }
