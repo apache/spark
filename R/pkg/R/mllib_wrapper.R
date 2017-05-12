@@ -51,7 +51,7 @@ setClass("JavaMLWritable", representation(jobj = "jobj"))
 #'                  which means throw exception if the output path exists.
 #'
 #' @aliases write.ml,JavaMLWritable,character-method
-#' @rdname spark.write.ml
+#' @rdname write.ml
 #' @export
 #' @seealso \link{read.ml}
 #' @note write.ml(JavaMLWritable, character) since 2.1.0
