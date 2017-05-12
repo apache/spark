@@ -61,7 +61,7 @@ unsetHiveContext <- function() {
 # Tests for SparkSQL functions in SparkR
 
 filesBefore <- list.files(path = sparkRDir, all.files = TRUE)
-sparkSession <- sparkR.session()
+sparkSession <- sparkR.session(master = sparkRTestMaster)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 mockLines <- c("{\"name\":\"Michael\"}",

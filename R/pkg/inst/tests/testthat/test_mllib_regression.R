@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib regression algorithms, except for tree-based algorithms")
 
 # Tests for MLlib regression algorithms in SparkR
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 test_that("formula of spark.glm", {
   skip_on_cran()
