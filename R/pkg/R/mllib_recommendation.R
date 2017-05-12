@@ -21,8 +21,10 @@
 #'
 #' @param jobj a Java object reference to the backing Scala ALSWrapper
 #' @export
+#' @include mllib_wrapper.R
 #' @note ALSModel since 2.1.0
-setClass("ALSModel", representation(jobj = "jobj"))
+setClass("ALSModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' Alternating Least Squares (ALS) for Collaborative Filtering
 #'
@@ -129,19 +131,6 @@ setMethod("summary", signature(object = "ALSModel"),
             rank <- callJMethod(jobj, "rank")
             list(user = user, item = item, rating = rating, userFactors = userFactors,
                  itemFactors = itemFactors, rank = rank)
-          })
-
-#  Makes predictions from an ALS model or a model produced by spark.als.
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted values.
-#' @rdname spark.als
-#' @aliases predict,ALSModel-method
-#' @export
-#' @note predict(ALSModel) since 2.1.0
-setMethod("predict", signature(object = "ALSModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
           })
 
 #  Saves the ALS model to the input path.
