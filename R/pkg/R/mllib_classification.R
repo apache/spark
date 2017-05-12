@@ -25,7 +25,7 @@
 #' @include mllib_wrapper.R
 #' @note LinearSVCModel since 2.2.0
 setClass("LinearSVCModel", representation(jobj = "jobj"),
-         contains = "JavaModel")
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents an LogisticRegressionModel
 #'
@@ -33,7 +33,7 @@ setClass("LinearSVCModel", representation(jobj = "jobj"),
 #' @export
 #' @note LogisticRegressionModel since 2.1.0
 setClass("LogisticRegressionModel", representation(jobj = "jobj"),
-         contains = "JavaModel")
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents a MultilayerPerceptronClassificationModel
 #'
@@ -42,7 +42,7 @@ setClass("LogisticRegressionModel", representation(jobj = "jobj"),
 #' @include mllib_wrapper.R
 #' @note MultilayerPerceptronClassificationModel since 2.1.0
 setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"),
-         contains = "JavaModel")
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents a NaiveBayesModel
 #'
@@ -51,7 +51,7 @@ setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"
 #' @include mllib_wrapper.R
 #' @note NaiveBayesModel since 2.0.0
 setClass("NaiveBayesModel", representation(jobj = "jobj"),
-         contains = "JavaModel")
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' Linear SVM Model
 #'
@@ -141,21 +141,6 @@ setMethod("summary", signature(object = "LinearSVCModel"),
             numFeatures <- callJMethod(jobj, "numFeatures")
             list(coefficients = coefficients, numClasses = numClasses, numFeatures = numFeatures)
           })
-
-#  Save fitted LinearSVCModel to the input path
-
-#' @param path The directory where the model is saved.
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#'
-#' @rdname spark.svmLinear
-#' @aliases write.ml,LinearSVCModel,character-method
-#' @export
-#' @note write.ml(LogisticRegression, character) since 2.2.0
-setMethod("write.ml", signature(object = "LinearSVCModel", path = "character"),
-function(object, path, overwrite = FALSE) {
-    write_internal(object, path, overwrite)
-})
 
 #' Logistic Regression Model
 #'
@@ -280,21 +265,6 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
             list(coefficients = coefficients)
           })
 
-#  Save fitted LogisticRegressionModel to the input path
-
-#' @param path The directory where the model is saved.
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#'
-#' @rdname spark.logit
-#' @aliases write.ml,LogisticRegressionModel,character-method
-#' @export
-#' @note write.ml(LogisticRegression, character) since 2.1.0
-setMethod("write.ml", signature(object = "LogisticRegressionModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
-
 #' Multilayer Perceptron Classification Model
 #'
 #' \code{spark.mlp} fits a multi-layer perceptron neural network model against a SparkDataFrame.
@@ -394,23 +364,6 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
                  layers = layers, weights = weights)
           })
 
-#  Saves the Multilayer Perceptron Classification Model to the input path.
-
-#' @param path the directory where the model is saved.
-#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#'
-#' @rdname spark.mlp
-#' @aliases write.ml,MultilayerPerceptronClassificationModel,character-method
-#' @export
-#' @seealso \link{write.ml}
-#' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.1.0
-setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationModel",
-          path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
-
 #' Naive Bayes Models
 #'
 #' \code{spark.naiveBayes} fits a Bernoulli naive Bayes model against a SparkDataFrame.
@@ -480,19 +433,4 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
             rownames(tables) <- unlist(labels)
             colnames(tables) <- unlist(features)
             list(apriori = apriori, tables = tables)
-          })
-
-#  Saves the Bernoulli naive Bayes model to the input path.
-
-#' @param path the directory where the model is saved.
-#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#'
-#' @rdname spark.naiveBayes
-#' @export
-#' @seealso \link{write.ml}
-#' @note write.ml(NaiveBayesModel, character) since 2.0.0
-setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
           })
