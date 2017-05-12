@@ -937,15 +937,15 @@ private[spark] class TaskSetManager(
     }
     var foundTasks = false
     val minFinishedForSpeculation = (SPECULATION_QUANTILE * numTasks).floor.toInt
-    logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
+    logDebug(s"Checking for speculative tasks: minFinished = $minFinishedForSpeculation")
 
     if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
       val time = clock.getTimeMillis()
-      var medianDuration = successfulTaskDurations.median
+      val medianDuration = successfulTaskDurations.median
       val threshold = max(SPECULATION_MULTIPLIER * medianDuration, minTimeToSpeculation)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.
-      logDebug("Task length threshold for speculation: " + threshold)
+      logDebug(s"Task length threshold for speculation: $threshold")
       for (tid <- runningTasksSet) {
         val info = taskInfos(tid)
         val index = info.index
