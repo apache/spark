@@ -40,6 +40,8 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  *      stage, but still many failures over the entire application
  *  * "flaky" executors -- they don't fail every task, but are still faulty enough to merit
  *      blacklisting
+ *   * shutting down executors -- executors which are shutting down and should not have new tasks
+ *      scheduled.
  *
  * See the design doc on SPARK-8425 for a more in-depth discussion.
  *
@@ -145,6 +147,12 @@ private[scheduler] class BlacklistTracker (
     nextExpiryTime = math.min(execMinExpiry, nodeMinExpiry)
   }
 
+  def updateBlackListForNodeShutdown(executors: Set[String]): Unit = {
+    // We allow timeout on the node shutdown so if the node ends up not actually shutting down
+    // or is migrated in a way we don't notice we can start scheduling tasks on it.
+    val expiryTimeForNewBlacklists = now + BLACKLIST_TIMEOUT_MILLIS
+
+  }
 
   def updateBlacklistForSuccessfulTaskSet(
       stageId: Int,

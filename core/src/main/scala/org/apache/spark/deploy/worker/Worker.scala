@@ -468,6 +468,8 @@ private[deploy] class Worker(
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
+      } else if (shuttingDown) {
+        logWarning("Asked to launch an executor while shutting down. Not launching executor.")
       } else {
         try {
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))

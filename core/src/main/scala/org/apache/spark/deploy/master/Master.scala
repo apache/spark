@@ -231,6 +231,9 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
+    case WorkerShutdown(id, workerHost, workerPort) =>
+      logInfo("Recording worker %d shutdown %s:%d".format(id, workerHost, workerPort))
+
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl, masterAddress) =>
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
@@ -769,6 +772,17 @@ private[deploy] class Master(
        webUi.addProxyTargets(worker.id, worker.webUiAddress)
     }
     true
+  }
+
+  private def decommissionWorker(worker: WorkerInfo) {
+    logInfo("Decommissioning worker %d on %s:%d".format(worker.id, worker.host, worker.port))
+    worker.setState(WorkerState.DECOMMISSIONED)
+    for (exec <- worker.executors.values) {
+      logInfo("Telling app of decomission executors")
+      exec.application.driver.send(ExecutorUpdated(
+        exec.id, ExecutorState.DECOMMISSIONED, Some("worker decommissioned"), None, workerLost = false))
+      exec.state = ExecutorState.DECOMMISSIONED
+    }
   }
 
   private def removeWorker(worker: WorkerInfo) {
