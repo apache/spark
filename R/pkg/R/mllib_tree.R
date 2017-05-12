@@ -21,29 +21,37 @@
 #'
 #' @param jobj a Java object reference to the backing Scala GBTRegressionModel
 #' @export
+#' @include mllib_wrapper.R
 #' @note GBTRegressionModel since 2.1.0
-setClass("GBTRegressionModel", representation(jobj = "jobj"))
+setClass("GBTRegressionModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' S4 class that represents a GBTClassificationModel
 #'
 #' @param jobj a Java object reference to the backing Scala GBTClassificationModel
 #' @export
+#' @include mllib_wrapper.R
 #' @note GBTClassificationModel since 2.1.0
-setClass("GBTClassificationModel", representation(jobj = "jobj"))
+setClass("GBTClassificationModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' S4 class that represents a RandomForestRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala RandomForestRegressionModel
 #' @export
+#' @include mllib_wrapper.R
 #' @note RandomForestRegressionModel since 2.1.0
-setClass("RandomForestRegressionModel", representation(jobj = "jobj"))
+setClass("RandomForestRegressionModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' S4 class that represents a RandomForestClassificationModel
 #'
 #' @param jobj a Java object reference to the backing Scala RandomForestClassificationModel
 #' @export
+#' @include mllib_wrapper.R
 #' @note RandomForestClassificationModel since 2.1.0
-setClass("RandomForestClassificationModel", representation(jobj = "jobj"))
+setClass("RandomForestClassificationModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' S4 class that represents a DecisionTreeRegressionModel
 #'
@@ -290,29 +298,6 @@ print.summary.GBTClassificationModel <- function(x, ...) {
   print.summary.treeEnsemble(x)
 }
 
-#  Makes predictions from a Gradient Boosted Tree Regression model or Classification model
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
-#'         "prediction".
-#' @rdname spark.gbt
-#' @aliases predict,GBTRegressionModel-method
-#' @export
-#' @note predict(GBTRegressionModel) since 2.1.0
-setMethod("predict", signature(object = "GBTRegressionModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
-          })
-
-#' @rdname spark.gbt
-#' @aliases predict,GBTClassificationModel-method
-#' @export
-#' @note predict(GBTClassificationModel) since 2.1.0
-setMethod("predict", signature(object = "GBTClassificationModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
-          })
-
 #  Save the Gradient Boosted Tree Regression or Classification model to the input path.
 
 #' @param object A fitted Gradient Boosted Tree regression model or classification model.
@@ -495,29 +480,6 @@ setMethod("summary", signature(object = "RandomForestClassificationModel"),
 print.summary.RandomForestClassificationModel <- function(x, ...) {
   print.summary.treeEnsemble(x)
 }
-
-#  Makes predictions from a Random Forest Regression model or Classification model
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
-#'         "prediction".
-#' @rdname spark.randomForest
-#' @aliases predict,RandomForestRegressionModel-method
-#' @export
-#' @note predict(RandomForestRegressionModel) since 2.1.0
-setMethod("predict", signature(object = "RandomForestRegressionModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
-          })
-
-#' @rdname spark.randomForest
-#' @aliases predict,RandomForestClassificationModel-method
-#' @export
-#' @note predict(RandomForestClassificationModel) since 2.1.0
-setMethod("predict", signature(object = "RandomForestClassificationModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
-          })
 
 #  Save the Random Forest Regression or Classification model to the input path.
 
