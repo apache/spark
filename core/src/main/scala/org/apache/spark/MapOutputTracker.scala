@@ -87,6 +87,7 @@ private class ShuffleStatus(numPartitions: Int) {
   def addMapOutput(mapId: Int, status: MapStatus): Unit = synchronized {
     if (mapStatuses(mapId) == null) {
       _numAvailableOutputs += 1
+      invalidateSerializedMapOutputStatusCache()
     }
     mapStatuses(mapId) = status
   }
@@ -222,8 +223,11 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   var trackerEndpoint: RpcEndpointRef = _
 
   /**
-   * Incremented every time a fetch fails so that client nodes know to clear
-   * their cache of map output locations if this happens.
+   * The driver-side counter is incremented every time that a map output is lost. This value is sent
+   * to executors as part of tasks, where executors compare the new epoch number to the highest
+   * epoch number that they received in the past. If the new epoch number is higher then executors
+   * will clear their local caches of map output statuses and will re-fetch (possibly updated)
+   * statuses from the driver.
    */
   protected var epoch: Long = 0
   protected val epochLock = new AnyRef
@@ -528,7 +532,7 @@ private[spark] class MapOutputTrackerMaster(
     None
   }
 
-  def incrementEpoch() {
+  private def incrementEpoch() {
     epochLock.synchronized {
       epoch += 1
       logDebug("Increasing epoch to " + epoch)
@@ -567,6 +571,9 @@ private[spark] class MapOutputTrackerMaster(
 
 /**
  * Executor-side client for fetching map output info from the driver's MapOutputTrackerMaster.
+ * Note that this is not used in local-mode; instead, local-mode Executors access the
+ * MapOutputTrackerMaster directly (which is possible because the master and worker share a comon
+ * superclass).
  */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
 
@@ -580,7 +587,14 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     val statuses = getStatuses(shuffleId)
-    MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
+    try {
+      MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses)
+    } catch {
+      case e: MetadataFetchFailedException =>
+        // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
+        mapStatuses.clear()
+        throw e
+    }
   }
 
   /**
