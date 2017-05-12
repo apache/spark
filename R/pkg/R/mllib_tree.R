@@ -251,6 +251,7 @@ setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
 
 #  Get the summary of a Gradient Boosted Tree Regression Model
 
+#' @param object A fitted Gradient Boosted Tree regression model or classification model.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list of components includes \code{formula} (formula),
 #'         \code{numFeatures} (number of features), \code{features} (list of features),
@@ -410,6 +411,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
 
 #  Get the summary of a Random Forest Regression Model
 
+#' @param object A fitted Random Forest regression model or classification model.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list of components includes \code{formula} (formula),
 #'         \code{numFeatures} (number of features), \code{features} (list of features),
