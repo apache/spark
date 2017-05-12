@@ -907,3 +907,19 @@ basenameSansExtFromUrl <- function(url) {
 isAtomicLengthOne <- function(x) {
   is.atomic(x) && length(x) == 1
 }
+
+is_cran <- function() {
+  if (identical(Sys.getenv("NOT_CRAN"), "true")) {
+    FALSE
+  } else {
+    TRUE
+  }
+}
+
+is_windows <- function() {
+  if (.Platform$OS.type != "windows") {
+    FALSE
+  } else {
+    TRUE
+  }
+}
