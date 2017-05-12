@@ -241,7 +241,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     try {
-      applications.get(appId).flatMap { appInfo =>
+      if (!getApplicationInfo(appId).isDefined) {
+        // Try to find eventlog from file system
+        val attemptSuffix = attemptId.map { id => s"_$id" }.getOrElse("")
+        val logPath = s"$appId$attemptSuffix*"
+        val fileStatus = fs.globStatus(new Path(logDir, logPath))
+        if (fileStatus != null) {
+          fileStatus.foreach(mergeApplicationListing)
+        }
+      }
+      getApplicationInfo(appId).flatMap { appInfo =>
         appInfo.attempts.find(_.attemptId == attemptId).flatMap { attempt =>
           val replayBus = new ReplayListenerBus()
           val ui = {
