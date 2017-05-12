@@ -53,6 +53,7 @@ setClass("JavaMLWritable", representation(jobj = "jobj"))
 #' @aliases write.ml,JavaMLWritable,character-method
 #' @rdname spark.write.ml
 #' @export
+#' @seealso \link{read.ml}
 #' @note write.ml(JavaMLWritable, character) since 2.1.0
 setMethod("write.ml", signature(object = "JavaMLWritable", path = "character"),
           function(object, path, overwrite = FALSE) {
