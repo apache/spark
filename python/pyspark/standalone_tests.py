@@ -41,14 +41,12 @@ if __name__ == "__main__":
         sys.stdout = new_stdout = StringIO()
         sys.stderr = new_stderr = StringIO()
 
-
     from pyspark.sql import SparkSession
     if 'numpy' in sys.modules:
         from pyspark.ml.param import Params
         from pyspark.mllib.linalg import *
     else:
         print("Skipping pyspark ml import tests, missing numpy")
-
 
     spark = SparkSession\
         .builder\
