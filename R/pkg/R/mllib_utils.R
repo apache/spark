@@ -38,6 +38,7 @@
 #' @seealso \link{spark.lda}, \link{spark.logit},
 #' @seealso \link{spark.mlp}, \link{spark.naiveBayes},
 #' @seealso \link{spark.randomForest}, \link{spark.survreg}, \link{spark.svmLinear},
+#' @seealso \link{spark.decisionTree},
 #' @seealso \link{read.ml}
 NULL
 
@@ -52,7 +53,8 @@ NULL
 #' @seealso \link{spark.gbt}, \link{spark.glm}, \link{glm}, \link{spark.isoreg},
 #' @seealso \link{spark.kmeans},
 #' @seealso \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
-#' @seealso \link{spark.randomForest}, \link{spark.survreg}, \link{spark.svmLinear}
+#' @seealso \link{spark.randomForest}, \link{spark.survreg}, \link{spark.svmLinear},
+#' @seealso \link{spark.decisionTree}
 NULL
 
 write_internal <- function(object, path, overwrite = FALSE) {
@@ -110,6 +112,10 @@ read.ml <- function(path) {
     new("RandomForestRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.RandomForestClassifierWrapper")) {
     new("RandomForestClassificationModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.DecisionTreeRegressorWrapper")) {
+    new("DecisionTreeRegressionModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.DecisionTreeClassifierWrapper")) {
+    new("DecisionTreeClassificationModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GBTRegressorWrapper")) {
     new("GBTRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GBTClassifierWrapper")) {
