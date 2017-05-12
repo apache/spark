@@ -91,7 +91,6 @@ private[sql] class GroupStateImpl[S](
     defined = false
     updated = false
     removed = true
-    timeoutTimestamp = NO_TIMESTAMP
   }
 
   override def setTimeoutDuration(durationMs: Long): Unit = {
@@ -100,10 +99,8 @@ private[sql] class GroupStateImpl[S](
         "Cannot set timeout duration without enabling processing time timeout in " +
           "map/flatMapGroupsWithState")
     }
-    if (!defined) {
-      throw new IllegalStateException(
-        "Cannot set timeout information without any state value, " +
-          "state has either not been initialized, or has already been removed")
+    if (removed) {
+      throw new IllegalStateException("Cannot set timeout after state has been removed")
     }
 
     if (durationMs <= 0) {
@@ -213,10 +210,8 @@ private[sql] class GroupStateImpl[S](
         "Cannot set timeout timestamp without enabling event time timeout in " +
           "map/flatMapGroupsWithState")
     }
-    if (!defined) {
-      throw new IllegalStateException(
-        "Cannot set timeout timestamp without any state value, " +
-          "state has either not been initialized, or has already been removed")
+    if (removed) {
+      throw new IllegalStateException("Cannot set timeout after state has been removed")
     }
   }
 }
