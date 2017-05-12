@@ -173,6 +173,46 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     }
   }
 
+  test("test consistency with R when encoding string terms") {
+    /*
+     R code:
+
+     df <- list(list(1, "foo", 4), list(2, "bar", 4), list(3, "bar", 5), list(4, "aaz", 5))
+     df <- do.call(rbind, lapply(df, as.data.frame, col.names = c("id", "a", "b")))
+     model.matrix(id ~ a + b, df)[, -1]
+
+     abar aaaz b
+      0    0   4
+      1    0   4
+      1    0   5
+      0    1   5
+    */
+    val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "aaz", 5))
+      .toDF("id", "a", "b")
+    val formula = new RFormula().setFormula("id ~ a + b")
+      .setStringOrderType(StringIndexer.alphabetAsc)
+
+    /*
+     Note that the category dropped after encoding is the same between R and Spark
+     (i.e., "foo" is treated as the reference level).
+     However, the column order is still different:
+     R renders the columns in descending alphabetical order ("bar", "aaz"), while
+     RFormula renders the columns in ascending alphabetical order ("aaz", "bar").
+    */
+    val expected = Seq(
+      (1, "foo", 4, Vectors.dense(0.0, 0.0, 4.0), 1.0),
+      (2, "bar", 4, Vectors.dense(0.0, 1.0, 4.0), 2.0),
+      (3, "bar", 5, Vectors.dense(0.0, 1.0, 5.0), 3.0),
+      (4, "aaz", 5, Vectors.dense(1.0, 0.0, 5.0), 4.0)
+    ).toDF("id", "a", "b", "features", "label")
+
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
+    assert(result.schema.toString == resultSchema.toString)
+    assert(result.collect() === expected.collect())
+  }
+
   test("index string label") {
     val formula = new RFormula().setFormula("id ~ a + b")
     val original =
