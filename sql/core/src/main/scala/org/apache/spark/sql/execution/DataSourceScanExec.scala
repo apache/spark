@@ -38,7 +38,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-trait DataSourceScanExec extends LeafExecNode with CodegenSupport with PredicateHelper {
+trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   val relation: BaseRelation
   val metastoreTableIdentifier: Option[TableIdentifier]
 
@@ -519,18 +519,8 @@ case class FileSourceScanExec(
       relation,
       output.map(QueryPlan.normalizeExprId(_, output)),
       requiredSchema,
-      canonicalizeFilters(partitionFilters, output),
-      canonicalizeFilters(dataFilters, output),
+      QueryPlan.normalizePredicates(partitionFilters, output),
+      QueryPlan.normalizePredicates(dataFilters, output),
       None)
-  }
-
-  private def canonicalizeFilters(filters: Seq[Expression], output: Seq[Attribute])
-    : Seq[Expression] = {
-    if (filters.nonEmpty) {
-      val normalizedFilters = QueryPlan.normalizeExprId(filters.reduce(And), output)
-      splitConjunctivePredicates(normalizedFilters)
-    } else {
-      Nil
-    }
   }
 }
