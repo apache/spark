@@ -25,7 +25,7 @@
 #' @include mllib_wrapper.R
 #' @note AFTSurvivalRegressionModel since 2.0.0
 setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"),
-         contains = "JavaModel")
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents a generalized linear model
 #'
@@ -34,7 +34,7 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"),
 #' @include mllib_wrapper.R
 #' @note GeneralizedLinearRegressionModel since 2.0.0
 setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"),
-         contains = "JavaModel")
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents an IsotonicRegressionModel
 #'
@@ -43,7 +43,7 @@ setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"),
 #' @include mllib_wrapper.R
 #' @note IsotonicRegressionModel since 2.1.0
 setClass("IsotonicRegressionModel", representation(jobj = "jobj"),
-         contains = "JavaModel")
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' Generalized Linear Models
 #'
@@ -276,20 +276,6 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   invisible(x)
   }
 
-#  Saves the generalized linear model to the input path.
-
-#' @param path the directory where the model is saved.
-#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#'
-#' @rdname spark.glm
-#' @export
-#' @note write.ml(GeneralizedLinearRegressionModel, character) since 2.0.0
-setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
-
 #' Isotonic Regression Model
 #'
 #' Fits an Isotonic Regression model against a SparkDataFrame, similarly to R's isoreg().
@@ -368,21 +354,6 @@ setMethod("summary", signature(object = "IsotonicRegressionModel"),
             list(boundaries = boundaries, predictions = predictions)
           })
 
-#  Save fitted IsotonicRegressionModel to the input path
-
-#' @param path The directory where the model is saved.
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#'
-#' @rdname spark.isoreg
-#' @aliases write.ml,IsotonicRegressionModel,character-method
-#' @export
-#' @note write.ml(IsotonicRegression, character) since 2.1.0
-setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
-
 #' Accelerated Failure Time (AFT) Survival Regression Model
 #'
 #' \code{spark.survreg} fits an accelerated failure time (AFT) survival regression model on
@@ -448,18 +419,4 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
             colnames(coefficients) <- c("Value")
             rownames(coefficients) <- unlist(features)
             list(coefficients = coefficients)
-          })
-
-#  Saves the AFT survival regression model to the input path.
-
-#' @param path the directory where the model is saved.
-#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#' @rdname spark.survreg
-#' @export
-#' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
-#' @seealso \link{write.ml}
-setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
           })
