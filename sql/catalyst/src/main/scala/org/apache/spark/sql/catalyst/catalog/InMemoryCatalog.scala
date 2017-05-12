@@ -310,10 +310,6 @@ class InMemoryCatalog(
     requireTableExists(db, table)
     val origTable = catalog(db).tables(table).table
 
-    if (origTable.bucketSpec.isDefined) {
-      checkSchemaContainsBucketingColumns(origTable.bucketSpec.get, schema)
-    }
-
     catalog(db).tables(table).table = origTable.copy(schema = schema)
   }
 

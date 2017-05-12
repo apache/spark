@@ -344,11 +344,6 @@ class SessionCatalog(
            |not present in the new schema. We don't support dropping columns yet.
          """.stripMargin)
     }
-
-    if (catalogTable.bucketSpec.isDefined) {
-      externalCatalog.checkSchemaContainsBucketingColumns(catalogTable.bucketSpec.get, newSchema)
-    }
-
     // assuming the newSchema has all partition columns at the end as required
     externalCatalog.alterTableSchema(db, table, newSchema)
   }

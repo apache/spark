@@ -336,32 +336,6 @@ abstract class ExternalCatalog
     postToAll(RenameFunctionEvent(db, oldName, newName))
   }
 
-  final def checkSchemaContainsBucketingColumns(
-      bucketSpec: BucketSpec,
-      schema: StructType): Unit = {
-    val nonExistentBucketColumns =
-      bucketSpec.bucketColumnNames.filterNot(col => schema.map(_.name).contains(col))
-
-    if (nonExistentBucketColumns.nonEmpty) {
-      throw new AnalysisException(
-        s"""
-           |Some existing bucketing columns are not present in the new schema :
-           |(${nonExistentBucketColumns.mkString("[", ",", "]")})
-         """.stripMargin)
-    }
-
-    val nonExistentSortColumns =
-      bucketSpec.sortColumnNames.filterNot(col => schema.map(_.name).contains(col))
-
-    if (nonExistentSortColumns.nonEmpty) {
-      throw new AnalysisException(
-        s"""
-           |Some existing sort columns are not present in the new schema :
-           |(${nonExistentSortColumns.mkString("[", ",", "]")})
-         """.stripMargin)
-    }
-  }
-
   protected def doRenameFunction(db: String, oldName: String, newName: String): Unit
 
   def getFunction(db: String, funcName: String): CatalogFunction
