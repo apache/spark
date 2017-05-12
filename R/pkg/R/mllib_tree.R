@@ -24,7 +24,7 @@
 #' @include mllib_wrapper.R
 #' @note GBTRegressionModel since 2.1.0
 setClass("GBTRegressionModel", representation(jobj = "jobj"),
-         contains = "JavaModel")
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents a GBTClassificationModel
 #'
@@ -33,7 +33,7 @@ setClass("GBTRegressionModel", representation(jobj = "jobj"),
 #' @include mllib_wrapper.R
 #' @note GBTClassificationModel since 2.1.0
 setClass("GBTClassificationModel", representation(jobj = "jobj"),
-         contains = "JavaModel")
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents a RandomForestRegressionModel
 #'
@@ -42,7 +42,7 @@ setClass("GBTClassificationModel", representation(jobj = "jobj"),
 #' @include mllib_wrapper.R
 #' @note RandomForestRegressionModel since 2.1.0
 setClass("RandomForestRegressionModel", representation(jobj = "jobj"),
-         contains = "JavaModel")
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents a RandomForestClassificationModel
 #'
@@ -51,21 +51,23 @@ setClass("RandomForestRegressionModel", representation(jobj = "jobj"),
 #' @include mllib_wrapper.R
 #' @note RandomForestClassificationModel since 2.1.0
 setClass("RandomForestClassificationModel", representation(jobj = "jobj"),
-         contains = "JavaModel")
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents a DecisionTreeRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala DecisionTreeRegressionModel
 #' @export
 #' @note DecisionTreeRegressionModel since 2.3.0
-setClass("DecisionTreeRegressionModel", representation(jobj = "jobj"))
+setClass("DecisionTreeRegressionModel", representation(jobj = "jobj"),
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents a DecisionTreeClassificationModel
 #'
 #' @param jobj a Java object reference to the backing Scala DecisionTreeClassificationModel
 #' @export
 #' @note DecisionTreeClassificationModel since 2.3.0
-setClass("DecisionTreeClassificationModel", representation(jobj = "jobj"))
+setClass("DecisionTreeClassificationModel", representation(jobj = "jobj"),
+         contains = c("JavaModel", "JavaMLWritable"))
 
 # Create the summary of a tree ensemble model (eg. Random Forest, GBT)
 summary.treeEnsemble <- function(model) {
@@ -298,30 +300,6 @@ print.summary.GBTClassificationModel <- function(x, ...) {
   print.summary.treeEnsemble(x)
 }
 
-#  Save the Gradient Boosted Tree Regression or Classification model to the input path.
-
-#' @param object A fitted Gradient Boosted Tree regression model or classification model.
-#' @param path The directory where the model is saved.
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#' @aliases write.ml,GBTRegressionModel,character-method
-#' @rdname spark.gbt
-#' @export
-#' @note write.ml(GBTRegressionModel, character) since 2.1.0
-setMethod("write.ml", signature(object = "GBTRegressionModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
-
-#' @aliases write.ml,GBTClassificationModel,character-method
-#' @rdname spark.gbt
-#' @export
-#' @note write.ml(GBTClassificationModel, character) since 2.1.0
-setMethod("write.ml", signature(object = "GBTClassificationModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
-
 #' Random Forest Model for Regression and Classification
 #'
 #' \code{spark.randomForest} fits a Random Forest Regression model or Classification model on
@@ -481,31 +459,6 @@ print.summary.RandomForestClassificationModel <- function(x, ...) {
   print.summary.treeEnsemble(x)
 }
 
-#  Save the Random Forest Regression or Classification model to the input path.
-
-#' @param object A fitted Random Forest regression model or classification model.
-#' @param path The directory where the model is saved.
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#'
-#' @aliases write.ml,RandomForestRegressionModel,character-method
-#' @rdname spark.randomForest
-#' @export
-#' @note write.ml(RandomForestRegressionModel, character) since 2.1.0
-setMethod("write.ml", signature(object = "RandomForestRegressionModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
-
-#' @aliases write.ml,RandomForestClassificationModel,character-method
-#' @rdname spark.randomForest
-#' @export
-#' @note write.ml(RandomForestClassificationModel, character) since 2.1.0
-setMethod("write.ml", signature(object = "RandomForestClassificationModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
-
 #' Decision Tree Model for Regression and Classification
 #'
 #' \code{spark.decisionTree} fits a Decision Tree Regression model or Classification model on
@@ -654,50 +607,3 @@ print.summary.DecisionTreeClassificationModel <- function(x, ...) {
   print.summary.decisionTree(x)
 }
 
-#  Makes predictions from a Decision Tree Regression model or Classification model
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
-#'         "prediction".
-#' @rdname spark.decisionTree
-#' @aliases predict,DecisionTreeRegressionModel-method
-#' @export
-#' @note predict(DecisionTreeRegressionModel) since 2.3.0
-setMethod("predict", signature(object = "DecisionTreeRegressionModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
-          })
-
-#' @rdname spark.decisionTree
-#' @aliases predict,DecisionTreeClassificationModel-method
-#' @export
-#' @note predict(DecisionTreeClassificationModel) since 2.3.0
-setMethod("predict", signature(object = "DecisionTreeClassificationModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
-          })
-
-#  Save the Decision Tree Regression or Classification model to the input path.
-
-#' @param object A fitted Decision Tree regression model or classification model.
-#' @param path The directory where the model is saved.
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#'
-#' @aliases write.ml,DecisionTreeRegressionModel,character-method
-#' @rdname spark.decisionTree
-#' @export
-#' @note write.ml(DecisionTreeRegressionModel, character) since 2.3.0
-setMethod("write.ml", signature(object = "DecisionTreeRegressionModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
-
-#' @aliases write.ml,DecisionTreeClassificationModel,character-method
-#' @rdname spark.decisionTree
-#' @export
-#' @note write.ml(DecisionTreeClassificationModel, character) since 2.3.0
-setMethod("write.ml", signature(object = "DecisionTreeClassificationModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
