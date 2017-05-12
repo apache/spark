@@ -334,7 +334,7 @@ queryOrganization
       (DISTRIBUTE BY distributeBy+=expression (',' distributeBy+=expression)*)?
       (SORT BY sort+=sortItem (',' sort+=sortItem)*)?
       windows?
-      (LIMIT limit=expression)?
+      (LIMIT (ALL | limit=expression))?
     ;
 
 multiInsertQueryBody
