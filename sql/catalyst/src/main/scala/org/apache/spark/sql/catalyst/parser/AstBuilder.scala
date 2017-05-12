@@ -281,6 +281,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val withWindow = withOrder.optionalMap(windows)(withWindows)
 
     // LIMIT
+    // - LIMIT ALL is the same as omitting the LIMIT clause
     withWindow.optional(limit) {
       Limit(typedVisit(limit), withWindow)
     }
