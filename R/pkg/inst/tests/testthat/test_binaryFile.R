@@ -18,12 +18,14 @@
 context("functions on binary files")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 mockFile <- c("Spark is pretty.", "Spark is awesome.")
 
 test_that("saveAsObjectFile()/objectFile() following textFile() works", {
+  skip_on_cran()
+
   fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName1)
@@ -38,6 +40,8 @@ test_that("saveAsObjectFile()/objectFile() following textFile() works", {
 })
 
 test_that("saveAsObjectFile()/objectFile() works on a parallelized list", {
+  skip_on_cran()
+
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
 
   l <- list(1, 2, 3)
@@ -50,6 +54,8 @@ test_that("saveAsObjectFile()/objectFile() works on a parallelized list", {
 })
 
 test_that("saveAsObjectFile()/objectFile() following RDD transformations works", {
+  skip_on_cran()
+
   fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName1)
@@ -74,6 +80,8 @@ test_that("saveAsObjectFile()/objectFile() following RDD transformations works",
 })
 
 test_that("saveAsObjectFile()/objectFile() works with multiple paths", {
+  skip_on_cran()
+
   fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
 
