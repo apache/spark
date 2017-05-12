@@ -783,6 +783,8 @@ class DataFrame(object):
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
+        The following performs a full outer join between ``df1`` and ``df2``.
+
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
 
