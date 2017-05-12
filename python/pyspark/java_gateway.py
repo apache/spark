@@ -47,8 +47,11 @@ def launch_gateway(conf=None):
     # If sys.stdout has been changed the child processes JVM will not respect that
     # so grab the jvm output and copy it over if we are in a notebook.
     redirect_shells = ["ZMQInteractiveShell", "StringIO"]
+    print("Launching gateway")
     grab_jvm_output = (sys.stdout != sys.__stdout__ and
                        sys.stdout.__class__.__name__ in redirect_shells)
+    print("Grab jvm output was %s %s" %
+          (grab_jvm_output, type(sys.stdout), sys.stdout.__class__))
 
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
