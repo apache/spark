@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 /**
@@ -61,6 +61,47 @@ class SparkListenerWithClusterSuite extends SparkFunSuite with LocalSparkContext
 
     override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
       addedExecutorInfo(executor.executorId) = executor.executorInfo
+    }
+  }
+}
+
+class SparkListenerStarvedSuite extends SparkFunSuite with LocalSparkContext
+  with BeforeAndAfter with BeforeAndAfterAll {
+
+  before {
+    val conf = new SparkConf()
+      .set("spark.executor.instances", "0")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.shuffle.service.enabled", "true")
+      .set("spark.cores.max", "0") // this one will ensure that no executors get assigned
+    sc = new SparkContext("local-cluster[2,1,1024]", "SparkListenerSuite", conf)
+  }
+
+
+  test("taskStarved") {
+    val listener = new TasksStarvedListener(sc)
+    sc.addSparkListener(listener)
+
+    val data = Array(1, 2, 3, 4, 5)
+    try {
+      sc.parallelize(data).count()
+    }
+    catch {
+      case se: SparkException => // once the starvation event is fired, we stop the sc
+    }
+    assert(listener.starvedFired)
+  }
+
+  private class TasksStarvedListener(sc: SparkContext) extends SparkListener {
+    var starvedFired = false
+
+    override def onOtherEvent(event: SparkListenerEvent): Unit = {
+      event match {
+        case SparkListenerTasksStarved(_) =>
+          starvedFired = true
+          sc.stop()
+        case _ => // Do nothing
+      }
     }
   }
 }

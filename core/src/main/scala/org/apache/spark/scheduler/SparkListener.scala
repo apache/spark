@@ -158,6 +158,13 @@ case class SparkListenerApplicationStart(
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
+@DeveloperApi
+case class SparkListenerTasksStarved(starvationStartTime: Long) extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerTasksUnstarved(starvationEndTime: Long) extends SparkListenerEvent
+
+
 /**
  * An internal class that describes the metadata of an event log.
  */
