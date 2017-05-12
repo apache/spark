@@ -35,3 +35,26 @@ setMethod("predict", signature(object = "JavaModel"),
           function(object, newData) {
             predict_internal(object, newData)
           })
+
+#' S4 class that represents a writable Java ML model
+#'
+#' @param jobj a Java object reference to the backing Scala model
+#' @export
+#' @note JavaMLWritable since 2.3.0
+setClass("JavaMLWritable", representation(jobj = "jobj"))
+
+#  Save the ML model to the output path.
+
+#' @param object A fitted ML model.
+#' @param path The directory where the model is saved.
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @aliases write.ml,JavaMLWritable,character-method
+#' @rdname spark.write.ml
+#' @export
+#' @note write.ml(JavaMLWritable, character) since 2.1.0
+setMethod("write.ml", signature(object = "JavaMLWritable", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
