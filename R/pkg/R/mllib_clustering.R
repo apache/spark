@@ -21,29 +21,37 @@
 #'
 #' @param jobj a Java object reference to the backing Scala BisectingKMeansModel
 #' @export
+#' @include mllib_wrapper.R
 #' @note BisectingKMeansModel since 2.2.0
-setClass("BisectingKMeansModel", representation(jobj = "jobj"))
+setClass("BisectingKMeansModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' S4 class that represents a GaussianMixtureModel
 #'
 #' @param jobj a Java object reference to the backing Scala GaussianMixtureModel
 #' @export
+#' @include mllib_wrapper.R
 #' @note GaussianMixtureModel since 2.1.0
-setClass("GaussianMixtureModel", representation(jobj = "jobj"))
+setClass("GaussianMixtureModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' S4 class that represents a KMeansModel
 #'
 #' @param jobj a Java object reference to the backing Scala KMeansModel
 #' @export
+#' @include mllib_wrapper.R
 #' @note KMeansModel since 2.0.0
-setClass("KMeansModel", representation(jobj = "jobj"))
+setClass("KMeansModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' S4 class that represents an LDAModel
 #'
 #' @param jobj a Java object reference to the backing Scala LDAWrapper
 #' @export
+#' @include mllib_wrapper.R
 #' @note LDAModel since 2.1.0
-setClass("LDAModel", representation(jobj = "jobj"))
+setClass("LDAModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' Bisecting K-Means Clustering Model
 #'
@@ -137,18 +145,6 @@ setMethod("summary", signature(object = "BisectingKMeansModel"),
             }
             list(k = k, coefficients = coefficients, size = size,
             cluster = cluster, is.loaded = is.loaded)
-          })
-
-#  Predicted values based on a bisecting k-means model
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns the predicted values based on a bisecting k-means model.
-#' @rdname spark.bisectingKmeans
-#' @export
-#' @note predict(BisectingKMeansModel) since 2.2.0
-setMethod("predict", signature(object = "BisectingKMeansModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
           })
 
 #' Get fitted result from a bisecting k-means model
@@ -284,20 +280,6 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
                  posterior = posterior, is.loaded = is.loaded)
           })
 
-#  Predicted values based on a gaussian mixture model
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
-#'         "prediction".
-#' @aliases predict,GaussianMixtureModel,SparkDataFrame-method
-#' @rdname spark.gaussianMixture
-#' @export
-#' @note predict(GaussianMixtureModel) since 2.1.0
-setMethod("predict", signature(object = "GaussianMixtureModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
-          })
-
 #  Save fitted MLlib model to the input path
 
 #' @param path the directory where the model is saved.
@@ -405,18 +387,6 @@ setMethod("summary", signature(object = "KMeansModel"),
             }
             list(k = k, coefficients = coefficients, size = size,
                  cluster = cluster, is.loaded = is.loaded, clusterSize = clusterSize)
-          })
-
-#  Predicted values based on a k-means model
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns the predicted values based on a k-means model.
-#' @rdname spark.kmeans
-#' @export
-#' @note predict(KMeansModel) since 2.0.0
-setMethod("predict", signature(object = "KMeansModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
           })
 
 #' Get fitted result from a k-means model
