@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.util.control.NonFatal
 
-import com.google.common.cache.{CacheBuilder, CacheLoader}
+import com.google.common.cache.{CacheBuilder, CacheLoader, Weigher}
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
@@ -853,6 +853,17 @@ class CodeAndComment(val body: String, val comment: collection.Map[String, Strin
   }
 
   override def hashCode(): Int = body.hashCode
+
+  private var _classByteCodeSize = 0
+  private[codegen] def incByteCodeSize(size: Int): Unit = _classByteCodeSize += size
+  private[codegen] def getByteCodeSize: Int = _classByteCodeSize
+}
+
+/**
+ * A weigher used for determining the weight of generated classes in cache.
+ */
+class CodeAndCommentWeigher extends Weigher[CodeAndComment, GeneratedClass] {
+  override def weigh(key: CodeAndComment, value: GeneratedClass): Int = key.getByteCodeSize
 }
 
 /**
@@ -949,7 +960,7 @@ object CodeGenerator extends Logging {
 
     try {
       evaluator.cook("generated.java", code.body)
-      recordCompilationStats(evaluator)
+      recordCompilationStats(evaluator, code)
     } catch {
       case e: Exception =>
         val msg = s"failed to compile: $e\n$formatted"
@@ -962,7 +973,7 @@ object CodeGenerator extends Logging {
   /**
    * Records the generated class and method bytecode sizes by inspecting janino private fields.
    */
-  private def recordCompilationStats(evaluator: ClassBodyEvaluator): Unit = {
+  private def recordCompilationStats(evaluator: ClassBodyEvaluator, code: CodeAndComment): Unit = {
     // First retrieve the generated classes.
     val classes = {
       val resultField = classOf[SimpleCompiler].getDeclaredField("result")
@@ -979,6 +990,7 @@ object CodeGenerator extends Logging {
     codeAttrField.setAccessible(true)
     classes.foreach { case (_, classBytes) =>
       CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
+      code.incByteCodeSize(classBytes.length)
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
         cf.methodInfos.asScala.foreach { method =>
@@ -1006,7 +1018,8 @@ object CodeGenerator extends Logging {
    * weak keys/values and thus does not respond to memory pressure.
    */
   private val cache = CacheBuilder.newBuilder()
-    .maximumSize(100)
+    .maximumWeight(10 * 1024 * 1024)
+    .weigher(new CodeAndCommentWeigher)
     .build(
       new CacheLoader[CodeAndComment, GeneratedClass]() {
         override def load(code: CodeAndComment): GeneratedClass = {
