@@ -21,6 +21,17 @@ if [ -z "${SPARK_HOME}" ]; then
   source "$(dirname "$0")"/find-spark-home
 fi
 
+# [SPARK-15218] replace ':' in SPARK_HOME to '_'
+SPARK_HOME_WITHOUT_COLON=$SPARK_HOME                                                          
+SPARK_HOME=${SPARK_HOME//:/_}
+if [ "$SPARK_HOME_WITHOUT_COLON" != "$SPARK_HOME"  ] && [ ! -d "$SPARK_HOME" ]; then
+  echo "replace ':' in SPARK_HOME with '_'."
+  PARENT_SPARK_HOME="$(dirname "$SPARK_HOME")"
+  mkdir -p $PARENT_SPARK_HOME
+  echo "SPARK_HOME=$SPARK_HOME"
+  ln -s $SPARK_HOME_WITHOUT_COLON  $PARENT_SPARK_HOME
+fi
+
 . "${SPARK_HOME}"/bin/load-spark-env.sh
 
 # Find the java binary
