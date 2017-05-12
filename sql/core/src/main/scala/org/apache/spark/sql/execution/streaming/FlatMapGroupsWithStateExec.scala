@@ -120,7 +120,7 @@ case class FlatMapGroupsWithStateExec(
         val filteredIter = watermarkPredicateForData match {
           case Some(predicate) if timeoutConf == EventTimeTimeout =>
             iter.filter(row => !predicate.eval(row))
-          case None =>
+          case _ =>
             iter
         }
 
