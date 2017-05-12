@@ -145,7 +145,7 @@ class PartiallySerializedBlockSuite
     try {
       TaskContext.setTaskContext(TaskContext.empty())
       val partiallySerializedBlock = partiallyUnroll((1 to 10).iterator, 2)
-      TaskContext.get().asInstanceOf[TaskContextImpl].markTaskCompleted()
+      TaskContext.get().asInstanceOf[TaskContextImpl].markTaskCompleted(None)
       Mockito.verify(partiallySerializedBlock.getUnrolledChunkedByteBuffer).dispose()
       Mockito.verifyNoMoreInteractions(memoryStore)
     } finally {
