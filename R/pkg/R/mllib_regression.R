@@ -360,6 +360,7 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
 
 #  Get the summary of an IsotonicRegressionModel model
 
+#' @param object a fitted IsotonicRegressionModel.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list includes model's \code{boundaries} (boundaries in increasing order)
 #'         and \code{predictions} (predictions associated with the boundaries at the same index).
@@ -373,20 +374,6 @@ setMethod("summary", signature(object = "IsotonicRegressionModel"),
             boundaries <- callJMethod(jobj, "boundaries")
             predictions <- callJMethod(jobj, "predictions")
             list(boundaries = boundaries, predictions = predictions)
-          })
-
-#  Predicted values based on an isotonicRegression model
-
-#' @param object a fitted IsotonicRegressionModel.
-#' @param newData SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted values.
-#' @rdname spark.isoreg
-#' @aliases predict,IsotonicRegressionModel,SparkDataFrame-method
-#' @export
-#' @note predict(IsotonicRegressionModel) since 2.1.0
-setMethod("predict", signature(object = "IsotonicRegressionModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
           })
 
 #  Save fitted IsotonicRegressionModel to the input path

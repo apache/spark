@@ -50,6 +50,7 @@ Collate:
     'mllib_stat.R'
     'mllib_tree.R'
     'mllib_utils.R'
+    'mllib_wrapper.R'
     'serialize.R'
     'sparkR.R'
     'stats.R'
