@@ -538,6 +538,20 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       // scalastyle:on nonascii
     }
   }
+
+  test("predicate pushdown for columns with a '.' in them") {
+    withTempPath { dir =>
+      import testImplicits._
+
+      val path = dir.getCanonicalPath
+      Seq("apple", null).toDF("col.dots").write.parquet(path)
+
+      assert(spark.read.parquet(path).count() == 2)
+      assert(spark.read.parquet(path).where("`col.dots` IS NULL").count() == 1)
+      assert(spark.read.parquet(path).where("`col.dots` IS NOT NULL").count() == 1)
+    }
+
+  }
 }
 
 class NumRowGroupsAcc extends AccumulatorV2[Integer, Integer] {
