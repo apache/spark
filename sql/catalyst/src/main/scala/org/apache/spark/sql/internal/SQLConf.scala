@@ -196,6 +196,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
+    .internal()
+    .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
+      "parser. The default is false since Spark 2.0. Setting it to true can restore the behavior " +
+      "prior to Spark 2.0.")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
          "otherwise the schema is picked from the summary file or a random data file " +
@@ -916,6 +924,8 @@ class SQLConf extends Serializable with Logging {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+
+  def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
