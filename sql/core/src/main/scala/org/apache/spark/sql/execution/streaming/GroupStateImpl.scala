@@ -99,14 +99,10 @@ private[sql] class GroupStateImpl[S](
         "Cannot set timeout duration without enabling processing time timeout in " +
           "map/flatMapGroupsWithState")
     }
-    if (removed) {
-      throw new IllegalStateException("Cannot set timeout after state has been removed")
-    }
-
     if (durationMs <= 0) {
       throw new IllegalArgumentException("Timeout duration must be positive")
     }
-    if (!removed && batchProcessingTimeMs != NO_TIMESTAMP) {
+    if (batchProcessingTimeMs != NO_TIMESTAMP) {
       timeoutTimestamp = durationMs + batchProcessingTimeMs
     } else {
       // This is being called in a batch query, hence no processing timestamp.
@@ -132,7 +128,7 @@ private[sql] class GroupStateImpl[S](
         s"Timeout timestamp ($timestampMs) cannot be earlier than the " +
           s"current watermark ($eventTimeWatermarkMs)")
     }
-    if (!removed && batchProcessingTimeMs != NO_TIMESTAMP) {
+    if (batchProcessingTimeMs != NO_TIMESTAMP) {
       timeoutTimestamp = timestampMs
     } else {
       // This is being called in a batch query, hence no processing timestamp.
@@ -209,9 +205,6 @@ private[sql] class GroupStateImpl[S](
       throw new UnsupportedOperationException(
         "Cannot set timeout timestamp without enabling event time timeout in " +
           "map/flatMapGroupsWithState")
-    }
-    if (removed) {
-      throw new IllegalStateException("Cannot set timeout after state has been removed")
     }
   }
 }

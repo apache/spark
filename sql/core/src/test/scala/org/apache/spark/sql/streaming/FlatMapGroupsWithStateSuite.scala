@@ -113,11 +113,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     state = new GroupStateImpl[Int](None, 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false)
     assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
     state.setTimeoutDuration(500)
-    assert(state.getTimeoutTimestamp === 1500)
+    assert(state.getTimeoutTimestamp === 1500)    // can be set without initializing state
     testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
 
     state.update(5)
-    assert(state.getTimeoutTimestamp === 1500)
+    assert(state.getTimeoutTimestamp === 1500)    // does not change
     state.setTimeoutDuration(1000)
     assert(state.getTimeoutTimestamp === 2000)
     state.setTimeoutDuration("2 second")
@@ -125,7 +125,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
 
     state.remove()
-    testTimeoutDurationNotAllowed[IllegalStateException](state)
+    assert(state.getTimeoutTimestamp === 3000)    // does not change
+    state.setTimeoutDuration(500)                 // can still be set
+    assert(state.getTimeoutTimestamp === 1500)
     testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
   }
 
@@ -135,10 +137,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
     testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
     state.setTimeoutTimestamp(5000)
-    assert(state.getTimeoutTimestamp === 5000)
+    assert(state.getTimeoutTimestamp === 5000)    // can be set without initializing state
 
     state.update(5)
-    assert(state.getTimeoutTimestamp === 5000)
+    assert(state.getTimeoutTimestamp === 5000)    // does not change
     state.setTimeoutTimestamp(10000)
     assert(state.getTimeoutTimestamp === 10000)
     state.setTimeoutTimestamp(new Date(20000))
@@ -147,8 +149,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
     state.remove()
     assert(state.getTimeoutTimestamp === 20000)
+    state.setTimeoutTimestamp(5000)
+    assert(state.getTimeoutTimestamp === 5000)    // can be set after removing state
     testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
-    testTimeoutTimestampNotAllowed[IllegalStateException](state)
   }
 
   test("GroupState - illegal params to setTimeout****") {
@@ -349,10 +352,12 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   }
 
   // Currently disallowed cases for StateStoreUpdater.updateStateForKeysWithData(),
-  // remove these in the future
+  // Try to remove these cases in the future
   for (priorTimeoutTimestamp <- Seq(NO_TIMESTAMP, 1000)) {
+    val testName =
+      if (priorTimeoutTimestamp != NO_TIMESTAMP) "prior timeout set" else "no prior timeout"
     testStateUpdateWithData(
-      s"ProcessingTimeTimeout - no prior state - timeout set - not allowed",
+      s"ProcessingTimeTimeout - $testName - setting timeout without init state not allowed",
       stateUpdates = state => { state.setTimeoutDuration(5000) },
       timeoutConf = ProcessingTimeTimeout,
       priorState = None,
@@ -360,10 +365,26 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       expectedException = classOf[IllegalStateException])
 
     testStateUpdateWithData(
-      s"EventTimeTimeout - no prior state - timeout set - not allowed",
+      s"ProcessingTimeTimeout - $testName - setting timeout with state removal not allowed",
+      stateUpdates = state => { state.remove(); state.setTimeoutDuration(5000) },
+      timeoutConf = ProcessingTimeTimeout,
+      priorState = Some(5),
+      priorTimeoutTimestamp = priorTimeoutTimestamp,
+      expectedException = classOf[IllegalStateException])
+
+    testStateUpdateWithData(
+      s"EventTimeTimeout - $testName - setting timeout without init state not allowed",
       stateUpdates = state => { state.setTimeoutTimestamp(10000) },
       timeoutConf = EventTimeTimeout,
       priorState = None,
+      priorTimeoutTimestamp = priorTimeoutTimestamp,
+      expectedException = classOf[IllegalStateException])
+
+    testStateUpdateWithData(
+      s"EventTimeTimeout - $testName - setting timeout with state removal not allowed",
+      stateUpdates = state => { state.remove(); state.setTimeoutTimestamp(10000) },
+      timeoutConf = EventTimeTimeout,
+      priorState = Some(5),
       priorTimeoutTimestamp = priorTimeoutTimestamp,
       expectedException = classOf[IllegalStateException])
   }
@@ -892,21 +913,21 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       returnedIter.size // consume the iterator to force state updates
     }
     if (expectedException != null) {
+      // Call function and verify the exception type
       val e = intercept[Exception] { callFunction() }
       assert(e.getClass === expectedException, "Exception thrown but of the wrong type")
     } else {
+      // Call function to update and verify updated state in store
       callFunction()
-    }
-
-    // Verify updated state in store
-    val updatedStateRow = store.get(key)
-    assert(
-      updater.getStateObj(updatedStateRow).map(_.toString.toInt) === expectedState,
-      "final state not as expected")
-    if (updatedStateRow.nonEmpty) {
+      val updatedStateRow = store.get(key)
       assert(
-        updater.getTimeoutTimestamp(updatedStateRow.get) === expectedTimeoutTimestamp,
-        "final timeout timestamp not as expected")
+        updater.getStateObj(updatedStateRow).map(_.toString.toInt) === expectedState,
+        "final state not as expected")
+      if (updatedStateRow.nonEmpty) {
+        assert(
+          updater.getTimeoutTimestamp(updatedStateRow.get) === expectedTimeoutTimestamp,
+          "final timeout timestamp not as expected")
+      }
     }
   }
 
