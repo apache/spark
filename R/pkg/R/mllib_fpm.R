@@ -21,8 +21,10 @@
 #'
 #' @param jobj a Java object reference to the backing Scala FPGrowthModel
 #' @export
+#' @include mllib_wrapper.R
 #' @note FPGrowthModel since 2.2.0
-setClass("FPGrowthModel", slots = list(jobj = "jobj"))
+setClass("FPGrowthModel", slots = list(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' FP-growth
 #'
@@ -130,19 +132,6 @@ setMethod("spark.freqItemsets", signature(object = "FPGrowthModel"),
 setMethod("spark.associationRules", signature(object = "FPGrowthModel"),
           function(object) {
             dataFrame(callJMethod(object@jobj, "associationRules"))
-          })
-
-#  Makes predictions based on generated association rules
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted values.
-#' @rdname spark.fpGrowth
-#' @aliases predict,FPGrowthModel-method
-#' @export
-#' @note predict(FPGrowthModel) since 2.2.0
-setMethod("predict", signature(object = "FPGrowthModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
           })
 
 #  Saves the FPGrowth model to the output path.
