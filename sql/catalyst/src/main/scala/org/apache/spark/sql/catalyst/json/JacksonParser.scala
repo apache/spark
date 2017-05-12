@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.json
 
 import java.io.ByteArrayOutputStream
-import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -88,17 +87,6 @@ class JacksonParser(
     }
   }
 
-  private object SpecialDouble {
-    def unapply(value: String): Option[Double] = {
-      value.toLowerCase match {
-        case "nan" => Some(Double.NaN)
-        case "infinity" | "+infinity" | "inf" | "+inf" => Some(Double.PositiveInfinity)
-        case "-infinity" | "-inf" => Some(Double.NegativeInfinity)
-        case _ => None
-      }
-    }
-  }
-
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema.
@@ -137,16 +125,13 @@ class JacksonParser(
 
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase(Locale.ROOT)
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toFloat
-          } else {
-            throw new RuntimeException(s"Cannot parse $value as FloatType.")
+          parser.getText match {
+            case "NaN" | "+NaN" | "-NaN" => Float.NaN
+            case "+INF" | "INF" | "+Infinity" | "Infinity" => Float.PositiveInfinity
+            case "-INF" | "-Infinity" => Float.NegativeInfinity
+            case other => Try(other.toFloat).getOrElse {
+              throw new RuntimeException(s"Cannot parse $other as FloatType.")
+            }
           }
       }
 
@@ -157,16 +142,13 @@ class JacksonParser(
 
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase(Locale.ROOT)
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toDouble
-          } else {
-            throw new RuntimeException(s"Cannot parse $value as DoubleType.")
+          parser.getText match {
+            case "NaN" | "+NaN" | "-NaN" => Double.NaN
+            case "+INF" | "INF" | "+Infinity" | "Infinity" => Double.PositiveInfinity
+            case "-INF" | "-Infinity" => Double.NegativeInfinity
+            case other => Try(other.toDouble).getOrElse {
+              throw new RuntimeException(s"Cannot parse $other as DoubleType.")
+            }
           }
       }
 

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.{File, StringWriter}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonFactory
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -1986,37 +1987,57 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .collect
       }.getMessage
       assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
+    }
+  }
 
-  test("SPARK-18772: Special floats") {
-    val records = sparkContext
-      .parallelize(
-        """{"a": "NaN"}""" ::
-          """{"a": "nAn"}""" ::
-          """{"a": "-iNf"}""" ::
-          """{"a": "inF"}""" ::
-          """{"a": "+Inf"}""" ::
-          """{"a": "-iNfInity"}""" ::
-          """{"a": "InFiNiTy"}""" ::
-          """{"a": "+InfiNitY"}""" ::
-          """{"a": "+Infi"}""" ::
-          Nil)
+  test("SPARK-18772: Parse special floats correctly") {
+    val jsons = Seq(
+      """{"a": "+INF"}""",
+      """{"a": "INF"}""",
+      """{"a": "-INF"}""",
+      """{"a": "NaN"}""",
+      """{"a": "+NaN"}""",
+      """{"a": "-NaN"}""",
+      """{"a": "Infinity"}""",
+      """{"a": "+Infinity"}""",
+      """{"a": "-Infinity"}""")
 
-    for (dt <- Seq(FloatType, DoubleType)) {
-      val res = spark.read
-        .schema(StructType(Seq(StructField("a", dt))))
-        .json(records)
-        .select($"a".cast(DoubleType).as[java.lang.Double])
-        .collect()
-      assert(res.length === 9)
-      assert(res(0).isNaN)
-      assert(res(1).isNaN)
-      assert(res(2).toDouble.isNegInfinity)
-      assert(res(3).toDouble.isPosInfinity)
-      assert(res(4).toDouble.isPosInfinity)
-      assert(res(5).toDouble.isNegInfinity)
-      assert(res(6).toDouble.isPosInfinity)
-      assert(res(7).toDouble.isPosInfinity)
-      assert(res(8) eq null)
+    // positive cases
+    val checks: Seq[Double => Boolean] = Seq(
+      _.isPosInfinity,
+      _.isPosInfinity,
+      _.isNegInfinity,
+      _.isNaN,
+      _.isNaN,
+      _.isNaN,
+      _.isPosInfinity,
+      _.isPosInfinity,
+      _.isNegInfinity)
+
+    Seq(FloatType, DoubleType).foreach { dt =>
+      jsons.zip(checks).foreach { case (json, check) =>
+        val ds = spark.read
+          .schema(StructType(Seq(StructField("a", dt))))
+          .json(Seq(json).toDS())
+          .select($"a".cast(DoubleType)).as[Double]
+        assert(check(ds.first()))
+      }
+    }
+
+    // negative cases
+    Seq(FloatType, DoubleType).foreach { dt =>
+      val lowerCasedJsons = jsons.map(_.toLowerCase(Locale.ROOT))
+      // The special floats are case-sensitive so these cases below throw exceptions.
+      lowerCasedJsons.foreach { lowerCasedJson =>
+        val e = intercept[SparkException] {
+          spark.read
+            .option("mode", "FAILFAST")
+            .schema(StructType(Seq(StructField("a", dt))))
+            .json(Seq(lowerCasedJson).toDS())
+            .collect()
+        }
+        assert(e.getMessage.contains("Cannot parse"))
+      }
     }
   }
 }
