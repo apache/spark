@@ -38,7 +38,7 @@ import org.apache.spark.util._
  * Helper class used by the [[MapOutputTrackerMaster]] to perform bookkeeping for a single
  * ShuffleMapStage.
  *
- * This class maintains a mapping from mapIds to [[MapStatus]]es. It also maintains a cache of
+ * This class maintains a mapping from mapIds to `MapStatus`. It also maintains a cache of
  * serialized map statuses in order to speed up tasks' requests for map output statuses.
  *
  * All public methods of this class are thread-safe.
@@ -48,8 +48,8 @@ private class ShuffleStatus(numPartitions: Int) {
   // All accesses to the following state must be guarded with `this.synchronized`.
 
   /**
-   * [[MapStatus]] for each partition. The index of the array is the map partition id.
-   * Each value in the array is the [[MapStatus]] for a partition, or null if the partition
+   * MapStatus for each partition. The index of the array is the map partition id.
+   * Each value in the array is the MapStatus for a partition, or null if the partition
    * is not available. Even though in theory a task may run multiple times (due to speculation,
    * stage retries, etc.), in practice the likelihood of a map output being available at multiple
    * locations is so small that we choose to ignore that case and store only a single location
@@ -138,7 +138,7 @@ private class ShuffleStatus(numPartitions: Int) {
 
   /**
    * Serializes the mapStatuses array into an efficient compressed format. See the comments on
-   * [[MapOutputTracker.serializeMapStatuses()]] for more details on the serialization format.
+   * `MapOutputTracker.serializeMapStatuses()` for more details on the serialization format.
    *
    * This method is designed to be called multiple times and implements caching in order to speed
    * up subsequent requests. If the cache is empty and multiple threads concurrently attempt to
