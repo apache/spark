@@ -155,6 +155,12 @@ package object util {
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
+  // Generates the alias name
+  // Note: the name should not have commas, which are not allowed by metastore
+  def generateAliasName(e: Expression): String = {
+    toPrettySQL(e).replace(",", "")
+  }
+
   /* FIX ME
   implicit class debugLogging(a: Any) {
     def debugLogging() {

@@ -177,7 +177,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c)),
         UnresolvedAlias(GroupingID(Seq(unresolved_a, unresolved_b)))))
     val expected = Aggregate(Seq(a, b, gid),
-      Seq(a, b, count(c).as("count(c)"), gid.as("grouping_id(a, b)")),
+      Seq(a, b, count(c).as("count(c)"), gid.as("grouping_id(a b)")),
       Expand(
         Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
         Seq(a, b, c, a, b, gid),
@@ -189,7 +189,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c)),
         UnresolvedAlias(GroupingID(Seq(unresolved_a, unresolved_b)))), r1)
     val expected2 = Aggregate(Seq(a, b, gid),
-      Seq(a, b, count(c).as("count(c)"), gid.as("grouping_id(a, b)")),
+      Seq(a, b, count(c).as("count(c)"), gid.as("grouping_id(a b)")),
       Expand(
         Seq(Seq(a, b, c, a, b, 0), Seq(a, b, c, a, nulStr, 1),
           Seq(a, b, c, nulInt, b, 2), Seq(a, b, c, nulInt, nulStr, 3)),
@@ -202,7 +202,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c)),
         UnresolvedAlias(GroupingID(Seq(unresolved_a, unresolved_b)))), r1)
     val expected3 = Aggregate(Seq(a, b, gid),
-      Seq(a, b, count(c).as("count(c)"), gid.as("grouping_id(a, b)")),
+      Seq(a, b, count(c).as("count(c)"), gid.as("grouping_id(a b)")),
       Expand(
         Seq(Seq(a, b, c, a, b, 0), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, nulInt, nulStr, 3)),
         Seq(a, b, c, a, b, gid),

@@ -69,7 +69,7 @@ class ComplexTypesSuite extends PlanTest{
       .analyze
 
     val expected = relation
-      .select('id as "named_struct(att, id).att")
+      .select('id as "named_struct(att id).att")
       .analyze
 
     comparePlans(Optimizer execute query, expected)
