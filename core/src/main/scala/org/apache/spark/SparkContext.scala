@@ -2150,6 +2150,27 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+    * :: DeveloperApi ::
+    * Run a job that can return a partial result that get from parts of the tasks.
+    */
+  @DeveloperApi
+  def runPartialJob[T, U, R](
+      rdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
+      evaluator: ApproximateEvaluator[U, R],
+      percent: Double): PartialResult[R] = {
+    assertNotStopped()
+    val callSite = getCallSite
+    logInfo("Starting job: " + callSite.shortForm)
+    val start = System.nanoTime
+    val cleanedFunc = clean(func)
+    val result = dagScheduler.runPartialJob(rdd, cleanedFunc, evaluator, callSite, percent,
+      localProperties.get)
+    logInfo(
+      "Job finished: " + callSite.shortForm + ", took " + (System.nanoTime - start) / 1e9 + " s")
+    result
+  }
+  /**
    * Submit a job for execution and return a FutureJob holding the result.
    *
    * @param rdd target RDD to run tasks on

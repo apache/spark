@@ -29,15 +29,13 @@ import scala.concurrent.duration._
 import scala.language.existentials
 import scala.language.postfixOps
 import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.SerializationUtils
-
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
+import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialActionListener, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.storage._
@@ -657,6 +655,33 @@ class DAGScheduler(
       timeout: Long,
       properties: Properties): PartialResult[R] = {
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
+    val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
+    val partitions = (0 until rdd.partitions.length).toArray
+    val jobId = nextJobId.getAndIncrement()
+    eventProcessLoop.post(JobSubmitted(
+      jobId, rdd, func2, partitions, callSite, listener, SerializationUtils.clone(properties)))
+    listener.awaitResult()    // Will throw an exception if the job fails
+  }
+
+  /**
+    * Run an Partial job on the given RDD and pass all the results to an ApproximateEvaluator
+    * as they arrive. Returns a partial result object from the evaluator.
+    *
+    * @param rdd target RDD to run tasks on
+    * @param func a function to run on each partition of the RDD
+    * @param evaluator [[ApproximateEvaluator]] to receive the partial results
+    * @param callSite where in the user program this job was called
+    * @param percent minimum percentage of tasks to wait
+    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
+    */
+  def runPartialJob[T, U, R](
+      rdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
+      evaluator: ApproximateEvaluator[U, R],
+      callSite: CallSite,
+      percent: Double,
+      properties: Properties): PartialResult[R] = {
+    val listener = new PartialActionListener(rdd, func, evaluator, percent)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.partitions.length).toArray
     val jobId = nextJobId.getAndIncrement()
