@@ -22,22 +22,28 @@
 #'
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
 #' @export
+#' @include mllib_wrapper.R
 #' @note AFTSurvivalRegressionModel since 2.0.0
-setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
+setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' S4 class that represents a generalized linear model
 #'
 #' @param jobj a Java object reference to the backing Scala GeneralizedLinearRegressionWrapper
 #' @export
+#' @include mllib_wrapper.R
 #' @note GeneralizedLinearRegressionModel since 2.0.0
-setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
+setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' S4 class that represents an IsotonicRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala IsotonicRegressionModel
 #' @export
+#' @include mllib_wrapper.R
 #' @note IsotonicRegressionModel since 2.1.0
-setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
+setClass("IsotonicRegressionModel", representation(jobj = "jobj"),
+         contains = "JavaModel")
 
 #' Generalized Linear Models
 #'
@@ -270,20 +276,6 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   invisible(x)
   }
 
-#  Makes predictions from a generalized linear model produced by glm() or spark.glm(),
-#  similarly to R's predict().
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
-#'         "prediction".
-#' @rdname spark.glm
-#' @export
-#' @note predict(GeneralizedLinearRegressionModel) since 1.5.0
-setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
-          })
-
 #  Saves the generalized linear model to the input path.
 
 #' @param path the directory where the model is saved.
@@ -456,20 +448,6 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
             colnames(coefficients) <- c("Value")
             rownames(coefficients) <- unlist(features)
             list(coefficients = coefficients)
-          })
-
-#  Makes predictions from an AFT survival regression model or a model produced by
-#  spark.survreg, similarly to R package survival's predict.
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted values
-#'         on the original scale of the data (mean predicted value at scale = 1.0).
-#' @rdname spark.survreg
-#' @export
-#' @note predict(AFTSurvivalRegressionModel) since 2.0.0
-setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
           })
 
 #  Saves the AFT survival regression model to the input path.
