@@ -38,22 +38,22 @@ import org.apache.spark.sql.types._
 private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
 
   /**
-    * Param for how to order labels of string column. The first label after ordering is assigned
-    * an index of 0.
-    * Options are:
-    *   - 'frequencyDesc': descending order by label frequency (most frequent label assigned 0)
-    *   - 'frequencyAsc': ascending order by label frequency (least frequent label assigned 0)
-    *   - 'alphabetDesc': descending alphabetical order
-    *   - 'alphabetAsc': ascending alphabetical order
-    * Default is 'frequencyDesc'.
-    *
-    * @group param
-    */
+   * Param for how to order labels of string column. The first label after ordering is assigned
+   * an index of 0.
+   * Options are:
+   *   - 'frequencyDesc': descending order by label frequency (most frequent label assigned 0)
+   *   - 'frequencyAsc': ascending order by label frequency (least frequent label assigned 0)
+   *   - 'alphabetDesc': descending alphabetical order
+   *   - 'alphabetAsc': ascending alphabetical order
+   * Default is 'frequencyDesc'.
+   *
+   * @group param
+   */
   @Since("2.3.0")
   final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
     "how to order labels of string column. " +
-      "The first label after ordering is assigned an index of 0. " +
-      s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
+    "The first label after ordering is assigned an index of 0. " +
+    s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
     ParamValidators.inArray(StringIndexer.supportedStringOrderType))
 
   /** @group getParam */
