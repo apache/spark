@@ -46,3 +46,17 @@ test_that("sparkCheckInstall", {
   deployMode <- "client"
   expect_error(sparkCheckInstall(sparkHome, master, deployMode))
 })
+
+test_that("sparkR.session", {
+  # nothing should be written outside tempdir() without explicit user permission
+  inital_working_directory_files <- list.files()
+  sparkR.session(enableHiveSupport = FALSE)
+  df <- data.frame("col1" = c(1, 2, 3, 4, 5, 6),
+                   "col2" = c(1, 0, 0, 1, 1, 0),
+                   "col3" = c(1, 0, 0, 2, 6, 2))
+  df <- as.DataFrame(df)
+  createOrReplaceTempView(df, "table")
+  result <- sql("SELECT * FROM `table`")
+  sparkR.session.stop()
+  expect_equal(inital_working_directory_files, list.files())
+})

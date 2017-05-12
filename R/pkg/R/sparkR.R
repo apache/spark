@@ -371,6 +371,10 @@ sparkR.session <- function(
   enableHiveSupport = TRUE,
   ...) {
 
+  if (length(sparkConfig[["spark.sql.warehouse.dir"]]) == 0) {
+    sparkConfig[["spark.sql.warehouse.dir"]] <- tempdir()
+  }
+
   sparkConfigMap <- convertNamedListToEnv(sparkConfig)
   namedParams <- list(...)
   if (length(namedParams) > 0) {
