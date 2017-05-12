@@ -1003,7 +1003,8 @@ class Analyzer(
    */
   object ResolveAggAliasInGroupBy extends Rule[LogicalPlan] {
 
-    // This is a strict check though, we put this to apply the rule only in alias expressions
+    // This is a strict check though, we put this to apply the rule only if the expression is not
+    // resolvable by child.
     private def notResolvableByChild(attrName: String, child: LogicalPlan): Boolean =
       !child.output.exists(a => resolver(a.name, attrName))
 
