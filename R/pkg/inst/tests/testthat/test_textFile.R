@@ -18,7 +18,7 @@
 context("the textFile() function")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 mockFile <- c("Spark is pretty.", "Spark is awesome.")

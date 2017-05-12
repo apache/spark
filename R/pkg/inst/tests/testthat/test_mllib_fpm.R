@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib frequent pattern mining")
 
 # Tests for MLlib frequent pattern mining algorithms in SparkR
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 test_that("spark.fpGrowth", {
   data <- selectExpr(createDataFrame(data.frame(items = c(
