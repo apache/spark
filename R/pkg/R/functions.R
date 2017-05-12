@@ -1757,7 +1757,8 @@ setMethod("toRadians",
 #' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
-#' The default format is 'yyyy-MM-dd'.
+#' By default, it follows casting rules to a DateType if the format is omitted
+#' (equivalent to \code{cast(df$x, "date")}).
 #'
 #' @param x Column to parse.
 #' @param format string to use to parse x Column to DateType. (optional)
@@ -1832,10 +1833,11 @@ setMethod("to_json", signature(x = "Column"),
 #' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
-#' The default format is 'yyyy-MM-dd HH:mm:ss'.
+#' By default, it follows casting rules to a TimestampType if the format is omitted
+#' (equivalent to \code{cast(df$x, "timestamp")}).
 #'
 #' @param x Column to parse.
-#' @param format string to use to parse x Column to DateType. (optional)
+#' @param format string to use to parse x Column to TimestampType. (optional)
 #'
 #' @rdname to_timestamp
 #' @name to_timestamp

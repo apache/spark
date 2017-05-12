@@ -495,14 +495,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
   }
 
-  test("function to_date") {
-    checkEvaluation(
-      ToDate(Literal(Date.valueOf("2015-07-22"))),
-      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-22")))
-    checkEvaluation(ToDate(Literal.create(null, DateType)), null)
-    checkConsistencyBetweenInterpretedAndCodegen(ToDate, DateType)
-  }
-
   test("function trunc") {
     def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
       checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
