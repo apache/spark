@@ -443,7 +443,10 @@ object QueryPlan extends PredicateHelper {
     }.canonicalized.asInstanceOf[T]
   }
 
-  /** Normalize and reorder the expressions in the given sequence. */
+  /**
+   * Composes the given predicates into a conjunctive predicate, which is normalized and reordered.
+   * Then returns a new sequence of predicates by splitting the conjunctive predicate.
+   */
   def normalizePredicates(predicates: Seq[Expression], output: AttributeSeq): Seq[Expression] = {
     if (predicates.nonEmpty) {
       val normalized = normalizeExprId(predicates.reduce(And), output)
