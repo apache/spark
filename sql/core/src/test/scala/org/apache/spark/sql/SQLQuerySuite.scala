@@ -531,6 +531,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e.contains(expected))
   }
 
+  test("limit for skew dataframe") {
+    // Create a skew dataframe.
+    val df = testData.repartition(100).union(testData).limit(50)
+    // Because `rdd` of dataframe will add a `DeserializeToObject` on top of `GlobalLimit`,
+    // the `GlobalLimit` will not be replaced with `CollectLimit`. So we can test if `GlobalLimit`
+    // work on skew partitions.
+    assert(df.rdd.count() == 50L)
+  }
+
   test("CTE feature") {
     checkAnswer(
       sql("with q1 as (select * from testData limit 10) select * from q1"),
