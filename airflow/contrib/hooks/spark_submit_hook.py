@@ -196,8 +196,11 @@ class SparkSubmitHook(BaseHook):
         # Append any application arguments
         if self._application_args:
             for arg in self._application_args:
-                connection_cmd += [arg]
-
+                if len(arg.split()) > 1:
+                    for splitted_option in arg.split():
+                        connection_cmd += [splitted_option]
+                else:
+                    connection_cmd += [arg]
         logging.debug("Spark-Submit cmd: {}".format(connection_cmd))
 
         return connection_cmd
@@ -257,7 +260,7 @@ class SparkSubmitHook(BaseHook):
 
             if self._yarn_application_id:
                 logging.info('Killing application on YARN')
-                yarn_kill = Popen("yarn application -kill {0}".format(self._yarn_application_id),
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE)
+                yarn_kill = subprocess.Popen("yarn application -kill {0}".format(self._yarn_application_id),
+                                             stdout=subprocess.PIPE,
+                                             stderr=subprocess.PIPE)
                 logging.info("YARN killed with return code: {0}".format(yarn_kill.wait()))
