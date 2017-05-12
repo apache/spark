@@ -494,4 +494,15 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
         spark.table("t").write.insertInto(tableName)
       }
   }
+
+  test("SPARK-20594: hive.exec.stagingdir was deleted by Hive") {
+    // Set hive.exec.stagingdir under the table directory without start with ".".
+    withSQLConf("hive.exec.stagingdir" -> "./test") {
+      withTable("test_table") {
+        sql("CREATE TABLE test_table (key int)")
+        sql("INSERT OVERWRITE TABLE test_table SELECT 1")
+        checkAnswer(sql("SELECT * FROM test_table"), Row(1))
+      }
+    }
+  }
 }
