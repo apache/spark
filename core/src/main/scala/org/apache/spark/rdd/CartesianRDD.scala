@@ -76,6 +76,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     val currSplit = split.asInstanceOf[CartesianPartition]
     val blockId2 = RDDBlockId(rdd2.id, currSplit.s2.index)
     var cachedInLocal = false
+    var holdReadLock = false
 
     // Try to get data from the local, otherwise it will be cached to the local.
     def getOrElseCache(
@@ -92,7 +93,10 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
       val iterator = rdd.iterator(partition, context)
       // Keep read lock, because next we need read it. And don't tell master.
       blockManager.putIterator[U](blockId2, iterator, level, false, true) match {
-        case true => cachedInLocal = true
+        case true =>
+          cachedInLocal = true
+          // After we cached the block, we also hold the block read lock until this task finished.
+          holdReadLock = true
         case false =>
           // There shouldn't a error caused by put in memory, because we use MEMORY_AND_DISK to
           // cache it.
@@ -129,6 +133,10 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
     def removeCachedBlock(): Unit = {
       val blockManager = SparkEnv.get.blockManager
+      if (holdReadLock) {
+        // If hold the read lock, we need release it.
+        blockManager.releaseLock(blockId2)
+      }
       // Whether the block it persisted by the user.
       val persistedInLocal =
         blockManager.master.getLocations(blockId2).contains(blockManager.blockManagerId)
