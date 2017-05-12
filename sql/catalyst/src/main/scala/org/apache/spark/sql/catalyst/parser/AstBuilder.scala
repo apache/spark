@@ -279,7 +279,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     // LIMIT
     withWindow.optional(limit) {
-      Limit(typedVisit(limit), withWindow)
+      if (ALL != null) {
+        // LIMIT ALL is the same as omitting the LIMIT clause
+        withWindow
+      } else {
+        Limit(typedVisit(limit), withWindow)
+      }
     }
   }
 
