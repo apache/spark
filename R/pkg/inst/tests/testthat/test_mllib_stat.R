@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib statistics algorithms")
 
 # Tests for MLlib statistics algorithms in SparkR
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 test_that("spark.kstest", {
   data <- data.frame(test = c(0.1, 0.15, 0.2, 0.3, 0.25, -1, -0.5))
