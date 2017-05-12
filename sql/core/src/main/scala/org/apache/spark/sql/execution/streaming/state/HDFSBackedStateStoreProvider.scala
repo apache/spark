@@ -218,7 +218,7 @@ private[state] class HDFSBackedStateStoreProvider(
           logDebug(s"Error aborting version $newVersion into $this", c)
 
         case e: Exception =>
-          logWarning(s"Error aborting version $newVersion into $this")
+          logWarning(s"Error aborting version $newVersion into $this", e)
       }
       logInfo(s"Aborted version $newVersion for $this")
     }
