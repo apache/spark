@@ -54,7 +54,7 @@ setClass("JavaMLWritable", representation(jobj = "jobj"))
 #' @rdname write.ml
 #' @export
 #' @seealso \link{read.ml}
-#' @note write.ml(JavaMLWritable, character) since 2.1.0
+#' @note write.ml(JavaMLWritable, character) since 2.3.0
 setMethod("write.ml", signature(object = "JavaMLWritable", path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)
