@@ -1005,8 +1005,9 @@ class Analyzer(
 
     // This is a strict check though, we put this to apply the rule only if the expression is not
     // resolvable by child.
-    private def notResolvableByChild(attrName: String, child: LogicalPlan): Boolean =
+    private def notResolvableByChild(attrName: String, child: LogicalPlan): Boolean = {
       !child.output.exists(a => resolver(a.name, attrName))
+    }
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case agg @ Aggregate(groups, aggs, child)
