@@ -1003,9 +1003,13 @@ object Matrices {
         // We need to truncate both arrays (rowIndices, data)
         // to the real size of the vector sm.activeSize to allow valid conversion
 
-        val truncRowIndices = sm.rowIndices.slice(0, sm.activeSize)
-        val truncData = sm.data.slice(0, sm.activeSize)
-        new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, truncRowIndices, truncData)
+        if (sm.rowIndices.length > sm.activeSize) {
+          val smC = sm.copy
+          smC.compact()
+          new SparseMatrix(smC.rows, smC.cols, smC.colPtrs, smC.rowIndices, smC.data)
+        } else {
+          new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, sm.rowIndices, sm.data)
+        }
       case _ =>
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
