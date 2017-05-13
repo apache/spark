@@ -629,7 +629,8 @@ private[ui] class JobPagedTable(
         {if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)"}
       </td>
       <td class="progress-cell">
-        {UIUtils.makeProgressBar(started = job.numActiveTasks, completed = job.numCompletedTasks,
+        {UIUtils.makeProgressBar(started = job.numActiveTasks,
+        completed = job.completedStageIndices.size,
         failed = job.numFailedTasks, skipped = job.numSkippedTasks,
         reasonToNumKilled = job.reasonToNumKilled, total = job.numTasks - job.numSkippedTasks)}
       </td>
