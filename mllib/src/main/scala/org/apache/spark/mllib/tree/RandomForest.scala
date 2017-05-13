@@ -92,7 +92,7 @@ private class RandomForest (
    */
   def run(input: RDD[LabeledPoint]): RandomForestModel = {
     val trees: Array[NewDTModel] = NewRandomForest.run(input.map(_.asML), strategy, numTrees,
-      featureSubsetStrategy, seed.toLong, None)
+      featureSubsetStrategy, seed.toLong, None, "MEMORY_AND_DISK")
     new RandomForestModel(strategy.algo, trees.map(_.toOld))
   }
 

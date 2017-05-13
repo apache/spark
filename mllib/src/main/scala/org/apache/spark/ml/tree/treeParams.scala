@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.util.Try
 
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -29,6 +30,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrat
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, ClassificationLoss => OldClassificationLoss, LogLoss => OldLogLoss, Loss => OldLoss, SquaredError => OldSquaredError}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Parameters for Decision Tree-based algorithms.
@@ -182,6 +184,26 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    */
   @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+
+  /**
+   * Param for StorageLevel for intermediate datasets. Pass in a string representation of
+   * `StorageLevel`. Cannot be "NONE".
+   * Default: "MEMORY_AND_DISK".
+   *
+   * @group expertParam
+   */
+  val intermediateStorageLevel = new Param[String](this, "intermediateStorageLevel",
+    "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
+    (s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE")
+
+  setDefault(intermediateStorageLevel -> "MEMORY_AND_DISK")
+
+  /** @group expertGetParam */
+  def getIntermediateStorageLevel: String = $(intermediateStorageLevel)
+
+  /** @group expertSetParam */
+  @Since("2.3.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(

@@ -136,7 +136,8 @@ class RandomForestClassifier @Since("1.4.0") (
       minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)
 
     val trees = RandomForest
-      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
+      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr),
+         $(intermediateStorageLevel))
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
 
     val numFeatures = oldDataset.first().features.size

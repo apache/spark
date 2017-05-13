@@ -92,6 +92,7 @@ private[spark] object RandomForest extends Logging {
       featureSubsetStrategy: String,
       seed: Long,
       instr: Option[Instrumentation[_]],
+      intermediateStorageLevel: String,
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
 
     val timer = new TimeTracker()
@@ -130,7 +131,7 @@ private[spark] object RandomForest extends Logging {
 
     val baggedInput = BaggedPoint
       .convertToBaggedRDD(treeInput, strategy.subsamplingRate, numTrees, withReplacement, seed)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist(StorageLevel.fromString(intermediateStorageLevel))
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
