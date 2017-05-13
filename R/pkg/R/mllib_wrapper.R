@@ -45,7 +45,7 @@ setClass("JavaMLWritable", representation(jobj = "jobj"))
 
 #  Save the ML model to the output path.
 
-#' @param object A fitted ML model.
+#' @param object a fitted ML model.
 #' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
