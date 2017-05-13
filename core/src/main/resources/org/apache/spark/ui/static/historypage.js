@@ -37,9 +37,20 @@ function makeIdNumeric(id) {
   return resl;
 }
 
+function padLeft(val) {
+  if(val < 10) return "0" + val;
+  else return val;
+}
+
 function formatDate(date) {
-  if (date <= 0) return "-";
-  else return date.split(".")[0].replace("T", " ");
+  if (date <= 0) {
+     return "-";
+  } else {
+     var localDate = new Date(date.split(".")[0].replace("T", " ") + " UTC");
+     return localDate.getFullYear() + "-" + padLeft(localDate.getMonth() + 1) + "-"
+            + padLeft(localDate.getDate()) + " " + padLeft(localDate.getHours()) + ":"
+            + padLeft(localDate.getMinutes()) + ":" + padLeft(localDate.getSeconds());
+  }
 }
 
 function getParameterByName(name, searchString) {
