@@ -505,31 +505,31 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 }
 
 /**
- * A function that trim the spaces or a character from both ends for the specified string.
+ * A function that trim the spaces or a trim string from both ends for the specified string.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
-    _FUNC_(BOTH trimChar FROM str) - Remove the leading and trailing trimChar from `str`
-    _FUNC_(LEADING trimChar FROM str) - Remove the leading trimChar from `str`
-    _FUNC_(TRAILING trimChar FROM str) - Remove the trailing trimChar from `str`
+    _FUNC_(BOTH trimString FROM str) - Remove the leading and trailing trimString from `str`
+    _FUNC_(LEADING trimChar FROM str) - Remove the leading trimString from `str`
+    _FUNC_(TRAILING trimChar FROM str) - Remove the trailing trimString from `str`
   """,
   extended = """
     Arguments:
       str - a string expression
-      trimChar - the trim character
-      BOTH, FROM - these are keyword to specify for trim character from both side of the string
-      LEADING, FROM - these are keyword to specify for trim character from left side of the string
-      TRAILING, FROM - these are keyword to specify for trim character from right side of the string
+      trimString - the trim string
+      BOTH, FROM - these are keyword to specify for trim string from both side of the string
+      LEADING, FROM - these are keyword to specify for trim string from left side of the string
+      TRAILING, FROM - these are keyword to specify for trim string from right side of the string
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_(BOTH 'S' FROM 'SSparkSQLS');
-       parkSQL
-      > SELECT _FUNC_(LEADING 'S' FROM 'SSparkSQLS');
-       parkSQLS
-      > SELECT _FUNC_(TRAILING 'S' FROM 'SSparkSQLS');
-       SSparkSQL
+      > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
+       parkSQ
+      > SELECT _FUNC_(LEADING 'paS' FROM 'SSparkSQLS');
+       rkSQLS
+      > SELECT _FUNC_(TRAILING 'SLQ' FROM 'SSparkSQLS');
+       SSparkS
   """)
 case class StringTrim(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes {
@@ -551,22 +551,15 @@ case class StringTrim(children: Seq[Expression])
       if (children.size == 1) {
         return inputs(0).trim()
       } else if (inputs(1) != null) {
-        if (inputs(0).numChars > 1) {
-          throw new AnalysisException(s"Trim character '${inputs(0)}' can not be greater than " +
-            s"1 character.")
-        } else {
-          return inputs(1).trim(inputs(0))
-        }
+        return inputs(1).trim(inputs(0))
       }
     }
     null
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.size == 2 &&
-      (! children(0).isInstanceOf[Literal] || children(0).toString.length > 1)) {
-      throw new AnalysisException(s"The trimming parameter should be Literal " +
-        s"and only one character.") }
+    if (children.size == 2 && ! children(0).isInstanceOf[Literal]) {
+      throw new AnalysisException(s"The trimming parameter should be Literal.")}
 
     val evals = children.map(_.genCode(ctx))
     val inputs = evals.map { eval =>
@@ -600,22 +593,22 @@ case class StringTrim(children: Seq[Expression])
 }
 
 /**
- * A function that trim the spaces or a character from left end for given string.
+ * A function that trim the spaces or a trim string from left end for given string.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading space characters from `str`.
-    _FUNC_(trimChar, str) - Remove the leading trimChar from `str`
+    _FUNC_(trimStr, str) - Removes the leading string contains the characters from the trim string from the `str`
   """,
   extended = """
     Arguments:
       str - a string expression
-      trimChar - the trim character
+      trimStr - the trim string
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('S', 'SSparkSQLS');
-       parkSQLS
+      > SELECT _FUNC_('Sp', 'SSparkSQLS');
+       arkSQLS
   """)
 case class StringTrimLeft(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes {
@@ -637,22 +630,15 @@ case class StringTrimLeft(children: Seq[Expression])
       if (children.size == 1) {
         return inputs(0).trimLeft()
       } else if (inputs(1) != null) {
-        if (inputs(0).numChars > 1) {
-          throw new AnalysisException(s"Trim character '${inputs(0)}' can not be greater than" +
-            s" 1 character.")
-        } else {
-          return inputs(1).trimLeft(inputs(0))
-        }
+        return inputs(1).trimLeft(inputs(0))
       }
     }
     null
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.size == 2 &&
-      (! children(0).isInstanceOf[Literal] || children(0).toString.length > 1)) {
-      throw new AnalysisException(s"The trimming parameter should be Literal " +
-        s"and only one character.") }
+    if (children.size == 2 && ! children(0).isInstanceOf[Literal]) {
+      throw new AnalysisException(s"The trimming parameter should be Literal.")}
 
     val evals = children.map(_.genCode(ctx))
     val inputs = evals.map { eval =>
@@ -687,22 +673,22 @@ case class StringTrimLeft(children: Seq[Expression])
 }
 
 /**
- * A function that trim the spaces or a character from right end for given string.
+ * A function that trim the spaces or a trim string from right end for given string.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
-    _FUNC_(trimChar, str) - Remove the trailing trimChar from `str`
+    _FUNC_(trimStr, str) - Removes the trailing string which contains the character from the trim string from the `str`
   """,
   extended = """
     Arguments:
       str - a string expression
-      trimChar - the trim character
+      trimStr - the trim string
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_('S', 'SSparkSQLS');
-       SSparkSQL
+      > SELECT _FUNC_('LQSa', 'SSparkSQLS');
+       SSpark
   """)
 case class StringTrimRight(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes {
@@ -724,22 +710,15 @@ case class StringTrimRight(children: Seq[Expression])
       if (children.size == 1) {
         return inputs(0).trimRight()
       } else if (inputs(1) != null) {
-        if (inputs(0).numChars > 1) {
-          throw new AnalysisException(s"Trim character '${inputs(0)}' can not be greater than" +
-            s" 1 character.")
-        } else {
-          return inputs(1).trimRight(inputs(0))
+        return inputs(1).trimRight(inputs(0))
         }
       }
-    }
     null
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.size == 2 &&
-      (! children(0).isInstanceOf[Literal] || children(0).toString.length > 1)) {
-      throw new AnalysisException(s"The trimming parameter should be Literal " +
-        s"and only one character.") }
+    if (children.size == 2 && ! children(0).isInstanceOf[Literal]) {
+      throw new AnalysisException(s"The trimming parameter should be Literal.")}
 
     val evals = children.map(_.genCode(ctx))
     val inputs = evals.map { eval =>

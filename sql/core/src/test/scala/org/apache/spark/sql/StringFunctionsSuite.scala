@@ -172,6 +172,14 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("xample", "exampl", "xampl"))
 
     checkAnswer(
+      df.select(ltrim($"c", "xe"), rtrim($"c", "emlp"), trim("elxp", $"c")),
+      Row("ample", "exa", "am"))
+
+    checkAnswer(
+      df.select(trim("xyz", $"c")),
+      Row("example"))
+
+    checkAnswer(
       df.selectExpr("ltrim(a)", "rtrim(a)", "trim(a)"),
       Row("example  ", "  example", "example"))
   }

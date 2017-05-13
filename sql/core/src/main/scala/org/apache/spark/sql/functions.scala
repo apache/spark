@@ -2334,12 +2334,12 @@ object functions {
   def ltrim(e: Column): Column = withExpr {StringTrimLeft(Seq(e.expr))}
 
   /**
-   * Trim the specified character from left ends for the specified string column.
+   * Trim the specified character string from left ends for the specified string column.
    * @group string_funcs
    * @since 2.0.0
    */
-  def ltrim(e: Column, trimChar: String): Column =
-    withExpr { StringTrimLeft(Seq(Literal(trimChar), e.expr))}
+  def ltrim(e: Column, trimString: String): Column =
+    withExpr { StringTrimLeft(Seq(Literal(trimString), e.expr))}
 
   /**
    * Extract a specific group matched by a Java regex, from the specified string column.
@@ -2419,12 +2419,12 @@ object functions {
   def rtrim(e: Column): Column = withExpr { StringTrimRight(Seq(e.expr)) }
 
   /**
-   * Trim the specified character from right ends for the specified string column.
+   * Trim the specified character string from right ends for the specified string column.
    * @group string_funcs
    * @since 2.0.0
    */
-  def rtrim(e: Column, trimChar: String): Column =
-    withExpr { StringTrimRight(Seq(Literal(trimChar), e.expr))}
+  def rtrim(e: Column, trimString: String): Column =
+    withExpr { StringTrimRight(Seq(Literal(trimString), e.expr))}
 
   /**
    * Returns the soundex code for the specified expression.
@@ -2498,8 +2498,8 @@ object functions {
    * @group string_funcs
    * @since 2.0.0
    */
-  def trim(trimChar: String, e: Column): Column =
-    withExpr { StringTrim(Seq(Literal(trimChar), e.expr))}
+  def trim(trimString: String, e: Column): Column =
+    withExpr { StringTrim(Seq(Literal(trimString), e.expr))}
 
   /**
    * Converts a string column to upper case.

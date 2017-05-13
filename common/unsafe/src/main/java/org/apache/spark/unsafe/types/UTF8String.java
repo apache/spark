@@ -511,57 +511,63 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Removes all specified trim character either from the beginning or the ending of a string
-   * @param trimChar the trim character
+   * Removes all specified trim character string either from the beginning or the ending of a string
+   * @param trimString the trim character string
    */
-  public UTF8String trim(UTF8String trimChar) {
-    int numTrimBytes = trimChar.numBytes;
-    if (numTrimBytes == 0) {
-      return this;
-    }
-    int s = 0;
-    // e is the search index in the input string, starting with the trim character's bytes
-    // boundary, moving from right to left.
-    int e = this.numBytes - numTrimBytes;
-    // skip all the consecutive matching characters from left to right.
-    while (s < this.numBytes && s == this.find(trimChar, s)) {
-      s += numTrimBytes;
-    }
-    // skip all the consecutive matching character in the right side.
-    // if the trimming character has more bytes than the input string, 'e' points to the end
-    // of input string.
-    // The search index 'e' will be first positioned at the offset from the end of the input
-    // string by the number of bytes of the trimming character, if a matching is found, continue
-    // moving left until the string is exhausted or a non-matching character is hit. Every move
-    // is the number of bytes of the trimming character. When a non-matching character is hit,
-    // 'e' needs to be positioned back to the last byte of the non-matching character.
-    // example 1:
-    // trim character: 数, input string: 头, both character has 3 bytes. e starts
-    // 0, rfind could not find matching, index 'e' goes back to the last byte of
-    // no matching position.
-    // example 2:
-    // trim character: 数, input string a, 'a' has 1 byte, '数' has 3 bytes, e starts with -2,
-    // it should return with the input string
-    // example 3:
-    // trim character: 数, input string aaa数, 'aaa数' has 6 bytes, '数' has 3 bytes, e start with
-    // 3, find matching, move 3 bytes to position 0, didn't find matching, the index e goes back
-    // to the last byte of no matching position.
-    if (e < 0) {
-      e = this.numBytes - 1;
-    } else {
-      while (e >= 0 && e == this.rfind(trimChar, e)) {
-        e -= numTrimBytes;
+  public UTF8String trim(UTF8String trimString) {
+    // this method do the trimLeft first, then trimRight
+    int s = 0; // the searching byte position of the input string
+    int i = 0; // the first beginning byte position of a non-matching character
+    int e = 0; // the last byte position
+    int numChars = 0; // number of characters from the input string
+    int[] stringCharLen = new int[numBytes]; // array of character length for the input string
+    int[] stringCharPos = new int[numBytes]; // array of the first byte position for each character in the input string
+    int searchCharBytes;
+
+    while (s < this.numBytes) {
+      UTF8String searchChar = copyUTF8String(s, s + numBytesForFirstByte(this.getByte(s)) - 1);
+      searchCharBytes = searchChar.numBytes;
+      // try to find the matching for the searchChar in the trimString set
+      if (trimString.find(searchChar, 0) >= 0) {
+        i += searchCharBytes;
+      } else {
+        // no matching, exit the search
+        break;
       }
-      if (e >= 0) {
-        e += numTrimBytes - 1;
-      }
+      s += searchCharBytes;
     }
 
-    if (s > e) {
+    if (i >= this.numBytes) {
       // empty string
       return UTF8String.EMPTY_UTF8;
     } else {
-      return copyUTF8String(s, e);
+      //build the position and length array
+      s = 0;
+      while (s < numBytes) {
+        stringCharPos[numChars] = s;
+        stringCharLen[numChars]= numBytesForFirstByte(getByte(s));
+        s += stringCharLen[numChars];
+        numChars ++;
+      }
+
+      e = this.numBytes - 1;
+      while (numChars > 0) {
+        UTF8String searchChar =
+          copyUTF8String(stringCharPos[numChars-1], stringCharPos[numChars-1] + stringCharLen[numChars-1] - 1);
+        if (trimString.find(searchChar, 0) >= 0) {
+          e -= stringCharLen[numChars-1];
+        } else {
+          break;
+        }
+        numChars --;
+      }
+    }
+
+    if (i > e) {
+      // empty string
+      return UTF8String.EMPTY_UTF8;
+    } else {
+      return copyUTF8String(i, e);
     }
   }
 
@@ -578,24 +584,34 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Removes all specified trim character from the beginning of a string
-   * @param trimChar the trim character
+   * Removes all specified trim characters from the beginning of a string
+   * @param trimString the trim character string
    */
-  public UTF8String trimLeft(UTF8String trimChar) {
-    int numTrimBytes = trimChar.numBytes;
-    if (numTrimBytes == 0) {
-      return this;
+  public UTF8String trimLeft(UTF8String trimString) {
+    // this method will get one character from the input string, try to find the the matching character from
+    // the trimString set.
+    int s = 0; // the searching byte position of the input string
+    int i = 0; // the first beginning byte position of a non-matching character
+    int searchCharBytes;
+
+    while (s < this.numBytes) {
+      UTF8String searchChar = copyUTF8String(s, s + numBytesForFirstByte(this.getByte(s)) - 1);
+      searchCharBytes = searchChar.numBytes;
+      // try to find the matching for the searchChar in the trimString set
+      if (trimString.find(searchChar, 0) >= 0) {
+        i += searchCharBytes;
+      } else {
+        // no matching, exit the search
+        break;
+      }
+      s += searchCharBytes;
     }
-    int s = 0;
-    // skip all the consecutive matching character in the left side
-    while(s < this.numBytes && s == this.find(trimChar, s)) {
-      s += numTrimBytes;
-    }
-    if (s == this.numBytes) {
+
+    if (i >= this.numBytes) {
       // empty string
       return UTF8String.EMPTY_UTF8;
     } else {
-      return copyUTF8String(s, this.numBytes - 1);
+      return copyUTF8String(i, this.numBytes -1);
     }
   }
 
@@ -614,33 +630,44 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   /**
    * Removes all specified trim character from the ending of a string
-   * @param trimChar the trim character
+   * @param trimString the trim character string
    */
-  public UTF8String trimRight(UTF8String trimChar) {
-    int numTrimBytes = trimChar.numBytes;
-    if (numTrimBytes == 0) {
-      return this;
+  public UTF8String trimRight(UTF8String trimString) {
+    // this method will get one character from the input string from right to left, then try to find
+    // the matching character from the trimString set
+
+    // index e points to first no matching byte position in the input string from right side,
+    // it moves the number of bytes of the trimming character first.
+    int e;
+    int i = 0;
+    int numChars = 0; // number of characters from the input string
+    int[] stringCharLen = new int[numBytes]; // array of character length for the input string
+    int[] stringCharPos = new int[numBytes]; // array of the first byte position for each character in the input string
+    //build the position and length array
+    while (i < numBytes) {
+      stringCharPos[numChars] = i;
+      stringCharLen[numChars]= numBytesForFirstByte(getByte(i));
+      i += stringCharLen[numChars];
+      numChars ++;
     }
-    int e = this.numBytes - numTrimBytes;
-    // skip all the consecutive matching character in the right side
-    // index 'e' points to first no matching byte position in the input string from right side.
-    // Index 'e' moves the number of bytes of the trimming character first.
-    if (e < 0) {
-      e = this.numBytes - 1;
-    } else {
-      while (e >= 0 && e == this.rfind(trimChar, e)) {
-        e -= numTrimBytes;
+
+    e = this.numBytes - 1;
+    while (numChars > 0) {
+      UTF8String searchChar =
+        copyUTF8String(stringCharPos[numChars-1], stringCharPos[numChars-1] + stringCharLen[numChars-1] - 1);
+      if (trimString.find(searchChar, 0) >= 0) {
+        e -= stringCharLen[numChars-1];
+      } else {
+        break;
       }
-      if (e >= 0) {
-        e += numTrimBytes - 1;
-      }
+      numChars --;
     }
 
     if (e < 0) {
       // empty string
       return UTF8String.EMPTY_UTF8;
     } else {
-      return copyUTF8String(0, e);
+      return copyUTF8String(0,e);
     }
   }
 
