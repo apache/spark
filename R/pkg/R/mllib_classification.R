@@ -31,6 +31,7 @@ setClass("LinearSVCModel", representation(jobj = "jobj"),
 #'
 #' @param jobj a Java object reference to the backing Scala LogisticRegressionModel
 #' @export
+#' @include mllib_wrapper.R
 #' @note LogisticRegressionModel since 2.1.0
 setClass("LogisticRegressionModel", representation(jobj = "jobj"),
          contains = c("JavaModel", "JavaMLWritable"))
