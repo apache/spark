@@ -600,6 +600,21 @@ Bucketing and sorting is applicable only to persistent tables:
 {% include_example write_sorting_and_bucketing python/sql/datasource.py %}
 </div>
 
+<div data-lang="sql"  markdown="1">
+
+{% highlight sql %}
+
+CREATE TABLE users_bucketed_by_name(
+  name STRING,
+  favorite_color STRING,
+  favorite_NUMBERS array<integer>
+) USING parquet 
+CLUSTERED BY(name) INTO 42 BUCKETS;
+
+{% endhighlight %}
+
+</div>
+
 </div>
 
 while partitioning can be used with both `save` and `saveAsTable`:
@@ -648,6 +663,22 @@ It is possible to use both partitions and buckets for a single table:
 
 <div data-lang="python"  markdown="1">
 {% include_example write_partition_and_bucket python/sql/datasource.py %}
+</div>
+
+<div data-lang="sql"  markdown="1">
+
+{% highlight sql %}
+
+CREATE TABLE users_bucketed_and_partitioned(
+  name STRING,
+  favorite_color STRING,
+  favorite_NUMBERS array<integer>
+) USING parquet 
+PARTITIONED BY (favorite_color)
+CLUSTERED BY(name) INTO 42 BUCKETS;
+
+{% endhighlight %}
+
 </div>
 
 </div>
