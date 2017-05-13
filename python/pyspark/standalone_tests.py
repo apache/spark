@@ -40,6 +40,7 @@ if __name__ == "__main__":
         # Verify stdout/stderr overwrite support for jupyter
         sys.stdout = new_stdout = StringIO()
         sys.stderr = new_stderr = StringIO()
+        print("Redirected to {0} / {1}".format(sys.stdout, sys.stderr))
 
     from pyspark.sql import SparkSession
     if 'numpy' in sys.modules:
