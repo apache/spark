@@ -640,8 +640,9 @@ while partitioning can be used with both `save` and `saveAsTable`:
 
 CREATE TABLE users_by_favorite_color(
   name STRING, 
+  favorite_color STRING,
   favorite_NUMBERS array<integer>
-) PARTITIONED BY(favorite_color STRING);
+) USING csv PARTITIONED BY(favorite_color);
 
 {% endhighlight %}
 
