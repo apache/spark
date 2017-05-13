@@ -3770,16 +3770,15 @@ setMethod("alias",
             dataFrame(sdf)
           })
 
-
 #' broadcast
-#' 
-#' Return a new SparkDataFrame marked as small enough for use in broadcast joins. 
-#' 
-#' Equivalent to hint(x, "broadcast).
-#' 
+#'
+#' Return a new SparkDataFrame marked as small enough for use in broadcast joins.
+#'
+#' Equivalent to \code{hint(x, "broadcast")}.
+#'
 #' @param x a SparkDataFrame.
 #' @return a SparkDataFrame.
-#' 
+#'
 #' @aliases broadcast,SparkDataFrame-method
 #' @family SparkDataFrame functions
 #' @rdname broadcast
