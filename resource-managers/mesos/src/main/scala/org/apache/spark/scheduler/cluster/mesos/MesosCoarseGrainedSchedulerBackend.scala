@@ -72,7 +72,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   private val useFetcherCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false)
-
+  private val gpuCores = conf.getInt("spark.mesos.gpus", 0)
   private val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
 
   private val gpuCores = conf.getInt("spark.mesos.gpus", 0)
