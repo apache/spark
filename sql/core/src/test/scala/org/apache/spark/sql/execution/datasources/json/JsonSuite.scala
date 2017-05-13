@@ -1992,25 +1992,13 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-18772: Parse special floats correctly") {
     val jsons = Seq(
-      """{"a": "+INF"}""",
-      """{"a": "INF"}""",
-      """{"a": "-INF"}""",
       """{"a": "NaN"}""",
-      """{"a": "+NaN"}""",
-      """{"a": "-NaN"}""",
       """{"a": "Infinity"}""",
-      """{"a": "+Infinity"}""",
       """{"a": "-Infinity"}""")
 
     // positive cases
     val checks: Seq[Double => Boolean] = Seq(
-      _.isPosInfinity,
-      _.isPosInfinity,
-      _.isNegInfinity,
       _.isNaN,
-      _.isNaN,
-      _.isNaN,
-      _.isPosInfinity,
       _.isPosInfinity,
       _.isNegInfinity)
 

@@ -126,12 +126,10 @@ class JacksonParser(
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
           parser.getText match {
-            case "NaN" | "+NaN" | "-NaN" => Float.NaN
-            case "+INF" | "INF" | "+Infinity" | "Infinity" => Float.PositiveInfinity
-            case "-INF" | "-Infinity" => Float.NegativeInfinity
-            case other => Try(other.toFloat).getOrElse {
-              throw new RuntimeException(s"Cannot parse $other as FloatType.")
-            }
+            case "NaN" => Float.NaN
+            case "Infinity" => Float.PositiveInfinity
+            case "-Infinity" => Float.NegativeInfinity
+            case other => throw new RuntimeException(s"Cannot parse $other as FloatType.")
           }
       }
 
@@ -143,12 +141,10 @@ class JacksonParser(
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
           parser.getText match {
-            case "NaN" | "+NaN" | "-NaN" => Double.NaN
-            case "+INF" | "INF" | "+Infinity" | "Infinity" => Double.PositiveInfinity
-            case "-INF" | "-Infinity" => Double.NegativeInfinity
-            case other => Try(other.toDouble).getOrElse {
-              throw new RuntimeException(s"Cannot parse $other as DoubleType.")
-            }
+            case "NaN" => Double.NaN
+            case "Infinity" => Double.PositiveInfinity
+            case "-Infinity" => Double.NegativeInfinity
+            case other => throw new RuntimeException(s"Cannot parse $other as DoubleType.")
           }
       }
 
