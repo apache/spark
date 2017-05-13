@@ -25,10 +25,10 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.StringType
 
 
-class CombineConcatSuite extends PlanTest with PredicateHelper {
+class CombineConcatsSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("CombineConcatSuite", FixedPoint(50), CombineConcat) :: Nil
+    val batches = Batch("CombineConcatsSuite", FixedPoint(50), CombineConcats) :: Nil
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {

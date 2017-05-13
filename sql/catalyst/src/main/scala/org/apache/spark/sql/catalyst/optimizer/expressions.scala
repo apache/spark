@@ -548,9 +548,9 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
 /**
  * Combine nested [[Concat]] expressions.
  */
-object CombineConcat extends Rule[LogicalPlan] {
+object CombineConcats extends Rule[LogicalPlan] {
 
-  private def flattenConcat(concat: Concat): Concat = {
+  private def flattenConcats(concat: Concat): Concat = {
     val stack = Stack[Expression](concat)
     val flattened = ArrayBuffer.empty[Expression]
     while (stack.nonEmpty) {
@@ -566,6 +566,6 @@ object CombineConcat extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
     case concat: Concat if concat.children.exists(_.isInstanceOf[Concat]) =>
-      flattenConcat(concat)
+      flattenConcats(concat)
   }
 }
