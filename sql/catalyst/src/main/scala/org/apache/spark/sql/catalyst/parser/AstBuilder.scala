@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
@@ -44,8 +45,10 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
+class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging {
   import ParserUtils._
+
+  def this() = this(new SQLConf())
 
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
@@ -696,7 +699,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     val tvf = UnresolvedTableValuedFunction(
       func.identifier.getText, func.expression.asScala.map(expression), aliases)
-    tvf.optionalMap(func.tableAlias.identifier)(aliasPlan)
+    tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 
   /**
@@ -721,7 +724,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
 
     val table = UnresolvedInlineTable(aliases, rows)
-    table.optionalMap(ctx.tableAlias.identifier)(aliasPlan)
+    table.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
   }
 
   /**
@@ -1423,7 +1426,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Special characters can be escaped by using Hive/C-style escaping.
    */
   private def createString(ctx: StringLiteralContext): String = {
-    ctx.STRING().asScala.map(string).mkString
+    if (conf.escapedStringLiterals) {
+      ctx.STRING().asScala.map(stringWithoutUnescape).mkString
+    } else {
+      ctx.STRING().asScala.map(string).mkString
+    }
   }
 
   /**

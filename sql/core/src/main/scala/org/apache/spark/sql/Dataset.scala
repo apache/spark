@@ -615,7 +615,8 @@ class Dataset[T] private[sql](
         .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'"))
     require(parsedDelay.milliseconds >= 0 && parsedDelay.months >= 0,
       s"delay threshold ($delayThreshold) should not be negative.")
-    EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
+    EliminateEventTimeWatermark(
+      EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))
   }
 
   /**
@@ -2805,7 +2806,7 @@ class Dataset[T] private[sql](
   def toJSON: Dataset[String] = {
     val rowSchema = this.schema
     val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
-    val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
+    mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JacksonGenerator(rowSchema, writer,
@@ -2814,7 +2815,7 @@ class Dataset[T] private[sql](
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext
         override def next(): String = {
-          gen.write(iter.next())
+          gen.write(exprEnc.toRow(iter.next()))
           gen.flush()
 
           val json = writer.toString
@@ -2827,9 +2828,7 @@ class Dataset[T] private[sql](
           json
         }
       }
-    }
-    import sparkSession.implicits.newStringEncoder
-    sparkSession.createDataset(rdd)
+    } (Encoders.STRING)
   }
 
   /**

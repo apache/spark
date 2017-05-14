@@ -480,7 +480,7 @@ relationPrimary
     ;
 
 inlineTable
-    : VALUES expression (',' expression)*  tableAlias
+    : VALUES expression (',' expression)* tableAlias
     ;
 
 functionTable
@@ -488,7 +488,7 @@ functionTable
     ;
 
 tableAlias
-    : (AS? identifier identifierList?)?
+    : (AS? strictIdentifier identifierList?)?
     ;
 
 rowFormat

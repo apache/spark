@@ -47,5 +47,5 @@
     <suppress checks="MethodName"
               files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/GroupStateTimeout.java"/>
     <suppress checks="MethodName"
-              files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
+              files="sql/core/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
 </suppressions>

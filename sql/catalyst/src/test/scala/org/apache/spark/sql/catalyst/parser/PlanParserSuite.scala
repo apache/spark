@@ -473,11 +473,11 @@ class PlanParserSuite extends PlanTest {
 
   test("SPARK-20311 range(N) as alias") {
     assertEqual(
-      "select * from range(10) AS t",
+      "SELECT * FROM range(10) AS t",
       SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(10) :: Nil, Seq.empty))
         .select(star()))
     assertEqual(
-      "select * from range(7) AS t(a)",
+      "SELECT * FROM range(7) AS t(a)",
       SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(7) :: Nil, "a" :: Nil))
         .select(star()))
   }

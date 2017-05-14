@@ -21,7 +21,7 @@ context("Structured Streaming")
 
 # Tests for Structured Streaming functions in SparkR
 
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 jsonSubDir <- file.path("sparkr-test", "json", "")
 if (.Platform$OS.type == "windows") {

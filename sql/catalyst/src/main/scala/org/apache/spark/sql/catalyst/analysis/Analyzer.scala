@@ -2128,7 +2128,7 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(func, _, inputs, _, _) =>
+        case udf @ ScalaUDF(func, _, inputs, _, _, _) =>
           val parameterTypes = ScalaReflection.getParameterTypes(func)
           assert(parameterTypes.length == inputs.length)
 
@@ -2453,6 +2453,16 @@ object CleanupAliases extends Rule[LogicalPlan] {
       other transformExpressionsDown {
         case Alias(child, _) => child
       }
+  }
+}
+
+/**
+ * Ignore event time watermark in batch query, which is only supported in Structured Streaming.
+ * TODO: add this rule into analyzer rule list.
+ */
+object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case EventTimeWatermark(_, _, child) if !child.isStreaming => child
   }
 }
 
