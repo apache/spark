@@ -53,7 +53,8 @@ public class YarnShuffleServiceMetrics implements MetricsSource {
   }
 
   @VisibleForTesting
-  public static void collectMetric(MetricsRecordBuilder metricsRecordBuilder, String name, Metric metric) {
+  public static void collectMetric(
+          MetricsRecordBuilder metricsRecordBuilder, String name, Metric metric) {
 
     // The metric types used in ExternalShuffleBlockHandler.ShuffleMetrics
     if (metric instanceof Timer) {
