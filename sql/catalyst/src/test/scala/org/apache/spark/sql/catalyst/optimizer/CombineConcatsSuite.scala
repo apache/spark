@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.StringType
 
 
-class CombineConcatsSuite extends PlanTest with PredicateHelper {
+class CombineConcatsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("CombineConcatsSuite", FixedPoint(50), CombineConcats) :: Nil
