@@ -607,7 +607,7 @@ Bucketing and sorting are applicable only to persistent tables:
 CREATE TABLE users_bucketed_by_name(
   name STRING,
   favorite_color STRING,
-  favorite_NUMBERS array<integer>
+  favorite_numbers array<integer>
 ) USING parquet 
 CLUSTERED BY(name) INTO 42 BUCKETS;
 
@@ -641,7 +641,7 @@ while partitioning can be used with both `save` and `saveAsTable` when using the
 CREATE TABLE users_by_favorite_color(
   name STRING, 
   favorite_color STRING,
-  favorite_NUMBERS array<integer>
+  favorite_numbers array<integer>
 ) USING csv PARTITIONED BY(favorite_color);
 
 {% endhighlight %}
