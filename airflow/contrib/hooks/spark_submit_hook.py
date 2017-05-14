@@ -254,12 +254,11 @@ class SparkSubmitHook(BaseHook):
 
     def on_kill(self):
         if self._sp and self._sp.poll() is None:
-            logging.info('Sending kill signal to spark-submit')
-            self.sp.kill()
+            logging.info('Sending kill signal to {}'.format(self._connection['spark_binary']))
+            self._sp.kill()
 
             if self._yarn_application_id:
                 logging.info('Killing application on YARN')
-                yarn_kill = subprocess.Popen("yarn application -kill {0}".format(self._yarn_application_id),
-                                             stdout=subprocess.PIPE,
-                                             stderr=subprocess.PIPE)
+                kill_cmd = "yarn application -kill {0}".format(self._yarn_application_id).split()
+                yarn_kill = subprocess.Popen(kill_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 logging.info("YARN killed with return code: {0}".format(yarn_kill.wait()))
