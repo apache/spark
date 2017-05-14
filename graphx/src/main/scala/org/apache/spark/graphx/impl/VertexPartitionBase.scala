@@ -59,8 +59,8 @@ private[graphx] object VertexPartitionBase {
  * `VertexPartitionBaseOpsConstructor` typeclass (for example,
  * `VertexPartition.VertexPartitionOpsConstructor`).
  */
-private[graphx] abstract class VertexPartitionBase[@specialized(Long, Int, Double) VD: ClassTag]
-  extends Serializable {
+private[graphx] abstract class VertexPartitionBase[@specialized(Long, Int, Double, Float)
+  VD: ClassTag] extends Serializable {
 
   def index: VertexIdToIndexMap
   def values: Array[VD]
