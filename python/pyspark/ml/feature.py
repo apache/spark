@@ -2118,14 +2118,14 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     stringOrderType = Param(Params._dummy(), "stringOrderType",
                             "How to order labels of string column. The first label after " +
                             "ordering is assigned an index of 0. Supported options: " +
-                            "frequencyDesc, frequencyAsc, alphabetDsc, alphabetAsc.",
+                            "frequencyDesc, frequencyAsc, alphabetDsec, alphabetAsc.",
                             typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
                  stringOrderType="frequencyDesc"):
         """
-        __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
+        __init__(self, inputCol=None, outputCol=None, handleInvalid="error", \
                  stringOrderType="frequencyDesc")
         """
         super(StringIndexer, self).__init__()
@@ -2139,7 +2139,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     def setParams(self, inputCol=None, outputCol=None, handleInvalid="error",
                   stringOrderType="frequencyDesc"):
         """
-        setParams(self, inputCol=None, outputCol=None, handleInvalid="error",
+        setParams(self, inputCol=None, outputCol=None, handleInvalid="error", \
                   stringOrderType="frequencyDesc")
         Sets params for this StringIndexer.
         """
@@ -2159,7 +2159,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     @since("2.3.0")
     def getStringOrderType(self):
         """
-        Gets the value of stringOrderType or its default value.
+        Gets the value of :py:attr:`stringOrderType` or its default value.
         """
         return self.getOrDefault(self.stringOrderType)
 
