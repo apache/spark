@@ -673,10 +673,10 @@ It is possible to use both partitioning and bucketing for a single table:
 CREATE TABLE users_bucketed_and_partitioned(
   name STRING,
   favorite_color STRING,
-  favorite_NUMBERS array<integer>
+  favorite_numbers array<integer>
 ) USING parquet 
 PARTITIONED BY (favorite_color)
-CLUSTERED BY(name) INTO 42 BUCKETS;
+CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
 
 {% endhighlight %}
 
