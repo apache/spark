@@ -157,4 +157,26 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("Leaf transformation") {
+    val trainRdd = sc.parallelize(GradientBoostedTreesSuite.trainData, 2)
+
+    Array(Classification, Regression).foreach { algo =>
+      val trees = Range(0, 3).map(_ => DecisionTreeSuite.createModel(algo)).toArray
+
+      val numLeave = trees.map { tree =>
+        tree.topNode.subtreeIterator.count(_.isLeaf)
+      }
+
+      val model = new RandomForestModel(algo, trees)
+      val leafRdd = model.leaf(trainRdd.map(_.features))
+      leafRdd.collect.foreach { vec =>
+        assert(vec.size === 3)
+        (vec.toArray zip numLeave).foreach {
+          case (value, num) =>
+            assert(value >= 0 && value < num)
+        }
+      }
+    }
+  }
+
 }
