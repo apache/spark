@@ -2118,29 +2118,29 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     stringOrderType = Param(Params._dummy(), "stringOrderType",
                             "how to order labels of string column. The first label after ordering " +
                             " is assigned an index of 0. Supported options: " +
-                            "frequencyDsc, frequencyAsc, frequencyDsc, frequencyDsc.",
+                            "frequencyDesc, frequencyAsc, alphabetDsc, alphabetAsc.",
                             typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
-                 stringOrderType="frequencyDsc"):
+                 stringOrderType="frequencyDesc"):
         """
         __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
-                 stringOrderType="frequencyDsc")
+                 stringOrderType="frequencyDesc")
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
-        self._setDefault(handleInvalid="error", stringOrderType="frequencyDsc")
+        self._setDefault(handleInvalid="error", stringOrderType="frequencyDesc")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
     def setParams(self, inputCol=None, outputCol=None, handleInvalid="error",
-                  stringOrderType="frequencyDsc"):
+                  stringOrderType="frequencyDesc"):
         """
         setParams(self, inputCol=None, outputCol=None, handleInvalid="error",
-                  stringOrderType="frequencyDsc")
+                  stringOrderType="frequencyDesc")
         Sets params for this StringIndexer.
         """
         kwargs = self._input_kwargs
