@@ -2116,8 +2116,8 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     """
 
     stringOrderType = Param(Params._dummy(), "stringOrderType",
-                            "How to order labels of string column. The first label after ordering " +
-                            " is assigned an index of 0. Supported options: " +
+                            "How to order labels of string column. The first label after " +
+                            "ordering is assigned an index of 0. Supported options: " +
                             "frequencyDesc, frequencyAsc, alphabetDsc, alphabetAsc.",
                             typeConverter=TypeConverters.toString)
 
@@ -2162,6 +2162,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         Gets the value of stringOrderType or its default value.
         """
         return self.getOrDefault(self.stringOrderType)
+
 
 class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
