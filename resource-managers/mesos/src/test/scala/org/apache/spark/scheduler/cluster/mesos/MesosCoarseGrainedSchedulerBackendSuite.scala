@@ -190,10 +190,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
                         Resources(executorMemory, 1, 2)))
 
     val taskInfos = verifyTaskLaunched(driver, "o1")
-    assert(backend.getResource(taskInfos.head.getResourcesList, "gpus") == executorGpus)
+    assert(backend.getResource(taskInfos.head.getResourcesList, "gpus") == 2)
 
-    val taskInfos = verifyTaskLaunched(driver, "o2")
-    assert(backend.getResource(taskInfos.head.getResourcesList, "gpus") == executorGpus)
+    taskInfos = verifyTaskLaunched(driver, "o2")
+    assert(backend.getResource(taskInfos.head.getResourcesList, "gpus") == 2)
 
     verifyDeclinedOffer(driver, createOfferId("o3"), true)
   }
