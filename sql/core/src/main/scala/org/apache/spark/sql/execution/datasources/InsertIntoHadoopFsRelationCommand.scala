@@ -49,11 +49,9 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex])
-  extends RunnableCommand {
+  extends WriteDataOutCommand {
 
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
-
-  override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
@@ -136,7 +134,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
       FileFormatWriter.write(
         sparkSession = sparkSession,
-        queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
+        queryExecution = Dataset.ofRows(sparkSession, writeDataOutQuery).queryExecution,
         fileFormat = fileFormat,
         committer = committer,
         outputSpec = FileFormatWriter.OutputSpec(

@@ -36,7 +36,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.command.WriteDataOutCommand
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
@@ -78,9 +78,7 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifNotExists: Boolean) extends RunnableCommand {
-
-  override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
+    ifNotExists: Boolean) extends WriteDataOutCommand {
 
   var createdTempDir: Option[Path] = None
 
@@ -310,7 +308,7 @@ case class InsertIntoHiveTable(
 
     FileFormatWriter.write(
       sparkSession = sparkSession,
-      queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
+      queryExecution = Dataset.ofRows(sparkSession, writeDataOutQuery).queryExecution,
       fileFormat = new HiveFileFormat(fileSinkConf),
       committer = committer,
       outputSpec = FileFormatWriter.OutputSpec(tmpLocation.toString, Map.empty),

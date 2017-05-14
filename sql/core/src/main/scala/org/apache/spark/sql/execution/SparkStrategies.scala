@@ -346,7 +346,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case w: WriteDataOutCommand => WrittenDataCommandExec(w) :: Nil
+
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
+
+      case WriteDataOut(child) =>
+        WriteDataOutExec(planLater(child)) :: Nil
 
       case MemoryPlan(sink, output) =>
         val encoder = RowEncoder(sink.schema)
