@@ -47,7 +47,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
    * @group param
    */
   @Since("1.6.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "How to handle " +
     "invalid data (unseen labels or NULL values). " +
     "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
@@ -73,7 +73,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
    */
   @Since("2.3.0")
   final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
-    "how to order labels of string column. " +
+    "How to order labels of string column. " +
     "The first label after ordering is assigned an index of 0. " +
     s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
     ParamValidators.inArray(StringIndexer.supportedStringOrderType))

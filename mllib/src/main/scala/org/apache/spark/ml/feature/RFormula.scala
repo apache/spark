@@ -51,7 +51,7 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
    */
   @Since("2.3.0")
   final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
-    "how to order labels of string column. " +
+    "How to order labels of string column. " +
     "The first label after ordering is assigned an index of 0. " +
     s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
     ParamValidators.inArray(StringIndexer.supportedStringOrderType))
