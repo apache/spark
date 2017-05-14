@@ -2329,6 +2329,7 @@
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
               <include>com.google.guava:guava</include>
+              <include>com.google.protobuf:protobuf-java</include>
             </includes>
           </artifactSet>
           <relocations>
@@ -2342,6 +2343,10 @@
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.protobuf</pattern>
+              <shadedPattern>org.spark-project.protobuf</shadedPattern>
             </relocation>
           </relocations>
         </configuration>
