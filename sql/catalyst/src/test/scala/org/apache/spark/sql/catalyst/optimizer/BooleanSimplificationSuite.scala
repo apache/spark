@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -26,11 +25,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.Row
 
 class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val conf = SimpleCatalystConf(caseSensitiveAnalysis = true)
     val batches =
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
@@ -42,6 +42,16 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
+
+  val testRelationWithData = LocalRelation.fromExternalRows(
+    testRelation.output, Seq(Row(1, 2, 3, "abc"))
+  )
+
+  private def checkCondition(input: Expression, expected: LogicalPlan): Unit = {
+    val plan = testRelationWithData.where(input).analyze
+    val actual = Optimize.execute(plan)
+    comparePlans(actual, expected)
+  }
 
   private def checkCondition(input: Expression, expected: Expression): Unit = {
     val plan = testRelation.where(input).analyze
@@ -139,7 +149,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     checkCondition(!(('a || 'b) && ('c || 'd)), (!'a && !'b) || (!'c && !'d))
   }
 
-  private val caseInsensitiveConf = new SimpleCatalystConf(false)
+  private val caseInsensitiveConf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> false)
   private val caseInsensitiveAnalyzer = new Analyzer(
     new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, caseInsensitiveConf),
     caseInsensitiveConf)
@@ -160,5 +170,13 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     val expected = caseInsensitiveAnalyzer.execute(
       testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
     comparePlans(actual, expected)
+  }
+
+  test("Complementation Laws") {
+    checkCondition('a && !'a, testRelation)
+    checkCondition(!'a && 'a, testRelation)
+
+    checkCondition('a || !'a, testRelationWithData)
+    checkCondition(!'a || 'a, testRelationWithData)
   }
 }

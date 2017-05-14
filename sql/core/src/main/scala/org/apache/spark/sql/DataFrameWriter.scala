@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
@@ -66,7 +66,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def mode(saveMode: String): DataFrameWriter[T] = {
-    this.mode = saveMode.toLowerCase match {
+    this.mode = saveMode.toLowerCase(Locale.ROOT) match {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
       case "ignore" => SaveMode.Ignore
@@ -223,7 +223,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def save(): Unit = {
-    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "write files of Hive data source directly.")
     }
@@ -477,7 +477,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * </ul>
@@ -583,7 +583,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `true`): a flag indicating whether or not leading

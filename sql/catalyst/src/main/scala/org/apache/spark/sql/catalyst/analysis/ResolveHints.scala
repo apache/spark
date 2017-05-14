@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.CatalystConf
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -43,7 +45,7 @@ object ResolveHints {
    *
    * This rule must happen before common table expressions.
    */
-  class ResolveBroadcastHints(conf: CatalystConf) extends Rule[LogicalPlan] {
+  class ResolveBroadcastHints(conf: SQLConf) extends Rule[LogicalPlan] {
     private val BROADCAST_HINT_NAMES = Set("BROADCAST", "BROADCASTJOIN", "MAPJOIN")
 
     def resolver: Resolver = conf.resolver
@@ -83,8 +85,14 @@ object ResolveHints {
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case h: Hint if BROADCAST_HINT_NAMES.contains(h.name.toUpperCase) =>
-        applyBroadcastHint(h.child, h.parameters.toSet)
+      case h: Hint if BROADCAST_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
+        if (h.parameters.isEmpty) {
+          // If there is no table alias specified, turn the entire subtree into a BroadcastHint.
+          BroadcastHint(h.child)
+        } else {
+          // Otherwise, find within the subtree query plans that should be broadcasted.
+          applyBroadcastHint(h.child, h.parameters.toSet)
+        }
     }
   }
 

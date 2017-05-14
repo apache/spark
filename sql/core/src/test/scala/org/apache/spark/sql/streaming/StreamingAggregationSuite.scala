@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfterAll
 
@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.OutputMode._
+import org.apache.spark.sql.streaming.util.StreamManualClock
 
 object FailureSinglton {
   var firstTime = true
@@ -65,6 +66,22 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
       // By default we run in new tuple mode.
       AddData(inputData, 4, 4, 4, 4),
       CheckLastBatch((4, 4))
+    )
+  }
+
+  test("count distinct") {
+    val inputData = MemoryStream[(Int, Seq[Int])]
+
+    val aggregated =
+      inputData.toDF()
+        .select($"*", explode($"_2") as 'value)
+        .groupBy($"_1")
+        .agg(size(collect_set($"value")))
+        .as[(Int, Int)]
+
+    testStream(aggregated, Update)(
+      AddData(inputData, (1, Seq(1, 2))),
+      CheckLastBatch((1, 2))
     )
   }
 
@@ -104,7 +121,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
       testStream(aggregated, Append)()
     }
     Seq("append", "not supported").foreach { m =>
-      assert(e.getMessage.toLowerCase.contains(m.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
     }
   }
 

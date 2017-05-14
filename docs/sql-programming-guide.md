@@ -571,7 +571,7 @@ be created by calling the `table` method on a `SparkSession` with the name of th
 For file-based data source, e.g. text, parquet, json, etc. you can specify a custom table path via the
 `path` option, e.g. `df.write.option("path", "/some/path").saveAsTable("t")`. When the table is dropped,
 the custom table path will not be removed and the table data is still there. If no custom table path is
-specifed, Spark will write data to a default table path under the warehouse directory. When the table is
+specified, Spark will write data to a default table path under the warehouse directory. When the table is
 dropped, the default table path will be removed too.
 
 Starting from Spark 2.1, persistent datasource tables have per-partition metadata stored in the Hive metastore. This brings several benefits:
@@ -883,7 +883,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
 
 <div data-lang="scala"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a `Dataset[Row]`.
-This conversion can be done using `SparkSession.read.json()` on either an RDD of String,
+This conversion can be done using `SparkSession.read.json()` on either a `Dataset[String]`,
 or a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
@@ -897,7 +897,7 @@ For a regular multi-line JSON file, set the `wholeFile` option to `true`.
 
 <div data-lang="java"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a `Dataset<Row>`.
-This conversion can be done using `SparkSession.read().json()` on either an RDD of String,
+This conversion can be done using `SparkSession.read().json()` on either a `Dataset<String>`,
 or a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
@@ -1700,7 +1700,7 @@ referencing a singleton.
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently Hive SerDes and UDFs are based on Hive 1.2.1,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 0.12.0 to 1.2.1. Also see [Interacting with Different Versions of Hive Metastore] (#interacting-with-different-versions-of-hive-metastore)).
+(from 0.12.0 to 2.1.1. Also see [Interacting with Different Versions of Hive Metastore] (#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 

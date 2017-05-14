@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
+import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -68,7 +69,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   }
 
   // name of function in java.lang.Math
-  def funcName: String = name.toLowerCase
+  def funcName: String = name.toLowerCase(Locale.ROOT)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
@@ -124,7 +125,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.${name.toLowerCase}($c1, $c2)")
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      s"java.lang.Math.${name.toLowerCase(Locale.ROOT)}($c1, $c2)")
   }
 }
 
@@ -1021,10 +1023,10 @@ abstract class RoundBase(child: Expression, scale: Expression,
 
   // not overriding since _scale is a constant int at runtime
   def nullSafeEval(input1: Any): Any = {
-    child.dataType match {
-      case _: DecimalType =>
+    dataType match {
+      case DecimalType.Fixed(_, s) =>
         val decimal = input1.asInstanceOf[Decimal]
-        decimal.toPrecision(decimal.precision, _scale, mode).orNull
+        decimal.toPrecision(decimal.precision, s, mode).orNull
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType =>
@@ -1053,10 +1055,10 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val ce = child.genCode(ctx)
 
-    val evaluationCode = child.dataType match {
-      case _: DecimalType =>
+    val evaluationCode = dataType match {
+      case DecimalType.Fixed(_, s) =>
         s"""
-        if (${ce.value}.changePrecision(${ce.value}.precision(), ${_scale},
+        if (${ce.value}.changePrecision(${ce.value}.precision(), ${s},
             java.math.BigDecimal.${modeStr})) {
           ${ev.value} = ${ce.value};
         } else {

@@ -405,8 +405,8 @@ class DataStreamReader(OptionUtils):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
-        `JSON Lines <http://jsonlines.org/>`_(newline-delimited JSON) is supported by default.
-        For JSON (one record per file), set the `wholeFile` parameter to ``true``.
+        `JSON Lines <http://jsonlines.org/>`_ (newline-delimited JSON) is supported by default.
+        For JSON (one record per file), set the ``wholeFile`` parameter to ``true``.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
@@ -457,7 +457,7 @@ class DataStreamReader(OptionUtils):
         :param timestampFormat: sets the string that indicates a timestamp format. Custom date
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param wholeFile: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
 
@@ -581,7 +581,7 @@ class DataStreamReader(OptionUtils):
         :param timestampFormat: sets the string that indicates a timestamp format. Custom date
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given

@@ -44,6 +44,7 @@ object DateTimeUtils {
   final val JULIAN_DAY_OF_EPOCH = 2440588
   final val SECONDS_PER_DAY = 60 * 60 * 24L
   final val MICROS_PER_SECOND = 1000L * 1000L
+  final val MILLIS_PER_SECOND = 1000L
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
   final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
 
@@ -237,6 +238,24 @@ object DateTimeUtils {
     (day.toInt, micros * 1000L)
   }
 
+  /*
+   * Converts the timestamp to milliseconds since epoch. In spark timestamp values have microseconds
+   * precision, so this conversion is lossy.
+   */
+  def toMillis(us: SQLTimestamp): Long = {
+    // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
+    // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
+    // In millis precision the above needs to be represented as (-157700927877).
+    Math.floor(us.toDouble / MILLIS_PER_SECOND).toLong
+  }
+
+  /*
+   * Converts millseconds since epoch to SQLTimestamp.
+   */
+  def fromMillis(millis: Long): SQLTimestamp = {
+    millis * 1000L
+  }
+
   /**
    * Parses a given UTF8 date string to the corresponding a corresponding [[Long]] value.
    * The return type is [[Option]] in order to distinguish between 0L and null. The following
@@ -404,11 +423,11 @@ object DateTimeUtils {
   }
 
   /**
-   * Parses a given UTF8 date string to the corresponding a corresponding [[Int]] value.
+   * Parses a given UTF8 date string to a corresponding [[Int]] value.
    * The return type is [[Option]] in order to distinguish between 0 and null. The following
    * formats are allowed:
    *
-   * `yyyy`,
+   * `yyyy`
    * `yyyy-[m]m`
    * `yyyy-[m]m-[d]d`
    * `yyyy-[m]m-[d]d `
@@ -875,7 +894,7 @@ object DateTimeUtils {
    * (Because 1970-01-01 is Thursday).
    */
   def getDayOfWeekFromString(string: UTF8String): Int = {
-    val dowString = string.toString.toUpperCase
+    val dowString = string.toString.toUpperCase(Locale.ROOT)
     dowString match {
       case "SU" | "SUN" | "SUNDAY" => 3
       case "MO" | "MON" | "MONDAY" => 4
@@ -932,7 +951,7 @@ object DateTimeUtils {
     if (format == null) {
       TRUNC_INVALID
     } else {
-      format.toString.toUpperCase match {
+      format.toString.toUpperCase(Locale.ROOT) match {
         case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
         case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
         case _ => TRUNC_INVALID

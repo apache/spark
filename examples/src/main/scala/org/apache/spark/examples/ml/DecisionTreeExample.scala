@@ -18,8 +18,9 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import java.util.Locale
+
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
@@ -203,7 +204,7 @@ object DecisionTreeExample {
       .getOrCreate()
 
     params.checkpointDir.foreach(spark.sparkContext.setCheckpointDir)
-    val algo = params.algo.toLowerCase
+    val algo = params.algo.toLowerCase(Locale.ROOT)
 
     println(s"DecisionTreeExample with parameters:\n$params")
 

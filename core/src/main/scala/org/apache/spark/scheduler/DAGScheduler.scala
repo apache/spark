@@ -58,7 +58,7 @@ import org.apache.spark.util._
  * set of map output files, and another to read those files after a barrier). In the end, every
  * stage will have only shuffle dependencies on other stages, and may compute multiple operations
  * inside it. The actual pipelining of these operations happens in the RDD.compute() functions of
- * various RDDs (MappedRDD, FilteredRDD, etc).
+ * various RDDs
  *
  * In addition to coming up with a DAG of stages, the DAGScheduler also determines the preferred
  * locations to run each task on, based on the current cache status, and passes these to the
@@ -607,7 +607,7 @@ class DAGScheduler(
    * @param resultHandler callback to pass each result to
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
    *
-   * @throws Exception when the job fails
+   * @note Throws `Exception` when the job fails
    */
   def runJob[T, U](
       rdd: RDD[T],
@@ -644,7 +644,7 @@ class DAGScheduler(
    *
    * @param rdd target RDD to run tasks on
    * @param func a function to run on each partition of the RDD
-   * @param evaluator [[ApproximateEvaluator]] to receive the partial results
+   * @param evaluator `ApproximateEvaluator` to receive the partial results
    * @param callSite where in the user program this job was called
    * @param timeout maximum time to wait for the job, in milliseconds
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name

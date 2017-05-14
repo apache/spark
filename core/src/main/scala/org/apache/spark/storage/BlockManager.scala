@@ -29,8 +29,6 @@ import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
-
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.internal.Logging
@@ -41,7 +39,6 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.memory._
@@ -66,7 +63,7 @@ private[spark] trait BlockData {
   /**
    * Returns a Netty-friendly wrapper for the block's data.
    *
-   * @see [[ManagedBuffer#convertToNetty()]]
+   * Please see `ManagedBuffer.convertToNetty()` for more details.
    */
   def toNetty(): Object
 
@@ -150,8 +147,8 @@ private[spark] class BlockManager(
   // However, since we use this only for reporting and logging, what we actually want here is
   // the absolute maximum value that `maxMemory` can ever possibly reach. We may need
   // to revisit whether reporting this value as the "max" is intuitive to the user.
-  private val maxMemory =
-    memoryManager.maxOnHeapStorageMemory + memoryManager.maxOffHeapStorageMemory
+  private val maxOnHeapMemory = memoryManager.maxOnHeapStorageMemory
+  private val maxOffHeapMemory = memoryManager.maxOffHeapStorageMemory
 
   // Port used by the external shuffle service. In Yarn mode, this may be already be
   // set through the Hadoop configuration as the server is launched in the Yarn NM.
@@ -229,7 +226,8 @@ private[spark] class BlockManager(
 
     val idFromMaster = master.registerBlockManager(
       id,
-      maxMemory,
+      maxOnHeapMemory,
+      maxOffHeapMemory,
       slaveEndpoint)
 
     blockManagerId = if (idFromMaster != null) idFromMaster else id
@@ -307,7 +305,7 @@ private[spark] class BlockManager(
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo(s"BlockManager $blockManagerId re-registering with master")
-    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
+    master.registerBlockManager(blockManagerId, maxOnHeapMemory, maxOffHeapMemory, slaveEndpoint)
     reportAllBlocks()
   }
 
@@ -611,12 +609,19 @@ private[spark] class BlockManager(
 
   /**
    * Return a list of locations for the given block, prioritizing the local machine since
-   * multiple block managers can share the same host.
+   * multiple block managers can share the same host, followed by hosts on the same rack.
    */
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     val locs = Random.shuffle(master.getLocations(blockId))
     val (preferredLocs, otherLocs) = locs.partition { loc => blockManagerId.host == loc.host }
-    preferredLocs ++ otherLocs
+    blockManagerId.topologyInfo match {
+      case None => preferredLocs ++ otherLocs
+      case Some(_) =>
+        val (sameRackLocs, differentRackLocs) = otherLocs.partition {
+          loc => blockManagerId.topologyInfo == loc.topologyInfo
+        }
+        preferredLocs ++ sameRackLocs ++ differentRackLocs
+    }
   }
 
   /**

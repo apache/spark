@@ -47,8 +47,8 @@ import org.apache.spark.util.ShutdownHookManager
  * has dropped its support.
  */
 private[hive] object SparkSQLCLIDriver extends Logging {
-  private var prompt = "spark-sql"
-  private var continuedPrompt = "".padTo(prompt.length, ' ')
+  private val prompt = "spark-sql"
+  private val continuedPrompt = "".padTo(prompt.length, ' ')
   private var transport: TSocket = _
 
   installSignalHandler()
@@ -302,7 +302,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   override def processCmd(cmd: String): Int = {
     val cmd_trimmed: String = cmd.trim()
-    val cmd_lower = cmd_trimmed.toLowerCase(Locale.ENGLISH)
+    val cmd_lower = cmd_trimmed.toLowerCase(Locale.ROOT)
     val tokens: Array[String] = cmd_trimmed.split("\\s+")
     val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
     if (cmd_lower.equals("quit") ||
@@ -310,7 +310,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       sessionState.close()
       System.exit(0)
     }
-    if (tokens(0).toLowerCase(Locale.ENGLISH).equals("source") ||
+    if (tokens(0).toLowerCase(Locale.ROOT).equals("source") ||
       cmd_trimmed.startsWith("!") || isRemoteMode) {
       val start = System.currentTimeMillis()
       super.processCmd(cmd)

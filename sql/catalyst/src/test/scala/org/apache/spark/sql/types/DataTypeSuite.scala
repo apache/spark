@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import com.fasterxml.jackson.core.JsonParseException
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 
@@ -246,6 +248,32 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(structType)
   checkDataTypeFromDDL(structType)
 
+  test("fromJson throws an exception when given type string is invalid") {
+    var message = intercept[IllegalArgumentException] {
+      DataType.fromJson(""""abcd"""")
+    }.getMessage
+    assert(message.contains(
+      "Failed to convert the JSON string 'abcd' to a data type."))
+
+    message = intercept[IllegalArgumentException] {
+      DataType.fromJson("""{"abcd":"a"}""")
+    }.getMessage
+    assert(message.contains(
+      """Failed to convert the JSON string '{"abcd":"a"}' to a data type"""))
+
+    message = intercept[IllegalArgumentException] {
+      DataType.fromJson("""{"fields": [{"a":123}], "type": "struct"}""")
+    }.getMessage
+    assert(message.contains(
+      """Failed to convert the JSON string '{"a":123}' to a field."""))
+
+    // Malformed JSON string
+    message = intercept[JsonParseException] {
+      DataType.fromJson("abcd")
+    }.getMessage
+    assert(message.contains("Unrecognized token 'abcd'"))
+  }
+
   def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {
     test(s"Check the default size of $dataType") {
       assert(dataType.defaultSize === expectedDefaultSize)
@@ -383,4 +411,35 @@ class DataTypeSuite extends SparkFunSuite {
   checkCatalogString(ArrayType(createStruct(40)))
   checkCatalogString(MapType(IntegerType, StringType))
   checkCatalogString(MapType(IntegerType, createStruct(40)))
+
+  def checkEqualsStructurally(from: DataType, to: DataType, expected: Boolean): Unit = {
+    val testName = s"equalsStructurally: (from: $from, to: $to)"
+    test(testName) {
+      assert(DataType.equalsStructurally(from, to) === expected)
+    }
+  }
+
+  checkEqualsStructurally(BooleanType, BooleanType, true)
+  checkEqualsStructurally(IntegerType, IntegerType, true)
+  checkEqualsStructurally(IntegerType, LongType, false)
+  checkEqualsStructurally(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true)
+  checkEqualsStructurally(ArrayType(IntegerType, true), ArrayType(IntegerType, false), false)
+
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType),
+    new StructType().add("f2", IntegerType),
+    true)
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType),
+    new StructType().add("f2", IntegerType, false),
+    false)
+
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType)),
+    new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
+    true)
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType, false)),
+    new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
+    false)
 }

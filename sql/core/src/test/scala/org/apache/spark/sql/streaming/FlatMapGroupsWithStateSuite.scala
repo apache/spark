@@ -21,8 +21,6 @@ import java.sql.Date
 import java.util.concurrent.ConcurrentHashMap
 
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.concurrent.Eventually.eventually
-import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
@@ -35,6 +33,7 @@ import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, GroupStateImpl, MemoryStream}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, StoreUpdate}
 import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.MemoryStateStore
+import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /** Class to check custom state types */
@@ -590,7 +589,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     )
   }
 
-  test("flatMapGroupsWithState - streaming with event time timeout") {
+  test("flatMapGroupsWithState - streaming with event time timeout + watermark") {
     // Function to maintain the max event time
     // Returns the max event time in the state, or -1 if the state was removed by timeout
     val stateFunc = (
@@ -761,6 +760,44 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
     assert(e.getMessage === "The output mode of function should be append or update")
   }
+
+  def testWithTimeout(timeoutConf: GroupStateTimeout): Unit = {
+    test("SPARK-20714: watermark does not fail query when timeout = " + timeoutConf) {
+      // Function to maintain running count up to 2, and then remove the count
+      // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
+      val stateFunc =
+      (key: String, values: Iterator[(String, Long)], state: GroupState[RunningCount]) => {
+        if (state.hasTimedOut) {
+          state.remove()
+          Iterator((key, "-1"))
+        } else {
+          val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+          state.update(RunningCount(count))
+          state.setTimeoutDuration("10 seconds")
+          Iterator((key, count.toString))
+        }
+      }
+
+      val clock = new StreamManualClock
+      val inputData = MemoryStream[(String, Long)]
+      val result =
+        inputData.toDF().toDF("key", "time")
+          .selectExpr("key", "cast(time as timestamp) as timestamp")
+          .withWatermark("timestamp", "10 second")
+          .as[(String, Long)]
+          .groupByKey(x => x._1)
+          .flatMapGroupsWithState(Update, ProcessingTimeTimeout)(stateFunc)
+
+      testStream(result, Update)(
+        StartStream(ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, ("a", 1L)),
+        AdvanceManualClock(1 * 1000),
+        CheckLastBatch(("a", "1"))
+      )
+    }
+  }
+  testWithTimeout(NoTimeout)
+  testWithTimeout(ProcessingTimeTimeout)
 
   def testStateUpdateWithData(
       testName: String,

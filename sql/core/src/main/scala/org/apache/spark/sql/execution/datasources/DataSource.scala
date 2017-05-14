@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.{ServiceConfigurationError, ServiceLoader}
+import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
-import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
@@ -482,7 +481,7 @@ case class DataSource(
   }
 }
 
-object DataSource {
+object DataSource extends Logging {
 
   /** A map to maintain backward compatibility in case we move data sources around. */
   private val backwardCompatibilityMap: Map[String, String] = {
@@ -539,15 +538,16 @@ object DataSource {
                 // Found the data source using fully qualified path
                 dataSource
               case Failure(error) =>
-                if (provider1.toLowerCase == "orc" ||
+                if (provider1.toLowerCase(Locale.ROOT) == "orc" ||
                   provider1.startsWith("org.apache.spark.sql.hive.orc")) {
                   throw new AnalysisException(
                     "The ORC data source must be used with Hive support enabled")
-                } else if (provider1.toLowerCase == "avro" ||
+                } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
                   provider1 == "com.databricks.spark.avro") {
                   throw new AnalysisException(
-                    s"Failed to find data source: ${provider1.toLowerCase}. Please find an Avro " +
-                      "package at http://spark.apache.org/third-party-projects.html")
+                    s"Failed to find data source: ${provider1.toLowerCase(Locale.ROOT)}. " +
+                    "Please find an Avro package at " +
+                    "http://spark.apache.org/third-party-projects.html")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider1. Please find packages at " +
@@ -570,10 +570,19 @@ object DataSource {
           // there is exactly one registered alias
           head.getClass
         case sources =>
-          // There are multiple registered aliases for the input
-          sys.error(s"Multiple sources found for $provider1 " +
-            s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
-            "please specify the fully qualified class name.")
+          // There are multiple registered aliases for the input. If there is single datasource
+          // that has "org.apache.spark" package in the prefix, we use it considering it is an
+          // internal datasource within Spark.
+          val sourceNames = sources.map(_.getClass.getName)
+          val internalSources = sources.filter(_.getClass.getName.startsWith("org.apache.spark"))
+          if (internalSources.size == 1) {
+            logWarning(s"Multiple sources found for $provider1 (${sourceNames.mkString(", ")}), " +
+              s"defaulting to the internal datasource (${internalSources.head.getClass.getName}).")
+            internalSources.head.getClass
+          } else {
+            throw new AnalysisException(s"Multiple sources found for $provider1 " +
+              s"(${sourceNames.mkString(", ")}), please specify the fully qualified class name.")
+          }
       }
     } catch {
       case e: ServiceConfigurationError if e.getCause.isInstanceOf[NoClassDefFoundError] =>
@@ -596,8 +605,8 @@ object DataSource {
    */
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
     val path = CaseInsensitiveMap(options).get("path")
-    val optionsWithoutPath = options.filterKeys(_.toLowerCase != "path")
+    val optionsWithoutPath = options.filterKeys(_.toLowerCase(Locale.ROOT) != "path")
     CatalogStorageFormat.empty.copy(
-      locationUri = path.map(CatalogUtils.stringToURI(_)), properties = optionsWithoutPath)
+      locationUri = path.map(CatalogUtils.stringToURI), properties = optionsWithoutPath)
   }
 }
