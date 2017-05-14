@@ -583,8 +583,8 @@ Note that partition information is not gathered by default when creating externa
 
 ### Bucketing, Sorting and Partitioning
 
-For file-based data source it is also possible to bucket and sort or partition the output. 
-Bucketing and sorting is applicable only to persistent tables:
+For file-based data source, it is also possible to bucket and sort or partition the output. 
+Bucketing and sorting are applicable only to persistent tables:
 
 <div class="codetabs">
 
@@ -617,7 +617,7 @@ CLUSTERED BY(name) INTO 42 BUCKETS;
 
 </div>
 
-while partitioning can be used with both `save` and `saveAsTable`:
+while partitioning can be used with both `save` and `saveAsTable` when using the Dataset APIs.
 
 
 <div class="codetabs">
@@ -650,7 +650,7 @@ CREATE TABLE users_by_favorite_color(
 
 </div>
 
-It is possible to use both partitions and buckets for a single table:
+It is possible to use both partitioning and bucketing for a single table:
 
 <div class="codetabs">
 
@@ -685,8 +685,9 @@ CLUSTERED BY(name) INTO 42 BUCKETS;
 </div>
 
 `partitionBy` creates a directory structure as described in the [Partition Discovery](#partition-discovery) section.
-Because of that it has limited applicability to columns with high cardinality. In contrast `bucketBy` distributes
-data across fixed number of buckets and can be used if a number of unique values is unbounded.
+Thus, it has limited applicability to columns with high cardinality. In contrast 
+ `bucketBy` distributes
+data across fixed number of buckets and can be used when a number of unique values is unbounded.
 
 ## Parquet Files
 
