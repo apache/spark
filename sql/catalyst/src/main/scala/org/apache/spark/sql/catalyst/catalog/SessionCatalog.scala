@@ -344,6 +344,7 @@ class SessionCatalog(
            |not present in the new schema. We don't support dropping columns yet.
          """.stripMargin)
     }
+
     // assuming the newSchema has all partition columns at the end as required
     externalCatalog.alterTableSchema(db, table, newSchema)
   }

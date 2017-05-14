@@ -425,6 +425,8 @@ private[hive] class HiveClientImpl(
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
+        // For data source tables, we will always overwrite the bucket spec in
+        // HiveExternalCatalog with the bucketing information in table properties.
         bucketSpec = bucketSpec,
         owner = h.getOwner,
         createTime = h.getTTable.getCreateTime.toLong * 1000,

@@ -309,7 +309,6 @@ class InMemoryCatalog(
       schema: StructType): Unit = synchronized {
     requireTableExists(db, table)
     val origTable = catalog(db).tables(table).table
-
     catalog(db).tables(table).table = origTable.copy(schema = schema)
   }
 

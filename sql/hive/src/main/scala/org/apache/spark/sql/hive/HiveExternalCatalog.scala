@@ -632,11 +632,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val rawTable = getRawTable(db, table)
     val withNewSchema = rawTable.copy(schema = schema)
     verifyColumnNames(withNewSchema)
-
     // Add table metadata such as table schema, partition columns, etc. to table properties.
     val updatedTable = withNewSchema.copy(
       properties = withNewSchema.properties ++ tableMetaToTableProps(withNewSchema))
-
     try {
       client.alterTable(updatedTable)
     } catch {
