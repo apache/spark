@@ -80,6 +80,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private val useFetcherCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false)
 
+  private val executorGpus = conf.getInt("spark.mesos.executor.gpus", 0)
+
   private val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
 
   private val taskLabels = conf.get("spark.mesos.task.labels", "")
@@ -403,6 +405,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       val offerAttributes = toAttributeMap(offer.getAttributesList)
       val offerMem = getResource(offer.getResourcesList, "mem")
       val offerCpus = getResource(offer.getResourcesList, "cpus")
+      val offerGpus = getResource(offer.getResourcesList, "gpus")
       val offerPorts = getRangeResource(offer.getResourcesList, "ports")
       val offerReservationInfo = offer
         .getResourcesList
@@ -416,7 +419,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         logDebug(s"Accepting offer: $id with attributes: $offerAttributes " +
           offerReservationInfo.map(resInfo =>
             s"reservation info: ${resInfo.getReservation.toString}").getOrElse("") +
-          s"mem: $offerMem cpu: $offerCpus ports: $offerPorts " +
+          s"mem: $offerMem cpu: $offerCpus gpu: $offerGpus ports: $offerPorts " +
           s"resources: ${offer.getResourcesList.asScala.mkString(",")}." +
           s"  Launching ${offerTasks.size} Mesos tasks.")
 
@@ -424,10 +427,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           val taskId = task.getTaskId
           val mem = getResource(task.getResourcesList, "mem")
           val cpus = getResource(task.getResourcesList, "cpus")
+          val gpus = getResource(task.getResourcesList, "gpus")
           val ports = getRangeResource(task.getResourcesList, "ports").mkString(",")
 
           logDebug(s"Launching Mesos task: ${taskId.getValue} with mem: $mem cpu: $cpus" +
-            s" ports: $ports" + s" on slave with slave id: ${task.getSlaveId.getValue} ")
+            s" gpu: $gpus ports: $ports" +
+            s" on slave with slave id: ${task.getSlaveId.getValue} ")
         }
 
         driver.launchTasks(
@@ -497,11 +502,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           launchTasks = true
           val taskId = newMesosTaskId()
           val offerCPUs = getResource(resources, "cpus").toInt
-          var taskGPUs = Math.min(Math.max(0, maxGpus - totalGpusAcquired),
-                                  getResource(resources, "gpus").toInt)
-          if (gpuCores > 0) {
-            taskGPUs = gpuCores
-          }
+          val offerGPUs = getResource(resources, "gpus").toInt
+          var taskGPUs = executorGpus
           val taskCPUs = executorCores(offerCPUs)
           val taskMemory = executorMemory(sc)
 
@@ -576,7 +578,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
       numExecutors < executorLimit &&
-      gpuCores <= offerGPUs &&
+      executorGpus <= offerGPUs &&
+      executorGpus + totalGpusAcquired <= maxGpus &&
       slaves.get(slaveId).map(_.taskFailures).getOrElse(0) < MAX_SLAVE_FAILURES &&
       meetsPortRequirements &&
       satisfiesLocality(offerHostname)
