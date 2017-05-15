@@ -377,8 +377,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("string params should be case-insensitive") {
-    val categoricalFeatures = Map.empty[Int, Int]
-    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2)
+    val df: DataFrame = TreeTests.setMetadata(data, Map.empty[Int, Int], 2)
 
     val gbt = new GBTClassifier()
     Seq("enTropy", "gInI").foreach { impurity =>

@@ -133,8 +133,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
   }
 
   test("string params should be case-insensitive") {
-    val categoricalFeatures = Map.empty[Int, Int]
-    val df: DataFrame = TreeTests.setMetadata(orderedLabeledPoints50_1000, categoricalFeatures, 0)
+    val df: DataFrame = TreeTests.setMetadata(orderedLabeledPoints50_1000, Map.empty[Int, Int], 0)
 
     val rf = new RandomForestRegressor()
     Seq("varIAnce").foreach { impurity =>
