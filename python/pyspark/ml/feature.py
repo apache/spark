@@ -2114,7 +2114,8 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     True
     >>> stringIndexer.getStringOrderType()
     'frequencyDesc'
-    >>> stringIndexer.setStringOrderType("alphabetDesc")
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid='error',
+    ...     stringOrderType="alphabetDesc")
     >>> model = stringIndexer.fit(stringIndDf)
     >>> td = model.transform(stringIndDf)
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
