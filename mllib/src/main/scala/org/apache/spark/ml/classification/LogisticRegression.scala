@@ -1357,23 +1357,23 @@ sealed trait LogisticRegressionSummary extends Serializable {
   /**
    * Dataframe output by the model's `transform` method.
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def predictions: DataFrame
 
   /** Field in "predictions" which gives the probability of each class as a vector. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def probabilityCol: String
 
   /** Field in "predictions" which gives the prediction of each class. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def predictionCol: String
 
   /** Field in "predictions" which gives the true label of each instance (if available). */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def labelCol: String
 
   /** Field in "predictions" which gives the features of each instance as a vector. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def featuresCol: String
 
   @transient private val multiclassMetrics = {
@@ -1385,23 +1385,23 @@ sealed trait LogisticRegressionSummary extends Serializable {
   }
 
   /** Returns true positive rate for each label. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def truePositiveRateByLabel: Array[Double] = recallByLabel
 
   /** Returns false positive rate for each label. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def falsePositiveRateByLabel: Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.falsePositiveRate(label))
   }
 
   /** Returns precision for each label. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def precisionByLabel: Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.precision(label))
   }
 
   /** Returns recall for each label. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def recallByLabel: Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.recall(label))
   }
@@ -1409,43 +1409,43 @@ sealed trait LogisticRegressionSummary extends Serializable {
   /**
    * Returns f-measure for each label.
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def fMeasureByLabel(beta: Double): Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.fMeasure(label, beta))
   }
 
   /** Returns f1-measure for each label. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def fMeasureByLabel: Array[Double] = fMeasureByLabel(1.0)
 
   /** Returns accuracy. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def accuracy: Double = multiclassMetrics.accuracy
 
   /** Returns weighted true positive rate. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def weightedTruePositiveRate: Double = weightedRecall
 
   /** Returns weighted false positive rate. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def weightedFalsePositiveRate: Double = multiclassMetrics.weightedFalsePositiveRate
 
   /** Returns weighted averaged recall. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def weightedRecall: Double = multiclassMetrics.weightedRecall
 
   /** Returns weighted averaged precision. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def weightedPrecision: Double = multiclassMetrics.weightedPrecision
 
   /**
    * Returns weighted averaged f-measure.
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def weightedFMeasure(beta: Double): Double = multiclassMetrics.weightedFMeasure(beta)
 
   /** Returns weighted averaged f1-measure. */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def weightedFMeasure: Double = multiclassMetrics.weightedFMeasure(1.0)
 }
 
