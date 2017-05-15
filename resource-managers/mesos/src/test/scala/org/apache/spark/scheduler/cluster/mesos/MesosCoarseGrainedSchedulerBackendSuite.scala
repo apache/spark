@@ -166,8 +166,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
 
   test("mesos acquires spark.mesos.executor.gpus number of gpus per executor") {
-    setBackend(Map("spark.mesos.gpus.max" -> "5"))
-    setBackend(Map("spark.mesos.executor.gpus" -> "2"))
+    setBackend(Map("spark.mesos.gpus.max" -> "5",
+                   "spark.mesos.executor.gpus" -> "2"))
 
     val executorMemory = backend.executorMemory(sc)
     offerResources(List(Resources(executorMemory, 1, 5)))
@@ -180,22 +180,32 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
 
+  test("mesos declines offers that cannot satisfy spark.mesos.executor.gpus") {
+    setBackend(Map("spark.mesos.gpus.max" -> "5",
+                   "spark.mesos.executor.gpus" -> "2"))
+
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(Resources(executorMemory, 1, 1)))
+    verifyDeclinedOffer(driver, createOfferId("o1"))
+  }
+
+
   test("mesos declines offers that exceed spark.mesos.gpus.max") {
-    setBackend(Map("spark.mesos.gpus.max" -> "5"))
-    setBackend(Map("spark.mesos.executor.gpus" -> "2"))
+    setBackend(Map("spark.mesos.gpus.max" -> "5",
+                   "spark.mesos.executor.gpus" -> "2"))
 
     val executorMemory = backend.executorMemory(sc)
     offerResources(List(Resources(executorMemory, 1, 2),
                         Resources(executorMemory, 1, 2),
                         Resources(executorMemory, 1, 2)))
 
-    val taskInfos = verifyTaskLaunched(driver, "o1")
-    assert(backend.getResource(taskInfos.head.getResourcesList, "gpus") == 2)
+    val taskInfos1 = verifyTaskLaunched(driver, "o1")
+    assert(backend.getResource(taskInfos1.head.getResourcesList, "gpus") == 2)
 
-    taskInfos = verifyTaskLaunched(driver, "o2")
-    assert(backend.getResource(taskInfos.head.getResourcesList, "gpus") == 2)
+    val taskInfos2 = verifyTaskLaunched(driver, "o2")
+    assert(backend.getResource(taskInfos2.head.getResourcesList, "gpus") == 2)
 
-    verifyDeclinedOffer(driver, createOfferId("o3"), true)
+    verifyDeclinedOffer(driver, createOfferId("o3"))
   }
 
 
