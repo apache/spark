@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io.{DataInputStream, DataOutputStream, FileNotFoundException, IOException}
+import java.nio.channels.ClosedChannelException
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -202,13 +203,22 @@ private[state] class HDFSBackedStateStoreProvider(
     /** Abort all the updates made on this store. This store will not be usable any more. */
     override def abort(): Unit = {
       verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
+      try {
+        state = ABORTED
+        if (tempDeltaFileStream != null) {
+          tempDeltaFileStream.close()
+        }
+        if (tempDeltaFile != null) {
+          fs.delete(tempDeltaFile, true)
+        }
+      } catch {
+        case c: ClosedChannelException =>
+          // This can happen when underlying file output stream has been closed before the
+          // compression stream.
+          logDebug(s"Error aborting version $newVersion into $this", c)
 
-      state = ABORTED
-      if (tempDeltaFileStream != null) {
-        tempDeltaFileStream.close()
-      }
-      if (tempDeltaFile != null) {
-        fs.delete(tempDeltaFile, true)
+        case e: Exception =>
+          logWarning(s"Error aborting version $newVersion into $this", e)
       }
       logInfo(s"Aborted version $newVersion for $this")
     }
