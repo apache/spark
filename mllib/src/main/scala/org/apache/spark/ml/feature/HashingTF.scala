@@ -17,9 +17,12 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
@@ -27,6 +30,7 @@ import org.apache.spark.mllib.feature
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StructType}
+import org.apache.spark.util.Utils
 
 /**
  * Maps a sequence of terms to their term frequencies using the hashing trick.
@@ -93,9 +97,27 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
-    // TODO: Make the hashingTF.transform natively in ml framework to avoid extra conversion.
-    val t = udf { terms: Seq[_] => hashingTF.transform(terms).asML }
+    val _binary = $(binary)
+    val _numFeatures = $(numFeatures)
+
+    val transformer: Seq[_] => Vector = {
+      (terms: Seq[_]) =>
+        val termFrequencies = mutable.HashMap.empty[Int, Double]
+        val setTF = if (_binary) {
+          (i: Int) => 1.0
+        } else {
+          (i: Int) => termFrequencies.getOrElse(i, 0.0) + 1.0
+        }
+
+        terms.foreach { term =>
+          val i = Utils.nonNegativeMod(feature.HashingTF.murmur3Hash(term), _numFeatures)
+          termFrequencies.put(i, setTF(i))
+        }
+
+        Vectors.sparse(_numFeatures, termFrequencies.toSeq)
+    }
+
+    val t = udf(transformer)
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }

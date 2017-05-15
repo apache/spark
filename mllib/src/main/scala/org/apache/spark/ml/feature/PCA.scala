@@ -26,8 +26,8 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{DenseMatrix => OldDenseMatrix, DenseVector => OldDenseVector,
-  Matrices => OldMatrices, Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.{DenseMatrix => OldDenseMatrix, Vector => OldVector,
+  Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
@@ -59,7 +59,6 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
     val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
     StructType(outputFields)
   }
-
 }
 
 /**
@@ -149,12 +148,19 @@ class PCAModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val pcaModel = new feature.PCAModel($(k),
-      OldMatrices.fromML(pc).asInstanceOf[OldDenseMatrix],
-      OldVectors.fromML(explainedVariance).asInstanceOf[OldDenseVector])
 
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    val transformer: Vector => Vector = v => pcaModel.transform(OldVectors.fromML(v)).asML
+    val transformer: Vector => Vector = {
+      case dv: DenseVector =>
+        pc.transpose.multiply(dv)
+      case SparseVector(size, indices, values) =>
+        /* SparseVector -> single row SparseMatrix */
+        val sm = Matrices.sparse(size, 1, Array(0, indices.length), indices, values).transpose
+        val projection = sm.multiply(pc)
+        Vectors.dense(projection.values)
+      case v =>
+        throw new IllegalArgumentException("Unsupported vector format. Expected " +
+          s"SparseVector or DenseVector. Instead got: ${v.getClass}")
+    }
 
     val pcaOp = udf(transformer)
     dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))

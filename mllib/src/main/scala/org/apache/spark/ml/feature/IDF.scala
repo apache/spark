@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -131,8 +131,31 @@ class IDFModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    // TODO: Make the idfModel.transform natively in ml framework to avoid extra conversion.
-    val idf = udf { vec: Vector => idfModel.transform(OldVectors.fromML(vec)).asML }
+
+    val transformer: Vector => Vector = {
+      case SparseVector(size, indices, values) =>
+        val nnz = indices.length
+        val newValues = new Array[Double](nnz)
+        var k = 0
+        while (k < nnz) {
+          newValues(k) = values(k) * idfModel.idf(indices(k))
+          k += 1
+        }
+        Vectors.sparse(size, indices, newValues)
+      case DenseVector(values) =>
+        val newValues = new Array[Double](values.length)
+        var j = 0
+        while (j < values.length) {
+          newValues(j) = values(j) * idfModel.idf(j)
+          j += 1
+        }
+        Vectors.dense(newValues)
+      case other =>
+        throw new UnsupportedOperationException(
+          s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+    }
+
+    val idf = udf(transformer)
     dataset.withColumn($(outputCol), idf(col($(inputCol))))
   }
 

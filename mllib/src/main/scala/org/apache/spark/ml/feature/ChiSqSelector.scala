@@ -17,12 +17,14 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable.ArrayBuilder
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
-import org.apache.spark.ml.attribute.{AttributeGroup, _}
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -266,9 +268,41 @@ final class ChiSqSelectorModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val transformedSchema = transformSchema(dataset.schema, logging = true)
     val newField = transformedSchema.last
+    val filterIndices = selectedFeatures.sorted
 
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    val transformer: Vector => Vector = v => chiSqSelector.transform(OldVectors.fromML(v)).asML
+    val transformer: Vector => Vector = {
+      case SparseVector(size, indices, values) =>
+        val newSize = filterIndices.length
+        val newValues = new ArrayBuilder.ofDouble
+        val newIndices = new ArrayBuilder.ofInt
+        var i = 0
+        var j = 0
+        var indicesIdx = 0
+        var filterIndicesIdx = 0
+        while (i < indices.length && j < filterIndices.length) {
+          indicesIdx = indices(i)
+          filterIndicesIdx = filterIndices(j)
+          if (indicesIdx == filterIndicesIdx) {
+            newIndices += j
+            newValues += values(i)
+            j += 1
+            i += 1
+          } else {
+            if (indicesIdx > filterIndicesIdx) {
+              j += 1
+            } else {
+              i += 1
+            }
+          }
+        }
+        // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
+        Vectors.sparse(newSize, newIndices.result(), newValues.result())
+      case DenseVector(values) =>
+        Vectors.dense(filterIndices.map(i => values(i)))
+      case other =>
+        throw new UnsupportedOperationException(
+          s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+    }
 
     val selector = udf(transformer)
     dataset.withColumn($(outputCol), selector(col($(featuresCol))), newField.metadata)
