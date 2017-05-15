@@ -1171,6 +1171,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         topic_and_partition_d = TopicAndPartition("foo", 1)
 
         self.assertEqual(topic_and_partition_a, topic_and_partition_b)
+        self.assertEqual(hash(topic_and_partition_a), hash(topic_and_partition_b))
         self.assertNotEqual(topic_and_partition_a, topic_and_partition_c)
         self.assertNotEqual(topic_and_partition_a, topic_and_partition_d)
 
