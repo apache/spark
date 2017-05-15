@@ -83,7 +83,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     )).toDF("id", "items")
     val model = new FPGrowth().setMinSupport(0.7).fit(dataset)
     val prediction = model.transform(df)
-    assert(prediction.select("prediction").where("id=3").first().getSeq[String](0).isEmpty)
+    assert(prediction.where("id=3").select("prediction").first().getSeq[String](0).isEmpty)
   }
 
   test("FPGrowth prediction should not contain duplicates") {

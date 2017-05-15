@@ -1037,8 +1037,6 @@ class Analyzer(
    * clause.  This rule detects such queries and adds the required attributes to the original
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
-   *
-   * The HAVING clause could also used a grouping columns that is not presented in the SELECT.
    */
   object ResolveMissingReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
@@ -1064,26 +1062,6 @@ class Analyzer(
           // Users will see an AnalysisException for resolution failure of missing attributes
           // in Sort
           case ae: AnalysisException => s
-        }
-
-      case f @ Filter(cond, child) if child.resolved =>
-        try {
-          val newCond = resolveExpressionRecursively(cond, child)
-          val requiredAttrs = newCond.references.filter(_.resolved)
-          val missingAttrs = requiredAttrs -- child.outputSet
-          if (missingAttrs.nonEmpty) {
-            // Add missing attributes and then project them away.
-            Project(child.output,
-              Filter(newCond, addMissingAttr(child, missingAttrs)))
-          } else if (newCond != cond) {
-            f.copy(condition = newCond)
-          } else {
-            f
-          }
-        } catch {
-          // Attempting to resolve it might fail. When this happens, return the original plan.
-          // Users will see an AnalysisException for resolution failure of missing attributes
-          case ae: AnalysisException => f
         }
     }
 

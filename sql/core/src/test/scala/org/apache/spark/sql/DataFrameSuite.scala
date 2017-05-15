@@ -1844,4 +1844,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .filter($"x1".isNotNull || !$"y".isin("a!"))
       .count
   }
+
+  test("Unresolvable attribute in Filter should throw analysis exception") {
+    val df = Seq((1, "a"), (2, "b"), (3, "c")).toDF("x", "y")
+    val e1 = intercept[AnalysisException](df.select("y").where("x=1"))
+    assert(e1.message.contains("cannot resolve '`x`'"))
+
+    Seq(1).toDF("c1").createOrReplaceTempView("onerow")
+    val e2 = intercept[AnalysisException] {
+      sql(
+        """
+          | select 1
+          |        from   (select 1 from onerow t2 LIMIT 1)
+          |        where  t2.c1=1""".stripMargin)
+    }
+    assert(e2.message.contains("cannot resolve '`t2.c1`'"))
+  }
 }
