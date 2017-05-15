@@ -425,8 +425,10 @@ private[hive] class HiveClientImpl(
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
-        // For data source tables, we will always overwrite the bucket spec in
-        // HiveExternalCatalog with the bucketing information in table properties.
+        // If the table is written by Spark, we will put bucketing information in table properties,
+        // and will always overwrite the bucket spec in hive metastore by the bucketing information
+        // in table properties. This means, if we have bucket spec in both hive metastore and
+        // table properties, we will trust the one in table properties.
         bucketSpec = bucketSpec,
         owner = h.getOwner,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
