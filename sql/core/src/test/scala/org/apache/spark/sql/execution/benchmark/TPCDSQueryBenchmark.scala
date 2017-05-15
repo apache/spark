@@ -43,6 +43,7 @@ object TPCDSQueryBenchmark {
       .set("spark.driver.memory", "3g")
       .set("spark.executor.memory", "3g")
       .set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)
+      .set("spark.sql.crossJoin.enabled", "true")
 
   val spark = SparkSession.builder.config(conf).getOrCreate()
 
