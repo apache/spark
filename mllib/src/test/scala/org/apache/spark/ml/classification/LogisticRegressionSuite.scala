@@ -2585,17 +2585,13 @@ class LogisticRegressionSuite
 
   test("string params should be case-insensitive") {
     val lr = new LogisticRegression()
-    lr.setFamily("AuTo")
-    assert(lr.getFamily === "AuTo")
-    lr.fit(smallBinaryDataset)
-
-    lr.setFamily("biNoMial")
-    assert(lr.getFamily === "biNoMial")
-    lr.fit(smallBinaryDataset)
-
-    lr.setFamily("mulTinomIAl")
-    assert(lr.getFamily === "mulTinomIAl")
-    lr.fit(smallMultinomialDataset)
+    Seq(("AuTo", smallBinaryDataset), ("biNoMial", smallBinaryDataset),
+      ("mulTinomIAl", smallMultinomialDataset)).foreach { case (family, data) =>
+      lr.setFamily(family)
+      assert(lr.getFamily === family)
+      val model = lr.fit(data)
+      assert(model.getFamily === family)
+    }
   }
 }
 

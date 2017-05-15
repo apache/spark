@@ -316,12 +316,11 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
   test("string params should be case-insensitive") {
     val lda = new LDA()
-    lda.setOptimizer("eM")
-    assert(lda.getOptimizer === "eM")
-    lda.fit(dataset)
-
-    lda.setOptimizer("oNlinE")
-    assert(lda.getOptimizer === "oNlinE")
-    lda.fit(dataset)
+    Seq("eM", "oNLinE").foreach { optimizer =>
+      lda.setOptimizer(optimizer)
+      assert(lda.getOptimizer === optimizer)
+      val model = lda.fit(dataset)
+      assert(model.getOptimizer === optimizer)
+    }
   }
 }
