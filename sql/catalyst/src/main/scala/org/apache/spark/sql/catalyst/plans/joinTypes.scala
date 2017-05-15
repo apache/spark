@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 object JoinType {
   def apply(typ: String): JoinType = typ.toLowerCase(Locale.ROOT).replace("_", "") match {
     case "inner" => Inner
-    case "outer" | "full" | "fullouter" => FullOuter
+    case "outer" | "full" | "fullouter" | "full_outer" => FullOuter
     case "leftouter" | "left" => LeftOuter
     case "rightouter" | "right" => RightOuter
     case "leftsemi" => LeftSemi
@@ -33,7 +33,7 @@ object JoinType {
     case _ =>
       val supported = Seq(
         "inner",
-        "outer", "full", "fullouter",
+        "outer", "full", "fullouter", "full_outer",
         "leftouter", "left",
         "rightouter", "right",
         "leftsemi",
