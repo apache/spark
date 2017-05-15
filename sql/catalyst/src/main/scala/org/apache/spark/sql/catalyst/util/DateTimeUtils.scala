@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
 import java.util.{Calendar, Locale, TimeZone}
+import java.util.concurrent.ConcurrentHashMap
+import java.util.function.{Function => JFunction}
 import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
@@ -99,12 +101,13 @@ object DateTimeUtils {
     sdf
   }
 
-  private val threadLocalTimeZones = new ThreadLocal[mutable.Map[String, TimeZone]] {
-    override def initialValue(): mutable.Map[String, TimeZone] = mutable.Map.empty
+  private val computedTimeZones = new ConcurrentHashMap[String, TimeZone]
+  private val computeTimeZone = new JFunction[String, TimeZone] {
+    override def apply(timeZoneId: String): TimeZone = TimeZone.getTimeZone(timeZoneId)
   }
 
   def getTimeZone(timeZoneId: String): TimeZone = {
-    threadLocalTimeZones.get().getOrElseUpdate(timeZoneId, TimeZone.getTimeZone(timeZoneId))
+    computedTimeZones.computeIfAbsent(timeZoneId, computeTimeZone)
   }
 
   def newDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
@@ -1054,6 +1057,5 @@ object DateTimeUtils {
     threadLocalGmtCalendar.remove()
     threadLocalTimestampFormat.remove()
     threadLocalDateFormat.remove()
-    threadLocalTimeZones.remove()
   }
 }
