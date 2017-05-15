@@ -227,17 +227,6 @@ test_that("spark.decisionTree", {
   expect_error(capture.output(stats), NA)
   expect_true(length(capture.output(stats)) > 6)
 
-  model <- spark.decisionTree(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16,
-                              seed = 123)
-  predictions <- collect(predict(model, data))
-  expect_equal(predictions$prediction, c(60.32820, 61.22315, 60.69025, 62.11070,
-                                         63.53160, 64.05470, 65.12710, 64.30450,
-                                         66.70910, 67.86125, 68.08700, 67.21865,
-                                         68.89275, 69.53180, 69.39640, 69.68250),
-               tolerance = 1e-4)
-  stats <- summary(model)
-  expect_equal(stats$maxDepth, 5)
-
   modelPath <- tempfile(pattern = "spark-decisionTreeRegression", fileext = ".tmp")
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))

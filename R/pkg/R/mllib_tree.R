@@ -96,7 +96,7 @@ print.summary.treeEnsemble <- function(x) {
 }
 
 # Create the summary of a decision tree model
-summary.dicisionTree <- function(model) {
+summary.decisionTree <- function(model) {
   jobj <- model@jobj
   formula <- callJMethod(jobj, "formula")
   numFeatures <- callJMethod(jobj, "numFeatures")
@@ -112,7 +112,7 @@ summary.dicisionTree <- function(model) {
 }
 
 # Prints the summary of decision tree models
-print.summary.dicisionTree <- function(x) {
+print.summary.decisionTree <- function(x) {
   jobj <- x$jobj
   cat("Formula: ", x$formula)
   cat("\nNumber of features: ", x$numFeatures)
@@ -579,7 +579,7 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.DecisionTree,SparkDataFrame,formula-method
 #' @return \code{spark.DecisionTree} returns a fitted Decision Tree model.
-#' @rdname spark.DecisionTree
+#' @rdname spark.decisionTree
 #' @name spark.DecisionTree
 #' @export
 #' @examples
@@ -661,7 +661,7 @@ setMethod("summary", signature(object = "DecisionTreeRegressionModel"),
 
 #' @param x summary object of Decision Tree regression model or classification model
 #'          returned by \code{summary}.
-#' @rdname spark.DecisionTree
+#' @rdname spark.decisionTree
 #' @export
 #' @note print.summary.DecisionTreeRegressionModel since 2.2.0
 print.summary.DecisionTreeRegressionModel <- function(x, ...) {
@@ -670,7 +670,7 @@ print.summary.DecisionTreeRegressionModel <- function(x, ...) {
 
 #  Get the summary of a Decision Tree Classification Model
 
-#' @rdname spark.DecisionTree
+#' @rdname spark.decisionTree
 #' @aliases summary,DecisionTreeClassificationModel-method
 #' @export
 #' @note summary(DecisionTreeClassificationModel) since 2.2.0
@@ -683,7 +683,7 @@ setMethod("summary", signature(object = "DecisionTreeClassificationModel"),
 
 #  Prints the summary of Decision Tree Classification Model
 
-#' @rdname spark.DecisionTree
+#' @rdname spark.decisionTree
 #' @export
 #' @note print.summary.DecisionTreeClassificationModel since 2.2.0
 print.summary.DecisionTreeClassificationModel <- function(x, ...) {
@@ -695,7 +695,7 @@ print.summary.DecisionTreeClassificationModel <- function(x, ...) {
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
 #'         "prediction".
-#' @rdname spark.DecisionTree
+#' @rdname spark.decisionTree
 #' @aliases predict,DecisionTreeRegressionModel-method
 #' @export
 #' @note predict(DecisionTreeRegressionModel) since 2.2.0
@@ -704,7 +704,7 @@ setMethod("predict", signature(object = "DecisionTreeRegressionModel"),
             predict_internal(object, newData)
           })
 
-#' @rdname spark.DecisionTree
+#' @rdname spark.decisionTree
 #' @aliases predict,DecisionTreeClassificationModel-method
 #' @export
 #' @note predict(DecisionTreeClassificationModel) since 2.2.0
@@ -721,7 +721,7 @@ setMethod("predict", signature(object = "DecisionTreeClassificationModel"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @aliases write.ml,DecisionTreeRegressionModel,character-method
-#' @rdname spark.DecisionTree
+#' @rdname spark.decisionTree
 #' @export
 #' @note write.ml(DecisionTreeRegressionModel, character) since 2.2.0
 setMethod("write.ml", signature(object = "DecisionTreeRegressionModel", path = "character"),
@@ -730,7 +730,7 @@ setMethod("write.ml", signature(object = "DecisionTreeRegressionModel", path = "
           })
 
 #' @aliases write.ml,DecisionTreeClassificationModel,character-method
-#' @rdname spark.DecisionTree
+#' @rdname spark.decisionTree
 #' @export
 #' @note write.ml(DecisionTreeClassificationModel, character) since 2.2.0
 setMethod("write.ml", signature(object = "DecisionTreeClassificationModel", path = "character"),
