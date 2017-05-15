@@ -398,6 +398,20 @@ class DecisionTreeClassifierSuite
 
     testDefaultReadWrite(model)
   }
+
+  test("string params should be case-insensitive") {
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, 2)
+
+    val dt = new DecisionTreeClassifier()
+    Seq("enTropy", "gInI").foreach { impurity =>
+      dt.setImpurity(impurity)
+      assert(dt.getImpurity === impurity)
+      val model = dt.fit(df)
+      assert(model.getImpurity === impurity)
+    }
+  }
 }
 
 private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {

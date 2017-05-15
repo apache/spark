@@ -222,6 +222,26 @@ class RandomForestClassifierSuite
     testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings,
       allParamSettings, checkModelData)
   }
+
+  test("string params should be case-insensitive") {
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(orderedLabeledPoints5_20, categoricalFeatures, 2)
+
+    val rf = new RandomForestClassifier()
+    Seq("enTropy", "gInI").foreach { impurity =>
+      rf.setImpurity(impurity)
+      assert(rf.getImpurity === impurity)
+      val model = rf.fit(df)
+      assert(model.getImpurity === impurity)
+    }
+
+    Seq("aUtO", "ALL", "oneThird", "sQrt", "lOG2").foreach { strategy =>
+      rf.setFeatureSubsetStrategy(strategy)
+      assert(rf.getFeatureSubsetStrategy === strategy)
+      val model = rf.fit(df)
+      assert(model.getFeatureSubsetStrategy === strategy)
+    }
+  }
 }
 
 private object RandomForestClassifierSuite extends SparkFunSuite {

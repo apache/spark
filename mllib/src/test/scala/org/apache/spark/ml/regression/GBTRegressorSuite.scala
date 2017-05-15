@@ -186,6 +186,20 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings,
       allParamSettings, checkModelData)
   }
+
+  test("string params should be case-insensitive") {
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
+
+    val gbt = new GBTRegressor()
+
+    Seq("sQuarEd", "aBsolUTe").foreach { loss =>
+      gbt.setLossType(loss)
+      assert(gbt.getLossType === loss)
+      val model = gbt.fit(df)
+      assert(model.getLossType === loss)
+    }
+  }
 }
 
 private object GBTRegressorSuite extends SparkFunSuite {

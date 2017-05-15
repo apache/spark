@@ -375,6 +375,26 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings,
       allParamSettings, checkModelData)
   }
+
+  test("string params should be case-insensitive") {
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2)
+
+    val gbt = new GBTClassifier()
+    Seq("enTropy", "gInI").foreach { impurity =>
+      gbt.setImpurity(impurity)
+      assert(gbt.getImpurity === impurity)
+      val model = gbt.fit(df)
+      assert(model.getImpurity === impurity)
+    }
+
+    Seq("loGIstiC").foreach { loss =>
+      gbt.setLossType(loss)
+      assert(gbt.getLossType === loss)
+      val model = gbt.fit(df)
+      assert(model.getLossType === loss)
+    }
+  }
 }
 
 private object GBTClassifierSuite extends SparkFunSuite {

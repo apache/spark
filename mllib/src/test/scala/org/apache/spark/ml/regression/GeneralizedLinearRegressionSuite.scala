@@ -1587,6 +1587,29 @@ class GeneralizedLinearRegressionSuite
     assert(evalSummary.deviance === summary.deviance)
     assert(evalSummary.aic === summary.aic)
   }
+
+  test("string params should be case-insensitive") {
+    val df = Seq(
+      Instance(1.0, 1.0, Vectors.zeros(0)),
+      Instance(0.5, 2.0, Vectors.zeros(0)),
+      Instance(0.7, 3.0, Vectors.zeros(0)),
+      Instance(0.3, 4.0, Vectors.zeros(0))
+    ).toDF()
+
+    Seq("gauSSian", "binOMial", "poisSON", "GAMMa", "TweeDIe").foreach { family =>
+      val glr = new GeneralizedLinearRegression().setFamily(family)
+      assert(glr.getFamily === family)
+      val model = glr.fit(df)
+      assert(model.getFamily === family)
+    }
+
+    Seq("identITY", "lOg", "inVersE", "lOgIt", "prOBit", "cLOGlog", "sQRt").foreach { link =>
+      val glr = new GeneralizedLinearRegression().setLink(link)
+      assert(glr.getLink === link)
+      val model = glr.fit(df)
+      assert(model.getLink === link)
+    }
+  }
 }
 
 object GeneralizedLinearRegressionSuite {

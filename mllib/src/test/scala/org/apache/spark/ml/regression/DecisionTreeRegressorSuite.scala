@@ -179,6 +179,20 @@ class DecisionTreeRegressorSuite
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0),
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
   }
+
+  test("string params should be case-insensitive") {
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, 0)
+
+    val dt = new DecisionTreeRegressor()
+    Seq("varIAncE").foreach { impurity =>
+      dt.setImpurity(impurity)
+      assert(dt.getImpurity === impurity)
+      val model = dt.fit(df)
+      assert(model.getImpurity === impurity)
+    }
+  }
 }
 
 private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
