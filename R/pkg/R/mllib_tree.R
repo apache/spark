@@ -622,9 +622,10 @@ setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "fo
                      impurity <- match.arg(impurity, "variance")
                      jobj <- callJStatic("org.apache.spark.ml.r.DecisionTreeRegressorWrapper",
                                          "fit", data@sdf, formula, as.integer(maxDepth),
-                                         as.integer(maxBins), impurity, as.integer(minInstancesPerNode),
-                                         as.numeric(minInfoGain), as.integer(checkpointInterval),
-                                         seed, as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
+                                         as.integer(maxBins), impurity,
+                                         as.integer(minInstancesPerNode), as.numeric(minInfoGain),
+                                         as.integer(checkpointInterval), seed,
+                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
                      new("DecisionTreeRegressionModel", jobj = jobj)
                    },
                    classification = {
@@ -632,9 +633,10 @@ setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "fo
                      impurity <- match.arg(impurity, c("gini", "entropy"))
                      jobj <- callJStatic("org.apache.spark.ml.r.DecisionTreeClassifierWrapper",
                                          "fit", data@sdf, formula, as.integer(maxDepth),
-                                         as.integer(maxBins), impurity, as.integer(minInstancesPerNode),
-                                         as.numeric(minInfoGain), as.integer(checkpointInterval),
-                                         seed, as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
+                                         as.integer(maxBins), impurity,
+                                         as.integer(minInstancesPerNode), as.numeric(minInfoGain),
+                                         as.integer(checkpointInterval), seed,
+                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
                      new("DecisionTreeClassificationModel", jobj = jobj)
                    }
             )
