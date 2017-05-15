@@ -545,35 +545,29 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     Seq(true, false).foreach { vectorized =>
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        withTempPath { path =>
-          Seq(Some(1), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
-          assert(spark.read.parquet(path.getAbsolutePath).where("`col.dots` > 0").count() == 1)
-        }
+        val dfs = Seq(
+          Seq(Some(1), None).toDF("col.dots"),
+          Seq(Some(1L), None).toDF("col.dots"),
+          Seq(Some(1.0F), None).toDF("col.dots"),
+          Seq(Some(1.0D), None).toDF("col.dots"),
+          Seq(true, false).toDF("col.dots"),
+          Seq("apple", null).toDF("col.dots")
+        )
 
-        withTempPath { path =>
-          Seq(Some(1L), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
-          assert(spark.read.parquet(path.getAbsolutePath).where("`col.dots` >= 1L").count() == 1)
-        }
+        val predicates = Seq(
+          "`col.dots` > 0",
+          "`col.dots` >= 1L",
+          "`col.dots` < 2.0",
+          "`col.dots` <= 1.0D",
+          "`col.dots` == true",
+          "`col.dots` IS NOT NULL"
+        )
 
-        withTempPath { path =>
-          Seq(Some(1.0F), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
-          assert(spark.read.parquet(path.getAbsolutePath).where("`col.dots` < 2.0").count() == 1)
-        }
-
-        withTempPath { path =>
-          Seq(Some(1.0D), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
-          assert(spark.read.parquet(path.getAbsolutePath).where("`col.dots` <= 1.0D").count() == 1)
-        }
-
-        withTempPath { path =>
-          Seq(true, false).toDF("col.dots").write.parquet(path.getAbsolutePath)
-          assert(spark.read.parquet(path.getAbsolutePath).where("`col.dots` == true").count() == 1)
-        }
-
-        withTempPath { path =>
-          Seq("apple", null).toDF("col.dots").write.parquet(path.getAbsolutePath)
-          assert(
-            spark.read.parquet(path.getAbsolutePath).where("`col.dots` IS NOT NULL").count() == 1)
+        dfs.zip(predicates).foreach { case (df, predicate) =>
+          withTempPath { path =>
+            df.write.parquet(path.getAbsolutePath)
+            assert(spark.read.parquet(path.getAbsolutePath).where(predicate).count() == 1)
+          }
         }
       }
     }

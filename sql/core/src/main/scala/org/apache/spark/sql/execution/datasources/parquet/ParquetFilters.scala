@@ -243,7 +243,8 @@ private[parquet] object ParquetFilters {
  * Note that, this is a hacky workaround to allow dots in column names. Currently, column APIs
  * in Parquet's `FilterApi` only allows dot-separated names so here we resemble those columns
  * but only allow single column path that allows dots in the names as we don't currently push
- * down filters with nested fields.
+ * down filters with nested fields. The functions in this object are based on
+ * the codes in `org.apache.parquet.filter2.predicate`.
  */
 private[parquet] object ParquetColumns {
   def intColumn(columnPath: String): Column[Integer] with SupportsLtGt = {
