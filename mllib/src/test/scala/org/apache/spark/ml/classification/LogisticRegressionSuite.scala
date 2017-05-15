@@ -255,7 +255,7 @@ class LogisticRegressionSuite
   }
 
   test("thresholds prediction") {
-    val blr = new LogisticRegression().setFamily("BiNomial")
+    val blr = new LogisticRegression().setFamily("binomial")
     val binaryModel = blr.fit(smallBinaryDataset)
 
     binaryModel.setThreshold(1.0)
@@ -269,7 +269,7 @@ class LogisticRegressionSuite
     assert(binaryOnePredictions.forall(_.getDouble(0) === 1.0))
 
 
-    val mlr = new LogisticRegression().setFamily("MulTinoMial")
+    val mlr = new LogisticRegression().setFamily("multinomial")
     val model = mlr.fit(smallMultinomialDataset)
     val basePredictions = model.transform(smallMultinomialDataset).select("prediction").collect()
 
@@ -2581,6 +2581,21 @@ class LogisticRegressionSuite
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients.toArray === actual.coefficients.toArray)
       }
+  }
+
+  test("string params should be case-insensitive") {
+    val lr = new LogisticRegression()
+    lr.setFamily("AuTo")
+    assert(lr.getFamily === "AuTo")
+    lr.fit(smallBinaryDataset)
+
+    lr.setFamily("biNoMial")
+    assert(lr.getFamily === "biNoMial")
+    lr.fit(smallBinaryDataset)
+
+    lr.setFamily("mulTinomIAl")
+    assert(lr.getFamily === "mulTinomIAl")
+    lr.fit(smallMultinomialDataset)
   }
 }
 

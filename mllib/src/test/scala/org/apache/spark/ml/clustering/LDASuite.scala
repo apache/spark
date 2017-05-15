@@ -173,7 +173,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("fit & transform with Online LDA") {
-    val lda = new LDA().setK(k).setSeed(1).setOptimizer("oNlIne").setMaxIter(2)
+    val lda = new LDA().setK(k).setSeed(1).setOptimizer("online").setMaxIter(2)
     val model = lda.fit(dataset)
 
     MLTestingUtils.checkCopyAndUids(lda, model)
@@ -218,7 +218,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("fit & transform with EM LDA") {
-    val lda = new LDA().setK(k).setSeed(1).setOptimizer("eM").setMaxIter(2)
+    val lda = new LDA().setK(k).setSeed(1).setOptimizer("em").setMaxIter(2)
     val model_ = lda.fit(dataset)
 
     MLTestingUtils.checkCopyAndUids(lda, model_)
@@ -312,5 +312,16 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val model = model_.asInstanceOf[DistributedLDAModel]
 
     assert(model.getCheckpointFiles.isEmpty)
+  }
+
+  test("string params should be case-insensitive") {
+    val lda = new LDA()
+    lda.setOptimizer("eM")
+    assert(lda.getOptimizer === "eM")
+    lda.fit(dataset)
+
+    lda.setOptimizer("oNlinE")
+    assert(lda.getOptimizer === "oNlinE")
+    lda.fit(dataset)
   }
 }
