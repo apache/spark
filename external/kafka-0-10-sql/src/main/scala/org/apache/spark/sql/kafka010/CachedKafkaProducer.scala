@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 
 private[kafka010] object CachedKafkaProducer extends Logging {
 
-  type Producer = KafkaProducer[Array[Byte], Array[Byte]]
+  private type Producer = KafkaProducer[Array[Byte], Array[Byte]]
 
   private val cacheMap = new mutable.HashMap[String, Producer]()
 
@@ -43,8 +43,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
 
   private def getUniqueId(kafkaParams: ju.Map[String, Object]): String = {
     val uid = kafkaParams.get(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId)
-    assert(uid != null, s"KafkaParams($kafkaParams) not canonicalized, see API doc on " +
-      "`CanonicalizeKafkaParams`")
+    assert(uid != null, s"KafkaParams($kafkaParams) not canonicalized")
     uid.toString
   }
 
@@ -53,7 +52,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
    * exist, a new KafkaProducer will be created. KafkaProducer is thread safe, it is best to keep
    * one instance per specified kafkaParams.
    */
-  def getOrCreate(
+  private[kafka010] def getOrCreate(
     kafkaParams: ju.Map[String, Object]): Producer = synchronized {
     val params = if (!CanonicalizeKafkaParams.isCanonicalized(kafkaParams)) {
       CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
@@ -62,7 +61,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     cacheMap.getOrElse(uid.toString, createKafkaProducer(params))
   }
 
-  def close(kafkaParams: ju.Map[String, Object]): Unit = {
+  private[kafka010] def close(kafkaParams: ju.Map[String, Object]): Unit = {
     val uid = getUniqueId(kafkaParams)
     val producer: Option[Producer] =
       cacheMap.remove(uid)
@@ -112,7 +111,7 @@ private[kafka010] object CanonicalizeKafkaParams extends Logging {
 
   private[kafka010] def computeUniqueCanonicalForm(
     kafkaParams: ju.Map[String, Object]): ju.Map[String, Object] = synchronized {
-    if (kafkaParams.get(sparkKafkaParamsUniqueId) != null) {
+    if (isCanonicalized(kafkaParams)) {
       logWarning(s"A unique id,$sparkKafkaParamsUniqueId ->" +
         s" ${kafkaParams.get(sparkKafkaParamsUniqueId)}" +
         s" already exists in kafka params, returning Kafka Params:$kafkaParams as is.")
