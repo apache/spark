@@ -2582,6 +2582,13 @@ class LogisticRegressionSuite
         assert(expected.coefficients.toArray === actual.coefficients.toArray)
       }
   }
+
+  test("toString") {
+    val lrModel = new LogisticRegressionModel(uid = "lrModeltest",
+      coefficients = Vectors.dense(0.1, 0.2, 0.3), intercept = 0.5)
+    val expected: String = "lrModeltest, numClasses = 2, numFeatures = 3 threshold = 0.5"
+    assert(lrModel.toString === expected)
+  }
 }
 
 object LogisticRegressionSuite {

@@ -454,6 +454,10 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
         java_blr_summary = self._call_java("evaluate", dataset)
         return BinaryLogisticRegressionSummary(java_blr_summary)
 
+    @since("2.0.0")
+    def __repr__(self):
+        return self._call_java("toString")
+
 
 class LogisticRegressionSummary(JavaWrapper):
     """

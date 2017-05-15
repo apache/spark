@@ -1149,6 +1149,13 @@ class LogisticRegressionModel private[spark] (
    */
   @Since("1.6.0")
   override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
+
+  @Since("2.0.0")
+  override def toString: String = {
+    val td = getDefault(threshold)
+    s"${super.toString}, numClasses = $numClasses, " +
+      s"numFeatures = $numFeatures threshold = ${td.getOrElse("None")}"
+  }
 }
 
 
