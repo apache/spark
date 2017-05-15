@@ -2582,6 +2582,17 @@ class LogisticRegressionSuite
         assert(expected.coefficients.toArray === actual.coefficients.toArray)
       }
   }
+
+  test("string params should be case-insensitive") {
+    val lr = new LogisticRegression()
+    Seq(("AuTo", smallBinaryDataset), ("biNoMial", smallBinaryDataset),
+      ("mulTinomIAl", smallMultinomialDataset)).foreach { case (family, data) =>
+      lr.setFamily(family)
+      assert(lr.getFamily === family)
+      val model = lr.fit(data)
+      assert(model.getFamily === family)
+    }
+  }
 }
 
 object LogisticRegressionSuite {
