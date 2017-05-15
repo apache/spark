@@ -909,9 +909,7 @@ object CodeGenerator extends Logging {
     // http://google.github.io/guava/releases/14.0/api/docs/com/google/common/cache/
     //   Cache.html#get(K,%20java.util.concurrent.Callable)
     case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
-      val excChains = ExceptionUtils.getThrowables(e)
-      val exc = if (excChains.length == 1) excChains(0) else excChains(excChains.length - 2)
-      throw exc
+      throw e.getCause
   }
 
   /**
