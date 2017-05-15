@@ -36,8 +36,9 @@ import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.WriteDataOutCommand
-import org.apache.spark.sql.execution.datasources.FileFormatWriter
+import org.apache.spark.sql.execution.datasources.{ExecutedWriteSummary, FileFormatWriter}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.{HiveClientImpl, HiveVersion}
@@ -215,7 +216,8 @@ case class InsertIntoHiveTable(
    * `org.apache.hadoop.hive.serde2.SerDe` and the
    * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.
    */
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(sparkSession: SparkSession, queryExecution: QueryExecution,
+      callback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
     val sessionState = sparkSession.sessionState
     val externalCatalog = sparkSession.sharedState.externalCatalog
     val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
@@ -306,9 +308,9 @@ case class InsertIntoHiveTable(
       }.asInstanceOf[Attribute]
     }
 
-    FileFormatWriter.write(
+    val writeSummary = FileFormatWriter.write(
       sparkSession = sparkSession,
-      queryExecution = Dataset.ofRows(sparkSession, writeDataOutQuery).queryExecution,
+      queryExecution = queryExecution,
       fileFormat = new HiveFileFormat(fileSinkConf),
       committer = committer,
       outputSpec = FileFormatWriter.OutputSpec(tmpLocation.toString, Map.empty),
@@ -317,6 +319,8 @@ case class InsertIntoHiveTable(
       bucketSpec = None,
       refreshFunction = _ => (),
       options = Map.empty)
+
+    callback(writeSummary)
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {

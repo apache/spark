@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogT
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command._
 
 /**
@@ -53,7 +54,8 @@ case class InsertIntoHadoopFsRelationCommand(
 
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(sparkSession: SparkSession, queryExecution: QueryExecution,
+      callback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
     if (query.schema.fieldNames.length != query.schema.fieldNames.distinct.length) {
       val duplicateColumns = query.schema.fieldNames.groupBy(identity).collect {
@@ -132,9 +134,9 @@ case class InsertIntoHadoopFsRelationCommand(
         }
       }
 
-      FileFormatWriter.write(
+      val writeSummary = FileFormatWriter.write(
         sparkSession = sparkSession,
-        queryExecution = Dataset.ofRows(sparkSession, writeDataOutQuery).queryExecution,
+        queryExecution = queryExecution,
         fileFormat = fileFormat,
         committer = committer,
         outputSpec = FileFormatWriter.OutputSpec(
@@ -144,6 +146,8 @@ case class InsertIntoHadoopFsRelationCommand(
         bucketSpec = bucketSpec,
         refreshFunction = refreshPartitionsCallback,
         options = options)
+
+      callback(writeSummary)
 
       // refresh cached files in FileIndex
       fileIndex.foreach(_.refresh())

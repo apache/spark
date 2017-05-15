@@ -23,7 +23,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
-import org.apache.spark.sql.execution.command.WriteDataOutCommand
+import org.apache.spark.sql.execution.command.RunnableCommand
 
 
 /**
@@ -37,7 +37,7 @@ case class CreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
     mode: SaveMode)
-  extends WriteDataOutCommand {
+  extends RunnableCommand {
 
   private val tableIdentifier = tableDesc.identifier
 

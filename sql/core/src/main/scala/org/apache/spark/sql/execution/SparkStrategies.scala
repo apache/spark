@@ -350,8 +350,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 
-      case WriteDataOut(child) =>
-        WriteDataOutExec(planLater(child)) :: Nil
+      case WriteDataFileOut(child) =>
+        WriteDataFileOutExec(planLater(child)) :: Nil
 
       case MemoryPlan(sink, output) =>
         val encoder = RowEncoder(sink.schema)

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.WriteDataOutCommand
+import org.apache.spark.sql.execution.command.RunnableCommand
 
 /**
  * Saves the results of `query` in to a data source.
@@ -36,14 +36,14 @@ case class SaveIntoDataSourceCommand(
     provider: String,
     partitionColumns: Seq[String],
     options: Map[String, String],
-    mode: SaveMode) extends WriteDataOutCommand {
+    mode: SaveMode) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     DataSource(
       sparkSession,
       className = provider,
       partitionColumns = partitionColumns,
-      options = options).write(mode, Dataset.ofRows(sparkSession, writeDataOutQuery))
+      options = options).write(mode, Dataset.ofRows(sparkSession, query))
 
     Seq.empty[Row]
   }

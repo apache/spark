@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, WriteDataOut}
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, WriteDataFileOut}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.datasources.ExecutedWriteSummary
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
@@ -44,20 +45,19 @@ trait RunnableCommand extends logical.Command {
  * A logical command specialized for writing data out. `WriteDataOutCommand`s are
  * wrapped in `WriteDataOutCommand` during execution.
  */
-trait WriteDataOutCommand extends RunnableCommand {
+trait WriteDataOutCommand extends logical.Command {
   // The query plan that represents the data going to write out.
   val query: LogicalPlan
 
-  // Wraps the query plan with an operator to track its metrics. The commands will actually use
-  // this wrapped query plan when writing data out.
-  val writeDataOutQuery: LogicalPlan = WriteDataOut(query)
+  def run(sparkSession: SparkSession, queryExecution: QueryExecution,
+    callback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row]
 
-  override protected def innerChildren: Seq[LogicalPlan] = writeDataOutQuery :: Nil
+  override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 }
 
 trait CommandExec extends SparkPlan {
 
-  val cmd: RunnableCommand
+  val cmd: logical.Command
 
   /**
    * A concrete command should override this lazy field to wrap up any side effects caused by the
@@ -103,20 +103,55 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends CommandExec {
  * saves the result to prevent multiple executions.
  */
 case class WrittenDataCommandExec(cmd: WriteDataOutCommand) extends CommandExec {
+
+  private def updateDriverMetrics(
+      queryExecution: QueryExecution,
+      writeTaskSummary: Seq[ExecutedWriteSummary]): Unit = {
+    var partitionNum = 0
+    var fileNum = 0
+    var fileBytes: Long = 0L
+
+    writeTaskSummary.foreach { summary =>
+      partitionNum += summary.updatedPartitions.size
+      fileNum += summary.writtenFileNum
+      fileBytes += summary.writtenBytes
+    }
+
+    val writeOutPlan = queryExecution.executedPlan.collect {
+      case w: WriteDataFileOutExec => w
+    }.head
+
+    val partitionMetric = writeOutPlan.metrics("dynamicPartNum")
+    val fileNumMetric = writeOutPlan.metrics("fileNum")
+    val fileBytesMetric = writeOutPlan.metrics("fileBytes")
+    partitionMetric.add(partitionNum)
+    fileNumMetric.add(fileNum)
+    fileBytesMetric.add(fileBytes)
+
+    val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId,
+      partitionMetric :: fileNumMetric :: fileBytesMetric :: Nil)
+  }
+
   override protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
-    val queryExecution = Dataset.ofRows(sqlContext.sparkSession, cmd.writeDataOutQuery)
-      .queryExecution
+    // Wraps the query plan with an operator to track its metrics. The commands will actually use
+    // this wrapped query plan when writing data out.
+    val writeDataOutQuery: LogicalPlan = WriteDataFileOut(cmd.query)
+
+    val queryExecution = Dataset.ofRows(sqlContext.sparkSession, writeDataOutQuery).queryExecution
 
     // Associate the query execution with a SQL execution id
     SQLExecution.withNewExecutionId(sqlContext.sparkSession, queryExecution) {
       val startTime = System.nanoTime()
 
       val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-      val results = cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
+      val results = cmd.run(sqlContext.sparkSession, queryExecution,
+        updateDriverMetrics(queryExecution, _))
+          .map(converter(_).asInstanceOf[InternalRow])
 
       val timeTakenMs = (System.nanoTime() - startTime) / 1000 / 1000
       val writingTimeMetrics = queryExecution.executedPlan.collect {
-        case w: WriteDataOutExec => w
+        case w: WriteDataFileOutExec => w
       }.head.metrics("writingTime")
       writingTimeMetrics.add(timeTakenMs)
 
@@ -130,17 +165,20 @@ case class WrittenDataCommandExec(cmd: WriteDataOutCommand) extends CommandExec 
 }
 
 /**
- * A physical operator represents the action of writing data out. This operator doesn't change
+ * A physical operator represents the action of writing out data files. This operator doesn't change
  * the data but associates metrics with data writes for visibility.
  */
-case class WriteDataOutExec(child: SparkPlan) extends SparkPlan {
+case class WriteDataFileOutExec(child: SparkPlan) extends SparkPlan {
 
   override def output: Seq[Attribute] = child.output
   override def children: Seq[SparkPlan] = child :: Nil
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of output rows"),
-    "writingTime" -> SQLMetrics.createMetric(sqlContext.sparkContext, "writing data out time (ms)"))
+    "writingTime" -> SQLMetrics.createMetric(sqlContext.sparkContext, "writing data out time (ms)"),
+    "dynamicPartNum" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of dynamic part"),
+    "fileNum" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of written files"),
+    "fileBytes" -> SQLMetrics.createMetric(sqlContext.sparkContext, "bytes of written files"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
