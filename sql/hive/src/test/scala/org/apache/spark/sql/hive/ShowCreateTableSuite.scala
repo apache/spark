@@ -247,21 +247,16 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     }
   }
 
-  test("hive bucketing is not supported") {
+  test("hive bucketing is supported") {
     withTable("t1") {
-      createRawHiveTable(
+      sql(
         s"""CREATE TABLE t1 (a INT, b STRING)
            |CLUSTERED BY (a)
            |SORTED BY (b)
            |INTO 2 BUCKETS
          """.stripMargin
       )
-
-      val cause = intercept[AnalysisException] {
-        sql("SHOW CREATE TABLE t1")
-      }
-
-      assert(cause.getMessage.contains(" - bucketing"))
+      checkCreateTable("t1")
     }
   }
 
