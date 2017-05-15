@@ -1662,11 +1662,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("Path does not exist"))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
-    }
-    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
-
-    e = intercept[AnalysisException] {
       sql(s"select id from `com.databricks.spark.avro`.`file_path`")
     }
     assert(e.message.contains("Failed to find data source: com.databricks.spark.avro."))
@@ -2754,6 +2749,21 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         // The DESC TABLE should report same schema as table scan.
         assert(sql("desc t").select("col_name")
           .as[String].collect().mkString(",").contains("i,p,j"))
+      }
+    }
+  }
+
+  // Only New OrcFileFormat supports this.
+  Seq("orc", "parquet").foreach { format =>
+    test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        val emptyDf = Seq((true, 1, "str")).toDF.limit(0)
+        emptyDf.write.format(format).save(path)
+
+        val df = spark.read.format(format).load(path)
+        assert(df.schema.sameType(emptyDf.schema))
+        checkAnswer(df, emptyDf)
       }
     }
   }

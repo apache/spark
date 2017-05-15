@@ -67,4 +67,11 @@ object OrcOptions {
     "snappy" -> "SNAPPY",
     "zlib" -> "ZLIB",
     "lzo" -> "LZO")
+
+  // The extensions for ORC compression codecs
+  val extensionsForCompressionCodecNames = Map(
+    "NONE" -> "",
+    "SNAPPY" -> ".snappy",
+    "ZLIB" -> ".zlib",
+    "LZO" -> ".lzo")
 }

@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcOptions
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -225,13 +226,13 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
   }
 }
 
-class OrcSourceSuite extends OrcSuite {
+class OrcSourceSuite extends OrcSuite with SQLTestUtils {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     spark.sql(
       s"""CREATE TEMPORARY VIEW normal_orc_source
-         |USING org.apache.spark.sql.hive.orc
+         |USING orc
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
@@ -239,7 +240,7 @@ class OrcSourceSuite extends OrcSuite {
 
     spark.sql(
       s"""CREATE TEMPORARY VIEW normal_orc_as_source
-         |USING org.apache.spark.sql.hive.orc
+         |USING orc
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
@@ -276,6 +277,15 @@ class OrcSourceSuite extends OrcSuite {
           StringContains("b", "prefix")
         ))
       )).get.toString
+    }
+  }
+
+  test("SPARK-21791 ORC should support column names with dot") {
+    import spark.implicits._
+    withTempDir { dir =>
+      val path = new File(dir, "orc").getCanonicalPath
+      Seq(Some(1), None).toDF("col.dots").write.orc(path)
+      assert(spark.read.orc(path).collect().length == 2)
     }
   }
 }
