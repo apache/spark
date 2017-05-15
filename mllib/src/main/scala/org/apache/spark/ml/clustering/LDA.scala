@@ -183,10 +183,10 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
 
   /**
    * Output column with estimates of the topic mixture distribution for each document (often called
-   * "theta" in the literature).  Returns a vector of zeros for an empty document.
+   * "theta" in the literature). Returns a vector of zeros for an empty document.
    *
    * This uses a variational approximation following Hoffman et al. (2010), where the approximate
-   * distribution is called "gamma."  Technically, this method returns this approximation "gamma"
+   * distribution is called "gamma." Technically, this method returns this approximation "gamma"
    * for each document.
    *
    * @group param
@@ -194,7 +194,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   final val topicDistributionCol = new Param[String](this, "topicDistributionCol", "Output column" +
     " with estimates of the topic mixture distribution for each document (often called \"theta\"" +
-    " in the literature).  Returns a vector of zeros for an empty document.")
+    " in the literature). Returns a vector of zeros for an empty document.")
 
   setDefault(topicDistributionCol -> "topicDistribution")
 
@@ -325,7 +325,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
           s" ${getDocConcentration.length}, but k = $getK.  docConcentration must be an array of" +
           s" length either 1 (scalar) or k (num topics).")
       }
-      getOptimizer match {
+      getOptimizer.toLowerCase(Locale.ROOT) match {
         case "online" =>
           require(getDocConcentration.forall(_ >= 0),
             "For Online LDA optimizer, docConcentration values must be >= 0.  Found values: " +
@@ -337,7 +337,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
       }
     }
     if (isSet(topicConcentration)) {
-      getOptimizer match {
+      getOptimizer.toLowerCase(Locale.ROOT) match {
         case "online" =>
           require(getTopicConcentration >= 0, s"For Online LDA optimizer, topicConcentration" +
             s" must be >= 0.  Found value: $getTopicConcentration")
@@ -350,16 +350,17 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
   }
 
-  private[clustering] def getOldOptimizer: OldLDAOptimizer = getOptimizer match {
-    case "online" =>
-      new OldOnlineLDAOptimizer()
-        .setTau0($(learningOffset))
-        .setKappa($(learningDecay))
-        .setMiniBatchFraction($(subsamplingRate))
-        .setOptimizeDocConcentration($(optimizeDocConcentration))
-    case "em" =>
-      new OldEMLDAOptimizer()
-        .setKeepLastCheckpoint($(keepLastCheckpoint))
+  private[clustering] def getOldOptimizer: OldLDAOptimizer =
+    getOptimizer.toLowerCase(Locale.ROOT) match {
+      case "online" =>
+        new OldOnlineLDAOptimizer()
+          .setTau0($(learningOffset))
+          .setKappa($(learningDecay))
+          .setMiniBatchFraction($(subsamplingRate))
+          .setOptimizeDocConcentration($(optimizeDocConcentration))
+      case "em" =>
+        new OldEMLDAOptimizer()
+          .setKeepLastCheckpoint($(keepLastCheckpoint))
   }
 }
 
