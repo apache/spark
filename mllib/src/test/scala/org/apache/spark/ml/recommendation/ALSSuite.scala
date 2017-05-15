@@ -690,9 +690,13 @@ class ALSSuite
     import spark.implicits._
     val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
     val data = ratings.toDF
-    val model = new ALS().fit(data)
+    val als = new ALS()
     Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { s =>
-      model.setColdStartStrategy(s).transform(data)
+      als.setColdStartStrategy(s)
+      assert(als.getColdStartStrategy === s)
+      val model = als.fit(data)
+      assert(model.getColdStartStrategy === s)
+      model.transform(data)
     }
   }
 

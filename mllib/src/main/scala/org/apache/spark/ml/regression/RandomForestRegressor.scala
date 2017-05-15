@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import java.util.Locale
+
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
@@ -127,8 +129,8 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       minInstancesPerNode, seed, subsamplingRate, cacheNodeIds, checkpointInterval)
 
     val trees = RandomForest
-      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
-      .map(_.asInstanceOf[DecisionTreeRegressionModel])
+      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy.toLowerCase(Locale.ROOT),
+        getSeed, Some(instr)).map(_.asInstanceOf[DecisionTreeRegressionModel])
 
     val numFeatures = oldDataset.first().features.size
     val m = new RandomForestRegressionModel(uid, trees, numFeatures)

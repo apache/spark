@@ -123,7 +123,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
       ALSModel.supportedColdStartStrategies.contains(s.toLowerCase(Locale.ROOT)))
 
   /** @group expertGetParam */
-  def getColdStartStrategy: String = $(coldStartStrategy).toLowerCase(Locale.ROOT)
+  def getColdStartStrategy: String = $(coldStartStrategy)
 }
 
 /**
@@ -308,7 +308,7 @@ class ALSModel private[ml] (
         checkedCast(dataset($(itemCol))) === itemFactors("id"), "left")
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
-    getColdStartStrategy match {
+    getColdStartStrategy.toLowerCase(Locale.ROOT) match {
       case ALSModel.Drop =>
         predictions.na.drop("all", Seq($(predictionCol)))
       case ALSModel.NaN =>

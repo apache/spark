@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import java.util.Locale
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.tree.impl.TreeTests
@@ -145,7 +147,7 @@ private object RandomForestRegressorSuite extends SparkFunSuite {
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainRegressor(data.map(OldLabeledPoint.fromML), oldStrategy,
-      rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
+      rf.getNumTrees, rf.getFeatureSubsetStrategy.toLowerCase(Locale.ROOT), rf.getSeed.toInt)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.

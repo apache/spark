@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.Locale
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -237,8 +239,8 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainClassifier(
-      data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy,
-      rf.getSeed.toInt)
+      data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees,
+      rf.getFeatureSubsetStrategy.toLowerCase(Locale.ROOT), rf.getSeed.toInt)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.
