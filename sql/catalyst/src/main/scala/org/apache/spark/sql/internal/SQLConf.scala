@@ -367,6 +367,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val THRIFTSERVER_RESULT_LIMIT =
+    buildConf("spark.sql.thriftserver.retainedResults")
+      .internal()
+      .doc("The number of sql results returned by Thrift Server when running a query " +
+        "without a limit, and when a query with a limit or this is set to 0, " +
+        "we don't change user's behavior." )
+      .intConf
+      .createWithDefault(200)
+
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     buildConf("spark.sql.thriftserver.ui.retainedStatements")
       .doc("The number of SQL statements kept in the JDBC/ODBC web UI history.")
