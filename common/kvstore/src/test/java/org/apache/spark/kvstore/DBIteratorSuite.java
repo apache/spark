@@ -17,7 +17,6 @@
 
 package org.apache.spark.kvstore;
 
-import java.io.File;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,15 +31,11 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import org.apache.commons.io.FileUtils;
 import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-/**
- * This class should really be called "LevelDBIteratorSuite" but for some reason I don't know,
- * sbt does not run the tests if it has that name.
- */
-public class DBIteratorSuite {
+public abstract class DBIteratorSuite {
 
   private static final int MIN_ENTRIES = 42;
   private static final int MAX_ENTRIES = 1024;
@@ -48,10 +43,9 @@ public class DBIteratorSuite {
 
   private static List<CustomType1> allEntries;
   private static List<CustomType1> clashingEntries;
-  private static LevelDB db;
-  private static File dbpath;
+  private static KVStore db;
 
-  private interface BaseComparator extends Comparator<CustomType1> {
+  private static interface BaseComparator extends Comparator<CustomType1> {
     /**
      * Returns a comparator that falls back to natural order if this comparator's ordering
      * returns equality for two elements. Used to mimic how the index sorts things internally.
@@ -73,17 +67,32 @@ public class DBIteratorSuite {
     }
   }
 
-  private final BaseComparator NATURAL_ORDER = (t1, t2) -> t1.key.compareTo(t2.key);
-  private final BaseComparator REF_INDEX_ORDER = (t1, t2) -> t1.id.compareTo(t2.id);
-  private final BaseComparator COPY_INDEX_ORDER = (t1, t2) -> t1.name.compareTo(t2.name);
-  private final BaseComparator NUMERIC_INDEX_ORDER = (t1, t2) -> t1.num - t2.num;
-  private final BaseComparator CHILD_INDEX_ORDER = (t1, t2) -> t1.child.compareTo(t2.child);
+  private static final BaseComparator NATURAL_ORDER = (t1, t2) -> t1.key.compareTo(t2.key);
+  private static final BaseComparator REF_INDEX_ORDER = (t1, t2) -> t1.id.compareTo(t2.id);
+  private static final BaseComparator COPY_INDEX_ORDER = (t1, t2) -> t1.name.compareTo(t2.name);
+  private static final BaseComparator NUMERIC_INDEX_ORDER = (t1, t2) -> t1.num - t2.num;
+  private static final BaseComparator CHILD_INDEX_ORDER = (t1, t2) -> t1.child.compareTo(t2.child);
 
-  @BeforeClass
-  public static void setup() throws Exception {
-    dbpath = File.createTempFile("test.", ".ldb");
-    dbpath.delete();
-    db = new LevelDB(dbpath);
+  /**
+   * Implementations should override this method; it is called only once, before all tests are
+   * run. Any state can be safely stored in static variables and cleaned up in a @AfterClass
+   * handler.
+   */
+  protected abstract KVStore createStore() throws Exception;
+
+  @AfterClass
+  public static void cleanupData() throws Exception {
+    allEntries = null;
+    db = null;
+  }
+
+  @Before
+  public void setup() throws Exception {
+    if (db != null) {
+      return;
+    }
+
+    db = createStore();
 
     int count = RND.nextInt(MAX_ENTRIES) + MIN_ENTRIES;
 
@@ -141,17 +150,6 @@ public class DBIteratorSuite {
     t.child = first.child;
     allEntries.add(t);
     db.write(t);
-  }
-
-  @AfterClass
-  public static void cleanup() throws Exception {
-    allEntries = null;
-    if (db != null) {
-      db.close();
-    }
-    if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
-    }
   }
 
   @Test

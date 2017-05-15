@@ -36,7 +36,6 @@ import org.fusesource.leveldbjni.JniDBFactory;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.Options;
 import org.iq80.leveldb.WriteBatch;
-import org.iq80.leveldb.WriteOptions;
 
 /**
  * Implementation of KVStore that uses LevelDB as the underlying data store.
@@ -132,14 +131,10 @@ public class LevelDB implements KVStore {
 
   @Override
   public void write(Object value) throws Exception {
-    write(value, false);
-  }
-
-  public void write(Object value, boolean sync) throws Exception {
     Preconditions.checkArgument(value != null, "Null values are not allowed.");
     LevelDBTypeInfo ti = getTypeInfo(value.getClass());
 
-    try (LevelDBWriteBatch batch = new LevelDBWriteBatch(this)) {
+    try (WriteBatch batch = db().createWriteBatch()) {
       byte[] data = serializer.serialize(value);
       synchronized (ti) {
         Object existing;
@@ -149,49 +144,33 @@ public class LevelDB implements KVStore {
           existing = null;
         }
 
-        PrefixCache cache = new PrefixCache();
-
+        PrefixCache cache = new PrefixCache(value);
+        byte[] naturalKey = ti.naturalIndex().toKey(ti.naturalIndex().getValue(value));
         for (LevelDBTypeInfo.Index idx : ti.indices()) {
-          // Try to avoid unnecessary writes by only updating copy indices, or indices whose value
-          // has changed.
-          Object indexed = idx.getValue(value);
-          byte[] prefix = cache.getPrefix(idx, indexed);
-          if (existing == null) {
-            idx.add(batch, value, data, prefix);
-          } else {
-            if (idx.isCopy() || !Objects.equal(indexed, idx.getValue(existing))) {
-              byte[] existingPrefix = idx.isChild() ? idx.parent().childPrefix(existing, true)
-                : null;
-              idx.remove(batch, existing, existingPrefix);
-              idx.add(batch, value, data, prefix);
-            }
-          }
+          byte[] prefix = cache.getPrefix(idx);
+          idx.add(batch, value, existing, data, naturalKey, prefix);
         }
-        batch.write(sync);
+        db().write(batch);
       }
     }
   }
 
   @Override
   public void delete(Class<?> type, Object naturalKey) throws Exception {
-    delete(type, naturalKey, false);
-  }
-
-  public void delete(Class<?> type, Object naturalKey, boolean sync) throws Exception {
     Preconditions.checkArgument(naturalKey != null, "Null keys are not allowed.");
-    try (LevelDBWriteBatch batch = new LevelDBWriteBatch(this)) {
+    try (WriteBatch batch = db().createWriteBatch()) {
       LevelDBTypeInfo ti = getTypeInfo(type);
       byte[] key = ti.naturalIndex().start(null, naturalKey);
-      PrefixCache cache = new PrefixCache();
-
       synchronized (ti) {
         byte[] data = db().get(key);
         if (data != null) {
           Object existing = serializer.deserialize(data, type);
+          PrefixCache cache = new PrefixCache(existing);
+          byte[] keyBytes = ti.naturalIndex().toKey(ti.naturalIndex().getValue(existing));
           for (LevelDBTypeInfo.Index idx : ti.indices()) {
-            idx.remove(batch, existing, cache.getPrefix(idx, idx.getValue(existing)));
+            idx.remove(batch, existing, keyBytes, cache.getPrefix(idx));
           }
-          batch.write(sync);
+          db().write(batch);
         }
       }
     } catch (NoSuchElementException nse) {
@@ -299,14 +278,20 @@ public class LevelDB implements KVStore {
 
   private static class PrefixCache {
 
-    private final Map<LevelDBTypeInfo.Index, byte[]> prefixes = new HashMap<>();
+    private final Object entity;
+    private final Map<LevelDBTypeInfo.Index, byte[]> prefixes;
 
-    byte[] getPrefix(LevelDBTypeInfo.Index idx, Object entity) throws Exception {
+    PrefixCache(Object entity) {
+      this.entity = entity;
+      this.prefixes = new HashMap<>();
+    }
+
+    byte[] getPrefix(LevelDBTypeInfo.Index idx) throws Exception {
       byte[] prefix = null;
       if (idx.isChild()) {
         prefix = prefixes.get(idx.parent());
         if (prefix == null) {
-          prefix = idx.parent().childPrefix(entity, true);
+          prefix = idx.parent().childPrefix(idx.parent().getValue(entity));
           prefixes.put(idx.parent(), prefix);
         }
       }

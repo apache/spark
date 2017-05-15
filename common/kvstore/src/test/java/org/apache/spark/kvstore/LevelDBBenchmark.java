@@ -132,17 +132,9 @@ public class LevelDBBenchmark {
   @Test
   public void sequentialWritesNoIndex() throws Exception {
     List<SimpleType> entries = createSimpleType();
-    writeAll(entries, false, "sequentialWritesNoIndex");
-    writeAll(entries, false, "sequentialUpdatesNoIndex");
-    deleteNoIndex(entries, false, "sequentialDeleteNoIndex");
-  }
-
-  @Test
-  public void sequentialSyncWritesNoIndex() throws Exception {
-    List<SimpleType> entries = createSimpleType();
-    writeAll(entries, true, "sequentialSyncWritesNoIndex");
-    writeAll(entries, true, "sequentialSyncUpdatesNoIndex");
-    deleteNoIndex(entries, true, "sequentialSyncDeleteNoIndex");
+    writeAll(entries, "sequentialWritesNoIndex");
+    writeAll(entries, "sequentialUpdatesNoIndex");
+    deleteNoIndex(entries, "sequentialDeleteNoIndex");
   }
 
   @Test
@@ -150,43 +142,21 @@ public class LevelDBBenchmark {
     List<SimpleType> entries = createSimpleType();
 
     Collections.shuffle(entries);
-    writeAll(entries, false, "randomWritesNoIndex");
+    writeAll(entries, "randomWritesNoIndex");
 
     Collections.shuffle(entries);
-    writeAll(entries, false, "randomUpdatesNoIndex");
+    writeAll(entries, "randomUpdatesNoIndex");
 
     Collections.shuffle(entries);
-    deleteNoIndex(entries, false, "randomDeletesNoIndex");
-  }
-
-  @Test
-  public void randomSyncWritesNoIndex() throws Exception {
-    List<SimpleType> entries = createSimpleType();
-
-    Collections.shuffle(entries);
-    writeAll(entries, true, "randomSyncWritesNoIndex");
-
-    Collections.shuffle(entries);
-    writeAll(entries, true, "randomSyncUpdatesNoIndex");
-
-    Collections.shuffle(entries);
-    deleteNoIndex(entries, true, "randomSyncDeletesNoIndex");
+    deleteNoIndex(entries, "randomDeletesNoIndex");
   }
 
   @Test
   public void sequentialWritesIndexedType() throws Exception {
     List<IndexedType> entries = createIndexedType();
-    writeAll(entries, false, "sequentialWritesIndexed");
-    writeAll(entries, false, "sequentialUpdatesIndexed");
-    deleteIndexed(entries, false, "sequentialDeleteIndexed");
-  }
-
-  @Test
-  public void sequentialSyncWritesIndexedType() throws Exception {
-    List<IndexedType> entries = createIndexedType();
-    writeAll(entries, true, "sequentialSyncWritesIndexed");
-    writeAll(entries, true, "sequentialSyncUpdatesIndexed");
-    deleteIndexed(entries, true, "sequentialSyncDeleteIndexed");
+    writeAll(entries, "sequentialWritesIndexed");
+    writeAll(entries, "sequentialUpdatesIndexed");
+    deleteIndexed(entries, "sequentialDeleteIndexed");
   }
 
   @Test
@@ -194,10 +164,10 @@ public class LevelDBBenchmark {
     List<IndexedType> entries = createIndexedType();
 
     Collections.shuffle(entries);
-    writeAll(entries, false, "randomWritesIndexed");
+    writeAll(entries, "randomWritesIndexed");
 
     Collections.shuffle(entries);
-    writeAll(entries, false, "randomUpdatesIndexed");
+    writeAll(entries, "randomUpdatesIndexed");
 
     // Run iteration benchmarks here since we've gone through the trouble of writing all
     // the data already.
@@ -208,18 +178,7 @@ public class LevelDBBenchmark {
     iterate(view.index("name").reverse(), "refIndexDescending");
 
     Collections.shuffle(entries);
-    deleteIndexed(entries, false, "randomDeleteIndexed");
-  }
-
-  @Test
-  public void randomSyncWritesIndexedTypeAndIteration() throws Exception {
-    List<IndexedType> entries = createIndexedType();
-
-    Collections.shuffle(entries);
-    writeAll(entries, true, "randomSyncWritesIndexed");
-
-    Collections.shuffle(entries);
-    deleteIndexed(entries, true, "randomSyncDeleteIndexed");
+    deleteIndexed(entries, "randomDeleteIndexed");
   }
 
   private void iterate(KVStoreView<?> view, String name) throws Exception {
@@ -245,31 +204,29 @@ public class LevelDBBenchmark {
     }
   }
 
-  private void writeAll(List<?> entries, boolean sync, String timerName) throws Exception {
+  private void writeAll(List<?> entries, String timerName) throws Exception {
     Timer timer = newTimer(timerName);
     for (Object o : entries) {
       try(Timer.Context ctx = timer.time()) {
-        db.write(o, sync);
+        db.write(o);
       }
     }
   }
 
-  private void deleteNoIndex(List<SimpleType> entries, boolean sync, String timerName)
-      throws Exception {
+  private void deleteNoIndex(List<SimpleType> entries, String timerName) throws Exception {
     Timer delete = newTimer(timerName);
     for (SimpleType i : entries) {
       try(Timer.Context ctx = delete.time()) {
-        db.delete(i.getClass(), i.key, sync);
+        db.delete(i.getClass(), i.key);
       }
     }
   }
 
-  private void deleteIndexed(List<IndexedType> entries, boolean sync, String timerName)
-      throws Exception {
+  private void deleteIndexed(List<IndexedType> entries, String timerName) throws Exception {
     Timer delete = newTimer(timerName);
     for (IndexedType i : entries) {
       try(Timer.Context ctx = delete.time()) {
-        db.delete(i.getClass(), i.key, sync);
+        db.delete(i.getClass(), i.key);
       }
     }
   }

@@ -29,6 +29,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
+import org.iq80.leveldb.WriteBatch;
 
 /**
  * Holds metadata about app-specific types stored in LevelDB. Serves as a cache for data collected
@@ -67,9 +68,9 @@ import com.google.common.base.Throwables;
  *
  * <p>
  * Entity data (either the entity's natural key or a copy of the data) is stored in all keys
- * that end with "+NATURAL_KEY". A count of all objects that match a particular top-level index
- * value is kept at the end marker. A count is also kept at the natural index's end marker,
- * to make it easy to retrieve the number of all elements of a particular type.
+ * that end with "+<something>". A count of all objects that match a particular top-level index
+ * value is kept at the end marker ("-<something>"). A count is also kept at the natural index's end
+ * marker, to make it easy to retrieve the number of all elements of a particular type.
  * </p>
  *
  * <p>
@@ -252,9 +253,9 @@ class LevelDBTypeInfo {
      * calculated only once, avoiding redundant work when multiple child indices of the
      * same parent index exist.
      */
-    byte[] childPrefix(Object value, boolean isEntity) throws Exception {
+    byte[] childPrefix(Object value) throws Exception {
       Preconditions.checkState(parent == null, "Not a parent index.");
-      return buildKey(name, toParentKey(isEntity ? getValue(value) : value));
+      return buildKey(name, toParentKey(value));
     }
 
     Object getValue(Object entity) throws Exception {
@@ -308,10 +309,21 @@ class LevelDBTypeInfo {
       return entityKey;
     }
 
+    private void updateCount(WriteBatch batch, byte[] key, long delta) throws Exception {
+      long updated = getCount(key) + delta;
+      if (updated > 0) {
+        batch.put(key, db.serializer.serialize(updated));
+      } else {
+        batch.delete(key);
+      }
+    }
+
     private void addOrRemove(
-        LevelDBWriteBatch batch,
+        WriteBatch batch,
         Object entity,
+        Object existing,
         byte[] data,
+        byte[] naturalKey,
         byte[] prefix) throws Exception {
       Object indexValue = getValue(entity);
       Preconditions.checkNotNull(indexValue, "Null index value for %s in type %s.",
@@ -319,28 +331,58 @@ class LevelDBTypeInfo {
 
       byte[] entityKey = start(prefix, indexValue);
       if (!isNatural) {
-        entityKey = buildKey(false, entityKey, toKey(naturalIndex().getValue(entity)));
+        entityKey = buildKey(false, entityKey, naturalKey);
       }
 
-      long delta;
-      if (data != null) {
-        byte[] stored = data;
-        if (!copy) {
-          stored = toKey(naturalIndex().getValue(entity));
+      boolean needCountUpdate = (existing == null);
+
+      // Check whether the index key for the existing value matches the new value. If it doesn't,
+      // then explicitly delete the existing key, otherwise just let the "put()" call overwrite it.
+      //
+      // Also check whether we need to update the counts. If the indexed value is changing, we
+      // need to decrement the count at the old index value, and the new indexed value count needs
+      // to be incremented.
+      //
+      // Natural indices don't need to be checked, because by definition both old and new elements
+      // will have the same key.
+      if (existing != null && !isNatural) {
+        byte[] oldPrefix = null;
+        Object oldIndexedValue = getValue(existing);
+        boolean removeExisting = !indexValue.equals(oldIndexedValue);
+        if (!removeExisting && isChild()) {
+          oldPrefix = parent().childPrefix(parent().getValue(existing));
+          removeExisting = LevelDBIterator.compare(prefix, oldPrefix) != 0;
         }
+
+        if (removeExisting) {
+          if (oldPrefix == null && isChild()) {
+            oldPrefix = parent().childPrefix(parent().getValue(existing));
+          }
+
+          byte[] oldKey = entityKey(oldPrefix, existing);
+          batch.delete(oldKey);
+
+          // If the indexed value has changed, we need to update the counts at the old and new
+          // end markers for the indexed value.
+          if (!isChild()) {
+            byte[] oldCountKey = end(null, oldIndexedValue);
+            updateCount(batch, oldCountKey, -1L);
+            needCountUpdate = true;
+          }
+        }
+      }
+
+      if (data != null) {
+        byte[] stored = copy ? data : naturalKey;
         batch.put(entityKey, stored);
-        delta = 1L;
       } else {
         batch.delete(entityKey);
-        delta = -1L;
       }
 
-      // Only update counts for the natural index or top-level indices, since that's exposed through
-      // the API.
-      if (isNatural) {
-        batch.updateCount(end(prefix), delta);
-      } else if (parent == null) {
-        batch.updateCount(end(prefix, indexValue), delta);
+      if (needCountUpdate && !isChild()) {
+        long delta = data != null ? 1L : -1L;
+        byte[] countKey = isNatural ? end(prefix) : end(prefix, indexValue);
+        updateCount(batch, countKey, delta);
       }
     }
 
@@ -349,12 +391,19 @@ class LevelDBTypeInfo {
      *
      * @param batch Write batch with other related changes.
      * @param entity The entity being added to the index.
+     * @param existing The entity being replaced in the index, or null.
      * @param data Serialized entity to store (when storing the entity, not a reference).
-     * @param naturalKey The value's key.
+     * @param naturalKey The value's natural key (to avoid re-computing it for every index).
      * @param prefix The parent index prefix, if this is a child index.
      */
-    void add(LevelDBWriteBatch batch, Object entity, byte[] data, byte[] prefix) throws Exception {
-      addOrRemove(batch, entity, data, prefix);
+    void add(
+        WriteBatch batch,
+        Object entity,
+        Object existing,
+        byte[] data,
+        byte[] naturalKey,
+        byte[] prefix) throws Exception {
+      addOrRemove(batch, entity, existing, data, naturalKey, prefix);
     }
 
     /**
@@ -362,11 +411,15 @@ class LevelDBTypeInfo {
      *
      * @param batch Write batch with other related changes.
      * @param entity The entity being removed, to identify the index entry to modify.
-     * @param naturalKey The value's key.
+     * @param naturalKey The value's natural key (to avoid re-computing it for every index).
      * @param prefix The parent index prefix, if this is a child index.
      */
-    void remove(LevelDBWriteBatch batch, Object entity, byte[] prefix) throws Exception {
-      addOrRemove(batch, entity, null, prefix);
+    void remove(
+        WriteBatch batch,
+        Object entity,
+        byte[] naturalKey,
+        byte[] prefix) throws Exception {
+      addOrRemove(batch, entity, null, null, naturalKey, prefix);
     }
 
     long getCount(byte[] key) throws Exception {

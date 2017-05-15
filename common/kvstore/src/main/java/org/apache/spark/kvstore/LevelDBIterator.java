@@ -57,7 +57,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
 
     Preconditions.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
-    byte[] parent = index.isChild() ? index.parent().childPrefix(params.parent, false) : null;
+    byte[] parent = index.isChild() ? index.parent().childPrefix(params.parent) : null;
 
     this.indexKeyPrefix = index.keyPrefix(parent);
 
@@ -191,6 +191,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
         } catch (NoSuchElementException e) {
           return null;
         }
+
         byte[] nextKey = nextEntry.getKey();
         // Next key is not part of the index, stop.
         if (!startsWith(nextKey, indexKeyPrefix)) {
@@ -246,7 +247,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
         key[key.length - 1] == LevelDBTypeInfo.END_MARKER[0]);
   }
 
-  private int compare(byte[] a, byte[] b) {
+  static int compare(byte[] a, byte[] b) {
     int diff = 0;
     int minLen = Math.min(a.length, b.length);
     for (int i = 0; i < minLen; i++) {
