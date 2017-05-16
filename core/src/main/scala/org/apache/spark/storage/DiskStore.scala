@@ -266,6 +266,22 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
   }
 
   override def deallocate(): Unit = source.close()
+
+  override def transferred(): Long = _transferred
+
+  override def touch(o: scala.Any): FileRegion = this
+
+  override def retain(): FileRegion = {
+    super.retain()
+    this
+  }
+
+  override def retain(increment: Int): FileRegion = {
+    super.retain(increment)
+    this
+  }
+
+  override def touch(): FileRegion = this
 }
 
 private class CountingWritableChannel(sink: WritableByteChannel) extends WritableByteChannel {

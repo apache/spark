@@ -86,6 +86,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     visitSparkDataType(ctx.dataType)
   }
 
+  override def visitStandaloneColTypeList(ctx: StandaloneColTypeListContext): Seq[StructField] =
+    withOrigin(ctx) {
+      visitColTypeList(ctx.colTypeList)
+    }
+
   /* ********************************************************************************************
    * Plan parsing
    * ******************************************************************************************** */

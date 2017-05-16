@@ -64,6 +64,10 @@ singleDataType
     : dataType EOF
     ;
 
+standaloneColTypeList
+    : colTypeList EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
@@ -968,7 +972,7 @@ CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
-    | '\"' ( ~('\"'|'\\') | ('\\' .) )* '\"'
+    | '"' ( ~('"'|'\\') | ('\\' .) )* '"'
     ;
 
 BIGINT_LITERAL

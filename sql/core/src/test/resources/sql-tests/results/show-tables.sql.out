@@ -161,7 +161,7 @@ struct<>
 -- !query 13 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input '<EOF>' expecting 'LIKE'(line 1, pos 19)
+mismatched input '<EOF>' expecting {'FROM', 'IN', 'LIKE'}(line 1, pos 19)
 
 == SQL ==
 SHOW TABLE EXTENDED
@@ -184,7 +184,7 @@ struct<>
 -- !query 15 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input 'PARTITION' expecting 'LIKE'(line 1, pos 20)
+mismatched input 'PARTITION' expecting {'FROM', 'IN', 'LIKE'}(line 1, pos 20)
 
 == SQL ==
 SHOW TABLE EXTENDED PARTITION(c='Us', d=1)

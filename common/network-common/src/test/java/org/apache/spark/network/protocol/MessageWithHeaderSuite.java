@@ -135,6 +135,11 @@ public class MessageWithHeaderSuite {
     }
 
     @Override
+    public long transferred() {
+      return 8 * written;
+    }
+
+    @Override
     public long transferTo(WritableByteChannel target, long position) throws IOException {
       for (int i = 0; i < writesPerCall; i++) {
         ByteBuf buf = Unpooled.copyLong((position / 8) + i);
@@ -146,6 +151,28 @@ public class MessageWithHeaderSuite {
         written++;
       }
       return 8 * writesPerCall;
+    }
+
+    @Override
+    public FileRegion retain() {
+      super.retain();
+      return this;
+    }
+
+    @Override
+    public FileRegion retain(int increment) {
+      super.retain(increment);
+      return this;
+    }
+
+    @Override
+    public FileRegion touch(Object o) {
+      return this;
+    }
+
+    @Override
+    public FileRegion touch() {
+      return this;
     }
 
     @Override

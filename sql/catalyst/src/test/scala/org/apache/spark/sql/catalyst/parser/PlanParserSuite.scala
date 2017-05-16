@@ -507,7 +507,7 @@ class PlanParserSuite extends PlanTest {
     val m = intercept[ParseException] {
       parsePlan("SELECT /*+ HINT() */ * FROM t")
     }.getMessage
-    assert(m.contains("no viable alternative at input"))
+    assert(m.contains("mismatched input ')' expecting"))
 
     // Hive compatibility: No database.
     val m2 = intercept[ParseException] {

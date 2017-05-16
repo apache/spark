@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.DriverManager
 import java.util.Properties
 
 import scala.collection.JavaConverters.propertiesAsScalaMapConverter
@@ -466,7 +466,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         .option("createTableColumnTypes", "`name char(20)") // incorrectly quoted column
         .jdbc(url1, "TEST.USERDBTYPETEST", properties)
     }.getMessage()
-    assert(msg.contains("no viable alternative at input"))
+    assert(msg.contains("extraneous input '`' expecting"))
   }
 
   test("SPARK-10849: jdbc CreateTableColumnTypes duplicate columns") {
