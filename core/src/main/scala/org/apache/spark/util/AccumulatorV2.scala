@@ -83,7 +83,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   /**
    * Returns the name of this accumulator, can only be called after registration.
    */
-  final lazy val name: Option[String] = {
+  final def name: Option[String] = {
     assertMetadataNotNull()
 
     if (atDriverSide) {
