@@ -18,9 +18,7 @@
 package org.apache.spark.executor
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
-
-import com.google.common.collect.Maps
+import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -202,45 +200,32 @@ class TaskMetrics private[spark] () extends Serializable {
 
 
   import InternalAccumulator._
-  @transient private[spark] lazy val nameToAccums = {
-    val mapEntries = Array[(String, AccumulatorV2[_, _])](
-      EXECUTOR_DESERIALIZE_TIME -> _executorDeserializeTime,
-      EXECUTOR_DESERIALIZE_CPU_TIME -> _executorDeserializeCpuTime,
-      EXECUTOR_RUN_TIME -> _executorRunTime,
-      EXECUTOR_CPU_TIME -> _executorCpuTime,
-      RESULT_SIZE -> _resultSize,
-      JVM_GC_TIME -> _jvmGCTime,
-      RESULT_SERIALIZATION_TIME -> _resultSerializationTime,
-      MEMORY_BYTES_SPILLED -> _memoryBytesSpilled,
-      DISK_BYTES_SPILLED -> _diskBytesSpilled,
-      PEAK_EXECUTION_MEMORY -> _peakExecutionMemory,
-      UPDATED_BLOCK_STATUSES -> _updatedBlockStatuses,
-      shuffleRead.REMOTE_BLOCKS_FETCHED -> shuffleReadMetrics._remoteBlocksFetched,
-      shuffleRead.LOCAL_BLOCKS_FETCHED -> shuffleReadMetrics._localBlocksFetched,
-      shuffleRead.REMOTE_BYTES_READ -> shuffleReadMetrics._remoteBytesRead,
-      shuffleRead.LOCAL_BYTES_READ -> shuffleReadMetrics._localBytesRead,
-      shuffleRead.FETCH_WAIT_TIME -> shuffleReadMetrics._fetchWaitTime,
-      shuffleRead.RECORDS_READ -> shuffleReadMetrics._recordsRead,
-      shuffleWrite.BYTES_WRITTEN -> shuffleWriteMetrics._bytesWritten,
-      shuffleWrite.RECORDS_WRITTEN -> shuffleWriteMetrics._recordsWritten,
-      shuffleWrite.WRITE_TIME -> shuffleWriteMetrics._writeTime,
-      input.BYTES_READ -> inputMetrics._bytesRead,
-      input.RECORDS_READ -> inputMetrics._recordsRead,
-      output.BYTES_WRITTEN -> outputMetrics._bytesWritten,
-      output.RECORDS_WRITTEN -> outputMetrics._recordsWritten
-    )
-    val map = Maps.newHashMapWithExpectedSize[String, AccumulatorV2[_, _]](mapEntries.length)
-    var i = 0
-    while (i < mapEntries.length) {
-      val e = mapEntries(i)
-      map.put(e._1, e._2)
-      i += 1
-    }
-    testAccum.foreach { accum =>
-      map.put(TEST_ACCUM, accum)
-    }
-    map.asScala
-  }
+  @transient private[spark] lazy val nameToAccums = LinkedHashMap(
+    EXECUTOR_DESERIALIZE_TIME -> _executorDeserializeTime,
+    EXECUTOR_DESERIALIZE_CPU_TIME -> _executorDeserializeCpuTime,
+    EXECUTOR_RUN_TIME -> _executorRunTime,
+    EXECUTOR_CPU_TIME -> _executorCpuTime,
+    RESULT_SIZE -> _resultSize,
+    JVM_GC_TIME -> _jvmGCTime,
+    RESULT_SERIALIZATION_TIME -> _resultSerializationTime,
+    MEMORY_BYTES_SPILLED -> _memoryBytesSpilled,
+    DISK_BYTES_SPILLED -> _diskBytesSpilled,
+    PEAK_EXECUTION_MEMORY -> _peakExecutionMemory,
+    UPDATED_BLOCK_STATUSES -> _updatedBlockStatuses,
+    shuffleRead.REMOTE_BLOCKS_FETCHED -> shuffleReadMetrics._remoteBlocksFetched,
+    shuffleRead.LOCAL_BLOCKS_FETCHED -> shuffleReadMetrics._localBlocksFetched,
+    shuffleRead.REMOTE_BYTES_READ -> shuffleReadMetrics._remoteBytesRead,
+    shuffleRead.LOCAL_BYTES_READ -> shuffleReadMetrics._localBytesRead,
+    shuffleRead.FETCH_WAIT_TIME -> shuffleReadMetrics._fetchWaitTime,
+    shuffleRead.RECORDS_READ -> shuffleReadMetrics._recordsRead,
+    shuffleWrite.BYTES_WRITTEN -> shuffleWriteMetrics._bytesWritten,
+    shuffleWrite.RECORDS_WRITTEN -> shuffleWriteMetrics._recordsWritten,
+    shuffleWrite.WRITE_TIME -> shuffleWriteMetrics._writeTime,
+    input.BYTES_READ -> inputMetrics._bytesRead,
+    input.RECORDS_READ -> inputMetrics._recordsRead,
+    output.BYTES_WRITTEN -> outputMetrics._bytesWritten,
+    output.RECORDS_WRITTEN -> outputMetrics._recordsWritten
+  ) ++ testAccum.map(TEST_ACCUM -> _)
 
   @transient private[spark] lazy val internalAccums: Seq[AccumulatorV2[_, _]] =
     nameToAccums.values.toIndexedSeq
