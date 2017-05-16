@@ -171,6 +171,22 @@ private[spark] class KubernetesV1Suite(testBackend: IntegrationTestBackend)
       "Unexpected value for annotation2")
   }
 
+  test("Run with driver pod name") {
+    sparkConf.set(KUBERNETES_DRIVER_POD_NAME, "spark-pi")
+    new Client(
+      sparkConf = sparkConf,
+      mainClass = KubernetesSuite.SPARK_PI_MAIN_CLASS,
+      mainAppResource = KubernetesSuite.SUBMITTER_LOCAL_MAIN_APP_RESOURCE,
+      appArgs = Array.empty[String]).run()
+    val driverPodMetadata = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .withName("spark-pi")
+      .get()
+      .getMetadata()
+    val driverName = driverPodMetadata.getName
+    assert(driverName === "spark-pi", "Unexpected driver pod name.")
+  }
+
   test("Enable SSL on the driver submit server") {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
 

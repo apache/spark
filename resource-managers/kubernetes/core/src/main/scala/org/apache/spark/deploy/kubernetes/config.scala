@@ -267,7 +267,6 @@ package object config extends Logging {
   private[spark] val KUBERNETES_DRIVER_POD_NAME =
     ConfigBuilder("spark.kubernetes.driver.pod.name")
       .doc("Name of the driver pod.")
-      .internal()
       .stringConf
       .createOptional
 
