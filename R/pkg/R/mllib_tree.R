@@ -49,14 +49,14 @@ setClass("RandomForestClassificationModel", representation(jobj = "jobj"))
 #'
 #' @param jobj a Java object reference to the backing Scala DecisionTreeRegressionModel
 #' @export
-#' @note DecisionTreeRegressionModel since 2.2.0
+#' @note DecisionTreeRegressionModel since 2.3.0
 setClass("DecisionTreeRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a DecisionTreeClassificationModel
 #'
 #' @param jobj a Java object reference to the backing Scala DecisionTreeClassificationModel
 #' @export
-#' @note DecisionTreeClassificationModel since 2.2.0
+#' @note DecisionTreeClassificationModel since 2.3.0
 setClass("DecisionTreeClassificationModel", representation(jobj = "jobj"))
 
 # Create the summary of a tree ensemble model (eg. Random Forest, GBT)
@@ -605,7 +605,7 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' df <- createDataFrame(t)
 #' model <- spark.decisionTree(df, Survived ~ Freq + Age, "classification")
 #' }
-#' @note spark.decisionTree since 2.2.0
+#' @note spark.decisionTree since 2.3.0
 setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, type = c("regression", "classification"),
                    maxDepth = 5, maxBins = 32, impurity = NULL, seed = NULL,
@@ -651,7 +651,7 @@ setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "fo
 #' @rdname spark.decisionTree
 #' @aliases summary,DecisionTreeRegressionModel-method
 #' @export
-#' @note summary(DecisionTreeRegressionModel) since 2.2.0
+#' @note summary(DecisionTreeRegressionModel) since 2.3.0
 setMethod("summary", signature(object = "DecisionTreeRegressionModel"),
           function(object) {
             ans <- summary.decisionTree(object)
@@ -665,7 +665,7 @@ setMethod("summary", signature(object = "DecisionTreeRegressionModel"),
 #'          returned by \code{summary}.
 #' @rdname spark.decisionTree
 #' @export
-#' @note print.summary.DecisionTreeRegressionModel since 2.2.0
+#' @note print.summary.DecisionTreeRegressionModel since 2.3.0
 print.summary.DecisionTreeRegressionModel <- function(x, ...) {
   print.summary.decisionTree(x)
 }
@@ -675,7 +675,7 @@ print.summary.DecisionTreeRegressionModel <- function(x, ...) {
 #' @rdname spark.decisionTree
 #' @aliases summary,DecisionTreeClassificationModel-method
 #' @export
-#' @note summary(DecisionTreeClassificationModel) since 2.2.0
+#' @note summary(DecisionTreeClassificationModel) since 2.3.0
 setMethod("summary", signature(object = "DecisionTreeClassificationModel"),
           function(object) {
             ans <- summary.decisionTree(object)
@@ -687,7 +687,7 @@ setMethod("summary", signature(object = "DecisionTreeClassificationModel"),
 
 #' @rdname spark.decisionTree
 #' @export
-#' @note print.summary.DecisionTreeClassificationModel since 2.2.0
+#' @note print.summary.DecisionTreeClassificationModel since 2.3.0
 print.summary.DecisionTreeClassificationModel <- function(x, ...) {
   print.summary.decisionTree(x)
 }
@@ -700,7 +700,7 @@ print.summary.DecisionTreeClassificationModel <- function(x, ...) {
 #' @rdname spark.decisionTree
 #' @aliases predict,DecisionTreeRegressionModel-method
 #' @export
-#' @note predict(DecisionTreeRegressionModel) since 2.2.0
+#' @note predict(DecisionTreeRegressionModel) since 2.3.0
 setMethod("predict", signature(object = "DecisionTreeRegressionModel"),
           function(object, newData) {
             predict_internal(object, newData)
@@ -709,7 +709,7 @@ setMethod("predict", signature(object = "DecisionTreeRegressionModel"),
 #' @rdname spark.decisionTree
 #' @aliases predict,DecisionTreeClassificationModel-method
 #' @export
-#' @note predict(DecisionTreeClassificationModel) since 2.2.0
+#' @note predict(DecisionTreeClassificationModel) since 2.3.0
 setMethod("predict", signature(object = "DecisionTreeClassificationModel"),
           function(object, newData) {
             predict_internal(object, newData)
@@ -725,7 +725,7 @@ setMethod("predict", signature(object = "DecisionTreeClassificationModel"),
 #' @aliases write.ml,DecisionTreeRegressionModel,character-method
 #' @rdname spark.decisionTree
 #' @export
-#' @note write.ml(DecisionTreeRegressionModel, character) since 2.2.0
+#' @note write.ml(DecisionTreeRegressionModel, character) since 2.3.0
 setMethod("write.ml", signature(object = "DecisionTreeRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)
@@ -734,7 +734,7 @@ setMethod("write.ml", signature(object = "DecisionTreeRegressionModel", path = "
 #' @aliases write.ml,DecisionTreeClassificationModel,character-method
 #' @rdname spark.decisionTree
 #' @export
-#' @note write.ml(DecisionTreeClassificationModel, character) since 2.2.0
+#' @note write.ml(DecisionTreeClassificationModel, character) since 2.3.0
 setMethod("write.ml", signature(object = "DecisionTreeClassificationModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)

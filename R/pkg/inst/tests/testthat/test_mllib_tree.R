@@ -209,7 +209,6 @@ test_that("spark.randomForest", {
   expect_equal(summary(model)$numFeatures, 4)
 })
 
-
 test_that("spark.decisionTree", {
   # regression
   data <- suppressWarnings(createDataFrame(longley))
