@@ -112,9 +112,9 @@ private[spark] object UIData {
   /**
    * These are kept mutable and reused throughout a task's lifetime to avoid excessive reallocation.
    */
-  class TaskUIData private(
-      private var _taskInfo: TaskInfo,
-      private var _metrics: Option[TaskMetricsUIData]) {
+  class TaskUIData private(private var _taskInfo: TaskInfo) {
+
+    private[this] var _metrics: Option[TaskMetricsUIData] = None
 
     var errorMessage: Option[String] = None
 
@@ -140,8 +140,8 @@ private[spark] object UIData {
   }
 
   object TaskUIData {
-    def apply(taskInfo: TaskInfo, metrics: Option[TaskMetrics]): TaskUIData = {
-      new TaskUIData(dropInternalAndSQLAccumulables(taskInfo), toTaskMetricsUIData(metrics))
+    def apply(taskInfo: TaskInfo): TaskUIData = {
+      new TaskUIData(dropInternalAndSQLAccumulables(taskInfo))
     }
 
     private def toTaskMetricsUIData(metrics: Option[TaskMetrics]): Option[TaskMetricsUIData] = {
