@@ -78,7 +78,7 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   protected def astBuilder: AstBuilder
 
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    logInfo(s"Parsing command: $command")
+    logDebug(s"Parsing command: $command")
 
     val lexer = new SqlBaseLexer(new ANTLRNoCaseStringStream(command))
     lexer.removeErrorListeners()
