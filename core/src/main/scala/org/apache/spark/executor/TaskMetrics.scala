@@ -203,8 +203,6 @@ class TaskMetrics private[spark] () extends Serializable {
 
   import InternalAccumulator._
   @transient private[spark] lazy val nameToAccums = {
-    // The construction of this map is a performance hotspot in the JobProgressListener, so we
-    // optimize this by using a pre-sized Java hashmap; see SPARK-20776 for more details.
     val mapEntries = Array[(String, AccumulatorV2[_, _])](
       EXECUTOR_DESERIALIZE_TIME -> _executorDeserializeTime,
       EXECUTOR_DESERIALIZE_CPU_TIME -> _executorDeserializeCpuTime,
