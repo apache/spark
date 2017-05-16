@@ -112,7 +112,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           |   with t4 as (select 1 as d, 3 as e)
           |   select * from t4 cross join t2 where t2.b = t4.d
           | )
-          | select a from (select 1 as a union all select 2 as a)
+          | select a from (select 1 as a union all select 2 as a) t
           | where a = (select max(d) from t3)
         """.stripMargin),
       Array(Row(1))
@@ -606,8 +606,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             |    select cntPlusOne + 1 as cntPlusTwo from (
             |        select cnt + 1 as cntPlusOne from (
             |            select sum(r.c) s, count(*) cnt from r where l.a = r.c having cnt = 0
-            |        )
-            |    )
+            |        ) t1
+            |    ) t2
             |) = 2""".stripMargin),
       Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
   }
@@ -879,7 +879,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             | from   (select 1 from onerow t1 LIMIT 1)
             | where  t1.c1=1""".stripMargin)
       }
-      assert(e.message.contains("cannot resolve '`t1.c1`'"))
+      assert(e.message.contains("mismatched input"))
 
       checkAnswer(
         sql(
