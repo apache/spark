@@ -46,7 +46,7 @@ public class TaskMemoryManagerSuite {
         1),
       0);
     final MemoryConsumer c = new TestMemoryConsumer(manager);
-    final MemoryBlock block = manager.allocatePage(4096, c);  // leak memory
+    manager.allocatePage(4096, c);  // leak memory
     Assert.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
     Assert.assertEquals(4096, manager.cleanUpAllAllocatedMemory());
     Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
