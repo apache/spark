@@ -135,8 +135,7 @@ createMethods()
 #' @aliases alias,Column-method
 #' @family colum_func
 #' @export
-#' @examples
-#' \dontrun{
+#' @examples \dontrun{
 #' df <- createDataFrame(iris)
 #'
 #' head(select(
@@ -245,8 +244,7 @@ setMethod("between", signature(x = "Column"),
 #' @family colum_func
 #' @aliases cast,Column-method
 #'
-#' @examples
-#' \dontrun{
+#' @examples \dontrun{
 #'   cast(df$age, "string")
 #' }
 #' @note cast since 1.4.0
