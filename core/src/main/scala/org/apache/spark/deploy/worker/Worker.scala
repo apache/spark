@@ -99,6 +99,20 @@ private[deploy] class Worker(
 
   private val testing: Boolean = sys.props.contains("spark.testing")
   private var master: Option[RpcEndpointRef] = None
+
+  /**
+   * Whether to use the master address in `masterRpcAddresses` if possible. If it's disabled, Worker
+   * will just use the address received from Master.
+   */
+  private val preferConfiguredMasterAddress =
+    conf.getBoolean("spark.worker.preferConfiguredMasterAddress", false)
+  /**
+   * The master address to connect in case of failure. When the connection is broken, worker will
+   * use this address to connect. This is usually just one of `masterRpcAddresses`. However, when
+   * a master is restarted or takes over leadership, it will be an address sent from master, which
+   * may not be in `masterRpcAddresses`.
+   */
+  private var masterAddressToConnect: Option[RpcAddress] = None
   private var activeMasterUrl: String = ""
   private[worker] var activeMasterWebUiUrl : String = ""
   private var workerWebUiUrl: String = ""
@@ -196,10 +210,19 @@ private[deploy] class Worker(
     metricsSystem.getServletHandlers.foreach(webUi.attachHandler)
   }
 
-  private def changeMaster(masterRef: RpcEndpointRef, uiUrl: String) {
+  /**
+   * Change to use the new master.
+   *
+   * @param masterRef the new master ref
+   * @param uiUrl the new master Web UI address
+   * @param masterAddress the new master address which the worker should use to connect in case of
+   *                      failure
+   */
+  private def changeMaster(masterRef: RpcEndpointRef, uiUrl: String, masterAddress: RpcAddress) {
     // activeMasterUrl it's a valid Spark url since we receive it from master.
     activeMasterUrl = masterRef.address.toSparkURL
     activeMasterWebUiUrl = uiUrl
+    masterAddressToConnect = Some(masterAddress)
     master = Some(masterRef)
     connected = true
     if (conf.getBoolean("spark.ui.reverseProxy", false)) {
@@ -266,7 +289,8 @@ private[deploy] class Worker(
             if (registerMasterFutures != null) {
               registerMasterFutures.foreach(_.cancel(true))
             }
-            val masterAddress = masterRef.address
+            val masterAddress =
+              if (preferConfiguredMasterAddress) masterAddressToConnect.get else masterRef.address
             registerMasterFutures = Array(registerMasterThreadPool.submit(new Runnable {
               override def run(): Unit = {
                 try {
@@ -342,15 +366,27 @@ private[deploy] class Worker(
   }
 
   private def sendRegisterMessageToMaster(masterEndpoint: RpcEndpointRef): Unit = {
-    masterEndpoint.send(RegisterWorker(workerId, host, port, self, cores, memory, workerWebUiUrl))
+    masterEndpoint.send(RegisterWorker(
+      workerId,
+      host,
+      port,
+      self,
+      cores,
+      memory,
+      workerWebUiUrl,
+      masterEndpoint.address))
   }
 
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
-      case RegisteredWorker(masterRef, masterWebUiUrl) =>
-        logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
+      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress) =>
+        if (preferConfiguredMasterAddress) {
+          logInfo("Successfully registered with master " + masterAddress.toSparkURL)
+        } else {
+          logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
+        }
         registered = true
-        changeMaster(masterRef, masterWebUiUrl)
+        changeMaster(masterRef, masterWebUiUrl, masterAddress)
         forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
             self.send(SendHeartbeat)
@@ -419,7 +455,7 @@ private[deploy] class Worker(
 
     case MasterChanged(masterRef, masterWebUiUrl) =>
       logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
-      changeMaster(masterRef, masterWebUiUrl)
+      changeMaster(masterRef, masterWebUiUrl, masterRef.address)
 
       val execs = executors.values.
         map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
@@ -561,7 +597,8 @@ private[deploy] class Worker(
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-    if (master.exists(_.address == remoteAddress)) {
+    if (master.exists(_.address == remoteAddress) ||
+      masterAddressToConnect.exists(_ == remoteAddress)) {
       logInfo(s"$remoteAddress Disassociated !")
       masterDisconnected()
     }
