@@ -373,9 +373,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     try {
       GeneratePredicate.generate(expression, inputSchema)
     } catch {
-      case e: JaninoRuntimeException if sqlContext == null || sqlContext.conf.wholeStageFallback =>
-        genInterpretedPredicate(expression, inputSchema)
-      case e: CompileException if sqlContext == null || sqlContext.conf.wholeStageFallback =>
+      case e @ (_: JaninoRuntimeException | _: CompileException)
+          if sqlContext == null || sqlContext.conf.wholeStageFallback =>
         genInterpretedPredicate(expression, inputSchema)
     }
   }
