@@ -26,10 +26,11 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class TaskMemoryManagerSuite {
 
-  static TaskMemoryManager manager;
+  private TaskMemoryManager manager;
 
   @After
   public void after() {
+    Assert.assertNotNull(manager);
     Assert.assertEquals(0, manager.getMemoryConsumptionForThisTask());
     Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
     manager = null;
@@ -48,7 +49,7 @@ public class TaskMemoryManagerSuite {
     final MemoryBlock block = manager.allocatePage(4096, c);  // leak memory
     Assert.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
     Assert.assertEquals(4096, manager.cleanUpAllAllocatedMemory());
-    manager.freePage(block, c);
+    Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
   }
 
   @Test
