@@ -802,7 +802,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
  * Aliased subquery.
  *
  * @param alias the alias name for this subquery.
- * @param child the LogicalPlan
+ * @param child the logical plan of this subquery.
  */
 case class SubqueryAlias(
     alias: String,

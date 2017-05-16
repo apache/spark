@@ -868,29 +868,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(3, 3.0, 2, 3.0) :: Row(3, 3.0, 2, 3.0) :: Nil)
   }
 
-  test("SPARK-20690: Do not add missing attributes through subqueries") {
-    withTempView("onerow") {
-      Seq(1).toDF("c1").createOrReplaceTempView("onerow")
-
-      val e = intercept[AnalysisException] {
-        sql(
-          """
-            | select 1
-            | from   (select 1 from onerow t1 LIMIT 1)
-            | where  t1.c1=1""".stripMargin)
-      }
-      assert(e.message.contains("mismatched input"))
-
-      checkAnswer(
-        sql(
-          """
-            | select 1
-            | from   (select 1 as c1 from onerow t1 LIMIT 1) t2
-            | where  t2.c1=1""".stripMargin),
-        Row(1) :: Nil)
-    }
-  }
-
   test("SPARK-20688: correctly check analysis for scalar sub-queries") {
     withTempView("t") {
       Seq(1 -> "a").toDF("i", "j").createTempView("t")
