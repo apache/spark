@@ -101,7 +101,7 @@
               </excludes>
             </filter>
           </filters>
-          <relocations>
+          <relocations combine.children="append">
             <relocation>
               <pattern>com.fasterxml.jackson</pattern>
               <shadedPattern>${spark.shade.packageName}.com.fasterxml.jackson</shadedPattern>
@@ -114,13 +114,6 @@
               <shadedPattern>${spark.shade.packageName}.io.netty</shadedPattern>
               <includes>
                 <include>io.netty.**</include>
-              </includes>
-            </relocation>
-            <relocation>
-              <pattern>com.google.common</pattern>
-              <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
-              <includes>
-                <include>com.google.**</include>
               </includes>
             </relocation>
           </relocations>
