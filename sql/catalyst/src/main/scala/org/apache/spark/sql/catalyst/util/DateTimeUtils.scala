@@ -603,14 +603,19 @@ object DateTimeUtils {
    */
   private[this] def getYearAndDayInYear(daysSince1970: SQLDate): (Int, Int) = {
     // add the difference (in days) between 1.1.1970 and the artificial year 0 (-17999)
-    val daysNormalized = daysSince1970 + toYearZero
+    var  daysSince1970Tmp = daysSince1970
+    // In history,the period(5.10.1582 ~ 14.10.1582) is not exist
+    // (4.10.1582) -141428 days since 1.1.1970
+    if (daysSince1970 <= -141428) {
+      daysSince1970Tmp -= 10
+    }
+    val daysNormalized = daysSince1970Tmp + toYearZero
     val numOfQuarterCenturies = daysNormalized / daysIn400Years
     val daysInThis400 = daysNormalized % daysIn400Years + 1
     val (years, dayInYear) = numYears(daysInThis400)
     val year: Int = (2001 - 20000) + 400 * numOfQuarterCenturies + years
     (year, dayInYear)
   }
-
   /**
    * Returns the 'day in year' value for the given date. The date is expressed in days
    * since 1.1.1970.
