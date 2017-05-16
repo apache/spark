@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Dataset
 
@@ -55,6 +55,15 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val mh = new MinHashLSH()
     val settings = Map("inputCol" -> "keys", "outputCol" -> "values")
     testEstimatorAndModelReadWrite(mh, dataset, settings, settings, checkModelData)
+  }
+
+  test("Model copy and uid checks") {
+    val mh = new MinHashLSH()
+      .setInputCol("keys")
+      .setOutputCol("values")
+    val model = mh.fit(dataset)
+    assert(mh.uid === model.uid)
+    MLTestingUtils.checkCopyAndUids(mh, model)
   }
 
   test("hashFunction") {

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
-import java.util.{Map => JMap}
+import java.util.{Locale, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
@@ -47,17 +47,19 @@ private[sql] object SQLUtils extends Logging {
       jsc: JavaSparkContext,
       sparkConfigMap: JMap[Object, Object],
       enableHiveSupport: Boolean): SparkSession = {
-    val spark = if (SparkSession.hiveClassesArePresent && enableHiveSupport
-        && jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase == "hive") {
-      SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
-    } else {
-      if (enableHiveSupport) {
-        logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
-          s"Spark is not built with Hive or ${CATALOG_IMPLEMENTATION.key} is not set to 'hive', " +
-          "falling back to without Hive support.")
+    val spark =
+      if (SparkSession.hiveClassesArePresent && enableHiveSupport &&
+          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
+            "hive") {
+        SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
+      } else {
+        if (enableHiveSupport) {
+          logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
+            s"Spark is not built with Hive or ${CATALOG_IMPLEMENTATION.key} is not set to " +
+            "'hive', falling back to without Hive support.")
+        }
+        SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
       }
-      SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
-    }
     setSparkContextSessionConf(spark, sparkConfigMap)
     spark
   }
@@ -81,7 +83,7 @@ private[sql] object SQLUtils extends Logging {
     new JavaSparkContext(spark.sparkContext)
   }
 
-  def createStructType(fields : Seq[StructField]): StructType = {
+  def createStructType(fields: Seq[StructField]): StructType = {
     StructType(fields)
   }
 

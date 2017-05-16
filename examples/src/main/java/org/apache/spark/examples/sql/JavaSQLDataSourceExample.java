@@ -215,7 +215,7 @@ public class JavaSQLDataSourceExample {
     // +------+
 
     // Alternatively, a DataFrame can be created for a JSON dataset represented by
-    // an Dataset[String] storing one JSON object per string.
+    // a Dataset<String> storing one JSON object per string.
     List<String> jsonData = Arrays.asList(
             "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
     Dataset<String> anotherPeopleDataset = spark.createDataset(jsonData, Encoders.STRING());
@@ -257,6 +257,11 @@ public class JavaSQLDataSourceExample {
       .save();
 
     jdbcDF2.write()
+      .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties);
+
+    // Specifying create table column data types on write
+    jdbcDF.write()
+      .option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)")
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties);
     // $example off:jdbc_dataset$
   }
