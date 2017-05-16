@@ -54,7 +54,8 @@ setMethod("lit", signature("ANY"),
 #' @name abs
 #' @family normal_funcs
 #' @export
-#' @examples \dontrun{abs(df$c)}
+#' @examples
+#' \dontrun{abs(df$c)}
 #' @aliases abs,Column-method
 #' @note abs since 1.5.0
 setMethod("abs",
@@ -75,7 +76,8 @@ setMethod("abs",
 #' @name acos
 #' @family math_funcs
 #' @export
-#' @examples \dontrun{acos(df$c)}
+#' @examples
+#' \dontrun{acos(df$c)}
 #' @aliases acos,Column-method
 #' @note acos since 1.5.0
 setMethod("acos",
@@ -95,7 +97,8 @@ setMethod("acos",
 #' @return the approximate number of distinct items in a group.
 #' @export
 #' @aliases approxCountDistinct,Column-method
-#' @examples \dontrun{approxCountDistinct(df$c)}
+#' @examples
+#' \dontrun{approxCountDistinct(df$c)}
 #' @note approxCountDistinct(Column) since 1.4.0
 setMethod("approxCountDistinct",
           signature(x = "Column"),
@@ -116,7 +119,8 @@ setMethod("approxCountDistinct",
 #' @family string_funcs
 #' @export
 #' @aliases ascii,Column-method
-#' @examples \dontrun{\dontrun{ascii(df$c)}}
+#' @examples
+#' \dontrun{\dontrun{ascii(df$c)}}
 #' @note ascii since 1.5.0
 setMethod("ascii",
           signature(x = "Column"),
@@ -137,7 +141,8 @@ setMethod("ascii",
 #' @family math_funcs
 #' @export
 #' @aliases asin,Column-method
-#' @examples \dontrun{asin(df$c)}
+#' @examples
+#' \dontrun{asin(df$c)}
 #' @note asin since 1.5.0
 setMethod("asin",
           signature(x = "Column"),
@@ -157,7 +162,8 @@ setMethod("asin",
 #' @family math_funcs
 #' @export
 #' @aliases atan,Column-method
-#' @examples \dontrun{atan(df$c)}
+#' @examples
+#' \dontrun{atan(df$c)}
 #' @note atan since 1.5.0
 setMethod("atan",
           signature(x = "Column"),
@@ -175,7 +181,8 @@ setMethod("atan",
 #' @family agg_funcs
 #' @export
 #' @aliases avg,Column-method
-#' @examples \dontrun{avg(df$c)}
+#' @examples
+#' \dontrun{avg(df$c)}
 #' @note avg since 1.4.0
 setMethod("avg",
           signature(x = "Column"),
@@ -196,7 +203,8 @@ setMethod("avg",
 #' @family string_funcs
 #' @export
 #' @aliases base64,Column-method
-#' @examples \dontrun{base64(df$c)}
+#' @examples
+#' \dontrun{base64(df$c)}
 #' @note base64 since 1.5.0
 setMethod("base64",
           signature(x = "Column"),
@@ -217,7 +225,8 @@ setMethod("base64",
 #' @family math_funcs
 #' @export
 #' @aliases bin,Column-method
-#' @examples \dontrun{bin(df$c)}
+#' @examples
+#' \dontrun{bin(df$c)}
 #' @note bin since 1.5.0
 setMethod("bin",
           signature(x = "Column"),
@@ -237,7 +246,8 @@ setMethod("bin",
 #' @family normal_funcs
 #' @export
 #' @aliases bitwiseNOT,Column-method
-#' @examples \dontrun{bitwiseNOT(df$c)}
+#' @examples
+#' \dontrun{bitwiseNOT(df$c)}
 #' @note bitwiseNOT since 1.5.0
 setMethod("bitwiseNOT",
           signature(x = "Column"),
@@ -257,7 +267,8 @@ setMethod("bitwiseNOT",
 #' @family math_funcs
 #' @export
 #' @aliases cbrt,Column-method
-#' @examples \dontrun{cbrt(df$c)}
+#' @examples
+#' \dontrun{cbrt(df$c)}
 #' @note cbrt since 1.4.0
 setMethod("cbrt",
           signature(x = "Column"),
@@ -277,7 +288,8 @@ setMethod("cbrt",
 #' @family math_funcs
 #' @export
 #' @aliases ceil,Column-method
-#' @examples \dontrun{ceil(df$c)}
+#' @examples
+#' \dontrun{ceil(df$c)}
 #' @note ceil since 1.5.0
 setMethod("ceil",
           signature(x = "Column"),
@@ -295,7 +307,8 @@ setMethod("ceil",
 #' @family normal_funcs
 #' @export
 #' @aliases coalesce,Column-method
-#' @examples \dontrun{coalesce(df$c, df$d, df$e)}
+#' @examples
+#' \dontrun{coalesce(df$c, df$d, df$e)}
 #' @note coalesce(Column) since 2.1.1
 setMethod("coalesce",
           signature(x = "Column"),
@@ -327,7 +340,8 @@ col <- function(x) {
 #' @family normal_funcs
 #' @export
 #' @aliases column,character-method
-#' @examples \dontrun{column("name")}
+#' @examples
+#' \dontrun{column("name")}
 #' @note column since 1.6.0
 setMethod("column",
           signature(x = "character"),
@@ -345,7 +359,8 @@ setMethod("column",
 #' @family math_funcs
 #' @export
 #' @aliases corr,Column-method
-#' @examples \dontrun{corr(df$c, df$d)}
+#' @examples
+#' \dontrun{corr(df$c, df$d)}
 #' @note corr since 1.6.0
 setMethod("corr", signature(x = "Column"),
           function(x, col2) {
@@ -435,7 +450,8 @@ setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOr
 #' @family math_funcs
 #' @aliases cos,Column-method
 #' @export
-#' @examples \dontrun{cos(df$c)}
+#' @examples
+#' \dontrun{cos(df$c)}
 #' @note cos since 1.5.0
 setMethod("cos",
           signature(x = "Column"),
@@ -455,7 +471,8 @@ setMethod("cos",
 #' @family math_funcs
 #' @aliases cosh,Column-method
 #' @export
-#' @examples \dontrun{cosh(df$c)}
+#' @examples
+#' \dontrun{cosh(df$c)}
 #' @note cosh since 1.5.0
 setMethod("cosh",
           signature(x = "Column"),
@@ -474,7 +491,8 @@ setMethod("cosh",
 #' @family agg_funcs
 #' @aliases count,Column-method
 #' @export
-#' @examples \dontrun{count(df$c)}
+#' @examples
+#' \dontrun{count(df$c)}
 #' @note count since 1.4.0
 setMethod("count",
           signature(x = "Column"),
@@ -495,7 +513,8 @@ setMethod("count",
 #' @family misc_funcs
 #' @aliases crc32,Column-method
 #' @export
-#' @examples \dontrun{crc32(df$c)}
+#' @examples
+#' \dontrun{crc32(df$c)}
 #' @note crc32 since 1.5.0
 setMethod("crc32",
           signature(x = "Column"),
@@ -516,7 +535,8 @@ setMethod("crc32",
 #' @family misc_funcs
 #' @aliases hash,Column-method
 #' @export
-#' @examples \dontrun{hash(df$c)}
+#' @examples
+#' \dontrun{hash(df$c)}
 #' @note hash since 2.0.0
 setMethod("hash",
           signature(x = "Column"),
@@ -540,7 +560,8 @@ setMethod("hash",
 #' @family datetime_funcs
 #' @aliases dayofmonth,Column-method
 #' @export
-#' @examples \dontrun{dayofmonth(df$c)}
+#' @examples
+#' \dontrun{dayofmonth(df$c)}
 #' @note dayofmonth since 1.5.0
 setMethod("dayofmonth",
           signature(x = "Column"),
@@ -560,7 +581,8 @@ setMethod("dayofmonth",
 #' @family datetime_funcs
 #' @aliases dayofyear,Column-method
 #' @export
-#' @examples \dontrun{dayofyear(df$c)}
+#' @examples
+#' \dontrun{dayofyear(df$c)}
 #' @note dayofyear since 1.5.0
 setMethod("dayofyear",
           signature(x = "Column"),
@@ -582,7 +604,8 @@ setMethod("dayofyear",
 #' @family string_funcs
 #' @aliases decode,Column,character-method
 #' @export
-#' @examples \dontrun{decode(df$c, "UTF-8")}
+#' @examples
+#' \dontrun{decode(df$c, "UTF-8")}
 #' @note decode since 1.6.0
 setMethod("decode",
           signature(x = "Column", charset = "character"),
@@ -604,7 +627,8 @@ setMethod("decode",
 #' @family string_funcs
 #' @aliases encode,Column,character-method
 #' @export
-#' @examples \dontrun{encode(df$c, "UTF-8")}
+#' @examples
+#' \dontrun{encode(df$c, "UTF-8")}
 #' @note encode since 1.6.0
 setMethod("encode",
           signature(x = "Column", charset = "character"),
@@ -624,7 +648,8 @@ setMethod("encode",
 #' @family math_funcs
 #' @aliases exp,Column-method
 #' @export
-#' @examples \dontrun{exp(df$c)}
+#' @examples
+#' \dontrun{exp(df$c)}
 #' @note exp since 1.5.0
 setMethod("exp",
           signature(x = "Column"),
@@ -644,7 +669,8 @@ setMethod("exp",
 #' @aliases expm1,Column-method
 #' @family math_funcs
 #' @export
-#' @examples \dontrun{expm1(df$c)}
+#' @examples
+#' \dontrun{expm1(df$c)}
 #' @note expm1 since 1.5.0
 setMethod("expm1",
           signature(x = "Column"),
@@ -664,7 +690,8 @@ setMethod("expm1",
 #' @aliases factorial,Column-method
 #' @family math_funcs
 #' @export
-#' @examples \dontrun{factorial(df$c)}
+#' @examples
+#' \dontrun{factorial(df$c)}
 #' @note factorial since 1.5.0
 setMethod("factorial",
           signature(x = "Column"),
@@ -717,7 +744,8 @@ setMethod("first",
 #' @aliases floor,Column-method
 #' @family math_funcs
 #' @export
-#' @examples \dontrun{floor(df$c)}
+#' @examples
+#' \dontrun{floor(df$c)}
 #' @note floor since 1.5.0
 setMethod("floor",
           signature(x = "Column"),
@@ -737,7 +765,8 @@ setMethod("floor",
 #' @family math_funcs
 #' @aliases hex,Column-method
 #' @export
-#' @examples \dontrun{hex(df$c)}
+#' @examples
+#' \dontrun{hex(df$c)}
 #' @note hex since 1.5.0
 setMethod("hex",
           signature(x = "Column"),
@@ -757,7 +786,8 @@ setMethod("hex",
 #' @aliases hour,Column-method
 #' @family datetime_funcs
 #' @export
-#' @examples \dontrun{hour(df$c)}
+#' @examples
+#' \dontrun{hour(df$c)}
 #' @note hour since 1.5.0
 setMethod("hour",
           signature(x = "Column"),
@@ -780,7 +810,8 @@ setMethod("hour",
 #' @family string_funcs
 #' @aliases initcap,Column-method
 #' @export
-#' @examples \dontrun{initcap(df$c)}
+#' @examples
+#' \dontrun{initcap(df$c)}
 #' @note initcap since 1.5.0
 setMethod("initcap",
           signature(x = "Column"),
@@ -834,7 +865,8 @@ setMethod("isnan",
 #' @aliases kurtosis,Column-method
 #' @family agg_funcs
 #' @export
-#' @examples \dontrun{kurtosis(df$c)}
+#' @examples
+#' \dontrun{kurtosis(df$c)}
 #' @note kurtosis since 1.6.0
 setMethod("kurtosis",
           signature(x = "Column"),
@@ -891,7 +923,8 @@ setMethod("last",
 #' @aliases last_day,Column-method
 #' @family datetime_funcs
 #' @export
-#' @examples \dontrun{last_day(df$c)}
+#' @examples
+#' \dontrun{last_day(df$c)}
 #' @note last_day since 1.5.0
 setMethod("last_day",
           signature(x = "Column"),
@@ -911,7 +944,8 @@ setMethod("last_day",
 #' @aliases length,Column-method
 #' @family string_funcs
 #' @export
-#' @examples \dontrun{length(df$c)}
+#' @examples
+#' \dontrun{length(df$c)}
 #' @note length since 1.5.0
 setMethod("length",
           signature(x = "Column"),
@@ -931,7 +965,8 @@ setMethod("length",
 #' @aliases log,Column-method
 #' @family math_funcs
 #' @export
-#' @examples \dontrun{log(df$c)}
+#' @examples
+#' \dontrun{log(df$c)}
 #' @note log since 1.5.0
 setMethod("log",
           signature(x = "Column"),
@@ -951,7 +986,8 @@ setMethod("log",
 #' @family math_funcs
 #' @aliases log10,Column-method
 #' @export
-#' @examples \dontrun{log10(df$c)}
+#' @examples
+#' \dontrun{log10(df$c)}
 #' @note log10 since 1.5.0
 setMethod("log10",
           signature(x = "Column"),
@@ -971,7 +1007,8 @@ setMethod("log10",
 #' @family math_funcs
 #' @aliases log1p,Column-method
 #' @export
-#' @examples \dontrun{log1p(df$c)}
+#' @examples
+#' \dontrun{log1p(df$c)}
 #' @note log1p since 1.5.0
 setMethod("log1p",
           signature(x = "Column"),
@@ -991,7 +1028,8 @@ setMethod("log1p",
 #' @family math_funcs
 #' @aliases log2,Column-method
 #' @export
-#' @examples \dontrun{log2(df$c)}
+#' @examples
+#' \dontrun{log2(df$c)}
 #' @note log2 since 1.5.0
 setMethod("log2",
           signature(x = "Column"),
@@ -1011,7 +1049,8 @@ setMethod("log2",
 #' @family string_funcs
 #' @aliases lower,Column-method
 #' @export
-#' @examples \dontrun{lower(df$c)}
+#' @examples
+#' \dontrun{lower(df$c)}
 #' @note lower since 1.4.0
 setMethod("lower",
           signature(x = "Column"),
@@ -1031,7 +1070,8 @@ setMethod("lower",
 #' @family string_funcs
 #' @aliases ltrim,Column-method
 #' @export
-#' @examples \dontrun{ltrim(df$c)}
+#' @examples
+#' \dontrun{ltrim(df$c)}
 #' @note ltrim since 1.5.0
 setMethod("ltrim",
           signature(x = "Column"),
@@ -1051,7 +1091,8 @@ setMethod("ltrim",
 #' @family agg_funcs
 #' @aliases max,Column-method
 #' @export
-#' @examples \dontrun{max(df$c)}
+#' @examples
+#' \dontrun{max(df$c)}
 #' @note max since 1.5.0
 setMethod("max",
           signature(x = "Column"),
@@ -1072,7 +1113,8 @@ setMethod("max",
 #' @family misc_funcs
 #' @aliases md5,Column-method
 #' @export
-#' @examples \dontrun{md5(df$c)}
+#' @examples
+#' \dontrun{md5(df$c)}
 #' @note md5 since 1.5.0
 setMethod("md5",
           signature(x = "Column"),
@@ -1093,7 +1135,8 @@ setMethod("md5",
 #' @family agg_funcs
 #' @aliases mean,Column-method
 #' @export
-#' @examples \dontrun{mean(df$c)}
+#' @examples
+#' \dontrun{mean(df$c)}
 #' @note mean since 1.5.0
 setMethod("mean",
           signature(x = "Column"),
@@ -1113,7 +1156,8 @@ setMethod("mean",
 #' @aliases min,Column-method
 #' @family agg_funcs
 #' @export
-#' @examples \dontrun{min(df$c)}
+#' @examples
+#' \dontrun{min(df$c)}
 #' @note min since 1.5.0
 setMethod("min",
           signature(x = "Column"),
@@ -1133,7 +1177,8 @@ setMethod("min",
 #' @aliases minute,Column-method
 #' @family datetime_funcs
 #' @export
-#' @examples \dontrun{minute(df$c)}
+#' @examples
+#' \dontrun{minute(df$c)}
 #' @note minute since 1.5.0
 setMethod("minute",
           signature(x = "Column"),
@@ -1162,7 +1207,8 @@ setMethod("minute",
 #' @name monotonically_increasing_id
 #' @family misc_funcs
 #' @export
-#' @examples \dontrun{select(df, monotonically_increasing_id())}
+#' @examples
+#' \dontrun{select(df, monotonically_increasing_id())}
 setMethod("monotonically_increasing_id",
           signature("missing"),
           function() {
@@ -1181,7 +1227,8 @@ setMethod("monotonically_increasing_id",
 #' @aliases month,Column-method
 #' @family datetime_funcs
 #' @export
-#' @examples \dontrun{month(df$c)}
+#' @examples
+#' \dontrun{month(df$c)}
 #' @note month since 1.5.0
 setMethod("month",
           signature(x = "Column"),
@@ -1201,7 +1248,8 @@ setMethod("month",
 #' @family normal_funcs
 #' @aliases negate,Column-method
 #' @export
-#' @examples \dontrun{negate(df$c)}
+#' @examples
+#' \dontrun{negate(df$c)}
 #' @note negate since 1.5.0
 setMethod("negate",
           signature(x = "Column"),
@@ -1221,7 +1269,8 @@ setMethod("negate",
 #' @family datetime_funcs
 #' @aliases quarter,Column-method
 #' @export
-#' @examples \dontrun{quarter(df$c)}
+#' @examples
+#' \dontrun{quarter(df$c)}
 #' @note quarter since 1.5.0
 setMethod("quarter",
           signature(x = "Column"),
@@ -1241,7 +1290,8 @@ setMethod("quarter",
 #' @family string_funcs
 #' @aliases reverse,Column-method
 #' @export
-#' @examples \dontrun{reverse(df$c)}
+#' @examples
+#' \dontrun{reverse(df$c)}
 #' @note reverse since 1.5.0
 setMethod("reverse",
           signature(x = "Column"),
@@ -1262,7 +1312,8 @@ setMethod("reverse",
 #' @family math_funcs
 #' @aliases rint,Column-method
 #' @export
-#' @examples \dontrun{rint(df$c)}
+#' @examples
+#' \dontrun{rint(df$c)}
 #' @note rint since 1.5.0
 setMethod("rint",
           signature(x = "Column"),
@@ -1282,7 +1333,8 @@ setMethod("rint",
 #' @family math_funcs
 #' @aliases round,Column-method
 #' @export
-#' @examples \dontrun{round(df$c)}
+#' @examples
+#' \dontrun{round(df$c)}
 #' @note round since 1.5.0
 setMethod("round",
           signature(x = "Column"),
@@ -1308,7 +1360,8 @@ setMethod("round",
 #' @family math_funcs
 #' @aliases bround,Column-method
 #' @export
-#' @examples \dontrun{bround(df$c, 0)}
+#' @examples
+#' \dontrun{bround(df$c, 0)}
 #' @note bround since 2.0.0
 setMethod("bround",
           signature(x = "Column"),
@@ -1329,7 +1382,8 @@ setMethod("bround",
 #' @family string_funcs
 #' @aliases rtrim,Column-method
 #' @export
-#' @examples \dontrun{rtrim(df$c)}
+#' @examples
+#' \dontrun{rtrim(df$c)}
 #' @note rtrim since 1.5.0
 setMethod("rtrim",
           signature(x = "Column"),
@@ -1375,7 +1429,8 @@ setMethod("sd",
 #' @family datetime_funcs
 #' @aliases second,Column-method
 #' @export
-#' @examples \dontrun{second(df$c)}
+#' @examples
+#' \dontrun{second(df$c)}
 #' @note second since 1.5.0
 setMethod("second",
           signature(x = "Column"),
@@ -1396,7 +1451,8 @@ setMethod("second",
 #' @family misc_funcs
 #' @aliases sha1,Column-method
 #' @export
-#' @examples \dontrun{sha1(df$c)}
+#' @examples
+#' \dontrun{sha1(df$c)}
 #' @note sha1 since 1.5.0
 setMethod("sha1",
           signature(x = "Column"),
@@ -1416,7 +1472,8 @@ setMethod("sha1",
 #' @aliases signum,Column-method
 #' @family math_funcs
 #' @export
-#' @examples \dontrun{signum(df$c)}
+#' @examples
+#' \dontrun{signum(df$c)}
 #' @note signum since 1.5.0
 setMethod("signum",
           signature(x = "Column"),
@@ -1436,7 +1493,8 @@ setMethod("signum",
 #' @family math_funcs
 #' @aliases sin,Column-method
 #' @export
-#' @examples \dontrun{sin(df$c)}
+#' @examples
+#' \dontrun{sin(df$c)}
 #' @note sin since 1.5.0
 setMethod("sin",
           signature(x = "Column"),
@@ -1456,7 +1514,8 @@ setMethod("sin",
 #' @family math_funcs
 #' @aliases sinh,Column-method
 #' @export
-#' @examples \dontrun{sinh(df$c)}
+#' @examples
+#' \dontrun{sinh(df$c)}
 #' @note sinh since 1.5.0
 setMethod("sinh",
           signature(x = "Column"),
@@ -1476,7 +1535,8 @@ setMethod("sinh",
 #' @family agg_funcs
 #' @aliases skewness,Column-method
 #' @export
-#' @examples \dontrun{skewness(df$c)}
+#' @examples
+#' \dontrun{skewness(df$c)}
 #' @note skewness since 1.6.0
 setMethod("skewness",
           signature(x = "Column"),
@@ -1496,7 +1556,8 @@ setMethod("skewness",
 #' @family string_funcs
 #' @aliases soundex,Column-method
 #' @export
-#' @examples \dontrun{soundex(df$c)}
+#' @examples
+#' \dontrun{soundex(df$c)}
 #' @note soundex since 1.5.0
 setMethod("soundex",
           signature(x = "Column"),
@@ -1550,7 +1611,8 @@ setMethod("stddev",
 #' @aliases stddev_pop,Column-method
 #' @seealso \link{sd}, \link{stddev_samp}
 #' @export
-#' @examples \dontrun{stddev_pop(df$c)}
+#' @examples
+#' \dontrun{stddev_pop(df$c)}
 #' @note stddev_pop since 1.6.0
 setMethod("stddev_pop",
           signature(x = "Column"),
@@ -1571,7 +1633,8 @@ setMethod("stddev_pop",
 #' @aliases stddev_samp,Column-method
 #' @seealso \link{stddev_pop}, \link{sd}
 #' @export
-#' @examples \dontrun{stddev_samp(df$c)}
+#' @examples
+#' \dontrun{stddev_samp(df$c)}
 #' @note stddev_samp since 1.6.0
 setMethod("stddev_samp",
           signature(x = "Column"),
@@ -1621,7 +1684,8 @@ setMethod("struct",
 #' @family math_funcs
 #' @aliases sqrt,Column-method
 #' @export
-#' @examples \dontrun{sqrt(df$c)}
+#' @examples
+#' \dontrun{sqrt(df$c)}
 #' @note sqrt since 1.5.0
 setMethod("sqrt",
           signature(x = "Column"),
@@ -1641,7 +1705,8 @@ setMethod("sqrt",
 #' @family agg_funcs
 #' @aliases sum,Column-method
 #' @export
-#' @examples \dontrun{sum(df$c)}
+#' @examples
+#' \dontrun{sum(df$c)}
 #' @note sum since 1.5.0
 setMethod("sum",
           signature(x = "Column"),
@@ -1661,7 +1726,8 @@ setMethod("sum",
 #' @family agg_funcs
 #' @aliases sumDistinct,Column-method
 #' @export
-#' @examples \dontrun{sumDistinct(df$c)}
+#' @examples
+#' \dontrun{sumDistinct(df$c)}
 #' @note sumDistinct since 1.4.0
 setMethod("sumDistinct",
           signature(x = "Column"),
@@ -1681,7 +1747,8 @@ setMethod("sumDistinct",
 #' @family math_funcs
 #' @aliases tan,Column-method
 #' @export
-#' @examples \dontrun{tan(df$c)}
+#' @examples
+#' \dontrun{tan(df$c)}
 #' @note tan since 1.5.0
 setMethod("tan",
           signature(x = "Column"),
@@ -1701,7 +1768,8 @@ setMethod("tan",
 #' @family math_funcs
 #' @aliases tanh,Column-method
 #' @export
-#' @examples \dontrun{tanh(df$c)}
+#' @examples
+#' \dontrun{tanh(df$c)}
 #' @note tanh since 1.5.0
 setMethod("tanh",
           signature(x = "Column"),
@@ -1721,7 +1789,8 @@ setMethod("tanh",
 #' @family math_funcs
 #' @aliases toDegrees,Column-method
 #' @export
-#' @examples \dontrun{toDegrees(df$c)}
+#' @examples
+#' \dontrun{toDegrees(df$c)}
 #' @note toDegrees since 1.4.0
 setMethod("toDegrees",
           signature(x = "Column"),
@@ -1741,7 +1810,8 @@ setMethod("toDegrees",
 #' @family math_funcs
 #' @aliases toRadians,Column-method
 #' @export
-#' @examples \dontrun{toRadians(df$c)}
+#' @examples
+#' \dontrun{toRadians(df$c)}
 #' @note toRadians since 1.4.0
 setMethod("toRadians",
           signature(x = "Column"),
@@ -1879,7 +1949,8 @@ setMethod("to_timestamp",
 #' @family string_funcs
 #' @aliases trim,Column-method
 #' @export
-#' @examples \dontrun{trim(df$c)}
+#' @examples
+#' \dontrun{trim(df$c)}
 #' @note trim since 1.5.0
 setMethod("trim",
           signature(x = "Column"),
@@ -1900,7 +1971,8 @@ setMethod("trim",
 #' @family string_funcs
 #' @aliases unbase64,Column-method
 #' @export
-#' @examples \dontrun{unbase64(df$c)}
+#' @examples
+#' \dontrun{unbase64(df$c)}
 #' @note unbase64 since 1.5.0
 setMethod("unbase64",
           signature(x = "Column"),
@@ -1921,7 +1993,8 @@ setMethod("unbase64",
 #' @family math_funcs
 #' @aliases unhex,Column-method
 #' @export
-#' @examples \dontrun{unhex(df$c)}
+#' @examples
+#' \dontrun{unhex(df$c)}
 #' @note unhex since 1.5.0
 setMethod("unhex",
           signature(x = "Column"),
@@ -1941,7 +2014,8 @@ setMethod("unhex",
 #' @family string_funcs
 #' @aliases upper,Column-method
 #' @export
-#' @examples \dontrun{upper(df$c)}
+#' @examples
+#' \dontrun{upper(df$c)}
 #' @note upper since 1.4.0
 setMethod("upper",
           signature(x = "Column"),
@@ -1999,7 +2073,8 @@ setMethod("variance",
 #' @aliases var_pop,Column-method
 #' @seealso \link{var}, \link{var_samp}
 #' @export
-#' @examples \dontrun{var_pop(df$c)}
+#' @examples
+#' \dontrun{var_pop(df$c)}
 #' @note var_pop since 1.5.0
 setMethod("var_pop",
           signature(x = "Column"),
@@ -2020,7 +2095,8 @@ setMethod("var_pop",
 #' @family agg_funcs
 #' @seealso \link{var_pop}, \link{var}
 #' @export
-#' @examples \dontrun{var_samp(df$c)}
+#' @examples
+#' \dontrun{var_samp(df$c)}
 #' @note var_samp since 1.6.0
 setMethod("var_samp",
           signature(x = "Column"),
@@ -2040,7 +2116,8 @@ setMethod("var_samp",
 #' @aliases weekofyear,Column-method
 #' @family datetime_funcs
 #' @export
-#' @examples \dontrun{weekofyear(df$c)}
+#' @examples
+#' \dontrun{weekofyear(df$c)}
 #' @note weekofyear since 1.5.0
 setMethod("weekofyear",
           signature(x = "Column"),
@@ -2060,7 +2137,8 @@ setMethod("weekofyear",
 #' @family datetime_funcs
 #' @aliases year,Column-method
 #' @export
-#' @examples \dontrun{year(df$c)}
+#' @examples
+#' \dontrun{year(df$c)}
 #' @note year since 1.5.0
 setMethod("year",
           signature(x = "Column"),
@@ -2082,7 +2160,8 @@ setMethod("year",
 #' @family math_funcs
 #' @aliases atan2,Column-method
 #' @export
-#' @examples \dontrun{atan2(df$c, x)}
+#' @examples
+#' \dontrun{atan2(df$c, x)}
 #' @note atan2 since 1.5.0
 setMethod("atan2", signature(y = "Column"),
           function(y, x) {
@@ -2105,7 +2184,8 @@ setMethod("atan2", signature(y = "Column"),
 #' @aliases datediff,Column-method
 #' @family datetime_funcs
 #' @export
-#' @examples \dontrun{datediff(df$c, x)}
+#' @examples
+#' \dontrun{datediff(df$c, x)}
 #' @note datediff since 1.5.0
 setMethod("datediff", signature(y = "Column"),
           function(y, x) {
@@ -2128,7 +2208,8 @@ setMethod("datediff", signature(y = "Column"),
 #' @family math_funcs
 #' @aliases hypot,Column-method
 #' @export
-#' @examples \dontrun{hypot(df$c, x)}
+#' @examples
+#' \dontrun{hypot(df$c, x)}
 #' @note hypot since 1.4.0
 setMethod("hypot", signature(y = "Column"),
           function(y, x) {
@@ -2151,7 +2232,8 @@ setMethod("hypot", signature(y = "Column"),
 #' @family string_funcs
 #' @aliases levenshtein,Column-method
 #' @export
-#' @examples \dontrun{levenshtein(df$c, x)}
+#' @examples
+#' \dontrun{levenshtein(df$c, x)}
 #' @note levenshtein since 1.5.0
 setMethod("levenshtein", signature(y = "Column"),
           function(y, x) {
@@ -2174,7 +2256,8 @@ setMethod("levenshtein", signature(y = "Column"),
 #' @family datetime_funcs
 #' @aliases months_between,Column-method
 #' @export
-#' @examples \dontrun{months_between(df$c, x)}
+#' @examples
+#' \dontrun{months_between(df$c, x)}
 #' @note months_between since 1.5.0
 setMethod("months_between", signature(y = "Column"),
           function(y, x) {
@@ -2198,7 +2281,8 @@ setMethod("months_between", signature(y = "Column"),
 #' @family normal_funcs
 #' @aliases nanvl,Column-method
 #' @export
-#' @examples \dontrun{nanvl(df$c, x)}
+#' @examples
+#' \dontrun{nanvl(df$c, x)}
 #' @note nanvl since 1.5.0
 setMethod("nanvl", signature(y = "Column"),
           function(y, x) {
@@ -2222,7 +2306,8 @@ setMethod("nanvl", signature(y = "Column"),
 #' @family math_funcs
 #' @aliases pmod,Column-method
 #' @export
-#' @examples \dontrun{pmod(df$c, x)}
+#' @examples
+#' \dontrun{pmod(df$c, x)}
 #' @note pmod since 1.5.0
 setMethod("pmod", signature(y = "Column"),
           function(y, x) {
@@ -2243,7 +2328,8 @@ setMethod("pmod", signature(y = "Column"),
 #'
 #' @aliases approxCountDistinct,Column-method
 #' @export
-#' @examples \dontrun{approxCountDistinct(df$c, 0.02)}
+#' @examples
+#' \dontrun{approxCountDistinct(df$c, 0.02)}
 #' @note approxCountDistinct(Column, numeric) since 1.4.0
 setMethod("approxCountDistinct",
           signature(x = "Column"),
@@ -2263,7 +2349,8 @@ setMethod("approxCountDistinct",
 #' @aliases countDistinct,Column-method
 #' @return the number of distinct items in a group.
 #' @export
-#' @examples \dontrun{countDistinct(df$c)}
+#' @examples
+#' \dontrun{countDistinct(df$c)}
 #' @note countDistinct since 1.4.0
 setMethod("countDistinct",
           signature(x = "Column"),
@@ -2290,7 +2377,8 @@ setMethod("countDistinct",
 #' @name concat
 #' @aliases concat,Column-method
 #' @export
-#' @examples \dontrun{concat(df$strings, df$strings2)}
+#' @examples
+#' \dontrun{concat(df$strings, df$strings2)}
 #' @note concat since 1.5.0
 setMethod("concat",
           signature(x = "Column"),
@@ -2316,7 +2404,8 @@ setMethod("concat",
 #' @name greatest
 #' @aliases greatest,Column-method
 #' @export
-#' @examples \dontrun{greatest(df$c, df$d)}
+#' @examples
+#' \dontrun{greatest(df$c, df$d)}
 #' @note greatest since 1.5.0
 setMethod("greatest",
           signature(x = "Column"),
@@ -2343,7 +2432,8 @@ setMethod("greatest",
 #' @aliases least,Column-method
 #' @name least
 #' @export
-#' @examples \dontrun{least(df$c, df$d)}
+#' @examples
+#' \dontrun{least(df$c, df$d)}
 #' @note least since 1.5.0
 setMethod("least",
           signature(x = "Column"),
@@ -2362,7 +2452,8 @@ setMethod("least",
 #' @name ceiling
 #' @aliases ceiling,Column-method
 #' @export
-#' @examples \dontrun{ceiling(df$c)}
+#' @examples
+#' \dontrun{ceiling(df$c)}
 #' @note ceiling since 1.5.0
 setMethod("ceiling",
           signature(x = "Column"),
@@ -2375,7 +2466,8 @@ setMethod("ceiling",
 #' @name sign
 #' @aliases sign,Column-method
 #' @export
-#' @examples \dontrun{sign(df$c)}
+#' @examples
+#' \dontrun{sign(df$c)}
 #' @note sign since 1.5.0
 setMethod("sign", signature(x = "Column"),
           function(x) {
@@ -2390,7 +2482,8 @@ setMethod("sign", signature(x = "Column"),
 #' @name n_distinct
 #' @aliases n_distinct,Column-method
 #' @export
-#' @examples \dontrun{n_distinct(df$c)}
+#' @examples
+#' \dontrun{n_distinct(df$c)}
 #' @note n_distinct since 1.4.0
 setMethod("n_distinct", signature(x = "Column"),
           function(x, ...) {
@@ -2401,7 +2494,8 @@ setMethod("n_distinct", signature(x = "Column"),
 #' @name n
 #' @aliases n,Column-method
 #' @export
-#' @examples \dontrun{n(df$c)}
+#' @examples
+#' \dontrun{n(df$c)}
 #' @note n since 1.4.0
 setMethod("n", signature(x = "Column"),
           function(x) {
@@ -2427,7 +2521,8 @@ setMethod("n", signature(x = "Column"),
 #' @name date_format
 #' @aliases date_format,Column,character-method
 #' @export
-#' @examples \dontrun{date_format(df$t, 'MM/dd/yyy')}
+#' @examples
+#' \dontrun{date_format(df$t, 'MM/dd/yyy')}
 #' @note date_format since 1.5.0
 setMethod("date_format", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2487,7 +2582,8 @@ setMethod("from_json", signature(x = "Column", schema = "structType"),
 #' @name from_utc_timestamp
 #' @aliases from_utc_timestamp,Column,character-method
 #' @export
-#' @examples \dontrun{from_utc_timestamp(df$t, 'PST')}
+#' @examples
+#' \dontrun{from_utc_timestamp(df$t, 'PST')}
 #' @note from_utc_timestamp since 1.5.0
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2510,7 +2606,8 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
 #' @rdname instr
 #' @name instr
 #' @export
-#' @examples \dontrun{instr(df$c, 'b')}
+#' @examples
+#' \dontrun{instr(df$c, 'b')}
 #' @note instr since 1.5.0
 setMethod("instr", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2562,7 +2659,8 @@ setMethod("next_day", signature(y = "Column", x = "character"),
 #' @name to_utc_timestamp
 #' @aliases to_utc_timestamp,Column,character-method
 #' @export
-#' @examples \dontrun{to_utc_timestamp(df$t, 'PST')}
+#' @examples
+#' \dontrun{to_utc_timestamp(df$t, 'PST')}
 #' @note to_utc_timestamp since 1.5.0
 setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2582,7 +2680,8 @@ setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
 #' @rdname add_months
 #' @aliases add_months,Column,numeric-method
 #' @export
-#' @examples \dontrun{add_months(df$d, 1)}
+#' @examples
+#' \dontrun{add_months(df$d, 1)}
 #' @note add_months since 1.5.0
 setMethod("add_months", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2602,7 +2701,8 @@ setMethod("add_months", signature(y = "Column", x = "numeric"),
 #' @name date_add
 #' @aliases date_add,Column,numeric-method
 #' @export
-#' @examples \dontrun{date_add(df$d, 1)}
+#' @examples
+#' \dontrun{date_add(df$d, 1)}
 #' @note date_add since 1.5.0
 setMethod("date_add", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2622,7 +2722,8 @@ setMethod("date_add", signature(y = "Column", x = "numeric"),
 #' @name date_sub
 #' @aliases date_sub,Column,numeric-method
 #' @export
-#' @examples \dontrun{date_sub(df$d, 1)}
+#' @examples
+#' \dontrun{date_sub(df$d, 1)}
 #' @note date_sub since 1.5.0
 setMethod("date_sub", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2645,7 +2746,8 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
 #' @name format_number
 #' @aliases format_number,Column,numeric-method
 #' @export
-#' @examples \dontrun{format_number(df$n, 4)}
+#' @examples
+#' \dontrun{format_number(df$n, 4)}
 #' @note format_number since 1.5.0
 setMethod("format_number", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2667,7 +2769,8 @@ setMethod("format_number", signature(y = "Column", x = "numeric"),
 #' @name sha2
 #' @aliases sha2,Column,numeric-method
 #' @export
-#' @examples \dontrun{sha2(df$c, 256)}
+#' @examples
+#' \dontrun{sha2(df$c, 256)}
 #' @note sha2 since 1.5.0
 setMethod("sha2", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2688,7 +2791,8 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
 #' @name shiftLeft
 #' @aliases shiftLeft,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftLeft(df$c, 1)}
+#' @examples
+#' \dontrun{shiftLeft(df$c, 1)}
 #' @note shiftLeft since 1.5.0
 setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2711,7 +2815,8 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
 #' @name shiftRight
 #' @aliases shiftRight,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftRight(df$c, 1)}
+#' @examples
+#' \dontrun{shiftRight(df$c, 1)}
 #' @note shiftRight since 1.5.0
 setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2734,7 +2839,8 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
 #' @name shiftRightUnsigned
 #' @aliases shiftRightUnsigned,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftRightUnsigned(df$c, 1)}
+#' @examples
+#' \dontrun{shiftRightUnsigned(df$c, 1)}
 #' @note shiftRightUnsigned since 1.5.0
 setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2758,7 +2864,8 @@ setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
 #' @name concat_ws
 #' @aliases concat_ws,character,Column-method
 #' @export
-#' @examples \dontrun{concat_ws('-', df$s, df$d)}
+#' @examples
+#' \dontrun{concat_ws('-', df$s, df$d)}
 #' @note concat_ws since 1.5.0
 setMethod("concat_ws", signature(sep = "character", x = "Column"),
           function(sep, x, ...) {
@@ -2780,7 +2887,8 @@ setMethod("concat_ws", signature(sep = "character", x = "Column"),
 #' @aliases conv,Column,numeric,numeric-method
 #' @name conv
 #' @export
-#' @examples \dontrun{conv(df$n, 2, 16)}
+#' @examples
+#' \dontrun{conv(df$n, 2, 16)}
 #' @note conv since 1.5.0
 setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeric"),
           function(x, fromBase, toBase) {
@@ -2803,7 +2911,8 @@ setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeri
 #' @aliases expr,character-method
 #' @name expr
 #' @export
-#' @examples \dontrun{expr('length(name)')}
+#' @examples
+#' \dontrun{expr('length(name)')}
 #' @note expr since 1.5.0
 setMethod("expr", signature(x = "character"),
           function(x) {
@@ -2823,7 +2932,8 @@ setMethod("expr", signature(x = "character"),
 #' @name format_string
 #' @aliases format_string,character,Column-method
 #' @export
-#' @examples \dontrun{format_string('%d %s', df$a, df$b)}
+#' @examples
+#' \dontrun{format_string('%d %s', df$a, df$b)}
 #' @note format_string since 1.5.0
 setMethod("format_string", signature(format = "character", x = "Column"),
           function(format, x, ...) {
@@ -2951,7 +3061,8 @@ setMethod("window", signature(x = "Column"),
 #' @aliases locate,character,Column-method
 #' @name locate
 #' @export
-#' @examples \dontrun{locate('b', df$c, 1)}
+#' @examples
+#' \dontrun{locate('b', df$c, 1)}
 #' @note locate since 1.5.0
 setMethod("locate", signature(substr = "character", str = "Column"),
           function(substr, str, pos = 1) {
@@ -2973,7 +3084,8 @@ setMethod("locate", signature(substr = "character", str = "Column"),
 #' @aliases lpad,Column,numeric,character-method
 #' @name lpad
 #' @export
-#' @examples \dontrun{lpad(df$c, 6, '#')}
+#' @examples
+#' \dontrun{lpad(df$c, 6, '#')}
 #' @note lpad since 1.5.0
 setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
           function(x, len, pad) {
@@ -2994,7 +3106,8 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 #' @name rand
 #' @aliases rand,missing-method
 #' @export
-#' @examples \dontrun{rand()}
+#' @examples
+#' \dontrun{rand()}
 #' @note rand since 1.5.0
 setMethod("rand", signature(seed = "missing"),
           function(seed) {
@@ -3024,7 +3137,8 @@ setMethod("rand", signature(seed = "numeric"),
 #' @name randn
 #' @aliases randn,missing-method
 #' @export
-#' @examples \dontrun{randn()}
+#' @examples
+#' \dontrun{randn()}
 #' @note randn since 1.5.0
 setMethod("randn", signature(seed = "missing"),
           function(seed) {
@@ -3056,7 +3170,8 @@ setMethod("randn", signature(seed = "numeric"),
 #' @name regexp_extract
 #' @aliases regexp_extract,Column,character,numeric-method
 #' @export
-#' @examples \dontrun{regexp_extract(df$c, '(\d+)-(\d+)', 1)}
+#' @examples
+#' \dontrun{regexp_extract(df$c, '(\d+)-(\d+)', 1)}
 #' @note regexp_extract since 1.5.0
 setMethod("regexp_extract",
           signature(x = "Column", pattern = "character", idx = "numeric"),
@@ -3079,7 +3194,8 @@ setMethod("regexp_extract",
 #' @name regexp_replace
 #' @aliases regexp_replace,Column,character,character-method
 #' @export
-#' @examples \dontrun{regexp_replace(df$c, '(\\d+)', '--')}
+#' @examples
+#' \dontrun{regexp_replace(df$c, '(\\d+)', '--')}
 #' @note regexp_replace since 1.5.0
 setMethod("regexp_replace",
           signature(x = "Column", pattern = "character", replacement = "character"),
@@ -3102,7 +3218,8 @@ setMethod("regexp_replace",
 #' @name rpad
 #' @aliases rpad,Column,numeric,character-method
 #' @export
-#' @examples \dontrun{rpad(df$c, 6, '#')}
+#' @examples
+#' \dontrun{rpad(df$c, 6, '#')}
 #' @note rpad since 1.5.0
 setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
           function(x, len, pad) {
@@ -3161,7 +3278,8 @@ setMethod("substring_index",
 #' @name translate
 #' @aliases translate,Column,character,character-method
 #' @export
-#' @examples \dontrun{translate(df$c, 'rnlt', '123')}
+#' @examples
+#' \dontrun{translate(df$c, 'rnlt', '123')}
 #' @note translate since 1.5.0
 setMethod("translate",
           signature(x = "Column", matchingString = "character", replaceString = "character"),
@@ -3231,7 +3349,8 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 #' @aliases when,Column-method
 #' @seealso \link{ifelse}
 #' @export
-#' @examples \dontrun{when(df$age == 2, df$age + 1)}
+#' @examples
+#' \dontrun{when(df$age == 2, df$age + 1)}
 #' @note when since 1.5.0
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
@@ -3255,7 +3374,8 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
 #' @aliases ifelse,Column-method
 #' @seealso \link{when}
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' ifelse(df$a > 1 & df$b > 2, 0, 1)
 #' ifelse(df$a > 1, df$a, 1)
 #' }
@@ -3290,7 +3410,8 @@ setMethod("ifelse",
 #' @family window_funcs
 #' @aliases cume_dist,missing-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'   out <- select(df, over(cume_dist(), ws), df$hp, df$am)
@@ -3319,7 +3440,8 @@ setMethod("cume_dist",
 #' @family window_funcs
 #' @aliases dense_rank,missing-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'   out <- select(df, over(dense_rank(), ws), df$hp, df$am)
@@ -3350,7 +3472,8 @@ setMethod("dense_rank",
 #' @aliases lag,characterOrColumn-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'
 #'   # Partition by am (transmission) and order by hp (horsepower)
@@ -3393,7 +3516,8 @@ setMethod("lag",
 #' @family window_funcs
 #' @aliases lead,characterOrColumn,numeric-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'
 #'   # Partition by am (transmission) and order by hp (horsepower)
@@ -3432,7 +3556,8 @@ setMethod("lead",
 #' @aliases ntile,numeric-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'
 #'   # Partition by am (transmission) and order by hp (horsepower)
@@ -3464,7 +3589,8 @@ setMethod("ntile",
 #' @family window_funcs
 #' @aliases percent_rank,missing-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'   out <- select(df, over(percent_rank(), ws), df$hp, df$am)
@@ -3494,7 +3620,8 @@ setMethod("percent_rank",
 #' @family window_funcs
 #' @aliases rank,missing-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'   out <- select(df, over(rank(), ws), df$hp, df$am)
@@ -3531,7 +3658,8 @@ setMethod("rank",
 #' @aliases row_number,missing-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'   out <- select(df, over(row_number(), ws), df$hp, df$am)
@@ -3557,7 +3685,8 @@ setMethod("row_number",
 #' @name array_contains
 #' @family collection_funcs
 #' @export
-#' @examples \dontrun{array_contains(df$c, 1)}
+#' @examples
+#' \dontrun{array_contains(df$c, 1)}
 #' @note array_contains since 1.6.0
 setMethod("array_contains",
           signature(x = "Column", value = "ANY"),
@@ -3577,7 +3706,8 @@ setMethod("array_contains",
 #' @family collection_funcs
 #' @aliases explode,Column-method
 #' @export
-#' @examples \dontrun{explode(df$c)}
+#' @examples
+#' \dontrun{explode(df$c)}
 #' @note explode since 1.5.0
 setMethod("explode",
           signature(x = "Column"),
@@ -3597,7 +3727,8 @@ setMethod("explode",
 #' @aliases size,Column-method
 #' @family collection_funcs
 #' @export
-#' @examples \dontrun{size(df$c)}
+#' @examples
+#' \dontrun{size(df$c)}
 #' @note size since 1.5.0
 setMethod("size",
           signature(x = "Column"),
@@ -3644,7 +3775,8 @@ setMethod("sort_array",
 #' @family collection_funcs
 #' @aliases posexplode,Column-method
 #' @export
-#' @examples \dontrun{posexplode(df$c)}
+#' @examples
+#' \dontrun{posexplode(df$c)}
 #' @note posexplode since 2.1.0
 setMethod("posexplode",
           signature(x = "Column"),
@@ -3665,7 +3797,8 @@ setMethod("posexplode",
 #' @name create_array
 #' @aliases create_array,Column-method
 #' @export
-#' @examples \dontrun{create_array(df$x, df$y, df$z)}
+#' @examples
+#' \dontrun{create_array(df$x, df$y, df$z)}
 #' @note create_array since 2.3.0
 setMethod("create_array",
           signature(x = "Column"),
@@ -3693,7 +3826,8 @@ setMethod("create_array",
 #' @name create_map
 #' @aliases create_map,Column-method
 #' @export
-#' @examples \dontrun{create_map(lit("x"), lit(1.0), lit("y"), lit(-1.0))}
+#' @examples
+#' \dontrun{create_map(lit("x"), lit(1.0), lit("y"), lit(-1.0))}
 #' @note create_map since 2.3.0
 setMethod("create_map",
           signature(x = "Column"),
@@ -3717,7 +3851,8 @@ setMethod("create_map",
 #' @family agg_funcs
 #' @aliases collect_list,Column-method
 #' @export
-#' @examples \dontrun{collect_list(df$x)}
+#' @examples
+#' \dontrun{collect_list(df$x)}
 #' @note collect_list since 2.3.0
 setMethod("collect_list",
           signature(x = "Column"),
@@ -3737,7 +3872,8 @@ setMethod("collect_list",
 #' @family agg_funcs
 #' @aliases collect_set,Column-method
 #' @export
-#' @examples \dontrun{collect_set(df$x)}
+#' @examples
+#' \dontrun{collect_set(df$x)}
 #' @note collect_set since 2.3.0
 setMethod("collect_set",
           signature(x = "Column"),
@@ -3759,7 +3895,8 @@ setMethod("collect_set",
 #' @family string_funcs
 #' @aliases split_string,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- read.text("README.md")
 #'
 #' head(select(df, split_string(df$value, "\\s+")))
@@ -3788,7 +3925,8 @@ setMethod("split_string",
 #' @family string_funcs
 #' @aliases repeat_string,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- read.text("README.md")
 #'
 #' first(select(df, repeat_string(df$value, 3)))
@@ -3817,7 +3955,8 @@ setMethod("repeat_string",
 #' @family collection_funcs
 #' @aliases explode_outer,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- createDataFrame(data.frame(
 #'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
 #' ))
@@ -3845,7 +3984,8 @@ setMethod("explode_outer",
 #' @family collection_funcs
 #' @aliases posexplode_outer,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- createDataFrame(data.frame(
 #'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
 #' ))
@@ -3873,7 +4013,8 @@ setMethod("posexplode_outer",
 #' @aliases not,Column-method
 #' @family normal_funcs
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- createDataFrame(data.frame(
 #'   is_true = c(TRUE, FALSE, NA),
 #'   flag = c(1, 0,  1)
@@ -3906,7 +4047,8 @@ setMethod("not",
 #' @family agg_funcs
 #' @aliases grouping_bit,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- createDataFrame(mtcars)
 #'
 #' # With cube
@@ -3947,7 +4089,8 @@ setMethod("grouping_bit",
 #' @family agg_funcs
 #' @aliases grouping_id,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- createDataFrame(mtcars)
 #'
 #' # With cube
@@ -3985,7 +4128,8 @@ setMethod("grouping_id",
 #' @family normal_funcs
 #' @aliases input_file_name,missing-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- read.text("README.md")
 #'
 #' head(select(df, input_file_name()))
