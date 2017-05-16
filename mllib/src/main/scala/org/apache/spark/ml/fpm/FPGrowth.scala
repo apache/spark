@@ -200,7 +200,7 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 @Experimental
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
-    @transient val freqItemsets: DataFrame)
+    @Since("2.2.0") @transient val freqItemsets: DataFrame)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
   /** @group setParam */
