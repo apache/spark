@@ -58,6 +58,10 @@ private[deploy] class Worker(
   Utils.checkHost(host)
   assert (port > 0)
 
+  // A separated thread to send Heartbeat message.
+  private val heartbeatThreadExecutor =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("heartbeat-send-thread")
+
   // A scheduled executor used to send messages at the specified time.
   private val forwordMessageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
@@ -351,9 +355,9 @@ private[deploy] class Worker(
         logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
         registered = true
         changeMaster(masterRef, masterWebUiUrl)
-        forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
+        heartbeatThreadExecutor.scheduleAtFixedRate(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
-            self.send(SendHeartbeat)
+            if (connected) { sendToMaster(Heartbeat(workerId, self)) }
           }
         }, 0, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS)
         if (CLEANUP_ENABLED) {
@@ -385,9 +389,6 @@ private[deploy] class Worker(
   override def receive: PartialFunction[Any, Unit] = synchronized {
     case msg: RegisterWorkerResponse =>
       handleRegisterResponse(msg)
-
-    case SendHeartbeat =>
-      if (connected) { sendToMaster(Heartbeat(workerId, self)) }
 
     case WorkDirCleanup =>
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker
@@ -578,16 +579,16 @@ private[deploy] class Worker(
     if (shouldCleanup) {
       finishedApps -= id
       appDirectories.remove(id).foreach { dirList =>
-        concurrent.Future {
-          logInfo(s"Cleaning up local directories for application $id")
-          dirList.foreach { dir =>
-            Utils.deleteRecursively(new File(dir))
-          }
-        }(cleanupThreadExecutor).onFailure {
-          case e: Throwable =>
-            logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
-        }(cleanupThreadExecutor)
-      }
+      concurrent.Future {
+        logInfo(s"Cleaning up local directories for application $id")
+        dirList.foreach { dir =>
+          Utils.deleteRecursively(new File(dir))
+        }
+      }(cleanupThreadExecutor).onFailure {
+        case e: Throwable =>
+          logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
+      }(cleanupThreadExecutor)
+    }
       shuffleService.applicationRemoved(id)
     }
   }
