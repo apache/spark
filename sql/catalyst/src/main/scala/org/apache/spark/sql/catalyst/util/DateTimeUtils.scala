@@ -604,8 +604,9 @@ object DateTimeUtils {
   private[this] def getYearAndDayInYear(daysSince1970: SQLDate): (Int, Int) = {
     // add the difference (in days) between 1.1.1970 and the artificial year 0 (-17999)
     var  daysSince1970Tmp = daysSince1970
-    // In history,the period(5.10.1582 ~ 14.10.1582) is not exist
-    // (4.10.1582) -141428 days since 1.1.1970
+    // Since Julian calendar was replaced with the Gregorian calendar,
+    // the 10 days after Oct. 4 were skipped.
+    // (1582-10-04) -141428 days since 1970-01-01
     if (daysSince1970 <= -141428) {
       daysSince1970Tmp -= 10
     }
@@ -616,6 +617,7 @@ object DateTimeUtils {
     val year: Int = (2001 - 20000) + 400 * numOfQuarterCenturies + years
     (year, dayInYear)
   }
+
   /**
    * Returns the 'day in year' value for the given date. The date is expressed in days
    * since 1.1.1970.
