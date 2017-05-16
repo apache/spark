@@ -1217,8 +1217,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.BOTH => "trim"
       case SqlBaseParser.LEADING => "ltrim"
       case SqlBaseParser.TRAILING => "rtrim"
-      case _ => throw new ParseException(s"Function trim doesn't support " +
-        s"this ${opt.getType}.", ctx)
+      case _ => throw new ParseException(s"Function trim doesn't support with" +
+        s"type ${opt.getType}. Please use BOTH, LEADING or Trailing as trim type", ctx)
     }
   }
 
@@ -1240,17 +1240,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   protected def visitFunctionName(
       ctx: QualifiedNameContext,
-      trimFuncN: Option[String] = None): FunctionIdentifier = {
+      trimFuncName: Option[String] = None): FunctionIdentifier = {
     ctx.identifier().asScala.map(_.getText) match {
       case Seq(db, fn) =>
-        if (fn.equalsIgnoreCase("trim") && trimFuncN.isDefined) {
-          FunctionIdentifier(trimFuncN.get, Option(db))
+        if (trimFuncName.isDefined) {
+          FunctionIdentifier(trimFuncName.get, Option(db))
         } else {
           FunctionIdentifier(fn, Option(db))
         }
       case Seq(fn) =>
-        if (fn.equalsIgnoreCase("trim") && trimFuncN.isDefined) {
-          FunctionIdentifier(trimFuncN.get, None)
+        if (trimFuncName.isDefined) {
+          FunctionIdentifier(trimFuncName.get, None)
         } else {
           FunctionIdentifier(fn, None)
         }

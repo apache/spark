@@ -505,7 +505,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 }
 
 /**
- * A function that trim the spaces or a trim string from both ends for the specified string.
+ * A function that trims leading or trailing characters (or both) from the specified string.
  */
 @ExpressionDescription(
   usage = """
@@ -518,9 +518,9 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
     Arguments:
       str - a string expression
       trimString - the trim string
-      BOTH, FROM - these are keyword to specify for trim string from both side of the string
-      LEADING, FROM - these are keyword to specify for trim string from left side of the string
-      TRAILING, FROM - these are keyword to specify for trim string from right side of the string
+      BOTH, FROM - these are keyword to specify for trim string from both ends of the string
+      LEADING, FROM - these are keyword to specify for trim string from left end of the string
+      TRAILING, FROM - these are keyword to specify for trim string from right end of the string
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
@@ -558,7 +558,7 @@ case class StringTrim(children: Seq[Expression])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.size == 2 && ! children(0).isInstanceOf[Literal]) {
+    if (children.size == 2 && !children(0).isInstanceOf[Literal]) {
       throw new AnalysisException(s"The trimming parameter should be Literal.")}
 
     val evals = children.map(_.genCode(ctx))
@@ -566,17 +566,16 @@ case class StringTrim(children: Seq[Expression])
       s"${eval.isNull} ? null : ${eval.value}"
     }
     val getTrimFunction = if (children.size == 1) {
-      s"""UTF8String ${ev.value} = ${inputs(0)}.trim();"""
+      s"UTF8String ${ev.value} = ${inputs(0)}.trim();"
     } else {
-      s"""UTF8String ${ev.value} = ${inputs(1)}.trim(${inputs(0)});""".stripMargin
+      s"UTF8String ${ev.value} = ${inputs(1)}.trim(${inputs(0)});".stripMargin
     }
-    ev.copy(evals.map(_.code).mkString("\n") +
-      s"""
-    boolean ${ev.isNull} = false;
-    ${getTrimFunction};
-    if (${ev.value} == null) {
-      ${ev.isNull} = true;
-    }
+    ev.copy(evals.map(_.code).mkString("\n") + s"""
+      boolean ${ev.isNull} = false;
+      ${getTrimFunction};
+      if (${ev.value} == null) {
+        ${ev.isNull} = true;
+      }
     """)
     }
 
@@ -637,7 +636,7 @@ case class StringTrimLeft(children: Seq[Expression])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.size == 2 && ! children(0).isInstanceOf[Literal]) {
+    if (children.size == 2 && !children(0).isInstanceOf[Literal]) {
       throw new AnalysisException(s"The trimming parameter should be Literal.")}
 
     val evals = children.map(_.genCode(ctx))
@@ -645,18 +644,17 @@ case class StringTrimLeft(children: Seq[Expression])
       s"${eval.isNull} ? null : ${eval.value}"
     }
     val getTrimLeftFunction = if (children.size == 1) {
-      s"""UTF8String ${ev.value} = ${inputs(0)}.trimLeft();"""
+      s"UTF8String ${ev.value} = ${inputs(0)}.trimLeft();"
     } else {
-      s"""UTF8String ${ev.value} = ${inputs(1)}.trimLeft(${inputs(0)});"""
+      s"UTF8String ${ev.value} = ${inputs(1)}.trimLeft(${inputs(0)});"
     }
 
-    ev.copy(evals.map(_.code).mkString("\n") +
-      s"""
-    boolean ${ev.isNull} = false;
-    ${getTrimLeftFunction};
-    if (${ev.value} == null) {
-      ${ev.isNull} = true;
-    }
+    ev.copy(evals.map(_.code).mkString("\n") + s"""
+      boolean ${ev.isNull} = false;
+      ${getTrimLeftFunction};
+      if (${ev.value} == null) {
+        ${ev.isNull} = true;
+      }
     """)
   }
 
@@ -717,7 +715,7 @@ case class StringTrimRight(children: Seq[Expression])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.size == 2 && ! children(0).isInstanceOf[Literal]) {
+    if (children.size == 2 && !children(0).isInstanceOf[Literal]) {
       throw new AnalysisException(s"The trimming parameter should be Literal.")}
 
     val evals = children.map(_.genCode(ctx))
@@ -725,17 +723,16 @@ case class StringTrimRight(children: Seq[Expression])
       s"${eval.isNull} ? null : ${eval.value}"
     }
     val getTrimRightFunction = if (children.size == 1) {
-      s"""UTF8String ${ev.value} = ${inputs(0)}.trimRight();"""
+      s"UTF8String ${ev.value} = ${inputs(0)}.trimRight();"
     } else {
-      s"""UTF8String ${ev.value} = ${inputs(1)}.trimRight(${inputs(0)});"""
+      s"UTF8String ${ev.value} = ${inputs(1)}.trimRight(${inputs(0)});"
     }
-    ev.copy(evals.map(_.code).mkString("\n") +
-      s"""
-    boolean ${ev.isNull} = false;
-    ${getTrimRightFunction};
-    if (${ev.value} == null) {
-      ${ev.isNull} = true;
-    }
+    ev.copy(evals.map(_.code).mkString("\n") + s"""
+      boolean ${ev.isNull} = false;
+      ${getTrimRightFunction};
+      if (${ev.value} == null) {
+        ${ev.isNull} = true;
+      }
     """)
   }
 
