@@ -274,6 +274,10 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(1, -1))
   }
 
+  test("cot") {
+    testOneToOneMathFunction(cot, (d: Double) => 1 / math.tan(d))
+  }
+
   test("pow / power") {
     testTwoToOneMathFunction(pow, pow, math.pow)
 
