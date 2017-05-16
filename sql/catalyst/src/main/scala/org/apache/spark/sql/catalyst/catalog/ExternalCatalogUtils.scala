@@ -123,6 +123,38 @@ object ExternalCatalogUtils {
     }
     escapePathName(col) + "=" + partitionString
   }
+
+  def prunePartitionsByFilter(
+      catalogTable: CatalogTable,
+      inputPartitions: Seq[CatalogTablePartition],
+      predicates: Seq[Expression],
+      defaultTimeZoneId: String): Seq[CatalogTablePartition] = {
+    if (predicates.isEmpty) {
+      inputPartitions
+    } else {
+      val partitionSchema = catalogTable.partitionSchema
+      val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+
+      val nonPartitionPruningPredicates = predicates.filterNot {
+        _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+      }
+      if (nonPartitionPruningPredicates.nonEmpty) {
+        throw new AnalysisException("Expected only partition pruning predicates: " +
+          nonPartitionPruningPredicates)
+      }
+
+      val boundPredicate =
+        InterpretedPredicate.create(predicates.reduce(And).transform {
+          case att: AttributeReference =>
+            val index = partitionSchema.indexWhere(_.name == att.name)
+            BoundReference(index, partitionSchema(index).dataType, nullable = true)
+        })
+
+      inputPartitions.filter { p =>
+        boundPredicate.eval(p.toRow(partitionSchema, defaultTimeZoneId))
+      }
+    }
+  }
 }
 
 object CatalogUtils {
