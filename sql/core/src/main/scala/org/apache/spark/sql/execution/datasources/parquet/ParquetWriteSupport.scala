@@ -90,7 +90,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
     }
 
 
-    this.rootFieldWriters = schema.map(_.dataType).map(makeWriter)
+    this.rootFieldWriters = schema.map(_.dataType).map(makeWriter).toArray
 
     val messageType = new ParquetSchemaConverter(configuration).convert(schema)
     val metadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
