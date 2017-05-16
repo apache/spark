@@ -89,7 +89,9 @@ There are no deprecations.
 * [SPARK-19787](https://issues.apache.org/jira/browse/SPARK-19787):
  Default value of `regParam` changed from `1.0` to `0.1` for `ALS.train` method (marked `DeveloperApi`).
  **Note** this does _not affect_ the `ALS` Estimator or Model, nor MLlib's `ALS` class.
- 
+* [SPARK-14772](https://issues.apache.org/jira/browse/SPARK-14772):
+ Fixed inconsistency between Python and Scala APIs for `Param.copy` method.
+  
 ## Previous Spark versions
 
 Earlier migration guides are archived [on this page](ml-migration-guides.html).
