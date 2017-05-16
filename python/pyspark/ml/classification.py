@@ -70,6 +70,7 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     `Linear SVM Classifier <https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM>`_
 
     This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
+    Only supports L2 regularization currently.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
