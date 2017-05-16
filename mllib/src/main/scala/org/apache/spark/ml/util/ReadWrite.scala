@@ -44,9 +44,11 @@ private[util] sealed trait BaseReadWrite {
 
   /**
    * Sets the Spark SQLContext to use for saving/loading.
+   *
+   * @deprecated Use session instead. This method will be removed in 3.0.0.
    */
   @Since("1.6.0")
-  @deprecated("Use session instead, This method will be removed in 2.2.0.", "2.0.0")
+  @deprecated("Use session instead. This method will be removed in 3.0.0.", "2.0.0")
   def context(sqlContext: SQLContext): this.type = {
     optionSparkSession = Option(sqlContext.sparkSession)
     this
