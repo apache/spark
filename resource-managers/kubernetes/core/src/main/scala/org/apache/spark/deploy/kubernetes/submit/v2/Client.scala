@@ -58,6 +58,8 @@ private[spark] class Client(
   private val appName = sparkConf.getOption("spark.app.name")
     .getOrElse("spark")
   private val kubernetesAppId = s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
+  private val kubernetesDriverPodName = sparkConf.get(KUBERNETES_DRIVER_POD_NAME)
+    .getOrElse(kubernetesAppId)
   private val driverDockerImage = sparkConf.get(DRIVER_DOCKER_IMAGE)
   private val maybeStagingServerUri = sparkConf.get(RESOURCE_STAGING_SERVER_URI)
   private val driverMemoryMb = sparkConf.get(org.apache.spark.internal.config.DRIVER_MEMORY)
@@ -123,7 +125,7 @@ private[spark] class Client(
         .build()
       val basePod = new PodBuilder()
         .withNewMetadata()
-          .withName(kubernetesAppId)
+          .withName(kubernetesDriverPodName)
           .addToLabels(allLabels.asJava)
           .addToAnnotations(parsedCustomAnnotations.asJava)
           .endMetadata()
@@ -176,7 +178,7 @@ private[spark] class Client(
       if (resolvedFiles.nonEmpty) {
         resolvedSparkConf.set("spark.files", resolvedFiles.mkString(","))
       }
-      resolvedSparkConf.set(KUBERNETES_DRIVER_POD_NAME, kubernetesAppId)
+      resolvedSparkConf.setIfMissing(KUBERNETES_DRIVER_POD_NAME, kubernetesDriverPodName)
       resolvedSparkConf.set("spark.app.id", kubernetesAppId)
       // We don't need this anymore since we just set the JVM options on the environment
       resolvedSparkConf.remove(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS)
