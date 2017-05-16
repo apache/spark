@@ -26,7 +26,7 @@ The primary Machine Learning API for Spark is now the [DataFrame](sql-programmin
 * MLlib will still support the RDD-based API in `spark.mllib` with bug fixes.
 * MLlib will not add new features to the RDD-based API.
 * In the Spark 2.x releases, MLlib will add features to the DataFrames-based API to reach feature parity with the RDD-based API.
-* After reaching feature parity (roughly estimated for Spark 2.2), the RDD-based API will be deprecated.
+* After reaching feature parity (roughly estimated for Spark 2.3), the RDD-based API will be deprecated.
 * The RDD-based API is expected to be removed in Spark 3.0.
 
 *Why is MLlib switching to the DataFrame-based API?*
