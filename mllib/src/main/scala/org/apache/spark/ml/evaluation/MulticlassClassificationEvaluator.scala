@@ -48,8 +48,8 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("1.5.0")
   val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
     " evaluation (f1|weightedPrecision|weightedRecall|accuracy)",
-    (value: String) => Array("f1", "weightedprecision", "weightedrecall", "accuracy").contains(
-      value.toLowerCase(Locale.ROOT)))
+    (value: String) => Array("f1", "weightedprecision", "weightedrecall", "accuracy")
+      .contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("1.5.0")

@@ -135,7 +135,7 @@ class NaiveBayes @Since("1.5.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
-    val modelTypeValue = $(modelType).toLowerCase(Locale.ROOT)
+    val modelTypeValue = getModelType.toLowerCase(Locale.ROOT)
     val requireValues: Vector => Unit = {
       modelTypeValue match {
         case Multinomial =>
@@ -144,7 +144,7 @@ class NaiveBayes @Since("1.5.0") (
           requireZeroOneBernoulliValues
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+          throw new UnknownError(s"Invalid modelType: ${getModelType}.")
       }
     }
 
@@ -188,12 +188,12 @@ class NaiveBayes @Since("1.5.0") (
     aggregated.foreach { case (label, (n, sumTermFreqs)) =>
       labelArray(i) = label
       piArray(i) = math.log(n + lambda) - piLogDenom
-      val thetaLogDenom = $(modelType).toLowerCase(Locale.ROOT) match {
+      val thetaLogDenom = getModelType.toLowerCase(Locale.ROOT) match {
         case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
         case Bernoulli => math.log(n + 2.0 * lambda)
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+          throw new UnknownError(s"Invalid modelType: ${getModelType}.")
       }
       var j = 0
       while (j < numFeatures) {
@@ -284,7 +284,7 @@ class NaiveBayesModel private[ml] (
    * application of this condition (in predict function).
    */
   private lazy val (thetaMinusNegTheta, negThetaSum) =
-    $(modelType).toLowerCase(Locale.ROOT) match {
+    getModelType.toLowerCase(Locale.ROOT) match {
       case Multinomial => (None, None)
       case Bernoulli =>
         val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
@@ -295,7 +295,7 @@ class NaiveBayesModel private[ml] (
         (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
       case _ =>
         // This should never happen.
-        throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+        throw new UnknownError(s"Invalid modelType: ${getModelType}.")
     }
 
   @Since("1.6.0")
@@ -322,14 +322,14 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    $(modelType).toLowerCase(Locale.ROOT) match {
+    getModelType.toLowerCase(Locale.ROOT) match {
       case Multinomial =>
         multinomialCalculation(features)
       case Bernoulli =>
         bernoulliCalculation(features)
       case _ =>
         // This should never happen.
-        throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+        throw new UnknownError(s"Invalid modelType: ${getModelType}.")
     }
   }
 

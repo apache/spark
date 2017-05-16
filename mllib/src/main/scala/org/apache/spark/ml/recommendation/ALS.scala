@@ -119,8 +119,8 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
     "useful in cross-validation or production scenarios, for handling user/item ids the model " +
     "has not seen in the training data. Supported values: " +
     s"${ALSModel.supportedColdStartStrategies.mkString(",")}.",
-    (s: String) =>
-      ALSModel.supportedColdStartStrategies.contains(s.toLowerCase(Locale.ROOT)))
+    (value: String) => ALSModel.supportedColdStartStrategies
+      .contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group expertGetParam */
   def getColdStartStrategy: String = $(coldStartStrategy)

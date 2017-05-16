@@ -89,8 +89,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
     "invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
-    (value: String) => Bucketizer.supportedHandleInvalids.contains(value.
-      toLowerCase(ju.Locale.ROOT)))
+    (value: String) => Bucketizer.supportedHandleInvalids
+      .contains(value.toLowerCase(ju.Locale.ROOT)))
 
   /** @group getParam */
   @Since("2.1.0")

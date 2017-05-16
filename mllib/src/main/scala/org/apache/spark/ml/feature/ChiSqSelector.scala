@@ -130,8 +130,8 @@ private[feature] trait ChiSqSelectorParams extends Params
   final val selectorType = new Param[String](this, "selectorType",
     "The selector type of the ChisqSelector. " +
       "Supported options: " + OldChiSqSelector.supportedSelectorTypes.mkString(", "),
-    (value: String) => OldChiSqSelector.supportedSelectorTypes.contains(
-      value.toLowerCase(Locale.ROOT)))
+    (value: String) => OldChiSqSelector.supportedSelectorTypes
+      .contains(value.toLowerCase(Locale.ROOT)))
   setDefault(selectorType -> OldChiSqSelector.NumTopFeatures)
 
   /** @group getParam */

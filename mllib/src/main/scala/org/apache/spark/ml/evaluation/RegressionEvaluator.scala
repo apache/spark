@@ -52,8 +52,8 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("1.4.0")
   val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
     " evaluation (mse|rmse|r2|mae)",
-    (value: String) => Array("mse", "rmse", "r2", "mae").contains(
-      value.toLowerCase(Locale.ROOT)))
+    (value: String) => Array("mse", "rmse", "r2", "mae")
+      .contains(value.toLowerCase(Locale.ROOT)))
 
 
   /** @group getParam */

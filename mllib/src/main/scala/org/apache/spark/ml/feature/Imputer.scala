@@ -144,7 +144,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
         throw new SparkException(s"surrogate cannot be computed. " +
           s"All the values in $inputCol are Null, Nan or missingValue(${$(missingValue)})")
       }
-      val surrogate = $(strategy) match {
+      val surrogate = getStrategy.toLowerCase(Locale.ROOT) match {
         case Imputer.mean => filtered.select(avg(inputCol)).as[Double].first()
         case Imputer.median => filtered.stat.approxQuantile(inputCol, Array(0.5), 0.001).head
       }

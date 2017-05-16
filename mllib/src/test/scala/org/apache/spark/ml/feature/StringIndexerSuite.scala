@@ -329,7 +329,7 @@ class StringIndexerSuite
       assert(model.getHandleInvalid === handleInvalid)
     }
 
-    Seq("frequencydesc", "frequencyasc", "alphabetdesc", "alphabetasc").foreach { order =>
+    Seq("freQuencYDesc", "frEquencyasC", "ALphabetdesc", "alphaBETasc").foreach { order =>
       indexer.setStringOrderType(order)
       assert(indexer.getStringOrderType === order)
       val model = indexer.fit(df)

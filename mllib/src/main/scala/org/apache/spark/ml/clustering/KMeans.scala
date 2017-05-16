@@ -319,7 +319,7 @@ class KMeans @Since("1.5.0") (
     instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
     val algo = new MLlibKMeans()
       .setK($(k))
-      .setInitializationMode($(initMode).toLowerCase(Locale.ROOT))
+      .setInitializationMode(getInitMode.toLowerCase(Locale.ROOT))
       .setInitializationSteps($(initSteps))
       .setMaxIterations($(maxIter))
       .setSeed($(seed))

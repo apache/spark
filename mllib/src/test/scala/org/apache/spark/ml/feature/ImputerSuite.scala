@@ -167,7 +167,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       .setInputCols(Array("value1", "value2"))
       .setOutputCols(Array("out1", "out2"))
 
-    Seq("mean", "median").foreach { strategy =>
+    Seq("MeaN", "meDIan").foreach { strategy =>
       imputer.setStrategy(strategy)
       assert(imputer.getStrategy === strategy)
       val model = imputer.fit(df)

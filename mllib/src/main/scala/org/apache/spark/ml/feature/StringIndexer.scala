@@ -53,8 +53,8 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     "invalid data (unseen labels or NULL values). " +
     "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
-    (value: String) => StringIndexer.supportedHandleInvalids.contains(
-      value.toLowerCase(Locale.ROOT)))
+    (value: String) => StringIndexer.supportedHandleInvalids
+      .contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
 
@@ -79,8 +79,8 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     "How to order labels of string column. " +
     "The first label after ordering is assigned an index of 0. " +
     s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
-    (value: String) => StringIndexer.supportedStringOrderType.contains(
-      value.toLowerCase(Locale.ROOT)))
+    (value: String) => StringIndexer.supportedStringOrderType
+      .contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("2.3.0")
@@ -143,7 +143,7 @@ class StringIndexer @Since("1.4.0") (
     val values = dataset.na.drop(Array($(inputCol)))
       .select(col($(inputCol)).cast(StringType))
       .rdd.map(_.getString(0))
-    val labels = $(stringOrderType) match {
+    val labels = getStringOrderType.toLowerCase(Locale.ROOT) match {
       case StringIndexer.frequencyDesc => values.countByValue().toSeq.sortBy(-_._2)
         .map(_._1).toArray
       case StringIndexer.frequencyAsc => values.countByValue().toSeq.sortBy(_._2)
