@@ -89,7 +89,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
     "invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
-    ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
+    (value: String) => Bucketizer.supportedHandleInvalids.contains(value.
+      toLowerCase(ju.Locale.ROOT)))
 
   /** @group getParam */
   @Since("2.1.0")
@@ -104,11 +105,11 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
     val (filteredDataset, keepInvalid) = {
-      if (getHandleInvalid == Bucketizer.SKIP_INVALID) {
+      if (getHandleInvalid.toLowerCase(ju.Locale.ROOT) == Bucketizer.SKIP_INVALID) {
         // "skip" NaN option is set, will filter out NaN values in the dataset
         (dataset.na.drop().toDF(), false)
       } else {
-        (dataset.toDF(), getHandleInvalid == Bucketizer.KEEP_INVALID)
+        (dataset.toDF(), getHandleInvalid.toLowerCase(ju.Locale.ROOT) == Bucketizer.KEEP_INVALID)
       }
     }
 

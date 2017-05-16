@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.evaluation
 
+import java.util.Locale
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
@@ -48,10 +50,11 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
    * @group param
    */
   @Since("1.4.0")
-  val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("mse", "rmse", "r2", "mae"))
-    new Param(this, "metricName", "metric name in evaluation (mse|rmse|r2|mae)", allowedParams)
-  }
+  val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
+    " evaluation (mse|rmse|r2|mae)",
+    (value: String) => Array("mse", "rmse", "r2", "mae").contains(
+      value.toLowerCase(Locale.ROOT)))
+
 
   /** @group getParam */
   @Since("1.4.0")
@@ -82,7 +85,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
       .rdd
       .map { case Row(prediction: Double, label: Double) => (prediction, label) }
     val metrics = new RegressionMetrics(predictionAndLabels)
-    val metric = $(metricName) match {
+    val metric = getMetricName.toLowerCase(Locale.ROOT) match {
       case "rmse" => metrics.rootMeanSquaredError
       case "mse" => metrics.meanSquaredError
       case "r2" => metrics.r2
@@ -92,7 +95,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   }
 
   @Since("1.4.0")
-  override def isLargerBetter: Boolean = $(metricName) match {
+  override def isLargerBetter: Boolean = getMetricName.toLowerCase(Locale.ROOT) match {
     case "rmse" => false
     case "mse" => false
     case "r2" => true

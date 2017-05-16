@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.Locale
+
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
@@ -51,7 +53,8 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     "invalid data (unseen labels or NULL values). " +
     "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
-    ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
+    (value: String) => StringIndexer.supportedHandleInvalids.contains(
+      value.toLowerCase(Locale.ROOT)))
 
   setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
 
@@ -72,11 +75,12 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
    * @group param
    */
   @Since("2.3.0")
-  final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
+  final val stringOrderType: Param[String] = new Param[String](this, "stringOrderType",
     "How to order labels of string column. " +
     "The first label after ordering is assigned an index of 0. " +
     s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
-    ParamValidators.inArray(StringIndexer.supportedStringOrderType))
+    (value: String) => StringIndexer.supportedStringOrderType.contains(
+      value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("2.3.0")
@@ -166,10 +170,10 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
-  private[feature] val frequencyDesc: String = "frequencyDesc"
-  private[feature] val frequencyAsc: String = "frequencyAsc"
-  private[feature] val alphabetDesc: String = "alphabetDesc"
-  private[feature] val alphabetAsc: String = "alphabetAsc"
+  private[feature] val frequencyDesc: String = "frequencydesc"
+  private[feature] val frequencyAsc: String = "frequencyasc"
+  private[feature] val alphabetDesc: String = "alphabetdesc"
+  private[feature] val alphabetAsc: String = "alphabetasc"
   private[feature] val supportedStringOrderType: Array[String] =
     Array(frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc)
 
@@ -229,7 +233,7 @@ class StringIndexerModel (
     }
     transformSchema(dataset.schema, logging = true)
 
-    val filteredLabels = getHandleInvalid match {
+    val filteredLabels = getHandleInvalid.toLowerCase(Locale.ROOT) match {
       case StringIndexer.KEEP_INVALID => labels :+ "__unknown"
       case _ => labels
     }
@@ -237,13 +241,13 @@ class StringIndexerModel (
     val metadata = NominalAttribute.defaultAttr
       .withName($(outputCol)).withValues(filteredLabels).toMetadata()
     // If we are skipping invalid records, filter them out.
-    val (filteredDataset, keepInvalid) = getHandleInvalid match {
+    val (filteredDataset, keepInvalid) = getHandleInvalid.toLowerCase(Locale.ROOT) match {
       case StringIndexer.SKIP_INVALID =>
         val filterer = udf { label: String =>
           labelToIndex.contains(label)
         }
         (dataset.na.drop(Array($(inputCol))).where(filterer(dataset($(inputCol)))), false)
-      case _ => (dataset, getHandleInvalid == StringIndexer.KEEP_INVALID)
+      case _ => (dataset, getHandleInvalid.toLowerCase(Locale.ROOT) == StringIndexer.KEEP_INVALID)
     }
 
     val indexer = udf { label: String =>

@@ -25,6 +25,8 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 class MulticlassClassificationEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   test("params") {
     ParamsSuite.checkParams(new MulticlassClassificationEvaluator)
   }
@@ -39,5 +41,17 @@ class MulticlassClassificationEvaluatorSuite
 
   test("should support all NumericType labels and not support other types") {
     MLTestingUtils.checkNumericTypes(new MulticlassClassificationEvaluator, spark)
+  }
+
+  test("string params should be case-insensitive") {
+    val df = Seq((0d, 0d), (2d, 1d), (1d, 2d)
+    ).toDF("label", "prediction")
+
+    val evaluator = new MulticlassClassificationEvaluator()
+    Seq("F1", "weighTEdprecISion", "weiGHtedrECall", "aCCuraCy").foreach { metric =>
+      evaluator.setMetricName(metric)
+      assert(evaluator.getMetricName === metric)
+      evaluator.evaluate(df)
+    }
   }
 }

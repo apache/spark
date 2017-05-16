@@ -690,7 +690,8 @@ class ALSSuite
     import spark.implicits._
     val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
     val data = ratings.toDF
-    val als = new ALS()
+
+    val als = new ALS().setMaxIter(1)
     Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { s =>
       als.setColdStartStrategy(s)
       assert(als.getColdStartStrategy === s)

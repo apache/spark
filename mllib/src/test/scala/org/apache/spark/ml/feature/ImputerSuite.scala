@@ -155,6 +155,25 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
     assert(newInstance.surrogateDF.collect() === instance.surrogateDF.collect())
   }
 
+  test("string params should be case-insensitive") {
+    val df = spark.createDataFrame( Seq(
+      (0, 1.0, 4.0, 1.0, 1.0, 4.0, 4.0),
+      (1, 11.0, 12.0, 11.0, 11.0, 12.0, 12.0),
+      (2, 3.0, Double.NaN, 3.0, 3.0, 10.0, 12.0),
+      (3, Double.NaN, 14.0, 5.0, 3.0, 14.0, 14.0)
+    )).toDF("id", "value1", "value2", "expected_mean_value1", "expected_median_value1",
+      "expected_mean_value2", "expected_median_value2")
+    val imputer = new Imputer()
+      .setInputCols(Array("value1", "value2"))
+      .setOutputCols(Array("out1", "out2"))
+
+    Seq("mean", "median").foreach { strategy =>
+      imputer.setStrategy(strategy)
+      assert(imputer.getStrategy === strategy)
+      val model = imputer.fit(df)
+      assert(model.getStrategy === strategy)
+    }
+  }
 }
 
 object ImputerSuite {

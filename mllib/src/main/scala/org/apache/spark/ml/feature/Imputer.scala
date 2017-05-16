@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -45,7 +47,7 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
   final val strategy: Param[String] = new Param(this, "strategy", s"strategy for imputation. " +
     s"If ${Imputer.mean}, then replace missing values using the mean value of the feature. " +
     s"If ${Imputer.median}, then replace missing values using the median value of the feature.",
-    ParamValidators.inArray[String](Array(Imputer.mean, Imputer.median)))
+    (value: String) => Array(Imputer.mean, Imputer.median).contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   def getStrategy: String = $(strategy)

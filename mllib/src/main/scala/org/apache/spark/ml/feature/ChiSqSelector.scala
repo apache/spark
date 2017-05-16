@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -128,7 +130,8 @@ private[feature] trait ChiSqSelectorParams extends Params
   final val selectorType = new Param[String](this, "selectorType",
     "The selector type of the ChisqSelector. " +
       "Supported options: " + OldChiSqSelector.supportedSelectorTypes.mkString(", "),
-    ParamValidators.inArray[String](OldChiSqSelector.supportedSelectorTypes))
+    (value: String) => OldChiSqSelector.supportedSelectorTypes.contains(
+      value.toLowerCase(Locale.ROOT)))
   setDefault(selectorType -> OldChiSqSelector.NumTopFeatures)
 
   /** @group getParam */

@@ -89,4 +89,16 @@ class RegressionEvaluatorSuite
   test("should support all NumericType labels and not support other types") {
     MLTestingUtils.checkNumericTypes(new RegressionEvaluator, spark)
   }
+
+  test("string params should be case-insensitive") {
+    val df = Seq((0.0, 0.0), (2.0, 1.0), (1.0, 2.0)
+    ).toDF("label", "prediction")
+
+    val evaluator = new RegressionEvaluator()
+    Seq("mSe", "rMSe", "R2", "mAE").foreach { metric =>
+      evaluator.setMetricName(metric)
+      assert(evaluator.getMetricName === metric)
+      evaluator.evaluate(df)
+    }
+  }
 }

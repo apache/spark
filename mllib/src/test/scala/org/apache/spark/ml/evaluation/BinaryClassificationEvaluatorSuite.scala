@@ -75,4 +75,19 @@ class BinaryClassificationEvaluatorSuite
     val evaluator = new BinaryClassificationEvaluator().setRawPredictionCol("prediction")
     MLTestingUtils.checkNumericTypes(evaluator, spark)
   }
+
+  test("string params should be case-insensitive") {
+    val vectorDF = Seq(
+      (0d, Vectors.dense(12, 2.5)),
+      (1d, Vectors.dense(1, 3)),
+      (0d, Vectors.dense(10, 2))
+    ).toDF("label", "rawPrediction")
+
+    val evaluator = new BinaryClassificationEvaluator()
+    Seq("AreAUnderRoC", "arEAUnderPR").foreach { metric =>
+      evaluator.setMetricName(metric)
+      assert(evaluator.getMetricName === metric)
+      evaluator.evaluate(vectorDF)
+    }
+  }
 }

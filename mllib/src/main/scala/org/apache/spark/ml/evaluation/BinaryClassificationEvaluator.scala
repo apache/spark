@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.evaluation
 
+import java.util.Locale
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
@@ -46,11 +48,10 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
    * @group param
    */
   @Since("1.2.0")
-  val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("areaUnderROC", "areaUnderPR"))
-    new Param(
-      this, "metricName", "metric name in evaluation (areaUnderROC|areaUnderPR)", allowedParams)
-  }
+  val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
+    " evaluation (areaUnderROC|areaUnderPR)",
+    (value: String) => Array("areaunderroc", "areaunderpr").contains(
+      value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("1.2.0")
@@ -83,18 +84,18 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
         case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
       }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
-    val metric = $(metricName) match {
-      case "areaUnderROC" => metrics.areaUnderROC()
-      case "areaUnderPR" => metrics.areaUnderPR()
+    val metric = getMetricName.toLowerCase(Locale.ROOT) match {
+      case "areaunderroc" => metrics.areaUnderROC()
+      case "areaunderpr" => metrics.areaUnderPR()
     }
     metrics.unpersist()
     metric
   }
 
   @Since("1.5.0")
-  override def isLargerBetter: Boolean = $(metricName) match {
-    case "areaUnderROC" => true
-    case "areaUnderPR" => true
+  override def isLargerBetter: Boolean = getMetricName.toLowerCase(Locale.ROOT) match {
+    case "areaunderroc" => true
+    case "areaunderpr" => true
   }
 
   @Since("1.4.1")

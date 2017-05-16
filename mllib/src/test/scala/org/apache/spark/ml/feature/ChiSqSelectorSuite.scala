@@ -163,6 +163,16 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
         assert(expected.selectedFeatures === actual.selectedFeatures)
       }
   }
+
+  test("string params should be case-insensitive") {
+    val css = new ChiSqSelector()
+    Seq("mulTInomiAl", "BERnoullI").foreach { selectorType =>
+      css.setSelectorType(selectorType)
+      assert(css.getSelectorType === selectorType)
+      val model = css.fit(dataset)
+      assert(model.getSelectorType === selectorType)
+    }
+  }
 }
 
 object ChiSqSelectorSuite {

@@ -146,4 +146,22 @@ class QuantileDiscretizerSuite
     val model = discretizer.fit(df)
     assert(model.hasParent)
   }
+
+  test("string params should be case-insensitive") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val df = sc.parallelize(1 to 100).map(Tuple1.apply).toDF("input")
+    val discretizer = new QuantileDiscretizer()
+      .setInputCol("input")
+      .setOutputCol("result")
+      .setNumBuckets(5)
+
+    Seq("skIP", "ErRoR", "keEP").foreach { handleInvalid =>
+      discretizer.setHandleInvalid(handleInvalid)
+      assert(discretizer.getHandleInvalid === handleInvalid)
+      val model = discretizer.fit(df)
+      assert(model.getHandleInvalid === handleInvalid)
+    }
+  }
 }

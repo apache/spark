@@ -181,4 +181,13 @@ class MultilayerPerceptronClassifierSuite
         assert(expected.weights === actual.weights)
       }
   }
+
+  test("string params should be case-insensitive") {
+    val mpc = new MultilayerPerceptronClassifier().setLayers(Array(2, 2)).setMaxIter(1)
+    Seq("GD", "L-BfGs").foreach { solver =>
+      mpc.setSolver(solver)
+      assert(mpc.getSolver === solver)
+      mpc.fit(dataset)
+    }
+  }
 }

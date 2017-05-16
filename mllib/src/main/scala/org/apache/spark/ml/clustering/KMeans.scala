@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -65,7 +67,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   @Since("1.5.0")
   final val initMode = new Param[String](this, "initMode", "The initialization algorithm. " +
     "Supported options: 'random' and 'k-means||'.",
-    (value: String) => MLlibKMeans.validateInitMode(value))
+    (value: String) => MLlibKMeans.validateInitMode(value.toLowerCase(Locale.ROOT)))
 
   /** @group expertGetParam */
   @Since("1.5.0")
@@ -317,7 +319,7 @@ class KMeans @Since("1.5.0") (
     instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
     val algo = new MLlibKMeans()
       .setK($(k))
-      .setInitializationMode($(initMode))
+      .setInitializationMode($(initMode).toLowerCase(Locale.ROOT))
       .setInitializationSteps($(initSteps))
       .setMaxIterations($(maxIter))
       .setSeed($(seed))

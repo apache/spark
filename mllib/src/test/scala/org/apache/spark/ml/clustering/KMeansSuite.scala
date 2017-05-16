@@ -152,6 +152,16 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings,
       KMeansSuite.allParamSettings, checkModelData)
   }
+
+  test("string params should be case-insensitive") {
+    val km = new KMeans().setK(k).setMaxIter(1)
+    Seq("RAndOm", "k-mEAns||").foreach { mode =>
+      km.setInitMode(mode)
+      assert(km.getInitMode === mode)
+      val model = km.fit(dataset)
+      assert(model.getInitMode === mode)
+    }
+  }
 }
 
 object KMeansSuite {

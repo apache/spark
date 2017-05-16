@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -28,7 +30,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
-import org.apache.spark.sql.types.DoubleType
 
 /**
  * Params for Naive Bayes Classifiers.
@@ -54,7 +55,7 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
    */
   final val modelType: Param[String] = new Param[String](this, "modelType", "The model type " +
     "which is a string (case-sensitive). Supported options: multinomial (default) and bernoulli.",
-    ParamValidators.inArray[String](NaiveBayes.supportedModelTypes.toArray))
+    (value: String) => NaiveBayes.supportedModelTypes.contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
@@ -134,7 +135,7 @@ class NaiveBayes @Since("1.5.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
-    val modelTypeValue = $(modelType)
+    val modelTypeValue = $(modelType).toLowerCase(Locale.ROOT)
     val requireValues: Vector => Unit = {
       modelTypeValue match {
         case Multinomial =>
@@ -187,7 +188,7 @@ class NaiveBayes @Since("1.5.0") (
     aggregated.foreach { case (label, (n, sumTermFreqs)) =>
       labelArray(i) = label
       piArray(i) = math.log(n + lambda) - piLogDenom
-      val thetaLogDenom = $(modelType) match {
+      val thetaLogDenom = $(modelType).toLowerCase(Locale.ROOT) match {
         case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
         case Bernoulli => math.log(n + 2.0 * lambda)
         case _ =>
@@ -282,19 +283,20 @@ class NaiveBayesModel private[ml] (
    * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
    * application of this condition (in predict function).
    */
-  private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
-    case Multinomial => (None, None)
-    case Bernoulli =>
-      val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
-      val ones = new DenseVector(Array.fill(theta.numCols) {1.0})
-      val thetaMinusNegTheta = theta.map { value =>
-        value - math.log(1.0 - math.exp(value))
-      }
-      (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
-    case _ =>
-      // This should never happen.
-      throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
-  }
+  private lazy val (thetaMinusNegTheta, negThetaSum) =
+    $(modelType).toLowerCase(Locale.ROOT) match {
+      case Multinomial => (None, None)
+      case Bernoulli =>
+        val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
+        val ones = new DenseVector(Array.fill(theta.numCols) {1.0})
+        val thetaMinusNegTheta = theta.map { value =>
+          value - math.log(1.0 - math.exp(value))
+        }
+        (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
+      case _ =>
+        // This should never happen.
+        throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+    }
 
   @Since("1.6.0")
   override val numFeatures: Int = theta.numCols
@@ -320,7 +322,7 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    $(modelType) match {
+    $(modelType).toLowerCase(Locale.ROOT) match {
       case Multinomial =>
         multinomialCalculation(features)
       case Bernoulli =>

@@ -190,7 +190,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
   test("string params should be case-insensitive") {
     val df: DataFrame = TreeTests.setMetadata(data, Map.empty[Int, Int], 0)
 
-    val gbt = new GBTRegressor()
+    val gbt = new GBTRegressor().setMaxIter(1).setMaxDepth(0)
     Seq("sQuarEd", "aBsolUTe").foreach { loss =>
       gbt.setLossType(loss)
       assert(gbt.getLossType === loss)

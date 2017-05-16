@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.evaluation
 
+import java.util.Locale
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
@@ -44,12 +46,10 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
    * @group param
    */
   @Since("1.5.0")
-  val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("f1", "weightedPrecision",
-      "weightedRecall", "accuracy"))
-    new Param(this, "metricName", "metric name in evaluation " +
-      "(f1|weightedPrecision|weightedRecall|accuracy)", allowedParams)
-  }
+  val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
+    " evaluation (f1|weightedPrecision|weightedRecall|accuracy)",
+    (value: String) => Array("f1", "weightedprecision", "weightedrecall", "accuracy").contains(
+      value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("1.5.0")
@@ -80,10 +80,10 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
         case Row(prediction: Double, label: Double) => (prediction, label)
       }
     val metrics = new MulticlassMetrics(predictionAndLabels)
-    val metric = $(metricName) match {
+    val metric = getMetricName.toLowerCase(Locale.ROOT) match {
       case "f1" => metrics.weightedFMeasure
-      case "weightedPrecision" => metrics.weightedPrecision
-      case "weightedRecall" => metrics.weightedRecall
+      case "weightedprecision" => metrics.weightedPrecision
+      case "weightedrecall" => metrics.weightedRecall
       case "accuracy" => metrics.accuracy
     }
     metric
