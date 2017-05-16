@@ -171,7 +171,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             location = fileIndex,
             partitionSchema = partitionSchema,
             dataSchema = dataSchema,
-            // We don't support hive bucketed tables, only ones we write out.
             bucketSpec = None,
             fileFormat = fileFormat,
             options = options)(sparkSession = sparkSession)
@@ -199,7 +198,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 sparkSession = sparkSession,
                 paths = rootPath.toString :: Nil,
                 userSpecifiedSchema = Option(dataSchema),
-                // We don't support hive bucketed tables, only ones we write out.
                 bucketSpec = None,
                 options = options,
                 className = fileType).resolveRelation(),

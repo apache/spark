@@ -263,10 +263,12 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       val sparkPlan = spark.sessionState.executePlan(explain).executedPlan
       sparkPlan.executeCollect().map(_.getString(0).trim).headOption.getOrElse("")
     }
-    val udf1 = "myUdf1"
-    val udf2 = "myUdf2"
-    spark.udf.register(udf1, (n: Int) => { n + 1 })
-    spark.udf.register(udf2, (n: Int) => { n * 1 })
-    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"UDF:$udf1(UDF:$udf2(1))"))
+    val udf1Name = "myUdf1"
+    val udf2Name = "myUdf2"
+    val udf1 = spark.udf.register(udf1Name, (n: Int) => n + 1)
+    val udf2 = spark.udf.register(udf2Name, (n: Int) => n * 1)
+    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
+    assert(explainStr(spark.range(1).select(udf1(udf2(functions.lit(1)))))
+      .contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
   }
 }

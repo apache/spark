@@ -21,7 +21,6 @@ package org.apache.spark.examples.ml
 import java.util.Locale
 
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 

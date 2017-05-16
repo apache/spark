@@ -18,7 +18,7 @@
 context("broadcast variables")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Partitioned data
@@ -29,7 +29,7 @@ test_that("using broadcast variable", {
   skip_on_cran()
 
   randomMat <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
-  randomMatBr <- broadcast(sc, randomMat)
+  randomMatBr <- broadcastRDD(sc, randomMat)
 
   useBroadcast <- function(x) {
     sum(SparkR:::value(randomMatBr) * x)
