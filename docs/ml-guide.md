@@ -72,35 +72,24 @@ MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases,
 and the migration guide below will explain all changes between releases.
 
-## From 2.0 to 2.1
+## From 2.1 to 2.2
 
 ### Breaking changes
- 
-**Deprecated methods removed**
 
-* `setLabelCol` in `feature.ChiSqSelectorModel`
-* `numTrees` in `classification.RandomForestClassificationModel` (This now refers to the Param called `numTrees`)
-* `numTrees` in `regression.RandomForestRegressionModel` (This now refers to the Param called `numTrees`)
-* `model` in `regression.LinearRegressionSummary`
-* `validateParams` in `PipelineStage`
-* `validateParams` in `Evaluator`
+There are no breaking changes.
 
 ### Deprecations and changes of behavior
 
 **Deprecations**
 
-* [SPARK-18592](https://issues.apache.org/jira/browse/SPARK-18592):
-  Deprecate all Param setter methods except for input/output column Params for `DecisionTreeClassificationModel`, `GBTClassificationModel`, `RandomForestClassificationModel`, `DecisionTreeRegressionModel`, `GBTRegressionModel` and `RandomForestRegressionModel`
+There are no deprecations.
 
 **Changes of behavior**
 
-* [SPARK-17870](https://issues.apache.org/jira/browse/SPARK-17870):
- Fix a bug of `ChiSqSelector` which will likely change its result. Now `ChiSquareSelector` use pValue rather than raw statistic to select a fixed number of top features.
-* [SPARK-3261](https://issues.apache.org/jira/browse/SPARK-3261):
- `KMeans` returns potentially fewer than k cluster centers in cases where k distinct centroids aren't available or aren't selected.
-* [SPARK-17389](https://issues.apache.org/jira/browse/SPARK-17389):
- `KMeans` reduces the default number of steps from 5 to 2 for the k-means|| initialization mode.
-
+* [SPARK-19787](https://issues.apache.org/jira/browse/SPARK-19787):
+ Default value of `regParam` changed from `1.0` to `0.1` for `ALS.train` method (marked `DeveloperApi`).
+ **Note** this does _not affect_ the `ALS` Estimator or Model, nor MLlib's `ALS` class.
+ 
 ## Previous Spark versions
 
 Earlier migration guides are archived [on this page](ml-migration-guides.html).
