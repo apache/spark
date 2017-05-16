@@ -19,8 +19,6 @@ package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
 
-import scala.language.reflectiveCalls
-
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}

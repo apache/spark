@@ -46,8 +46,9 @@ We use default settings in which it runs in local mode. It auto downloads Spark 
 
 ```{r, include=FALSE}
 install.spark()
+sparkR.session(master = "local[1]")
 ```
-```{r, message=FALSE, results="hide"}
+```{r, eval=FALSE}
 sparkR.session()
 ```
 
