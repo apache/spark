@@ -44,9 +44,9 @@ if __name__ == "__main__":
     df = spark.createDataFrame(data, ["label", "features"])
 
     r = ChiSquareTest.test(df, "features", "label").head()
-    print("pValues: " + str(r[0]))
-    print("degreesOfFreedom: " + str(r[1]))
-    print("statistics: " + str(r[2]))
+    print("pValues: " + str(r.pValues))
+    print("degreesOfFreedom: " + str(r.degreesOfFreedom))
+    print("statistics: " + str(r.statistics))
     # $example off$
 
     spark.stop()
