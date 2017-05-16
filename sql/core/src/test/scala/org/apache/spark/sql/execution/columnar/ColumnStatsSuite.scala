@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.types._
 
 class ColumnStatsSuite extends SparkFunSuite {
@@ -33,18 +32,18 @@ class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[StringColumnStats], STRING, createRow(null, null, 0))
   testDecimalColumnStats(createRow(null, null, 0))
 
-  def createRow(values: Any*): GenericInternalRow = new GenericInternalRow(values.toArray)
+  def createRow(values: Any*): Array[Any] = values.toArray
 
   def testColumnStats[T <: AtomicType, U <: ColumnStats](
       columnStatsClass: Class[U],
       columnType: NativeColumnType[T],
-      initialStatistics: GenericInternalRow): Unit = {
+      initialStatistics: Array[Any]): Unit = {
 
     val columnStatsName = columnStatsClass.getSimpleName
 
     test(s"$columnStatsName: empty") {
       val columnStats = columnStatsClass.newInstance()
-      columnStats.collectedStatistics.values.zip(initialStatistics.values).foreach {
+      columnStats.collectedStatistics.zip(initialStatistics).foreach {
         case (actual, expected) => assert(actual === expected)
       }
     }
@@ -60,11 +59,11 @@ class ColumnStatsSuite extends SparkFunSuite {
       val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
       val stats = columnStats.collectedStatistics
 
-      assertResult(values.min(ordering), "Wrong lower bound")(stats.values(0))
-      assertResult(values.max(ordering), "Wrong upper bound")(stats.values(1))
-      assertResult(10, "Wrong null count")(stats.values(2))
-      assertResult(20, "Wrong row count")(stats.values(3))
-      assertResult(stats.values(4), "Wrong size in bytes") {
+      assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
+      assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
+      assertResult(10, "Wrong null count")(stats(2))
+      assertResult(20, "Wrong row count")(stats(3))
+      assertResult(stats(4), "Wrong size in bytes") {
         rows.map { row =>
           if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
         }.sum
@@ -73,14 +72,14 @@ class ColumnStatsSuite extends SparkFunSuite {
   }
 
   def testDecimalColumnStats[T <: AtomicType, U <: ColumnStats](
-      initialStatistics: GenericInternalRow): Unit = {
+      initialStatistics: Array[Any]): Unit = {
 
     val columnStatsName = classOf[DecimalColumnStats].getSimpleName
     val columnType = COMPACT_DECIMAL(15, 10)
 
     test(s"$columnStatsName: empty") {
       val columnStats = new DecimalColumnStats(15, 10)
-      columnStats.collectedStatistics.values.zip(initialStatistics.values).foreach {
+      columnStats.collectedStatistics.zip(initialStatistics).foreach {
         case (actual, expected) => assert(actual === expected)
       }
     }
@@ -96,11 +95,11 @@ class ColumnStatsSuite extends SparkFunSuite {
       val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
       val stats = columnStats.collectedStatistics
 
-      assertResult(values.min(ordering), "Wrong lower bound")(stats.values(0))
-      assertResult(values.max(ordering), "Wrong upper bound")(stats.values(1))
-      assertResult(10, "Wrong null count")(stats.values(2))
-      assertResult(20, "Wrong row count")(stats.values(3))
-      assertResult(stats.values(4), "Wrong size in bytes") {
+      assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
+      assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
+      assertResult(10, "Wrong null count")(stats(2))
+      assertResult(20, "Wrong row count")(stats(3))
+      assertResult(stats(4), "Wrong size in bytes") {
         rows.map { row =>
           if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
         }.sum
