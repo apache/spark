@@ -38,6 +38,8 @@ case class SaveIntoDataSourceCommand(
     options: Map[String, String],
     mode: SaveMode) extends RunnableCommand {
 
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     DataSource(
       sparkSession,

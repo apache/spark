@@ -450,12 +450,14 @@ object FileFormatWriter extends Logging {
       for (row <- iter) {
         val nextPartColsAndBucketId = getPartitionColsAndBucketId(row)
         if (currentPartColsAndBucketId != nextPartColsAndBucketId) {
+          if (currentPartColsAndBucketId != null) {
+            totalFileCounter += (fileCounter + 1)
+          }
           // See a new partition or bucket - write to a new partition dir (or a new bucket file).
           currentPartColsAndBucketId = nextPartColsAndBucketId.copy()
           logDebug(s"Writing partition: $currentPartColsAndBucketId")
 
           recordsInFile = 0
-          totalFileCounter += fileCounter
           fileCounter = 0
 
           releaseResources()
@@ -478,10 +480,13 @@ object FileFormatWriter extends Logging {
         currentWriter.write(getOutputRow(row))
         recordsInFile += 1
       }
+      if (currentPartColsAndBucketId != null) {
+        totalFileCounter += (fileCounter + 1)
+      }
       releaseResources()
       totalFileSize += getFileSize(taskAttemptContext.getConfiguration, currentPath)
       ExecutedWriteSummary(updatedPartitions = updatedPartitions.toSet,
-        writtenFileNum = totalFileCounter + 1, writtenBytes = totalFileSize)
+        writtenFileNum = totalFileCounter, writtenBytes = totalFileSize)
     }
 
     override def releaseResources(): Unit = {
