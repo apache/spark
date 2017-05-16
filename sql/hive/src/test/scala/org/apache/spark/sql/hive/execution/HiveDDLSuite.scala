@@ -1731,14 +1731,14 @@ class HiveDDLSuite
             spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`=2) SELECT 1")
             val partEscaped = s"${ExternalCatalogUtils.escapePathName(specialChars)}=2"
             val partFile = new File(dir, partEscaped)
-            assert(partFile.listFiles().length >= 1)
+            assert(partFile.listFiles().nonEmpty)
             checkAnswer(spark.table("t"), Row("1", "2") :: Nil)
 
             withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
               spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`) SELECT 3, 4")
               val partEscaped1 = s"${ExternalCatalogUtils.escapePathName(specialChars)}=4"
               val partFile1 = new File(dir, partEscaped1)
-              assert(partFile1.listFiles().length >= 1)
+              assert(partFile1.listFiles().nonEmpty)
               checkAnswer(spark.table("t"), Row("1", "2") :: Row("3", "4") :: Nil)
             }
           }
@@ -1757,7 +1757,7 @@ class HiveDDLSuite
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
           loc.mkdir()
-          // The parser does not recognizes the backslashes on Windows as they are.
+          // The parser does not recognize the backslashes on Windows as they are.
           // These currently should be escaped.
           val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
           spark.sql(
@@ -1793,7 +1793,7 @@ class HiveDDLSuite
                |CREATE TABLE t1(a string, b string)
                |USING hive
                |PARTITIONED BY(b)
-               |LOCATION '${escapedLoc}'
+               |LOCATION '$escapedLoc'
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -1804,7 +1804,7 @@ class HiveDDLSuite
           if (specialChars != "a:b") {
             spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
             val partFile = new File(loc, "b=2")
-            assert(partFile.listFiles().length >= 1)
+            assert(partFile.listFiles().nonEmpty)
             checkAnswer(spark.table("t1"), Row("1", "2") :: Nil)
 
             spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
@@ -1814,7 +1814,7 @@ class HiveDDLSuite
             if (!Utils.isWindows) {
               // Actual path becomes "b=2017-03-03%2012%3A13%253A14" on Windows.
               val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
-              assert(partFile2.listFiles().length >= 1)
+              assert(partFile2.listFiles().nonEmpty)
               checkAnswer(spark.table("t1"),
                 Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
             }

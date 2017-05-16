@@ -2054,7 +2054,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
           loc.mkdir()
-          // The parser does not recognizes the backslashes on Windows as they are.
+          // The parser does not recognize the backslashes on Windows as they are.
           // These currently should be escaped.
           val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
           spark.sql(
@@ -2077,7 +2077,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
           loc.mkdir()
-          // The parser does not recognizes the backslashes on Windows as they are.
+          // The parser does not recognize the backslashes on Windows as they are.
           // These currently should be escaped.
           val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
           spark.sql(
@@ -2124,7 +2124,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         withTable("t") {
           withTempDir { dir =>
             val loc = new File(dir, specialChars)
-            // The parser does not recognizes the backslashes on Windows as they are.
+            // The parser does not recognize the backslashes on Windows as they are.
             // These currently should be escaped.
             val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
             spark.sql(s"CREATE DATABASE tmpdb LOCATION '$escapedLoc'")
@@ -2146,7 +2146,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     withTable("t", "t1") {
       withTempDir { dir =>
         assert(!dir.getAbsolutePath.startsWith("file:/"))
-        // The parser does not recognizes the backslashes on Windows as they are.
+        // The parser does not recognize the backslashes on Windows as they are.
         // These currently should be escaped.
         val escapedDir = dir.getAbsolutePath.replace("\\", "\\\\")
         spark.sql(
@@ -2161,7 +2161,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
       withTempDir { dir =>
         assert(!dir.getAbsolutePath.startsWith("file:/"))
-        // The parser does not recognizes the backslashes on Windows as they are.
+        // The parser does not recognize the backslashes on Windows as they are.
         // These currently should be escaped.
         val escapedDir = dir.getAbsolutePath.replace("\\", "\\\\")
         spark.sql(
