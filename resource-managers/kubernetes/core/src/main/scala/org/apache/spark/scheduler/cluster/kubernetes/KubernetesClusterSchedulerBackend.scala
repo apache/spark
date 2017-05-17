@@ -20,17 +20,16 @@ import java.io.Closeable
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 
+import io.fabric8.kubernetes.api.model.{ContainerPortBuilder, EnvVarBuilder, EnvVarSourceBuilder, Pod, PodBuilder, QuantityBuilder}
+import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
+import io.fabric8.kubernetes.client.Watcher.Action
+import org.apache.commons.io.FilenameUtils
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 
-import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
-import io.fabric8.kubernetes.client.Watcher.Action
-import org.apache.commons.io.FilenameUtils
-
 import org.apache.spark.{SparkContext, SparkEnv, SparkException}
-import org.apache.spark.deploy.kubernetes.ConfigurationUtils
+import org.apache.spark.deploy.kubernetes.{ConfigurationUtils, SparkPodInitContainerBootstrap}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointAddress, RpcEnv}
@@ -41,7 +40,8 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
-    val sc: SparkContext)
+    val sc: SparkContext,
+    executorInitContainerBootstrap: Option[SparkPodInitContainerBootstrap])
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
   import KubernetesClusterSchedulerBackend._
@@ -52,6 +52,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val EXECUTOR_PODS_BY_IPS_LOCK = new Object
   private val executorPodsByIPs = new mutable.HashMap[String, Pod] // Indexed by executor IP addrs.
 
+  private val executorExtraClasspath = conf.get(
+    org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
+  private val executorJarsDownloadDir = conf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION)
   private var shufflePodCache: Option[ShufflePodCache] = None
   private val executorDockerImage = conf.get(EXECUTOR_DOCKER_IMAGE)
   private val kubernetesNamespace = conf.get(KUBERNETES_NAMESPACE)
@@ -258,13 +261,20 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val executorCpuQuantity = new QuantityBuilder(false)
       .withAmount(executorCores)
       .build()
+    val executorExtraClasspathEnv = executorExtraClasspath.map { cp =>
+      new EnvVarBuilder()
+        .withName(ENV_EXECUTOR_EXTRA_CLASSPATH)
+        .withValue(cp)
+        .build()
+    }
     val requiredEnv = Seq(
       (ENV_EXECUTOR_PORT, executorPort.toString),
       (ENV_DRIVER_URL, driverUrl),
       (ENV_EXECUTOR_CORES, executorCores),
       (ENV_EXECUTOR_MEMORY, executorMemoryString),
       (ENV_APPLICATION_ID, applicationId()),
-      (ENV_EXECUTOR_ID, executorId))
+      (ENV_EXECUTOR_ID, executorId),
+      (ENV_MOUNTED_CLASSPATH, s"$executorJarsDownloadDir/*"))
       .map(env => new EnvVarBuilder()
         .withName(env._1)
         .withValue(env._2)
@@ -317,7 +327,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         .endContainer()
       .endSpec()
 
-    val resolvedPodBuilder = shuffleServiceConfig
+    val withMaybeShuffleConfigPodBuilder = shuffleServiceConfig
       .map { config =>
         config.shuffleDirs.foldLeft(basePodBuilder) { (builder, dir) =>
           builder
@@ -337,9 +347,14 @@ private[spark] class KubernetesClusterSchedulerBackend(
             .endSpec()
         }
       }.getOrElse(basePodBuilder)
+    val resolvedExecutorPod = executorInitContainerBootstrap.map { bootstrap =>
+      bootstrap.bootstrapInitContainerAndVolumes(
+        "executor",
+        withMaybeShuffleConfigPodBuilder)
+    }.getOrElse(withMaybeShuffleConfigPodBuilder)
 
     try {
-      (executorId, kubernetesClient.pods().create(resolvedPodBuilder.build()))
+      (executorId, kubernetesClient.pods.create(resolvedExecutorPod.build()))
     } catch {
       case throwable: Throwable =>
         logError("Failed to allocate executor pod.", throwable)

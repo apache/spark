@@ -22,6 +22,7 @@ import javax.ws.rs.core.{MediaType, StreamingOutput}
 
 import org.glassfish.jersey.media.multipart.FormDataParam
 
+import org.apache.spark.deploy.kubernetes.submit.v2.SubmittedResourceIdAndSecret
 import org.apache.spark.deploy.rest.kubernetes.v1.KubernetesCredentials
 
 /**
@@ -69,7 +70,7 @@ private[spark] trait ResourceStagingService {
       @FormDataParam("podNamespace") podNamespace: String,
       @FormDataParam("resources") resources: InputStream,
       @FormDataParam("kubernetesCredentials") kubernetesCredentials: KubernetesCredentials)
-      : StagedResourceIdentifier
+      : SubmittedResourceIdAndSecret
 
   /**
    * Download an application's resources. The resources are provided as a stream, where the stream's

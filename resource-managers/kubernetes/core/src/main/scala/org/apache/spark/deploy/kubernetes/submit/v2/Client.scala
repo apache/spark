@@ -19,11 +19,10 @@ package org.apache.spark.deploy.kubernetes.submit.v2
 import java.io.File
 import java.util.Collections
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, HasMetadata, OwnerReferenceBuilder, PodBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, OwnerReferenceBuilder, PodBuilder}
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
-import org.apache.spark.{SecurityManager => SparkSecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.internal.Logging
@@ -35,33 +34,25 @@ import org.apache.spark.util.Utils
  *
  * This class is responsible for instantiating Kubernetes resources that allow a Spark driver to
  * run in a pod on the Kubernetes cluster with the Spark configurations specified by spark-submit.
- * Application submitters that desire to provide their application's dependencies from their local
- * disk must provide a resource staging server URI to this client so that the client can push the
- * local resources to the resource staging server and have the driver pod pull the resources in an
- * init-container. Interactions with the resource staging server are offloaded to the
- * {@link MountedDependencyManager} class. If instead the application submitter has their
- * dependencies pre-staged in remote locations like HDFS or their own HTTP servers already, then
- * the mounted dependency manager is bypassed entirely, but the init-container still needs to
- * fetch these remote dependencies (TODO https://github.com/apache-spark-on-k8s/spark/issues/238).
+ * The API of this class makes it such that much of the specific behavior can be stubbed for
+ * testing; most of the detailed logic must be dependency-injected when constructing an instance
+ * of this client. Therefore the submission process is designed to be as modular as possible,
+ * where different steps of submission should be factored out into separate classes.
  */
 private[spark] class Client(
+    appName: String,
+    kubernetesAppId: String,
     mainClass: String,
     sparkConf: SparkConf,
     appArgs: Array[String],
-    mainAppResource: String,
+    sparkJars: Seq[String],
+    sparkFiles: Seq[String],
     kubernetesClientProvider: SubmissionKubernetesClientProvider,
-    mountedDependencyManagerProvider: MountedDependencyManagerProvider) extends Logging {
+    initContainerComponentsProvider: DriverInitContainerComponentsProvider) extends Logging {
 
-  private val namespace = sparkConf.get(KUBERNETES_NAMESPACE)
-  private val master = resolveK8sMaster(sparkConf.get("spark.master"))
-  private val launchTime = System.currentTimeMillis
-  private val appName = sparkConf.getOption("spark.app.name")
-    .getOrElse("spark")
-  private val kubernetesAppId = s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
   private val kubernetesDriverPodName = sparkConf.get(KUBERNETES_DRIVER_POD_NAME)
     .getOrElse(kubernetesAppId)
   private val driverDockerImage = sparkConf.get(DRIVER_DOCKER_IMAGE)
-  private val maybeStagingServerUri = sparkConf.get(RESOURCE_STAGING_SERVER_URI)
   private val driverMemoryMb = sparkConf.get(org.apache.spark.internal.config.DRIVER_MEMORY)
   private val memoryOverheadMb = sparkConf
     .get(KUBERNETES_DRIVER_MEMORY_OVERHEAD)
@@ -70,22 +61,15 @@ private[spark] class Client(
   private val driverContainerMemoryWithOverhead = driverMemoryMb + memoryOverheadMb
   private val customLabels = sparkConf.get(KUBERNETES_DRIVER_LABELS)
   private val customAnnotations = sparkConf.get(KUBERNETES_DRIVER_ANNOTATIONS)
-  private val sparkJars = sparkConf.getOption("spark.jars")
-    .map(_.split(","))
-    .getOrElse(Array.empty[String]) ++
-    Option(mainAppResource)
-      .filterNot(_ == SparkLauncher.NO_RESOURCE)
-      .toSeq
 
-  private val sparkFiles = sparkConf.getOption("spark.files")
-    .map(_.split(","))
-    .getOrElse(Array.empty[String])
   private val driverExtraClasspath = sparkConf.get(
     org.apache.spark.internal.config.DRIVER_CLASS_PATH)
   private val driverJavaOptions = sparkConf.get(
     org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS)
 
   def run(): Unit = {
+    validateNoDuplicateFileNames(sparkJars)
+    validateNoDuplicateFileNames(sparkFiles)
     val parsedCustomLabels = parseKeyValuePairs(customLabels, KUBERNETES_DRIVER_LABELS.key,
       "labels")
     require(!parsedCustomLabels.contains(SPARK_APP_ID_LABEL), s"Label with key " +
@@ -133,50 +117,39 @@ private[spark] class Client(
           .addToContainers(driverContainer)
           .endSpec()
 
-      val nonDriverPodKubernetesResources = mutable.Buffer[HasMetadata]()
-      val resolvedJars = mutable.Buffer[String]()
-      val resolvedFiles = mutable.Buffer[String]()
-      val driverPodWithMountedDeps = maybeStagingServerUri.map { stagingServerUri =>
-        val mountedDependencyManager = mountedDependencyManagerProvider.getMountedDependencyManager(
-          kubernetesAppId,
-          stagingServerUri,
-          allLabels,
-          namespace,
-          sparkJars,
-          sparkFiles)
-        val jarsResourceIdentifier = mountedDependencyManager.uploadJars()
-        val filesResourceIdentifier = mountedDependencyManager.uploadFiles()
-        val initContainerKubernetesSecret = mountedDependencyManager.buildInitContainerSecret(
-          jarsResourceIdentifier.resourceSecret, filesResourceIdentifier.resourceSecret)
-        val initContainerConfigMap = mountedDependencyManager.buildInitContainerConfigMap(
-          jarsResourceIdentifier.resourceId, filesResourceIdentifier.resourceId)
-        resolvedJars ++= mountedDependencyManager.resolveSparkJars()
-        resolvedFiles ++= mountedDependencyManager.resolveSparkFiles()
-        nonDriverPodKubernetesResources += initContainerKubernetesSecret
-        nonDriverPodKubernetesResources += initContainerConfigMap
-        mountedDependencyManager.configurePodToMountLocalDependencies(
-          driverContainer.getName, initContainerKubernetesSecret, initContainerConfigMap, basePod)
-      }.getOrElse {
-        sparkJars.map(Utils.resolveURI).foreach { jar =>
-          require(Option.apply(jar.getScheme).getOrElse("file") != "file",
-            "When submitting with local jars, a resource staging server must be provided to" +
-              s" deploy your jars into the driver pod. Cannot send jar with URI $jar.")
-        }
-        sparkFiles.map(Utils.resolveURI).foreach { file =>
-          require(Option.apply(file.getScheme).getOrElse("file") != "file",
-            "When submitting with local files, a resource staging server must be provided to" +
-              s" deploy your files into the driver pod. Cannot send file with URI $file")
-        }
-        resolvedJars ++= sparkJars
-        resolvedFiles ++= sparkFiles
-        basePod
+      val maybeSubmittedDependencyUploader = initContainerComponentsProvider
+        .provideInitContainerSubmittedDependencyUploader(allLabels)
+      val maybeSubmittedResourceIdentifiers = maybeSubmittedDependencyUploader.map { uploader =>
+        SubmittedResources(uploader.uploadJars(), uploader.uploadFiles())
       }
-      val resolvedSparkConf = sparkConf.clone()
-      if (resolvedJars.nonEmpty) {
-        resolvedSparkConf.set("spark.jars", resolvedJars.mkString(","))
+      val maybeSecretBuilder = initContainerComponentsProvider
+          .provideSubmittedDependenciesSecretBuilder(
+              maybeSubmittedResourceIdentifiers.map(_.secrets()))
+      val maybeSubmittedDependenciesSecret = maybeSecretBuilder.map(_.build())
+      val initContainerConfigMap = initContainerComponentsProvider
+        .provideInitContainerConfigMapBuilder(maybeSubmittedResourceIdentifiers.map(_.ids()))
+        .build()
+      val podWithInitContainer = initContainerComponentsProvider
+        .provideInitContainerBootstrap()
+        .bootstrapInitContainerAndVolumes(driverContainer.getName, basePod)
+
+      val driverOwnedResources = Seq(initContainerConfigMap) ++
+          maybeSubmittedDependenciesSecret.toSeq
+
+      val containerLocalizedFilesResolver = initContainerComponentsProvider
+          .provideContainerLocalizedFilesResolver()
+      val resolvedSparkJars = containerLocalizedFilesResolver.resolveSubmittedSparkJars()
+      val resolvedSparkFiles = containerLocalizedFilesResolver.resolveSubmittedSparkFiles()
+
+      val executorInitContainerConfiguration = initContainerComponentsProvider
+          .provideExecutorInitContainerConfiguration()
+      val resolvedSparkConf = executorInitContainerConfiguration
+          .configureSparkConfForExecutorInitContainer(sparkConf)
+      if (resolvedSparkJars.nonEmpty) {
+        resolvedSparkConf.set("spark.jars", resolvedSparkJars.mkString(","))
       }
-      if (resolvedFiles.nonEmpty) {
-        resolvedSparkConf.set("spark.files", resolvedFiles.mkString(","))
+      if (resolvedSparkFiles.nonEmpty) {
+        resolvedSparkConf.set("spark.files", resolvedSparkFiles.mkString(","))
       }
       resolvedSparkConf.setIfMissing(KUBERNETES_DRIVER_POD_NAME, kubernetesDriverPodName)
       resolvedSparkConf.set("spark.app.id", kubernetesAppId)
@@ -188,19 +161,16 @@ private[spark] class Client(
       resolvedSparkConf.get(KUBERNETES_DRIVER_OAUTH_TOKEN).foreach { _ =>
         resolvedSparkConf.set(KUBERNETES_DRIVER_OAUTH_TOKEN.key, "<present_but_redacted>")
       }
-
-      val mountedClassPath = resolvedJars.map(Utils.resolveURI).filter { jarUri =>
-        val scheme = Option.apply(jarUri.getScheme).getOrElse("file")
-        scheme == "local" || scheme == "file"
-      }.map(_.getPath).mkString(File.pathSeparator)
-      val resolvedDriverJavaOpts = resolvedSparkConf.getAll.map { case (confKey, confValue) =>
-          s"-D$confKey=$confValue"
+      val resolvedLocalClasspath = containerLocalizedFilesResolver
+        .resolveSubmittedAndRemoteSparkJars()
+      val resolvedDriverJavaOpts = resolvedSparkConf.getAll.map {
+        case (confKey, confValue) => s"-D$confKey=$confValue"
       }.mkString(" ") + driverJavaOptions.map(" " + _).getOrElse("")
-      val resolvedDriverPod = driverPodWithMountedDeps.editSpec()
+      val resolvedDriverPod = podWithInitContainer.editSpec()
         .editMatchingContainer(new ContainerNameEqualityPredicate(driverContainer.getName))
           .addNewEnv()
             .withName(ENV_MOUNTED_CLASSPATH)
-            .withValue(mountedClassPath)
+            .withValue(resolvedLocalClasspath.mkString(File.pathSeparator))
             .endEnv()
           .addNewEnv()
             .withName(ENV_DRIVER_JAVA_OPTS)
@@ -218,16 +188,27 @@ private[spark] class Client(
           .withKind(createdDriverPod.getKind)
           .withController(true)
           .build()
-        nonDriverPodKubernetesResources.foreach { resource =>
+        driverOwnedResources.foreach { resource =>
           val originalMetadata = resource.getMetadata
           originalMetadata.setOwnerReferences(Collections.singletonList(driverPodOwnerReference))
         }
-        kubernetesClient.resourceList(nonDriverPodKubernetesResources: _*).createOrReplace()
+        kubernetesClient.resourceList(driverOwnedResources: _*).createOrReplace()
       } catch {
         case e: Throwable =>
           kubernetesClient.pods().delete(createdDriverPod)
           throw e
       }
+    }
+  }
+
+  private def validateNoDuplicateFileNames(allFiles: Seq[String]): Unit = {
+    val fileNamesToUris = allFiles.map { file =>
+      (new File(Utils.resolveURI(file).getPath).getName, file)
+    }
+    fileNamesToUris.groupBy(_._1).foreach {
+      case (fileName, urisWithFileName) =>
+        require(urisWithFileName.size == 1, "Cannot add multiple files with the same name, but" +
+          s" file name $fileName is shared by all of these URIs: $urisWithFileName")
     }
   }
 
@@ -247,5 +228,48 @@ private[spark] class Client(
         }
       }).toMap
     }).getOrElse(Map.empty[String, String])
+  }
+}
+
+private[spark] object Client {
+  def main(args: Array[String]): Unit = {
+    val sparkConf = new SparkConf(true)
+    val mainAppResource = args(0)
+    val mainClass = args(1)
+    val appArgs = args.drop(2)
+    run(sparkConf, mainAppResource, mainClass, appArgs)
+  }
+
+  def run(
+      sparkConf: SparkConf,
+      mainAppResource: String,
+      mainClass: String,
+      appArgs: Array[String]): Unit = {
+    val sparkJars = sparkConf.getOption("spark.jars")
+      .map(_.split(","))
+      .getOrElse(Array.empty[String]) ++
+      Option(mainAppResource)
+        .filterNot(_ == SparkLauncher.NO_RESOURCE)
+        .toSeq
+    val launchTime = System.currentTimeMillis
+    val sparkFiles = sparkConf.getOption("spark.files")
+      .map(_.split(","))
+      .getOrElse(Array.empty[String])
+    val appName = sparkConf.getOption("spark.app.name")
+      .getOrElse("spark")
+    val kubernetesAppId = s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
+    val initContainerComponentsProvider = new DriverInitContainerComponentsProviderImpl(
+      sparkConf, kubernetesAppId, sparkJars, sparkFiles)
+    val kubernetesClientProvider = new SubmissionKubernetesClientProviderImpl(sparkConf)
+    new Client(
+      appName,
+      kubernetesAppId,
+      mainClass,
+      sparkConf,
+      appArgs,
+      sparkJars,
+      sparkFiles,
+      kubernetesClientProvider,
+      initContainerComponentsProvider).run()
   }
 }

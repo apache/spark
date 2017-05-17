@@ -26,6 +26,7 @@ import com.google.common.io.{BaseEncoding, ByteStreams, Files}
 import scala.collection.concurrent.TrieMap
 
 import org.apache.spark.SparkException
+import org.apache.spark.deploy.kubernetes.submit.v2.SubmittedResourceIdAndSecret
 import org.apache.spark.deploy.rest.kubernetes.v1.KubernetesCredentials
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -41,7 +42,7 @@ private[spark] class ResourceStagingServiceImpl(dependenciesRootDir: File)
       podLabels: Map[String, String],
       podNamespace: String,
       resources: InputStream,
-      kubernetesCredentials: KubernetesCredentials): StagedResourceIdentifier = {
+      kubernetesCredentials: KubernetesCredentials): SubmittedResourceIdAndSecret = {
     val resourceId = UUID.randomUUID().toString
     val secretBytes = new Array[Byte](1024)
     SECURE_RANDOM.nextBytes(secretBytes)
@@ -65,7 +66,7 @@ private[spark] class ResourceStagingServiceImpl(dependenciesRootDir: File)
         podNamespace,
         resourcesTgz,
         kubernetesCredentials)
-      StagedResourceIdentifier(resourceId, resourceSecret)
+      SubmittedResourceIdAndSecret(resourceId, resourceSecret)
     } catch {
       case e: Throwable =>
         if (!resourcesDir.delete()) {

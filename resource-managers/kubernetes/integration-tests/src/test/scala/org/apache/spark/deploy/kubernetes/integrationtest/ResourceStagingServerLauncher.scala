@@ -43,7 +43,6 @@ private[spark] class ResourceStagingServerLauncher(kubernetesClient: KubernetesC
   private val PROPERTIES_FILE_NAME = "staging-server.properties"
   private val PROPERTIES_DIR = "/var/data/spark-staging-server"
   private val PROPERTIES_FILE_PATH = s"$PROPERTIES_DIR/$PROPERTIES_FILE_NAME"
-  private var activeResources = Seq.empty[HasMetadata]
 
   // Returns the NodePort the staging server is listening on
   def launchStagingServer(sslOptions: SSLOptions): Int = {
@@ -146,8 +145,8 @@ private[spark] class ResourceStagingServerLauncher(kubernetesClient: KubernetesC
           .endPort()
         .endSpec()
       .build()
-    val stagingServerPodReadyWatcher = new ReadinessWatcher[Pod]
-    val serviceReadyWatcher = new ReadinessWatcher[Endpoints]
+    val stagingServerPodReadyWatcher = new SparkReadinessWatcher[Pod]
+    val serviceReadyWatcher = new SparkReadinessWatcher[Endpoints]
     val allResources = Seq(
       stagingServerService,
       stagingServerConfigMap,
@@ -159,9 +158,7 @@ private[spark] class ResourceStagingServerLauncher(kubernetesClient: KubernetesC
       Utils.tryWithResource(kubernetesClient.endpoints()
           .withName(stagingServerService.getMetadata.getName)
           .watch(serviceReadyWatcher)) { _ =>
-        activeResources = kubernetesClient.resourceList(allResources: _*)
-          .createOrReplace()
-          .asScala
+        kubernetesClient.resourceList(allResources: _*).createOrReplace()
         stagingServerPodReadyWatcher.waitUntilReady()
         serviceReadyWatcher.waitUntilReady()
       }
@@ -171,26 +168,5 @@ private[spark] class ResourceStagingServerLauncher(kubernetesClient: KubernetesC
       .getPorts
       .get(0)
       .getNodePort
-  }
-
-  def tearDownStagingServer(): Unit = {
-    kubernetesClient.resourceList(activeResources: _*).delete()
-    activeResources = Seq.empty[HasMetadata]
-  }
-
-  private class ReadinessWatcher[T <: HasMetadata] extends Watcher[T] {
-
-    private val signal = SettableFuture.create[Boolean]
-
-    override def eventReceived(action: Action, resource: T): Unit = {
-      if ((action == Action.MODIFIED || action == Action.ADDED) &&
-        Readiness.isReady(resource)) {
-        signal.set(true)
-      }
-    }
-
-    override def onClose(cause: KubernetesClientException): Unit = {}
-
-    def waitUntilReady(): Boolean = signal.get(30, TimeUnit.SECONDS)
   }
 }

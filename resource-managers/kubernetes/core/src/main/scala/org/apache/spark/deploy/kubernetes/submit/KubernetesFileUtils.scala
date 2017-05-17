@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.rest.kubernetes.v1
+package org.apache.spark.deploy.kubernetes.submit
 
 import org.apache.spark.util.Utils
 
@@ -41,4 +41,7 @@ private[spark] object KubernetesFileUtils {
     Option(Utils.resolveURI(uri).getScheme).getOrElse("file") == "file"
   }
 
+  def getOnlyRemoteFiles(uris: Iterable[String]): Iterable[String] = {
+    filterUriStringsByScheme(uris, scheme => scheme != "file" && scheme != "local")
+  }
 }

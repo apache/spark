@@ -17,9 +17,12 @@
 package org.apache.spark.scheduler.cluster.kubernetes
 
 import org.apache.spark.SparkContext
+import org.apache.spark.deploy.kubernetes.{InitContainerResourceStagingServerSecretPluginImpl, SparkPodInitContainerBootstrapImpl}
+import org.apache.spark.deploy.kubernetes.config._
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 
-private[spark] class KubernetesClusterManager extends ExternalClusterManager {
+private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
 
   override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
 
@@ -31,7 +34,49 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager {
 
   override def createSchedulerBackend(sc: SparkContext, masterURL: String, scheduler: TaskScheduler)
       : SchedulerBackend = {
-    new KubernetesClusterSchedulerBackend(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl], sc)
+    val sparkConf = sc.getConf
+    val maybeConfigMap = sparkConf.get(EXECUTOR_INIT_CONTAINER_CONFIG_MAP)
+    val maybeConfigMapKey = sparkConf.get(EXECUTOR_INIT_CONTAINER_CONFIG_MAP_KEY)
+
+    val maybeExecutorInitContainerSecretName =
+      sparkConf.get(EXECUTOR_INIT_CONTAINER_SECRET)
+    val maybeExecutorInitContainerSecretMount =
+        sparkConf.get(EXECUTOR_INIT_CONTAINER_SECRET_MOUNT_DIR)
+    val executorInitContainerSecretVolumePlugin = for {
+      initContainerSecretName <- maybeExecutorInitContainerSecretName
+      initContainerSecretMountPath <- maybeExecutorInitContainerSecretMount
+    } yield {
+      new InitContainerResourceStagingServerSecretPluginImpl(
+        initContainerSecretName,
+        initContainerSecretMountPath)
+    }
+    // Only set up the bootstrap if they've provided both the config map key and the config map
+    // name. Note that we generally expect both to have been set from spark-submit V2, but for
+    // testing developers may simply run the driver JVM locally, but the config map won't be set
+    // then.
+    val bootStrap = for {
+      configMap <- maybeConfigMap
+      configMapKey <- maybeConfigMapKey
+    } yield {
+      new SparkPodInitContainerBootstrapImpl(
+        sparkConf.get(INIT_CONTAINER_DOCKER_IMAGE),
+        sparkConf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION),
+        sparkConf.get(INIT_CONTAINER_FILES_DOWNLOAD_LOCATION),
+        sparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT),
+        configMap,
+        configMapKey,
+        executorInitContainerSecretVolumePlugin)
+    }
+    if (maybeConfigMap.isEmpty) {
+      logWarning("The executor's init-container config map was not specified. Executors will" +
+        " therefore not attempt to fetch remote or submitted dependencies.")
+    }
+    if (maybeConfigMapKey.isEmpty) {
+      logWarning("The executor's init-container config map key was not specified. Executors will" +
+        " therefore not attempt to fetch remote or submitted dependencies.")
+    }
+    new KubernetesClusterSchedulerBackend(
+      sc.taskScheduler.asInstanceOf[TaskSchedulerImpl], sc, bootStrap)
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {
