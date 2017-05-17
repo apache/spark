@@ -777,6 +777,26 @@ class HiveDDLSuite
     }
   }
 
+  test("desc table for Hive table - bucketed + sorted table") {
+    withTable("tbl") {
+      sql(s"""
+        CREATE TABLE tbl (id int, name string)
+        PARTITIONED BY (ds string)
+        CLUSTERED BY(id)
+        SORTED BY(id, name) INTO 1024 BUCKETS
+        """)
+
+      val x = sql("DESC FORMATTED tbl").collect()
+      assert(x.containsSlice(
+        Seq(
+          Row("Num Buckets", "1024", ""),
+          Row("Bucket Columns", "[`id`]", ""),
+          Row("Sort Columns", "[`id`, `name`]", "")
+        )
+      ))
+    }
+  }
+
   test("desc table for data source table using Hive Metastore") {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
     val tabName = "tab1"

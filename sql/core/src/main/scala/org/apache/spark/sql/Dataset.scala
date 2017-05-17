@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.io.CharArrayWriter
 import java.sql.{Date, Timestamp}
-import java.util.TimeZone
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -252,7 +251,8 @@ class Dataset[T] private[sql](
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
-    lazy val timeZone = TimeZone.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
+    lazy val timeZone =
+      DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
@@ -2810,7 +2810,7 @@ class Dataset[T] private[sql](
   def toJSON: Dataset[String] = {
     val rowSchema = this.schema
     val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
-    val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
+    mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JacksonGenerator(rowSchema, writer,
@@ -2819,7 +2819,7 @@ class Dataset[T] private[sql](
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext
         override def next(): String = {
-          gen.write(iter.next())
+          gen.write(exprEnc.toRow(iter.next()))
           gen.flush()
 
           val json = writer.toString
@@ -2832,9 +2832,7 @@ class Dataset[T] private[sql](
           json
         }
       }
-    }
-    import sparkSession.implicits.newStringEncoder
-    sparkSession.createDataset(rdd)
+    } (Encoders.STRING)
   }
 
   /**

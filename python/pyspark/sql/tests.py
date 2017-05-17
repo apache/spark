@@ -330,6 +330,12 @@ class SQLTests(ReusedPySparkTestCase):
         [row] = self.spark.sql("SELECT double(double(1) + 1)").collect()
         self.assertEqual(row[0], 6)
 
+    def test_single_udf_with_repeated_argument(self):
+        # regression test for SPARK-20685
+        self.spark.catalog.registerFunction("add", lambda x, y: x + y, IntegerType())
+        row = self.spark.sql("SELECT add(1, 1)").first()
+        self.assertEqual(tuple(row), (2, ))
+
     def test_multiple_udfs(self):
         self.spark.catalog.registerFunction("double", lambda x: x * 2, IntegerType())
         [row] = self.spark.sql("SELECT double(1), double(2)").collect()
@@ -2518,7 +2524,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         from datetime import date, datetime
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
         parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
-        self.assertEquals(date(2017, 1, 22), parse_result['to_date(dateCol)'])
+        self.assertEquals(date(2017, 1, 22), parse_result['to_date(`dateCol`)'])
 
     @unittest.skipIf(sys.version_info < (3, 3), "Unittest < 3.3 doesn't support mocking")
     def test_unbounded_frames(self):

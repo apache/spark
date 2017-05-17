@@ -47,12 +47,60 @@ case class UserDefinedFunction protected[sql] (
     dataType: DataType,
     inputTypes: Option[Seq[DataType]]) {
 
+  private var _nameOption: Option[String] = None
+  private var _nullable: Boolean = true
+
+  /**
+   * Returns true when the UDF can return a nullable value.
+   *
+   * @since 2.3.0
+   */
+  def nullable: Boolean = _nullable
+
   /**
    * Returns an expression that invokes the UDF, using the given arguments.
    *
    * @since 1.3.0
    */
   def apply(exprs: Column*): Column = {
-    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes.getOrElse(Nil)))
+    Column(ScalaUDF(
+      f,
+      dataType,
+      exprs.map(_.expr),
+      inputTypes.getOrElse(Nil),
+      udfName = _nameOption,
+      nullable = _nullable))
+  }
+
+  private def copyAll(): UserDefinedFunction = {
+    val udf = copy()
+    udf._nameOption = _nameOption
+    udf._nullable = _nullable
+    udf
+  }
+
+  /**
+   * Updates UserDefinedFunction with a given name.
+   *
+   * @since 2.3.0
+   */
+  def withName(name: String): this.type = {
+    this._nameOption = Option(name)
+    this
+  }
+
+  /**
+   * Updates UserDefinedFunction with a given nullability.
+   *
+   * @since 2.3.0
+   */
+  def withNullability(nullable: Boolean): UserDefinedFunction = {
+    if (nullable == _nullable) {
+      this
+    } else {
+      val udf = copyAll()
+      udf._nullable = nullable
+      udf
+    }
   }
 }

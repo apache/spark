@@ -84,6 +84,7 @@ exportClasses("SparkDataFrame")
 exportMethods("arrange",
               "as.data.frame",
               "attach",
+              "broadcast",
               "cache",
               "checkpoint",
               "coalesce",

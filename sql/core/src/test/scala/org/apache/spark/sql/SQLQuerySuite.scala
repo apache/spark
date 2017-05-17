@@ -523,14 +523,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     sortTest()
   }
 
-  test("negative in LIMIT or TABLESAMPLE") {
-    val expected = "The limit expression must be equal to or greater than 0, but got -1"
-    var e = intercept[AnalysisException] {
-      sql("SELECT * FROM testData TABLESAMPLE (-1 rows)")
-    }.getMessage
-    assert(e.contains(expected))
-  }
-
   test("CTE feature") {
     checkAnswer(
       sql("with q1 as (select * from testData limit 10) select * from q1"),
@@ -2618,5 +2610,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     intercept[MalformedURLException] {
       new URL(jarFromInvalidFs)
     }
+  }
+
+  test("RuntimeReplaceable functions should not take extra parameters") {
+    val e = intercept[AnalysisException](sql("SELECT nvl(1, 2, 3)"))
+    assert(e.message.contains("Invalid number of arguments"))
   }
 }
