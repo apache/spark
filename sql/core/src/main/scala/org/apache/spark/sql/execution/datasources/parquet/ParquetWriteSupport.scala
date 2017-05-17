@@ -58,7 +58,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   private var schema: StructType = _
 
   // `ValueWriter`s for all fields of the schema
-  private var rootFieldWriters: IndexedSeq[ValueWriter] = _
+  private var rootFieldWriters: Array[ValueWriter] = _
 
   // The Parquet `RecordConsumer` to which all `InternalRow`s are written
   private var recordConsumer: RecordConsumer = _
@@ -116,7 +116,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   }
 
   private def writeFields(
-      row: InternalRow, schema: StructType, fieldWriters: IndexedSeq[ValueWriter]): Unit = {
+      row: InternalRow, schema: StructType, fieldWriters: Array[ValueWriter]): Unit = {
     var i = 0
     while (i < row.numFields) {
       if (!row.isNullAt(i)) {
