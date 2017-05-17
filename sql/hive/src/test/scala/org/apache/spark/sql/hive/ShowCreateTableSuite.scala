@@ -325,25 +325,23 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
         "last_modified_by",
         "last_modified_time",
         "Owner:",
-        "COLUMN_STATS_ACCURATE",
         // The following are hive specific schema parameters which we do not need to match exactly.
-        "numFiles",
-        "numRows",
-        "rawDataSize",
-        "totalSize",
         "totalNumberFiles",
         "maxFileSize",
-        "minFileSize",
-        // EXTERNAL is not non-deterministic, but it is filtered out for external tables.
-        "EXTERNAL"
+        "minFileSize"
       )
 
       table.copy(
         createTime = 0L,
         lastAccessTime = 0L,
-        properties = table.properties.filterKeys(!nondeterministicProps.contains(_))
+        properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
+        stats = None,
+        ignoredProperties = Map.empty
       )
     }
+
+    val e = normalize(actual)
+    val m = normalize(expected)
 
     assert(normalize(actual) == normalize(expected))
   }

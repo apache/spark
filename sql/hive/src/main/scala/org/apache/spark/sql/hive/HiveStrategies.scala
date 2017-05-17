@@ -119,20 +119,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
     case relation: CatalogRelation
         if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       val table = relation.tableMeta
-      // TODO: check if this estimate is valid for tables after partition pruning.
-      // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
-      // relatively cheap if parameters for the table are populated into the metastore.
-      // Besides `totalSize`, there are also `numFiles`, `numRows`, `rawDataSize` keys
-      // (see StatsSetupConst in Hive) that we can look at in the future.
-      // When table is external,`totalSize` is always zero, which will influence join strategy
-      // so when `totalSize` is zero, use `rawDataSize` instead.
-      val totalSize = table.properties.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
-      val rawDataSize = table.properties.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
-      val sizeInBytes = if (totalSize.isDefined && totalSize.get > 0) {
-        totalSize.get
-      } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
-        rawDataSize.get
-      } else if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+      val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
         try {
           val hadoopConf = session.sessionState.newHadoopConf()
           val tablePath = new Path(table.location)
