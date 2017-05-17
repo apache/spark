@@ -394,7 +394,7 @@ FROM   (SELECT *
                              FROM   t1)) t4
         WHERE  t4.t2b IN (SELECT Min(t3b)
                           FROM   t3
-                          WHERE  t4.t2a = t3a));
+                          WHERE  t4.t2a = t3a)) T;
 
 -- UNION, UNION ALL, UNION DISTINCT, INTERSECT and EXCEPT for NOT IN
 -- TC 01.12

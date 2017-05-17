@@ -496,7 +496,7 @@ FROM   (SELECT *
                              FROM   t1)) t4
         WHERE  t4.t2b IN (SELECT Min(t3b)
                           FROM   t3
-                          WHERE  t4.t2a = t3a))
+                          WHERE  t4.t2a = t3a)) T
 -- !query 13 schema
 struct<t2a:string,t2b:smallint,t2c:int,t2d:bigint,t2e:float,t2f:double,t2g:decimal(2,-2),t2h:timestamp,t2i:date>
 -- !query 13 output

@@ -39,7 +39,7 @@ AND    c.cv = (SELECT max(avg)
                FROM   (SELECT   c1.cv, avg(c1.cv) avg
                        FROM     c c1
                        WHERE    c1.ck = p.pk
-                       GROUP BY c1.cv))
+                       GROUP BY c1.cv) T)
 -- !query 3 schema
 struct<pk:int,cv:int>
 -- !query 3 output
