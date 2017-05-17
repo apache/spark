@@ -1816,6 +1816,39 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df, Row(BigDecimal(0.0)) :: Nil)
   }
 
+  test("Distinct on a Dataframe with zero column") {
+    // Distinct on zero-row RDD with zero column returns 0 row
+    assert(spark.sparkContext.emptyRDD.distinct().count() == 0)
+    // Distinct on zero-row DataFrame with zero column returns 0 row
+    assert(spark.emptyDataFrame.distinct().count() == 0)
+
+    val rddNoCols = sparkContext.parallelize(1 to 10).map(_ => Row.empty)
+    val dfNoCols = spark.createDataFrame(rddNoCols, StructType(Seq.empty))
+    // Distinct on multi-row RDD with zero column returns 1 row
+    assert(rddNoCols.distinct().count() == 1)
+    // Distinct on multi-row DataFrame with zero column returns 1 row
+    checkAnswer(dfNoCols.distinct(), Row())
+  }
+
+  test("Except on two Dataframe with zero column") {
+    // Substract two zero-row RDD with zero column returns 0 row
+    assert(spark.sparkContext.emptyRDD.subtract(spark.sparkContext.emptyRDD).count() == 0)
+    // Except two zero-row DataFrame with zero column returns 0 row
+    assert(spark.emptyDataFrame.except(spark.emptyDataFrame).count() == 0)
+
+    val rddNoCols10Rows = sparkContext.parallelize(1 to 10).map(_ => Row.empty)
+    val dfNoCols10Rows = spark.createDataFrame(rddNoCols10Rows, StructType(Seq.empty))
+    val rddNoCols5Rows = sparkContext.parallelize(1 to 5).map(_ => Row.empty)
+    val dfNoCols5Rows = spark.createDataFrame(rddNoCols5Rows, StructType(Seq.empty))
+
+    // Our EXCEPT follow the SQL compliance
+    assert(dfNoCols10Rows.except(dfNoCols10Rows).count() == 0)
+    assert(dfNoCols10Rows.except(dfNoCols5Rows).count() == 0)
+    assert(dfNoCols5Rows.except(dfNoCols10Rows).count() == 0)
+    assert(dfNoCols5Rows.except(spark.emptyDataFrame).count() == 1)
+    assert(spark.emptyDataFrame.except(dfNoCols5Rows).count() == 0)
+  }
+
   test("SPARK-19893: cannot run set operations with map type") {
     val df = spark.range(1).select(map(lit("key"), $"id").as("m"))
     val e = intercept[AnalysisException](df.intersect(df))
