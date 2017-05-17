@@ -245,7 +245,7 @@ case class Elt(children: Seq[Expression])
 }
 
 
-trait String2StringExpression extends ImplicitCastInputTypes {
+trait String2StringExpression extends ExpectsInputTypes {
   self: UnaryExpression =>
 
   def convert(v: UTF8String): UTF8String
