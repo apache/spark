@@ -113,4 +113,5 @@ package object constants {
     s"$INIT_CONTAINER_PROPERTIES_FILE_MOUNT_PATH/$INIT_CONTAINER_PROPERTIES_FILE_NAME"
   private[spark] val DOWNLOAD_JARS_VOLUME_NAME = "download-jars"
   private[spark] val DOWNLOAD_FILES_VOLUME_NAME = "download-files"
+  private[spark] val DEFAULT_SHUFFLE_MOUNT_NAME = "shuffle"
 }

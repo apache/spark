@@ -233,8 +233,14 @@ private[spark] class BlockManager(
     blockManagerId = if (idFromMaster != null) idFromMaster else id
 
     shuffleServerId = if (externalShuffleServiceEnabled) {
-      logInfo(s"external shuffle service port = $externalShuffleServicePort")
-      BlockManagerId(executorId, blockTransferService.hostName, externalShuffleServicePort)
+      val shuffleServerHostName = if (blockManagerId.isDriver) {
+        blockTransferService.hostName
+      } else {
+        conf.get("spark.shuffle.service.host", blockTransferService.hostName)
+      }
+      logInfo(s"external shuffle service host = $shuffleServerHostName, " +
+        s"port = $externalShuffleServicePort")
+      BlockManagerId(executorId, shuffleServerHostName, externalShuffleServicePort)
     } else {
       blockManagerId
     }

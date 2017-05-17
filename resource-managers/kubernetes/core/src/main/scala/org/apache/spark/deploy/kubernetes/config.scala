@@ -157,6 +157,13 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
+  private[spark] val SPARK_SHUFFLE_SERVICE_HOST =
+    ConfigBuilder("spark.shuffle.service.host")
+      .doc("Host for Spark Shuffle Service")
+      .internal()
+      .stringConf
+      .createOptional
+
   // Note that while we set a default for this when we start up the
   // scheduler, the specific default value is dynamically determined
   // based on the executor memory.
@@ -269,6 +276,44 @@ package object config extends Logging {
       .doc("Name of the driver pod.")
       .stringConf
       .createOptional
+
+  private[spark] val KUBERNETES_SHUFFLE_NAMESPACE =
+    ConfigBuilder("spark.kubernetes.shuffle.namespace")
+      .doc("Namespace of the shuffle service")
+      .stringConf
+      .createWithDefault("default")
+
+  private[spark] val KUBERNETES_SHUFFLE_SVC_IP =
+    ConfigBuilder("spark.kubernetes.shuffle.ip")
+      .doc("This setting is for debugging only. Setting this " +
+        "allows overriding the IP that the executor thinks its colocated " +
+        "shuffle service is on")
+      .stringConf
+      .createOptional
+
+  private[spark] val KUBERNETES_SHUFFLE_LABELS =
+    ConfigBuilder("spark.kubernetes.shuffle.labels")
+      .doc("Labels to identify the shuffle service")
+      .stringConf
+      .createOptional
+
+  private[spark] val KUBERNETES_SHUFFLE_DIR =
+    ConfigBuilder("spark.kubernetes.shuffle.dir")
+      .doc("Path to the shared shuffle directories.")
+      .stringConf
+      .createOptional
+
+  private[spark] val KUBERNETES_ALLOCATION_BATCH_SIZE =
+    ConfigBuilder("spark.kubernetes.allocation.batch.size")
+      .doc("Number of pods to launch at once in each round of dynamic allocation. ")
+      .intConf
+      .createWithDefault(5)
+
+  private[spark] val KUBERNETES_ALLOCATION_BATCH_DELAY =
+    ConfigBuilder("spark.kubernetes.allocation.batch.delay")
+      .doc("Number of seconds to wait between each round of executor allocation. ")
+      .longConf
+      .createWithDefault(1)
 
   private[spark] val DRIVER_SERVICE_MANAGER_TYPE =
     ConfigBuilder("spark.kubernetes.driver.serviceManagerType")

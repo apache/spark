@@ -17,22 +17,25 @@
 package org.apache.spark.scheduler.cluster.kubernetes
 
 import java.io.Closeable
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 
-import io.fabric8.kubernetes.api.model.{ContainerPortBuilder, EnvVarBuilder,
-    EnvVarSourceBuilder, Pod, QuantityBuilder}
+import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
+import org.apache.commons.io.FilenameUtils
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
+import org.apache.spark.deploy.kubernetes.ConfigurationUtils
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.rpc.RpcEndpointAddress
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointAddress, RpcEnv}
 import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RetrieveSparkAppConfig, SparkAppConfig}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -49,6 +52,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val EXECUTOR_PODS_BY_IPS_LOCK = new Object
   private val executorPodsByIPs = new mutable.HashMap[String, Pod] // Indexed by executor IP addrs.
 
+  private var shufflePodCache: Option[ShufflePodCache] = None
   private val executorDockerImage = conf.get(EXECUTOR_DOCKER_IMAGE)
   private val kubernetesNamespace = conf.get(KUBERNETES_NAMESPACE)
   private val executorPort = conf.getInt("spark.executor.port", DEFAULT_STATIC_PORT)
@@ -88,6 +92,28 @@ private[spark] class KubernetesClusterSchedulerBackend(
       throw new SparkException(s"Executor cannot find driver pod", throwable)
   }
 
+  private val shuffleServiceConfig: Option[ShuffleServiceConfig] =
+    if (Utils.isDynamicAllocationEnabled(sc.conf)) {
+      val shuffleNamespace = conf.get(KUBERNETES_SHUFFLE_NAMESPACE)
+      val parsedShuffleLabels = ConfigurationUtils.parseKeyValuePairs(
+        conf.get(KUBERNETES_SHUFFLE_LABELS), KUBERNETES_SHUFFLE_LABELS.key,
+            "shuffle-labels")
+      if (parsedShuffleLabels.size == 0) {
+        throw new SparkException(s"Dynamic allocation enabled " +
+          s"but no ${KUBERNETES_SHUFFLE_LABELS.key} specified")
+      }
+
+      val shuffleDirs = conf.get(KUBERNETES_SHUFFLE_DIR).map {
+        _.split(",")
+      }.getOrElse(Utils.getConfiguredLocalDirs(conf))
+      Some(
+        ShuffleServiceConfig(shuffleNamespace,
+          parsedShuffleLabels,
+          shuffleDirs))
+    } else {
+      None
+    }
+
   override val minRegisteredRatio =
     if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
       0.8
@@ -105,6 +131,38 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val initialExecutors = getInitialTargetExecutorNumber(1)
 
+  private val podAllocationInterval = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
+  require(podAllocationInterval > 0, s"Allocation batch delay " +
+    s"${KUBERNETES_ALLOCATION_BATCH_DELAY} " +
+    s"is ${podAllocationInterval}, should be a positive integer")
+
+  private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
+  require(podAllocationSize > 0, s"Allocation batch size " +
+    s"${KUBERNETES_ALLOCATION_BATCH_SIZE} " +
+    s"is ${podAllocationSize}, should be a positive integer")
+
+  private val allocator = ThreadUtils
+    .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")
+
+  private val allocatorRunnable: Runnable = new Runnable {
+    override def run(): Unit = {
+      if (totalRegisteredExecutors.get() < runningExecutorPods.size) {
+        logDebug("Waiting for pending executors before scaling")
+      } else if (totalExpectedExecutors.get() <= runningExecutorPods.size) {
+        logDebug("Maximum allowed executor limit reached. Not scaling up further.")
+      } else {
+        RUNNING_EXECUTOR_PODS_LOCK.synchronized {
+          for (i <- 0 until math.min(
+            totalExpectedExecutors.get - runningExecutorPods.size, podAllocationSize)) {
+            runningExecutorPods += allocateNewExecutorPod()
+            logInfo(
+              s"Requesting a new executor, total executors is now ${runningExecutorPods.size}")
+          }
+        }
+      }
+    }
+  }
+
   private def getInitialTargetExecutorNumber(defaultNumExecutors: Int = 1): Int = {
     if (Utils.isDynamicAllocationEnabled(conf)) {
       val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
@@ -118,6 +176,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     } else {
       conf.getInt("spark.executor.instances", defaultNumExecutors)
     }
+
   }
 
   override def applicationId(): String = conf.get("spark.app.id", super.applicationId())
@@ -130,12 +189,25 @@ private[spark] class KubernetesClusterSchedulerBackend(
     super.start()
     executorWatchResource.set(kubernetesClient.pods().withLabel(SPARK_APP_ID_LABEL, applicationId())
       .watch(new ExecutorPodsWatcher()))
+
+    allocator.scheduleWithFixedDelay(
+      allocatorRunnable, 0, podAllocationInterval, TimeUnit.SECONDS)
+
     if (!Utils.isDynamicAllocationEnabled(sc.conf)) {
       doRequestTotalExecutors(initialExecutors)
+    } else {
+      shufflePodCache = shuffleServiceConfig
+        .map { config => new ShufflePodCache(
+          kubernetesClient, config.shuffleNamespace, config.shuffleLabels) }
+      shufflePodCache.foreach(_.start())
     }
   }
 
   override def stop(): Unit = {
+    // stop allocation of new resources and caches.
+    allocator.shutdown()
+    shufflePodCache.foreach(_.stop())
+
     // send stop message to executors so they shut down cleanly
     super.stop()
 
@@ -214,37 +286,60 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withContainerPort(port._2)
           .build()
       })
+
+    val basePodBuilder = new PodBuilder()
+      .withNewMetadata()
+        .withName(name)
+        .withLabels(selectors)
+        .withOwnerReferences()
+        .addNewOwnerReference()
+          .withController(true)
+          .withApiVersion(driverPod.getApiVersion)
+          .withKind(driverPod.getKind)
+          .withName(driverPod.getMetadata.getName)
+          .withUid(driverPod.getMetadata.getUid)
+        .endOwnerReference()
+      .endMetadata()
+      .withNewSpec()
+        .withHostname(hostname)
+        .addNewContainer()
+          .withName(s"executor")
+          .withImage(executorDockerImage)
+          .withImagePullPolicy("IfNotPresent")
+          .withNewResources()
+            .addToRequests("memory", executorMemoryQuantity)
+            .addToLimits("memory", executorMemoryLimitQuantity)
+            .addToRequests("cpu", executorCpuQuantity)
+            .addToLimits("cpu", executorCpuQuantity)
+          .endResources()
+          .withEnv(requiredEnv.asJava)
+          .withPorts(requiredPorts.asJava)
+        .endContainer()
+      .endSpec()
+
+    val resolvedPodBuilder = shuffleServiceConfig
+      .map { config =>
+        config.shuffleDirs.foldLeft(basePodBuilder) { (builder, dir) =>
+          builder
+            .editSpec()
+              .addNewVolume()
+                .withName(FilenameUtils.getBaseName(dir))
+                .withNewHostPath()
+                  .withPath(dir)
+                .endHostPath()
+              .endVolume()
+              .editFirstContainer()
+                .addNewVolumeMount()
+                  .withName(FilenameUtils.getBaseName(dir))
+                  .withMountPath(dir)
+                .endVolumeMount()
+              .endContainer()
+            .endSpec()
+        }
+      }.getOrElse(basePodBuilder)
+
     try {
-      (executorId, kubernetesClient.pods().createNew()
-        .withNewMetadata()
-          .withName(name)
-          .withLabels(selectors)
-          .withOwnerReferences()
-          .addNewOwnerReference()
-            .withController(true)
-            .withApiVersion(driverPod.getApiVersion)
-            .withKind(driverPod.getKind)
-            .withName(driverPod.getMetadata.getName)
-            .withUid(driverPod.getMetadata.getUid)
-          .endOwnerReference()
-        .endMetadata()
-        .withNewSpec()
-          .withHostname(hostname)
-          .addNewContainer()
-            .withName(s"executor")
-            .withImage(executorDockerImage)
-            .withImagePullPolicy("IfNotPresent")
-            .withNewResources()
-              .addToRequests("memory", executorMemoryQuantity)
-              .addToLimits("memory", executorMemoryLimitQuantity)
-              .addToRequests("cpu", executorCpuQuantity)
-              .addToLimits("cpu", executorCpuQuantity)
-              .endResources()
-            .withEnv(requiredEnv.asJava)
-            .withPorts(requiredPorts.asJava)
-            .endContainer()
-          .endSpec()
-        .done())
+      (executorId, kubernetesClient.pods().create(resolvedPodBuilder.build()))
     } catch {
       case throwable: Throwable =>
         logError("Failed to allocate executor pod.", throwable)
@@ -252,18 +347,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
   }
 
+  override def createDriverEndpoint(
+    properties: Seq[(String, String)]): DriverEndpoint = {
+    new KubernetesDriverEndpoint(rpcEnv, properties)
+  }
+
   override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = Future[Boolean] {
-    RUNNING_EXECUTOR_PODS_LOCK.synchronized {
-      if (requestedTotal > totalExpectedExecutors.get) {
-        logInfo(s"Requesting ${requestedTotal - totalExpectedExecutors.get}"
-          + s" additional executors, expecting total $requestedTotal and currently" +
-          s" expected ${totalExpectedExecutors.get}")
-        for (i <- 0 until (requestedTotal - totalExpectedExecutors.get)) {
-          runningExecutorPods += allocateNewExecutorPod()
-        }
-      }
-      totalExpectedExecutors.set(requestedTotal)
-    }
+    totalExpectedExecutors.set(requestedTotal)
     true
   }
 
@@ -313,6 +403,50 @@ private[spark] class KubernetesClusterSchedulerBackend(
       logDebug("Executor pod watch closed.", cause)
     }
   }
+
+  private class KubernetesDriverEndpoint(
+    rpcEnv: RpcEnv,
+    sparkProperties: Seq[(String, String)])
+    extends DriverEndpoint(rpcEnv, sparkProperties) {
+    override def receiveAndReply(
+      context: RpcCallContext): PartialFunction[Any, Unit] = {
+      new PartialFunction[Any, Unit]() {
+        override def isDefinedAt(msg: Any): Boolean = {
+          msg match {
+            case RetrieveSparkAppConfig(executorId) =>
+              Utils.isDynamicAllocationEnabled(sc.conf)
+            case _ => false
+          }
+        }
+
+        override def apply(msg: Any): Unit = {
+          msg match {
+            case RetrieveSparkAppConfig(executorId) =>
+              RUNNING_EXECUTOR_PODS_LOCK.synchronized {
+                var resolvedProperties = sparkProperties
+                val runningExecutorPod = kubernetesClient
+                  .pods()
+                  .withName(runningExecutorPods(executorId).getMetadata.getName)
+                  .get()
+                val nodeName = runningExecutorPod.getSpec.getNodeName
+                val shufflePodIp = shufflePodCache.get.getShufflePodForExecutor(nodeName)
+                resolvedProperties = resolvedProperties ++ Seq(
+                  (SPARK_SHUFFLE_SERVICE_HOST.key, shufflePodIp))
+
+                val reply = SparkAppConfig(
+                  resolvedProperties,
+                  SparkEnv.get.securityManager.getIOEncryptionKey())
+                context.reply(reply)
+              }
+          }
+        }
+      }.orElse(super.receiveAndReply(context))
+    }
+  }
+
+  case class ShuffleServiceConfig(shuffleNamespace: String,
+    shuffleLabels: Map[String, String],
+    shuffleDirs: Seq[String])
 }
 
 private object KubernetesClusterSchedulerBackend {
