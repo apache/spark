@@ -1268,6 +1268,59 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
 }
 
 /**
+ * Returns the ASCII character having the binary equivalent to n.
+ * If n is larger than 256 the result is equivalent to chr(n % 256)
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(n) - Returns the ASCII character having the binary equivalent to `n`. If n is larger than 256 the result is equivalent to chr(n % 256)",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(65);
+       A
+             """)
+// scalastyle:on line.size.limit
+case class Chr(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(LongType)
+
+  protected override def nullSafeEval(value: Any): Any = {
+    val longVal = value.asInstanceOf[Long]
+    val shortVal = if (longVal > 255) (longVal % 256).toShort else longVal.toShort
+    val stringVal = if (shortVal == 0) {
+      String.valueOf('\u0000')
+    } else if (shortVal < 0) {
+      ""
+    } else {
+      shortVal.toChar.toString
+    }
+    UTF8String.fromString(stringVal)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, str => {
+      s"""
+        long longVal = ${java.lang.Long.parseLong(new String(str.getBytes))};
+        short shortVal;
+        if (longVal > 255) {
+          shortVal = (short)(longVal % 256);
+        } else {
+          (short)longVal;
+        }
+        if (shortVal == 0) {
+          ${ev.value} = String.valueOf('\u0000');
+        } else if (shortVal < 0) {
+          ${ev.value} = "";
+        } else {
+          ${ev.value} = (short)shortVal;
+        }
+      """
+    })
+  }
+}
+
+/**
  * Converts the argument from binary to a base 64 string.
  */
 @ExpressionDescription(

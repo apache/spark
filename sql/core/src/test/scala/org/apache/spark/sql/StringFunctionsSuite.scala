@@ -117,6 +117,41 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(97, 0))
   }
 
+  test("string ch[a]r function") {
+    def verify(input: Seq[(Double, Float, Long, Int, Short)], expect: Row): Unit = {
+      val df1 = input.toDF("a", "b", "c", "d", "e")
+      checkAnswer(
+        df1.select(chr($"a"), chr($"b"), chr($"c"), chr($"d"), chr($"e")),
+        expect)
+      checkAnswer(
+        df1.selectExpr("char(a)", "char(b)", "chr(c)", "chr(d)", "chr(e)"),
+        expect)
+    }
+
+    // Test string "0"
+    verify(Seq((48.0D, 48.0F, 48L, 48, 48.toShort)),
+      Row("0", "0", "0", "0", "0"))
+
+    // Test string "A"
+    verify(Seq((65.123D, 65.123F, 65L, 65, 65.toShort)),
+      Row("A", "A", "A", "A", "A"))
+
+    // Test negative integers result in ""
+    verify(Seq((-65.123D, -65.123F, -65L, -65, (-65).toShort)),
+      Row("", "", "", "", ""))
+
+    // Test 0 is nul character
+    val nulString = String.valueOf('\u0000')
+    verify(Seq((0.9D, 0.9F, 0L, 0, 0.toShort)),
+      Row(nulString, nulString, nulString, nulString, nulString))
+
+    // Test 256 or greater is n % 256
+    verify(Seq((256.9D, 256.9F, 256L, 256, 256.toShort)),
+      Row(nulString, nulString, nulString, nulString, nulString))
+    verify(Seq((321.9D, 321.9F, 321L, 321, 321.toShort)),
+      Row("A", "A", "A", "A", "A"))
+  }
+
   test("string base64/unbase64 function") {
     val bytes = Array[Byte](1, 2, 3, 4)
     val df = Seq((bytes, "AQIDBA==")).toDF("a", "b")

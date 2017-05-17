@@ -2138,6 +2138,23 @@ object functions {
   def ascii(e: Column): Column = withExpr { Ascii(e.expr) }
 
   /**
+   * Returns the ASCII character having the binary equivalent to n.
+   * If n is larger than 256 the result is equivalent to chr(n % 256)
+   *
+   * @group string_funcs
+   * @since 2.3.0
+   */
+  def chr(e: Column): Column = withExpr { Chr(e.expr) }
+
+  /**
+   * Returns the ASCII character having the binary equivalent to n.
+   * If n is larger than 256 the result is equivalent to chr(n % 256)
+   * @group string_funcs
+   * @since 2.3.0
+   */
+  def chr(columnName: String): Column = chr(Column(columnName))
+
+  /**
    * Computes the BASE64 encoding of a binary column and returns it as a string column.
    * This is the reverse of unbase64.
    *
