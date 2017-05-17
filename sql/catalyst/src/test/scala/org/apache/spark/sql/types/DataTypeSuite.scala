@@ -22,6 +22,15 @@ import com.fasterxml.jackson.core.JsonParseException
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 
+private[types] class TestClass
+
+private[types] class TestUDT extends UserDefinedType[TestClass] {
+  override def sqlType: DataType = DoubleType
+  override def serialize(feature: TestClass): Double = 0.0
+  override def deserialize(datum: Any): TestClass = new TestClass
+  override def userClass: java.lang.Class[TestClass] = classOf[TestClass]
+}
+
 class DataTypeSuite extends SparkFunSuite {
 
   test("construct an ArrayType") {
@@ -150,10 +159,13 @@ class DataTypeSuite extends SparkFunSuite {
   test("existsRecursively") {
     val struct = StructType(
       StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
+      StructField("b", FloatType) ::
+      StructField("c", new TestUDT) :: Nil)
     assert(struct.existsRecursively(_.isInstanceOf[LongType]))
     assert(struct.existsRecursively(_.isInstanceOf[StructType]))
     assert(!struct.existsRecursively(_.isInstanceOf[IntegerType]))
+    assert(struct.existsRecursively(_.isInstanceOf[UserDefinedType[_]]))
+    assert(struct.existsRecursively(_.isInstanceOf[DoubleType]))
 
     val mapType = MapType(struct, StringType)
     assert(mapType.existsRecursively(_.isInstanceOf[LongType]))

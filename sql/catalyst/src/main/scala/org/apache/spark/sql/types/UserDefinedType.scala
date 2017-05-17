@@ -95,6 +95,10 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
   }
 
   override def catalogString: String = sqlType.simpleString
+
+  override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
+    f(this) || f(sqlType)
+  }
 }
 
 /**
