@@ -100,11 +100,15 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     assert(metrics1.contains("numOutputRows"))
     assert(metrics1("numOutputRows").value === 3)
 
-    val df2 = spark.createDataset(Seq(1, 2, 3)).limit(2)
-    df2.collect()
-    val metrics2 = df2.queryExecution.executedPlan.collectLeaves().head.metrics
-    assert(metrics2.contains("numOutputRows"))
-    assert(metrics2("numOutputRows").value === 2)
+    Seq("true", "false").map { codeGen =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codeGen) {
+        val df2 = spark.createDataset(Seq(1, 2, 3)).coalesce(1).limit(2)
+        assert(df2.collect().length === 2)
+        val metrics2 = df2.queryExecution.executedPlan.collectLeaves().head.metrics
+        assert(metrics2.contains("numOutputRows"))
+        assert(metrics2("numOutputRows").value === 2)
+      }
+    }
   }
 
   test("Filter metrics") {

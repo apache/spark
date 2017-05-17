@@ -73,7 +73,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           execution.TakeOrderedAndProjectExec(
             limit, order, projectList, planLater(child)) :: Nil
         case logical.Limit(IntegerLiteral(limit), child) =>
-          execution.CollectLimitExec(limit, planLater(child)) :: Nil
+          execution.CollectLimitExec(
+            limit,
+            execution.LocalLimitExec(limit, planLater(child))) :: Nil
         case other => planLater(other) :: Nil
       }
       case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>

@@ -35,14 +35,24 @@ import org.apache.spark.util.Utils
 case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
-  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
-  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+  override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
+  override def executeCollect(): Array[InternalRow] = child match {
+    // Shuffling injected. WholeStageCodegenExec enabled.
+    case ShuffleExchange(_, WholeStageCodegenExec(l: LocalLimitExec), _) =>
+      l.child.executeTake(limit)
+
+    // Shuffling injected. WholeStageCodegenExec disabled.
+    case ShuffleExchange(_, l: LocalLimitExec, _) => l.child.executeTake(limit)
+
+    // No shuffled injected. WholeStageCodegenExec enabled.
+    case WholeStageCodegenExec(l: LocalLimitExec) => l.child.executeTake(limit)
+
+    // No shuffling injected. WholeStageCodegenExec disabled.
+    case l: LocalLimitExec => l.child.executeTake(limit)
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
-    val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit))
-    val shuffled = new ShuffledRowRDD(
-      ShuffleExchange.prepareShuffleDependency(
-        locallyLimited, child.output, SinglePartition, serializer))
-    shuffled.mapPartitionsInternal(_.take(limit))
+    child.execute().mapPartitionsInternal(_.take(limit))
   }
 }
 
