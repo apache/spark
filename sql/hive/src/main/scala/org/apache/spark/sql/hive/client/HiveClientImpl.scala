@@ -525,11 +525,8 @@ private[hive] class HiveClientImpl(
     // these properties are still available to the others that share the same Hive metastore.
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
     // these user-specified values.
-    val hiveSpecificProps = table.ignoredProperties.filter {
-      case (key, _) => HiveStatisticsProperties.contains(key)
-    }
     val hiveTable = toHiveTable(
-      table.copy(properties = hiveSpecificProps ++ table.properties), Some(userName))
+      table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"${table.database}.$tableName"
     shim.alterTable(client, qualifiedTableName, hiveTable)
