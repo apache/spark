@@ -61,8 +61,14 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
-  override def validConstraints: Set[Expression] =
-    child.constraints.union(getAliasedConstraints(projectList))
+  override lazy val aliasedConstraintExprs: Map[Expression, AttributeSet] =
+    projectList.collect {
+      case a: Alias => a
+    }.groupBy(_.child).map { case (k, v) =>
+      k -> AttributeSet(v.map(_.toAttribute))
+    }
+
+  override def validConstraints: Set[Expression] = child.constraints
 
   override def computeStats(conf: SQLConf): Statistics = {
     if (conf.cboEnabled) {
@@ -566,10 +572,14 @@ case class Aggregate(
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
-  override def validConstraints: Set[Expression] = {
-    val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
-    child.constraints.union(getAliasedConstraints(nonAgg))
-  }
+  override lazy val aliasedConstraintExprs: Map[Expression, AttributeSet] =
+    aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty).collect {
+      case a: Alias => a
+    }.groupBy(_.child).map { case (k, v) =>
+      k -> AttributeSet(v.map(_.toAttribute))
+    }
+
+  override def validConstraints: Set[Expression] = child.constraints
 
   override def computeStats(conf: SQLConf): Statistics = {
     def simpleEstimation: Statistics = {

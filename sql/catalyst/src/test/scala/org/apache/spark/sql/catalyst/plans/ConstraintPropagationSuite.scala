@@ -130,7 +130,8 @@ class ConstraintPropagationSuite extends SparkFunSuite {
 
     val aliasedRelation = tr.where('a.attr > 10).select('a.as('x), 'b, 'b.as('y), 'a.as('z))
 
-    verifyConstraints(aliasedRelation.analyze.constraints,
+    // `completeConstraints` contains all constraints including fully aliased ones.
+    verifyConstraints(aliasedRelation.analyze.completeConstraints,
       ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "x") > 10,
         IsNotNull(resolveColumn(aliasedRelation.analyze, "x")),
         resolveColumn(aliasedRelation.analyze, "b") <=> resolveColumn(aliasedRelation.analyze, "y"),
@@ -138,12 +139,37 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         resolveColumn(aliasedRelation.analyze, "z") > 10,
         IsNotNull(resolveColumn(aliasedRelation.analyze, "z")))))
 
+    // `constraints` doesn't contain fully aliased constraints. It only contains the minimal
+    // constraints can effectively determine if a row is produced by the relation.
+    verifyConstraints(aliasedRelation.analyze.constraints,
+      ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "x") > 10,
+        IsNotNull(resolveColumn(aliasedRelation.analyze, "x")))))
+
+    val aliasedMap = aliasedRelation.analyze.aliasedExpressionsInConstraints
+    // 'a aliased to 'x and 'z.
+    assert(aliasedMap.contains(resolveColumn(tr.analyze, "a")))
+    assert(aliasedMap(resolveColumn(tr.analyze, "a")).equals(
+      AttributeSet(
+        Seq(resolveColumn(aliasedRelation.analyze, "x"),
+          resolveColumn(aliasedRelation.analyze, "z")))))
+
+    // 'b aliased to 'y'
+    assert(aliasedMap.contains(resolveColumn(tr.analyze, "b")))
+    assert(aliasedMap(resolveColumn(tr.analyze, "b")).equals(
+      AttributeSet(
+        Seq(resolveColumn(aliasedRelation.analyze, "y")))))
+
     val multiAlias = tr.where('a === 'c + 10).select('a.as('x), 'c.as('y))
-    verifyConstraints(multiAlias.analyze.constraints,
+    verifyConstraints(multiAlias.analyze.completeConstraints,
       ExpressionSet(Seq(IsNotNull(resolveColumn(multiAlias.analyze, "x")),
         IsNotNull(resolveColumn(multiAlias.analyze, "y")),
         resolveColumn(multiAlias.analyze, "x") === resolveColumn(multiAlias.analyze, "y") + 10))
     )
+
+    // Because 'a and 'c are not in the outputSet of multiAlias, their occurrence in `constraints`
+    // will be transformed with aliasing attributes 'x and 'y.
+    // So the `completeConstraints` of multiAlias is as same as its `constraints`.
+    assert((multiAlias.analyze.completeConstraints -- multiAlias.analyze.constraints).isEmpty)
   }
 
   test("propagating constraints in union") {
