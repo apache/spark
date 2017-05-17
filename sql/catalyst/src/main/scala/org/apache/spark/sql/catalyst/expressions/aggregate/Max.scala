@@ -26,6 +26,8 @@ import org.apache.spark.sql.types._
   usage = "_FUNC_(expr) - Returns the maximum value of `expr`.")
 case class Max(child: Expression) extends DeclarativeAggregate {
 
+  override def supportsPushDown: Boolean = true
+
   override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = true

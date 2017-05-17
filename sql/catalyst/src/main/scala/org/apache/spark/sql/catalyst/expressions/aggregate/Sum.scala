@@ -26,6 +26,8 @@ import org.apache.spark.sql.types._
   usage = "_FUNC_(expr) - Returns the sum calculated from values of a group.")
 case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
+  override def supportsPushDown: Boolean = true
+
   override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = true

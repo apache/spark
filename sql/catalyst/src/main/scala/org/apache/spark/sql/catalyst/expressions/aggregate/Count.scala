@@ -33,6 +33,8 @@ import org.apache.spark.sql.types._
 // scalastyle:on line.size.limit
 case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
 
+  override def supportsPushDown: Boolean = true
+
   override def nullable: Boolean = false
 
   // Return data type.

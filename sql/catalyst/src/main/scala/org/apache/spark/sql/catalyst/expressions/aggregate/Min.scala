@@ -26,6 +26,8 @@ import org.apache.spark.sql.types._
   usage = "_FUNC_(expr) - Returns the minimum value of `expr`.")
 case class Min(child: Expression) extends DeclarativeAggregate {
 
+  override def supportsPushDown: Boolean = true
+
   override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = true
