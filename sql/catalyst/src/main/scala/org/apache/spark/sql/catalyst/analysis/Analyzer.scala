@@ -1058,7 +1058,7 @@ class Analyzer(
           if (missingAttrs.nonEmpty) {
             // Add missing attributes and then project them away after the sort.
             Project(child.output,
-              Sort(newOrder, s.global, AnalysisBarrier(addMissingAttr(child, missingAttrs))))
+              Sort(newOrder, s.global, addMissingAttr(child, missingAttrs)))
           } else if (newOrder != order) {
             s.copy(order = newOrder)
           } else {
@@ -1080,7 +1080,7 @@ class Analyzer(
           if (missingAttrs.nonEmpty) {
             // Add missing attributes and then project them away.
             Project(child.output,
-              Filter(newCond, AnalysisBarrier(addMissingAttr(child, missingAttrs))))
+              Filter(newCond, addMissingAttr(child, missingAttrs)))
           } else if (newCond != cond) {
             f.copy(condition = newCond)
           } else {
@@ -1099,7 +1099,7 @@ class Analyzer(
      */
     private def addMissingAttr(plan: LogicalPlan, missingAttrs: AttributeSet): LogicalPlan = {
       if (missingAttrs.isEmpty) {
-        return plan
+        return AnalysisBarrier(plan)
       }
       plan match {
         case p: Project =>
