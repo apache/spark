@@ -71,6 +71,10 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
 
   setDefault(metricName -> "areaUnderROC")
 
+  private def getFormattedMetricName =
+    Array("areaUnderROC", "areaUnderPR")
+      .find(_.toLowerCase(Locale.ROOT) == getMetricName.toLowerCase(Locale.ROOT)).get
+
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
     val schema = dataset.schema
@@ -84,18 +88,18 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
         case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
       }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
-    val metric = getMetricName.toLowerCase(Locale.ROOT) match {
-      case "areaunderroc" => metrics.areaUnderROC()
-      case "areaunderpr" => metrics.areaUnderPR()
+    val metric = getFormattedMetricName match {
+      case "areaUnderROC" => metrics.areaUnderROC()
+      case "areaUnderPR" => metrics.areaUnderPR()
     }
     metrics.unpersist()
     metric
   }
 
   @Since("1.5.0")
-  override def isLargerBetter: Boolean = getMetricName.toLowerCase(Locale.ROOT) match {
-    case "areaunderroc" => true
-    case "areaunderpr" => true
+  override def isLargerBetter: Boolean = getFormattedMetricName match {
+    case "areaUnderROC" => true
+    case "areaUnderPR" => true
   }
 
   @Since("1.4.1")

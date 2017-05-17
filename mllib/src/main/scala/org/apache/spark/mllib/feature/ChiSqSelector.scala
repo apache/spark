@@ -293,7 +293,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
 private[spark] object ChiSqSelector {
 
   /** String name for `numTopFeatures` selector type. */
-  private[spark] val NumTopFeatures: String = "numtopfeatures"
+  private[spark] val NumTopFeatures: String = "numTopFeatures"
 
   /** String name for `percentile` selector type. */
   private[spark] val Percentile: String = "percentile"

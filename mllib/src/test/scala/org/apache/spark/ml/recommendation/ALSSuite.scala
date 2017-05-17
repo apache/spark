@@ -685,7 +685,7 @@ class ALSSuite
     assert(dropPredictions.head ~== defaultPredictions.last relTol 1e-14)
   }
 
-  test("case insensitive cold start param value") {
+  test("string params should be case-insensitive") {
     val spark = this.spark
     import spark.implicits._
 
@@ -699,6 +699,24 @@ class ALSSuite
       assert(als.getColdStartStrategy === strtegy)
       val model = als.fit(data)
       assert(model.getColdStartStrategy === strtegy)
+      model.transform(data)
+    }
+
+    Seq("diSK_onLY", "DIsk_ONLY_2", "memory_ONLY", "MEMORY_only_2",
+      "MEMORY_ONLY_ser", "memory_ONLY_SER_2", "MEMORY_and_DISK", "memory_AND_DISK_2",
+      "MEMORY_AND_DISK_ser", "MEMORY_and_DISK_SER_2", "oFF_HeaP").foreach { level =>
+      als.setIntermediateStorageLevel(level)
+      assert(als.getIntermediateStorageLevel === level)
+      val model = als.fit(data)
+      model.transform(data)
+    }
+
+    Seq("diSK_onLY", "DIsk_ONLY_2", "memory_ONLY", "MEMORY_only_2",
+      "MEMORY_ONLY_ser", "memory_ONLY_SER_2", "MEMORY_and_DISK", "memory_AND_DISK_2",
+      "MEMORY_AND_DISK_ser", "MEMORY_and_DISK_SER_2", "oFF_HeaP", "NoNe").foreach { level =>
+      als.setFinalStorageLevel(level)
+      assert(als.getFinalStorageLevel === level)
+      val model = als.fit(data)
       model.transform(data)
     }
   }

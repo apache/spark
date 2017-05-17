@@ -69,6 +69,10 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   setDefault(metricName -> "f1")
 
+  private def getFormattedMetricName =
+    Array("f1", "weightedPrecision", "weightedRecall", "accuracy")
+      .find(_.toLowerCase(Locale.ROOT) == getMetricName.toLowerCase(Locale.ROOT)).get
+
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
     val schema = dataset.schema
@@ -80,10 +84,10 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
         case Row(prediction: Double, label: Double) => (prediction, label)
       }
     val metrics = new MulticlassMetrics(predictionAndLabels)
-    val metric = getMetricName.toLowerCase(Locale.ROOT) match {
+    val metric = getFormattedMetricName match {
       case "f1" => metrics.weightedFMeasure
-      case "weightedprecision" => metrics.weightedPrecision
-      case "weightedrecall" => metrics.weightedRecall
+      case "weightedPrecision" => metrics.weightedPrecision
+      case "weightedRecall" => metrics.weightedRecall
       case "accuracy" => metrics.accuracy
     }
     metric

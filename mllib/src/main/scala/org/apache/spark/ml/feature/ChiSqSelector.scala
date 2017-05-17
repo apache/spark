@@ -130,7 +130,7 @@ private[feature] trait ChiSqSelectorParams extends Params
   final val selectorType = new Param[String](this, "selectorType",
     "The selector type of the ChisqSelector. " +
       "Supported options: " + OldChiSqSelector.supportedSelectorTypes.mkString(", "),
-    (value: String) => OldChiSqSelector.supportedSelectorTypes
+    (value: String) => OldChiSqSelector.supportedSelectorTypes.map(_.toLowerCase(Locale.ROOT))
       .contains(value.toLowerCase(Locale.ROOT)))
   setDefault(selectorType -> OldChiSqSelector.NumTopFeatures)
 
@@ -199,6 +199,10 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   @Since("1.6.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
+  private def getFormattedSelectorType: String =
+    OldChiSqSelector.supportedSelectorTypes
+      .find(_.toLowerCase(Locale.ROOT) == getSelectorType.toLowerCase(Locale.ROOT)).get
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
     transformSchema(dataset.schema, logging = true)
@@ -208,7 +212,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
           OldLabeledPoint(label, OldVectors.fromML(features))
       }
     val selector = new feature.ChiSqSelector()
-      .setSelectorType(getSelectorType.toLowerCase(Locale.ROOT))
+      .setSelectorType(getFormattedSelectorType)
       .setNumTopFeatures($(numTopFeatures))
       .setPercentile($(percentile))
       .setFpr($(fpr))
@@ -220,8 +224,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    val otherPairs = OldChiSqSelector.supportedSelectorTypes
-      .filter(_ != getSelectorType.toLowerCase(Locale.ROOT))
+    val otherPairs = OldChiSqSelector.supportedSelectorTypes.filter(_ != getFormattedSelectorType)
     otherPairs.foreach { paramName: String =>
       if (isSet(getParam(paramName))) {
         logWarning(s"Param $paramName will take no effect when selector type = $getSelectorType.")
