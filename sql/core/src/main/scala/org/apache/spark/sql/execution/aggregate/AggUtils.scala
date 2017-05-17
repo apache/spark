@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object AggUtils {
-  private def createAggregate(
+  private[aggregate] def createAggregate(
       requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
       groupingExpressions: Seq[NamedExpression] = Nil,
       aggregateExpressions: Seq[AggregateExpression] = Nil,
