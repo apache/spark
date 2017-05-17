@@ -1049,7 +1049,7 @@ class Analyzer(
       case sa @ Sort(_, _, AnalysisBarrier(child: Aggregate)) => sa
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, orgChild) if orgChild.resolved =>
+      case s @ Sort(order, _, orgChild) if !s.resolved && orgChild.resolved =>
         val child = CleanupBarriers(orgChild)
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
@@ -1071,7 +1071,7 @@ class Analyzer(
           case ae: AnalysisException => s
         }
 
-      case f @ Filter(cond, orgChild) if orgChild.resolved =>
+      case f @ Filter(cond, orgChild) if !f.resolved && orgChild.resolved =>
         val child = CleanupBarriers(orgChild)
         try {
           val newCond = resolveExpressionRecursively(cond, child)
