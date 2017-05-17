@@ -3255,7 +3255,8 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
 #' @aliases ifelse,Column-method
 #' @seealso \link{when}
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' ifelse(df$a > 1 & df$b > 2, 0, 1)
 #' ifelse(df$a > 1, df$a, 1)
 #' }
@@ -3290,7 +3291,8 @@ setMethod("ifelse",
 #' @family window_funcs
 #' @aliases cume_dist,missing-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'   out <- select(df, over(cume_dist(), ws), df$hp, df$am)
@@ -3319,7 +3321,8 @@ setMethod("cume_dist",
 #' @family window_funcs
 #' @aliases dense_rank,missing-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'   out <- select(df, over(dense_rank(), ws), df$hp, df$am)
@@ -3350,7 +3353,8 @@ setMethod("dense_rank",
 #' @aliases lag,characterOrColumn-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'
 #'   # Partition by am (transmission) and order by hp (horsepower)
@@ -3393,7 +3397,8 @@ setMethod("lag",
 #' @family window_funcs
 #' @aliases lead,characterOrColumn,numeric-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'
 #'   # Partition by am (transmission) and order by hp (horsepower)
@@ -3432,7 +3437,8 @@ setMethod("lead",
 #' @aliases ntile,numeric-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'
 #'   # Partition by am (transmission) and order by hp (horsepower)
@@ -3464,7 +3470,8 @@ setMethod("ntile",
 #' @family window_funcs
 #' @aliases percent_rank,missing-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'   out <- select(df, over(percent_rank(), ws), df$hp, df$am)
@@ -3494,7 +3501,8 @@ setMethod("percent_rank",
 #' @family window_funcs
 #' @aliases rank,missing-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'   out <- select(df, over(rank(), ws), df$hp, df$am)
@@ -3531,7 +3539,8 @@ setMethod("rank",
 #' @aliases row_number,missing-method
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'   ws <- orderBy(windowPartitionBy("am"), "hp")
 #'   out <- select(df, over(row_number(), ws), df$hp, df$am)
@@ -3759,7 +3768,8 @@ setMethod("collect_set",
 #' @family string_funcs
 #' @aliases split_string,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- read.text("README.md")
 #'
 #' head(select(df, split_string(df$value, "\\s+")))
@@ -3788,7 +3798,8 @@ setMethod("split_string",
 #' @family string_funcs
 #' @aliases repeat_string,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- read.text("README.md")
 #'
 #' first(select(df, repeat_string(df$value, 3)))
@@ -3817,7 +3828,8 @@ setMethod("repeat_string",
 #' @family collection_funcs
 #' @aliases explode_outer,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- createDataFrame(data.frame(
 #'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
 #' ))
@@ -3845,7 +3857,8 @@ setMethod("explode_outer",
 #' @family collection_funcs
 #' @aliases posexplode_outer,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- createDataFrame(data.frame(
 #'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
 #' ))
@@ -3873,7 +3886,8 @@ setMethod("posexplode_outer",
 #' @aliases not,Column-method
 #' @family normal_funcs
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- createDataFrame(data.frame(
 #'   is_true = c(TRUE, FALSE, NA),
 #'   flag = c(1, 0,  1)
@@ -3906,7 +3920,8 @@ setMethod("not",
 #' @family agg_funcs
 #' @aliases grouping_bit,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- createDataFrame(mtcars)
 #'
 #' # With cube
@@ -3947,7 +3962,8 @@ setMethod("grouping_bit",
 #' @family agg_funcs
 #' @aliases grouping_id,Column-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- createDataFrame(mtcars)
 #'
 #' # With cube
@@ -3985,7 +4001,8 @@ setMethod("grouping_id",
 #' @family normal_funcs
 #' @aliases input_file_name,missing-method
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' df <- read.text("README.md")
 #'
 #' head(select(df, input_file_name()))
