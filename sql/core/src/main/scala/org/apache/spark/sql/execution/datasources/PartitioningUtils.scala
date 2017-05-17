@@ -96,7 +96,7 @@ object PartitioningUtils {
       partitionTemplatePath: Option[String],
       timeZoneId: String): PartitionSpec = {
     parsePartitions(
-      paths, typeInference, basePaths, partitionTemplatePath, TimeZone.getTimeZone(timeZoneId))
+      paths, typeInference, basePaths, partitionTemplatePath, DateTimeUtils.getTimeZone(timeZoneId))
   }
 
   private[datasources] def parsePartitions(

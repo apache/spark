@@ -180,7 +180,7 @@ abstract class PartitioningAwareFileIndex(
       })
 
       val selected = partitions.filter {
-        case PartitionPath(values, _) => boundPredicate(values)
+        case PartitionPath(values, _) => boundPredicate.eval(values)
       }
       logInfo {
         val total = partitions.length

@@ -70,6 +70,7 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     `Linear SVM Classifier <https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM>`_
 
     This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
+    Only supports L2 regularization currently.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
@@ -349,13 +350,13 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     def _checkThresholdConsistency(self):
         if self.isSet(self.threshold) and self.isSet(self.thresholds):
-            ts = self.getParam(self.thresholds)
+            ts = self.getOrDefault(self.thresholds)
             if len(ts) != 2:
                 raise ValueError("Logistic Regression getThreshold only applies to" +
                                  " binary classification, but thresholds has length != 2." +
-                                 " thresholds: " + ",".join(ts))
+                                 " thresholds: {0}".format(str(ts)))
             t = 1.0/(1.0 + ts[0]/ts[1])
-            t2 = self.getParam(self.threshold)
+            t2 = self.getOrDefault(self.threshold)
             if abs(t2 - t) >= 1E-5:
                 raise ValueError("Logistic Regression getThreshold found inconsistent values for" +
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))

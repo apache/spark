@@ -3745,3 +3745,56 @@ setMethod("hint",
             jdf <- callJMethod(x@sdf, "hint", name, parameters)
             dataFrame(jdf)
           })
+
+#' alias
+#'
+#' @aliases alias,SparkDataFrame-method
+#' @family SparkDataFrame functions
+#' @rdname alias
+#' @name alias
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- alias(createDataFrame(mtcars), "mtcars")
+#' avg_mpg <- alias(agg(groupBy(df, df$cyl), avg(df$mpg)), "avg_mpg")
+#'
+#' head(select(df, column("mtcars.mpg")))
+#' head(join(df, avg_mpg, column("mtcars.cyl") == column("avg_mpg.cyl")))
+#' }
+#' @note alias(SparkDataFrame) since 2.3.0
+setMethod("alias",
+          signature(object = "SparkDataFrame"),
+          function(object, data) {
+            stopifnot(is.character(data))
+            sdf <- callJMethod(object@sdf, "alias", data)
+            dataFrame(sdf)
+          })
+
+#' broadcast
+#'
+#' Return a new SparkDataFrame marked as small enough for use in broadcast joins.
+#'
+#' Equivalent to \code{hint(x, "broadcast")}.
+#'
+#' @param x a SparkDataFrame.
+#' @return a SparkDataFrame.
+#'
+#' @aliases broadcast,SparkDataFrame-method
+#' @family SparkDataFrame functions
+#' @rdname broadcast
+#' @name broadcast
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(mtcars)
+#' avg_mpg <- mean(groupBy(createDataFrame(mtcars), "cyl"), "mpg")
+#'
+#' head(join(df, broadcast(avg_mpg), df$cyl == avg_mpg$cyl))
+#' }
+#' @note broadcast since 2.3.0
+setMethod("broadcast",
+          signature(x = "SparkDataFrame"),
+          function(x) {
+            sdf <- callJStatic("org.apache.spark.sql.functions", "broadcast", x@sdf)
+            dataFrame(sdf)
+          })
