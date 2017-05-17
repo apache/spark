@@ -25,12 +25,15 @@ import com.google.common.io.Files
 import com.google.common.util.concurrent.SettableFuture
 import okhttp3.ResponseBody
 import retrofit2.{Call, Callback, Response}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 
-import org.apache.spark.{SecurityManager => SparkSecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager => SparkSecurityManager, SparkConf}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.CompressionUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private trait WaitableCallback[T] extends Callback[T] {
   private val complete = SettableFuture.create[Boolean]
@@ -61,55 +64,149 @@ private class DownloadTarGzCallback(downloadDir: File) extends WaitableCallback[
   }
 }
 
+// Extracted for testing so that unit tests don't have to depend on Utils.fetchFile
+private[v2] trait FileFetcher {
+  def fetchFile(uri: String, targetDir: File): Unit
+}
+
+private class FileFetcherImpl(sparkConf: SparkConf, securityManager: SparkSecurityManager)
+    extends FileFetcher {
+  def fetchFile(uri: String, targetDir: File): Unit = {
+    Utils.fetchFile(
+      url = uri,
+      targetDir = targetDir,
+      conf = sparkConf,
+      securityMgr = securityManager,
+      hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf),
+      timestamp = System.currentTimeMillis(),
+      useCache = false)
+  }
+}
+
+/**
+ * Process that fetches files from a resource staging server and/or arbitrary remote locations.
+ *
+ * The init-container can handle fetching files from any of those sources, but not all of the
+ * sources need to be specified. This allows for composing multiple instances of this container
+ * with different configurations for different download sources, or using the same container to
+ * download everything at once.
+ */
 private[spark] class KubernetesSparkDependencyDownloadInitContainer(
-    sparkConf: SparkConf, retrofitClientFactory: RetrofitClientFactory) extends Logging {
+    sparkConf: SparkConf,
+    retrofitClientFactory: RetrofitClientFactory,
+    fileFetcher: FileFetcher,
+    securityManager: SparkSecurityManager) extends Logging {
 
-  private val resourceStagingServerUri = sparkConf.get(RESOURCE_STAGING_SERVER_URI)
-    .getOrElse(throw new SparkException("No dependency server URI was provided."))
+  private implicit val downloadExecutor = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("download-executor"))
+  private val maybeResourceStagingServerUri = sparkConf.get(RESOURCE_STAGING_SERVER_URI)
 
-  private val downloadJarsResourceIdentifier = sparkConf
+  private val maybeDownloadJarsResourceIdentifier = sparkConf
     .get(INIT_CONTAINER_DOWNLOAD_JARS_RESOURCE_IDENTIFIER)
-    .getOrElse(throw new SparkException("No resource identifier provided for jars."))
   private val downloadJarsSecretLocation = new File(
     sparkConf.get(INIT_CONTAINER_DOWNLOAD_JARS_SECRET_LOCATION))
-  private val downloadFilesResourceIdentifier = sparkConf
+  private val maybeDownloadFilesResourceIdentifier = sparkConf
     .get(INIT_CONTAINER_DOWNLOAD_FILES_RESOURCE_IDENTIFIER)
-    .getOrElse(throw new SparkException("No resource identifier provided for files."))
   private val downloadFilesSecretLocation = new File(
     sparkConf.get(INIT_CONTAINER_DOWNLOAD_FILES_SECRET_LOCATION))
-  require(downloadJarsSecretLocation.isFile, "Application jars download secret provided" +
-    s" at ${downloadJarsSecretLocation.getAbsolutePath} does not exist or is not a file.")
-  require(downloadFilesSecretLocation.isFile, "Application files download secret provided" +
-    s" at ${downloadFilesSecretLocation.getAbsolutePath} does not exist or is not a file.")
 
-  private val jarsDownloadDir = new File(sparkConf.get(DRIVER_LOCAL_JARS_DOWNLOAD_LOCATION))
-  require(jarsDownloadDir.isDirectory, "Application jars download directory provided at" +
-    s" ${jarsDownloadDir.getAbsolutePath} does not exist or is not a directory.")
+  private val jarsDownloadDir = new File(
+    sparkConf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION))
+  private val filesDownloadDir = new File(
+    sparkConf.get(INIT_CONTAINER_FILES_DOWNLOAD_LOCATION))
 
-  private val filesDownloadDir = new File(sparkConf.get(DRIVER_LOCAL_FILES_DOWNLOAD_LOCATION))
-  require(filesDownloadDir.isDirectory, "Application files download directory provided at" +
-    s" ${filesDownloadDir.getAbsolutePath} does not exist or is not a directory.")
-  private val downloadTimeoutMinutes = sparkConf.get(DRIVER_MOUNT_DEPENDENCIES_INIT_TIMEOUT)
+  private val remoteJars = sparkConf.get(INIT_CONTAINER_REMOTE_JARS)
+  private val remoteFiles = sparkConf.get(INIT_CONTAINER_REMOTE_FILES)
+
+  private val downloadTimeoutMinutes = sparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT)
 
   def run(): Unit = {
-    val securityManager = new SparkSecurityManager(sparkConf)
-    val sslOptions = securityManager.getSSLOptions("kubernetes.resourceStagingServer")
-    val service = retrofitClientFactory.createRetrofitClient(
-      resourceStagingServerUri, classOf[ResourceStagingServiceRetrofit], sslOptions)
-    val jarsSecret = Files.toString(downloadJarsSecretLocation, Charsets.UTF_8)
-    val filesSecret = Files.toString(downloadFilesSecretLocation, Charsets.UTF_8)
-    val downloadJarsCallback = new DownloadTarGzCallback(jarsDownloadDir)
-    val downloadFilesCallback = new DownloadTarGzCallback(filesDownloadDir)
-    service.downloadResources(downloadJarsResourceIdentifier, jarsSecret)
-      .enqueue(downloadJarsCallback)
-    service.downloadResources(downloadFilesResourceIdentifier, filesSecret)
-      .enqueue(downloadFilesCallback)
-    logInfo("Waiting to download jars...")
-    downloadJarsCallback.waitForCompletion(downloadTimeoutMinutes, TimeUnit.MINUTES)
-    logInfo(s"Jars downloaded to ${jarsDownloadDir.getAbsolutePath}")
-    logInfo("Waiting to download files...")
-    downloadFilesCallback.waitForCompletion(downloadTimeoutMinutes, TimeUnit.MINUTES)
-    logInfo(s"Files downloaded to ${filesDownloadDir.getAbsolutePath}")
+    val resourceStagingServerJarsDownload = Future[Unit] {
+      downloadResourcesFromStagingServer(
+        maybeDownloadJarsResourceIdentifier,
+        downloadJarsSecretLocation,
+        jarsDownloadDir,
+        "Starting to download jars from resource staging server...",
+        "Finished downloading jars from resource staging server.",
+        s"Application jars download secret provided at" +
+          s" ${downloadJarsSecretLocation.getAbsolutePath} does not exist or is not a file.",
+        s"Application jars download directory provided at" +
+          s" ${jarsDownloadDir.getAbsolutePath} does not exist or is not a directory.")
+    }
+    val resourceStagingServerFilesDownload = Future[Unit] {
+      downloadResourcesFromStagingServer(
+        maybeDownloadFilesResourceIdentifier,
+        downloadFilesSecretLocation,
+        filesDownloadDir,
+        "Starting to download files from resource staging server...",
+        "Finished downloading files from resource staging server.",
+        s"Application files download secret provided at" +
+          s" ${downloadFilesSecretLocation.getAbsolutePath} does not exist or is not a file.",
+        s"Application files download directory provided at" +
+          s" ${filesDownloadDir.getAbsolutePath} does not exist or is not" +
+          s" a directory.")
+    }
+    val remoteJarsDownload = Future[Unit] {
+      downloadFiles(remoteJars,
+        jarsDownloadDir,
+        s"Remote jars download directory specified at $jarsDownloadDir does not exist" +
+          s" or is not a directory.")
+    }
+    val remoteFilesDownload = Future[Unit] {
+      downloadFiles(remoteFiles,
+        filesDownloadDir,
+        s"Remote files download directory specified at $filesDownloadDir does not exist" +
+          s" or is not a directory.")
+    }
+    waitForFutures(
+      resourceStagingServerJarsDownload,
+      resourceStagingServerFilesDownload,
+      remoteJarsDownload,
+      remoteFilesDownload)
+  }
+
+  private def downloadResourcesFromStagingServer(
+      maybeResourceId: Option[String],
+      resourceSecretLocation: File,
+      resourceDownloadDir: File,
+      downloadStartMessage: String,
+      downloadFinishedMessage: String,
+      errMessageOnSecretNotAFile: String,
+      errMessageOnDownloadDirNotADirectory: String): Unit = {
+    maybeResourceStagingServerUri.foreach { resourceStagingServerUri =>
+      maybeResourceId.foreach { resourceId =>
+        require(resourceSecretLocation.isFile, errMessageOnSecretNotAFile)
+        require(resourceDownloadDir.isDirectory, errMessageOnDownloadDirNotADirectory)
+        val sslOptions = securityManager.getSSLOptions("kubernetes.resourceStagingServer")
+        val service = retrofitClientFactory.createRetrofitClient(
+          resourceStagingServerUri, classOf[ResourceStagingServiceRetrofit], sslOptions)
+        val resourceSecret = Files.toString(resourceSecretLocation, Charsets.UTF_8)
+        val downloadResourceCallback = new DownloadTarGzCallback(resourceDownloadDir)
+        logInfo(downloadStartMessage)
+        service.downloadResources(resourceId, resourceSecret)
+          .enqueue(downloadResourceCallback)
+        downloadResourceCallback.waitForCompletion(downloadTimeoutMinutes, TimeUnit.MINUTES)
+        logInfo(downloadFinishedMessage)
+      }
+    }
+  }
+
+  private def downloadFiles(
+      filesCommaSeparated: Option[String],
+      downloadDir: File,
+      errMessageOnDestinationNotADirectory: String): Unit = {
+    if (filesCommaSeparated.isDefined) {
+      require(downloadDir.isDirectory, errMessageOnDestinationNotADirectory)
+    }
+    filesCommaSeparated.map(_.split(",")).toSeq.flatten.foreach { file =>
+      fileFetcher.fetchFile(file, downloadDir)
+    }
+  }
+
+  private def waitForFutures(futures: Future[_]*) {
+    futures.foreach {
+      ThreadUtils.awaitResult(_, Duration.create(downloadTimeoutMinutes, TimeUnit.MINUTES))
+    }
   }
 }
 
@@ -121,7 +218,13 @@ object KubernetesSparkDependencyDownloadInitContainer extends Logging {
     } else {
       new SparkConf(true)
     }
-    new KubernetesSparkDependencyDownloadInitContainer(sparkConf, RetrofitClientFactoryImpl).run()
+    val securityManager = new SparkSecurityManager(sparkConf)
+    val fileFetcher = new FileFetcherImpl(sparkConf, securityManager)
+    new KubernetesSparkDependencyDownloadInitContainer(
+      sparkConf,
+      RetrofitClientFactoryImpl,
+      fileFetcher,
+      securityManager).run()
     logInfo("Finished downloading application dependencies.")
   }
 }

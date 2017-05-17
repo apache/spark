@@ -29,7 +29,8 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SecurityManager => SparkSecurityManager, SparkConf, SparkException, SSLOptions}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.rest.kubernetes.v1.{KubernetesFileUtils, PemsToKeyStoreConverter}
+import org.apache.spark.deploy.kubernetes.submit.KubernetesFileUtils
+import org.apache.spark.deploy.rest.kubernetes.v1.PemsToKeyStoreConverter
 import org.apache.spark.util.Utils
 
 /**

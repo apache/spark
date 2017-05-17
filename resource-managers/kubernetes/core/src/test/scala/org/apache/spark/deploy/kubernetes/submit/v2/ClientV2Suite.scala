@@ -18,311 +18,331 @@ package org.apache.spark.deploy.kubernetes.submit.v2
 
 import java.io.File
 
-import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, Container, DoneablePod, HasMetadata, Pod, PodBuilder, PodList, Secret, SecretBuilder}
+import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, DoneablePod, HasMetadata, Pod, PodBuilder, PodList, Secret, SecretBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
 import org.hamcrest.{BaseMatcher, Description}
-import org.mockito.Matchers.{any, anyVararg, argThat, eq => mockitoEq, startsWith}
-import org.mockito.Mockito.when
+import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
+import org.mockito.Matchers.{any, anyVararg, argThat, eq => mockitoEq}
+import org.mockito.Mockito.{times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
-import org.scalatest.mock.MockitoSugar._
 import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
+import scala.collection.mutable
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.kubernetes.SparkPodInitContainerBootstrap
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.rest.kubernetes.v2.StagedResourceIdentifier
-import org.apache.spark.util.Utils
 
 class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
 
-  private val MAIN_CLASS = "org.apache.spark.test.Main"
-  private val APP_ARGS = Array[String]("arg1", "arg2")
-  private val MAIN_APP_RESOURCE = "local:///app/jars/spark-main.jar"
-  private val APP_NAME = "spark-test-app"
-  private val STAGING_SERVER_URI = "http://localhost:9000"
+  private val JARS_RESOURCE = SubmittedResourceIdAndSecret("jarsId", "jarsSecret")
+  private val FILES_RESOURCE = SubmittedResourceIdAndSecret("filesId", "filesSecret")
+  private val SUBMITTED_RESOURCES = SubmittedResources(JARS_RESOURCE, FILES_RESOURCE)
+  private val BOOTSTRAPPED_POD_ANNOTATION = "bootstrapped"
+  private val TRUE = "true"
+  private val APP_NAME = "spark-test"
+  private val APP_ID = "spark-app-id"
+  private val CUSTOM_LABEL_KEY = "customLabel"
+  private val CUSTOM_LABEL_VALUE = "customLabelValue"
+  private val ALL_EXPECTED_LABELS = Map(
+      CUSTOM_LABEL_KEY -> CUSTOM_LABEL_VALUE,
+      SPARK_APP_ID_LABEL -> APP_ID,
+      SPARK_APP_NAME_LABEL -> APP_NAME)
+  private val CUSTOM_ANNOTATION_KEY = "customAnnotation"
+  private val CUSTOM_ANNOTATION_VALUE = "customAnnotationValue"
+  private val SECRET_NAME = "secret"
+  private val SECRET_KEY = "secret-key"
+  private val SECRET_DATA = "secret-data"
+  private val MAIN_CLASS = "org.apache.spark.examples.SparkPi"
+  private val APP_ARGS = Array("3", "20")
   private val SPARK_JARS = Seq(
-    "local:///app/jars/spark-helper.jar", "file:///var/data/spark-local-helper.jar")
+      "hdfs://localhost:9000/app/jars/jar1.jar", "file:///app/jars/jar2.jar")
   private val RESOLVED_SPARK_JARS = Seq(
-    "local:///app/jars/spark-helper.jar",
-    "file:///var/data/spark-downloaded/spark-local-helper.jar")
+    "hdfs://localhost:9000/app/jars/jar1.jar", "file:///var/data/spark-jars/jar2.jar")
+  private val RESOLVED_SPARK_REMOTE_AND_LOCAL_JARS = Seq(
+    "/var/data/spark-jars/jar1.jar", "/var/data/spark-jars/jar2.jar")
   private val SPARK_FILES = Seq(
-    "local:///app/files/spark-file.txt", "file:///var/data/spark-local-file.txt")
+    "hdfs://localhost:9000/app/files/file1.txt", "file:///app/files/file2.txt")
   private val RESOLVED_SPARK_FILES = Seq(
-    "local:///app/files/spark-file.txt", "file:///var/data/spark-downloaded/spark-local-file.txt")
-  private val DRIVER_EXTRA_CLASSPATH = "/app/jars/extra-jar1.jar:/app/jars/extra-jars2.jar"
-  private val DRIVER_DOCKER_IMAGE_VALUE = "spark-driver:latest"
-  private val DRIVER_MEMORY_OVERHEARD_MB = 128L
-  private val DRIVER_MEMORY_MB = 512L
-  private val NAMESPACE = "namespace"
-  private val DOWNLOAD_JARS_RESOURCE_IDENTIFIER = StagedResourceIdentifier("jarsId", "jarsSecret")
-  private val DOWNLOAD_FILES_RESOURCE_IDENTIFIER = StagedResourceIdentifier(
-    "filesId", "filesSecret")
-  private val MOUNTED_FILES_ANNOTATION_KEY = "mountedFiles"
-
-  private var sparkConf: SparkConf = _
-  private var submissionKubernetesClientProvider: SubmissionKubernetesClientProvider = _
-  private var submissionKubernetesClient: KubernetesClient = _
-  private type PODS = MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]
-  private type RESOURCES = NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[
-    HasMetadata, Boolean]
-  private var podOperations: PODS = _
-  private var resourceListOperations: RESOURCES = _
-  private var mountedDependencyManagerProvider: MountedDependencyManagerProvider = _
-  private var mountedDependencyManager: MountedDependencyManager = _
-  private var captureCreatedPodAnswer: SelfArgumentCapturingAnswer[Pod] = _
-  private var captureCreatedResourcesAnswer: AllArgumentsCapturingAnswer[HasMetadata, RESOURCES] = _
+    "hdfs://localhost:9000/app/files/file1.txt", "file:///var/data/spark-files/file2.txt")
+  private val INIT_CONTAINER_SECRET = new SecretBuilder()
+    .withNewMetadata()
+      .withName(SECRET_NAME)
+      .endMetadata()
+    .addToData(SECRET_KEY, SECRET_DATA)
+    .build()
+  private val CONFIG_MAP_NAME = "config-map"
+  private val CONFIG_MAP_KEY = "config-map-key"
+  private val CONFIG_MAP_DATA = "config-map-data"
+  private val CUSTOM_JAVA_OPTION_KEY = "myappoption"
+  private val CUSTOM_JAVA_OPTION_VALUE = "myappoptionvalue"
+  private val DRIVER_JAVA_OPTIONS = s"-D$CUSTOM_JAVA_OPTION_KEY=$CUSTOM_JAVA_OPTION_VALUE"
+  private val DRIVER_EXTRA_CLASSPATH = "/var/data/spark-app-custom/custom-jar.jar"
+  private val INIT_CONTAINER_CONFIG_MAP = new ConfigMapBuilder()
+    .withNewMetadata()
+      .withName(CONFIG_MAP_NAME)
+      .endMetadata()
+    .addToData(CONFIG_MAP_KEY, CONFIG_MAP_DATA)
+    .build()
+  private val CUSTOM_DRIVER_IMAGE = "spark-custom-driver:latest"
+  private val DRIVER_MEMORY_MB = 512
+  private val DRIVER_MEMORY_OVERHEAD_MB = 128
+  private val SPARK_CONF = new SparkConf(true)
+      .set(DRIVER_DOCKER_IMAGE, CUSTOM_DRIVER_IMAGE)
+      .set(org.apache.spark.internal.config.DRIVER_MEMORY, DRIVER_MEMORY_MB.toLong)
+      .set(KUBERNETES_DRIVER_MEMORY_OVERHEAD, DRIVER_MEMORY_OVERHEAD_MB.toLong)
+      .set(KUBERNETES_DRIVER_LABELS, s"$CUSTOM_LABEL_KEY=$CUSTOM_LABEL_VALUE")
+      .set(KUBERNETES_DRIVER_ANNOTATIONS, s"$CUSTOM_ANNOTATION_KEY=$CUSTOM_ANNOTATION_VALUE")
+      .set(org.apache.spark.internal.config.DRIVER_CLASS_PATH, DRIVER_EXTRA_CLASSPATH)
+      .set(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS, DRIVER_JAVA_OPTIONS)
+  private val EXECUTOR_INIT_CONF_KEY = "executor-init-conf"
+  private val SPARK_CONF_WITH_EXECUTOR_INIT_CONF = SPARK_CONF.clone()
+      .set(EXECUTOR_INIT_CONF_KEY, TRUE)
+  private val DRIVER_POD_UID = "driver-pod-uid"
+  private val DRIVER_POD_KIND = "pod"
+  private val DRIVER_POD_API_VERSION = "v1"
+  @Mock
+  private var initContainerConfigMapBuilder: SparkInitContainerConfigMapBuilder = _
+  @Mock
+  private var containerLocalizedFilesResolver: ContainerLocalizedFilesResolver = _
+  @Mock
+  private var executorInitContainerConfiguration: ExecutorInitContainerConfiguration = _
+  @Mock
+  private var submittedDependencyUploader: SubmittedDependencyUploader = _
+  @Mock
+  private var submittedDependenciesSecretBuilder: SubmittedDependencySecretBuilder = _
+  @Mock
+  private var initContainerBootstrap: SparkPodInitContainerBootstrap = _
+  @Mock
+  private var initContainerComponentsProvider: DriverInitContainerComponentsProvider = _
+  @Mock
+  private var kubernetesClientProvider: SubmissionKubernetesClientProvider = _
+  @Mock
+  private var kubernetesClient: KubernetesClient = _
+  @Mock
+  private var podOps: MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]] = _
+  private type ResourceListOps = NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[
+      HasMetadata, java.lang.Boolean]
+  @Mock
+  private var resourceListOps: ResourceListOps = _
 
   before {
-    sparkConf = new SparkConf(true)
-      .set("spark.app.name", APP_NAME)
-      .set("spark.master", "k8s://https://localhost:443")
-      .set(DRIVER_DOCKER_IMAGE, DRIVER_DOCKER_IMAGE_VALUE)
-      .set(KUBERNETES_DRIVER_MEMORY_OVERHEAD, DRIVER_MEMORY_OVERHEARD_MB)
-      .set(KUBERNETES_NAMESPACE, NAMESPACE)
-      .set(org.apache.spark.internal.config.DRIVER_MEMORY, DRIVER_MEMORY_MB)
-    submissionKubernetesClientProvider = mock[SubmissionKubernetesClientProvider]
-    submissionKubernetesClient = mock[KubernetesClient]
-    podOperations = mock[PODS]
-    resourceListOperations = mock[RESOURCES]
-    mountedDependencyManagerProvider = mock[MountedDependencyManagerProvider]
-    mountedDependencyManager = mock[MountedDependencyManager]
-    when(submissionKubernetesClientProvider.get).thenReturn(submissionKubernetesClient)
-    when(submissionKubernetesClient.pods()).thenReturn(podOperations)
-    captureCreatedPodAnswer = new SelfArgumentCapturingAnswer[Pod]
-    captureCreatedResourcesAnswer = new AllArgumentsCapturingAnswer[HasMetadata, RESOURCES](
-      resourceListOperations)
-    when(podOperations.create(any())).thenAnswer(captureCreatedPodAnswer)
-    when(submissionKubernetesClient.resourceList(anyVararg[HasMetadata]))
-      .thenAnswer(captureCreatedResourcesAnswer)
-  }
-
-  // Tests w/o local dependencies, or behave independently to that configuration.
-  test("Simple properties and environment set on the driver pod.") {
-    sparkConf.set(org.apache.spark.internal.config.DRIVER_CLASS_PATH, DRIVER_EXTRA_CLASSPATH)
-    val createdDriverPod = createAndGetDriverPod()
-    val maybeDriverContainer = getDriverContainer(createdDriverPod)
-    maybeDriverContainer.foreach { driverContainer =>
-      assert(driverContainer.getName === DRIVER_CONTAINER_NAME)
-      assert(driverContainer.getImage === DRIVER_DOCKER_IMAGE_VALUE)
-      assert(driverContainer.getImagePullPolicy === "IfNotPresent")
-      val envs = driverContainer.getEnv.asScala.map { env =>
-        (env.getName, env.getValue)
-      }.toMap
-      assert(envs(ENV_DRIVER_MEMORY) === s"${DRIVER_MEMORY_MB + DRIVER_MEMORY_OVERHEARD_MB}m")
-      assert(envs(ENV_DRIVER_MAIN_CLASS) === MAIN_CLASS)
-      assert(envs(ENV_DRIVER_ARGS) === APP_ARGS.mkString(" "))
-      assert(envs(ENV_SUBMIT_EXTRA_CLASSPATH) === DRIVER_EXTRA_CLASSPATH)
-    }
-  }
-
-  test("Created pod should apply custom annotations and labels") {
-    sparkConf.set(KUBERNETES_DRIVER_LABELS,
-      "label1=label1value,label2=label2value")
-    sparkConf.set(KUBERNETES_DRIVER_ANNOTATIONS,
-      "annotation1=annotation1value,annotation2=annotation2value")
-    val createdDriverPod = createAndGetDriverPod()
-    val labels = createdDriverPod.getMetadata.getLabels.asScala
-    assert(labels.size === 4)
-    // App ID is non-deterministic, but just check if it's set and is prefixed with the app name
-    val appIdLabel = labels(SPARK_APP_ID_LABEL)
-    assert(appIdLabel != null && appIdLabel.startsWith(APP_NAME) && appIdLabel != APP_NAME)
-    val appNameLabel = labels(SPARK_APP_NAME_LABEL)
-    assert(appNameLabel != null && appNameLabel == APP_NAME)
-    assert(labels("label1") === "label1value")
-    assert(labels("label2") === "label2value")
-    val annotations = createdDriverPod.getMetadata.getAnnotations.asScala
-    val expectedAnnotations = Map(
-      "annotation1" -> "annotation1value", "annotation2" -> "annotation2value")
-    assert(annotations === expectedAnnotations)
-  }
-
-  test("Driver JVM Options should be set in the environment.") {
-    sparkConf.set(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS, "-Dopt1=opt1value")
-    sparkConf.set("spark.logConf", "true")
-    val createdDriverPod = createAndGetDriverPod()
-    val maybeDriverContainer = getDriverContainer(createdDriverPod)
-    maybeDriverContainer.foreach { driverContainer =>
-      val maybeJvmOptionsEnv = driverContainer.getEnv
-        .asScala
-        .find(_.getName == ENV_DRIVER_JAVA_OPTS)
-      assert(maybeJvmOptionsEnv.isDefined)
-      maybeJvmOptionsEnv.foreach { jvmOptionsEnv =>
-        val jvmOptions = jvmOptionsEnv.getValue.split(" ")
-        jvmOptions.foreach { opt => assert(opt.startsWith("-D")) }
-        val optionKeyValues = jvmOptions.map { option =>
-          val withoutDashDPrefix = option.stripPrefix("-D")
-          val split = withoutDashDPrefix.split('=')
-          assert(split.length == 2)
-          (split(0), split(1))
-        }.toMap
-        assert(optionKeyValues("opt1") === "opt1value")
-        assert(optionKeyValues.contains("spark.app.id"))
-        assert(optionKeyValues("spark.jars") === MAIN_APP_RESOURCE)
-        assert(optionKeyValues(KUBERNETES_DRIVER_POD_NAME.key).startsWith(APP_NAME))
-        assert(optionKeyValues("spark.app.name") === APP_NAME)
-        assert(optionKeyValues("spark.logConf") === "true")
+    MockitoAnnotations.initMocks(this)
+    when(initContainerComponentsProvider.provideInitContainerBootstrap())
+      .thenReturn(initContainerBootstrap)
+    when(submittedDependencyUploader.uploadJars()).thenReturn(JARS_RESOURCE)
+    when(submittedDependencyUploader.uploadFiles()).thenReturn(FILES_RESOURCE)
+    when(initContainerBootstrap
+      .bootstrapInitContainerAndVolumes(mockitoEq(DRIVER_CONTAINER_NAME), any()))
+      .thenAnswer(new Answer[PodBuilder] {
+        override def answer(invocationOnMock: InvocationOnMock): PodBuilder = {
+          invocationOnMock.getArgumentAt(1, classOf[PodBuilder]).editMetadata()
+            .addToAnnotations(BOOTSTRAPPED_POD_ANNOTATION, TRUE)
+            .endMetadata()
+        }
+      })
+    when(initContainerComponentsProvider.provideContainerLocalizedFilesResolver())
+      .thenReturn(containerLocalizedFilesResolver)
+    when(initContainerComponentsProvider.provideExecutorInitContainerConfiguration())
+      .thenReturn(executorInitContainerConfiguration)
+    when(submittedDependenciesSecretBuilder.build())
+      .thenReturn(INIT_CONTAINER_SECRET)
+    when(initContainerConfigMapBuilder.build())
+      .thenReturn(INIT_CONTAINER_CONFIG_MAP)
+    when(kubernetesClientProvider.get).thenReturn(kubernetesClient)
+    when(kubernetesClient.pods()).thenReturn(podOps)
+    when(podOps.create(any())).thenAnswer(new Answer[Pod] {
+      override def answer(invocation: InvocationOnMock): Pod = {
+        new PodBuilder(invocation.getArgumentAt(0, classOf[Pod]))
+          .editMetadata()
+          .withUid(DRIVER_POD_UID)
+          .endMetadata()
+          .withKind(DRIVER_POD_KIND)
+          .withApiVersion(DRIVER_POD_API_VERSION)
+          .build()
       }
-    }
+    })
+    when(containerLocalizedFilesResolver.resolveSubmittedAndRemoteSparkJars())
+        .thenReturn(RESOLVED_SPARK_REMOTE_AND_LOCAL_JARS)
+    when(containerLocalizedFilesResolver.resolveSubmittedSparkJars())
+        .thenReturn(RESOLVED_SPARK_JARS)
+    when(containerLocalizedFilesResolver.resolveSubmittedSparkFiles())
+        .thenReturn(RESOLVED_SPARK_FILES)
+    when(executorInitContainerConfiguration.configureSparkConfForExecutorInitContainer(SPARK_CONF))
+        .thenReturn(SPARK_CONF_WITH_EXECUTOR_INIT_CONF)
+    when(kubernetesClient.resourceList(anyVararg[HasMetadata]())).thenReturn(resourceListOps)
   }
 
-  // Tests with local dependencies with the mounted dependency manager.
-  test("Uploading local dependencies should create Kubernetes secrets and config map") {
-    val initContainerConfigMap = getInitContainerConfigMap()
-    val initContainerSecret = getInitContainerSecret()
-    runWithMountedDependencies(initContainerConfigMap, initContainerSecret)
-    val driverPod = captureCreatedPodAnswer.capturedArgument
-    assert(captureCreatedResourcesAnswer.capturedArguments != null)
-    assert(captureCreatedResourcesAnswer.capturedArguments.size === 2)
-    assert(captureCreatedResourcesAnswer.capturedArguments.toSet ===
-      Set(initContainerSecret, initContainerConfigMap))
-    captureCreatedResourcesAnswer.capturedArguments.foreach { resource =>
-      val driverPodOwnerReferences = resource.getMetadata.getOwnerReferences
-      assert(driverPodOwnerReferences.size === 1)
-      val driverPodOwnerReference = driverPodOwnerReferences.asScala.head
-      assert(driverPodOwnerReference.getName === driverPod.getMetadata.getName)
-      assert(driverPodOwnerReference.getApiVersion === driverPod.getApiVersion)
-      assert(driverPodOwnerReference.getUid === driverPod.getMetadata.getUid)
-      assert(driverPodOwnerReference.getKind === driverPod.getKind)
-      assert(driverPodOwnerReference.getController)
-    }
+  test("Run with dependency uploader") {
+    when(initContainerComponentsProvider
+        .provideInitContainerSubmittedDependencyUploader(ALL_EXPECTED_LABELS))
+        .thenReturn(Some(submittedDependencyUploader))
+    when(initContainerComponentsProvider
+        .provideSubmittedDependenciesSecretBuilder(Some(SUBMITTED_RESOURCES.secrets())))
+        .thenReturn(Some(submittedDependenciesSecretBuilder))
+    when(initContainerComponentsProvider
+        .provideInitContainerConfigMapBuilder(Some(SUBMITTED_RESOURCES.ids())))
+        .thenReturn(initContainerConfigMapBuilder)
+    runAndVerifyDriverPodHasCorrectProperties()
+    val resourceListArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
+    verify(kubernetesClient).resourceList(resourceListArgumentCaptor.capture())
+    val createdResources = resourceListArgumentCaptor.getAllValues.asScala
+    assert(createdResources.size === 2)
+    verifyCreatedResourcesHaveOwnerReferences(createdResources)
+    assert(createdResources.exists {
+      case secret: Secret =>
+        val expectedSecretData = Map(SECRET_KEY -> SECRET_DATA)
+        secret.getMetadata.getName == SECRET_NAME && secret.getData.asScala == expectedSecretData
+      case _ => false
+    })
+    verifyConfigMapWasCreated(createdResources)
+    verify(submittedDependencyUploader).uploadJars()
+    verify(submittedDependencyUploader).uploadFiles()
+    verify(initContainerComponentsProvider)
+        .provideInitContainerConfigMapBuilder(Some(SUBMITTED_RESOURCES.ids()))
+    verify(initContainerComponentsProvider)
+      .provideSubmittedDependenciesSecretBuilder(Some(SUBMITTED_RESOURCES.secrets()))
   }
 
-  test("Uploading local resources should set classpath environment variables") {
-    val initContainerConfigMap = getInitContainerConfigMap()
-    val initContainerSecret = getInitContainerSecret()
-    runWithMountedDependencies(initContainerConfigMap, initContainerSecret)
-    val driverPod = captureCreatedPodAnswer.capturedArgument
-    val maybeDriverContainer = getDriverContainer(driverPod)
-    maybeDriverContainer.foreach { driverContainer =>
-      val envs = driverContainer.getEnv
-        .asScala
-        .map { env => (env.getName, env.getValue) }
-        .toMap
-      val classPathEntries = envs(ENV_MOUNTED_CLASSPATH).split(File.pathSeparator).toSet
-      val expectedClassPathEntries = RESOLVED_SPARK_JARS
-        .map(Utils.resolveURI)
-        .map(_.getPath)
-        .toSet
-      assert(classPathEntries === expectedClassPathEntries)
-    }
+  test("Run without dependency uploader") {
+    when(initContainerComponentsProvider
+      .provideInitContainerSubmittedDependencyUploader(ALL_EXPECTED_LABELS))
+      .thenReturn(None)
+    when(initContainerComponentsProvider
+      .provideSubmittedDependenciesSecretBuilder(None))
+      .thenReturn(None)
+    when(initContainerComponentsProvider
+      .provideInitContainerConfigMapBuilder(None))
+      .thenReturn(initContainerConfigMapBuilder)
+    runAndVerifyDriverPodHasCorrectProperties()
+    val resourceListArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
+    verify(kubernetesClient).resourceList(resourceListArgumentCaptor.capture())
+    val createdResources = resourceListArgumentCaptor.getAllValues.asScala
+    assert(createdResources.size === 1)
+    verifyCreatedResourcesHaveOwnerReferences(createdResources)
+    verifyConfigMapWasCreated(createdResources)
+    verify(submittedDependencyUploader, times(0)).uploadJars()
+    verify(submittedDependencyUploader, times(0)).uploadFiles()
+    verify(initContainerComponentsProvider)
+      .provideInitContainerConfigMapBuilder(None)
+    verify(initContainerComponentsProvider)
+      .provideSubmittedDependenciesSecretBuilder(None)
   }
 
-  private def getInitContainerSecret(): Secret = {
-    new SecretBuilder()
-      .withNewMetadata().withName(s"$APP_NAME-init-container-secret").endMetadata()
-      .addToData(
-        INIT_CONTAINER_DOWNLOAD_JARS_SECRET_KEY, DOWNLOAD_JARS_RESOURCE_IDENTIFIER.resourceSecret)
-      .addToData(INIT_CONTAINER_DOWNLOAD_FILES_SECRET_KEY,
-        DOWNLOAD_FILES_RESOURCE_IDENTIFIER.resourceSecret)
-      .build()
+  private def verifyCreatedResourcesHaveOwnerReferences(
+      createdResources: mutable.Buffer[HasMetadata]): Unit = {
+    assert(createdResources.forall { resource =>
+      val owners = resource.getMetadata.getOwnerReferences.asScala
+      owners.size === 1 &&
+        owners.head.getController &&
+        owners.head.getKind == DRIVER_POD_KIND &&
+        owners.head.getUid == DRIVER_POD_UID &&
+        owners.head.getName == APP_ID &&
+        owners.head.getApiVersion == DRIVER_POD_API_VERSION
+    })
   }
 
-  private def getInitContainerConfigMap(): ConfigMap = {
-    new ConfigMapBuilder()
-      .withNewMetadata().withName(s"$APP_NAME-init-container-conf").endMetadata()
-      .addToData("key", "configuration")
-      .build()
+  private def verifyConfigMapWasCreated(createdResources: mutable.Buffer[HasMetadata]): Unit = {
+    assert(createdResources.exists {
+      case configMap: ConfigMap =>
+        val expectedConfigMapData = Map(CONFIG_MAP_KEY -> CONFIG_MAP_DATA)
+        configMap.getMetadata.getName == CONFIG_MAP_NAME &&
+          configMap.getData.asScala == expectedConfigMapData
+      case _ => false
+    })
   }
 
-  private def runWithMountedDependencies(
-      initContainerConfigMap: ConfigMap, initContainerSecret: Secret): Unit = {
-    sparkConf.set(RESOURCE_STAGING_SERVER_URI, STAGING_SERVER_URI)
-      .setJars(SPARK_JARS)
-      .set("spark.files", SPARK_FILES.mkString(","))
-    val labelsMatcher = new BaseMatcher[Map[String, String]] {
-      override def matches(maybeLabels: scala.Any) = {
-        maybeLabels match {
-          case labels: Map[String, String] =>
-            labels(SPARK_APP_ID_LABEL).startsWith(APP_NAME) &&
-              labels(SPARK_APP_NAME_LABEL) == APP_NAME
-          case _ => false
+  private def runAndVerifyDriverPodHasCorrectProperties(): Unit = {
+    new Client(
+      APP_NAME,
+      APP_ID,
+      MAIN_CLASS,
+      SPARK_CONF,
+      APP_ARGS,
+      SPARK_JARS,
+      SPARK_FILES,
+      kubernetesClientProvider,
+      initContainerComponentsProvider).run()
+    val podMatcher = new BaseMatcher[Pod] {
+      override def matches(o: scala.Any): Boolean = {
+        o match {
+          case p: Pod =>
+            Option(p)
+              .filter(_.getMetadata.getName == APP_ID)
+              .filter(podHasCorrectAnnotations)
+              .filter(_.getMetadata.getLabels.asScala == ALL_EXPECTED_LABELS)
+              .filter(containerHasCorrectBasicContainerConfiguration)
+              .filter(containerHasCorrectBasicEnvs)
+              .filter(containerHasCorrectMountedClasspath)
+              .exists(containerHasCorrectJvmOptions)
+          case _ =>
+            false
         }
       }
 
-      override def describeTo(description: Description) = {
-        description.appendText("Checks if the labels contain the app ID and app name.")
-      }
+      override def describeTo(description: Description): Unit = {}
     }
-    when(mountedDependencyManagerProvider.getMountedDependencyManager(
-      startsWith(APP_NAME),
-      mockitoEq(STAGING_SERVER_URI),
-      argThat(labelsMatcher),
-      mockitoEq(NAMESPACE),
-      mockitoEq(SPARK_JARS ++ Seq(MAIN_APP_RESOURCE)),
-      mockitoEq(SPARK_FILES))).thenReturn(mountedDependencyManager)
-    when(mountedDependencyManager.uploadJars()).thenReturn(DOWNLOAD_JARS_RESOURCE_IDENTIFIER)
-    when(mountedDependencyManager.uploadFiles()).thenReturn(DOWNLOAD_FILES_RESOURCE_IDENTIFIER)
-    when(mountedDependencyManager.buildInitContainerSecret(
-      DOWNLOAD_JARS_RESOURCE_IDENTIFIER.resourceSecret,
-      DOWNLOAD_FILES_RESOURCE_IDENTIFIER.resourceSecret))
-      .thenReturn(initContainerSecret)
-    when(mountedDependencyManager.buildInitContainerConfigMap(
-      DOWNLOAD_JARS_RESOURCE_IDENTIFIER.resourceId, DOWNLOAD_FILES_RESOURCE_IDENTIFIER.resourceId))
-      .thenReturn(initContainerConfigMap)
-    when(mountedDependencyManager.resolveSparkJars()).thenReturn(RESOLVED_SPARK_JARS)
-    when(mountedDependencyManager.resolveSparkFiles()).thenReturn(RESOLVED_SPARK_FILES)
-    when(mountedDependencyManager.configurePodToMountLocalDependencies(
-      mockitoEq(DRIVER_CONTAINER_NAME),
-      mockitoEq(initContainerSecret),
-      mockitoEq(initContainerConfigMap),
-      any())).thenAnswer(new Answer[PodBuilder] {
-      override def answer(invocationOnMock: InvocationOnMock): PodBuilder = {
-        val basePod = invocationOnMock.getArgumentAt(3, classOf[PodBuilder])
-        basePod.editMetadata().addToAnnotations(MOUNTED_FILES_ANNOTATION_KEY, "true").endMetadata()
-      }
-    })
-    val clientUnderTest = createClient()
-    clientUnderTest.run()
+    verify(podOps).create(argThat(podMatcher))
   }
 
-  private def getDriverContainer(driverPod: Pod): Option[Container] = {
-    val maybeDriverContainer = driverPod.getSpec
-      .getContainers
-      .asScala
-      .find(_.getName == DRIVER_CONTAINER_NAME)
-    assert(maybeDriverContainer.isDefined)
-    maybeDriverContainer
-  }
-
-  private def createAndGetDriverPod(): Pod = {
-    val clientUnderTest = createClient()
-    clientUnderTest.run()
-    val createdDriverPod = captureCreatedPodAnswer.capturedArgument
-    assert(createdDriverPod != null)
-    createdDriverPod
-  }
-
-  private def createClient(): Client = {
-    new Client(
-      MAIN_CLASS,
-      sparkConf,
-      APP_ARGS,
-      MAIN_APP_RESOURCE,
-      submissionKubernetesClientProvider,
-      mountedDependencyManagerProvider)
-  }
-
-  private class SelfArgumentCapturingAnswer[T: ClassTag] extends Answer[T] {
-    var capturedArgument: T = _
-
-    override def answer(invocationOnMock: InvocationOnMock): T = {
-      val argumentClass = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
-      val argument = invocationOnMock.getArgumentAt(0, argumentClass)
-      this.capturedArgument = argument
-      argument
+  private def containerHasCorrectJvmOptions(pod: Pod): Boolean = {
+    val driverContainer = pod.getSpec.getContainers.asScala.head
+    val envs = driverContainer.getEnv.asScala.map(env => (env.getName, env.getValue))
+    envs.toMap.get(ENV_DRIVER_JAVA_OPTS).exists { javaOptions =>
+      val splitOptions = javaOptions.split(" ")
+      val expectedOptions = SPARK_CONF.getAll
+        .filterNot(_._1 == org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS.key)
+        .toMap ++
+        Map(
+          "spark.app.id" -> APP_ID,
+          KUBERNETES_DRIVER_POD_NAME.key -> APP_ID,
+          EXECUTOR_INIT_CONF_KEY -> TRUE,
+          CUSTOM_JAVA_OPTION_KEY -> CUSTOM_JAVA_OPTION_VALUE,
+          "spark.jars" -> RESOLVED_SPARK_JARS.mkString(","),
+          "spark.files" -> RESOLVED_SPARK_FILES.mkString(","))
+      splitOptions.forall(_.startsWith("-D")) &&
+        splitOptions.map { option =>
+          val withoutPrefix = option.substring(2)
+          (withoutPrefix.split("=", 2)(0), withoutPrefix.split("=", 2)(1))
+        }.toMap == expectedOptions
     }
   }
 
-  private class AllArgumentsCapturingAnswer[I, T](returnValue: T) extends Answer[T] {
-    var capturedArguments: Seq[I] = _
-
-    override def answer(invocationOnMock: InvocationOnMock): T = {
-      capturedArguments = invocationOnMock.getArguments.map(_.asInstanceOf[I]).toSeq
-      returnValue
+  private def containerHasCorrectMountedClasspath(pod: Pod): Boolean = {
+    val driverContainer = pod.getSpec.getContainers.asScala.head
+    val envs = driverContainer.getEnv.asScala.map(env => (env.getName, env.getValue))
+    envs.toMap.get(ENV_MOUNTED_CLASSPATH).exists { classpath =>
+      val mountedClasspathEntities = classpath.split(File.pathSeparator)
+      mountedClasspathEntities.toSet == RESOLVED_SPARK_REMOTE_AND_LOCAL_JARS.toSet
     }
+  }
+
+  private def containerHasCorrectBasicEnvs(pod: Pod): Boolean = {
+    val driverContainer = pod.getSpec.getContainers.asScala.head
+    val envs = driverContainer.getEnv.asScala.map(env => (env.getName, env.getValue))
+    val expectedBasicEnvs = Map(
+      ENV_SUBMIT_EXTRA_CLASSPATH -> DRIVER_EXTRA_CLASSPATH,
+      ENV_DRIVER_MEMORY -> s"${DRIVER_MEMORY_MB + DRIVER_MEMORY_OVERHEAD_MB}m",
+      ENV_DRIVER_MAIN_CLASS -> MAIN_CLASS,
+      ENV_DRIVER_ARGS -> APP_ARGS.mkString(" "))
+    expectedBasicEnvs.toSet.subsetOf(envs.toSet)
+  }
+
+  private def containerHasCorrectBasicContainerConfiguration(pod: Pod): Boolean = {
+    val containers = pod.getSpec.getContainers.asScala
+    containers.size == 1 &&
+      containers.head.getName == DRIVER_CONTAINER_NAME &&
+      containers.head.getImage == CUSTOM_DRIVER_IMAGE &&
+      containers.head.getImagePullPolicy == "IfNotPresent"
+  }
+
+  private def podHasCorrectAnnotations(pod: Pod): Boolean = {
+    val expectedAnnotations = Map(
+      CUSTOM_ANNOTATION_KEY -> CUSTOM_ANNOTATION_VALUE,
+      BOOTSTRAPPED_POD_ANNOTATION -> TRUE)
+    pod.getMetadata.getAnnotations.asScala == expectedAnnotations
   }
 }

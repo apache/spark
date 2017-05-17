@@ -24,6 +24,7 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 import okhttp3.{MediaType, ResponseBody}
 import org.mockito.Matchers.any
+import org.mockito.Mockito
 import org.mockito.Mockito.{doAnswer, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -31,7 +32,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.mock.MockitoSugar._
 import retrofit2.{Call, Callback, Response}
 
-import org.apache.spark.{SparkConf, SparkFunSuite, SSLOptions}
+import org.apache.spark.{SecurityManager => SparkSecurityManager, SparkConf, SparkFunSuite, SSLOptions}
 import org.apache.spark.deploy.kubernetes.CompressionUtils
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.util.Utils
@@ -55,7 +56,6 @@ class KubernetesSparkDependencyDownloadInitContainerSuite
   private val JARS_RESOURCE_ID = "jarsId"
   private val FILES_RESOURCE_ID = "filesId"
 
-  private var sparkConf: SparkConf = _
   private var downloadJarsDir: File = _
   private var downloadFilesDir: File = _
   private var downloadJarsSecretValue: String = _
@@ -64,7 +64,7 @@ class KubernetesSparkDependencyDownloadInitContainerSuite
   private var filesCompressedBytes: Array[Byte] = _
   private var retrofitClientFactory: RetrofitClientFactory = _
   private var retrofitClient: ResourceStagingServiceRetrofit = _
-  private var initContainerUnderTest: KubernetesSparkDependencyDownloadInitContainer = _
+  private var fileFetcher: FileFetcher = _
 
   override def beforeAll(): Unit = {
     jarsCompressedBytes = compressPathsToBytes(JARS)
@@ -80,24 +80,10 @@ class KubernetesSparkDependencyDownloadInitContainerSuite
     downloadFilesDir = Utils.createTempDir()
     retrofitClientFactory = mock[RetrofitClientFactory]
     retrofitClient = mock[ResourceStagingServiceRetrofit]
-    sparkConf = new SparkConf(true)
-      .set(RESOURCE_STAGING_SERVER_URI, STAGING_SERVER_URI)
-      .set(INIT_CONTAINER_DOWNLOAD_JARS_RESOURCE_IDENTIFIER, JARS_RESOURCE_ID)
-      .set(INIT_CONTAINER_DOWNLOAD_JARS_SECRET_LOCATION, DOWNLOAD_JARS_SECRET_LOCATION)
-      .set(INIT_CONTAINER_DOWNLOAD_FILES_RESOURCE_IDENTIFIER, FILES_RESOURCE_ID)
-      .set(INIT_CONTAINER_DOWNLOAD_FILES_SECRET_LOCATION, DOWNLOAD_FILES_SECRET_LOCATION)
-      .set(DRIVER_LOCAL_JARS_DOWNLOAD_LOCATION, downloadJarsDir.getAbsolutePath)
-      .set(DRIVER_LOCAL_FILES_DOWNLOAD_LOCATION, downloadFilesDir.getAbsolutePath)
-      .set(RESOURCE_STAGING_SERVER_SSL_ENABLED, true)
-      .set(RESOURCE_STAGING_SERVER_TRUSTSTORE_FILE, TRUSTSTORE_FILE.getAbsolutePath)
-      .set(RESOURCE_STAGING_SERVER_TRUSTSTORE_PASSWORD, TRUSTSTORE_PASSWORD)
-      .set(RESOURCE_STAGING_SERVER_TRUSTSTORE_TYPE, TRUSTSTORE_TYPE)
-
+    fileFetcher = mock[FileFetcher]
     when(retrofitClientFactory.createRetrofitClient(
         STAGING_SERVER_URI, classOf[ResourceStagingServiceRetrofit], STAGING_SERVER_SSL_OPTIONS))
       .thenReturn(retrofitClient)
-    initContainerUnderTest = new KubernetesSparkDependencyDownloadInitContainer(
-      sparkConf, retrofitClientFactory)
   }
 
   after {
@@ -105,9 +91,15 @@ class KubernetesSparkDependencyDownloadInitContainerSuite
     downloadFilesDir.delete()
   }
 
-  test("Downloads should unpack response body streams to directories") {
+  test("Downloads from resource staging server should unpack response body to directories") {
     val downloadJarsCall = mock[Call[ResponseBody]]
     val downloadFilesCall = mock[Call[ResponseBody]]
+    val sparkConf = getSparkConfForResourceStagingServerDownloads
+    val initContainerUnderTest = new KubernetesSparkDependencyDownloadInitContainer(
+      sparkConf,
+      retrofitClientFactory,
+      fileFetcher,
+      securityManager = new SparkSecurityManager(sparkConf))
     when(retrofitClient.downloadResources(JARS_RESOURCE_ID, downloadJarsSecretValue))
       .thenReturn(downloadJarsCall)
     when(retrofitClient.downloadResources(FILES_RESOURCE_ID, downloadFilesSecretValue))
@@ -125,6 +117,46 @@ class KubernetesSparkDependencyDownloadInitContainerSuite
     initContainerUnderTest.run()
     checkWrittenFilesAreTheSameAsOriginal(JARS, downloadJarsDir)
     checkWrittenFilesAreTheSameAsOriginal(FILES, downloadFilesDir)
+    Mockito.verifyZeroInteractions(fileFetcher)
+  }
+
+  test("Downloads from remote server should invoke the file fetcher") {
+    val sparkConf = getSparkConfForRemoteFileDownloads
+    val initContainerUnderTest = new KubernetesSparkDependencyDownloadInitContainer(
+      sparkConf,
+      retrofitClientFactory,
+      fileFetcher,
+      securityManager = new SparkSecurityManager(sparkConf))
+    initContainerUnderTest.run()
+    Mockito.verify(fileFetcher).fetchFile("http://localhost:9000/jar1.jar", downloadJarsDir)
+    Mockito.verify(fileFetcher).fetchFile("hdfs://localhost:9000/jar2.jar", downloadJarsDir)
+    Mockito.verify(fileFetcher).fetchFile("http://localhost:9000/file.txt", downloadFilesDir)
+
+  }
+
+  private def getSparkConfForResourceStagingServerDownloads: SparkConf = {
+    new SparkConf(true)
+      .set(RESOURCE_STAGING_SERVER_URI, STAGING_SERVER_URI)
+      .set(INIT_CONTAINER_DOWNLOAD_JARS_RESOURCE_IDENTIFIER, JARS_RESOURCE_ID)
+      .set(INIT_CONTAINER_DOWNLOAD_JARS_SECRET_LOCATION, DOWNLOAD_JARS_SECRET_LOCATION)
+      .set(INIT_CONTAINER_DOWNLOAD_FILES_RESOURCE_IDENTIFIER, FILES_RESOURCE_ID)
+      .set(INIT_CONTAINER_DOWNLOAD_FILES_SECRET_LOCATION, DOWNLOAD_FILES_SECRET_LOCATION)
+      .set(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION, downloadJarsDir.getAbsolutePath)
+      .set(INIT_CONTAINER_FILES_DOWNLOAD_LOCATION, downloadFilesDir.getAbsolutePath)
+      .set(RESOURCE_STAGING_SERVER_SSL_ENABLED, true)
+      .set(RESOURCE_STAGING_SERVER_TRUSTSTORE_FILE, TRUSTSTORE_FILE.getAbsolutePath)
+      .set(RESOURCE_STAGING_SERVER_TRUSTSTORE_PASSWORD, TRUSTSTORE_PASSWORD)
+      .set(RESOURCE_STAGING_SERVER_TRUSTSTORE_TYPE, TRUSTSTORE_TYPE)
+  }
+
+  private def getSparkConfForRemoteFileDownloads: SparkConf = {
+    new SparkConf(true)
+      .set(INIT_CONTAINER_REMOTE_JARS,
+        "http://localhost:9000/jar1.jar,hdfs://localhost:9000/jar2.jar")
+      .set(INIT_CONTAINER_REMOTE_FILES,
+        "http://localhost:9000/file.txt")
+      .set(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION, downloadJarsDir.getAbsolutePath)
+      .set(INIT_CONTAINER_FILES_DOWNLOAD_LOCATION, downloadFilesDir.getAbsolutePath)
   }
 
   private def checkWrittenFilesAreTheSameAsOriginal(
