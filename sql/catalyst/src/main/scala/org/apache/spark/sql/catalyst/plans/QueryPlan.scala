@@ -82,7 +82,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   }
 
   // Collect aliases from expressions, so we may avoid producing recursive constraints.
-  protected lazy val aliasMap: AttributeMap[Expression] = AttributeMap(
+  private lazy val aliasMap: AttributeMap[Expression] = AttributeMap(
     expressions.collect {
       case a: Alias => (a.toAttribute, a.child)
     } ++ children.flatMap(_.aliasMap))
