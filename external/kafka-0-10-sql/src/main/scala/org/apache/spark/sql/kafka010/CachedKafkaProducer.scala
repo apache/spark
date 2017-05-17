@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
@@ -30,6 +31,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
 
   private type Producer = KafkaProducer[Array[Byte], Array[Byte]]
 
+  @GuardedBy("this")
   private val cacheMap = new mutable.HashMap[String, Producer]()
 
   private def createKafkaProducer(
@@ -61,16 +63,16 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     cacheMap.getOrElse(uid.toString, createKafkaProducer(params))
   }
 
-  private[kafka010] def close(kafkaParams: ju.Map[String, Object]): Unit = {
+  private[kafka010] def close(kafkaParams: ju.Map[String, Object]): Unit = synchronized {
     val params = if (!CanonicalizeKafkaParams.isCanonicalized(kafkaParams)) {
       CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
     } else kafkaParams
     val uid = getUniqueId(params)
 
     val producer: Option[Producer] = cacheMap.remove(uid)
-
     if (producer.isDefined) {
       log.info(s"Closing the KafkaProducer with config: $kafkaParams")
+      CanonicalizeKafkaParams.remove(kafkaParams)
       producer.foreach(_.close())
     } else {
       log.warn(s"No KafkaProducer found in cache for $kafkaParams.")
@@ -93,6 +95,7 @@ private[kafka010] object CanonicalizeKafkaParams extends Logging {
 
   import scala.collection.JavaConverters._
 
+  @GuardedBy("this")
   private val registryMap = mutable.HashMap[String, String]()
 
   private[kafka010] val sparkKafkaParamsUniqueId: String =
@@ -129,6 +132,12 @@ private[kafka010] object CanonicalizeKafkaParams extends Logging {
       newMap.put(sparkKafkaParamsUniqueId, uuid)
       newMap
     }
+  }
+
+  private[kafka010] def remove(kafkaParams: ju.Map[String, Object]): Boolean = {
+    val sortedMap = SortedMap.empty[String, Object] ++ kafkaParams.asScala
+    val stringRepresentation: String = sortedMap.mkString("\n")
+    registryMap.remove(stringRepresentation).isDefined
   }
 
   // For testing purpose only.
