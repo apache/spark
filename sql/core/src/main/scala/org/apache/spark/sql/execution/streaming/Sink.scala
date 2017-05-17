@@ -38,4 +38,8 @@ trait Sink {
    * after data is consumed by sink successfully.
    */
   def addBatch(batchId: Long, data: DataFrame): Unit
+
+  /** Clean up any resources held by the Sink. */
+  def stop(): Unit = {}
+
 }

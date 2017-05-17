@@ -62,11 +62,15 @@ private[kafka010] object CachedKafkaProducer extends Logging {
   }
 
   private[kafka010] def close(kafkaParams: ju.Map[String, Object]): Unit = {
-    val uid = getUniqueId(kafkaParams)
-    val producer: Option[Producer] =
-      cacheMap.remove(uid)
+    val params = if (!CanonicalizeKafkaParams.isCanonicalized(kafkaParams)) {
+      CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
+    } else kafkaParams
+    val uid = getUniqueId(params)
+
+    val producer: Option[Producer] = cacheMap.remove(uid)
 
     if (producer.isDefined) {
+      log.info(s"Closing the KafkaProducer with config: $kafkaParams")
       producer.foreach(_.close())
     } else {
       log.warn(s"No KafkaProducer found in cache for $kafkaParams.")

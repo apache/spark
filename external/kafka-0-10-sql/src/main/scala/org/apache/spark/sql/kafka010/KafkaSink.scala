@@ -22,6 +22,7 @@ import java.{util => ju}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.Sink
+import org.apache.spark.util.Utils
 
 private[kafka010] class KafkaSink(
     sqlContext: SQLContext,
@@ -39,5 +40,9 @@ private[kafka010] class KafkaSink(
         data.queryExecution, executorKafkaParams, topic)
       latestBatchId = batchId
     }
+  }
+
+  override def stop(): Unit = {
+    KafkaWriter.close(sqlContext.sparkContext, executorKafkaParams)
   }
 }

@@ -361,6 +361,7 @@ class StreamExecution(
 
       try {
         stopSources()
+        stopSink()
         state.set(TERMINATED)
         currentStatus = status.copy(isTriggerActive = false, isDataAvailable = false)
 
@@ -595,6 +596,7 @@ class StreamExecution(
 
   /**
    * Processes any data available between `availableOffsets` and `committedOffsets`.
+   *
    * @param sparkSessionToRunBatch Isolated [[SparkSession]] to run this batch with.
    */
   private def runBatch(sparkSessionToRunBatch: SparkSession): Unit = {
@@ -681,6 +683,17 @@ class StreamExecution(
           logWarning(s"Failed to stop streaming source: $source. Resources may have leaked.", e)
       }
     }
+  }
+
+  /** Stops streaming sink safely. */
+  private def stopSink(): Unit = {
+      try {
+        sink.stop()
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Failed to stop streaming sink: $sink. Resources may have leaked.", e)
+      }
+
   }
 
   /**

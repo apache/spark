@@ -19,6 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
@@ -91,6 +92,12 @@ private[kafka010] object KafkaWriter extends Logging {
         Utils.tryWithSafeFinally(block = writeTask.execute(iter))(
           finallyBlock = writeTask.close())
       }
+    }
+  }
+
+  def close(sc: SparkContext, kafkaParams: ju.Map[String, Object]): Unit = {
+    sc.parallelize(1 to 10000).foreachPartition { iter =>
+      CachedKafkaProducer.close(kafkaParams)
     }
   }
 }
