@@ -93,7 +93,7 @@ The limit expression must be integer type, but got string;
 
 
 -- !query 10
-SELECT * FROM (SELECT * FROM range(10) LIMIT 5) WHERE id > 3
+SELECT * FROM (SELECT * FROM range(10) LIMIT 5) t WHERE id > 3
 -- !query 10 schema
 struct<id:bigint>
 -- !query 10 output
