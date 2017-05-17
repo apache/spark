@@ -473,7 +473,7 @@ identifierComment
 
 relationPrimary
     : tableIdentifier sample? (AS? strictIdentifier)?      #tableName
-    | '(' queryNoWith ')' sample? (AS? strictIdentifier)?  #aliasedQuery
+    | '(' queryNoWith ')' sample? (AS? strictIdentifier)   #aliasedQuery
     | '(' relation ')' sample? (AS? strictIdentifier)?     #aliasedRelation
     | inlineTable                                          #inlineTableDefault2
     | functionTable                                        #tableValuedFunction

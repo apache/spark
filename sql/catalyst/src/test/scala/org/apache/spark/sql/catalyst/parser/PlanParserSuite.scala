@@ -444,6 +444,17 @@ class PlanParserSuite extends PlanTest {
         |      (select id from t0)) as u_1
       """.stripMargin,
       plan.union(plan).union(plan).as("u_1").select('id))
+
+  }
+
+  test("aliased subquery") {
+    assertEqual("select a from (select id as a from t0) tt",
+      table("t0").select('id.as("a")).as("tt").select('a))
+    intercept("select a from (select id as a from t0)", "mismatched input")
+
+    assertEqual("from (select id as a from t0) tt select a",
+      table("t0").select('id.as("a")).as("tt").select('a))
+    intercept("from (select id as a from t0) select a", "extraneous input 'a'")
   }
 
   test("scalar sub-query") {
