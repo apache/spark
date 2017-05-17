@@ -189,7 +189,7 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td>
     The namespace that will be used for running the driver and executor pods. When using
     <code>spark-submit</code> in cluster mode, this can also be passed to <code>spark-submit</code> via the
-    <code>--kubernetes-namespace</code> command line argument. The namespace must already exist.
+    <code>--kubernetes-namespace</code> command line argument.
   </td>
 </tr>
 <tr>
@@ -206,6 +206,37 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td>
     Docker image to use for the executors. Specify this using the standard
     <a href="https://docs.docker.com/engine/reference/commandline/tag/">Docker tag</a> format.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.shuffle.namespace</code></td>
+  <td><code>default</code></td>
+  <td>
+    Namespace in which the shuffle service pods are present. The shuffle service must be
+    created in the cluster prior to attempts to use it.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.shuffle.labels</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Labels that will be used to look up shuffle service pods. This should be a comma-separated list of label key-value pairs,
+    where each label is in the format <code>key=value</code>. The labels chosen must be such that
+    they match exactly one shuffle service pod on each node that executors are launched.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.batch.size</code></td>
+  <td><code>5</code></td>
+  <td>
+    Number of pods to launch at once in each round of executor pod allocation.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.batch.delay</code></td>
+  <td><code>1</code></td>
+  <td>
+    Number of seconds to wait between each round of executor pod allocation.
   </td>
 </tr>
 <tr>
@@ -389,10 +420,41 @@ from the other deployment modes. See the [configuration page](configuration.html
 </tr>
 </table>
 
+## Dynamic Executor Scaling
+
+Spark on Kubernetes supports Dynamic Allocation with cluster mode. This mode requires running
+an external shuffle service. This is typically a [daemonset](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/)
+with a provisioned [hostpath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath) volume.
+This shuffle service may be shared by executors belonging to different SparkJobs. Using Spark with dynamic allocation
+on Kubernetes assumes that a cluster administrator has set up one or more shuffle-service daemonsets in the cluster.
+
+A sample configuration file is provided in `conf/kubernetes-shuffle-service.yaml` which can be customized as needed
+for a particular cluster. It is important to note that `spec.template.metadata.labels` are setup appropriately for the shuffle
+service because there may be multiple shuffle service instances running in a cluster. The labels give us a way to target a particular
+shuffle service.
+
+For example, if the shuffle service we want to use is in the default namespace, and
+has pods with labels `app=spark-shuffle-service` and `spark-version=2.1.0`, we can
+use those tags to target that particular shuffle service at job launch time. In order to run a job with dynamic allocation enabled,
+the command may then look like the following:
+
+    bin/spark-submit \
+      --deploy-mode cluster \
+      --class org.apache.spark.examples.GroupByTest \
+      --master k8s://<k8s-master>:<port> \
+      --kubernetes-namespace default \
+      --conf spark.app.name=group-by-test \
+      --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:latest \
+      --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:latest \
+      --conf spark.dynamicAllocation.enabled=true \
+      --conf spark.shuffle.service.enabled=true \
+      --conf spark.kubernetes.shuffle.namespace=default \
+      --conf spark.kubernetes.shuffle.labels="app=spark-shuffle-service,spark-version=2.1.0" \
+      examples/jars/spark_examples_2.11-2.2.0.jar 10 400000 2
+
 ## Current Limitations
 
 Running Spark on Kubernetes is currently an experimental feature. Some restrictions on the current implementation that
 should be lifted in the future include:
-* Applications can only use a fixed number of executors. Dynamic allocation is not supported.
 * Applications can only run in cluster mode.
 * Only Scala and Java applications can be run.

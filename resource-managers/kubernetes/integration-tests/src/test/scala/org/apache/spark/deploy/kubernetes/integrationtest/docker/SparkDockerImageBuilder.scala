@@ -31,6 +31,7 @@ private[spark] class SparkDockerImageBuilder(private val dockerEnv: Map[String, 
   private val DRIVER_V1_DOCKER_FILE = "dockerfiles/driver/Dockerfile"
   private val DRIVER_V2_DOCKER_FILE = "dockerfiles/driver-v2/Dockerfile"
   private val EXECUTOR_DOCKER_FILE = "dockerfiles/executor/Dockerfile"
+  private val SHUFFLE_SERVICE_DOCKER_FILE = "dockerfiles/shuffle-service/Dockerfile"
   private val DRIVER_INIT_DOCKER_FILE = "dockerfiles/driver-init/Dockerfile"
   private val STAGING_SERVER_DOCKER_FILE = "dockerfiles/resource-staging-server/Dockerfile"
   private val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
@@ -60,6 +61,7 @@ private[spark] class SparkDockerImageBuilder(private val dockerEnv: Map[String, 
     Eventually.eventually(TIMEOUT, INTERVAL) { dockerClient.ping() }
     buildImage("spark-driver", DRIVER_V1_DOCKER_FILE)
     buildImage("spark-executor", EXECUTOR_DOCKER_FILE)
+    buildImage("spark-shuffle", SHUFFLE_SERVICE_DOCKER_FILE)
     buildImage("spark-driver-v2", DRIVER_V2_DOCKER_FILE)
     buildImage("spark-resource-staging-server", STAGING_SERVER_DOCKER_FILE)
     buildImage("spark-driver-init", DRIVER_INIT_DOCKER_FILE)

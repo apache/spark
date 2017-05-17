@@ -67,4 +67,8 @@ private[spark] object KubernetesSuite {
     ".integrationtest.jobs.SparkPiWithInfiniteWait"
   val FILE_EXISTENCE_MAIN_CLASS = "org.apache.spark.deploy.kubernetes" +
     ".integrationtest.jobs.FileExistenceTest"
+  val GROUP_BY_MAIN_CLASS = "org.apache.spark.deploy.kubernetes" +
+    ".integrationtest.jobs.GroupByTest"
+
+  case class ShuffleNotReadyException() extends Exception
 }
