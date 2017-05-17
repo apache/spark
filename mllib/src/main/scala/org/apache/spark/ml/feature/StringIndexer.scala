@@ -79,7 +79,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     "How to order labels of string column. " +
     "The first label after ordering is assigned an index of 0. " +
     s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
-    (value: String) => StringIndexer.supportedStringOrderType
+    (value: String) => StringIndexer.supportedStringOrderType.map(_.toLowerCase(Locale.ROOT))
       .contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
@@ -137,13 +137,17 @@ class StringIndexer @Since("1.4.0") (
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  private def getFormattedStringOrderType: String =
+    StringIndexer.supportedStringOrderType
+      .find(_.toLowerCase(Locale.ROOT) == getStringOrderType.toLowerCase(Locale.ROOT)).get
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
     transformSchema(dataset.schema, logging = true)
     val values = dataset.na.drop(Array($(inputCol)))
       .select(col($(inputCol)).cast(StringType))
       .rdd.map(_.getString(0))
-    val labels = getStringOrderType.toLowerCase(Locale.ROOT) match {
+    val labels = getFormattedStringOrderType match {
       case StringIndexer.frequencyDesc => values.countByValue().toSeq.sortBy(-_._2)
         .map(_._1).toArray
       case StringIndexer.frequencyAsc => values.countByValue().toSeq.sortBy(_._2)
@@ -170,10 +174,10 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
-  private[feature] val frequencyDesc: String = "frequencydesc"
-  private[feature] val frequencyAsc: String = "frequencyasc"
-  private[feature] val alphabetDesc: String = "alphabetdesc"
-  private[feature] val alphabetAsc: String = "alphabetasc"
+  private[feature] val frequencyDesc: String = "frequencyDesc"
+  private[feature] val frequencyAsc: String = "frequencyAsc"
+  private[feature] val alphabetDesc: String = "alphabetDesc"
+  private[feature] val alphabetAsc: String = "alphabetAsc"
   private[feature] val supportedStringOrderType: Array[String] =
     Array(frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc)
 
