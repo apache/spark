@@ -380,7 +380,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         s"""
            |CREATE TABLE $managedTable (key INT, value STRING)
            |PARTITIONED BY (ds STRING, hr STRING)
-        """.stripMargin)
+         """.stripMargin)
 
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
         sql(
