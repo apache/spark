@@ -80,7 +80,7 @@ private[columnar] final class NoopColumnStats extends ColumnStats {
     if (!row.isNullAt(ordinal)) {
       count += 1
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
@@ -96,7 +96,7 @@ private[columnar] final class BooleanColumnStats extends ColumnStats {
       val value = row.getBoolean(ordinal)
       gatherValueStats(value)
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
@@ -120,7 +120,7 @@ private[columnar] final class ByteColumnStats extends ColumnStats {
       val value = row.getByte(ordinal)
       gatherValueStats(value)
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
@@ -144,7 +144,7 @@ private[columnar] final class ShortColumnStats extends ColumnStats {
       val value = row.getShort(ordinal)
       gatherValueStats(value)
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
@@ -168,7 +168,7 @@ private[columnar] final class IntColumnStats extends ColumnStats {
       val value = row.getInt(ordinal)
       gatherValueStats(value)
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
@@ -192,7 +192,7 @@ private[columnar] final class LongColumnStats extends ColumnStats {
       val value = row.getLong(ordinal)
       gatherValueStats(value)
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
@@ -216,7 +216,7 @@ private[columnar] final class FloatColumnStats extends ColumnStats {
       val value = row.getFloat(ordinal)
       gatherValueStats(value)
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
@@ -240,7 +240,7 @@ private[columnar] final class DoubleColumnStats extends ColumnStats {
       val value = row.getDouble(ordinal)
       gatherValueStats(value)
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
@@ -265,7 +265,7 @@ private[columnar] final class StringColumnStats extends ColumnStats {
       val size = STRING.actualSize(row, ordinal)
       gatherValueStats(value, size)
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
@@ -284,9 +284,10 @@ private[columnar] final class BinaryColumnStats extends ColumnStats {
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val size = BINARY.actualSize(row, ordinal)
-      gatherValueStats(size)
+      sizeInBytes += size
+      count += 1
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
@@ -312,7 +313,7 @@ private[columnar] final class DecimalColumnStats(precision: Int, scale: Int) ext
       val size = 8
       gatherValueStats(value, size)
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
@@ -333,9 +334,10 @@ private[columnar] final class ObjectColumnStats(dataType: DataType) extends Colu
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val size = columnType.actualSize(row, ordinal)
-      gatherValueStats(size)
+      sizeInBytes += size
+      count += 1
     } else {
-      super.gatherNullStats
+      gatherNullStats
     }
   }
 
