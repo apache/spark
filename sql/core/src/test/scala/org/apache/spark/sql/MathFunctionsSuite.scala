@@ -276,6 +276,9 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("cot") {
     testOneToOneMathFunction(cot, (d: Double) => 1 / math.tan(d))
+    checkAnswer(
+      sql(s"SELECT cot(null), cot(0), cot(-1), cot(${Double.MaxValue})"),
+      Row(null, Double.PositiveInfinity, -0.6420926159343306, -201.53099572900314))
   }
 
   test("pow / power") {

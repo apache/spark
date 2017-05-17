@@ -1994,7 +1994,7 @@ object functions {
    * Computes the cotangent of the given column.
    *
    * @group math_funcs
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def cot(e: Column): Column = withExpr { Cot(e.expr) }
 
@@ -2002,7 +2002,7 @@ object functions {
    * Computes the cotangent of the given column name.
    *
    * @group math_funcs
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def cot(colName: String): Column = cot(Column(colName))
 
