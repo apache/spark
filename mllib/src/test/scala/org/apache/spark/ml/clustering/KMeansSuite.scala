@@ -155,6 +155,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
 
   test("string params should be case-insensitive") {
     val km = new KMeans().setK(k).setMaxIter(1)
+
     Seq("RAndOm", "k-mEAns||").foreach { mode =>
       km.setInitMode(mode)
       assert(km.getInitMode === mode)

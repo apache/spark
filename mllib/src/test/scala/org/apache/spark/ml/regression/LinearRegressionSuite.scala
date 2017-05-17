@@ -1001,6 +1001,7 @@ class LinearRegressionSuite
 
   test("string params should be case-insensitive") {
     val lir = new LinearRegression().setMaxIter(1)
+
     Seq("aUtO", "l-bFGs", "nOrmAl").foreach { solver =>
       lir.setSolver(solver)
       assert(lir.getSolver === solver)

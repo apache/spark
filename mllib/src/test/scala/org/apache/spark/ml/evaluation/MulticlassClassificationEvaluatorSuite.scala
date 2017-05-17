@@ -48,6 +48,7 @@ class MulticlassClassificationEvaluatorSuite
     ).toDF("label", "prediction")
 
     val evaluator = new MulticlassClassificationEvaluator()
+
     Seq("F1", "weighTEdprecISion", "weiGHtedrECall", "aCCuraCy").foreach { metric =>
       evaluator.setMetricName(metric)
       assert(evaluator.getMetricName === metric)

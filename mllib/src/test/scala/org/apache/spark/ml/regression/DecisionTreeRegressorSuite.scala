@@ -183,8 +183,8 @@ class DecisionTreeRegressorSuite
   test("string params should be case-insensitive") {
     val rdd = TreeTests.getTreeReadWriteData(sc)
     val df: DataFrame = TreeTests.setMetadata(rdd, Map.empty[Int, Int], 0)
-
     val dt = new DecisionTreeRegressor().setMaxDepth(0)
+
     Seq("varIAncE").foreach { impurity =>
       dt.setImpurity(impurity)
       assert(dt.getImpurity === impurity)

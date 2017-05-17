@@ -296,10 +296,11 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
   test("string params should be case-insensitive") {
     val nb = new NaiveBayes()
+
     Seq("mulTInomiAl", "BERnoullI").foreach { modelType =>
       nb.setModelType(modelType)
       assert(nb.getModelType === modelType)
-      val model = nb.fit(dataset)
+      val model = nb.fit(bernoulliDataset)
       assert(model.getModelType === modelType)
     }
   }

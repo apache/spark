@@ -225,8 +225,8 @@ class RandomForestClassifierSuite
 
   test("string params should be case-insensitive") {
     val df: DataFrame = TreeTests.setMetadata(orderedLabeledPoints5_20, Map.empty[Int, Int], 2)
-
     val rf = new RandomForestClassifier().setNumTrees(1).setMaxDepth(0)
+
     Seq("enTropy", "gInI").foreach { impurity =>
       rf.setImpurity(impurity)
       assert(rf.getImpurity === impurity)

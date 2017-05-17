@@ -95,6 +95,7 @@ class RegressionEvaluatorSuite
     ).toDF("label", "prediction")
 
     val evaluator = new RegressionEvaluator()
+
     Seq("mSe", "rMSe", "R2", "mAE").foreach { metric =>
       evaluator.setMetricName(metric)
       assert(evaluator.getMetricName === metric)

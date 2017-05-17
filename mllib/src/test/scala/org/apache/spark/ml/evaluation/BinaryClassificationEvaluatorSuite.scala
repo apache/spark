@@ -84,6 +84,7 @@ class BinaryClassificationEvaluatorSuite
     ).toDF("label", "rawPrediction")
 
     val evaluator = new BinaryClassificationEvaluator()
+
     Seq("AreAUnderRoC", "arEAUnderPR").foreach { metric =>
       evaluator.setMetricName(metric)
       assert(evaluator.getMetricName === metric)

@@ -163,6 +163,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (3, Double.NaN, 14.0, 5.0, 3.0, 14.0, 14.0)
     )).toDF("id", "value1", "value2", "expected_mean_value1", "expected_median_value1",
       "expected_mean_value2", "expected_median_value2")
+
     val imputer = new Imputer()
       .setInputCols(Array("value1", "value2"))
       .setOutputCols(Array("out1", "out2"))

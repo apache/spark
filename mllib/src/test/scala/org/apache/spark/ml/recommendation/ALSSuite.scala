@@ -688,15 +688,17 @@ class ALSSuite
   test("case insensitive cold start param value") {
     val spark = this.spark
     import spark.implicits._
+
     val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
     val data = ratings.toDF
 
     val als = new ALS().setMaxIter(1)
-    Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { s =>
-      als.setColdStartStrategy(s)
-      assert(als.getColdStartStrategy === s)
+
+    Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { strtegy =>
+      als.setColdStartStrategy(strtegy)
+      assert(als.getColdStartStrategy === strtegy)
       val model = als.fit(data)
-      assert(model.getColdStartStrategy === s)
+      assert(model.getColdStartStrategy === strtegy)
       model.transform(data)
     }
   }

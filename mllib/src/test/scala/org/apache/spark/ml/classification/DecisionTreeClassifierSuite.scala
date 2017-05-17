@@ -402,8 +402,8 @@ class DecisionTreeClassifierSuite
   test("string params should be case-insensitive") {
     val rdd = TreeTests.getTreeReadWriteData(sc)
     val df: DataFrame = TreeTests.setMetadata(rdd, Map.empty[Int, Int], 2)
-
     val dt = new DecisionTreeClassifier().setMaxDepth(0)
+
     Seq("enTropy", "gInI").foreach { impurity =>
       dt.setImpurity(impurity)
       assert(dt.getImpurity === impurity)

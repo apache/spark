@@ -208,7 +208,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
           OldLabeledPoint(label, OldVectors.fromML(features))
       }
     val selector = new feature.ChiSqSelector()
-      .setSelectorType($(selectorType))
+      .setSelectorType(getSelectorType.toLowerCase(Locale.ROOT))
       .setNumTopFeatures($(numTopFeatures))
       .setPercentile($(percentile))
       .setFpr($(fpr))
@@ -220,10 +220,11 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    val otherPairs = OldChiSqSelector.supportedSelectorTypes.filter(_ != $(selectorType))
+    val otherPairs = OldChiSqSelector.supportedSelectorTypes
+      .filter(_ != getSelectorType.toLowerCase(Locale.ROOT))
     otherPairs.foreach { paramName: String =>
       if (isSet(getParam(paramName))) {
-        logWarning(s"Param $paramName will take no effect when selector type = ${$(selectorType)}.")
+        logWarning(s"Param $paramName will take no effect when selector type = $getSelectorType.")
       }
     }
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)

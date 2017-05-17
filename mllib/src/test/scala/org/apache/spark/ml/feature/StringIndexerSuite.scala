@@ -318,6 +318,7 @@ class StringIndexerSuite
   test("string params should be case-insensitive") {
     val data = Seq((0, "b"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "b"))
     val df = data.toDF("id", "label")
+
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")

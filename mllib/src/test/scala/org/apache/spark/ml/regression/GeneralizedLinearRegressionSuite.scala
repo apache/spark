@@ -1595,19 +1595,18 @@ class GeneralizedLinearRegressionSuite
     ).toDF()
 
     val glr = new GeneralizedLinearRegression().setMaxIter(1)
-    Seq("gauSSian", "binOMial", "poisSON", "GAMMa", "TweeDIe").foreach { family =>
-      glr.setFamily(family)
-      assert(glr.getFamily === family)
-      val model = glr.fit(df)
-      assert(model.getFamily === family)
-    }
-    glr.setFamily("gaussian")
 
-    Seq("identITY", "lOg", "inVersE", "lOgIt", "prOBit", "cLOGlog", "sQRt").foreach { link =>
-      glr.setLink(link)
-      assert(glr.getLink === link)
-      val model = glr.fit(df)
-      assert(model.getLink === link)
+    Seq(("gauSSian", "identITY"), ("GaussiAn", "LOG"), ("GAUssIan", "inVersE"),
+      ("binOMial", "lOgIt"), ("bInoMial", "ProbiT"), ("bInOmial", "CLOGlog"),
+      ("poisSON", "loG"), ("poiSSon", "IdeNtity"), ("pOissOn", "SQrT"),
+      ("GammA", "InversE"), ("GAmmA", "IdEntity"), ("gaMMa", "loG")).foreach {
+      case (family, link) =>
+        glr.setFamily(family).setLink(link)
+        assert(glr.getFamily === family)
+        assert(glr.getLink === link)
+        val model = glr.fit(df)
+        assert(model.getFamily === family)
+        assert(model.getLink === link)
     }
 
     Seq("IRlS").foreach { solver =>

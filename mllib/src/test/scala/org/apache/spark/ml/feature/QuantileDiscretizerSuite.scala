@@ -152,6 +152,7 @@ class QuantileDiscretizerSuite
     import spark.implicits._
 
     val df = sc.parallelize(1 to 100).map(Tuple1.apply).toDF("input")
+
     val discretizer = new QuantileDiscretizer()
       .setInputCol("input")
       .setOutputCol("result")
