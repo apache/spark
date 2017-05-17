@@ -412,6 +412,10 @@ private[hive] class HiveClientImpl(
         unsupportedFeatures += "partitioned view"
       }
 
+      if (h.getTableType == HiveTableType.VIRTUAL_VIEW && partCols.nonEmpty) {
+        unsupportedFeatures += "partitioned view"
+      }
+
       val properties = Option(h.getParameters).map(_.asScala.toMap).orNull
 
       CatalogTable(
