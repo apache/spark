@@ -165,7 +165,8 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("string params should be case-insensitive") {
-    val css = new ChiSqSelector()
+    val css = new ChiSqSelector().setNumTopFeatures(1).setPercentile(0.17)
+      .setFpr(0.02).setFdr(0.12).setFwe(0.12)
 
     Seq("numtOpfeAtures", "perCentIle", "fPr", "fDr", "fwE").foreach { selectorType =>
       css.setSelectorType(selectorType)
