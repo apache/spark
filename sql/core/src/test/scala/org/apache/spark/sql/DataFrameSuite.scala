@@ -1797,6 +1797,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     dates.intersect(widenTypedRows).collect()
   }
 
+  test("SPARK-17897: Attribute is not NullIntolerant") {
+    val data = Seq[java.lang.Integer](1, null).toDF("key")
+    checkAnswer(data.filter("not key is not null"), Row(null))
+  }
+
   test("SPARK-18070 binary operator should not consider nullability when comparing input types") {
     val rows = Seq(Row(Seq(1), Seq(1)))
     val schema = new StructType()
