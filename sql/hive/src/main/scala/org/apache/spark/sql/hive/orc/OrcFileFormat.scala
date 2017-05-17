@@ -38,7 +38,7 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
+import org.apache.spark.sql.hive.{HiveInspectors, HiveSessionState, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -128,6 +128,9 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
+    val convertHiveOrc =
+      sparkSession.sessionState.asInstanceOf[HiveSessionState].convertMetastoreOrc
+
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
 
@@ -139,7 +142,31 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
         Iterator.empty
       } else {
         val physicalSchema = maybePhysicalSchema.get
-        OrcRelation.setRequiredColumns(conf, physicalSchema, requiredSchema)
+
+        // SPARK-16628: an Orc table created by Hive may not store column name correctly in the
+        // Orc files. So the physical schema can mismatch required schema which comes from
+        // metastore schema and reading Orc files will fail.
+        // To fix this, we assume the metastore schema `dataSchema` can match to `physicalSchema`
+        // by each column disregarding the column names. If not, we throw an exception that
+        // suggests users to disable the conversion of Hive Orc tables.
+        val physicalRequiredSchema =
+          if (convertHiveOrc && OrcRelation.isMismatchSchema(physicalSchema, requiredSchema)) {
+            require(physicalSchema.length == dataSchema.length,
+              s"physical schema $physicalSchema in Orc file doesn't match metastore schema " +
+                s"$dataSchema, please disable spark.sql.hive.convertMetastoreOrc to work around " +
+                "this problem.")
+            physicalSchema.fields.zip(dataSchema.fields).map { case (pf, df) =>
+              require(pf.dataType == df.dataType,
+                s"Column $pf in Orc file doesn't match column $df in metastore schema, " +
+                  "please disable spark.sql.hive.convertMetastoreOrc to work around this problem.")
+            }
+            OrcRelation.setRequiredColumns(conf, dataSchema, requiredSchema)
+            StructType(
+              requiredSchema.map(a => dataSchema.fieldIndex(a.name)).map(physicalSchema(_)))
+          } else {
+            OrcRelation.setRequiredColumns(conf, physicalSchema, requiredSchema)
+            requiredSchema
+          }
 
         val orcRecordReader = {
           val job = Job.getInstance(conf)
@@ -163,7 +190,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
         // Unwraps `OrcStruct`s to `UnsafeRow`s
         OrcRelation.unwrapOrcStructs(
           conf,
-          requiredSchema,
+          physicalRequiredSchema,
           Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
           recordsIterator)
       }
@@ -303,6 +330,10 @@ private[orc] object OrcRelation extends HiveInspectors {
     }
 
     maybeStructOI.map(unwrap).getOrElse(Iterator.empty)
+  }
+
+  def isMismatchSchema(physicalSchema: StructType, requestedSchema: StructType): Boolean = {
+    requestedSchema.forall(a => physicalSchema.getFieldIndex(a.name).isEmpty)
   }
 
   def setRequiredColumns(
