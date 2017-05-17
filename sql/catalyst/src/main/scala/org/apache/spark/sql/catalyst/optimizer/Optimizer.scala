@@ -689,13 +689,17 @@ object CombineUnions extends Rule[LogicalPlan] {
 object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Filter(fc, nf @ Filter(nc, grandChild)) =>
-      (ExpressionSet(splitConjunctivePredicates(fc)) --
+      val combinedFilter = (ExpressionSet(splitConjunctivePredicates(fc)) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }
+      // [[Filter]] can't pushdown through another [[Filter]]. Once they are combined,
+      // [[BooleanSimplification]] rule will possibly simplify the predicate to the form that
+      // will not be able to pushdown. So we pushdown the combined [[Filter]] immediately.
+      PushDownPredicate(combinedFilter)
   }
 }
 

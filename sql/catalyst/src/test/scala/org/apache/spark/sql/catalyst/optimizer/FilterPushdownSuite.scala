@@ -34,8 +34,8 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
-        CombineFilters,
         PushDownPredicate,
+        CombineFilters,
         BooleanSimplification,
         PushPredicateThroughJoin,
         CollapseProject) :: Nil
@@ -200,6 +200,49 @@ class FilterPushdownSuite extends PlanTest {
       testRelation
         .where('a === 1 && 'a === 2)
         .select('a).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("push down filters that are combined") {
+    // The following predicate ('a === 2 || 'a === 3) && ('c > 10 || 'a === 2)
+    // will be simplified as ('a == 2) || ('c > 10 && 'a == 3).
+    // ('a === 2 || 'a === 3) can be pushed down. But the simplified one can't.
+    val originalQuery = testRelation
+      .select('a, 'b, ('c + 1) as 'cc)
+      .groupBy('a)('a, count('cc) as 'c)
+      .where('c > 10) // this predicate can't be pushed down.
+      .where(('a === 2 || 'a === 3) && ('c > 10 || 'a === 2))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where('a === 2 || 'a === 3)
+        .select('a, 'b, ('c + 1) as 'cc)
+        .groupBy('a)('a, count('cc) as 'c)
+        .where('c > 10).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // TODO: currently predicate pushdown doesn't convert predicates to pushdown-able form.
+  // We should do it to push down more predicates.
+  ignore("predicates which are able to pushdown should be pushed down after converted") {
+    // (('a === 2) || ('c > 10 || 'a === 3)) can't be pushdown due to the disjunctive form.
+    // However, its conjunctive normal form can be pushdown.
+    val originalQuery = testRelation
+      .select('a, 'b, ('c + 1) as 'cc)
+      .groupBy('a)('a, count('cc) as 'c)
+      .where('c > 10)
+      .where(('a === 2) || ('c > 10 && 'a === 3))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where('a === 2 || 'a === 3)
+        .select('a, 'b, ('c + 1) as 'cc)
+        .groupBy('a)('a, count('cc) as 'c)
+        .where('c > 10).analyze
 
     comparePlans(optimized, correctAnswer)
   }
