@@ -173,7 +173,11 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val t1 = testRelation.subquery('t1)
     val t2 = testRelation.subquery('t2)
 
+    // We should prevent `Coalese(a, b)` from recursively creating complicated constraints through
+    // the constraint inference procedure.
     val originalQuery = t1.select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col))
+      // We hide an `Alias` inside the child's child's expressions, to cover the situation reported
+      // in [SPARK-20700].
       .select('int_col, 'd, 'a).as("t")
       .join(t2, Inner,
         Some("t.a".attr === "t2.a".attr
