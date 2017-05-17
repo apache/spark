@@ -20,7 +20,7 @@ import breeze.optimize.DiffFunction
 
 /**
  * A Breeze diff function which represents a cost function for differentiable regularization
- * of parameters. e.g. L2 regularization: 1 / 2 regParam * <\beta, \beta>
+ * of parameters. e.g. L2 regularization: 1 / 2 regParam * beta dot beta
  *
  * @tparam T The type of the coefficients being regularized.
  */
