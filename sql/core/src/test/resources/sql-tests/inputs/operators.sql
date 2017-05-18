@@ -32,6 +32,7 @@ select 1 - 2;
 select 2 * 5;
 select 5 % 3;
 select pmod(-7, 3);
+select cot(1);
 
 -- check operator precedence.
 -- We follow Oracle operator precedence in the table below that lists the levels of precedence
