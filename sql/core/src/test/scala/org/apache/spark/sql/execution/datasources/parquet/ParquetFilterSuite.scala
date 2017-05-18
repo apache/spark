@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.nio.charset.StandardCharsets
 
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
-import org.apache.parquet.filter2.predicate.FilterApi._
+import org.apache.parquet.filter2.predicate.FilterApi.{and, gt, lt}
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
 
 import org.apache.spark.sql._
@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetColumns.{doubleColumn, intColumn}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -536,6 +537,49 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       assert(spark.read.parquet(path).where("name < 'é'").count() == 1)
       assert(spark.read.parquet(path).where("name <= 'é'").count() == 2)
       // scalastyle:on nonascii
+    }
+  }
+
+  test("SPARK-20364: Predicate pushdown for columns with a '.' in them") {
+    import testImplicits._
+
+    Seq(true, false).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val dfs = Seq(
+          Seq(Some(1), None).toDF("col.dots"),
+          Seq(Some(1L), None).toDF("col.dots"),
+          Seq(Some(1.0F), None).toDF("col.dots"),
+          Seq(Some(1.0D), None).toDF("col.dots"),
+          Seq(true, false).toDF("col.dots"),
+          Seq("apple", null).toDF("col.dots")
+        )
+
+        val predicates = Seq(
+          "`col.dots` > 0",
+          "`col.dots` >= 1L",
+          "`col.dots` < 2.0",
+          "`col.dots` <= 1.0D",
+          "`col.dots` == true",
+          "`col.dots` IS NOT NULL"
+        )
+
+        dfs.zip(predicates).foreach { case (df, predicate) =>
+          withTempPath { path =>
+            df.write.parquet(path.getAbsolutePath)
+            assert(spark.read.parquet(path.getAbsolutePath).where(predicate).count() == 1)
+          }
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> false.toString) {
+      withTempPath { path =>
+        Seq("apple", null).toDF("col.dots").write.parquet(path.getAbsolutePath)
+        // This checks record-by-record filtering in Parquet's filter2.
+        val num = stripSparkFilter(
+          spark.read.parquet(path.getAbsolutePath).where("`col.dots` IS NULL")).count()
+        assert(num == 1)
+      }
     }
   }
 }

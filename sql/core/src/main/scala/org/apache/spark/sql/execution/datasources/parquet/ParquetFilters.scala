@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.parquet.filter2.predicate._
-import org.apache.parquet.filter2.predicate.FilterApi._
+import org.apache.parquet.filter2.predicate.Operators.{Column, SupportsEqNotEq, SupportsLtGt}
+import org.apache.parquet.hadoop.metadata.ColumnPath
 import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.sources
@@ -28,6 +29,8 @@ import org.apache.spark.sql.types._
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
 private[parquet] object ParquetFilters {
+
+  import ParquetColumns._
 
   private val makeEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
     case BooleanType =>
@@ -233,5 +236,42 @@ private[parquet] object ParquetFilters {
 
       case _ => None
     }
+  }
+}
+
+/**
+ * Note that, this is a hacky workaround to allow dots in column names. Currently, column APIs
+ * in Parquet's `FilterApi` only allows dot-separated names so here we resemble those columns
+ * but only allow single column path that allows dots in the names as we don't currently push
+ * down filters with nested fields. The functions in this object are based on
+ * the codes in `org.apache.parquet.filter2.predicate`.
+ */
+private[parquet] object ParquetColumns {
+  def intColumn(columnPath: String): Column[Integer] with SupportsLtGt = {
+    new Column[Integer] (ColumnPath.get(columnPath), classOf[Integer]) with SupportsLtGt
+  }
+
+  def longColumn(columnPath: String): Column[java.lang.Long] with SupportsLtGt = {
+    new Column[java.lang.Long] (
+      ColumnPath.get(columnPath), classOf[java.lang.Long]) with SupportsLtGt
+  }
+
+  def floatColumn(columnPath: String): Column[java.lang.Float] with SupportsLtGt = {
+    new Column[java.lang.Float] (
+      ColumnPath.get(columnPath), classOf[java.lang.Float]) with SupportsLtGt
+  }
+
+  def doubleColumn(columnPath: String): Column[java.lang.Double] with SupportsLtGt = {
+    new Column[java.lang.Double] (
+      ColumnPath.get(columnPath), classOf[java.lang.Double]) with SupportsLtGt
+  }
+
+  def booleanColumn(columnPath: String): Column[java.lang.Boolean] with SupportsEqNotEq = {
+    new Column[java.lang.Boolean] (
+      ColumnPath.get(columnPath), classOf[java.lang.Boolean]) with SupportsEqNotEq
+  }
+
+  def binaryColumn(columnPath: String): Column[Binary] with SupportsLtGt = {
+    new Column[Binary] (ColumnPath.get(columnPath), classOf[Binary]) with SupportsLtGt
   }
 }

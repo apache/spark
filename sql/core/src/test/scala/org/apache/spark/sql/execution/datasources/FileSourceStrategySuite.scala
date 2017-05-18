@@ -487,6 +487,20 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  test("no filter pushdown for nested field access") {
+    val table = createTable(
+      files = Seq("file1" -> 1),
+      format = classOf[TestFileFormatWithNestedSchema].getName)
+
+    checkScan(table.where("a1 = 1"))(_ => ())
+    // Check `a1` access pushes the predicate.
+    checkDataFilters(Set(IsNotNull("a1"), EqualTo("a1", 1)))
+
+    checkScan(table.where("a2.c1 = 1"))(_ => ())
+    // Check `a2.c1` access does not push the predicate.
+    checkDataFilters(Set(IsNotNull("a2")))
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
@@ -537,7 +551,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
    */
   def createTable(
       files: Seq[(String, Int)],
-      buckets: Int = 0): DataFrame = {
+      buckets: Int = 0,
+      format: String = classOf[TestFileFormat].getName): DataFrame = {
     val tempDir = Utils.createTempDir()
     files.foreach {
       case (name, size) =>
@@ -547,7 +562,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
 
     val df = spark.read
-      .format(classOf[TestFileFormat].getName)
+      .format(format)
       .load(tempDir.getCanonicalPath)
 
     if (buckets > 0) {
@@ -632,6 +647,22 @@ class TestFileFormat extends TextBasedFileFormat {
   }
 }
 
+/**
+ * A test [[FileFormat]] that records the arguments passed to buildReader, and returns nothing.
+ * Unlike the one above, this one has a nested schema.
+ */
+class TestFileFormatWithNestedSchema extends TestFileFormat {
+  override def inferSchema(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      files: Seq[FileStatus]): Option[StructType] =
+    Some(StructType(Nil)
+      .add("a1", IntegerType)
+      .add("a2",
+         StructType(Nil)
+           .add("c1", IntegerType)
+           .add("c2", IntegerType)))
+}
 
 class LocalityTestFileSystem extends RawLocalFileSystem {
   private val invocations = new AtomicInteger(0)
