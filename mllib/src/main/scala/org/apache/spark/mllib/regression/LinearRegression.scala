@@ -208,3 +208,35 @@ object LinearRegressionWithSGD {
     train(input, numIterations, 1.0, 1.0)
   }
 }
+
+/**
+ * Train a linear regression model using Orthogonal Decomposition Method.
+ * This solves the least squares regression formulation
+ *              f(weights) = 1/n ||A weights-y||^2
+ * (which is the mean squared error).
+ * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
+ * its corresponding right hand side label y.
+ * See also the documentation for the precise formulation.
+ */
+class LinearRegressionWithOLS
+  extends GeneralizedLinearAlgorithm[LinearRegressionModel] with Serializable {
+
+  override val optimizer = new OrdinaryLeastSquares
+
+  override protected def createModel(weights: Vector, intercept: Double) = {
+    new LinearRegressionModel(weights, intercept)
+  }
+}
+
+object LinearRegressionWithOLS {
+
+  def train(input: RDD[LabeledPoint], initialWeight: Vector): LinearRegressionModel = {
+    new LinearRegressionWithOLS().run(input, initialWeight)
+  }
+
+  def train(input: RDD[LabeledPoint]): LinearRegressionModel = {
+    new LinearRegressionWithOLS().run(input)
+  }
+
+
+}
