@@ -244,6 +244,40 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("a", ClassData("a", 1)), ("b", ClassData("b", 2)), ("c", ClassData("c", 3)))
   }
 
+  test("select 3, regex") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDF()
+    intercept[AnalysisException] {
+      ds.select(expr("`(_1)?+.+`").as[Int])
+    }
+
+    intercept[AnalysisException] {
+      ds.select(expr("`(_1|_2)`").as[Int])
+    }
+
+    withSQLConf(SQLConf.SUPPORT_QUOTED_IDENTIFIERS.key -> "true") {
+      checkDataset(
+        ds.select(expr("`(_1)?+.+`").as[Int]),
+        1, 2, 3)
+      val m = ds.select(expr("`(_1|_2)`"))
+
+      checkDataset(
+        ds.select(expr("`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+
+      checkDataset(
+        ds.alias("g")
+          .select(expr("g.`(_1)?+.+`").as[Int]),
+        1, 2, 3)
+
+      checkDataset(
+        ds.alias("g")
+          .select(expr("g.`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+    }
+  }
+
   test("filter") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDataset(
