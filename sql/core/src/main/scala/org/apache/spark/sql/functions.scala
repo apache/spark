@@ -1999,14 +1999,6 @@ object functions {
   def cot(e: Column): Column = withExpr { Cot(e.expr) }
 
   /**
-   * Computes the cotangent of the given column name.
-   *
-   * @group math_funcs
-   * @since 2.3.0
-   */
-  def cot(colName: String): Column = cot(Column(colName))
-
-  /**
    * Computes the hyperbolic tangent of the given value.
    *
    * @group math_funcs
