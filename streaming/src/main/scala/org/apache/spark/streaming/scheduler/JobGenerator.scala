@@ -58,7 +58,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   private val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
-    longTime => eventLoop.post(GenerateJobs(new Time(longTime))), "JobGenerator")
+    longTime => eventLoop.post(GenerateJobs(new Time(longTime))), "JobGenerator", ssc.sparkContext.getConf.getLong("spark.streaming.starttime.jitter", 0))
 
   // This is marked lazy so that this is initialized after checkpoint duration has been set
   // in the context and the generator has been started.

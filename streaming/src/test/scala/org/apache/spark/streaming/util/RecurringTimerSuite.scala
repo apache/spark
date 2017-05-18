@@ -82,4 +82,35 @@ class RecurringTimerSuite extends SparkFunSuite with PrivateMethodTester {
     assert(results.asScala.toSeq === Seq(0L, 100L, 200L))
     assert(lastTime === 200L)
   }
+
+  test("SPARK-14230: add a start time jitter for the RecurringTimer") {
+    val jitter = 10
+    val period = 100
+    val clock = new ManualClock()
+    val results = new ConcurrentLinkedQueue[Long]()
+    val timer = new RecurringTimer(clock, period, time => {
+      results.add(time)
+    }, "RecurringTimerSuite-jitter", jitter)
+
+    assert(timer.getStartTime() === period + jitter)
+    timer.start()
+    clock.advance(jitter)
+    clock.advance(period)
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(results.asScala.toSeq === Seq(jitter + period))
+    }
+    clock.advance(period)
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(results.asScala.toSeq === Seq(jitter + period, jitter + period * 2))
+    }
+    clock.advance(period * 2)
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(results.asScala.toSeq === Seq(jitter + period,
+                                           jitter + period * 2,
+                                           jitter + period * 3,
+                                           jitter + period * 4))
+    }
+
+    assert(timer.stop(interruptTimer = true) === (jitter + period * 4))
+  }
 }
