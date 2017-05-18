@@ -238,6 +238,124 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 </div>
 </div>
 
+### Creating a Kafka Source Batch
+If you have a use case that is better suited to batch processing,
+you can create an Dataset/DataFrame for a defined range of offsets.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+
+// Subscribe to 1 topic defaults to the earliest and latest offsets
+val ds1 = spark
+  .read
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .load()
+ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .as[(String, String)]
+
+// Subscribe to multiple topics, specifying explicit Kafka offsets
+val ds2 = spark
+  .read
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1,topic2")
+  .option("startingOffsets", """{"topic1":{"0":23,"1":-2},"topic2":{"0":-2}}""")
+  .option("endingOffsets", """{"topic1":{"0":50,"1":-1},"topic2":{"0":-1}}""")
+  .load()
+ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .as[(String, String)]
+
+// Subscribe to a pattern, at the earliest and latest offsets
+val ds3 = spark
+  .read
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribePattern", "topic.*")
+  .option("startingOffsets", "earliest")
+  .option("endingOffsets", "latest")
+  .load()
+ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .as[(String, String)]
+
+{% endhighlight %}
+</div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+// Subscribe to 1 topic defaults to the earliest and latest offsets
+Dataset<Row> ds1 = spark
+  .read()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .load();
+ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
+
+// Subscribe to multiple topics, specifying explicit Kafka offsets
+Dataset<Row> ds2 = spark
+  .read()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1,topic2")
+  .option("startingOffsets", "{\"topic1\":{\"0\":23,\"1\":-2},\"topic2\":{\"0\":-2}}")
+  .option("endingOffsets", "{\"topic1\":{\"0\":50,\"1\":-1},\"topic2\":{\"0\":-1}}")
+  .load();
+ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
+
+// Subscribe to a pattern, at the earliest and latest offsets
+Dataset<Row> ds3 = spark
+  .read()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribePattern", "topic.*")
+  .option("startingOffsets", "earliest")
+  .option("endingOffsets", "latest")
+  .load();
+ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
+
+{% endhighlight %}
+</div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+
+# Subscribe to 1 topic defaults to the earliest and latest offsets
+ds1 = spark \
+  .read \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
+  .load()
+ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to multiple topics, specifying explicit Kafka offsets
+ds2 = spark \
+  .read \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1,topic2") \
+  .option("startingOffsets", """{"topic1":{"0":23,"1":-2},"topic2":{"0":-2}}""") \
+  .option("endingOffsets", """{"topic1":{"0":50,"1":-1},"topic2":{"0":-1}}""") \
+  .load()
+ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to a pattern, at the earliest and latest offsets
+ds3 = spark \
+  .read \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribePattern", "topic.*") \
+  .option("startingOffsets", "earliest") \
+  .option("endingOffsets", "latest") \
+  .load()
+ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+{% endhighlight %}
+</div>
+</div>
+
 Each row in the source has the following schema:
 <table class="table">
 <tr><th>Column</th><th>Type</th></tr>
