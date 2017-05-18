@@ -92,15 +92,15 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
       val iterator = rdd.iterator(partition, context)
       // Keep read lock, because next we need read it. And don't tell master.
-      blockManager.putIterator[U](blockId2, iterator, level, false, true) match {
-        case true =>
-          cachedInLocal = true
-          // After we cached the block, we also hold the block read lock until this task finished.
-          holdReadLock = true
-        case false =>
-          // There shouldn't a error caused by put in memory, because we use MEMORY_AND_DISK to
-          // cache it.
-          throw new SparkException(s"Cache block $blockId2 in local failed even though it's $level")
+      val putResult = blockManager.putIterator[U](blockId2, iterator, level, false, true)
+      if (putResult) {
+        cachedInLocal = true
+        // After we cached the block, we also hold the block read lock until this task finished.
+        holdReadLock = true
+      } else {
+        // There shouldn't a error caused by put in memory, because we use MEMORY_AND_DISK to
+        // cache it.
+        throw new SparkException(s"Cache block $blockId2 in local failed even though it's $level")
       }
 
       logInfo(s"Cache the block $blockId2 to local successful.")
