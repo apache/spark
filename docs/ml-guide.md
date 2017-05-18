@@ -91,6 +91,9 @@ There are no deprecations.
  **Note** this does _not affect_ the `ALS` Estimator or Model, nor MLlib's `ALS` class.
 * [SPARK-14772](https://issues.apache.org/jira/browse/SPARK-14772):
  Fixed inconsistency between Python and Scala APIs for `Param.copy` method.
+* [SPARK-11569](https://issues.apache.org/jira/browse/SPARK-11569):
+ `StringIndexer` now handles `NULL` values in the same way as unseen values. Previously an exception
+ would always be thrown regardless of the setting of the `handleInvalid` parameter.
   
 ## Previous Spark versions
 
