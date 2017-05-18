@@ -769,7 +769,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    *
    * \sum,,i,, c,,i,, (a,,i,, a,,i,,^T^ x - d,,i,, a,,i,,) + lambda * x = 0.
    *
-   * Distributing and letting b,,i,, = d,,i,, * b,,i,,
+   * Distributing and letting b,,i,, = c,,i,, * d,,i,,
    *
    * \sum,,i,, c,,i,, a,,i,, a,,i,,^T^ x - b,,i,, a,,i,, + lambda * x = 0.
    */
@@ -799,7 +799,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       require(a.length == k)
       copyToDouble(a)
       blas.dspr(upper, k, c, da, 1, ata)
-      if (Math.abs(b) > Double.MinPositiveValue) {
+      if (b != 0.0) {
         blas.daxpy(k, b, da, 1, atb, 1)
       }
       this
