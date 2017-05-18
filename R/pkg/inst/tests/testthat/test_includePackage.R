@@ -18,7 +18,7 @@
 context("include R packages")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Partitioned data
@@ -26,6 +26,8 @@ nums <- 1:2
 rdd <- parallelize(sc, nums, 2L)
 
 test_that("include inside function", {
+  skip_on_cran()
+
   # Only run the test if plyr is installed.
   if ("plyr" %in% rownames(installed.packages())) {
     suppressPackageStartupMessages(library(plyr))
@@ -42,6 +44,8 @@ test_that("include inside function", {
 })
 
 test_that("use include package", {
+  skip_on_cran()
+
   # Only run the test if plyr is installed.
   if ("plyr" %in% rownames(installed.packages())) {
     suppressPackageStartupMessages(library(plyr))

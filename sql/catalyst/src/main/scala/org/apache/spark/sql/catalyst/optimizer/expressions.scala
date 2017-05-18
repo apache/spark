@@ -18,11 +18,13 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
+import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -152,6 +154,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case _ And FalseLiteral => FalseLiteral
       case TrueLiteral Or _ => TrueLiteral
       case _ Or TrueLiteral => TrueLiteral
+
+      case a And b if Not(a).semanticEquals(b) => FalseLiteral
+      case a Or b if Not(a).semanticEquals(b) => TrueLiteral
+      case a And b if a.semanticEquals(Not(b)) => FalseLiteral
+      case a Or b if a.semanticEquals(Not(b)) => TrueLiteral
 
       case a And b if a.semanticEquals(b) => a
       case a Or b if a.semanticEquals(b) => a
@@ -368,6 +375,8 @@ case class NullPropagation(conf: SQLConf) extends Rule[LogicalPlan] {
       case EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case EqualNullSafe(l, Literal(null, _)) => IsNull(l)
 
+      case AssertNotNull(c, _) if !c.nullable => c
+
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
         val newChildren = children.filterNot(isNullLiteral)
@@ -533,5 +542,30 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
       case Lower(Upper(child)) => Lower(child)
       case Lower(Lower(child)) => Lower(child)
     }
+  }
+}
+
+/**
+ * Combine nested [[Concat]] expressions.
+ */
+object CombineConcats extends Rule[LogicalPlan] {
+
+  private def flattenConcats(concat: Concat): Concat = {
+    val stack = Stack[Expression](concat)
+    val flattened = ArrayBuffer.empty[Expression]
+    while (stack.nonEmpty) {
+      stack.pop() match {
+        case Concat(children) =>
+          stack.pushAll(children.reverse)
+        case child =>
+          flattened += child
+      }
+    }
+    Concat(flattened)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
+    case concat: Concat if concat.children.exists(_.isInstanceOf[Concat]) =>
+      flattenConcats(concat)
   }
 }

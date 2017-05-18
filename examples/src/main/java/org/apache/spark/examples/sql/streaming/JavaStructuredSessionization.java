@@ -28,8 +28,6 @@ import java.io.Serializable;
 import java.sql.Timestamp;
 import java.util.*;
 
-import scala.Tuple2;
-
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network.
  * <p>
@@ -76,8 +74,6 @@ public final class JavaStructuredSessionization {
           for (String word : lineWithTimestamp.getLine().split(" ")) {
             eventList.add(new Event(word, lineWithTimestamp.getTimestamp()));
           }
-          System.out.println(
-              "Number of events from " + lineWithTimestamp.getLine() + " = " + eventList.size());
           return eventList.iterator();
         }
       };
@@ -100,7 +96,7 @@ public final class JavaStructuredSessionization {
           // If timed out, then remove session and send final update
           if (state.hasTimedOut()) {
             SessionUpdate finalUpdate = new SessionUpdate(
-                sessionId, state.get().getDurationMs(), state.get().getNumEvents(), true);
+                sessionId, state.get().calculateDuration(), state.get().getNumEvents(), true);
             state.remove();
             return finalUpdate;
 
@@ -133,7 +129,7 @@ public final class JavaStructuredSessionization {
             // Set timeout such that the session will be expired if no data received for 10 seconds
             state.setTimeoutDuration("10 seconds");
             return new SessionUpdate(
-                sessionId, state.get().getDurationMs(), state.get().getNumEvents(), false);
+                sessionId, state.get().calculateDuration(), state.get().getNumEvents(), false);
           }
         }
       };
@@ -215,7 +211,8 @@ public final class JavaStructuredSessionization {
     public long getEndTimestampMs() { return endTimestampMs; }
     public void setEndTimestampMs(long endTimestampMs) { this.endTimestampMs = endTimestampMs; }
 
-    public long getDurationMs() { return endTimestampMs - startTimestampMs; }
+    public long calculateDuration() { return endTimestampMs - startTimestampMs; }
+
     @Override public String toString() {
       return "SessionInfo(numEvents = " + numEvents +
           ", timestamps = " + startTimestampMs + " to " + endTimestampMs + ")";

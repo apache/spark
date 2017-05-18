@@ -72,7 +72,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("rdd deserialization does not crash [SPARK-15791]") {
+  test("SPARK-15791: rdd deserialization does not crash") {
     sql("select (select 1 as b) as b").rdd.count()
   }
 
@@ -112,7 +112,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           |   with t4 as (select 1 as d, 3 as e)
           |   select * from t4 cross join t2 where t2.b = t4.d
           | )
-          | select a from (select 1 as a union all select 2 as a)
+          | select a from (select 1 as a union all select 2 as a) t
           | where a = (select max(d) from t3)
         """.stripMargin),
       Array(Row(1))
@@ -606,8 +606,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             |    select cntPlusOne + 1 as cntPlusTwo from (
             |        select cnt + 1 as cntPlusOne from (
             |            select sum(r.c) s, count(*) cnt from r where l.a = r.c having cnt = 0
-            |        )
-            |    )
+            |        ) t1
+            |    ) t2
             |) = 2""".stripMargin),
       Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
   }
@@ -655,7 +655,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           """
             | select c1 from onerow t1
             | where exists (select 1
-            |               from   (select 1 from onerow t2 LIMIT 1)
+            |               from   (select 1 as c1 from onerow t2 LIMIT 1) t2
             |               where  t1.c1=t2.c1)""".stripMargin),
         Row(1) :: Nil)
     }
@@ -822,12 +822,25 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         sql(
           """
-          | select c2
-          | from t1
-          | where exists (select *
-          |               from t2 lateral view explode(arr_c2) q as c2
-                          where t1.c1 = t2.c1)""".stripMargin),
+          | SELECT c2
+          | FROM t1
+          | WHERE EXISTS (SELECT *
+          |               FROM t2 LATERAL VIEW explode(arr_c2) q AS c2
+                          WHERE t1.c1 = t2.c1)""".stripMargin),
         Row(1) :: Row(0) :: Nil)
+
+      val msg1 = intercept[AnalysisException] {
+        sql(
+          """
+            | SELECT c1
+            | FROM t2
+            | WHERE EXISTS (SELECT *
+            |               FROM t1 LATERAL VIEW explode(t2.arr_c2) q AS c2
+            |               WHERE t1.c1 = t2.c1)
+          """.stripMargin)
+      }
+      assert(msg1.getMessage.contains(
+        "Expressions referencing the outer query are not supported outside of WHERE/HAVING"))
     }
   }
 
@@ -842,6 +855,24 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         sql("select * from t1 where id in (select id as id from t2)"),
         Row(0) :: Row(1) :: Nil)
+    }
+  }
+
+  test("ListQuery and Exists should work even no correlated references") {
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c AND (r.d in (select d from r) OR l.a >= 1)"),
+      Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) ::
+        Row(2, 1.0, 2, 3.0) :: Row(3.0, 3.0, 3, 2.0) :: Row(6, null, 6, null) :: Nil)
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c + 1 AND (exists (select * from r) OR l.a = r.c)"),
+      Row(3, 3.0, 2, 3.0) :: Row(3, 3.0, 2, 3.0) :: Nil)
+  }
+
+  test("SPARK-20688: correctly check analysis for scalar sub-queries") {
+    withTempView("t") {
+      Seq(1 -> "a").toDF("i", "j").createTempView("t")
+      val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
+      assert(e.message.contains("cannot resolve '`a`' given input columns: [i, j]"))
     }
   }
 }

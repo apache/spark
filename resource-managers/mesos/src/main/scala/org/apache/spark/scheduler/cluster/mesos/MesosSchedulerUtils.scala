@@ -239,7 +239,7 @@ trait MesosSchedulerUtils extends Logging {
   }
 
   /**
-   * Converts the attributes from the resource offer into a Map of name -> Attribute Value
+   * Converts the attributes from the resource offer into a Map of name to Attribute Value
    * The attribute values are the mesos attribute types and they are
    *
    * @param offerAttributes the attributes offered
@@ -296,7 +296,7 @@ trait MesosSchedulerUtils extends Logging {
 
   /**
    * Parses the attributes constraints provided to spark and build a matching data struct:
-   *  Map[<attribute-name>, Set[values-to-match]]
+   *  {@literal Map[<attribute-name>, Set[values-to-match]}
    *  The constraints are specified as ';' separated key-value pairs where keys and values
    *  are separated by ':'. The ':' implies equality (for singular values) and "is one of" for
    *  multiple values (comma separated). For example:
@@ -354,7 +354,7 @@ trait MesosSchedulerUtils extends Logging {
    * container overheads.
    *
    * @param sc SparkContext to use to get `spark.mesos.executor.memoryOverhead` value
-   * @return memory requirement as (0.1 * <memoryOverhead>) or MEMORY_OVERHEAD_MINIMUM
+   * @return memory requirement as (0.1 * memoryOverhead) or MEMORY_OVERHEAD_MINIMUM
    *         (whichever is larger)
    */
   def executorMemory(sc: SparkContext): Int = {
@@ -438,7 +438,7 @@ trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  val managedPortNames = List("spark.executor.port", BLOCK_MANAGER_PORT.key)
+  val managedPortNames = List(BLOCK_MANAGER_PORT.key)
 
   /**
    * The values of the non-zero ports to be used by the executor process.

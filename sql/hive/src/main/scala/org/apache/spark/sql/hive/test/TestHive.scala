@@ -488,13 +488,8 @@ private[hive] class TestHiveSparkSession(
 
       sharedState.cacheManager.clearCache()
       loadedTables.clear()
-      sessionState.catalog.clearTempTables()
-      sessionState.catalog.tableRelationCache.invalidateAll()
-
+      sessionState.catalog.reset()
       metadataHive.reset()
-
-      FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
-        foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
 
       // HDFS root scratch dir requires the write all (733) permission. For each connecting user,
       // an HDFS scratch dir: ${hive.exec.scratchdir}/<username> is created, with

@@ -205,6 +205,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
+    .internal()
+    .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
+      "parser. The default is false since Spark 2.0. Setting it to true can restore the behavior " +
+      "prior to Spark 2.0.")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
          "otherwise the schema is picked from the summary file or a random data file " +
@@ -427,6 +435,12 @@ object SQLConf {
   val GROUP_BY_ORDINAL = buildConf("spark.sql.groupByOrdinal")
     .doc("When true, the ordinal numbers in group by clauses are treated as the position " +
       "in the select list. When false, the ordinal numbers are ignored.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val GROUP_BY_ALIASES = buildConf("spark.sql.groupByAliases")
+    .doc("When true, aliases in a select list can be used in group by clauses. When false, " +
+      "an analysis exception is thrown in the case.")
     .booleanConf
     .createWithDefault(true)
 
@@ -745,6 +759,12 @@ object SQLConf {
       .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
       .createWithDefault(0.7)
 
+  val JOIN_REORDER_DP_STAR_FILTER =
+    buildConf("spark.sql.cbo.joinReorder.dp.star.filter")
+      .doc("Applies star-join filter heuristics to cost based join enumeration.")
+      .booleanConf
+      .createWithDefault(false)
+
   val STARSCHEMA_DETECTION = buildConf("spark.sql.cbo.starSchemaDetection")
     .doc("When true, it enables join reordering based on star schema detection. ")
     .booleanConf
@@ -914,6 +934,8 @@ class SQLConf extends Serializable with Logging {
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
+  def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
+
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
    * identifiers are equal.
@@ -1008,6 +1030,8 @@ class SQLConf extends Serializable with Logging {
 
   def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
+  def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
+
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
@@ -1021,6 +1045,8 @@ class SQLConf extends Serializable with Logging {
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
 
   def joinReorderCardWeight: Double = getConf(SQLConf.JOIN_REORDER_CARD_WEIGHT)
+
+  def joinReorderDPStarFilter: Boolean = getConf(SQLConf.JOIN_REORDER_DP_STAR_FILTER)
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
