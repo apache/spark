@@ -83,7 +83,7 @@ Once you've set up this file, you can launch or stop your cluster with the follo
 - `sbin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
 - `sbin/start-slave.sh` - Starts a slave instance on the machine the script is executed on.
 - `sbin/start-all.sh` - Starts both a master and a number of slaves as described above.
-- `sbin/stop-master.sh` - Stops the master that was started via the `bin/start-master.sh` script.
+- `sbin/stop-master.sh` - Stops the master that was started via the `sbin/start-master.sh` script.
 - `sbin/stop-slaves.sh` - Stops all slave instances on the machines specified in the `conf/slaves` file.
 - `sbin/stop-all.sh` - Stops both the master and the slaves as described above.
 
