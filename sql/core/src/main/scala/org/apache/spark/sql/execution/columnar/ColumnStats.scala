@@ -291,11 +291,6 @@ private[columnar] final class BinaryColumnStats extends ColumnStats {
     }
   }
 
-  def gatherValueStats(size: Int): Unit = {
-    sizeInBytes += size
-    count += 1
-  }
-
   override def collectedStatistics: Array[Any] =
     Array[Any](null, null, nullCount, count, sizeInBytes)
 }
@@ -310,17 +305,16 @@ private[columnar] final class DecimalColumnStats(precision: Int, scale: Int) ext
     if (!row.isNullAt(ordinal)) {
       val value = row.getDecimal(ordinal, precision, scale)
       // TODO: this is not right for DecimalType with precision > 18
-      val size = 8
-      gatherValueStats(value, size)
+      gatherValueStats(value)
     } else {
       gatherNullStats
     }
   }
 
-  def gatherValueStats(value: Decimal, size: Int): Unit = {
+  def gatherValueStats(value: Decimal): Unit = {
     if (upper == null || value.compareTo(upper) > 0) upper = value
     if (lower == null || value.compareTo(lower) < 0) lower = value
-    sizeInBytes += size
+    sizeInBytes += 8
     count += 1
   }
 
@@ -339,11 +333,6 @@ private[columnar] final class ObjectColumnStats(dataType: DataType) extends Colu
     } else {
       gatherNullStats
     }
-  }
-
-  def gatherValueStats(size: Int): Unit = {
-    sizeInBytes += size
-    count += 1
   }
 
   override def collectedStatistics: Array[Any] =
