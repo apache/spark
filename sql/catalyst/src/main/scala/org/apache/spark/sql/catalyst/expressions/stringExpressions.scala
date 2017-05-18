@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
@@ -43,6 +44,12 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 @ExpressionDescription(
   usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of str1, str2, ..., strN.",
   extended = """
+    Arguments:
+      str - The strings to be concatenated.
+
+      The arguments are expressions that return a value of a character string. If any argument is null, the
+            result is the null value.
+
     Examples:
       > SELECT _FUNC_('Spark', 'SQL');
        SparkSQL
@@ -86,6 +93,15 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
 @ExpressionDescription(
   usage = "_FUNC_(sep, [str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
   extended = """
+    Arguments:
+      sep - The separator for the rest of the arguments.
+      str | array(str) - The strings to be concatenated.
+
+      The arguments can be expressions that return a value of a character string. The arguments from
+      the second argument can also be expressions that return array<string>. Minimum number of
+      arguments is 3. The function ignores null values and returns an empty string if all values
+      are null. It returns null only if the separator is null.
+
     Examples:
       > SELECT _FUNC_(' ', 'Spark', 'SQL');
         Spark SQL
@@ -105,6 +121,14 @@ case class ConcatWs(children: Seq[Expression])
   }
 
   override def dataType: DataType = StringType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.size < 3) {
+      TypeCheckFailure("requires at least three arguments")
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
 
   override def nullable: Boolean = children.head.nullable
   override def foldable: Boolean = children.forall(_.foldable)
