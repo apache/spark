@@ -197,9 +197,7 @@ object SVDPlusPlus {
     g.unpersist()
     g = gJoinT3
 
-    // Convert DoubleMatrix to Array[Double]:
-    val newVertices = g.vertices.mapValues(v => (v._1.toArray, v._2.toArray, v._3, v._4))
-    (Graph(newVertices, g.edges), u)
+    (g, u)
   }
 
   /**
