@@ -24,10 +24,9 @@ import org.apache.spark.SparkConf
 import org.apache.spark.annotation.InterfaceStability
 
 /**
- * A credential provider for a service. User must implement this if they need to access a
- * secure service from Spark.
+ * Hadoop delegation token provider.
  */
-private[spark] trait ServiceCredentialProvider {
+private[spark] trait HadoopDelegationTokenProvider {
 
   /**
    * Name of the service to provide credentials. This name should unique, Spark internally will
@@ -36,7 +35,7 @@ private[spark] trait ServiceCredentialProvider {
   def serviceName: String
 
   /**
-   * To decide whether credential is required for this service. By default it based on whether
+   * Returns true if credentials are required for this service. By default, it is based on whether
    * Hadoop security is enabled.
    */
   def credentialsRequired(hadoopConf: Configuration): Boolean = {

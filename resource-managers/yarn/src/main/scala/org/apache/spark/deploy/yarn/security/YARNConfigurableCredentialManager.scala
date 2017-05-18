@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
 
 /**
  * This class exists for backwards compatibility.  It loads services registered under the
- * deprecated [[org.apache.spark.deploy.yarn.security.ServiceCredentialProvider]].
+ * deprecated [[ServiceCredentialProvider]].
  */
 private[yarn] class YARNConfigurableCredentialManager(
     sparkConf: SparkConf,
@@ -43,7 +43,7 @@ private[yarn] class YARNConfigurableCredentialManager(
   val deprecatedCredentialProviders = getDeprecatedCredentialProviders
 
   def getDeprecatedCredentialProviders:
-    Map[String, org.apache.spark.deploy.yarn.security.ServiceCredentialProvider] = {
+    Map[String, ServiceCredentialProvider] = {
     val deprecatedProviders = loadDeprecatedCredentialProviders
 
     deprecatedProviders.
@@ -53,9 +53,9 @@ private[yarn] class YARNConfigurableCredentialManager(
   }
 
   def loadDeprecatedCredentialProviders:
-    List[org.apache.spark.deploy.yarn.security.ServiceCredentialProvider] = {
+    List[ServiceCredentialProvider] = {
     ServiceLoader.load(
-      classOf[org.apache.spark.deploy.yarn.security.ServiceCredentialProvider],
+      classOf[ServiceCredentialProvider],
       Utils.getContextOrSparkClassLoader)
       .asScala
       .toList

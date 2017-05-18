@@ -26,7 +26,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class YARNConfigurableCredentialManagerSuite
-    extends SparkFunSuite with Matchers with BeforeAndAfter {
+    extends SparkFunSuite with Matchers {
   private var credentialManager: YARNConfigurableCredentialManager = null
   private var sparkConf: SparkConf = null
   private var hadoopConf: Configuration = null
@@ -46,9 +46,6 @@ class YARNConfigurableCredentialManagerSuite
 }
 
 class YARNTestCredentialProvider extends ServiceCredentialProvider {
-  val tokenRenewalInterval = 86400 * 1000L
-  var timeOfNextTokenRenewal = 0L
-
   override def serviceName: String = "yarn-test"
 
   override def credentialsRequired(conf: Configuration): Boolean = true
@@ -56,19 +53,5 @@ class YARNTestCredentialProvider extends ServiceCredentialProvider {
   override def obtainCredentials(
     hadoopConf: Configuration,
     sparkConf: SparkConf,
-    creds: Credentials): Option[Long] = {
-    if (creds == null) {
-      // Guard out other unit test failures.
-      return None
-    }
-
-    val emptyToken = new Token()
-    emptyToken.setService(new Text(serviceName))
-    creds.addToken(emptyToken.getService, emptyToken)
-
-    val currTime = System.currentTimeMillis()
-    timeOfNextTokenRenewal = (currTime - currTime % tokenRenewalInterval) + tokenRenewalInterval
-
-    Some(timeOfNextTokenRenewal)
-  }
+    creds: Credentials): Option[Long] = Some(0)
 }

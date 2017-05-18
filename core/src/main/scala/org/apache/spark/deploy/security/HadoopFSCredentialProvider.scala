@@ -26,7 +26,7 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 import org.apache.spark.internal.Logging
 
 private[deploy] class HadoopFSCredentialProvider
-    extends ServiceCredentialProvider with Logging {
+    extends HadoopDelegationTokenProvider with Logging {
   // Token renewal interval, this value will be set in the first call,
   // if None means no token renewer specified or no token can be renewed,
   // so cannot get token renewal interval.

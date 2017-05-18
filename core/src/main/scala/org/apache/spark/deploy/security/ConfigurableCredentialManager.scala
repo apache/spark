@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  * APIs for other modules to obtain credentials as well as renewal time. By default
  * [[HadoopFSCredentialProvider]], [[HiveCredentialProvider]] and [[HBaseCredentialProvider]] will
  * be loaded in if not explicitly disabled, any plugged-in credential provider wants to be
- * managed by ConfigurableCredentialManager needs to implement [[ServiceCredentialProvider]]
+ * managed by ConfigurableCredentialManager needs to implement [[HadoopDelegationTokenProvider]]
  * interface and put into resources/META-INF/services to be loaded by ServiceLoader.
  *
  * Also each credential provider is controlled by
@@ -65,7 +65,7 @@ private[spark] class ConfigurableCredentialManager(
     this(sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
   }
 
-  private def getCredentialProviders(): Map[String, ServiceCredentialProvider] = {
+  private def getCredentialProviders: Map[String, HadoopDelegationTokenProvider] = {
     val providers = List(new HadoopFSCredentialProvider,
       new HiveCredentialProvider,
       new HBaseCredentialProvider)
@@ -83,7 +83,7 @@ private[spark] class ConfigurableCredentialManager(
     deprecatedProviderEnabledConfigs.foreach { pattern =>
       val deprecatedKey = pattern.format(serviceName)
       if (sparkConf.contains(deprecatedKey)) {
-        logWarning(s"${deprecatedKey} is deprecated, using ${key} instead")
+        logWarning(s"${deprecatedKey} is deprecated.  Please use ${key} instead.")
       }
     }
 
@@ -103,7 +103,7 @@ private[spark] class ConfigurableCredentialManager(
   /**
    * Get credential provider for the specified service.
    */
-  def getServiceCredentialProvider(service: String): Option[ServiceCredentialProvider] = {
+  def getServiceCredentialProvider(service: String): Option[HadoopDelegationTokenProvider] = {
     credentialProviders.get(service)
   }
 

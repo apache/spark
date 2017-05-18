@@ -33,7 +33,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[security] class HiveCredentialProvider extends ServiceCredentialProvider with Logging {
+private[security] class HiveCredentialProvider extends HadoopDelegationTokenProvider with Logging {
 
   override def serviceName: String = "hive"
 

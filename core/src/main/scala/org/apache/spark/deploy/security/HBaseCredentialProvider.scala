@@ -28,7 +28,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[security] class HBaseCredentialProvider extends ServiceCredentialProvider with Logging {
+private[security] class HBaseCredentialProvider extends HadoopDelegationTokenProvider with Logging {
 
   override def serviceName: String = "hbase"
 

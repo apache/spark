@@ -36,7 +36,7 @@ trait ServiceCredentialProvider {
   def serviceName: String
 
   /**
-   * To decide whether credential is required for this service. By default it based on whether
+   * Returns true if credentials are required by this service. By default, it is based on whether
    * Hadoop security is enabled.
    */
   def credentialsRequired(hadoopConf: Configuration): Boolean = {

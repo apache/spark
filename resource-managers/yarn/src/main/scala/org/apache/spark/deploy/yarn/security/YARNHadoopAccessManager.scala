@@ -38,15 +38,15 @@ private[yarn] class YARNHadoopAccessManager(
     sparkConf: SparkConf) extends HadoopAccessManager with Logging {
 
   def getTokenRenewer: String = {
-    val delegTokenRenewer = Master.getMasterPrincipal(hadoopConf)
-    logDebug("delegation token renewer is: " + delegTokenRenewer)
-    if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
+    val tokenRenewer = Master.getMasterPrincipal(hadoopConf)
+    logDebug("delegation token renewer is: " + tokenRenewer)
+    if (tokenRenewer == null || tokenRenewer.length() == 0) {
       val errorMessage = "Can't get Master Kerberos principal for use as renewer"
       logError(errorMessage)
       throw new SparkException(errorMessage)
     }
 
-    delegTokenRenewer
+    tokenRenewer
   }
 
   def hadoopFSsToAccess: Set[Path] = {
