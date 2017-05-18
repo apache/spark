@@ -316,7 +316,17 @@ abstract class UnaryNode extends LogicalPlan {
    * expressions with the corresponding alias
    */
   protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
-    var allConstraints = child.constraints.asInstanceOf[Set[Expression]]
+    val relativeReferences = AttributeSet(projectList.collect {
+      case a: Alias => a
+    }.flatMap(_.references)) ++ outputSet
+
+    // We only care about the constraints which refer to attributes in output and aliases.
+    // For example, for a constraint 'a > b', if 'a' is aliased to 'c', we need to get aliased
+    // constraint 'c > b' only if 'b' is in output.
+    var allConstraints = child.constraints.filter { constraint =>
+      constraint.references.subsetOf(relativeReferences)
+    }.asInstanceOf[Set[Expression]]
+
     projectList.foreach {
       case a @ Alias(e, _) =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
