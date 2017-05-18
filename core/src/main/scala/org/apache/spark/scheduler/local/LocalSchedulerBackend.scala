@@ -149,6 +149,12 @@ private[spark] class LocalSchedulerBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {
+    if (TaskState.isFailed(state)) {
+      launcherBackend.setState(SparkAppHandle.State.FAILED)
+    }
+    else if (TaskState.isFinished(state)) {
+      launcherBackend.setState(SparkAppHandle.State.FINISHED)
+    }
     localEndpoint.send(StatusUpdate(taskId, state, serializedData))
   }
 
