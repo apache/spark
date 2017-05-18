@@ -33,7 +33,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val currentTime = System.currentTimeMillis()
-    var content : NodeSeq = listener.synchronized {
+    val content = listener.synchronized {
       val _content = mutable.ListBuffer[Node]()
       if (listener.getRunningExecutions.nonEmpty) {
         _content ++=
@@ -61,7 +61,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           details.parentNode.querySelector('.stage-details').classList.toggle('collapsed')
         }}
       </script>
-    content =
+
+    val summary: NodeSeq =
       <div>
         <ul class="unstyled">
           {
@@ -89,9 +90,9 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           }
           }
         </ul>
-      </div> ++ content
-
-    UIUtils.headerSparkPage("SQL", content, parent, Some(5000))
+      </div>
+    
+    UIUtils.headerSparkPage("SQL", summary ++ content, parent, Some(5000))
   }
 }
 
