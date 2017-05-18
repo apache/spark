@@ -23,7 +23,7 @@ import java.nio.channels.Channels
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -334,7 +334,7 @@ private[spark] class BlockManager(
     val task = asyncReregisterTask
     if (task != null) {
       try {
-        Await.ready(task, Duration.Inf)
+        ThreadUtils.awaitReady(task, Duration.Inf)
       } catch {
         case NonFatal(t) =>
           throw new Exception("Error occurred while waiting for async. reregistration", t)
@@ -916,7 +916,7 @@ private[spark] class BlockManager(
       if (level.replication > 1) {
         // Wait for asynchronous replication to finish
         try {
-          Await.ready(replicationFuture, Duration.Inf)
+          ThreadUtils.awaitReady(replicationFuture, Duration.Inf)
         } catch {
           case NonFatal(t) =>
             throw new Exception("Error occurred while waiting for replication to finish", t)
