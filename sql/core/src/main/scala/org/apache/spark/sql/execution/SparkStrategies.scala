@@ -170,7 +170,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
          if !conf.preferSortMergeJoin && canBuildRight(joinType) && canBuildLocalHashMap(right)
            && muchSmaller(right, left) ||
-           !RowOrdering.isOrderable(leftKeys) =>
+           !RowOrdering.isOrderable(rightKeys) =>
         Seq(joins.ShuffledHashJoinExec(
           leftKeys, rightKeys, joinType, BuildRight, condition, planLater(left), planLater(right)))
 
