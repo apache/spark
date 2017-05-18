@@ -338,6 +338,12 @@ private[spark] class Executor(
             metricsSystem = env.metricsSystem)
           threwException = false
           res
+        } catch {
+          case t: Throwable =>
+            if (!task.killed) {
+              throw t
+            }
+            logWarning(s"Exception occured in $taskName (TID $taskId) during kill.", t)
         } finally {
           val releasedLocks = env.blockManager.releaseAllLocksForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
