@@ -62,47 +62,50 @@ object ConstantFolding extends Rule[LogicalPlan] {
  *   SELECT * FROM table WHERE i = 5 AND j = i + 3
  *   ==>  SELECT * FROM table WHERE i = 5 AND j = 8
  * }}}
+ *
+ * Approach used:
+ * - Start from AND operator as the root
+ * - Get all the children conjunctive predicates which are EqualTo / EqualNullSafe such that they
+ *   don't have a `NOT` or `OR` operator in them
+ * - Populate a mapping of attribute => constant value by looking at all the equals predicates
+ * - Using this mapping, replace occurrence of the attributes with the corresponding constant values
+ *   in the AND node.
  */
 object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
-
-  def containsNonConjunctionPredicates(expression: Expression): Boolean = expression match {
-    case Not(_) => true
-    case Or(_, _) => true
-    case _ =>
-      var result = false
-      expression.children.foreach {
-        case Not(_) => result = true
-        case Or(_, _) => result = true
-        case other => result = result || containsNonConjunctionPredicates(other)
-      }
-      result
-  }
+  def containsNonConjunctionPredicates(expression: Expression): Boolean = expression.find {
+    case _: Not | _: Or => true
+    case _ => false
+  }.isDefined
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsUp {
-      case and @ (left And right)
-        if !containsNonConjunctionPredicates(left) && !containsNonConjunctionPredicates(right) =>
+    case f: Filter => f transformExpressionsUp {
+      case and: And =>
+        val conjunctivePredicates =
+          splitConjunctivePredicates(and)
+            .filter(expr => expr.isInstanceOf[EqualTo] || expr.isInstanceOf[EqualNullSafe])
+            .filterNot(expr => containsNonConjunctionPredicates(expr))
 
-        val leftEntries = left.collect {
+        val equalityPredicates = conjunctivePredicates.collect {
           case e @ EqualTo(left: AttributeReference, right: Literal) => ((left, right), e)
           case e @ EqualTo(left: Literal, right: AttributeReference) => ((right, left), e)
+          case e @ EqualNullSafe(left: AttributeReference, right: Literal) => ((left, right), e)
+          case e @ EqualNullSafe(left: Literal, right: AttributeReference) => ((right, left), e)
         }
-        val rightEntries = right.collect {
-          case e @ EqualTo(left: AttributeReference, right: Literal) => ((left, right), e)
-          case e @ EqualTo(left: Literal, right: AttributeReference) => ((right, left), e)
-        }
-        val constantsMap = AttributeMap(leftEntries.map(_._1) ++ rightEntries.map(_._1))
-        val predicates = (leftEntries.map(_._2) ++ rightEntries.map(_._2)).toSet
+
+        val constantsMap = AttributeMap(equalityPredicates.map(_._1))
+        val predicates = equalityPredicates.map(_._2).toSet
 
         def replaceConstants(expression: Expression) = expression transform {
-          case a: AttributeReference if constantsMap.contains(a) =>
-            constantsMap.get(a).getOrElse(a)
+          case a: AttributeReference =>
+            constantsMap.get(a) match {
+              case Some(literal) => literal
+              case None => a
+            }
         }
 
         and transform {
-          case e @ EqualTo(_, _) if !predicates.contains(e) &&
-            e.references.exists(ref => constantsMap.contains(ref)) =>
-            replaceConstants(e)
+          case e @ EqualTo(_, _) if !predicates.contains(e) => replaceConstants(e)
+          case e @ EqualNullSafe(_, _) if !predicates.contains(e) => replaceConstants(e)
         }
     }
   }

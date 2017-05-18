@@ -25,13 +25,16 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
+/**
+ * Unit tests for constant propagation in expressions.
+ */
 class ConstantPropagationSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
-        Batch("ConstantPropagation", Once,
+        Batch("ConstantPropagation", FixedPoint(2),
           ColumnPruning,
           ConstantPropagation,
           ConstantFolding,
@@ -42,10 +45,8 @@ class ConstantPropagationSuite extends PlanTest {
 
   private val columnA = 'a.int
   private val columnB = 'b.int
+  private val columnC = 'c.int
 
-  /**
-   * Unit tests for constant propagation in expressions.
-   */
   test("basic test") {
     val query = testRelation
       .select(columnA)
@@ -65,7 +66,7 @@ class ConstantPropagationSuite extends PlanTest {
       .where(
         columnA === Add(columnB, Literal(1)) &&
           columnB === Literal(10) &&
-          (columnA === Add(columnB, Literal(3)) || columnB === Literal(9)))
+          (columnA === Add(columnC, Literal(3)) || columnB === columnC))
       .analyze
 
     val correctAnswer =
@@ -74,22 +75,55 @@ class ConstantPropagationSuite extends PlanTest {
         .where(
           columnA === Literal(11) &&
             columnB === Literal(10) &&
-            (columnA === Add(columnB, Literal(3)) || columnB === Literal(9)))
+            (Literal(11) === Add(columnC, Literal(3)) || Literal(10) === columnC))
         .analyze
 
     comparePlans(Optimize.execute(query), correctAnswer)
   }
 
-  test("negative test : with NOT in predicate") {
+  test("equality predicates outside a `NOT` can be propagated within a `NOT`") {
     val query = testRelation
       .select(columnA)
       .where(Not(columnA === Add(columnB, Literal(1))) && columnB === Literal(10))
       .analyze
 
+    val correctAnswer =
+      testRelation
+        .select(columnA)
+        .where(Not(columnA === Literal(11)) && columnB === Literal(10))
+        .analyze
+
+    comparePlans(Optimize.execute(query), correctAnswer)
+  }
+
+  test("equality predicates inside a `NOT` should not be picked for propagation") {
+    val query = testRelation
+      .select(columnA)
+      .where(Not(columnB === Literal(10)) && columnA === Add(columnB, Literal(1)))
+      .analyze
+
     comparePlans(Optimize.execute(query), query)
   }
 
-  test("negative test : with OR in predicate") {
+  test("equality predicates outside a `OR` can be propagated within a `OR`") {
+    val query = testRelation
+      .select(columnA)
+      .where(
+        columnA === Literal(2) &&
+          (columnA === Add(columnB, Literal(3)) || columnB === Literal(9)))
+      .analyze
+
+    val correctAnswer = testRelation
+      .select(columnA)
+      .where(
+        columnA === Literal(2) &&
+          (Literal(2) === Add(columnB, Literal(3)) || columnB === Literal(9)))
+      .analyze
+
+    comparePlans(Optimize.execute(query), correctAnswer)
+  }
+
+  test("equality predicates inside a `OR` should not be picked for propagation") {
     val query = testRelation
       .select(columnA)
       .where(
@@ -98,5 +132,23 @@ class ConstantPropagationSuite extends PlanTest {
       .analyze
 
     comparePlans(Optimize.execute(query), query)
+  }
+
+  test("equality operator not immediate child of root `AND` should not be used for propagation") {
+    val query = testRelation
+      .select(columnA)
+      .where(
+        columnA === Literal(0) &&
+          ((columnB === columnA) === (columnB === Literal(0))))
+      .analyze
+
+    val correctAnswer = testRelation
+      .select(columnA)
+      .where(
+        columnA === Literal(0) &&
+          ((columnB === Literal(0)) === (columnB === Literal(0))))
+      .analyze
+
+    comparePlans(Optimize.execute(query), correctAnswer)
   }
 }
