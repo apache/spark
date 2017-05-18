@@ -727,12 +727,27 @@ public class UTF8StringSuite {
     }
   }
   @Test
-  public void trimsChar() {
+  public void trim() {
     assertEquals(fromString("hello"), fromString("  hello ").trim(fromString(" ")));
     assertEquals(fromString("o"), fromString("  hello ").trim(fromString(" hle")));
     assertEquals(fromString("h e"), fromString("ooh e ooo").trim(fromString("o ")));
     assertEquals(fromString(""), fromString("ooo...oooo").trim(fromString("o.")));
     assertEquals(fromString("b"), fromString("%^b[]@").trim(fromString("][@^%")));
+
+
+    assertEquals(EMPTY_UTF8, fromString("  ").trim(fromString(" ")));
+
+
+    assertEquals(fromString("数据砖头"), fromString("  数据砖头 ").trim());
+    assertEquals(fromString("数"), fromString("a数b").trim(fromString("ab")));
+    assertEquals(fromString(""), fromString("a").trim(fromString("a数b")));
+    assertEquals(fromString(""), fromString("数数 数数数").trim(fromString("数 ")));
+    assertEquals(fromString("据砖头"), fromString("数]数[数据砖头#数数").trim(fromString("[数]#")));
+    assertEquals(fromString("据砖头数数 "), fromString("数数数据砖头数数 ").trim(fromString("数")));
+  }
+
+  @Test
+  public void trimLeft() {
     assertEquals(fromString("  hello "), fromString("  hello ").trimLeft(fromString("")));
     assertEquals(fromString(""), fromString("a").trimLeft(fromString("a")));
     assertEquals(fromString("b"), fromString("b").trimLeft(fromString("a")));
@@ -741,23 +756,9 @@ public class UTF8StringSuite {
     assertEquals(fromString(""), fromString("aaaaaaa").trimLeft(fromString("a")));
     assertEquals(fromString("trim"), fromString("oabtrim").trimLeft(fromString("bao")));
     assertEquals(fromString("rim "), fromString("ooootrim ").trimLeft(fromString("otm")));
-    assertEquals(fromString("  hello "), fromString("  hello ").trimRight(fromString("")));
-    assertEquals(fromString(""), fromString("a").trimRight(fromString("a")));
-    assertEquals(fromString("cc"), fromString("ccbaaaa").trimRight(fromString("ba")));
-    assertEquals(fromString(""), fromString("aabbbbaaa").trimRight(fromString("ab")));
-    assertEquals(fromString("  he"), fromString("  hello ").trimRight(fromString(" ol")));
-    assertEquals(fromString("oohell"), fromString("oohellooo../*&").trimRight(fromString("./,&%*o")));
 
-    assertEquals(EMPTY_UTF8, fromString("  ").trim(fromString(" ")));
     assertEquals(EMPTY_UTF8, fromString("  ").trimLeft(fromString(" ")));
-    assertEquals(EMPTY_UTF8, fromString("  ").trimRight(fromString(" ")));
 
-    assertEquals(fromString("数据砖头"), fromString("  数据砖头 ").trim());
-    assertEquals(fromString("数"), fromString("a数b").trim(fromString("ab")));
-    assertEquals(fromString(""), fromString("a").trim(fromString("a数b")));
-    assertEquals(fromString(""), fromString("数数 数数数").trim(fromString("数 ")));
-    assertEquals(fromString("据砖头"), fromString("数]数[数据砖头#数数").trim(fromString("[数]#")));
-    assertEquals(fromString("据砖头数数 "), fromString("数数数据砖头数数 ").trim(fromString("数")));
     assertEquals(fromString("数据砖头 "), fromString("  数据砖头 ").trimLeft(fromString(" ")));
     assertEquals(fromString("数"), fromString("数").trimLeft(fromString("a")));
     assertEquals(fromString("a"), fromString("a").trimLeft(fromString("数")));
@@ -765,6 +766,18 @@ public class UTF8StringSuite {
     assertEquals(fromString("据砖头数数"), fromString(" 数数数据砖头数数").trimLeft(fromString("数 ")));
     assertEquals(fromString("据砖头数数"), fromString("aa数数数据砖头数数").trimLeft(fromString("a数砖")));
     assertEquals(fromString("$S,.$BR"), fromString(",,,,%$S,.$BR").trimLeft(fromString("%,")));
+  }
+  @Test
+  public void trimRight() {
+    assertEquals(fromString("  hello "), fromString("  hello ").trimRight(fromString("")));
+    assertEquals(fromString(""), fromString("a").trimRight(fromString("a")));
+    assertEquals(fromString("cc"), fromString("ccbaaaa").trimRight(fromString("ba")));
+    assertEquals(fromString(""), fromString("aabbbbaaa").trimRight(fromString("ab")));
+    assertEquals(fromString("  he"), fromString("  hello ").trimRight(fromString(" ol")));
+    assertEquals(fromString("oohell"), fromString("oohellooo../*&").trimRight(fromString("./,&%*o")));
+
+    assertEquals(EMPTY_UTF8, fromString("  ").trimRight(fromString(" ")));
+
     assertEquals(fromString("  数据砖头"), fromString("  数据砖头 ").trimRight(fromString(" ")));
     assertEquals(fromString("数数砖头"), fromString("数数砖头数aa数").trimRight(fromString("a数")));
     assertEquals(fromString(""), fromString("数数数据砖ab").trimRight(fromString("数据砖ab")));
