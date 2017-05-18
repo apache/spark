@@ -79,6 +79,8 @@ release of Spark:
 * `Correlation` and `ChiSquareTest` stats functions for `DataFrames`
  ([SPARK-19635](https://issues.apache.org/jira/browse/SPARK-19635) and
  [SPARK-19635](https://issues.apache.org/jira/browse/SPARK-19635))
+* `FPGrowth` algorithm for frequent pattern mining
+ ([SPARK-14503](https://issues.apache.org/jira/browse/SPARK-14503))
 * `GLM` now supports the full `Tweedie` family
  ([SPARK-18929](https://issues.apache.org/jira/browse/SPARK-18929))
 * `Imputer` feature transformer to impute missing values in a dataset
