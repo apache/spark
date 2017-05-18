@@ -66,6 +66,28 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 [^1]: To learn more about the benefits and background of system optimised natives, you may wish to
     watch Sam Halliday's ScalaX talk on [High Performance Linear Algebra in Scala](http://fommil.github.io/scalax14/#/).
 
+# Highlights in 2.2
+
+The list below highlights some of the new features and enhancements added to MLlib in the `2.2`
+release of Spark:
+
+* `ALS` methods for _top-k_ recommendations for all users or items, matching the functionality
+ in `mllib` ([SPARK-19535](https://issues.apache.org/jira/browse/SPARK-19535)). Performance
+ was also improved for both `ml` and `mllib`
+ ([SPARK-11968](https://issues.apache.org/jira/browse/SPARK-11968) and
+ [SPARK-20587](https://issues.apache.org/jira/browse/SPARK-20587))
+* `Correlation` and `ChiSquareTest` stats functions for `DataFrames`
+ ([SPARK-19635](https://issues.apache.org/jira/browse/SPARK-19635) and
+ [SPARK-19635](https://issues.apache.org/jira/browse/SPARK-19635))
+* `GLM` now supports the full `Tweedie` family
+ ([SPARK-18929](https://issues.apache.org/jira/browse/SPARK-18929))
+* `Imputer` feature transformer to impute missing values in a dataset
+ ([SPARK-13568](https://issues.apache.org/jira/browse/SPARK-13568))
+* `LinearSVC` for linear Support Vector Machine classification
+ ([SPARK-14709](https://issues.apache.org/jira/browse/SPARK-14709))
+* Logistic regression now supports constraints on the coefficients during training
+ ([SPARK-20047](https://issues.apache.org/jira/browse/SPARK-20047))
+
 # Migration guide
 
 MLlib is under active development.
