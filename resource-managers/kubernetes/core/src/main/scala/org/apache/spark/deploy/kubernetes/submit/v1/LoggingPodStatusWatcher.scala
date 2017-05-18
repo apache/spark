@@ -24,6 +24,7 @@ import io.fabric8.kubernetes.client.Watcher.Action
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A monitor for the running Kubernetes pod of a Spark application. Status logging occurs on
@@ -40,18 +41,22 @@ private[kubernetes] class LoggingPodStatusWatcher(podCompletedFuture: CountDownL
     extends Watcher[Pod] with Logging {
 
   // start timer for periodic logging
-  private val scheduler = Executors.newScheduledThreadPool(1)
+  private val scheduler =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("logging-pod-status-watcher")
   private val logRunnable: Runnable = new Runnable {
     override def run() = logShortStatus()
-  }
-  if (interval > 0) {
-    scheduler.scheduleWithFixedDelay(logRunnable, 0, interval, TimeUnit.MILLISECONDS)
   }
 
   private var pod: Option[Pod] = Option.empty
   private def phase: String = pod.map(_.getStatus().getPhase()).getOrElse("unknown")
   private def status: String = pod.map(_.getStatus().getContainerStatuses().toString())
     .getOrElse("unknown")
+
+  def start(): Unit = {
+    if (interval > 0) {
+      scheduler.scheduleAtFixedRate(logRunnable, 0, interval, TimeUnit.MILLISECONDS)
+    }
+  }
 
   override def eventReceived(action: Action, pod: Pod): Unit = {
     this.pod = Option(pod)
