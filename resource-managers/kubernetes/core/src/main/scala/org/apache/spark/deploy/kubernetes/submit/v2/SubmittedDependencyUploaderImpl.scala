@@ -25,9 +25,8 @@ import okhttp3.RequestBody
 import retrofit2.Call
 
 import org.apache.spark.{SparkException, SSLOptions}
-import org.apache.spark.deploy.kubernetes.CompressionUtils
+import org.apache.spark.deploy.kubernetes.{CompressionUtils, KubernetesCredentials}
 import org.apache.spark.deploy.kubernetes.submit.KubernetesFileUtils
-import org.apache.spark.deploy.rest.kubernetes.v1.KubernetesCredentials
 import org.apache.spark.deploy.rest.kubernetes.v2.{ResourceStagingServiceRetrofit, RetrofitClientFactory}
 import org.apache.spark.util.Utils
 

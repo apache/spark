@@ -38,6 +38,22 @@ package object constants {
   private[spark] val SUBMISSION_SSL_SECRETS_VOLUME_NAME = "spark-submission-server-ssl-secrets"
   private[spark] val SUBMISSION_SSL_KEY_PEM_SECRET_NAME = "spark-submission-server-key-pem"
   private[spark] val SUBMISSION_SSL_CERT_PEM_SECRET_NAME = "spark-submission-server-cert-pem"
+  private[spark] val DRIVER_CREDENTIALS_SECRETS_BASE_DIR =
+    "/mnt/secrets/spark-kubernetes-credentials"
+  private[spark] val DRIVER_CREDENTIALS_CA_CERT_SECRET_NAME = "ca-cert"
+  private[spark] val DRIVER_CREDENTIALS_CA_CERT_PATH =
+    s"$DRIVER_CREDENTIALS_SECRETS_BASE_DIR/$DRIVER_CREDENTIALS_CA_CERT_SECRET_NAME"
+  private[spark] val DRIVER_CREDENTIALS_CLIENT_KEY_SECRET_NAME = "client-key"
+  private[spark] val DRIVER_CREDENTIALS_CLIENT_KEY_PATH =
+    s"$DRIVER_CREDENTIALS_SECRETS_BASE_DIR/$DRIVER_CREDENTIALS_CLIENT_KEY_SECRET_NAME"
+  private[spark] val DRIVER_CREDENTIALS_CLIENT_CERT_SECRET_NAME = "client-cert"
+  private[spark] val DRIVER_CREDENTIALS_CLIENT_CERT_PATH =
+    s"$DRIVER_CREDENTIALS_SECRETS_BASE_DIR/$DRIVER_CREDENTIALS_CLIENT_CERT_SECRET_NAME"
+  private[spark] val DRIVER_CREDENTIALS_OAUTH_TOKEN_SECRET_NAME = "oauth-token"
+  private[spark] val DRIVER_CREDENTIALS_OAUTH_TOKEN_PATH =
+    s"$DRIVER_CREDENTIALS_SECRETS_BASE_DIR/$DRIVER_CREDENTIALS_OAUTH_TOKEN_SECRET_NAME"
+  private[spark] val DRIVER_CREDENTIALS_SECRET_VOLUME_NAME = "kubernetes-credentials"
+
 
   // Default and fixed ports
   private[spark] val SUBMISSION_SERVER_PORT = 7077

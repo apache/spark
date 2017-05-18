@@ -135,6 +135,19 @@ private[spark] class KubernetesV2Suite(testBackend: IntegrationTestBackend)
     runSparkPiAndVerifyCompletion(SparkLauncher.NO_RESOURCE)
   }
 
+  test("Use client key and client cert file when requesting executors") {
+    sparkConf.setJars(Seq(
+        KubernetesSuite.CONTAINER_LOCAL_MAIN_APP_RESOURCE,
+        KubernetesSuite.CONTAINER_LOCAL_HELPER_JAR_PATH))
+    sparkConf.set(KUBERNETES_DRIVER_CLIENT_KEY_FILE,
+        kubernetesTestComponents.clientConfig.getClientKeyFile)
+    sparkConf.set(KUBERNETES_DRIVER_CLIENT_CERT_FILE,
+        kubernetesTestComponents.clientConfig.getClientCertFile)
+    sparkConf.set(KUBERNETES_DRIVER_CA_CERT_FILE,
+        kubernetesTestComponents.clientConfig.getCaCertFile)
+    runSparkPiAndVerifyCompletion(SparkLauncher.NO_RESOURCE)
+  }
+
   private def launchStagingServer(resourceStagingServerSslOptions: SSLOptions): Unit = {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
 

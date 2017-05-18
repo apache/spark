@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, DoneablePod
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
 import org.hamcrest.{BaseMatcher, Description}
-import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
+import org.mockito.{AdditionalAnswers, ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Matchers.{any, anyVararg, argThat, eq => mockitoEq}
 import org.mockito.Mockito.{times, verify, when}
 import org.mockito.invocation.InvocationOnMock
@@ -37,7 +37,6 @@ import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 
 class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
-
   private val JARS_RESOURCE = SubmittedResourceIdAndSecret("jarsId", "jarsSecret")
   private val FILES_RESOURCE = SubmittedResourceIdAndSecret("filesId", "filesSecret")
   private val SUBMITTED_RESOURCES = SubmittedResources(JARS_RESOURCE, FILES_RESOURCE)
@@ -53,9 +52,8 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
       SPARK_APP_NAME_LABEL -> APP_NAME)
   private val CUSTOM_ANNOTATION_KEY = "customAnnotation"
   private val CUSTOM_ANNOTATION_VALUE = "customAnnotationValue"
-  private val SECRET_NAME = "secret"
-  private val SECRET_KEY = "secret-key"
-  private val SECRET_DATA = "secret-data"
+  private val INIT_CONTAINER_SECRET_NAME = "init-container-secret"
+  private val INIT_CONTAINER_SECRET_DATA = Map("secret-key" -> "secret-data")
   private val MAIN_CLASS = "org.apache.spark.examples.SparkPi"
   private val APP_ARGS = Array("3", "20")
   private val SPARK_JARS = Seq(
@@ -70,22 +68,21 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
     "hdfs://localhost:9000/app/files/file1.txt", "file:///var/data/spark-files/file2.txt")
   private val INIT_CONTAINER_SECRET = new SecretBuilder()
     .withNewMetadata()
-      .withName(SECRET_NAME)
+      .withName(INIT_CONTAINER_SECRET_NAME)
       .endMetadata()
-    .addToData(SECRET_KEY, SECRET_DATA)
+    .withData(INIT_CONTAINER_SECRET_DATA.asJava)
     .build()
-  private val CONFIG_MAP_NAME = "config-map"
-  private val CONFIG_MAP_KEY = "config-map-key"
-  private val CONFIG_MAP_DATA = "config-map-data"
   private val CUSTOM_JAVA_OPTION_KEY = "myappoption"
   private val CUSTOM_JAVA_OPTION_VALUE = "myappoptionvalue"
   private val DRIVER_JAVA_OPTIONS = s"-D$CUSTOM_JAVA_OPTION_KEY=$CUSTOM_JAVA_OPTION_VALUE"
   private val DRIVER_EXTRA_CLASSPATH = "/var/data/spark-app-custom/custom-jar.jar"
+  private val CONFIG_MAP_NAME = "config-map"
+  private val CONFIG_MAP_DATA = Map("config-map-key" -> "config-map-data")
   private val INIT_CONTAINER_CONFIG_MAP = new ConfigMapBuilder()
     .withNewMetadata()
       .withName(CONFIG_MAP_NAME)
       .endMetadata()
-    .addToData(CONFIG_MAP_KEY, CONFIG_MAP_DATA)
+    .withData(CONFIG_MAP_DATA.asJava)
     .build()
   private val CUSTOM_DRIVER_IMAGE = "spark-custom-driver:latest"
   private val DRIVER_MEMORY_MB = 512
@@ -104,6 +101,17 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   private val DRIVER_POD_UID = "driver-pod-uid"
   private val DRIVER_POD_KIND = "pod"
   private val DRIVER_POD_API_VERSION = "v1"
+  private val CREDENTIALS_SECRET_NAME = "credentials-secret"
+  private val CREDENTIALS_SECRET_DATA = Map("credentials-secret-key" -> "credentials-secret-value")
+  private val CREDENTIALS_SECRET = new SecretBuilder()
+    .withNewMetadata()
+      .withName(CREDENTIALS_SECRET_NAME)
+      .endMetadata()
+    .withData(CREDENTIALS_SECRET_DATA.asJava)
+    .build()
+  private val CREDENTIALS_SET_CONF = "spark.kubernetes.driverCredentials.provided"
+  private val CREDENTIALS_SET_ANNOTATION = "credentials-set"
+
   @Mock
   private var initContainerConfigMapBuilder: SparkInitContainerConfigMapBuilder = _
   @Mock
@@ -128,6 +136,10 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
       HasMetadata, java.lang.Boolean]
   @Mock
   private var resourceListOps: ResourceListOps = _
+  @Mock
+  private var credentialsMounterProvider: DriverPodKubernetesCredentialsMounterProvider = _
+  @Mock
+  private var credentialsMounter: DriverPodKubernetesCredentialsMounter = _
 
   before {
     MockitoAnnotations.initMocks(this)
@@ -174,9 +186,12 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
     when(executorInitContainerConfiguration.configureSparkConfForExecutorInitContainer(SPARK_CONF))
         .thenReturn(SPARK_CONF_WITH_EXECUTOR_INIT_CONF)
     when(kubernetesClient.resourceList(anyVararg[HasMetadata]())).thenReturn(resourceListOps)
+    when(credentialsMounterProvider.getDriverPodKubernetesCredentialsMounter())
+        .thenReturn(credentialsMounter)
   }
 
   test("Run with dependency uploader") {
+    expectationsForNoMountedCredentials()
     when(initContainerComponentsProvider
         .provideInitContainerSubmittedDependencyUploader(ALL_EXPECTED_LABELS))
         .thenReturn(Some(submittedDependencyUploader))
@@ -194,8 +209,8 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
     verifyCreatedResourcesHaveOwnerReferences(createdResources)
     assert(createdResources.exists {
       case secret: Secret =>
-        val expectedSecretData = Map(SECRET_KEY -> SECRET_DATA)
-        secret.getMetadata.getName == SECRET_NAME && secret.getData.asScala == expectedSecretData
+        secret.getMetadata.getName == INIT_CONTAINER_SECRET_NAME &&
+            secret.getData.asScala == INIT_CONTAINER_SECRET_DATA
       case _ => false
     })
     verifyConfigMapWasCreated(createdResources)
@@ -208,15 +223,8 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Run without dependency uploader") {
-    when(initContainerComponentsProvider
-      .provideInitContainerSubmittedDependencyUploader(ALL_EXPECTED_LABELS))
-      .thenReturn(None)
-    when(initContainerComponentsProvider
-      .provideSubmittedDependenciesSecretBuilder(None))
-      .thenReturn(None)
-    when(initContainerComponentsProvider
-      .provideInitContainerConfigMapBuilder(None))
-      .thenReturn(initContainerConfigMapBuilder)
+    expectationsForNoMountedCredentials()
+    expectationsForNoDependencyUploader()
     runAndVerifyDriverPodHasCorrectProperties()
     val resourceListArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
     verify(kubernetesClient).resourceList(resourceListArgumentCaptor.capture())
@@ -230,6 +238,65 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
       .provideInitContainerConfigMapBuilder(None)
     verify(initContainerComponentsProvider)
       .provideSubmittedDependenciesSecretBuilder(None)
+  }
+
+  test("Run with mounted credentials") {
+    expectationsForNoDependencyUploader()
+    when(credentialsMounter.createCredentialsSecret()).thenReturn(Some(CREDENTIALS_SECRET))
+    when(credentialsMounter.mountDriverKubernetesCredentials(
+        any(), mockitoEq(DRIVER_CONTAINER_NAME), mockitoEq(Some(CREDENTIALS_SECRET))))
+        .thenAnswer(new Answer[PodBuilder] {
+          override def answer(invocation: InvocationOnMock): PodBuilder = {
+            invocation.getArgumentAt(0, classOf[PodBuilder]).editMetadata()
+              .addToAnnotations(CREDENTIALS_SET_ANNOTATION, TRUE)
+              .endMetadata()
+          }
+        })
+    when(credentialsMounter.setDriverPodKubernetesCredentialLocations(any()))
+        .thenAnswer(new Answer[SparkConf] {
+          override def answer(invocation: InvocationOnMock): SparkConf = {
+            invocation.getArgumentAt(0, classOf[SparkConf]).clone().set(CREDENTIALS_SET_CONF, TRUE)
+          }
+        })
+    runAndVerifyPodMatchesPredicate { p =>
+      Option(p)
+        .filter(pod => containerHasCorrectJvmOptions(pod, _(CREDENTIALS_SET_CONF) == TRUE))
+        .exists { pod =>
+          pod.getMetadata.getAnnotations.asScala(CREDENTIALS_SET_ANNOTATION) == TRUE
+        }
+    }
+    val resourceListArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
+    verify(kubernetesClient).resourceList(resourceListArgumentCaptor.capture())
+    val createdResources = resourceListArgumentCaptor.getAllValues.asScala
+    assert(createdResources.size === 2)
+    verifyCreatedResourcesHaveOwnerReferences(createdResources)
+    assert(createdResources.exists {
+      case secret: Secret =>
+        secret.getMetadata.getName == CREDENTIALS_SECRET_NAME &&
+            secret.getData.asScala == CREDENTIALS_SECRET_DATA
+      case _ => false
+    })
+  }
+
+  private def expectationsForNoDependencyUploader(): Unit = {
+    when(initContainerComponentsProvider
+      .provideInitContainerSubmittedDependencyUploader(ALL_EXPECTED_LABELS))
+      .thenReturn(None)
+    when(initContainerComponentsProvider
+      .provideSubmittedDependenciesSecretBuilder(None))
+      .thenReturn(None)
+    when(initContainerComponentsProvider
+      .provideInitContainerConfigMapBuilder(None))
+      .thenReturn(initContainerConfigMapBuilder)
+  }
+
+  private def expectationsForNoMountedCredentials(): Unit = {
+    when(credentialsMounter.setDriverPodKubernetesCredentialLocations(any()))
+        .thenAnswer(AdditionalAnswers.returnsFirstArg())
+    when(credentialsMounter.createCredentialsSecret()).thenReturn(None)
+    when(credentialsMounter.mountDriverKubernetesCredentials(
+        any(), mockitoEq(DRIVER_CONTAINER_NAME), mockitoEq(None)))
+        .thenAnswer(AdditionalAnswers.returnsFirstArg())
   }
 
   private def verifyCreatedResourcesHaveOwnerReferences(
@@ -248,14 +315,36 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   private def verifyConfigMapWasCreated(createdResources: mutable.Buffer[HasMetadata]): Unit = {
     assert(createdResources.exists {
       case configMap: ConfigMap =>
-        val expectedConfigMapData = Map(CONFIG_MAP_KEY -> CONFIG_MAP_DATA)
         configMap.getMetadata.getName == CONFIG_MAP_NAME &&
-          configMap.getData.asScala == expectedConfigMapData
+            configMap.getData.asScala == CONFIG_MAP_DATA
       case _ => false
     })
   }
 
   private def runAndVerifyDriverPodHasCorrectProperties(): Unit = {
+    val expectedOptions = SPARK_CONF.getAll
+      .filterNot(_._1 == org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS.key)
+      .toMap ++
+      Map(
+        "spark.app.id" -> APP_ID,
+        KUBERNETES_DRIVER_POD_NAME.key -> APP_ID,
+        EXECUTOR_INIT_CONF_KEY -> TRUE,
+        CUSTOM_JAVA_OPTION_KEY -> CUSTOM_JAVA_OPTION_VALUE,
+        "spark.jars" -> RESOLVED_SPARK_JARS.mkString(","),
+        "spark.files" -> RESOLVED_SPARK_FILES.mkString(","))
+    runAndVerifyPodMatchesPredicate { p =>
+      Option(p)
+        .filter(_.getMetadata.getName == APP_ID)
+        .filter(podHasCorrectAnnotations)
+        .filter(_.getMetadata.getLabels.asScala == ALL_EXPECTED_LABELS)
+        .filter(containerHasCorrectBasicContainerConfiguration)
+        .filter(containerHasCorrectBasicEnvs)
+        .filter(containerHasCorrectMountedClasspath)
+        .exists(pod => containerHasCorrectJvmOptions(pod, _ == expectedOptions))
+    }
+  }
+
+  private def runAndVerifyPodMatchesPredicate(pred: (Pod => Boolean)): Unit = {
     new Client(
       APP_NAME,
       APP_ID,
@@ -265,49 +354,31 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
       SPARK_JARS,
       SPARK_FILES,
       kubernetesClientProvider,
-      initContainerComponentsProvider).run()
+      initContainerComponentsProvider,
+      credentialsMounterProvider).run()
     val podMatcher = new BaseMatcher[Pod] {
       override def matches(o: scala.Any): Boolean = {
         o match {
-          case p: Pod =>
-            Option(p)
-              .filter(_.getMetadata.getName == APP_ID)
-              .filter(podHasCorrectAnnotations)
-              .filter(_.getMetadata.getLabels.asScala == ALL_EXPECTED_LABELS)
-              .filter(containerHasCorrectBasicContainerConfiguration)
-              .filter(containerHasCorrectBasicEnvs)
-              .filter(containerHasCorrectMountedClasspath)
-              .exists(containerHasCorrectJvmOptions)
-          case _ =>
-            false
+          case p: Pod => pred(p)
+          case _ => false
         }
       }
-
       override def describeTo(description: Description): Unit = {}
     }
     verify(podOps).create(argThat(podMatcher))
   }
 
-  private def containerHasCorrectJvmOptions(pod: Pod): Boolean = {
+  private def containerHasCorrectJvmOptions(
+      pod: Pod, optionsCorrectnessPredicate: (Map[String, String] => Boolean)): Boolean = {
     val driverContainer = pod.getSpec.getContainers.asScala.head
     val envs = driverContainer.getEnv.asScala.map(env => (env.getName, env.getValue))
     envs.toMap.get(ENV_DRIVER_JAVA_OPTS).exists { javaOptions =>
       val splitOptions = javaOptions.split(" ")
-      val expectedOptions = SPARK_CONF.getAll
-        .filterNot(_._1 == org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS.key)
-        .toMap ++
-        Map(
-          "spark.app.id" -> APP_ID,
-          KUBERNETES_DRIVER_POD_NAME.key -> APP_ID,
-          EXECUTOR_INIT_CONF_KEY -> TRUE,
-          CUSTOM_JAVA_OPTION_KEY -> CUSTOM_JAVA_OPTION_VALUE,
-          "spark.jars" -> RESOLVED_SPARK_JARS.mkString(","),
-          "spark.files" -> RESOLVED_SPARK_FILES.mkString(","))
       splitOptions.forall(_.startsWith("-D")) &&
-        splitOptions.map { option =>
+        optionsCorrectnessPredicate(splitOptions.map { option =>
           val withoutPrefix = option.substring(2)
           (withoutPrefix.split("=", 2)(0), withoutPrefix.split("=", 2)(1))
-        }.toMap == expectedOptions
+        }.toMap)
     }
   }
 
