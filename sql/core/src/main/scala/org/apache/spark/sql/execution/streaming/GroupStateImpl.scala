@@ -39,7 +39,6 @@ import org.apache.spark.unsafe.types.CalendarInterval
  *                        getting timed out or not.
  */
 private[sql] class GroupStateImpl[S] private(
-    isStreaming: Boolean,
     optionalValue: Option[S],
     batchProcessingTimeMs: Long,
     eventTimeWatermarkMs: Long,
@@ -205,12 +204,11 @@ private[sql] object GroupStateImpl {
       timeoutConf: GroupStateTimeout,
       hasTimedOut: Boolean): GroupStateImpl[S] = {
     new GroupStateImpl[S](
-      true, optionalValue, batchProcessingTimeMs, eventTimeWatermarkMs, timeoutConf, hasTimedOut)
+      optionalValue, batchProcessingTimeMs, eventTimeWatermarkMs, timeoutConf, hasTimedOut)
   }
 
   def createForBatch(timeoutConf: GroupStateTimeout): GroupStateImpl[Any] = {
     new GroupStateImpl[Any](
-      isStreaming = false,
       optionalValue = None,
       batchProcessingTimeMs = NO_TIMESTAMP,
       eventTimeWatermarkMs = NO_TIMESTAMP,
