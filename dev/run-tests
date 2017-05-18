@@ -20,4 +20,6 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-exec python -u ./dev/run-tests.py "$@"
+build/sbt -Pyarn -Phadoop-2.6 -Dhadoop.version=2.6.0 "project sql-kafka-0-10" "test-only *KafkaSourceSuite*"
+
+# exec python -u ./dev/run-tests.py "$@"
