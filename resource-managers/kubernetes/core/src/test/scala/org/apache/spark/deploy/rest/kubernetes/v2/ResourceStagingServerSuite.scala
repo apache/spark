@@ -27,8 +27,7 @@ import org.scalatest.BeforeAndAfter
 import retrofit2.Call
 
 import org.apache.spark.{SparkFunSuite, SSLOptions}
-import org.apache.spark.deploy.kubernetes.SSLUtils
-import org.apache.spark.deploy.rest.kubernetes.v1.KubernetesCredentials
+import org.apache.spark.deploy.kubernetes.{KubernetesCredentials, SSLUtils}
 import org.apache.spark.util.Utils
 
 /**

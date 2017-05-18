@@ -33,7 +33,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SecurityManager, SPARK_VERSION => sparkVersion, SparkConf, SparkException, SSLOptions}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.kubernetes.CompressionUtils
+import org.apache.spark.deploy.kubernetes.{CompressionUtils, KubernetesCredentials}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.submit.KubernetesFileUtils
 import org.apache.spark.deploy.rest._
@@ -306,7 +306,10 @@ private[spark] class KubernetesSparkRestServer(
           + resolvedDirectory.getAbsolutePath)
       }
       val oauthTokenFile = writeRawStringCredentialAndGetConf("oauth-token.txt", resolvedDirectory,
-        KUBERNETES_DRIVER_MOUNTED_OAUTH_TOKEN, kubernetesCredentials.oauthToken)
+        KUBERNETES_DRIVER_MOUNTED_OAUTH_TOKEN,
+        kubernetesCredentials.oauthTokenBase64.map { base64 =>
+          new String(BaseEncoding.base64().decode(base64), Charsets.UTF_8)
+        })
       val caCertFile = writeBase64CredentialAndGetConf("ca.crt", resolvedDirectory,
         KUBERNETES_DRIVER_MOUNTED_CA_CERT_FILE, kubernetesCredentials.caCertDataBase64)
       val clientKeyFile = writeBase64CredentialAndGetConf("key.key", resolvedDirectory,

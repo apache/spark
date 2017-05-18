@@ -120,14 +120,20 @@ package object config extends Logging {
   private[spark] val KUBERNETES_DRIVER_MOUNTED_CA_CERT_FILE =
     ConfigBuilder(s"$APISERVER_DRIVER_CONF_PREFIX.mounted.caCertFile")
       .doc("Path on the driver pod's disk containing the CA cert file to use when authenticating" +
-        " against Kubernetes.")
+        " against Kubernetes. Typically this is configured by spark-submit from mounting a" +
+        " secret from the submitting machine into the pod, and hence this configuration is marked" +
+        " as internal, but this can also be set manually to use a certificate that is mounted" +
+        " into the driver pod via other means.")
       .stringConf
       .createOptional
 
   private[spark] val KUBERNETES_DRIVER_MOUNTED_CLIENT_KEY_FILE =
     ConfigBuilder(s"$APISERVER_DRIVER_CONF_PREFIX.mounted.clientKeyFile")
       .doc("Path on the driver pod's disk containing the client key file to use when" +
-        " authenticating against Kubernetes.")
+        " authenticating against Kubernetes. Typically this is configured by spark-submit from" +
+        " mounting a secret from the submitting machine into the pod, and hence this" +
+        " configuration is marked as internal, but this can also be set manually to" +
+        " use a key file that is mounted into the driver pod via other means.")
       .internal()
       .stringConf
       .createOptional
@@ -135,7 +141,10 @@ package object config extends Logging {
   private[spark] val KUBERNETES_DRIVER_MOUNTED_CLIENT_CERT_FILE =
     ConfigBuilder(s"$APISERVER_DRIVER_CONF_PREFIX.mounted.clientCertFile")
       .doc("Path on the driver pod's disk containing the client cert file to use when" +
-        " authenticating against Kubernetes.")
+        " authenticating against Kubernetes. Typically this is configured by spark-submit from" +
+        " mounting a secret from the submitting machine into the pod, and hence this" +
+        " configuration is marked as internal, but this can also be set manually to" +
+        " use a certificate that is mounted into the driver pod via other means.")
       .internal()
       .stringConf
       .createOptional
@@ -143,7 +152,10 @@ package object config extends Logging {
   private[spark] val KUBERNETES_DRIVER_MOUNTED_OAUTH_TOKEN =
     ConfigBuilder(s"$APISERVER_DRIVER_CONF_PREFIX.mounted.oauthTokenFile")
       .doc("Path on the driver pod's disk containing the OAuth token file to use when" +
-        " authenticating against Kubernetes.")
+        " authenticating against Kubernetes. Typically this is configured by spark-submit from" +
+        " mounting a secret from the submitting machine into the pod, and hence this" +
+        " configuration is marked as internal, but this can also be set manually to" +
+        " use a token that is mounted into the driver pod via other means.")
       .internal()
       .stringConf
       .createOptional

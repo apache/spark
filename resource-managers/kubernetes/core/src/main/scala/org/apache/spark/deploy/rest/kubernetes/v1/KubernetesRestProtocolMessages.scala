@@ -19,14 +19,9 @@ package org.apache.spark.deploy.rest.kubernetes.v1
 import com.fasterxml.jackson.annotation.{JsonIgnore, JsonSubTypes, JsonTypeInfo}
 
 import org.apache.spark.SPARK_VERSION
+import org.apache.spark.deploy.kubernetes.KubernetesCredentials
 import org.apache.spark.deploy.rest.{SubmitRestProtocolRequest, SubmitRestProtocolResponse}
 import org.apache.spark.util.Utils
-
-case class KubernetesCredentials(
-    oauthToken: Option[String],
-    caCertDataBase64: Option[String],
-    clientKeyDataBase64: Option[String],
-    clientCertDataBase64: Option[String])
 
 case class KubernetesCreateSubmissionRequest(
     appResource: AppResource,

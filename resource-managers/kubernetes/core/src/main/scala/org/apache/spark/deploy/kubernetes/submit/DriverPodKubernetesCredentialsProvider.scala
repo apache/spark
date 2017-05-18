@@ -14,15 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.kubernetes.submit.v1
+package org.apache.spark.deploy.kubernetes.submit
 
 import java.io.File
 
+import com.google.common.base.Charsets
 import com.google.common.io.{BaseEncoding, Files}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.kubernetes.KubernetesCredentials
 import org.apache.spark.deploy.kubernetes.config._
-import org.apache.spark.deploy.rest.kubernetes.v1.KubernetesCredentials
 import org.apache.spark.internal.config.OptionalConfigEntry
 
 private[spark] class DriverPodKubernetesCredentialsProvider(sparkConf: SparkConf) {
@@ -38,7 +39,9 @@ private[spark] class DriverPodKubernetesCredentialsProvider(sparkConf: SparkConf
       require(sparkConf.get(KUBERNETES_DRIVER_CLIENT_CERT_FILE).isEmpty,
         "Cannot specify both a service account and a driver pod client cert file.")
     }
-    val oauthToken = sparkConf.get(KUBERNETES_DRIVER_OAUTH_TOKEN)
+    val oauthTokenBase64 = sparkConf.get(KUBERNETES_DRIVER_OAUTH_TOKEN).map { token =>
+      BaseEncoding.base64().encode(token.getBytes(Charsets.UTF_8))
+    }
     val caCertDataBase64 = safeFileConfToBase64(KUBERNETES_DRIVER_CA_CERT_FILE,
       s"Driver CA cert file provided at %s does not exist or is not a file.")
     val clientKeyDataBase64 = safeFileConfToBase64(KUBERNETES_DRIVER_CLIENT_KEY_FILE,
@@ -46,7 +49,7 @@ private[spark] class DriverPodKubernetesCredentialsProvider(sparkConf: SparkConf
     val clientCertDataBase64 = safeFileConfToBase64(KUBERNETES_DRIVER_CLIENT_CERT_FILE,
       s"Driver client cert file provided at %s does not exist or is not a file.")
     KubernetesCredentials(
-      oauthToken = oauthToken,
+      oauthTokenBase64 = oauthTokenBase64,
       caCertDataBase64 = caCertDataBase64,
       clientKeyDataBase64 = clientKeyDataBase64,
       clientCertDataBase64 = clientCertDataBase64)

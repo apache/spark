@@ -48,7 +48,9 @@ private[spark] class Client(
     sparkJars: Seq[String],
     sparkFiles: Seq[String],
     kubernetesClientProvider: SubmissionKubernetesClientProvider,
-    initContainerComponentsProvider: DriverInitContainerComponentsProvider) extends Logging {
+    initContainerComponentsProvider: DriverInitContainerComponentsProvider,
+    kubernetesCredentialsMounterProvider: DriverPodKubernetesCredentialsMounterProvider)
+    extends Logging {
 
   private val kubernetesDriverPodName = sparkConf.get(KUBERNETES_DRIVER_POD_NAME)
     .getOrElse(kubernetesAppId)
@@ -133,9 +135,6 @@ private[spark] class Client(
         .provideInitContainerBootstrap()
         .bootstrapInitContainerAndVolumes(driverContainer.getName, basePod)
 
-      val driverOwnedResources = Seq(initContainerConfigMap) ++
-          maybeSubmittedDependenciesSecret.toSeq
-
       val containerLocalizedFilesResolver = initContainerComponentsProvider
           .provideContainerLocalizedFilesResolver()
       val resolvedSparkJars = containerLocalizedFilesResolver.resolveSubmittedSparkJars()
@@ -143,8 +142,15 @@ private[spark] class Client(
 
       val executorInitContainerConfiguration = initContainerComponentsProvider
           .provideExecutorInitContainerConfiguration()
-      val resolvedSparkConf = executorInitContainerConfiguration
+      val sparkConfWithExecutorInit = executorInitContainerConfiguration
           .configureSparkConfForExecutorInitContainer(sparkConf)
+      val credentialsMounter = kubernetesCredentialsMounterProvider
+          .getDriverPodKubernetesCredentialsMounter()
+      val credentialsSecret = credentialsMounter.createCredentialsSecret()
+      val podWithInitContainerAndMountedCreds = credentialsMounter.mountDriverKubernetesCredentials(
+        podWithInitContainer, driverContainer.getName, credentialsSecret)
+      val resolvedSparkConf = credentialsMounter.setDriverPodKubernetesCredentialLocations(
+          sparkConfWithExecutorInit)
       if (resolvedSparkJars.nonEmpty) {
         resolvedSparkConf.set("spark.jars", resolvedSparkJars.mkString(","))
       }
@@ -166,7 +172,7 @@ private[spark] class Client(
       val resolvedDriverJavaOpts = resolvedSparkConf.getAll.map {
         case (confKey, confValue) => s"-D$confKey=$confValue"
       }.mkString(" ") + driverJavaOptions.map(" " + _).getOrElse("")
-      val resolvedDriverPod = podWithInitContainer.editSpec()
+      val resolvedDriverPod = podWithInitContainerAndMountedCreds.editSpec()
         .editMatchingContainer(new ContainerNameEqualityPredicate(driverContainer.getName))
           .addNewEnv()
             .withName(ENV_MOUNTED_CLASSPATH)
@@ -181,6 +187,9 @@ private[spark] class Client(
         .build()
       val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
       try {
+        val driverOwnedResources = Seq(initContainerConfigMap) ++
+          maybeSubmittedDependenciesSecret.toSeq ++
+          credentialsSecret.toSeq
         val driverPodOwnerReference = new OwnerReferenceBuilder()
           .withName(createdDriverPod.getMetadata.getName)
           .withApiVersion(createdDriverPod.getApiVersion)
@@ -261,6 +270,8 @@ private[spark] object Client {
     val initContainerComponentsProvider = new DriverInitContainerComponentsProviderImpl(
       sparkConf, kubernetesAppId, sparkJars, sparkFiles)
     val kubernetesClientProvider = new SubmissionKubernetesClientProviderImpl(sparkConf)
+    val kubernetesCredentialsMounterProvider =
+        new DriverPodKubernetesCredentialsMounterProviderImpl(sparkConf, kubernetesAppId)
     new Client(
       appName,
       kubernetesAppId,
@@ -270,6 +281,7 @@ private[spark] object Client {
       sparkJars,
       sparkFiles,
       kubernetesClientProvider,
-      initContainerComponentsProvider).run()
+      initContainerComponentsProvider,
+      kubernetesCredentialsMounterProvider).run()
   }
 }
