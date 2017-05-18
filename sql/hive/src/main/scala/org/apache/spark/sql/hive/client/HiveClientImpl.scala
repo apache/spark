@@ -436,28 +436,28 @@ private[hive] class HiveClientImpl(
 
       val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
       val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
-      def rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_)) match {
+      lazy val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_)) match {
         case Some(c) if c >= 0 => Some(c)
         case _ => None
       }
       // TODO: check if this estimate is valid for tables after partition pruning.
       // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
       // relatively cheap if parameters for the table are populated into the metastore.
-      // Currently, only totalSize, rawDataSize, and row_count are used to build the field `stats`
+      // Currently, only totalSize, rawDataSize, and rowCount are used to build the field `stats`
       // TODO: stats should include all the other two fields (`numFiles` and `numPartitions`).
       // (see StatsSetupConst in Hive)
       val stats =
-      // When table is external, `totalSize` is always zero, which will influence join strategy
-      // so when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
-      // return None. Later, we will use the other ways to estimate the statistics.
-      if (totalSize.isDefined && totalSize.get > 0L) {
-        Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount))
-      } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
-        Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount))
-      } else {
-        // TODO: still fill the rowCount even if sizeInBytes is empty. Break some assumptions?
-        None
-      }
+        // When table is external, `totalSize` is always zero, which will influence join strategy
+        // so when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
+        // return None. Later, we will use the other ways to estimate the statistics.
+        if (totalSize.isDefined && totalSize.get > 0L) {
+          Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount))
+        } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
+          Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount))
+        } else {
+          // TODO: still fill the rowCount even if sizeInBytes is empty. Might break anything?
+          None
+        }
 
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),

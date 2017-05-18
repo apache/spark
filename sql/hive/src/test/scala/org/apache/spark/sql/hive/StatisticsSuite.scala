@@ -351,7 +351,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         createNonPartitionedTable(tabName, analyzedByHive = true, analyzedBySpark = analyzedBySpark)
         val fetchedStats1 = checkTableStats(
           tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        sql(s"ALTER TABLE $tabName UNSET TBLPROPERTIES ('prop1')")
+        sql(s"ALTER TABLE $tabName UNSET TBLPROPERTIES ('totalSize')")
         val fetchedStats2 = checkTableStats(
           tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
         assert(fetchedStats1 == fetchedStats2)
@@ -418,8 +418,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       assert(stats2.get.sizeInBytes > stats3.get.sizeInBytes)
 
       sql(s"ALTER TABLE $managedTable ADD PARTITION (ds='2008-04-08', hr='12')")
-      assert(stats1 == stats2)
-
       sql(s"ANALYZE TABLE $managedTable COMPUTE STATISTICS")
       val stats4 = checkTableStats(
         managedTable, hasSizeInBytes = true, expectedRowCounts = Some(1))

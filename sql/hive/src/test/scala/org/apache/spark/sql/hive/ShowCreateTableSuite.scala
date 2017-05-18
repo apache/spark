@@ -339,10 +339,6 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
         ignoredProperties = Map.empty
       )
     }
-
-    val e = normalize(actual)
-    val m = normalize(expected)
-
     assert(normalize(actual) == normalize(expected))
   }
 }
