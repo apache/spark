@@ -69,7 +69,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       val completedStageNumStr = if (numCompletedStages == completedStages.size) {
         s"$numCompletedStages"
       } else {
-        s"$numCompletedStages, only showing ${completedStages.size}"
+        s"$numCompletedStages, only showing last ${completedStages.size}"
       }
 
       val summary: NodeSeq =

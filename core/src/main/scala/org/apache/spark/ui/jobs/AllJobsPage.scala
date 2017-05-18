@@ -308,7 +308,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val completedJobNumStr = if (completedJobs.size == listener.numCompletedJobs) {
         s"${completedJobs.size}"
       } else {
-        s"${listener.numCompletedJobs}, only showing ${completedJobs.size}"
+        s"${listener.numCompletedJobs}, only showing last ${completedJobs.size}"
       }
 
       val summary: NodeSeq =
