@@ -84,6 +84,33 @@ case class UnresolvedTableValuedFunction(
 }
 
 /**
+ * Represents all of the input attributes to a given relational operator, for example in
+ * "SELECT `(id)?+.+` FROM ...".
+ *
+ * @param table an optional table that should be the target of the expansion.  If omitted all
+ *              tables' columns are produced.
+ */
+case class UnresolvedRegex(expr: String, table: Option[String]) extends Star with Unevaluable {
+  override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
+    val expandedAttributes: Seq[Attribute] = table match {
+      // If there is no table specified, use all input attributes that match expr
+      case None => input.output.filter(_.name.matches(expr))
+      // If there is a table, pick out attributes that are part of this table that match expr
+      case Some(t) => input.output.filter(_.qualifier.filter(resolver(_, t)).nonEmpty)
+        .filter(_.name.matches(expr))
+    }
+
+    expandedAttributes.zip(input.output).map {
+      case (n: NamedExpression, _) => n
+      case (e, originalAttribute) =>
+        Alias(e, originalAttribute.name)()
+    }
+  }
+
+  override def toString: String = table.map(_ + ".").getOrElse("") + expr
+}
+
+/**
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {

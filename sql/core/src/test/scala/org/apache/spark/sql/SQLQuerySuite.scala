@@ -2624,4 +2624,92 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException](sql("SELECT nvl(1, 2, 3)"))
     assert(e.message.contains("Invalid number of arguments"))
   }
+
+  test("SPARK-12139: REGEX Column Specification for Hive Queries") {
+    // hive.support.quoted.identifiers is turned off by default
+    checkAnswer(
+      sql(
+        """
+          |SELECT b
+          |FROM testData2
+          |WHERE a = 1
+        """.stripMargin),
+      Row(1) :: Row(2) :: Nil)
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT t.b
+          |FROM testData2 t
+          |WHERE a = 1
+        """.stripMargin),
+      Row(1) :: Row(2) :: Nil)
+
+    intercept[AnalysisException] {
+      sql(
+        """
+          |SELECT `(a)?+.+`
+          |FROM testData2
+          |WHERE a = 1
+        """.stripMargin)
+    }
+
+    intercept[AnalysisException] {
+      sql(
+        """
+          |SELECT t.`(a)?+.+`
+          |FROM testData2 t
+          |WHERE a = 1
+        """.stripMargin)
+    }
+
+    // now, turn on hive.support.quoted.identifiers
+    withSQLConf(SQLConf.SUPPORT_QUOTED_IDENTIFIERS.key -> "true") {
+      checkAnswer(
+        sql(
+          """
+            |SELECT b
+            |FROM testData2
+            |WHERE a = 1
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT t.b
+            |FROM testData2 t
+            |WHERE a = 1
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT `(a)?+.+`
+            |FROM testData2
+            |WHERE a = 1
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT t.`(a)?+.+`
+            |FROM testData2 t
+            |WHERE a = 1
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT p.`(key)?+.+`, b, testdata2.`(b)?+.+`
+            |FROM testData p join testData2
+            |ON p.key = testData2.a
+            |WHERE key < 3
+          """.stripMargin),
+        Row("1", 1, 1) :: Row("1", 2, 1) :: Row("2", 1, 2) :: Row("2", 2, 2) :: Nil)
+    }
+  }
 }

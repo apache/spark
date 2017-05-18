@@ -795,6 +795,12 @@ object SQLConf {
       .intConf
       .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
 
+  val SUPPORT_QUOTED_IDENTIFIERS = buildConf("spark.sql.support.quoted.identifiers")
+    .internal()
+    .doc("When true, identifiers specified by regex patterns will be expanded.")
+    .booleanConf
+    .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1050,6 +1056,8 @@ class SQLConf extends Serializable with Logging {
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
+
+  def supportQuotedIdentifiers: Boolean = getConf(SUPPORT_QUOTED_IDENTIFIERS)
 
   /** ********************** SQLConf functionality methods ************ */
 
