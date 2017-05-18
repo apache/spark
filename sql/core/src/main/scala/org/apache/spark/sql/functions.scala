@@ -2138,13 +2138,30 @@ object functions {
   def ascii(e: Column): Column = withExpr { Ascii(e.expr) }
 
   /**
-   * Returns the ASCII character having the binary equivalent to n.
-   * If n is larger than 256 the result is equivalent to chr(n % 256)
+   * Returns the ASCII character having the binary equivalent to expr.
+   * If expr is larger than 256 the result is equivalent to chr(expr % 256)
    *
    * @group string_funcs
    * @since 2.3.0
    */
   def chr(e: Column): Column = withExpr { Chr(e.expr) }
+
+  /**
+   * Returns the ASCII character having the binary equivalent to n.
+   * If n is larger than 256 the result is equivalent to chr(n % 256)
+   * @group string_funcs
+   * @since 2.3.0
+   */
+  def char(columnName: String): Column = chr(Column(columnName))
+
+  /**
+   * Returns the ASCII character having the binary equivalent to expr.
+   * If expr is larger than 256 the result is equivalent to chr(expr % 256)
+   *
+   * @group string_funcs
+   * @since 2.3.0
+   */
+  def char(e: Column): Column = withExpr { Chr(e.expr) }
 
   /**
    * Returns the ASCII character having the binary equivalent to n.

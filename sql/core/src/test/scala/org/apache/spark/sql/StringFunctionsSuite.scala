@@ -121,7 +121,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     def verify(input: Seq[(Double, Float, Long, Int, Short)], expect: Row): Unit = {
       val df1 = input.toDF("a", "b", "c", "d", "e")
       checkAnswer(
-        df1.select(chr($"a"), chr($"b"), chr($"c"), chr($"d"), chr($"e")),
+        df1.select(chr($"a"), chr($"b"), chr($"c"), char($"d"), char($"e")),
         expect)
       checkAnswer(
         df1.selectExpr("char(a)", "char(b)", "chr(c)", "chr(d)", "chr(e)"),

@@ -1273,7 +1273,7 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(n) - Returns the ASCII character having the binary equivalent to `n`. If n is larger than 256 the result is equivalent to chr(n % 256)",
+  usage = "_FUNC_(expr) - Returns the ASCII character having the binary equivalent to `expr`. If n is larger than 256 the result is equivalent to chr(n % 256)",
   extended = """
     Examples:
       > SELECT _FUNC_(65);
@@ -1299,9 +1299,9 @@ case class Chr(child: Expression) extends UnaryExpression with ImplicitCastInput
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, str => {
+    defineCodeGen(ctx, ev, lon => {
       s"""
-        long longVal = ${java.lang.Long.parseLong(new String(str.getBytes))};
+        long longVal = (long)${lon};
         short shortVal;
         if (longVal > 255) {
           shortVal = (short)(longVal % 256);
