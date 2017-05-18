@@ -618,12 +618,7 @@ class DAGScheduler(
       properties: Properties): Unit = {
     val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
-    // Note: Do not call Await.ready(future) because that calls `scala.concurrent.blocking`,
-    // which causes concurrent SQL executions to fail if a fork-join pool is used. Note that
-    // due to idiosyncrasies in Scala, `awaitPermission` is not actually used anywhere so it's
-    // safe to pass in null here. For more detail, see SPARK-13747.
-    val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
-    waiter.completionFuture.ready(Duration.Inf)(awaitPermission)
+    ThreadUtils.awaitReady(waiter.completionFuture, Duration.Inf)
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
         logInfo("Job %d finished: %s, took %f s".format
