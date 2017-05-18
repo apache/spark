@@ -101,7 +101,7 @@ case class InsertIntoHadoopFsRelationCommand(
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
+        deleteMatchingPaths(fs, qualifiedOutputPath, customPartitionLocations, committer)
         true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
         true
@@ -159,10 +159,12 @@ case class InsertIntoHadoopFsRelationCommand(
   }
 
   /**
-   * Deletes all partition files that match the specified static prefix. Partitions with custom
-   * locations are also cleared based on the custom locations map given to this class.
+   * Deletes all files that match the specified static prefix.
+   * whether the file is a partition file or not.
+   * Partitions with custom locations are also cleared
+   * based on the custom locations map given to this class.
    */
-  private def deleteMatchingPartitions(
+  private def deleteMatchingPaths(
       fs: FileSystem,
       qualifiedOutputPath: Path,
       customPartitionLocations: Map[TablePartitionSpec, String],
@@ -180,6 +182,7 @@ case class InsertIntoHadoopFsRelationCommand(
       ""
     }
     // first clear the path determined by the static partition keys (e.g. /table/foo=1)
+    // if staticPartitionPrefix is empty, it will delete qualifiedOutputPath (e.g. /xxx/foo.json)
     val staticPrefixPath = qualifiedOutputPath.suffix(staticPartitionPrefix)
     if (fs.exists(staticPrefixPath) && !committer.deleteWithJob(fs, staticPrefixPath, true)) {
       throw new IOException(s"Unable to clear output " +
