@@ -598,8 +598,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       s"No $loadcount in metrics dump <$metricsDump>")
     assertCounterEvaluates(providerMetrics, loadcount,
       providerMetrics.getCounter(loadcount).get, _ > 0)
-    assertGaugeEvaluates(providerMetrics, replayTime,
-      providerMetrics.getLongGauge(replayTime).get, _ > 0)
 
     val evictionCount = cacheMetrics.fullname("eviction.count")
     assert(metricsDump.contains(evictionCount),
