@@ -66,7 +66,9 @@ private[spark] class ConfigurableCredentialManager(
   }
 
   private def getCredentialProviders(): Map[String, ServiceCredentialProvider] = {
-    val providers = loadCredentialProviders
+    val providers = List(new HadoopFSCredentialProvider,
+      new HiveCredentialProvider,
+      new HBaseCredentialProvider)
 
     // Filter out credentials in which spark.security.credentials.{service}.enabled is false.
     providers
@@ -96,11 +98,6 @@ private[spark] class ConfigurableCredentialManager(
       .getOption(key)
       .map(_.toBoolean)
       .getOrElse(isEnabledDeprecated)
-  }
-
-  private def loadCredentialProviders: List[ServiceCredentialProvider] = {
-    ServiceLoader.load(classOf[ServiceCredentialProvider], Utils.getContextOrSparkClassLoader)
-      .asScala.toList
   }
 
   /**

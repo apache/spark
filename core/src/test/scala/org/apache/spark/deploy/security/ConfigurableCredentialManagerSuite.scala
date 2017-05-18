@@ -62,31 +62,17 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
     credentialManager.getServiceCredentialProvider("hadoopfs") should be (None)
     credentialManager.getServiceCredentialProvider("hive") should be (None)
-    credentialManager.getServiceCredentialProvider("test") should not be (None)
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
   }
 
-  test("verify obtaining credentials from provider") {
+  test("verify no credentials are obtained") {
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
     val creds = new Credentials()
 
-    // Tokens can only be obtained from TestTokenProvider, for hdfs, hbase and hive tokens cannot
-    // be obtained.
+    // Tokens cannot be obtained from HDFS, Hive, HBase in unit tests.
     credentialManager.obtainCredentials(hadoopConf, creds)
     val tokens = creds.getAllTokens
-    tokens.size() should be (1)
-    tokens.iterator().next().getService should be (new Text("test"))
-  }
-
-  test("verify getting credential renewal info") {
-    credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
-    val creds = new Credentials()
-
-    val testCredentialProvider = credentialManager.getServiceCredentialProvider("test").get
-      .asInstanceOf[TestCredentialProvider]
-    // Only TestTokenProvider can get the time of next token renewal
-    val nextRenewal = credentialManager.obtainCredentials(hadoopConf, creds)
-    nextRenewal should be (testCredentialProvider.timeOfNextTokenRenewal)
+    tokens.size() should be (0)
   }
 
   test("obtain tokens For HiveMetastore") {
@@ -117,33 +103,5 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
       creds)
 
     creds.getAllTokens.size should be (0)
-  }
-}
-
-class TestCredentialProvider extends ServiceCredentialProvider {
-  val tokenRenewalInterval = 86400 * 1000L
-  var timeOfNextTokenRenewal = 0L
-
-  override def serviceName: String = "test"
-
-  override def credentialsRequired(conf: Configuration): Boolean = true
-
-  override def obtainCredentials(
-    hadoopConf: Configuration,
-    hadoopAccessManager: HadoopAccessManager,
-    creds: Credentials): Option[Long] = {
-    if (creds == null) {
-      // Guard out other unit test failures.
-      return None
-    }
-
-    val emptyToken = new Token()
-    emptyToken.setService(new Text("test"))
-    creds.addToken(emptyToken.getService, emptyToken)
-
-    val currTime = System.currentTimeMillis()
-    timeOfNextTokenRenewal = (currTime - currTime % tokenRenewalInterval) + tokenRenewalInterval
-
-    Some(timeOfNextTokenRenewal)
   }
 }

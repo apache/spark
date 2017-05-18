@@ -27,8 +27,7 @@ import org.apache.spark.annotation.InterfaceStability
  * A credential provider for a service. User must implement this if they need to access a
  * secure service from Spark.
  */
-@InterfaceStability.Unstable
-trait ServiceCredentialProvider {
+private[spark] trait ServiceCredentialProvider {
 
   /**
    * Name of the service to provide credentials. This name should unique, Spark internally will
