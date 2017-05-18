@@ -505,14 +505,22 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 }
 
 /**
- * A function that trims leading or trailing characters (or both) from the specified string.
- */
+ * A function that takes a character string, removes the leading and/or trailing characters matching with the characters
+ * in the trim string, returns the new string. If LEADING/TRAILING/BOTH and trimStr keywords are not specified, it
+ * defaults to remove space character from both ends.
+ * trimStr: A character string to be trimmed from the source string, if it has multiple characters, the function
+ * searches for each character in the source string, removes the characters from the source string until it
+ * encounters the first non-match character.
+ * LEADING: removes any characters from the left end of the source string that matches characters in the trim string.
+ * TRAILING: removes any characters from the right end of the source string that matches characters in the trim string.
+ * BOTH: removes any characters from both ends of the source string that matches characters in the trim string.
+  */
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
-    _FUNC_(BOTH trimString FROM str) - Remove the leading and trailing trimString from `str`
-    _FUNC_(LEADING trimChar FROM str) - Remove the leading trimString from `str`
-    _FUNC_(TRAILING trimChar FROM str) - Remove the trailing trimString from `str`
+    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing trimString from `str`
+    _FUNC_(LEADING trimStr FROM str) - Remove the leading trimString from `str`
+    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing trimString from `str`
   """,
   extended = """
     Arguments:
@@ -545,6 +553,9 @@ case class StringTrim(children: Seq[Expression])
 
   override def prettyName: String = "trim"
 
+  // trim function can take one or two arguments.
+  // For one argument(children size is 1), it is the trim space function.
+  // For two arguments(children size is 2), it is the trim function with one of these options: BOTH/LEADING/TRAILING.
   override def eval(input: InternalRow): Any = {
     val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
     if (inputs(0) != null) {
@@ -592,7 +603,10 @@ case class StringTrim(children: Seq[Expression])
 }
 
 /**
- * A function that trim the spaces or a trim string from left end for given string.
+ * A function that trims the characters from left end for a given string, if the trimStr is not specified, it defaults
+ * to trim the spaces from the left end of the source string.
+ * trimStr: the function removes any characters from the left end of the source string which matches with the characters
+ * from trimStr, it stops at the first non-match character.
  */
 @ExpressionDescription(
   usage = """
@@ -623,6 +637,9 @@ case class StringTrimLeft(children: Seq[Expression])
 
   override def prettyName: String = "ltrim"
 
+  // ltrim function can take one or two arguments.
+  // For one argument(children size is 1), it is the ltrim space function.
+  // For two arguments(children size is 2), it is the trim function with option LEADING.
   override def eval(input: InternalRow): Any = {
     val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
     if (inputs(0) != null) {
@@ -671,7 +688,10 @@ case class StringTrimLeft(children: Seq[Expression])
 }
 
 /**
- * A function that trim the spaces or a trim string from right end for given string.
+ * A function that trims the characters from right end for a given string, if the trimStr is not specified, it defaults
+ * to trim the spaces from the right end of the source string.
+ * trimStr: the function removes any characters from the right end of source string which matches with the characters
+ * from trimStr, it stops at the first non-match character.
  */
 @ExpressionDescription(
   usage = """
@@ -702,6 +722,9 @@ case class StringTrimRight(children: Seq[Expression])
 
   override def prettyName: String = "rtrim"
 
+  // rtrim function can take one or two arguments.
+  // For one argument(children size is 1), it is the rtrim space function.
+  // For two arguments(children size is 2), it is the trim function with option TRAILING.
   override def eval(input: InternalRow): Any = {
     val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
     if (inputs(0) != null) {

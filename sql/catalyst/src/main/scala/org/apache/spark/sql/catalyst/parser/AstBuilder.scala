@@ -1182,7 +1182,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // Create the function call.
     val name = ctx.qualifiedName.getText
     val trimFuncName = Option(ctx.trimOperator).map {
-      o => visitTrimFuncName(ctx, o)}
+      o => visitTrimFuncName(ctx, o)
+    }
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     val arguments = ctx.argument.asScala.map(expression) match {
       case Seq(UnresolvedStar(None))

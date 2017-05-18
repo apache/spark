@@ -511,11 +511,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Removes all specified trim character string either from the beginning or the ending of a string
+   * Removes the given trim string from both ends of a string
    * @param trimString the trim character string
    */
   public UTF8String trim(UTF8String trimString) {
-    // this method do the trimLeft first, then trimRight
+    // This method searches for each character in the source string, removes the character if it is found
+    // in the trim string, stops at the first not found. It starts from left end, then right end.
+    // It returns a new string in which both ends trim characters have been removed.
     int s = 0; // the searching byte position of the input string
     int i = 0; // the first beginning byte position of a non-matching character
     int e = 0; // the last byte position
@@ -584,12 +586,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Removes all specified trim characters from the beginning of a string
+   * Removes the given trim string from the beginning of a string
    * @param trimString the trim character string
    */
   public UTF8String trimLeft(UTF8String trimString) {
-    // this method will get one character from the input string, try to find the the matching character from
-    // the trimString set.
+    // this method searches each character in the source string starting from the left end, removes the character if it
+    // is in the trim string, stops at the first character which is not in the trim string, returns the new string.
     int s = 0; // the searching byte position of the input string
     int i = 0; // the first beginning byte position of a non-matching character
     int searchCharBytes;
@@ -629,12 +631,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Removes all specified trim character from the ending of a string
+   * Removes the given trim string from the ending of a string
    * @param trimString the trim character string
    */
   public UTF8String trimRight(UTF8String trimString) {
-    // this method will get one character from the input string from right to left, then try to find
-    // the matching character from the trimString set
+    // this method searches each character in the source string starting from the right end, removes the character if it
+    // is in the trim string, stops at the first character which is not in the trim string, returns the new string.
 
     // index e points to first no matching byte position in the input string from right side,
     // it moves the number of bytes of the trimming character first.
