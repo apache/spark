@@ -23,10 +23,9 @@ import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
-
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -1229,15 +1228,33 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     CaseWhen(branches, Option(ctx.elseExpression).map(expression))
   }
 
+  def enableHiveSupportQuotedIdentifiers() : Boolean = {
+    SparkEnv.get != null &&
+      SparkEnv.get.conf != null &&
+      SparkEnv.get.conf.getBoolean("hive.support.quoted.identifiers", false)
+  }
+
   /**
-   * Create a dereference expression. The return type depends on the type of the parent, this can
-   * either be a [[UnresolvedAttribute]] (if the parent is an [[UnresolvedAttribute]]), or an
-   * [[UnresolvedExtractValue]] if the parent is some expression.
+   * Create a dereference expression. The return type depends on the type of the parent.
+   * If the parent is an [[UnresolvedAttribute]], it can be a [[UnresolvedAttribute]] or
+   * a [[UnresolvedRegex]] for regex quoted in ``; if the parent is some other expression,
+   * it can be [[UnresolvedExtractValue]].
    */
   override def visitDereference(ctx: DereferenceContext): Expression = withOrigin(ctx) {
     val attr = ctx.fieldName.getText
     expression(ctx.base) match {
-      case UnresolvedAttribute(nameParts) =>
+      case unresolved_attr @ UnresolvedAttribute(nameParts) =>
+        if (enableHiveSupportQuotedIdentifiers) {
+          val escapedIdentifier = "`(.+)`".r
+          val ret = Option(ctx.fieldName.getStart).map(_.getText match {
+            case r@escapedIdentifier(i) =>
+              UnresolvedRegex(i, Some(unresolved_attr.name))
+            case _ =>
+              UnresolvedAttribute(nameParts :+ attr)
+          })
+          return ret.get
+        }
+
         UnresolvedAttribute(nameParts :+ attr)
       case e =>
         UnresolvedExtractValue(e, Literal(attr))
@@ -1245,9 +1262,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create an [[UnresolvedAttribute]] expression.
+   * Create an [[UnresolvedAttribute]] expression or a [[UnresolvedRegex]] if it is a regex
+   * quoted in ``
    */
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
+    if (enableHiveSupportQuotedIdentifiers) {
+      val escapedIdentifier = "`(.+)`".r
+      val ret = Option(ctx.getStart).map(_.getText match {
+        case r @ escapedIdentifier(i) =>
+          UnresolvedRegex(i, None)
+        case _ =>
+          UnresolvedAttribute.quoted(ctx.getText)
+      })
+
+      return ret.get
+    }
+
     UnresolvedAttribute.quoted(ctx.getText)
   }
 
