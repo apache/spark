@@ -120,7 +120,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   test("GroupState - setTimeout**** with ProcessingTimeTimeout") {
     // for streaming queries
     var state: GroupStateImpl[Int] = GroupStateImpl.createForStreaming(
-      None, 1000, 1000, ProcessingTimeTimeout, false)
+      None, 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false)
     assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
     state.setTimeoutDuration(500)
     assert(state.getTimeoutTimestamp === 1500) // can be set without initializing state
@@ -179,6 +179,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     assert(state.getTimeoutTimestamp === 5000) // can be set after removing state
     testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
 
+    // for batch queries
     state = GroupStateImpl.createForBatch(EventTimeTimeout).asInstanceOf[GroupStateImpl[Int]]
     assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
     testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
