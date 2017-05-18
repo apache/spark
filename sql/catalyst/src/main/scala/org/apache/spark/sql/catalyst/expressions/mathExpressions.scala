@@ -553,11 +553,7 @@ case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 case class Cot(child: Expression)
   extends UnaryMathExpression((x: Double) => 1 / math.tan(x), "COT") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c =>
-      s"""
-        ${ev.value} = 1 / java.lang.Math.tan($c);
-      """
-    )
+    defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.tan($c);")
   }
 }
 

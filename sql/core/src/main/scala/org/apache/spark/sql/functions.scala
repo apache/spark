@@ -1991,14 +1991,6 @@ object functions {
   def tan(columnName: String): Column = tan(Column(columnName))
 
   /**
-   * Computes the cotangent of the given column.
-   *
-   * @group math_funcs
-   * @since 2.3.0
-   */
-  def cot(e: Column): Column = withExpr { Cot(e.expr) }
-
-  /**
    * Computes the hyperbolic tangent of the given value.
    *
    * @group math_funcs
