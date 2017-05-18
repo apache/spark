@@ -287,3 +287,42 @@ case class ArrayContains(left: Expression, right: Expression)
 
   override def prettyName: String = "array_contains"
 }
+
+/**
+ * Returns an array with all duplicate elements removed from input array
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Returns an array with all duplicate elements removed from input array.",
+  extended =
+    """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 2, 3, 4, 3, 6));
+    [1,2,3,4,6]
+  """)
+case class ArrayUnique(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  override def dataType: DataType = child.dataType
+
+  override def nullable: Boolean = false
+
+  override def nullSafeEval(array: Any): Any = {
+
+    val elementType = child.dataType.asInstanceOf[ArrayType].elementType
+    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
+    new GenericArrayData(data.distinct.asInstanceOf[Array[Any]])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val elementType = child.dataType.asInstanceOf[ArrayType].elementType
+      val dataTypeClass = elementType.getClass.getName.stripSuffix("$")
+      val arrayDataClass = classOf[GenericArrayData].getName.stripSuffix("$")
+      s"${ev.value} = new ${arrayDataClass}(($c).distinct(new ${dataTypeClass}()));"
+    })
+  }
+
+  override def prettyName: String = "array_unique"
+}
