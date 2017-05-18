@@ -24,13 +24,11 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
-
-import com.google.common.io.ByteStreams
 
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
@@ -42,7 +40,6 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.memory._
@@ -341,7 +338,7 @@ private[spark] class BlockManager(
     val task = asyncReregisterTask
     if (task != null) {
       try {
-        Await.ready(task, Duration.Inf)
+        ThreadUtils.awaitReady(task, Duration.Inf)
       } catch {
         case NonFatal(t) =>
           throw new Exception("Error occurred while waiting for async. reregistration", t)
@@ -925,7 +922,7 @@ private[spark] class BlockManager(
       if (level.replication > 1) {
         // Wait for asynchronous replication to finish
         try {
-          Await.ready(replicationFuture, Duration.Inf)
+          ThreadUtils.awaitReady(replicationFuture, Duration.Inf)
         } catch {
           case NonFatal(t) =>
             throw new Exception("Error occurred while waiting for replication to finish", t)

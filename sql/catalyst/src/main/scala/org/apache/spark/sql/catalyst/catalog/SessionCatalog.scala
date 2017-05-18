@@ -73,7 +73,7 @@ class SessionCatalog(
       functionRegistry,
       conf,
       new Configuration(),
-      CatalystSqlParser,
+      new CatalystSqlParser(conf),
       DummyFunctionResourceLoader)
   }
 
@@ -1251,9 +1251,10 @@ class SessionCatalog(
         dropTempFunction(func.funcName, ignoreIfNotExists = false)
       }
     }
-    tempTables.clear()
+    clearTempTables()
     globalTempViewManager.clear()
     functionRegistry.clear()
+    tableRelationCache.invalidateAll()
     // restore built-in functions
     FunctionRegistry.builtin.listFunction().foreach { f =>
       val expressionInfo = FunctionRegistry.builtin.lookupFunction(f)
