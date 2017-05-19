@@ -152,6 +152,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
                 ThreadingSuiteState.runningThreads.get() + "); failing test")
       fail("One or more threads didn't see runningThreads = 4")
     }
+    throwable.foreach { t => throw t }
   }
 
   test("set local properties in different thread") {
@@ -179,6 +180,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     sem.acquire(5)
     throwable.foreach { t => throw improveStackTrace(t) }
     assert(sc.getLocalProperty("test") === null)
+    throwable.foreach { t => throw t }
   }
 
   test("set and get local properties in parent-children thread") {
@@ -209,6 +211,7 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     throwable.foreach { t => throw improveStackTrace(t) }
     assert(sc.getLocalProperty("test") === "parent")
     assert(sc.getLocalProperty("Foo") === null)
+    throwable.foreach { t => throw t }
   }
 
   test("mutation in parent local property does not affect child (SPARK-10563)") {
