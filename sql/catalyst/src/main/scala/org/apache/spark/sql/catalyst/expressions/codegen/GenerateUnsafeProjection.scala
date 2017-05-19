@@ -50,10 +50,17 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       fieldTypes: Seq[DataType],
       bufferHolder: String): String = {
     val fieldEvals = fieldTypes.zipWithIndex.map { case (dt, i) =>
-      val fieldName = ctx.freshName("fieldName")
-      val code = s"final ${ctx.javaType(dt)} $fieldName = ${ctx.getValue(input, dt, i.toString)};"
-      val isNull = s"$input.isNullAt($i)"
-      ExprCode(code, isNull, fieldName)
+      val javaType = ctx.javaType(dt)
+      val isNullVar = ctx.freshName("isNull")
+      val valueVar = ctx.freshName("value")
+      val defaultValue = ctx.defaultValue(dt)
+      val readValue = ctx.getValue(input, dt, i.toString)
+      val code =
+        s"""
+          boolean $isNullVar = $input.isNullAt($i);
+          $javaType $valueVar = $isNullVar ? $defaultValue : $readValue;
+        """
+      ExprCode(code, isNullVar, valueVar)
     }
 
     s"""
