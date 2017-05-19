@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.IntegerType
 
 /**
  * This suite is used to test [[LogicalPlan]]'s `transformUp` plus analysis barrier and make sure
- * it can correctly skips sub-trees that have already been marked as analyzed.
+ * it can correctly skip sub-trees that have already been marked as analyzed.
  */
 class LogicalPlanSuite extends SparkFunSuite {
   private var invocationCount = 0

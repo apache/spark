@@ -187,7 +187,7 @@ class Dataset[T] private[sql](
     }
   }
 
-  // Wrap analyzed logical plan with an analysis barrier so we won't traverse/resolve it again.
+  // Wraps analyzed logical plans with an analysis barrier so we won't traverse/resolve it again.
   @transient private val planWithBarrier: LogicalPlan = AnalysisBarrier(logicalPlan)
 
   /**
@@ -1744,7 +1744,7 @@ class Dataset[T] private[sql](
   def union(other: Dataset[T]): Dataset[T] = withSetOperator {
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, other.logicalPlan)).mapChildren(AnalysisBarrier(_))
+    CombineUnions(Union(logicalPlan, other.logicalPlan)).mapChildren(AnalysisBarrier)
   }
 
   /**

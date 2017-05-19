@@ -167,7 +167,7 @@ class Analyzer(
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
       CleanupAliases,
-      CleanupBarriers)
+      EliminateBarriers)
   )
 
   /**
@@ -673,7 +673,7 @@ class Analyzer(
      */
     private def dedupRight (left: LogicalPlan, oriRight: LogicalPlan): LogicalPlan = {
       // Remove analysis barrier if any.
-      val right = CleanupBarriers(oriRight)
+      val right = EliminateBarriers(oriRight)
       val conflictingAttributes = left.outputSet.intersect(right.outputSet)
       logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
         s"between $left and $right")
@@ -1050,7 +1050,7 @@ class Analyzer(
       case sa @ Sort(_, _, child: Aggregate) => sa
 
       case s @ Sort(order, _, orgChild) if !s.resolved && orgChild.resolved =>
-        val child = CleanupBarriers(orgChild)
+        val child = EliminateBarriers(orgChild)
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
           val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
@@ -1072,7 +1072,7 @@ class Analyzer(
         }
 
       case f @ Filter(cond, orgChild) if !f.resolved && orgChild.resolved =>
-        val child = CleanupBarriers(orgChild)
+        val child = EliminateBarriers(orgChild)
         try {
           val newCond = resolveExpressionRecursively(cond, child)
           val requiredAttrs = newCond.references.filter(_.resolved)
@@ -1553,7 +1553,7 @@ class Analyzer(
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
       case filter @ Filter(havingCondition, AnalysisBarrier(aggregate: Aggregate)) =>
-        apply(Filter(havingCondition, aggregate)).mapChildren(AnalysisBarrier(_))
+        apply(Filter(havingCondition, aggregate)).mapChildren(AnalysisBarrier)
       case filter @ Filter(havingCondition,
              aggregate @ Aggregate(grouping, originalAggExprs, child))
           if aggregate.resolved =>
@@ -1614,7 +1614,7 @@ class Analyzer(
         }
 
       case sort @ Sort(sortOrder, global, AnalysisBarrier(aggregate: Aggregate)) =>
-        apply(Sort(sortOrder, global, aggregate)).mapChildren(AnalysisBarrier(_))
+        apply(Sort(sortOrder, global, aggregate)).mapChildren(AnalysisBarrier)
       case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved =>
 
         // Try resolving the ordering as though it is in the aggregate clause.
@@ -2481,7 +2481,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
 }
 
 /** Remove the barrier nodes of analysis */
-object CleanupBarriers extends Rule[LogicalPlan] {
+object EliminateBarriers extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case AnalysisBarrier(child) => child
   }
