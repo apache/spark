@@ -150,4 +150,7 @@ if not (ENV['SKIP_API'] == '1')
     cp("../R/pkg/DESCRIPTION", "api")
   end
 
+  puts "cp R/pkg/DESCRIPTION docs/api"
+  cp("R/pkg/DESCRIPTION", "docs/api")
+
 end
