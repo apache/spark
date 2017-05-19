@@ -63,8 +63,7 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
 
   def installPackages(packages: Seq[String]): Unit = {
     manager.runCondaProcess(rootPath,
-      List("install", "-n", envName, "-y", "--override-channels")
-        ::: channels.iterator.flatMap(Iterator("--channel", _)).toList
+      List("install", "-n", envName, "-y")
         ::: "--" :: packages.toList,
       description = s"install dependencies in conda env $condaEnvDir",
       channels = channels.toList
