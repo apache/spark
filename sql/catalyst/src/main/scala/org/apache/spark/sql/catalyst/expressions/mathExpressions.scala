@@ -544,6 +544,20 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
 @ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the cotangent of `expr`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1);
+       0.6420926159343306
+  """)
+case class Cot(child: Expression)
+  extends UnaryMathExpression((x: Double) => 1 / math.tan(x), "COT") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.tan($c);")
+  }
+}
+
+@ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the hyperbolic tangent of `expr`.",
   extended = """
     Examples:
