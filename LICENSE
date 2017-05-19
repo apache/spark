@@ -249,11 +249,11 @@ The text of each license is also included at licenses/LICENSE-[project].txt.
         (Interpreter classes (all .scala files in repl/src/main/scala
         except for Main.Scala, SparkHelper.scala and ExecutorClassLoader.scala),
         and for SerializableMapWrapper in JavaUtils.scala)
-     (BSD-like) Scala Actors library (org.scala-lang:scala-actors:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scala Compiler (org.scala-lang:scala-compiler:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scala Compiler (org.scala-lang:scala-reflect:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scala Library (org.scala-lang:scala-library:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scalap (org.scala-lang:scalap:2.11.7 - http://www.scala-lang.org/)
+     (BSD-like) Scala Actors library (org.scala-lang:scala-actors:2.11.8 - http://www.scala-lang.org/)
+     (BSD-like) Scala Compiler (org.scala-lang:scala-compiler:2.11.8 - http://www.scala-lang.org/)
+     (BSD-like) Scala Compiler (org.scala-lang:scala-reflect:2.11.8 - http://www.scala-lang.org/)
+     (BSD-like) Scala Library (org.scala-lang:scala-library:2.11.8 - http://www.scala-lang.org/)
+     (BSD-like) Scalap (org.scala-lang:scalap:2.11.8 - http://www.scala-lang.org/)
      (BSD-style) scalacheck (org.scalacheck:scalacheck_2.11:1.10.0 - http://www.scalacheck.org)
      (BSD-style) spire (org.spire-math:spire_2.11:0.7.1 - http://spire-math.org)
      (BSD-style) spire-macros (org.spire-math:spire-macros_2.11:0.7.1 - http://spire-math.org)
