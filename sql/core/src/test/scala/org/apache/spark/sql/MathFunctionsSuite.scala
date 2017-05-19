@@ -173,14 +173,6 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT ceiling(0), ceiling(1), ceiling(1.5)"),
       Row(0L, 1L, 2L))
-
-    checkAnswer(
-      sql("SELECT ceil(1234567890123456), ceil(12345678901234567)"),
-      Row(1234567890123456L, 12345678901234567L))
-
-    checkAnswer(
-      sql("SELECT ceiling(1234567890123456), ceiling(12345678901234567)"),
-      Row(1234567890123456L, 12345678901234567L))
   }
 
   test("conv") {
@@ -197,13 +189,6 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("floor") {
     testOneToOneMathFunction(floor, (d: Double) => math.floor(d).toLong)
-    checkAnswer(
-      sql("SELECT floor(0), floor(1), floor(1.5)"),
-      Row(0L, 1L, 1L))
-
-    checkAnswer(
-      sql("SELECT floor(1234567890123456), floor(12345678901234567)"),
-      Row(1234567890123456L, 12345678901234567L))
   }
 
   test("factorial") {
