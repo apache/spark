@@ -165,8 +165,11 @@ trait CreatableRelationProvider {
   /**
    * Saves a DataFrame to a destination (using data source-specific parameters)
    *
+   * @param sqlContext SQLContext
    * @param mode specifies what happens when the destination already exists
    * @param parameters data source-specific parameters
+   * @param data DataFrame to save (i.e. the rows after executing the query)
+   * @return Relation with a known schema
    *
    * @since 1.3.0
    */
