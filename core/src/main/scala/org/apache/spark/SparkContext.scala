@@ -236,6 +236,8 @@ class SparkContext(config: SparkConf) extends Logging {
   def appName: String = _conf.get("spark.app.name")
 
   private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
+  private[spark] def isEventLogAsync: Boolean = _conf.getBoolean("spark.eventLog.async", false)
+
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
@@ -525,9 +527,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _eventLogger =
       if (isEventLogEnabled) {
-        val logger =
-          new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
-            _conf, _hadoopConfiguration)
+        val logger = getEventLogger(isEventLogAsync)
         logger.start()
         listenerBus.addListener(logger)
         Some(logger)
@@ -591,6 +591,22 @@ class SparkContext(config: SparkConf) extends Logging {
       } finally {
         throw e
       }
+  }
+
+  private def getEventLogger(async: Boolean): EventLoggingListener = {
+    if (async) {
+      val queueSize = _conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY)
+      new AsynchronousEventLoggingListener(_applicationId,
+        _applicationAttemptId,
+        _eventLogDir.get,
+        _conf,
+        _hadoopConfiguration,
+        queueSize)
+    }
+    else {
+      new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
+        _conf, _hadoopConfiguration)
+    }
   }
 
   /**

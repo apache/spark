@@ -85,13 +85,15 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     }
   }
 
-  test("End-to-end event logging") {
-    testApplicationEventLogging()
-  }
+  Seq(false, true).foreach{ async =>
+    test((if (async) "Async " else "") + "End-to-end event logging") {
+      testApplicationEventLogging(None, async)
+    }
 
-  test("End-to-end event logging with compression") {
-    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
-      testApplicationEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
+    test((if (async) "Async " else "") + "End-to-end event logging with compression") {
+      CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
+        testApplicationEventLogging(Some(CompressionCodec.getShortName(codec)), async)
+      }
     }
   }
 
@@ -189,11 +191,12 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
    * Test end-to-end event logging functionality in an application.
    * This runs a simple Spark job and asserts that the expected events are logged when expected.
    */
-  private def testApplicationEventLogging(compressionCodec: Option[String] = None) {
+  private def testApplicationEventLogging(compressionCodec: Option[String], asynchronous: Boolean) {
     // Set defaultFS to something that would cause an exception, to make sure we don't run
     // into SPARK-6688.
     val conf = getLoggingConf(testDirPath, compressionCodec)
       .set("spark.hadoop.fs.defaultFS", "unsupported://example.com")
+      .set("spark.eventLog.async", asynchronous.toString)
     sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
