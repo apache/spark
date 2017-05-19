@@ -53,3 +53,9 @@ explain select 2 * 4  + 3 || 'b';
 explain select 3 + 1 || 'a' || 4 / 2;
 explain select 1 == 1 OR 'a' || 'b' ==  'ab';
 explain select 'a' || 'c' == 'ac' AND 2 == 3;
+
+-- math functions
+select cot(1);
+select cot(null);
+select cot(0);
+select cot(-1);
