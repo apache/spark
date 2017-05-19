@@ -120,7 +120,7 @@ class CacheManager extends Logging {
     val it = cachedData.iterator()
     while (it.hasNext) {
       val cd = it.next()
-      if (cd.plan.find(_.sameResult(plan)).isDefined) {
+      if (cd.plan.sameResult(plan)) {
         cd.cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
         it.remove()
       }

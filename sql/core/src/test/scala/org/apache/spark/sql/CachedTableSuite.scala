@@ -643,7 +643,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
   }
 
-  test("SPARK-19765: UNCACHE TABLE should un-cache all cached plans that refer to this table") {
+  ignore("SPARK-19765: UNCACHE TABLE should un-cache all cached plans that refer to this table") {
     withTable("t") {
       withTempPath { path =>
         Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
