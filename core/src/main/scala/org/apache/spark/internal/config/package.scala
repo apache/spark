@@ -193,6 +193,13 @@ package object config {
     .intConf
     .createWithDefault(0)
 
+  private[spark] val CONDA_GLOBAL_PACKAGE_DIRS = ConfigBuilder("spark.conda.packageDirs")
+    .doc("Custom pkgs_dirs that should be prepended to the default set of pkgs_dirs that comes " +
+      "with conda")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
   // To limit memory usage, we only track information for a fixed number of tasks
   private[spark] val UI_RETAINED_TASKS = ConfigBuilder("spark.ui.retainedTasks")
     .intConf

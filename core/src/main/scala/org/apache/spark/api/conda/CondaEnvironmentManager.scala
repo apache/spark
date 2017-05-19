@@ -25,18 +25,51 @@ import scala.sys.process.BasicIO
 import scala.sys.process.Process
 import scala.sys.process.ProcessBuilder
 import scala.sys.process.ProcessIO
+import scala.sys.process.ProcessLogger
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
+import org.json4s.JsonAST.JValue
+import org.json4s.jackson.Json4sScalaModule
+import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CONDA_BINARY_PATH
-import org.apache.spark.internal.config.CONDA_CHANNEL_URLS
+import org.apache.spark.internal.config.CONDA_GLOBAL_PACKAGE_DIRS
 import org.apache.spark.internal.config.CONDA_VERBOSITY
 import org.apache.spark.util.Utils
 
-final class CondaEnvironmentManager(condaBinaryPath: String, verbosity: Int = 0) extends Logging {
+final class CondaEnvironmentManager(condaBinaryPath: String,
+                                    verbosity: Int = 0,
+                                    packageDirs: Seq[String] = Nil) extends Logging {
 
   require(verbosity >= 0 && verbosity <= 3, "Verbosity must be between 0 and 3 inclusively")
+
+  lazy val defaultInfo: Map[String, JValue] = {
+    logInfo("Retrieving the conda installation's info")
+    val command = Process(List(condaBinaryPath, "info", "--json"), None)
+
+    val buffer = new StringBuffer
+    val io = BasicIO(withIn = false,
+      buffer,
+      Some(ProcessLogger(line => logDebug(s"<conda> $line"))))
+
+    val exitCode = command.run(io).exitValue()
+    if (exitCode != 0) {
+      throw new SparkException(s"Attempt to retrieve initial conda info exited with code: "
+        + f"$exitCode%nCommand was: $command%nOutput was:%n${buffer.toString}")
+    }
+
+    implicit val format = org.json4s.DefaultFormats
+    JsonMethods.parse(buffer.toString).extract[Map[String, JValue]]
+  }
+
+  lazy val defaultPkgsDirs: List[String] = {
+    implicit val format = org.json4s.DefaultFormats
+    defaultInfo("pkgs_dirs").extract[List[String]]
+  }
 
   def create(
               baseDir: String,
@@ -58,11 +91,11 @@ final class CondaEnvironmentManager(condaBinaryPath: String, verbosity: Int = 0)
     // Attempt to create environment
     runCondaProcess(
       linkedBaseDir,
-      List("create", "-n", name, "-y", "--override-channels", "--no-default-packages")
+      List("create", "-n", name, "-y", "--no-default-packages")
         ::: verbosityFlags
-        ::: condaChannelUrls.flatMap(Iterator("--channel", _)).toList
         ::: "--" :: condaPackages.toList,
-      description = "create conda env"
+      description = "create conda env",
+      channels = condaChannelUrls.toList
     )
 
     new CondaEnvironment(this, linkedBaseDir, name, condaPackages, condaChannelUrls)
@@ -77,28 +110,37 @@ final class CondaEnvironmentManager(condaBinaryPath: String, verbosity: Int = 0)
    *
    * This hack is necessary otherwise conda tries to use the homedir for pkgs cache.
    */
-  private[this] def generateCondarc(baseRoot: Path): Path = {
-    val condaPkgsPath = Paths.get(condaBinaryPath).getParent.getParent.resolve("pkgs")
+  private[this] def generateCondarc(baseRoot: Path, channelUrls: Seq[String]): Path = {
+
     val condarc = baseRoot.resolve("condarc")
-    val condarcContents =
-      s"""pkgs_dirs:
-         | - $baseRoot/pkgs
-         | - $condaPkgsPath
-         |envs_dirs:
-         | - $baseRoot/envs
-         |show_channel_urls: false
-         |channels: []
-         |default_channels: []
-      """.stripMargin
-    Files.write(condarc, List(condarcContents).asJava)
-    logInfo(f"Using condarc at $condarc:%n$condarcContents")
+
+    import org.json4s.JsonAST._
+    import org.json4s.JsonDSL._
+
+    // building it in json4s AST since it gives us more control over how it will be mapped
+    val condarcNode = JObject(
+      "pkgs_dirs" -> (packageDirs ++: s"$baseRoot/pkgs" +: defaultPkgsDirs),
+      "envs_dirs" -> List(s"$baseRoot/envs"),
+      "show_channel_urls" -> false,
+      "default_channels" -> JArray(Nil),
+      "channels" -> channelUrls
+    )
+    val mapper = new ObjectMapper(new YAMLFactory()).registerModule(Json4sScalaModule)
+
+    Files.write(condarc, mapper.writeValueAsBytes(condarcNode))
+
+    val sanitizedCondarc = condarcNode removeField { case (name, _) => name == "channels" }
+    logInfo(f"Using condarc at $condarc (channels have been edited out):%n"
+        + mapper.writeValueAsString(sanitizedCondarc))
+
     condarc
   }
 
   private[conda] def runCondaProcess(baseRoot: Path,
                                      args: List[String],
+                                     channels: List[String],
                                      description: String): Unit = {
-    val condarc = generateCondarc(baseRoot)
+    val condarc = generateCondarc(baseRoot, channels)
     val fakeHomeDir = baseRoot.resolve("home")
     // Attempt to create fake home dir
     Files.createDirectories(fakeHomeDir)
@@ -142,6 +184,7 @@ object CondaEnvironmentManager {
     val condaBinaryPath = sparkConf.get(CONDA_BINARY_PATH).getOrElse(
       sys.error(s"Expected config ${CONDA_BINARY_PATH.key} to be set"))
     val verbosity = sparkConf.get(CONDA_VERBOSITY)
-    new CondaEnvironmentManager(condaBinaryPath, verbosity)
+    val packageDirs = sparkConf.get(CONDA_GLOBAL_PACKAGE_DIRS)
+    new CondaEnvironmentManager(condaBinaryPath, verbosity, packageDirs)
   }
 }

@@ -66,7 +66,8 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
       List("install", "-n", envName, "-y", "--override-channels")
         ::: channels.iterator.flatMap(Iterator("--channel", _)).toList
         ::: "--" :: packages.toList,
-      description = s"install dependencies in conda env $condaEnvDir"
+      description = s"install dependencies in conda env $condaEnvDir",
+      channels = channels.toList
     )
 
     this.packages ++= packages
