@@ -90,24 +90,19 @@ case class UnresolvedTableValuedFunction(
  * @param table an optional table that should be the target of the expansion.  If omitted all
  *              tables' columns are produced.
  */
-case class UnresolvedRegex(expr: String, table: Option[String]) extends Star with Unevaluable {
+case class UnresolvedRegex(regexPattern: String, table: Option[String])
+  extends Star with Unevaluable {
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
-    val expandedAttributes: Seq[Attribute] = table match {
+    table match {
       // If there is no table specified, use all input attributes that match expr
-      case None => input.output.filter(_.name.matches(expr))
+      case None => input.output.filter(_.name.matches(regexPattern))
       // If there is a table, pick out attributes that are part of this table that match expr
-      case Some(t) => input.output.filter(_.qualifier.filter(resolver(_, t)).nonEmpty)
-        .filter(_.name.matches(expr))
-    }
-
-    expandedAttributes.zip(input.output).map {
-      case (n: NamedExpression, _) => n
-      case (e, originalAttribute) =>
-        Alias(e, originalAttribute.name)()
+      case Some(t) => input.output.filter(_.qualifier.exists(resolver(_, t)))
+        .filter(_.name.matches(regexPattern))
     }
   }
 
-  override def toString: String = table.map(_ + ".").getOrElse("") + expr
+  override def toString: String = table.map(_ + ".").getOrElse("") + regexPattern
 }
 
 /**

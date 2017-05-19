@@ -177,6 +177,18 @@ object ParserUtils {
     sb.toString()
   }
 
+  val escapedIdentifier = "`(.+)`".r
+
+  /**
+   * Return the substring extracted using regex
+   */
+  def matchEscapedIdentifier(b: String): Option[String] = {
+    b match {
+      case escapedIdentifier(i) => Some(i)
+      case _ => None
+    }
+  }
+
   /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
   implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {
     /**
