@@ -414,9 +414,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId))
             .setName(s"${sc.appName} $taskId")
-
-          taskBuilder.addAllResources(resourcesToUse.asJava)
-          taskBuilder.setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
+            .addAllResources(resourcesToUse.asJava)
+            .setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
 
           val labelsBuilder = taskBuilder.getLabelsBuilder
           val labels = buildMesosLabels().asJava

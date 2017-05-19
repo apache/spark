@@ -31,12 +31,14 @@ import org.apache.mesos.Protos.TaskStatus.Reason
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.mesos.config
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
 
 /**
  * Tracks the current state of a Mesos Task that runs a Spark driver.
+ *
  * @param driverDescription Submitted driver description from
  * [[org.apache.spark.deploy.rest.mesos.MesosRestServer]]
  * @param taskId Mesos TaskID generated for the task
@@ -380,13 +382,36 @@ private[spark] class MesosClusterScheduler(
       v => s"$v -Dspark.mesos.driver.frameworkId=${getDriverFrameworkID(desc)}"
     )
 
-    val env = desc.conf.getAllWithPrefix("spark.mesos.driverEnv.") ++ commandEnv
+    val driverEnv = desc.conf.getAllWithPrefix("spark.mesos.driverEnv.")
+    val env = driverEnv ++ commandEnv
 
     val envBuilder = Environment.newBuilder()
+
     env.foreach { case (k, v) =>
       envBuilder.addVariables(Variable.newBuilder().setName(k).setValue(v))
     }
+
+    getSecretEnvVar(desc).foreach { variable =>
+      logInfo(s"Setting secret name=${variable.getSecret.getReference.getName} " +
+        s"on environment variable name=${variable.getName}")
+
+      envBuilder.addVariables(variable)
+    }
+
     envBuilder.build()
+  }
+
+  private def getSecretEnvVar(desc: MesosDriverDescription): Option[Variable] = {
+    desc.conf.get(config.SECRET_ENVKEY).map { envKey =>
+      desc.conf.get(config.SECRET_NAME).map { secretName =>
+        val reference = Secret.Reference.newBuilder().setName(secretName)
+        val secret = Secret.newBuilder().setReference(reference)
+        Variable.newBuilder().setName(envKey).setSecret(secret).build()
+      }.getOrElse {
+        throw new SparkException(
+          s"${config.SECRET_ENVKEY.key} is set, but ${config.SECRET_NAME.key} is not set.")
+      }
+    }
   }
 
   private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
@@ -530,10 +555,45 @@ private[spark] class MesosClusterScheduler(
       .setName(s"Driver for ${appName}")
       .setSlaveId(offer.offer.getSlaveId)
       .setCommand(buildDriverCommand(desc))
+      .setContainer(getContainerInfo(desc))
       .addAllResources(cpuResourcesToUse.asJava)
       .addAllResources(memResourcesToUse.asJava)
-    taskInfo.setContainer(MesosSchedulerBackendUtil.containerInfo(desc.conf))
     taskInfo.build
+  }
+
+  private def getContainerInfo(desc: MesosDriverDescription): ContainerInfo.Builder = {
+    val containerInfo = MesosSchedulerBackendUtil.containerInfo(desc.conf)
+
+    getSecretVolume(desc).foreach { volume =>
+      logInfo(s"Setting secret name=${volume.getSource.getSecret.getReference.getName} " +
+        s"on file name=${volume.getContainerPath}")
+
+      containerInfo.addVolumes(volume)
+    }
+
+    containerInfo
+  }
+
+  private def getSecretVolume(desc: MesosDriverDescription): Option[Volume] = {
+    desc.conf.get(config.SECRET_FILENAME).map { filename =>
+      desc.conf.get(config.SECRET_NAME).map { secretName =>
+        val reference = Secret.Reference.newBuilder().setName(secretName)
+        val secret = Secret.newBuilder()
+          .setType(Secret.Type.REFERENCE)
+          .setReference(reference)
+        val source = Volume.Source.newBuilder()
+          .setType(Volume.Source.Type.SECRET)
+          .setSecret(secret)
+        Volume.newBuilder()
+          .setContainerPath(filename)
+          .setSource(source)
+          .setMode(Volume.Mode.RO)
+          .build()
+      }.getOrElse {
+        throw new SparkException(
+          s"${config.SECRET_FILENAME.key} is set, but ${config.SECRET_NAME.key} is not set.")
+      }
+    }
   }
 
   /**
@@ -579,9 +639,14 @@ private[spark] class MesosClusterScheduler(
         } catch {
           case e: SparkException =>
             afterLaunchCallback(submission.submissionId)
-            finishedDrivers += new MesosClusterSubmissionState(submission, TaskID.newBuilder().
-              setValue(submission.submissionId).build(), SlaveID.newBuilder().setValue("").
-              build(), None, null, None, getDriverFrameworkID(submission))
+            finishedDrivers += new MesosClusterSubmissionState(
+              submission,
+              TaskID.newBuilder().setValue(submission.submissionId).build(),
+              SlaveID.newBuilder().setValue("").build(),
+              None,
+              null,
+              None,
+              getDriverFrameworkID(submission))
             logError(s"Failed to launch the driver with id: ${submission.submissionId}, " +
               s"cpu: $driverCpu, mem: $driverMem, reason: ${e.getMessage}")
         }

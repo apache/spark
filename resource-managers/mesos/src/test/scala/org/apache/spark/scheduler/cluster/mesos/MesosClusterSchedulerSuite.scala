@@ -306,4 +306,67 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     verify(driver, times(1)).declineOffer(offerId, filter)
   }
+
+  test("Creates an env-based secret.") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+    val secretName = "/path/to/secret"
+    val envKey = "SECRET_ENV_KEY"
+    val driverDesc = new MesosDriverDescription(
+      "d1",
+      "jar",
+      mem,
+      cpu,
+      true,
+      command,
+      Map("spark.mesos.executor.home" -> "test",
+        "spark.app.name" -> "test",
+        "spark.mesos.driver.secret.name" -> secretName,
+        "spark.mesos.driver.secret.envkey" -> envKey),
+      "s1",
+      new Date())
+    val response = scheduler.submitDriver(driverDesc)
+
+    val offer = Utils.createOffer("o1", "s1", mem, cpu)
+    scheduler.resourceOffers(driver, Collections.singletonList(offer))
+
+    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
+
+    val variable = launchedTasks.head.getCommand.getEnvironment
+      .getVariablesList.asScala.filter(_.getName == envKey).head
+
+    assert(variable.getSecret.getReference.getName == secretName)
+  }
+
+  test("Creates a file-based secret.") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+    val secretName = "/path/to/secret"
+    val driverDesc = new MesosDriverDescription(
+      "d1",
+      "jar",
+      mem,
+      cpu,
+      true,
+      command,
+      Map("spark.mesos.executor.home" -> "test",
+        "spark.app.name" -> "test",
+        "spark.mesos.driver.secret.name" -> secretName,
+        "spark.mesos.driver.secret.filename" -> "/path/to/file"),
+      "s1",
+      new Date())
+    val response = scheduler.submitDriver(driverDesc)
+
+    val offer = Utils.createOffer("o1", "s1", mem, cpu)
+    scheduler.resourceOffers(driver, Collections.singletonList(offer))
+
+    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
+
+    val secret = launchedTasks.head.getContainer.getVolumes(0).getSource.getSecret
+    assert(secret.getReference.getName == secretName)
+  }
 }

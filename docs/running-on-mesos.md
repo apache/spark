@@ -469,6 +469,34 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.driver.secret.envkey</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    If set, the contents of the secret referenced by
+    spark.mesos.driver.secret.name will be written to the provided
+    environment variable in the driver's process.
+  </td>
+  </tr>
+  <tr>
+<td><code>spark.mesos.driver.secret.filename</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    If set, the contents of the secret referenced by
+    spark.mesos.driver.secret.name will be written to the provided
+    file.  Relative paths are relative to the container's work
+    directory.  Absolute paths must already exist.  Consult the Mesos Secret
+    protobuf for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.secret.name</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the secret's reference name.  Consult the Mesos Secret
+    protobuf for more information.
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.driverEnv.[EnvironmentVariableName]</code></td>
   <td><code>(none)</code></td>
   <td>
