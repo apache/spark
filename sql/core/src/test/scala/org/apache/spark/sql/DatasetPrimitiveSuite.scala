@@ -260,6 +260,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
 
   test("nested sequences") {
     checkDataset(Seq(Seq(Seq(1))).toDS(), Seq(Seq(1)))
+    checkDataset(Seq(List(Queue(1))).toDS(), List(Queue(1)))
   }
 
   test("package objects") {
