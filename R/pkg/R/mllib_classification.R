@@ -46,15 +46,16 @@ setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"
 #' @note NaiveBayesModel since 2.0.0
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
-#' linear SVM Model
+#' Linear SVM Model
 #'
-#' Fits an linear SVM model against a SparkDataFrame. It is a binary classifier, similar to svm in glmnet package
+#' Fits a linear SVM model against a SparkDataFrame, similar to svm in e1071 package.
+#' Currently only supports binary classification model with linear kernal.
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
 #' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param regParam The regularization parameter.
+#' @param regParam The regularization parameter. Only supports L2 regularization currently.
 #' @param maxIter Maximum iteration number.
 #' @param tol Convergence tolerance of iterations.
 #' @param standardization Whether to standardize the training features before fitting the model. The coefficients
@@ -111,10 +112,10 @@ setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formu
             new("LinearSVCModel", jobj = jobj)
           })
 
-#  Predicted values based on an LinearSVCModel model
+#  Predicted values based on a linear SVM model.
 
 #' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns the predicted values based on an LinearSVCModel.
+#' @return \code{predict} returns the predicted values based on a linear SVM model.
 #' @rdname spark.svmLinear
 #' @aliases predict,LinearSVCModel,SparkDataFrame-method
 #' @export
@@ -124,13 +125,12 @@ setMethod("predict", signature(object = "LinearSVCModel"),
             predict_internal(object, newData)
           })
 
-#  Get the summary of an LinearSVCModel
+#  Get the summary of a linear SVM model.
 
-#' @param object an LinearSVCModel fitted by \code{spark.svmLinear}.
+#' @param object a linear SVM model fitted by \code{spark.svmLinear}.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list includes \code{coefficients} (coefficients of the fitted model),
-#'         \code{intercept} (intercept of the fitted model), \code{numClasses} (number of classes),
-#'         \code{numFeatures} (number of features).
+#'         \code{numClasses} (number of classes), \code{numFeatures} (number of features).
 #' @rdname spark.svmLinear
 #' @aliases summary,LinearSVCModel-method
 #' @export
@@ -138,25 +138,17 @@ setMethod("predict", signature(object = "LinearSVCModel"),
 setMethod("summary", signature(object = "LinearSVCModel"),
           function(object) {
             jobj <- object@jobj
-            features <- callJMethod(jobj, "features")
-            labels <- callJMethod(jobj, "labels")
-            coefficients <- callJMethod(jobj, "coefficients")
-            nCol <- length(coefficients) / length(features)
-            coefficients <- matrix(unlist(coefficients), ncol = nCol)
-            intercept <- callJMethod(jobj, "intercept")
+            features <- callJMethod(jobj, "rFeatures")
+            coefficients <- callJMethod(jobj, "rCoefficients")
+            coefficients <- as.matrix(unlist(coefficients))
+            colnames(coefficients) <- c("Estimate")
+            rownames(coefficients) <- unlist(features)
             numClasses <- callJMethod(jobj, "numClasses")
             numFeatures <- callJMethod(jobj, "numFeatures")
-            if (nCol == 1) {
-              colnames(coefficients) <- c("Estimate")
-            } else {
-              colnames(coefficients) <- unlist(labels)
-            }
-            rownames(coefficients) <- unlist(features)
-            list(coefficients = coefficients, intercept = intercept,
-                 numClasses = numClasses, numFeatures = numFeatures)
+            list(coefficients = coefficients, numClasses = numClasses, numFeatures = numFeatures)
           })
 
-#  Save fitted LinearSVCModel to the input path
+#  Save fitted linear SVM model to the input path.
 
 #' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
