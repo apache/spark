@@ -21,6 +21,7 @@ import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteBuffer
 
 import scala.annotation.tailrec
+import scala.language.existentials
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.InternalRow
