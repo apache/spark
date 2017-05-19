@@ -55,9 +55,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       val valueVar = ctx.freshName("value")
       val defaultValue = ctx.defaultValue(dt)
       val readValue = ctx.getValue(input, dt, i.toString)
-      val code = s"""
-               boolean $isNullVar = $input.isNullAt($i);
-               $javaType $valueVar = $isNullVar ? $defaultValue : $readValue;"""
+      val code =
+        s"""
+          boolean $isNullVar = $input.isNullAt($i);
+          $javaType $valueVar = $isNullVar ? $defaultValue : $readValue;
+        """
       ExprCode(code, isNullVar, valueVar)
     }
 
