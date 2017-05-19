@@ -46,6 +46,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
    *   - 'alphabetDesc': descending alphabetical order
    *   - 'alphabetAsc': ascending alphabetical order
    * Default is 'frequencyDesc'.
+   * When the ordering is set to 'alphabetDesc', `RFormula` drops the same category as R
+   * when encoding strings.
    *
    * @group param
    */
