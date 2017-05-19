@@ -25,7 +25,7 @@ RUN apt-get update && \
     apt-get install -y less openjdk-7-jre-headless net-tools vim-tiny sudo openssh-server && \
     rm -rf /var/lib/apt/lists/*
 
-ENV SCALA_VERSION 2.11.7
+ENV SCALA_VERSION 2.11.8
 ENV CDH_VERSION cdh4
 ENV SCALA_HOME /opt/scala-$SCALA_VERSION
 ENV SPARK_HOME /opt/spark
