@@ -795,9 +795,9 @@ object SQLConf {
       .intConf
       .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
 
-  val SUPPORT_QUOTED_IDENTIFIERS = buildConf("spark.sql.support.quoted.identifiers")
+  val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
     .internal()
-    .doc("When true, identifiers specified by regex patterns will be expanded.")
+    .doc("When true, column names specified by quoted regex pattern will be expanded.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1057,7 +1057,7 @@ class SQLConf extends Serializable with Logging {
 
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
 
-  def supportQuotedIdentifiers: Boolean = getConf(SUPPORT_QUOTED_IDENTIFIERS)
+  def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
 
   /** ********************** SQLConf functionality methods ************ */
 

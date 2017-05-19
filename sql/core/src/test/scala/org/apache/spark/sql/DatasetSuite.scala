@@ -245,7 +245,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("select 3, regex") {
-    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDF()
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+
     intercept[AnalysisException] {
       ds.select(expr("`(_1)?+.+`").as[Int])
     }
@@ -254,7 +255,37 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds.select(expr("`(_1|_2)`").as[Int])
     }
 
-    withSQLConf(SQLConf.SUPPORT_QUOTED_IDENTIFIERS.key -> "true") {
+    intercept[AnalysisException] {
+      ds.select(ds("`(_1)?+.+`"))
+    }
+
+    intercept[AnalysisException] {
+      ds.select(ds("`(_1|_2)`"))
+    }
+
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
+      checkDataset(
+        ds.select(ds("`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+
+      checkDataset(
+        ds.alias("g")
+          .select(ds("g.`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+
+      checkDataset(
+        ds.select(ds("`(_1)?+.+`"))
+          .select(expr("_2").as[Int]),
+        1, 2, 3)
+
+      checkDataset(
+        ds.alias("g")
+          .select(ds("g.`(_1)?+.+`"))
+          .select(expr("_2").as[Int]),
+        1, 2, 3)
+
       checkDataset(
         ds.select(expr("`(_1)?+.+`").as[Int]),
         1, 2, 3)

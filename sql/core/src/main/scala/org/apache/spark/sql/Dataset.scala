@@ -25,9 +25,7 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -40,13 +38,13 @@ import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
-import org.apache.spark.sql.catalyst.util.{usePrettyExpression, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, usePrettyExpression}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -1188,6 +1186,11 @@ class Dataset[T] private[sql](
   def col(colName: String): Column = colName match {
     case "*" =>
       Column(ResolvedStar(queryExecution.analyzed.output))
+    case ParserUtils.escapedIdentifier(i) if sqlContext.conf.supportQuotedRegexColumnName =>
+      Column(UnresolvedRegex(i, None))
+    case ParserUtils.qualifiedEscapedIdentifier(i, j)
+      if sqlContext.conf.supportQuotedRegexColumnName =>
+      Column(UnresolvedRegex(j, Some(i)))
     case _ =>
       val expr = resolve(colName)
       Column(expr)

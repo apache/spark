@@ -2664,7 +2664,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
 
     // now, turn on hive.support.quoted.identifiers
-    withSQLConf(SQLConf.SUPPORT_QUOTED_IDENTIFIERS.key -> "true") {
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
       checkAnswer(
         sql(
           """

@@ -177,17 +177,11 @@ object ParserUtils {
     sb.toString()
   }
 
+  /** the column name pattern in quoted regex without qualifier */
   val escapedIdentifier = "`(.+)`".r
 
-  /**
-   * Return the substring extracted using regex
-   */
-  def matchEscapedIdentifier(b: String): Option[String] = {
-    b match {
-      case escapedIdentifier(i) => Some(i)
-      case _ => None
-    }
-  }
+  /** the column name pattern in quoted regex with qualifier */
+  val qualifiedEscapedIdentifier = ("(.+)" + """.""" + "`(.+)`").r
 
   /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
   implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {
