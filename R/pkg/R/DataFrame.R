@@ -3667,8 +3667,8 @@ setMethod("checkpoint",
 #' mean(cube(df, "cyl", "gear", "am"), "mpg")
 #'
 #' # Following calls are equivalent
-#' agg(cube(carsDF), mean(carsDF$mpg))
-#' agg(carsDF, mean(carsDF$mpg))
+#' agg(cube(df), mean(df$mpg))
+#' agg(df, mean(df$mpg))
 #' }
 #' @note cube since 2.3.0
 #' @seealso \link{agg}, \link{groupBy}, \link{rollup}
@@ -3702,8 +3702,8 @@ setMethod("cube",
 #' mean(rollup(df, "cyl", "gear", "am"), "mpg")
 #'
 #' # Following calls are equivalent
-#' agg(rollup(carsDF), mean(carsDF$mpg))
-#' agg(carsDF, mean(carsDF$mpg))
+#' agg(rollup(df), mean(df$mpg))
+#' agg(df, mean(df$mpg))
 #' }
 #' @note rollup since 2.3.0
 #' @seealso \link{agg}, \link{cube}, \link{groupBy}
