@@ -549,7 +549,7 @@ setMethod("registerTempTable",
 #' sparkR.session()
 #' df <- read.df(path, "parquet")
 #' df2 <- read.df(path2, "parquet")
-#' createOrReplaceTempView(df, "table1")
+#' saveAsTable(df, "table1")
 #' insertInto(df2, "table1", overwrite = TRUE)
 #'}
 #' @note insertInto since 1.4.0
@@ -1125,7 +1125,8 @@ setMethod("dim",
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' collected <- collect(df)
-#' firstName <- collected[[1]]$name
+#' class(collected)
+#' firstName <- names(collected)[1]
 #' }
 #' @note collect since 1.4.0
 setMethod("collect",
@@ -2814,7 +2815,7 @@ setMethod("except",
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' write.df(df, "myfile", "parquet", "overwrite")
-#' saveDF(df, parquetPath2, "parquet", mode = saveMode, mergeSchema = mergeSchema)
+#' saveDF(df, parquetPath2, "parquet", mode = "append", mergeSchema = TRUE)
 #' }
 #' @note write.df since 1.4.0
 setMethod("write.df",
@@ -3097,8 +3098,8 @@ setMethod("fillna",
 #' @family SparkDataFrame functions
 #' @aliases as.data.frame,SparkDataFrame-method
 #' @rdname as.data.frame
-#' @examples \dontrun{
-#'
+#' @examples
+#' \dontrun{
 #' irisDF <- createDataFrame(iris)
 #' df <- as.data.frame(irisDF[irisDF$Species == "setosa", ])
 #' }
@@ -3175,7 +3176,8 @@ setMethod("with",
 #' @aliases str,SparkDataFrame-method
 #' @family SparkDataFrame functions
 #' @param object a SparkDataFrame
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #' # Create a SparkDataFrame from the Iris dataset
 #' irisDF <- createDataFrame(iris)
 #'
