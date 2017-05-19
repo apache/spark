@@ -17,10 +17,11 @@
 package org.apache.spark.deploy.kubernetes.submit.v2
 
 import org.apache.spark.{SparkConf, SSLOptions}
-import org.apache.spark.deploy.kubernetes.{InitContainerResourceStagingServerSecretPluginImpl, SparkPodInitContainerBootstrap, SparkPodInitContainerBootstrapImpl}
+import org.apache.spark.deploy.kubernetes.{InitContainerResourceStagingServerSecretPluginImpl, OptionRequirements, SparkPodInitContainerBootstrap, SparkPodInitContainerBootstrapImpl}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.deploy.rest.kubernetes.v2.RetrofitClientFactoryImpl
+import org.apache.spark.util.Utils
 
 /**
  * Interface that wraps the provision of everything the submission client needs to set up the
@@ -47,10 +48,51 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
     kubernetesAppId: String,
     sparkJars: Seq[String],
     sparkFiles: Seq[String],
-    resourceStagingServerSslOptions: SSLOptions)
+    resourceStagingServerExternalSslOptions: SSLOptions)
     extends DriverInitContainerComponentsProvider {
 
   private val maybeResourceStagingServerUri = sparkConf.get(RESOURCE_STAGING_SERVER_URI)
+  private val maybeResourceStagingServerInternalUri =
+      sparkConf.get(RESOURCE_STAGING_SERVER_INTERNAL_URI)
+  private val maybeResourceStagingServerInternalTrustStore =
+      sparkConf.get(RESOURCE_STAGING_SERVER_INTERNAL_TRUSTSTORE_FILE)
+          .orElse(sparkConf.get(RESOURCE_STAGING_SERVER_TRUSTSTORE_FILE))
+  private val maybeResourceStagingServerInternalTrustStorePassword =
+      sparkConf.get(RESOURCE_STAGING_SERVER_INTERNAL_TRUSTSTORE_PASSWORD)
+          .orElse(sparkConf.get(RESOURCE_STAGING_SERVER_TRUSTSTORE_PASSWORD))
+  private val maybeResourceStagingServerInternalTrustStoreType =
+      sparkConf.get(RESOURCE_STAGING_SERVER_INTERNAL_TRUSTSTORE_TYPE)
+          .orElse(sparkConf.get(RESOURCE_STAGING_SERVER_TRUSTSTORE_TYPE))
+  private val maybeResourceStagingServerInternalClientCert =
+      sparkConf.get(RESOURCE_STAGING_SERVER_INTERNAL_CLIENT_CERT_PEM)
+          .orElse(sparkConf.get(RESOURCE_STAGING_SERVER_CLIENT_CERT_PEM))
+  private val resourceStagingServerInternalSslEnabled =
+      sparkConf.get(RESOURCE_STAGING_SERVER_INTERNAL_SSL_ENABLED)
+          .orElse(sparkConf.get(RESOURCE_STAGING_SERVER_SSL_ENABLED))
+          .getOrElse(false)
+
+  OptionRequirements.requireNandDefined(
+      maybeResourceStagingServerInternalClientCert,
+      maybeResourceStagingServerInternalTrustStore,
+      "Cannot provide both a certificate file and a trustStore file for init-containers to" +
+        " use for contacting the resource staging server over TLS.")
+
+  require(maybeResourceStagingServerInternalTrustStore.forall { trustStore =>
+    Option(Utils.resolveURI(trustStore).getScheme).getOrElse("file") match {
+      case "file" | "local" => true
+      case _ => false
+    }
+  }, "TrustStore URI used for contacting the resource staging server from init containers must" +
+    " have no scheme, or scheme file://, or scheme local://.")
+
+  require(maybeResourceStagingServerInternalClientCert.forall { trustStore =>
+    Option(Utils.resolveURI(trustStore).getScheme).getOrElse("file") match {
+      case "file" | "local" => true
+      case _ => false
+    }
+  }, "Client cert file URI used for contacting the resource staging server from init containers" +
+    " must have no scheme, or scheme file://, or scheme local://.")
+
   private val jarsDownloadPath = sparkConf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION)
   private val filesDownloadPath = sparkConf.get(INIT_CONTAINER_FILES_DOWNLOAD_LOCATION)
   private val maybeSecretName = maybeResourceStagingServerUri.map { _ =>
@@ -71,14 +113,20 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
       filesResourceId <- maybeSubmittedResourceIds.map(_.filesResourceId)
     } yield {
       new SubmittedDependencyInitContainerConfigPluginImpl(
-        stagingServerUri,
+        // Configure the init-container with the internal URI over the external URI.
+        maybeResourceStagingServerInternalUri.getOrElse(stagingServerUri),
         jarsResourceId,
         filesResourceId,
         INIT_CONTAINER_SUBMITTED_JARS_SECRET_KEY,
         INIT_CONTAINER_SUBMITTED_FILES_SECRET_KEY,
         INIT_CONTAINER_STAGING_SERVER_TRUSTSTORE_SECRET_KEY,
-        INIT_CONTAINER_SECRET_VOLUME_MOUNT_PATH,
-        resourceStagingServerSslOptions)
+        INIT_CONTAINER_STAGING_SERVER_CLIENT_CERT_SECRET_KEY,
+        resourceStagingServerInternalSslEnabled,
+        maybeResourceStagingServerInternalTrustStore,
+        maybeResourceStagingServerInternalClientCert,
+        maybeResourceStagingServerInternalTrustStorePassword,
+        maybeResourceStagingServerInternalTrustStoreType,
+        INIT_CONTAINER_SECRET_VOLUME_MOUNT_PATH)
     }
     new SparkInitContainerConfigMapBuilderImpl(
       sparkJars,
@@ -113,7 +161,7 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
         stagingServerUri,
         sparkJars,
         sparkFiles,
-        resourceStagingServerSslOptions,
+        resourceStagingServerExternalSslOptions,
         RetrofitClientFactoryImpl)
     }
   }
@@ -133,7 +181,9 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
         INIT_CONTAINER_SUBMITTED_JARS_SECRET_KEY,
         INIT_CONTAINER_SUBMITTED_FILES_SECRET_KEY,
         INIT_CONTAINER_STAGING_SERVER_TRUSTSTORE_SECRET_KEY,
-        resourceStagingServerSslOptions)
+        INIT_CONTAINER_STAGING_SERVER_CLIENT_CERT_SECRET_KEY,
+        maybeResourceStagingServerInternalTrustStore,
+        maybeResourceStagingServerInternalClientCert)
     }
   }
 
