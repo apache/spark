@@ -351,7 +351,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         createNonPartitionedTable(tabName, analyzedByHive = true, analyzedBySpark = analyzedBySpark)
         val fetchedStats1 = checkTableStats(
           tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        sql(s"ALTER TABLE $tabName UNSET TBLPROPERTIES ('totalSize')")
+        sql(s"ALTER TABLE $tabName UNSET TBLPROPERTIES ('prop1')")
         val fetchedStats2 = checkTableStats(
           tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
         assert(fetchedStats1 == fetchedStats2)
