@@ -50,7 +50,8 @@ private[spark]
 class CartesianRDD[T: ClassTag, U: ClassTag](
     sc: SparkContext,
     var rdd1 : RDD[T],
-    var rdd2 : RDD[U])
+    var rdd2 : RDD[U],
+    val cacheFetchedInLocal: Boolean = false)
   extends RDD[(T, U)](sc, Nil)
   with Serializable {
 
@@ -78,7 +79,8 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     var cachedInLocal = false
     var holdReadLock = false
 
-    // Try to get data from the local, otherwise it will be cached to the local.
+    // Try to get data from the local, otherwise it will be cached to the local if user set
+    // cacheFetchedInLocal as true.
     def getOrElseCache(
         rdd: RDD[U],
         partition: Partition,
@@ -88,13 +90,16 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
         case Some(result) =>
           return result
         case None => if (holdReadLock) {
+          blockManager.releaseLock(blockId2)
           throw new SparkException(s"get() failed for block $blockId2 even though we held a lock")
         }
       }
 
       val iterator = rdd.iterator(partition, context)
-      if (rdd.getStorageLevel != StorageLevel.NONE || rdd.isCheckpointedAndMaterialized) {
-        // If the block is cached in local, wo shouldn't cache it again.
+      val status = blockManager.getStatus(blockId2)
+      if (!cacheFetchedInLocal || (status.isDefined && status.get.storageLevel.isValid)) {
+        // If user don't want cache the block fetched from remotely, just return it.
+        // Or if the block is cached in local, wo shouldn't cache it again.
         return iterator
       }
 
@@ -138,26 +143,33 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
       }
     }
 
-    def removeCachedBlock(): Unit = {
-      val blockManager = SparkEnv.get.blockManager
-      if (holdReadLock) {
-        // If hold the read lock, we need release it.
-        blockManager.releaseLock(blockId2)
-      }
-      // Whether the block it persisted by the user.
-      val persistedInLocal =
-        blockManager.master.getLocations(blockId2).contains(blockManager.blockManagerId)
-      if (!persistedInLocal && (cachedInLocal || blockManager.isRemovable(blockId2))) {
-        blockManager.removeOrMarkAsRemovable(blockId2, false)
-      }
-    }
-
     val resultIter =
       for (x <- rdd1.iterator(currSplit.s1, context);
            y <- getOrElseCache(rdd2, currSplit.s2, context, StorageLevel.MEMORY_AND_DISK))
         yield (x, y)
 
-    CompletionIterator[(T, U), Iterator[(T, U)]](resultIter, removeCachedBlock())
+    CompletionIterator[(T, U), Iterator[(T, U)]](resultIter,
+      removeCachedBlock(blockId2, holdReadLock, cachedInLocal))
+  }
+
+  /**
+   * Remove the cached block. If we hold the read lock, we also need release it.
+   */
+  def removeCachedBlock(
+      blockId: RDDBlockId,
+      holdReadLock: Boolean,
+      cachedInLocal: Boolean): Unit = {
+    val blockManager = SparkEnv.get.blockManager
+    if (holdReadLock) {
+      // If hold the read lock, we need release it.
+      blockManager.releaseLock(blockId)
+    }
+    // Whether the block it persisted by the user.
+    val persistedInLocal =
+    blockManager.master.getLocations(blockId).contains(blockManager.blockManagerId)
+    if (!persistedInLocal && (cachedInLocal || blockManager.isRemovable(blockId))) {
+      blockManager.removeOrMarkAsRemovable(blockId, false)
+    }
   }
 
   override def getDependencies: Seq[Dependency[_]] = List(
