@@ -23,20 +23,18 @@ import org.apache.spark.deploy.kubernetes.config._
 
 class SubmittedDependencyInitContainerConfigPluginSuite extends SparkFunSuite {
   private val STAGING_SERVER_URI = "http://localhost:9000"
+  private val STAGING_SERVER_INTERNAL_URI = "http://internalHost:9000"
   private val JARS_RESOURCE_ID = "jars-id"
   private val FILES_RESOURCE_ID = "files-id"
   private val JARS_SECRET_KEY = "jars"
   private val FILES_SECRET_KEY = "files"
   private val TRUSTSTORE_SECRET_KEY = "trustStore"
-  private val SECRETS_VOLUME_MOUNT_PATH = "/var/data/"
+  private val CLIENT_CERT_SECRET_KEY = "client-cert"
+  private val SECRETS_VOLUME_MOUNT_PATH = "/var/data"
   private val TRUSTSTORE_PASSWORD = "trustStore"
   private val TRUSTSTORE_FILE = "/mnt/secrets/trustStore.jks"
+  private val CLIENT_CERT_URI = "local:///mnt/secrets/client-cert.pem"
   private val TRUSTSTORE_TYPE = "jks"
-  private val RESOURCE_STAGING_SERVICE_SSL_OPTIONS = SSLOptions(
-    enabled = true,
-    trustStore = Some(new File(TRUSTSTORE_FILE)),
-    trustStorePassword = Some(TRUSTSTORE_PASSWORD),
-    trustStoreType = Some(TRUSTSTORE_TYPE))
 
   test("Plugin should provide configuration for fetching uploaded dependencies") {
     val configPluginUnderTest = new SubmittedDependencyInitContainerConfigPluginImpl(
@@ -46,8 +44,13 @@ class SubmittedDependencyInitContainerConfigPluginSuite extends SparkFunSuite {
       JARS_SECRET_KEY,
       FILES_SECRET_KEY,
       TRUSTSTORE_SECRET_KEY,
-      SECRETS_VOLUME_MOUNT_PATH,
-      SSLOptions())
+      CLIENT_CERT_SECRET_KEY,
+      false,
+      None,
+      None,
+      None,
+      None,
+      SECRETS_VOLUME_MOUNT_PATH)
     val addedConfigurations = configPluginUnderTest.configurationsToFetchSubmittedDependencies()
     val expectedConfigurations = Map(
       RESOURCE_STAGING_SERVER_URI.key -> STAGING_SERVER_URI,
@@ -65,19 +68,24 @@ class SubmittedDependencyInitContainerConfigPluginSuite extends SparkFunSuite {
     val configPluginUnderTest = new SubmittedDependencyInitContainerConfigPluginImpl(
       STAGING_SERVER_URI,
       JARS_RESOURCE_ID,
-      FILES_RESOURCE_ID,
-      JARS_SECRET_KEY,
+      FILES_RESOURCE_ID, JARS_SECRET_KEY,
       FILES_SECRET_KEY,
       TRUSTSTORE_SECRET_KEY,
-      SECRETS_VOLUME_MOUNT_PATH,
-      RESOURCE_STAGING_SERVICE_SSL_OPTIONS)
+      CLIENT_CERT_SECRET_KEY,
+      true,
+      Some(TRUSTSTORE_FILE),
+      Some(CLIENT_CERT_URI),
+      Some(TRUSTSTORE_PASSWORD),
+      Some(TRUSTSTORE_TYPE),
+      SECRETS_VOLUME_MOUNT_PATH)
     val addedConfigurations = configPluginUnderTest.configurationsToFetchSubmittedDependencies()
     val expectedSslConfigurations = Map(
       RESOURCE_STAGING_SERVER_SSL_ENABLED.key -> "true",
       RESOURCE_STAGING_SERVER_TRUSTSTORE_FILE.key ->
           s"$SECRETS_VOLUME_MOUNT_PATH/$TRUSTSTORE_SECRET_KEY",
       RESOURCE_STAGING_SERVER_TRUSTSTORE_PASSWORD.key -> TRUSTSTORE_PASSWORD,
-      RESOURCE_STAGING_SERVER_TRUSTSTORE_TYPE.key -> TRUSTSTORE_TYPE)
+      RESOURCE_STAGING_SERVER_TRUSTSTORE_TYPE.key -> TRUSTSTORE_TYPE,
+      RESOURCE_STAGING_SERVER_CLIENT_CERT_PEM.key -> "/mnt/secrets/client-cert.pem")
     assert(expectedSslConfigurations.toSet.subsetOf(addedConfigurations.toSet))
   }
 }

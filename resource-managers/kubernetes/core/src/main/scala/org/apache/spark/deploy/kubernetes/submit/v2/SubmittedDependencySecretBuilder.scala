@@ -16,12 +16,14 @@
  */
 package org.apache.spark.deploy.kubernetes.submit.v2
 
+import java.io.File
+
 import com.google.common.base.Charsets
 import com.google.common.io.{BaseEncoding, Files}
 import io.fabric8.kubernetes.api.model.{Secret, SecretBuilder}
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SSLOptions
+import org.apache.spark.util.Utils
 
 private[spark] trait SubmittedDependencySecretBuilder {
   /**
@@ -32,28 +34,30 @@ private[spark] trait SubmittedDependencySecretBuilder {
 }
 
 private[spark] class SubmittedDependencySecretBuilderImpl(
-    secretName: String,
-    jarsResourceSecret: String,
-    filesResourceSecret: String,
-    jarsSecretKey: String,
-    filesSecretKey: String,
-    trustStoreSecretKey: String,
-    resourceStagingServerSslOptions: SSLOptions)
+      secretName: String,
+      jarsResourceSecret: String,
+      filesResourceSecret: String,
+      jarsSecretKey: String,
+      filesSecretKey: String,
+      trustStoreSecretKey: String,
+      clientCertSecretKey: String,
+      internalTrustStoreUri: Option[String],
+      internalClientCertUri: Option[String])
     extends SubmittedDependencySecretBuilder {
 
   override def build(): Secret = {
-    val trustStoreBase64 = resourceStagingServerSslOptions.trustStore.map { trustStoreFile =>
-      require(trustStoreFile.isFile, "Dependency server trustStore provided at" +
-        trustStoreFile.getAbsolutePath + " does not exist or is not a file.")
-      (trustStoreSecretKey, BaseEncoding.base64().encode(Files.toByteArray(trustStoreFile)))
-    }.toMap
+    val trustStoreBase64 = convertFileToBase64IfSubmitterLocal(
+        trustStoreSecretKey, internalTrustStoreUri)
+    val clientCertBase64 = convertFileToBase64IfSubmitterLocal(
+        clientCertSecretKey, internalClientCertUri)
     val jarsSecretBase64 = BaseEncoding.base64().encode(jarsResourceSecret.getBytes(Charsets.UTF_8))
     val filesSecretBase64 = BaseEncoding.base64().encode(
       filesResourceSecret.getBytes(Charsets.UTF_8))
     val secretData = Map(
       jarsSecretKey -> jarsSecretBase64,
       filesSecretKey -> filesSecretBase64) ++
-      trustStoreBase64
+      trustStoreBase64 ++
+      clientCertBase64
     val kubernetesSecret = new SecretBuilder()
       .withNewMetadata()
       .withName(secretName)
@@ -61,5 +65,17 @@ private[spark] class SubmittedDependencySecretBuilderImpl(
       .addToData(secretData.asJava)
       .build()
     kubernetesSecret
+  }
+
+  private def convertFileToBase64IfSubmitterLocal(secretKey: String, secretUri: Option[String])
+      : Map[String, String] = {
+    secretUri.filter { trustStore =>
+      Option(Utils.resolveURI(trustStore).getScheme).getOrElse("file") == "file"
+    }.map { uri =>
+      val file = new File(Utils.resolveURI(uri).getPath)
+      require(file.isFile, "Dependency server trustStore provided at" +
+        file.getAbsolutePath + " does not exist or is not a file.")
+      (secretKey, BaseEncoding.base64().encode(Files.toByteArray(file)))
+    }.toMap
   }
 }

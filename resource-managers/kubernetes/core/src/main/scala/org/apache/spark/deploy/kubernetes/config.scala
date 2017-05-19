@@ -362,6 +362,8 @@ package object config extends Logging {
       .createOptional
 
   private[spark] val RESOURCE_STAGING_SERVER_SSL_NAMESPACE = "kubernetes.resourceStagingServer"
+  private[spark] val RESOURCE_STAGING_SERVER_INTERNAL_SSL_NAMESPACE =
+      "kubernetes.resourceStagingServer.internal"
   private[spark] val RESOURCE_STAGING_SERVER_CERT_PEM =
     ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_SSL_NAMESPACE.serverCertPem")
       .doc("Certificate PEM file to use when having the resource staging server" +
@@ -370,35 +372,70 @@ package object config extends Logging {
       .createOptional
   private[spark] val RESOURCE_STAGING_SERVER_CLIENT_CERT_PEM =
     ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_SSL_NAMESPACE.clientCertPem")
-      .doc("Certificate PEM file to use when the client contacts the resource staging server.")
+      .doc("Certificate PEM file to use when the client contacts the resource staging server." +
+        " This must strictly be a path to a file on the submitting machine's disk.")
       .stringConf
       .createOptional
-
+  private[spark] val RESOURCE_STAGING_SERVER_INTERNAL_CLIENT_CERT_PEM =
+    ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_INTERNAL_SSL_NAMESPACE.clientCertPem")
+      .doc("Certificate PEM file to use when the init-container contacts the resource staging" +
+        " server. If this is not provided, it defaults to the value of" +
+        " spark.ssl.kubernetes.resourceStagingServer.clientCertPem. This can be a URI with" +
+        " a scheme of local:// which denotes that the file is pre-mounted on the init-container's" +
+        " disk. A uri without a scheme or a scheme of file:// will result in this file being" +
+        " mounted from the submitting machine's disk as a secret into the pods.")
+      .stringConf
+      .createOptional
   private[spark] val RESOURCE_STAGING_SERVER_KEYSTORE_PASSWORD_FILE =
     ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_SSL_NAMESPACE.keyStorePasswordFile")
-      .doc("File containing the keystore password for the Kubernetes dependency server.")
+      .doc("File containing the keystore password for the Kubernetes resource staging server.")
       .stringConf
       .createOptional
 
   private[spark] val RESOURCE_STAGING_SERVER_KEYSTORE_KEY_PASSWORD_FILE =
     ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_SSL_NAMESPACE.keyPasswordFile")
-      .doc("File containing the key password for the Kubernetes dependency server.")
+      .doc("File containing the key password for the Kubernetes resource staging server.")
       .stringConf
       .createOptional
 
   private[spark] val RESOURCE_STAGING_SERVER_SSL_ENABLED =
     ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_SSL_NAMESPACE.enabled")
-      .doc("Whether or not to use SSL when communicating with the dependency server.")
+      .doc("Whether or not to use SSL when communicating with the resource staging server.")
+      .booleanConf
+      .createOptional
+  private[spark] val RESOURCE_STAGING_SERVER_INTERNAL_SSL_ENABLED =
+    ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_INTERNAL_SSL_NAMESPACE.enabled")
+      .doc("Whether or not to use SSL when communicating with the resource staging server from" +
+        " the init-container. If this is not provided, defaults to" +
+        " the value of spark.ssl.kubernetes.resourceStagingServer.enabled")
       .booleanConf
       .createOptional
   private[spark] val RESOURCE_STAGING_SERVER_TRUSTSTORE_FILE =
     ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_SSL_NAMESPACE.trustStore")
-      .doc("File containing the trustStore to communicate with the Kubernetes dependency server.")
+      .doc("File containing the trustStore to communicate with the Kubernetes dependency server." +
+        " This must strictly be a path on the submitting machine's disk.")
+      .stringConf
+      .createOptional
+  private[spark] val RESOURCE_STAGING_SERVER_INTERNAL_TRUSTSTORE_FILE =
+    ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_INTERNAL_SSL_NAMESPACE.trustStore")
+      .doc("File containing the trustStore to communicate with the Kubernetes dependency server" +
+        " from the init-container. If this is not provided, defaults to the value of" +
+        " spark.ssl.kubernetes.resourceStagingServer.trustStore. This can be a URI with a scheme" +
+        " of local:// indicating that the trustStore is pre-mounted on the init-container's" +
+        " disk. If no scheme, or a scheme of file:// is provided, this file is mounted from the" +
+        " submitting machine's disk as a Kubernetes secret into the pods.")
       .stringConf
       .createOptional
   private[spark] val RESOURCE_STAGING_SERVER_TRUSTSTORE_PASSWORD =
     ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_SSL_NAMESPACE.trustStorePassword")
-      .doc("Password for the trustStore for talking to the dependency server.")
+      .doc("Password for the trustStore for communicating to the dependency server.")
+      .stringConf
+      .createOptional
+  private[spark] val RESOURCE_STAGING_SERVER_INTERNAL_TRUSTSTORE_PASSWORD =
+    ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_INTERNAL_SSL_NAMESPACE.trustStorePassword")
+      .doc("Password for the trustStore for communicating to the dependency server from the" +
+        " init-container. If this is not provided, defaults to" +
+        " spark.ssl.kubernetes.resourceStagingServer.trustStorePassword.")
       .stringConf
       .createOptional
   private[spark] val RESOURCE_STAGING_SERVER_TRUSTSTORE_TYPE =
@@ -406,11 +443,27 @@ package object config extends Logging {
       .doc("Type of trustStore for communicating with the dependency server.")
       .stringConf
       .createOptional
+  private[spark] val RESOURCE_STAGING_SERVER_INTERNAL_TRUSTSTORE_TYPE =
+    ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_INTERNAL_SSL_NAMESPACE.trustStoreType")
+      .doc("Type of trustStore for communicating with the dependency server from the" +
+        " init-container. If this is not provided, defaults to" +
+        " spark.ssl.kubernetes.resourceStagingServer.trustStoreType")
+      .stringConf
+      .createOptional
 
   // Driver and Init-Container parameters for submission v2
   private[spark] val RESOURCE_STAGING_SERVER_URI =
     ConfigBuilder("spark.kubernetes.resourceStagingServer.uri")
-      .doc("Base URI for the Spark resource staging server")
+      .doc("Base URI for the Spark resource staging server.")
+      .stringConf
+      .createOptional
+
+  private[spark] val RESOURCE_STAGING_SERVER_INTERNAL_URI =
+    ConfigBuilder("spark.kubernetes.resourceStagingServer.internal.uri")
+      .doc("Base URI for the Spark resource staging server when the init-containers access it for" +
+        " downloading resources. If this is not provided, it defaults to the value provided in" +
+        " spark.kubernetes.resourceStagingServer.uri, the URI that the submission client uses to" +
+        " upload the resources from outside the cluster.")
       .stringConf
       .createOptional
 

@@ -35,7 +35,9 @@ class SubmittedDependencySecretBuilderSuite extends SparkFunSuite {
   private val JARS_SECRET_KEY = "jars-secret-key"
   private val FILES_SECRET_KEY = "files-secret-key"
   private val TRUSTSTORE_SECRET_KEY = "truststore-secret-key"
+  private val CLIENT_CERT_SECRET_KEY = "client-cert"
   private val TRUSTSTORE_STRING_CONTENTS = "trustStore-contents"
+  private val CLIENT_CERT_STRING_CONTENTS = "client-certificate-contents"
 
   test("Building the secret without a trustStore") {
     val builder = new SubmittedDependencySecretBuilderImpl(
@@ -45,7 +47,9 @@ class SubmittedDependencySecretBuilderSuite extends SparkFunSuite {
       JARS_SECRET_KEY,
       FILES_SECRET_KEY,
       TRUSTSTORE_SECRET_KEY,
-      SSLOptions())
+      CLIENT_CERT_SECRET_KEY,
+      None,
+      None)
     val secret = builder.build()
     assert(secret.getMetadata.getName === SECRET_NAME)
     val secretDecodedData = decodeSecretData(secret)
@@ -60,10 +64,12 @@ class SubmittedDependencySecretBuilderSuite extends SparkFunSuite {
   }
 
   test("Building the secret with a trustStore") {
-    val tempTrustStoreDir = Utils.createTempDir(namePrefix = "temp-truststores")
+    val tempSslDir = Utils.createTempDir(namePrefix = "temp-ssl-tests")
     try {
-      val trustStoreFile = new File(tempTrustStoreDir, "trustStore.jks")
+      val trustStoreFile = new File(tempSslDir, "trustStore.jks")
       Files.write(TRUSTSTORE_STRING_CONTENTS, trustStoreFile, Charsets.UTF_8)
+      val clientCertFile = new File(tempSslDir, "cert.pem")
+      Files.write(CLIENT_CERT_STRING_CONTENTS, clientCertFile, Charsets.UTF_8)
       val builder = new SubmittedDependencySecretBuilderImpl(
         SECRET_NAME,
         JARS_SECRET,
@@ -71,13 +77,33 @@ class SubmittedDependencySecretBuilderSuite extends SparkFunSuite {
         JARS_SECRET_KEY,
         FILES_SECRET_KEY,
         TRUSTSTORE_SECRET_KEY,
-        SSLOptions(trustStore = Some(trustStoreFile)))
+        CLIENT_CERT_SECRET_KEY,
+        Some(trustStoreFile.getAbsolutePath),
+        Some(clientCertFile.getAbsolutePath))
       val secret = builder.build()
-      val secretDecodedData = decodeSecretData(secret)
-      assert(secretDecodedData(TRUSTSTORE_SECRET_KEY) === TRUSTSTORE_STRING_CONTENTS)
+      val decodedSecretData = decodeSecretData(secret)
+      assert(decodedSecretData(TRUSTSTORE_SECRET_KEY) === TRUSTSTORE_STRING_CONTENTS)
+      assert(decodedSecretData(CLIENT_CERT_SECRET_KEY) === CLIENT_CERT_STRING_CONTENTS)
     } finally {
-      tempTrustStoreDir.delete()
+      tempSslDir.delete()
     }
+  }
+
+  test("If trustStore and certificate are container-local, don't add secret entries") {
+    val builder = new SubmittedDependencySecretBuilderImpl(
+      SECRET_NAME,
+      JARS_SECRET,
+      FILES_SECRET,
+      JARS_SECRET_KEY,
+      FILES_SECRET_KEY,
+      TRUSTSTORE_SECRET_KEY,
+      CLIENT_CERT_SECRET_KEY,
+      Some("local:///mnt/secrets/trustStore.jks"),
+      Some("local:///mnt/secrets/cert.pem"))
+    val secret = builder.build()
+    val decodedSecretData = decodeSecretData(secret)
+    assert(!decodedSecretData.contains(TRUSTSTORE_SECRET_KEY))
+    assert(!decodedSecretData.contains(CLIENT_CERT_SECRET_KEY))
   }
 
 }

@@ -115,6 +115,7 @@ package object constants {
   private[spark] val INIT_CONTAINER_SUBMITTED_FILES_SECRET_KEY =
     "downloadSubmittedFilesSecret"
   private[spark] val INIT_CONTAINER_STAGING_SERVER_TRUSTSTORE_SECRET_KEY = "trustStore"
+  private[spark] val INIT_CONTAINER_STAGING_SERVER_CLIENT_CERT_SECRET_KEY = "ssl-certificate"
   private[spark] val INIT_CONTAINER_CONFIG_MAP_KEY = "download-submitted-files"
   private[spark] val INIT_CONTAINER_DOWNLOAD_JARS_VOLUME_NAME = "download-jars-volume"
   private[spark] val INIT_CONTAINER_DOWNLOAD_FILES_VOLUME_NAME = "download-files"
