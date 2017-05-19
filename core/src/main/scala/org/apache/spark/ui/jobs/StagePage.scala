@@ -85,6 +85,21 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     localityNamesAndCounts.sorted.mkString("; ")
   }
 
+  private def getLocalitySummaryString(stageData: StageUIData): String = {
+    val localities = stageData.taskData.values.map(_.taskInfo.taskLocality)
+    val localityCounts = localities.groupBy(identity).mapValues(_.size)
+    val localityNamesAndCounts = localityCounts.toSeq.map { case (locality, count) =>
+      val localityName = locality match {
+        case TaskLocality.PROCESS_LOCAL => "Process local"
+        case TaskLocality.NODE_LOCAL => "Node local"
+        case TaskLocality.RACK_LOCAL => "Rack local"
+        case TaskLocality.ANY => "Any"
+      }
+      s"$localityName: $count"
+    }
+    localityNamesAndCounts.sorted.mkString("; ")
+  }
+
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
       // stripXSS is called first to remove suspicious characters used in XSS attacks
