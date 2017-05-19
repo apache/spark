@@ -192,7 +192,7 @@ class ArrowSerializer(FramedSerializer):
 
     def loads(self, obj):
         import pyarrow as pa
-        reader = pa.FileReader(pa.BufferReader(obj))
+        reader = pa.RecordBatchFileReader(pa.BufferReader(obj))
         return reader.read_all()
 
     def __repr__(self):
