@@ -77,7 +77,7 @@ release of Spark:
  ([SPARK-11968](https://issues.apache.org/jira/browse/SPARK-11968) and
  [SPARK-20587](https://issues.apache.org/jira/browse/SPARK-20587))
 * `Correlation` and `ChiSquareTest` stats functions for `DataFrames`
- ([SPARK-19635](https://issues.apache.org/jira/browse/SPARK-19635) and
+ ([SPARK-19636](https://issues.apache.org/jira/browse/SPARK-19636) and
  [SPARK-19635](https://issues.apache.org/jira/browse/SPARK-19635))
 * `FPGrowth` algorithm for frequent pattern mining
  ([SPARK-14503](https://issues.apache.org/jira/browse/SPARK-14503))
