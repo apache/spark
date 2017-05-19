@@ -74,6 +74,14 @@ public final class OffHeapColumnVector extends ColumnVector {
     offsetData = 0;
   }
 
+  @Override
+  public void compress() {
+  }
+
+  @Override
+  public void decompress() {
+  }
+
   //
   // APIs dealing with nulls
   //

@@ -1078,7 +1078,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
-  private def getPrivateValue(column : OnHeapColumnVector, fieldName : String) : Any = {
+  private def getPrivateValue(column : ColumnVector, fieldName : String) : Any = {
     val cls = classOf[OnHeapColumnVector]
     val field = cls.getDeclaredField(fieldName)
     field.setAccessible(true)
@@ -1086,19 +1086,18 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   def performCompressDecompress(column: ColumnVector, dataFieldName: String): Unit = {
-    val unsafeColumn = column.asInstanceOf[OnHeapColumnVector]
-    unsafeColumn.compress()
-    assert(getPrivateValue(unsafeColumn, "compressed").asInstanceOf[Boolean])
-    assert((getPrivateValue(unsafeColumn, dataFieldName) == null))
-    assert((getPrivateValue(unsafeColumn, "compressedData") != null))
-    assert((getPrivateValue(unsafeColumn, "nulls") == null))
-    assert((getPrivateValue(unsafeColumn, "compressedNulls") != null))
-    unsafeColumn.decompress()
-    assert(getPrivateValue(unsafeColumn, "compressed").asInstanceOf[Boolean] == false)
-    assert((getPrivateValue(unsafeColumn, dataFieldName) != null))
-    assert((getPrivateValue(unsafeColumn, "compressedData") == null))
-    assert((getPrivateValue(unsafeColumn, "nulls") != null))
-    assert((getPrivateValue(unsafeColumn, "compressedNulls") == null))
+    column.compress()
+    assert(getPrivateValue(column, "compressed").asInstanceOf[Boolean])
+    assert((getPrivateValue(column, dataFieldName) == null))
+    assert((getPrivateValue(column, "compressedData") != null))
+    assert((getPrivateValue(column, "nulls") == null))
+    assert((getPrivateValue(column, "compressedNulls") != null))
+    column.decompress()
+    assert(getPrivateValue(column, "compressed").asInstanceOf[Boolean] == false)
+    assert((getPrivateValue(column, dataFieldName) != null))
+    assert((getPrivateValue(column, "compressedData") == null))
+    assert((getPrivateValue(column, "nulls") != null))
+    assert((getPrivateValue(column, "compressedNulls") == null))
 
   }
 

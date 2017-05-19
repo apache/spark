@@ -77,6 +77,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   public void close() {
   }
 
+  @Override
   public void compress() {
     if (compressed) return;
 
@@ -117,6 +118,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     compressed = (compressedData != null) || (compressedNulls != null);
   }
 
+  @Override
   public void decompress() {
     if (!compressed) return;
 
