@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.columnar.compression
 
+import java.nio.ByteBuffer
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.execution.columnar.{BOOLEAN, NoopColumnStats}
+import org.apache.spark.sql.execution.columnar.{ArrayBuffer, BOOLEAN, NoopColumnStats}
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 
 class BooleanBitSetSuite extends SparkFunSuite {
@@ -103,5 +105,77 @@ class BooleanBitSetSuite extends SparkFunSuite {
 
   test(s"$BooleanBitSet: multiple words and 1 more bit") {
     skeleton(BITS_PER_LONG * 2 + 1)
+  }
+
+  def skeletonForBatch(count: Int) {
+    // -------------
+    // Tests encoder
+    // -------------
+    val inputArray = new Array[Boolean](count)
+    (0 until inputArray.length).foreach { i =>
+      inputArray(i) = makeRandomValues(BOOLEAN)(0).asInstanceOf[Boolean]}
+
+    val encoder = BooleanBitSet.encoder(BOOLEAN)
+    encoder.gatherCompressibilityStats(ArrayBuffer(inputArray))
+
+    val size = encoder.compressedSize
+    val compressedArray = new Array[Byte](4 + size)
+    encoder.compress(ArrayBuffer(inputArray), ArrayBuffer(compressedArray))
+
+    // Compression scheme ID + element count + bitset words
+    val compressedSize = 4 + 4 + {
+      val extra = if (count % BITS_PER_LONG == 0) 0 else 1
+      (count / BITS_PER_LONG + extra) * 8
+    }
+
+    // 4 extra bytes for compression scheme type ID
+    assertResult(compressedSize, "Wrong buffer capacity")(compressedArray.size)
+
+    // Skips column header
+    val buffer = ArrayBuffer(compressedArray)
+    assertResult(BooleanBitSet.typeId, "Wrong compression scheme ID")(buffer.getInt())
+    assertResult(count, "Wrong element count")(buffer.getInt())
+
+    var word = 0: Long
+    for (i <- 0 until count) {
+      val bit = i % BITS_PER_LONG
+      word = if (bit == 0) buffer.getLong() else word
+      assertResult(inputArray(i), s"Wrong value in compressed buffer, index=$i") {
+        (word & ((1: Long) << bit)) != 0
+      }
+    }
+
+    // -------------
+    // Tests decoder
+    // -------------
+    val outputArray = new Array[Boolean](inputArray.length)
+    val decoder = BooleanBitSet.decoder(ByteBuffer.wrap(compressedArray), BOOLEAN)
+    decoder.decompress(ArrayBuffer(outputArray))
+
+    if (inputArray.nonEmpty) {
+      inputArray.zipWithIndex.foreach { case (value, i) =>
+        assertResult(value, "Wrong decoded value")(outputArray(i))
+      }
+    }
+  }
+
+  test(s"$BooleanBitSet Batch: empty") {
+    skeletonForBatch(0)
+  }
+
+  test(s"$BooleanBitSet Batch: less than 1 word") {
+    skeletonForBatch(BITS_PER_LONG - 1)
+  }
+
+  test(s"$BooleanBitSet Batch: exactly 1 word") {
+    skeletonForBatch(BITS_PER_LONG)
+  }
+
+  test(s"$BooleanBitSet Batch: multiple whole words") {
+    skeletonForBatch(BITS_PER_LONG * 2)
+  }
+
+  test(s"$BooleanBitSet Batch: multiple words and 1 more bit") {
+    skeletonForBatch(BITS_PER_LONG * 2 + 1)
   }
 }

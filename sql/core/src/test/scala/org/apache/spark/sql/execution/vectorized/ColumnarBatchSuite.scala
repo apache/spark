@@ -1077,4 +1077,41 @@ class ColumnarBatchSuite extends SparkFunSuite {
         s"vectorized reader"))
     }
   }
+
+  private def getPrivateValue(column : OnHeapColumnVector, fieldName : String) : Any = {
+    val cls = classOf[OnHeapColumnVector]
+    val field = cls.getDeclaredField(fieldName)
+    field.setAccessible(true)
+    field.get(column)
+  }
+
+  def performCompressDecompress(column: ColumnVector, dataFieldName: String): Unit = {
+    val unsafeColumn = column.asInstanceOf[OnHeapColumnVector]
+    unsafeColumn.compress()
+    assert(getPrivateValue(unsafeColumn, "compressed").asInstanceOf[Boolean])
+    assert((getPrivateValue(unsafeColumn, dataFieldName) == null))
+    assert((getPrivateValue(unsafeColumn, "compressedData") != null))
+    assert((getPrivateValue(unsafeColumn, "nulls") == null))
+    assert((getPrivateValue(unsafeColumn, "compressedNulls") != null))
+    unsafeColumn.decompress()
+    assert(getPrivateValue(unsafeColumn, "compressed").asInstanceOf[Boolean] == false)
+    assert((getPrivateValue(unsafeColumn, dataFieldName) != null))
+    assert((getPrivateValue(unsafeColumn, "compressedData") == null))
+    assert((getPrivateValue(unsafeColumn, "nulls") != null))
+    assert((getPrivateValue(unsafeColumn, "compressedNulls") == null))
+
+  }
+
+  test("compress and decompress") {
+    val len = 1024
+    // data for RLE
+    val intArray = Array.tabulate(len)(i => (i / (len / 4)))
+    val column = ColumnVector.allocate(1024, IntegerType, MemoryMode.ON_HEAP)
+    (0 until len).foreach(i => column.putInt(i, intArray(i)))
+    performCompressDecompress(column, "intData")
+    (0 until len).foreach(i => assert(column.getInt(i) == intArray(i)))
+    performCompressDecompress(column, "intData")
+    (0 until len).foreach(i => assert(column.getInt(i) == intArray(i)))
+    column.close
+  }
 }

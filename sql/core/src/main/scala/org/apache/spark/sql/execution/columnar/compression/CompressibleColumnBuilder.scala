@@ -21,8 +21,8 @@ import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.columnar.{ColumnBuilder, NativeColumnBuilder}
-import org.apache.spark.sql.types.AtomicType
+import org.apache.spark.sql.execution.columnar._
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 
 /**
@@ -111,4 +111,54 @@ private[columnar] trait CompressibleColumnBuilder[T <: AtomicType]
 
 private[columnar] object CompressibleColumnBuilder {
   val unaligned = Platform.unaligned()
+}
+
+class ColumnVectorCompressionBuilder[T <: AtomicType](dataType: T) {
+  protected def isWorthCompressing(encoder: Encoder[T]) = {
+    CompressibleColumnBuilder.unaligned && encoder.compressionRatio < 0.8
+  }
+
+  val columnType : NativeColumnType[T] = {
+    val n = dataType match {
+      case _: BooleanType => BOOLEAN
+      case _: ByteType => BYTE
+      case _: ShortType => SHORT
+      case _: IntegerType | _: DateType => INT
+      case _: LongType | _: TimestampType => LONG
+      case _: FloatType => FLOAT
+      case _: DoubleType => DOUBLE
+      case other => throw new Exception(s"not supported type: $other")
+    }
+    n.asInstanceOf[NativeColumnType[T]]
+  }
+
+  def compress(in: Array[_]): Array[Byte] = {
+    // val schemes = CompressionScheme.all
+    val schemes = Seq(RunLengthEncoding, BooleanBitSet)
+    val compressionEncoders =
+      schemes.filter(_.supports(columnType)).map(_.encoder[T](columnType))
+
+    compressionEncoders.foreach(_.gatherCompressibilityStats(ArrayBuffer(in)))
+
+    val encoder: Encoder[T] = {
+      val candidate = compressionEncoders.minBy(_.compressionRatio)
+      if (isWorthCompressing(candidate)) candidate else null
+    }
+
+    if (encoder != null) {
+      print(s"Compressor: $encoder, ratio: ${encoder.compressionRatio}\n")
+      val size = encoder.compressedSize
+      val compressedBuffer = new Array[Byte](4 + size)
+      encoder.compress(ArrayBuffer(in), ArrayBuffer(compressedBuffer))
+      compressedBuffer
+    } else {
+      null
+    }
+  }
+
+  def decompress(in: Array[Byte], out: Array[_]): Unit = {
+    CompressionScheme(Platform.getInt(in, Platform.BYTE_ARRAY_OFFSET))
+      .decoder[T](ByteBuffer.wrap(in), columnType)
+      .decompress(ArrayBuffer(out))
+  }
 }

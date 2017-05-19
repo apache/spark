@@ -20,11 +20,13 @@ package org.apache.spark.sql.execution.columnar.compression
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.columnar.{ColumnType, NativeColumnType}
+import org.apache.spark.sql.execution.columnar.{ArrayBuffer, ColumnType, NativeColumnType}
 import org.apache.spark.sql.types.AtomicType
 
 private[columnar] trait Encoder[T <: AtomicType] {
   def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {}
+
+  def gatherCompressibilityStats(in: ArrayBuffer): Unit = { }
 
   def compressedSize: Int
 
@@ -35,12 +37,16 @@ private[columnar] trait Encoder[T <: AtomicType] {
   }
 
   def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer
+
+  def compress(from: ArrayBuffer, to: ArrayBuffer): Unit
 }
 
 private[columnar] trait Decoder[T <: AtomicType] {
   def next(row: InternalRow, ordinal: Int): Unit
 
   def hasNext: Boolean
+
+  def decompress(values: ArrayBuffer): Unit
 }
 
 private[columnar] trait CompressionScheme {

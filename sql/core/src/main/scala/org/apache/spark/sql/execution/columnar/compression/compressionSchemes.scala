@@ -51,6 +51,10 @@ private[columnar] case object PassThrough extends CompressionScheme {
       to.putInt(PassThrough.typeId).put(from).rewind()
       to
     }
+
+    override def compress(from: ArrayBuffer, to: ArrayBuffer): Unit = {
+      throw new IllegalStateException("Not support in PassThru (should not be called)")
+    }
   }
 
   class Decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T])
@@ -61,6 +65,10 @@ private[columnar] case object PassThrough extends CompressionScheme {
     }
 
     override def hasNext: Boolean = buffer.hasRemaining
+
+    override def decompress(values: ArrayBuffer): Unit = {
+      throw new IllegalStateException("Not support in PassThru (should not be called)")
+    }
   }
 }
 
@@ -113,6 +121,24 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       }
     }
 
+    override def gatherCompressibilityStats(in: ArrayBuffer): Unit = {
+      val actualSize = columnType.actualSize(null, 0)
+      _uncompressedSize = actualSize * in.array.length
+
+      if (in.hasRemaining) {
+        var lastValue = columnType.get(in)
+
+        while (in.hasRemaining) {
+          val value = columnType.get(in)
+          if (lastValue != value) {
+            _compressedSize += actualSize + 4
+            lastValue = value
+          }
+        }
+        _compressedSize += actualSize + 4
+      }
+    }
+
     override def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer = {
       to.putInt(RunLengthEncoding.typeId)
 
@@ -147,6 +173,34 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       to.rewind()
       to
     }
+
+    override def compress(from: ArrayBuffer, to: ArrayBuffer): Unit = {
+      to.putInt(RunLengthEncoding.typeId)
+
+      if (from.hasRemaining) {
+        var currentValue = columnType.get(from)
+        var currentRun = 1
+
+        while (from.hasRemaining) {
+          val value = columnType.get(from)
+          if (value == currentValue) {
+            currentRun += 1
+          } else {
+            // Writes current run
+            columnType.put(to, currentValue)
+            to.putInt(currentRun)
+
+            // Resets current run
+            currentValue = value
+            currentRun = 1
+          }
+        }
+
+        // Writes the last run
+        columnType.put(to, currentValue)
+        to.putInt(currentRun)
+      }
+    }
   }
 
   class Decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T])
@@ -169,6 +223,26 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
     }
 
     override def hasNext: Boolean = valueCount < run || buffer.hasRemaining
+
+    override def decompress(values: ArrayBuffer): Unit = {
+      val buf = ArrayBuffer(buffer.array)
+
+      // read typeID
+      buf.getInt()
+
+      var run = 0
+      var valueCount = 0
+      while (valueCount < run || buf.hasRemaining) {
+        if (valueCount == run) {
+          currentValue = columnType.get(buf)
+          run = buf.getInt()
+          valueCount = 1
+        } else {
+          valueCount += 1
+        }
+        columnType.put(values, currentValue)
+      }
+    }
   }
 }
 
@@ -263,6 +337,10 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
     override def uncompressedSize: Int = _uncompressedSize
 
     override def compressedSize: Int = if (overflow) Int.MaxValue else dictionarySize + count * 2
+
+    override def compress(from: ArrayBuffer, to: ArrayBuffer): Unit = {
+      throw new UnsupportedOperationException
+    }
   }
 
   class Decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T])
@@ -278,6 +356,10 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
     }
 
     override def hasNext: Boolean = buffer.hasRemaining
+
+    override def decompress(values: ArrayBuffer): Unit = {
+      throw new IllegalStateException("Not support in Dict")
+    }
   }
 }
 
@@ -302,6 +384,10 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
 
     override def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
       _uncompressedSize += BOOLEAN.defaultSize
+    }
+
+    override def gatherCompressibilityStats(in: ArrayBuffer): Unit = {
+      _uncompressedSize += in.array.length * BOOLEAN.defaultSize;
     }
 
     override def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer = {
@@ -341,6 +427,35 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
       to
     }
 
+    override def compress(from: ArrayBuffer, to: ArrayBuffer): Unit = {
+      to.putInt(BooleanBitSet.typeId)
+      to.putInt(from.array.length)
+
+      while (from.remaining >= BITS_PER_LONG) {
+        var word = 0: Long
+        var i = 0
+        while (i < BITS_PER_LONG) {
+          if (BOOLEAN.get(from)) {
+            word |= (1: Long) << i
+          }
+          i += 1
+        }
+        to.putLong(word)
+      }
+
+      if (from.hasRemaining) {
+        var word = 0: Long
+        var i = 0
+        while (from.hasRemaining) {
+          if (BOOLEAN.get(from)) {
+            word |= (1: Long) << i
+          }
+          i += 1
+        }
+        to.putLong(word)
+      }
+    }
+
     override def uncompressedSize: Int = _uncompressedSize
 
     override def compressedSize: Int = {
@@ -368,6 +483,26 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
     }
 
     override def hasNext: Boolean = visited < count
+
+    override def decompress(values: ArrayBuffer): Unit = {
+      val buf = ArrayBuffer(buffer.array)
+
+      // read typeID
+      buf.getInt()
+      val count = buf.getInt()
+
+      var currentWord = 0L
+      var visited = 0
+      while (visited < count) {
+        val bit = visited % BITS_PER_LONG
+        if (bit == 0) {
+          currentWord = buf.getLong()
+        }
+        val value = ((currentWord >> bit) & 1) != 0
+        BOOLEAN.put(values, value)
+        visited += 1
+      }
+    }
   }
 }
 
@@ -434,6 +569,10 @@ private[columnar] case object IntDelta extends CompressionScheme {
 
       to.rewind().asInstanceOf[ByteBuffer]
     }
+
+    override def compress(from: ArrayBuffer, to: ArrayBuffer): Unit = {
+      throw new UnsupportedOperationException
+    }
   }
 
   class Decoder(buffer: ByteBuffer, columnType: NativeColumnType[IntegerType.type])
@@ -447,6 +586,10 @@ private[columnar] case object IntDelta extends CompressionScheme {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getInt(buffer)
       row.setInt(ordinal, prev)
+    }
+
+    override def decompress(values: ArrayBuffer): Unit = {
+      throw new IllegalStateException("Not support in IntDelta")
     }
   }
 }
@@ -514,6 +657,10 @@ private[columnar] case object LongDelta extends CompressionScheme {
 
       to.rewind().asInstanceOf[ByteBuffer]
     }
+
+    override def compress(from: ArrayBuffer, to: ArrayBuffer): Unit = {
+      throw new IllegalStateException("Not support in LongDelta")
+    }
   }
 
   class Decoder(buffer: ByteBuffer, columnType: NativeColumnType[LongType.type])
@@ -527,6 +674,10 @@ private[columnar] case object LongDelta extends CompressionScheme {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getLong(buffer)
       row.setLong(ordinal, prev)
+    }
+
+    override def decompress(values: ArrayBuffer): Unit = {
+      throw new IllegalStateException("Not support in LongDelta")
     }
   }
 }
