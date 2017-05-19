@@ -87,28 +87,35 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
       getLocalValues() match {
         case Some(result) =>
           return result
-        case None => // do nothing
+        case None => if (holdReadLock) {
+          throw new SparkException(s"get() failed for block $blockId2 even though we held a lock")
+        }
       }
 
       val iterator = rdd.iterator(partition, context)
+      if (rdd.getStorageLevel != StorageLevel.NONE || rdd.isCheckpointedAndMaterialized) {
+        // If the block is cached in local, wo shouldn't cache it again.
+        return iterator
+      }
+
       // Keep read lock, because next we need read it. And don't tell master.
-      val putResult = blockManager.putIterator[U](blockId2, iterator, level, false, true)
-      if (putResult) {
+      val putSuccess = blockManager.putIterator[U](blockId2, iterator, level, false, true)
+      if (putSuccess) {
         cachedInLocal = true
         // After we cached the block, we also hold the block read lock until this task finished.
         holdReadLock = true
+        logInfo(s"Cache the block $blockId2 to local successful.")
+        val readLocalBlock = blockManager.getLocalValues(blockId2).getOrElse {
+          blockManager.releaseLock(blockId2)
+          throw new SparkException(s"get() failed for block $blockId2 even though we held a lock")
+        }
+
+        new InterruptibleIterator[U](context, readLocalBlock.data.asInstanceOf[Iterator[U]])
       } else {
+        blockManager.releaseLock(blockId2)
         // There shouldn't a error caused by put in memory, because we use MEMORY_AND_DISK to
         // cache it.
         throw new SparkException(s"Cache block $blockId2 in local failed even though it's $level")
-      }
-
-      logInfo(s"Cache the block $blockId2 to local successful.")
-      getLocalValues() match {
-        // We don't need release the read lock, it will release after the iterator completion.
-        case Some(result) => result
-        case None =>
-          throw new SparkException(s"Block $blockId2 was not found even though it's read-locked")
       }
     }
 

@@ -198,8 +198,12 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     // write files to disk so we can read them later.
     sc.parallelize(cartVector).saveAsTextFile(cartFilePath)
     val aRdd = sc.textFile(cartFilePath, numPartitions)
+    aRdd.cache()
+    aRdd.count()
 
     val tmpRdd = sc.textFile(tmpFilePath, numPartitions)
+    tmpRdd.cache()
+    tmpRdd.count()
 
     val firstSize = runAndReturnBytesRead {
       aRdd.count()
