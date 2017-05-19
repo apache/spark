@@ -38,7 +38,7 @@ function makeIdNumeric(id) {
 }
 
 function formatDate(date) {
-  if (date <= 0) return "-";
+  if (date.substr(0, 2) == "19") return "-";
   else return date.split(".")[0].replace("T", " ");
 }
 
