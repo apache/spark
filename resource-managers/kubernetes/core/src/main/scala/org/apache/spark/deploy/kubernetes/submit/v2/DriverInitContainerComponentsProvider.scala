@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.kubernetes.submit.v2
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SparkConf, SSLOptions}
 import org.apache.spark.deploy.kubernetes.{InitContainerResourceStagingServerSecretPluginImpl, SparkPodInitContainerBootstrap, SparkPodInitContainerBootstrapImpl}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
@@ -46,12 +46,11 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
     sparkConf: SparkConf,
     kubernetesAppId: String,
     sparkJars: Seq[String],
-    sparkFiles: Seq[String])
+    sparkFiles: Seq[String],
+    resourceStagingServerSslOptions: SSLOptions)
     extends DriverInitContainerComponentsProvider {
 
   private val maybeResourceStagingServerUri = sparkConf.get(RESOURCE_STAGING_SERVER_URI)
-  private val resourceStagingServerSslOptions = new SecurityManager(sparkConf)
-      .getSSLOptions(RESOURCE_STAGING_SERVER_SSL_NAMESPACE)
   private val jarsDownloadPath = sparkConf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION)
   private val filesDownloadPath = sparkConf.get(INIT_CONTAINER_FILES_DOWNLOAD_LOCATION)
   private val maybeSecretName = maybeResourceStagingServerUri.map { _ =>

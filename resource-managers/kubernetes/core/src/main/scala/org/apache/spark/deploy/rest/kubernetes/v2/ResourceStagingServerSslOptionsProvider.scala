@@ -17,9 +17,11 @@
 package org.apache.spark.deploy.rest.kubernetes.v2
 
 import java.io.File
+import java.security.SecureRandom
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
+import org.apache.commons.lang3.RandomStringUtils
 
 import org.apache.spark.{SecurityManager => SparkSecurityManager, SparkConf, SparkException, SSLOptions}
 import org.apache.spark.deploy.kubernetes.config._
@@ -32,20 +34,29 @@ private[spark] trait ResourceStagingServerSslOptionsProvider {
 
 private[spark] class ResourceStagingServerSslOptionsProviderImpl(sparkConf: SparkConf)
     extends ResourceStagingServerSslOptionsProvider with Logging {
+
+  private val SECURE_RANDOM = new SecureRandom()
+
   def getSslOptions: SSLOptions = {
     val baseSslOptions = new SparkSecurityManager(sparkConf)
-      .getSSLOptions("kubernetes.resourceStagingServer")
+      .getSSLOptions(RESOURCE_STAGING_SERVER_SSL_NAMESPACE)
     val maybeKeyPem = sparkConf.get(RESOURCE_STAGING_SERVER_KEY_PEM)
-    val maybeCertPem = sparkConf.get(RESOURCE_STAGING_SERVER_CERT_PEM)
+    val maybeServerCertPem = sparkConf.get(RESOURCE_STAGING_SERVER_CERT_PEM)
     val maybeKeyStorePasswordFile = sparkConf.get(RESOURCE_STAGING_SERVER_KEYSTORE_PASSWORD_FILE)
     val maybeKeyPasswordFile = sparkConf.get(RESOURCE_STAGING_SERVER_KEYSTORE_KEY_PASSWORD_FILE)
+    val maybeClientCertPem = sparkConf.get(RESOURCE_STAGING_SERVER_CLIENT_CERT_PEM)
 
     logSslConfigurations(
-      baseSslOptions, maybeKeyPem, maybeCertPem, maybeKeyStorePasswordFile, maybeKeyPasswordFile)
+      baseSslOptions,
+      maybeKeyPem,
+      maybeServerCertPem,
+      maybeKeyStorePasswordFile,
+      maybeKeyPasswordFile,
+      maybeClientCertPem)
 
     requireNandDefined(baseSslOptions.keyStore, maybeKeyPem,
       "Shouldn't provide both key PEM and keyStore files for TLS.")
-    requireNandDefined(baseSslOptions.keyStore, maybeCertPem,
+    requireNandDefined(baseSslOptions.keyStore, maybeServerCertPem,
       "Shouldn't provide both certificate PEM and keyStore files for TLS.")
     requireNandDefined(baseSslOptions.keyStorePassword, maybeKeyStorePasswordFile,
       "Shouldn't provide both the keyStore password value and the keyStore password file.")
@@ -53,42 +64,68 @@ private[spark] class ResourceStagingServerSslOptionsProviderImpl(sparkConf: Spar
       "Shouldn't provide both the keyStore key password value and the keyStore key password file.")
     requireBothOrNeitherDefined(
       maybeKeyPem,
-      maybeCertPem,
+      maybeServerCertPem,
       "When providing a certificate PEM file, the key PEM file must also be provided.",
       "When providing a key PEM file, the certificate PEM file must also be provided.")
+    requireNandDefined(baseSslOptions.trustStore, maybeClientCertPem,
+      "Shouldn't provide both the trustStore and a client certificate PEM file.")
 
     val resolvedKeyStorePassword = baseSslOptions.keyStorePassword
       .orElse(maybeKeyStorePasswordFile.map { keyStorePasswordFile =>
         safeFileToString(keyStorePasswordFile, "KeyStore password file")
       })
+      .orElse(maybeKeyPem.map { _ => randomPassword()})
     val resolvedKeyStoreKeyPassword = baseSslOptions.keyPassword
       .orElse(maybeKeyPasswordFile.map { keyPasswordFile =>
         safeFileToString(keyPasswordFile, "KeyStore key password file")
       })
-    val resolvedKeyStore = baseSslOptions.keyStore
-      .orElse(maybeKeyPem.map { keyPem =>
+      .orElse(maybeKeyPem.map { _ => randomPassword()})
+    val resolvedKeyStore = baseSslOptions.keyStore.orElse {
+      for {
+        keyPem <- maybeKeyPem
+        certPem <- maybeServerCertPem
+        keyStorePassword <- resolvedKeyStorePassword
+        keyPassword <- resolvedKeyStoreKeyPassword
+      } yield {
         val keyPemFile = new File(keyPem)
-        val certPemFile = new File(maybeCertPem.get)
+        val certPemFile = new File(certPem)
         PemsToKeyStoreConverter.convertPemsToTempKeyStoreFile(
           keyPemFile,
           certPemFile,
           "key",
-          resolvedKeyStorePassword,
-          resolvedKeyStoreKeyPassword,
+          keyStorePassword,
+          keyPassword,
           baseSslOptions.keyStoreType)
-      })
+      }
+    }
+    val resolvedTrustStorePassword = baseSslOptions.trustStorePassword
+      .orElse(maybeClientCertPem.map( _ => "defaultTrustStorePassword"))
+    val resolvedTrustStore = baseSslOptions.trustStore.orElse {
+      for {
+        clientCertPem <- maybeClientCertPem
+        trustStorePassword <- resolvedTrustStorePassword
+      } yield {
+        val certPemFile = new File(clientCertPem)
+        PemsToKeyStoreConverter.convertCertPemToTempTrustStoreFile(
+          certPemFile,
+          trustStorePassword,
+          baseSslOptions.trustStoreType)
+      }
+    }
     baseSslOptions.copy(
       keyStore = resolvedKeyStore,
       keyStorePassword = resolvedKeyStorePassword,
-      keyPassword = resolvedKeyStoreKeyPassword)
+      keyPassword = resolvedKeyStoreKeyPassword,
+      trustStore = resolvedTrustStore)
   }
 
   private def logSslConfigurations(
       baseSslOptions: SSLOptions,
       maybeKeyPem: Option[String],
-      maybeCertPem: Option[String],
+      maybeServerCertPem: Option[String],
       maybeKeyStorePasswordFile: Option[String],
-      maybeKeyPasswordFile: Option[String]) = {
+      maybeKeyPasswordFile: Option[String],
+      maybeClientCertPem: Option[String]) = {
     logDebug("The following SSL configurations were provided for the resource staging server:")
     logDebug(s"KeyStore File: ${baseSslOptions.keyStore.map(_.getAbsolutePath).getOrElse("N/A")}")
     logDebug("KeyStore Password: " +
@@ -99,7 +136,8 @@ private[spark] class ResourceStagingServerSslOptionsProviderImpl(sparkConf: Spar
     logDebug(s"Key Password File: ${maybeKeyPasswordFile.getOrElse("N/A")}")
     logDebug(s"KeyStore Type: ${baseSslOptions.keyStoreType.getOrElse("N/A")}")
     logDebug(s"Key PEM: ${maybeKeyPem.getOrElse("N/A")}")
-    logDebug(s"Certificate PEM: ${maybeCertPem.getOrElse("N/A")}")
+    logDebug(s"Server-side certificate PEM: ${maybeServerCertPem.getOrElse("N/A")}")
+    logDebug(s"Client-side certificate PEM: ${maybeClientCertPem.getOrElse("N/A")}")
   }
 
   private def requireBothOrNeitherDefined(
@@ -129,5 +167,9 @@ private[spark] class ResourceStagingServerSslOptionsProviderImpl(sparkConf: Spar
         + s" is not a file.")
     }
     Files.toString(file, Charsets.UTF_8)
+  }
+
+  private def randomPassword(): String = {
+    RandomStringUtils.random(1024, 0, Integer.MAX_VALUE, false, false, null, SECURE_RANDOM)
   }
 }

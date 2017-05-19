@@ -414,18 +414,20 @@ private[spark] object KubernetesSparkRestServer {
         // If keystore password isn't set but we're using PEM files, generate a password
         .orElse(parsedArguments.keyPemFile.map(_ => randomPassword()))
       val resolvedKeyStore = parsedArguments.keyStoreFile.map(new File(_)).orElse(
-        parsedArguments.keyPemFile.map(keyPemFile => {
-          parsedArguments.certPemFile.map(certPemFile => {
-            PemsToKeyStoreConverter.convertPemsToTempKeyStoreFile(
-              new File(keyPemFile),
-              new File(certPemFile),
-              "provided-key",
-              keyStorePassword,
-              keyPassword,
-              parsedArguments.keyStoreType)
-          })
-        }).getOrElse(throw new SparkException("When providing PEM files to set up TLS for the" +
-          " submission server, both the key and the certificate must be specified.")))
+        for {
+          keyPemFile <- parsedArguments.keyPemFile
+          certPemFile <- parsedArguments.certPemFile
+          resolvedKeyStorePassword <- keyStorePassword
+          resolvedKeyPassword <- keyPassword
+        } yield {
+          PemsToKeyStoreConverter.convertPemsToTempKeyStoreFile(
+            new File(keyPemFile),
+            new File(certPemFile),
+            "provided-key",
+            resolvedKeyStorePassword,
+            resolvedKeyPassword,
+            parsedArguments.keyStoreType)
+        })
       new SSLOptions(
         enabled = true,
         keyStore = resolvedKeyStore,

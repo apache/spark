@@ -66,10 +66,12 @@ class ResourceStagingServerSslOptionsProviderSuite extends SparkFunSuite with Be
   }
 
   test("Setting key and certificate pem files should write an appropriate keyStore.") {
-    val (keyPemFile, certPemFile) = SSLUtils.generateKeyCertPemPair("127.0.0.1")
+    val keyAndCertPem = SSLUtils.generateKeyCertPemPair("127.0.0.1")
     sparkConf.set("spark.ssl.kubernetes.resourceStagingServer.enabled", "true")
-      .set("spark.ssl.kubernetes.resourceStagingServer.keyPem", keyPemFile.getAbsolutePath)
-      .set("spark.ssl.kubernetes.resourceStagingServer.serverCertPem", certPemFile.getAbsolutePath)
+      .set("spark.ssl.kubernetes.resourceStagingServer.keyPem",
+          keyAndCertPem.keyPem.getAbsolutePath)
+      .set("spark.ssl.kubernetes.resourceStagingServer.serverCertPem",
+          keyAndCertPem.certPem.getAbsolutePath)
       .set("spark.ssl.kubernetes.resourceStagingServer.keyStorePassword", "keyStorePassword")
       .set("spark.ssl.kubernetes.resourceStagingServer.keyPassword", "keyPassword")
     val sslOptions = sslOptionsProvider.getSslOptions
@@ -81,9 +83,37 @@ class ResourceStagingServerSslOptionsProviderSuite extends SparkFunSuite with Be
         keyStore.load(_, "keyStorePassword".toCharArray)
       }
       val key = keyStore.getKey("key", "keyPassword".toCharArray)
-      compareJcaPemObjectToFileString(key, keyPemFile)
+      compareJcaPemObjectToFileString(key, keyAndCertPem.keyPem)
       val certificate = keyStore.getCertificateChain("key")(0)
-      compareJcaPemObjectToFileString(certificate, certPemFile)
+      compareJcaPemObjectToFileString(certificate, keyAndCertPem.certPem)
+    }
+  }
+
+  test("Setting pem files without setting passwords should use random passwords.") {
+    val keyAndCertPem = SSLUtils.generateKeyCertPemPair("127.0.0.1")
+    sparkConf.set("spark.ssl.kubernetes.resourceStagingServer.enabled", "true")
+      .set("spark.ssl.kubernetes.resourceStagingServer.keyPem",
+          keyAndCertPem.keyPem.getAbsolutePath)
+      .set("spark.ssl.kubernetes.resourceStagingServer.serverCertPem",
+          keyAndCertPem.certPem.getAbsolutePath)
+    val sslOptions = sslOptionsProvider.getSslOptions
+    assert(sslOptions.enabled, "SSL should be enabled.")
+    assert(sslOptions.keyStore.isDefined, "KeyStore should be defined.")
+    assert(sslOptions.keyStorePassword.isDefined)
+    assert(sslOptions.keyPassword.isDefined)
+    for {
+      keyStoreFile <- sslOptions.keyStore
+      keyStorePassword <- sslOptions.keyStorePassword
+      keyPassword <- sslOptions.keyPassword
+    } {
+      val keyStore = KeyStore.getInstance(KeyStore.getDefaultType)
+      Utils.tryWithResource(new FileInputStream(keyStoreFile)) {
+        keyStore.load(_, keyStorePassword.toCharArray)
+      }
+      val key = keyStore.getKey("key", keyPassword.toCharArray)
+      compareJcaPemObjectToFileString(key, keyAndCertPem.keyPem)
+      val certificate = keyStore.getCertificateChain("key")(0)
+      compareJcaPemObjectToFileString(certificate, keyAndCertPem.certPem)
     }
   }
 

@@ -28,7 +28,7 @@ import retrofit2.{Call, Callback, Response}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{SecurityManager => SparkSecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager => SparkSecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.CompressionUtils
@@ -95,7 +95,7 @@ private[spark] class KubernetesSparkDependencyDownloadInitContainer(
     sparkConf: SparkConf,
     retrofitClientFactory: RetrofitClientFactory,
     fileFetcher: FileFetcher,
-    securityManager: SparkSecurityManager) extends Logging {
+    resourceStagingServerSslOptions: SSLOptions) extends Logging {
 
   private implicit val downloadExecutor = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("download-executor"))
@@ -177,9 +177,10 @@ private[spark] class KubernetesSparkDependencyDownloadInitContainer(
       maybeResourceId.foreach { resourceId =>
         require(resourceSecretLocation.isFile, errMessageOnSecretNotAFile)
         require(resourceDownloadDir.isDirectory, errMessageOnDownloadDirNotADirectory)
-        val sslOptions = securityManager.getSSLOptions("kubernetes.resourceStagingServer")
         val service = retrofitClientFactory.createRetrofitClient(
-          resourceStagingServerUri, classOf[ResourceStagingServiceRetrofit], sslOptions)
+          resourceStagingServerUri,
+          classOf[ResourceStagingServiceRetrofit],
+          resourceStagingServerSslOptions)
         val resourceSecret = Files.toString(resourceSecretLocation, Charsets.UTF_8)
         val downloadResourceCallback = new DownloadTarGzCallback(resourceDownloadDir)
         logInfo(downloadStartMessage)
@@ -219,12 +220,14 @@ object KubernetesSparkDependencyDownloadInitContainer extends Logging {
       new SparkConf(true)
     }
     val securityManager = new SparkSecurityManager(sparkConf)
+    val resourceStagingServerSslOptions =
+      new ResourceStagingServerSslOptionsProviderImpl(sparkConf).getSslOptions
     val fileFetcher = new FileFetcherImpl(sparkConf, securityManager)
     new KubernetesSparkDependencyDownloadInitContainer(
       sparkConf,
       RetrofitClientFactoryImpl,
       fileFetcher,
-      securityManager).run()
+      resourceStagingServerSslOptions).run()
     logInfo("Finished downloading application dependencies.")
   }
 }

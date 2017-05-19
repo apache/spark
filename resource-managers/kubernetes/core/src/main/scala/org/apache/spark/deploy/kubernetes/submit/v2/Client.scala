@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
+import org.apache.spark.deploy.rest.kubernetes.v2.ResourceStagingServerSslOptionsProviderImpl
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.Utils
@@ -267,8 +268,9 @@ private[spark] object Client {
     val appName = sparkConf.getOption("spark.app.name")
       .getOrElse("spark")
     val kubernetesAppId = s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
+    val sslOptionsProvider = new ResourceStagingServerSslOptionsProviderImpl(sparkConf)
     val initContainerComponentsProvider = new DriverInitContainerComponentsProviderImpl(
-      sparkConf, kubernetesAppId, sparkJars, sparkFiles)
+      sparkConf, kubernetesAppId, sparkJars, sparkFiles, sslOptionsProvider.getSslOptions)
     val kubernetesClientProvider = new SubmissionKubernetesClientProviderImpl(sparkConf)
     val kubernetesCredentialsMounterProvider =
         new DriverPodKubernetesCredentialsMounterProviderImpl(sparkConf, kubernetesAppId)

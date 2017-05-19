@@ -29,7 +29,7 @@ import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.integrationtest.backend.IntegrationTestBackend
 import org.apache.spark.deploy.kubernetes.integrationtest.backend.minikube.Minikube
 import org.apache.spark.deploy.kubernetes.integrationtest.constants.MINIKUBE_TEST_BACKEND
-import org.apache.spark.deploy.kubernetes.submit.v2.Client
+import org.apache.spark.deploy.kubernetes.submit.v2.{Client, KeyAndCertPem}
 import org.apache.spark.launcher.SparkLauncher
 
 @DoNotDiscover
@@ -65,31 +65,34 @@ private[spark] class KubernetesV2Suite(testBackend: IntegrationTestBackend)
   test("Use submission v2.") {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
 
-    launchStagingServer(SSLOptions())
+    launchStagingServer(SSLOptions(), None)
     runSparkPiAndVerifyCompletion(KubernetesSuite.SUBMITTER_LOCAL_MAIN_APP_RESOURCE)
   }
 
   test("Enable SSL on the submission server") {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
 
-    val (keyStore, trustStore) = SSLUtils.generateKeyStoreTrustStorePair(
+    val keyStoreAndTrustStore = SSLUtils.generateKeyStoreTrustStorePair(
       ipAddress = Minikube.getMinikubeIp,
       keyStorePassword = "keyStore",
       keyPassword = "key",
       trustStorePassword = "trustStore")
     sparkConf.set(RESOURCE_STAGING_SERVER_SSL_ENABLED, true)
-      .set("spark.ssl.kubernetes.resourceStagingServer.keyStore", keyStore.getAbsolutePath)
-      .set("spark.ssl.kubernetes.resourceStagingServer.trustStore", trustStore.getAbsolutePath)
+      .set("spark.ssl.kubernetes.resourceStagingServer.keyStore",
+          keyStoreAndTrustStore.keyStore.getAbsolutePath)
+      .set("spark.ssl.kubernetes.resourceStagingServer.trustStore",
+          keyStoreAndTrustStore.trustStore.getAbsolutePath)
       .set("spark.ssl.kubernetes.resourceStagingServer.keyStorePassword", "keyStore")
       .set("spark.ssl.kubernetes.resourceStagingServer.keyPassword", "key")
       .set("spark.ssl.kubernetes.resourceStagingServer.trustStorePassword", "trustStore")
     launchStagingServer(SSLOptions(
       enabled = true,
-      keyStore = Some(keyStore),
-      trustStore = Some(trustStore),
+      keyStore = Some(keyStoreAndTrustStore.keyStore),
+      trustStore = Some(keyStoreAndTrustStore.trustStore),
       keyStorePassword = Some("keyStore"),
       keyPassword = Some("key"),
-      trustStorePassword = Some("trustStore")))
+      trustStorePassword = Some("trustStore")),
+      None)
     runSparkPiAndVerifyCompletion(KubernetesSuite.SUBMITTER_LOCAL_MAIN_APP_RESOURCE)
   }
 
@@ -104,7 +107,7 @@ private[spark] class KubernetesV2Suite(testBackend: IntegrationTestBackend)
   test("Dynamic executor scaling basic test") {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
 
-    launchStagingServer(SSLOptions())
+    launchStagingServer(SSLOptions(), None)
     createShuffleServiceDaemonSet()
 
     sparkConf.setJars(Seq(KubernetesSuite.CONTAINER_LOCAL_HELPER_JAR_PATH))
@@ -117,6 +120,7 @@ private[spark] class KubernetesV2Suite(testBackend: IntegrationTestBackend)
   }
 
   test("Use remote resources without the resource staging server.") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
     val assetServerUri = staticAssetServerLauncher.launchStaticAssetServer()
     sparkConf.setJars(Seq(
       s"$assetServerUri/${KubernetesSuite.EXAMPLES_JAR_FILE.getName}",
@@ -126,7 +130,8 @@ private[spark] class KubernetesV2Suite(testBackend: IntegrationTestBackend)
   }
 
   test("Mix remote resources with submitted ones.") {
-    launchStagingServer(SSLOptions())
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+    launchStagingServer(SSLOptions(), None)
     val assetServerUri = staticAssetServerLauncher.launchStaticAssetServer()
     sparkConf.setJars(Seq(
       KubernetesSuite.SUBMITTER_LOCAL_MAIN_APP_RESOURCE,
@@ -135,7 +140,20 @@ private[spark] class KubernetesV2Suite(testBackend: IntegrationTestBackend)
     runSparkPiAndVerifyCompletion(SparkLauncher.NO_RESOURCE)
   }
 
+  test("Use key and certificate PEM files for TLS.") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+    val keyAndCertificate = SSLUtils.generateKeyCertPemPair(Minikube.getMinikubeIp)
+    launchStagingServer(
+        SSLOptions(enabled = true),
+        Some(keyAndCertificate))
+    sparkConf.set(RESOURCE_STAGING_SERVER_SSL_ENABLED, true)
+        .set(
+            RESOURCE_STAGING_SERVER_CLIENT_CERT_PEM.key, keyAndCertificate.certPem.getAbsolutePath)
+    runSparkPiAndVerifyCompletion(KubernetesSuite.SUBMITTER_LOCAL_MAIN_APP_RESOURCE)
+  }
+
   test("Use client key and client cert file when requesting executors") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
     sparkConf.setJars(Seq(
         KubernetesSuite.CONTAINER_LOCAL_MAIN_APP_RESOURCE,
         KubernetesSuite.CONTAINER_LOCAL_HELPER_JAR_PATH))
@@ -148,11 +166,12 @@ private[spark] class KubernetesV2Suite(testBackend: IntegrationTestBackend)
     runSparkPiAndVerifyCompletion(SparkLauncher.NO_RESOURCE)
   }
 
-  private def launchStagingServer(resourceStagingServerSslOptions: SSLOptions): Unit = {
+  private def launchStagingServer(
+      resourceStagingServerSslOptions: SSLOptions, keyAndCertPem: Option[KeyAndCertPem]): Unit = {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
 
     val resourceStagingServerPort = resourceStagingServerLauncher.launchStagingServer(
-      resourceStagingServerSslOptions)
+      resourceStagingServerSslOptions, keyAndCertPem)
     val resourceStagingServerUriScheme = if (resourceStagingServerSslOptions.enabled) {
       "https"
     } else {
