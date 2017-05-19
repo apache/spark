@@ -244,7 +244,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("a", ClassData("a", 1)), ("b", ClassData("b", 2)), ("c", ClassData("c", 3)))
   }
 
-  test("select 3, regex") {
+  test("REGEX column specification") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
 
     intercept[AnalysisException] {
