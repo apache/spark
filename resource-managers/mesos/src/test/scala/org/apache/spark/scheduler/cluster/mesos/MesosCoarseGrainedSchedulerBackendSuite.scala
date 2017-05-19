@@ -586,6 +586,44 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(backend.isReady)
   }
 
+  test("supports data locality with dynamic allocation") {
+    setBackend(Map(
+      "spark.dynamicAllocation.enabled" -> "true",
+      "spark.dynamicAllocation.testing" -> "true",
+      "spark.locality.wait" -> "2s"))
+
+    assert(backend.getExecutorIds().isEmpty)
+
+    backend.requestTotalExecutors(2, 2, Map("hosts10" -> 1, "hosts11" -> 1))
+
+    // Offer non-local resources, which should be rejected
+    var id = 1
+    offerResources(List(Resources(backend.executorMemory(sc), 1)), id)
+    verifyTaskNotLaunched(driver, s"o$id")
+    id = 2
+    offerResources(List(Resources(backend.executorMemory(sc), 1)), id)
+    verifyTaskNotLaunched(driver, s"o$id")
+
+    // Offer local resource
+    id = 10
+    offerResources(List(Resources(backend.executorMemory(sc), 1)), id)
+    var launchedTasks = verifyTaskLaunched(driver, s"o$id")
+    assert(s"s$id" == launchedTasks.head.getSlaveId.getValue)
+    registerMockExecutor(launchedTasks.head.getTaskId.getValue, s"s$id", 1)
+    assert(backend.getExecutorIds().size == 1)
+
+    // Wait longer than spark.locality.wait
+    Thread.sleep(3000)
+
+    // Offer non-local resource, which should be accepted
+    id = 1
+    offerResources(List(Resources(backend.executorMemory(sc), 1)), id)
+    launchedTasks = verifyTaskLaunched(driver, s"o$id")
+    assert(s"s$id" == launchedTasks.head.getSlaveId.getValue)
+    registerMockExecutor(launchedTasks.head.getTaskId.getValue, s"s$id", 1)
+    assert(backend.getExecutorIds().size == 2)
+  }
+
   private case class Resources(mem: Int, cpus: Int, gpus: Int = 0)
 
   private def registerMockExecutor(executorId: String, slaveId: String, cores: Integer) = {
