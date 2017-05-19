@@ -992,24 +992,16 @@ object Matrices {
         new DenseMatrix(dm.rows, dm.cols, dm.data, dm.isTranspose)
       case sm: BSM[Double] =>
         // There is no isTranspose flag for sparse matrices in Breeze
-
-        // Some Breeze CSCMatrices may have extra trailing zeros in
-        // .rowIndices and .data, which are added after some matrix
-        // operations for efficiency.
-        //
-        // Therefore the last element of sm.colPtrs would no longer be
-        // coherent with the size of sm.rowIndices and sm.data
-        // despite sm being a valid CSCMatrix.
-        // We need to truncate both arrays (rowIndices, data)
-        // to the real size of the vector sm.activeSize to allow valid conversion
-
-        if (sm.rowIndices.length > sm.activeSize) {
-          val smC = sm.copy
-          smC.compact()
-          new SparseMatrix(smC.rows, smC.cols, smC.colPtrs, smC.rowIndices, smC.data)
+        val nsm = if (sm.rowIndices.length > sm.activeSize) {
+          // This sparse matrix has trainling zeros.
+          // Remove them by compacting the matrix.
+          val csm = sm.copy
+          csm.compact()
+          csm
         } else {
-          new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, sm.rowIndices, sm.data)
+          sm
         }
+        new SparseMatrix(nsm.rows, nsm.cols, nsm.colPtrs, nsm.rowIndices, nsm.data)
       case _ =>
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
