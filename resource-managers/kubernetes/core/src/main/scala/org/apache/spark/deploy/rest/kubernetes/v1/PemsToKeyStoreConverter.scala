@@ -43,8 +43,8 @@ private[spark] object PemsToKeyStoreConverter {
       keyPemFile: File,
       certPemFile: File,
       keyAlias: String,
-      keyStorePassword: Option[String],
-      keyPassword: Option[String],
+      keyStorePassword: String,
+      keyPassword: String,
       keyStoreType: Option[String]): File = {
     require(keyPemFile.isFile, s"Key PEM file provided at ${keyPemFile.getAbsolutePath}" +
       " does not exist or is not a file.")
@@ -58,12 +58,12 @@ private[spark] object PemsToKeyStoreConverter {
     keyStore.setKeyEntry(
       keyAlias,
       privateKey,
-      keyPassword.map(_.toCharArray).orNull,
+      keyPassword.toCharArray,
       certificates)
     val keyStoreDir = Utils.createTempDir("temp-keystores")
     val keyStoreFile = new File(keyStoreDir, s"keystore-${UUID.randomUUID()}.$resolvedKeyStoreType")
     Utils.tryWithResource(new FileOutputStream(keyStoreFile)) { storeStream =>
-      keyStore.store(storeStream, keyStorePassword.map(_.toCharArray).orNull)
+      keyStore.store(storeStream, keyStorePassword.toCharArray)
     }
     keyStoreFile
   }
@@ -79,6 +79,20 @@ private[spark] object PemsToKeyStoreConverter {
       trustStore.setCertificateEntry(s"certificate-$index", cert)
     }
     trustStore
+  }
+
+  def convertCertPemToTempTrustStoreFile(
+      certPemFile: File,
+      trustStorePassword: String,
+      trustStoreType: Option[String]): File = {
+    val trustStore = convertCertPemToTrustStore(certPemFile, trustStoreType)
+    val tempTrustStoreDir = Utils.createTempDir(namePrefix = "temp-trustStore")
+    val tempTrustStoreFile = new File(tempTrustStoreDir,
+      s"trustStore.${trustStoreType.getOrElse(KeyStore.getDefaultType)}")
+    Utils.tryWithResource(new FileOutputStream(tempTrustStoreFile)) {
+      trustStore.store(_, trustStorePassword.toCharArray)
+    }
+    tempTrustStoreFile
   }
 
   private def withPemParsedFromFile[T](pemFile: File)(f: (PEMParser => T)): T = {

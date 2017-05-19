@@ -22,7 +22,6 @@ import io.fabric8.kubernetes.api.model.{Secret, SecretBuilder}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SSLOptions
-import org.apache.spark.deploy.kubernetes.constants._
 
 private[spark] trait SubmittedDependencySecretBuilder {
   /**

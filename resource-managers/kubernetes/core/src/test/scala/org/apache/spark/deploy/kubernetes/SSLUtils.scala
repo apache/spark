@@ -30,6 +30,7 @@ import org.bouncycastle.cert.jcajce.{JcaX509CertificateConverter, JcaX509v3Certi
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 
+import org.apache.spark.deploy.kubernetes.submit.v2.{KeyAndCertPem, KeyStoreAndTrustStore}
 import org.apache.spark.util.Utils
 
 private[spark] object SSLUtils {
@@ -38,7 +39,7 @@ private[spark] object SSLUtils {
       ipAddress: String,
       keyStorePassword: String,
       keyPassword: String,
-      trustStorePassword: String): (File, File) = {
+      trustStorePassword: String): KeyStoreAndTrustStore = {
     val keyPairGenerator = KeyPairGenerator.getInstance("RSA")
     keyPairGenerator.initialize(512)
     val keyPair = keyPairGenerator.generateKeyPair()
@@ -60,10 +61,10 @@ private[spark] object SSLUtils {
     Utils.tryWithResource(new FileOutputStream(trustStoreFile)) {
       trustStore.store(_, trustStorePassword.toCharArray)
     }
-    (keyStoreFile, trustStoreFile)
+    KeyStoreAndTrustStore(keyStoreFile, trustStoreFile)
   }
 
-  def generateKeyCertPemPair(ipAddress: String): (File, File) = {
+  def generateKeyCertPemPair(ipAddress: String): KeyAndCertPem = {
     val keyPairGenerator = KeyPairGenerator.getInstance("RSA")
     keyPairGenerator.initialize(512)
     val keyPair = keyPairGenerator.generateKeyPair()
@@ -90,7 +91,7 @@ private[spark] object SSLUtils {
         }
       }
     }
-    (keyPemFile, certPemFile)
+    KeyAndCertPem(keyPemFile, certPemFile)
   }
 
   private def generateCertificate(ipAddress: String, keyPair: KeyPair): X509Certificate = {

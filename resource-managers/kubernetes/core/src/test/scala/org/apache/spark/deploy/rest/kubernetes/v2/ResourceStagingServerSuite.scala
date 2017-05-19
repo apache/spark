@@ -57,17 +57,17 @@ class ResourceStagingServerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Enable SSL on the server") {
-    val (keyStore, trustStore) = SSLUtils.generateKeyStoreTrustStorePair(
+    val keyStoreAndTrustStore = SSLUtils.generateKeyStoreTrustStorePair(
       ipAddress = "127.0.0.1",
       keyStorePassword = "keyStore",
       keyPassword = "key",
       trustStorePassword = "trustStore")
     val sslOptions = SSLOptions(
       enabled = true,
-      keyStore = Some(keyStore),
+      keyStore = Some(keyStoreAndTrustStore.keyStore),
       keyStorePassword = Some("keyStore"),
       keyPassword = Some("key"),
-      trustStore = Some(trustStore),
+      trustStore = Some(keyStoreAndTrustStore.trustStore),
       trustStorePassword = Some("trustStore"))
     sslOptionsProvider.setOptions(sslOptions)
     server.start()

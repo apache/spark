@@ -99,7 +99,7 @@ class KubernetesSparkDependencyDownloadInitContainerSuite
       sparkConf,
       retrofitClientFactory,
       fileFetcher,
-      securityManager = new SparkSecurityManager(sparkConf))
+      resourceStagingServerSslOptions = STAGING_SERVER_SSL_OPTIONS)
     when(retrofitClient.downloadResources(JARS_RESOURCE_ID, downloadJarsSecretValue))
       .thenReturn(downloadJarsCall)
     when(retrofitClient.downloadResources(FILES_RESOURCE_ID, downloadFilesSecretValue))
@@ -126,7 +126,7 @@ class KubernetesSparkDependencyDownloadInitContainerSuite
       sparkConf,
       retrofitClientFactory,
       fileFetcher,
-      securityManager = new SparkSecurityManager(sparkConf))
+      resourceStagingServerSslOptions = STAGING_SERVER_SSL_OPTIONS)
     initContainerUnderTest.run()
     Mockito.verify(fileFetcher).fetchFile("http://localhost:9000/jar1.jar", downloadJarsDir)
     Mockito.verify(fileFetcher).fetchFile("hdfs://localhost:9000/jar2.jar", downloadJarsDir)

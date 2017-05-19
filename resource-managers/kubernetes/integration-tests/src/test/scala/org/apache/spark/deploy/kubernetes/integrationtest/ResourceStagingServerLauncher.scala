@@ -16,21 +16,17 @@
  */
 package org.apache.spark.deploy.kubernetes.integrationtest
 
-import java.io.StringWriter
+import java.io.{File, StringWriter}
 import java.util.Properties
-import java.util.concurrent.TimeUnit
 
 import com.google.common.io.{BaseEncoding, Files}
-import com.google.common.util.concurrent.SettableFuture
-import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, Endpoints, HasMetadata, HTTPGetActionBuilder, KeyToPathBuilder, Pod, PodBuilder, SecretBuilder, ServiceBuilder}
-import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watcher}
-import io.fabric8.kubernetes.client.Watcher.Action
-import io.fabric8.kubernetes.client.internal.readiness.Readiness
+import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, Endpoints, HTTPGetActionBuilder, KeyToPathBuilder, Pod, PodBuilder, SecretBuilder, ServiceBuilder}
+import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SSLOptions
 import org.apache.spark.deploy.kubernetes.config._
-import org.apache.spark.deploy.kubernetes.submit.v2.ContainerNameEqualityPredicate
+import org.apache.spark.deploy.kubernetes.submit.v2.{ContainerNameEqualityPredicate, KeyAndCertPem}
 import org.apache.spark.util.Utils
 
 /**
@@ -38,23 +34,39 @@ import org.apache.spark.util.Utils
  */
 private[spark] class ResourceStagingServerLauncher(kubernetesClient: KubernetesClient) {
 
-  private val KEYSTORE_DIR = "/mnt/secrets/spark-staging"
-  private val KEYSTORE_FILE = s"$KEYSTORE_DIR/keyStore"
+  private val SECRETS_ROOT_DIR = "/mnt/secrets/spark-staging"
+  private val KEYSTORE_SECRET_KEY = "keyStore"
+  private val KEYSTORE_FILE = s"$SECRETS_ROOT_DIR/$KEYSTORE_SECRET_KEY"
+  private val KEY_PEM_SECRET_KEY = "keyPem"
+  private val CERT_PEM_SECRET_KEY = "certPem"
+  private val KEY_PEM_FILE = s"$SECRETS_ROOT_DIR/$KEY_PEM_SECRET_KEY"
+  private val CERT_PEM_FILE = s"$SECRETS_ROOT_DIR/$CERT_PEM_SECRET_KEY"
+  private val SSL_SECRET_NAME = "resource-staging-server-ssl-secrets"
   private val PROPERTIES_FILE_NAME = "staging-server.properties"
   private val PROPERTIES_DIR = "/var/data/spark-staging-server"
   private val PROPERTIES_FILE_PATH = s"$PROPERTIES_DIR/$PROPERTIES_FILE_NAME"
 
   // Returns the NodePort the staging server is listening on
-  def launchStagingServer(sslOptions: SSLOptions): Int = {
+  def launchStagingServer(
+      sslOptions: SSLOptions,
+      keyAndCertPem: Option[KeyAndCertPem] = None): Int = {
     val stagingServerProperties = new Properties()
     val stagingServerSecret = sslOptions.keyStore.map { keyStore =>
       val keyStoreBytes = Files.toByteArray(keyStore)
       val keyStoreBase64 = BaseEncoding.base64().encode(keyStoreBytes)
+      Map(KEYSTORE_SECRET_KEY -> keyStoreBase64)
+    }.orElse {
+      keyAndCertPem.map { keyAndCert =>
+        val keyPemBytes = Files.toByteArray(keyAndCert.keyPem)
+        val keyPemBase64 = BaseEncoding.base64().encode(keyPemBytes)
+        val certPemBytes = Files.toByteArray(keyAndCert.certPem)
+        val certPemBase64 = BaseEncoding.base64().encode(certPemBytes)
+        Map(KEY_PEM_SECRET_KEY -> keyPemBase64, CERT_PEM_SECRET_KEY -> certPemBase64)
+      }
+    }.map { secretData =>
       new SecretBuilder()
-        .withNewMetadata()
-          .withName("resource-staging-server-keystore")
-          .endMetadata()
-        .addToData("keyStore", keyStoreBase64)
+        .withNewMetadata().withName(SSL_SECRET_NAME).endMetadata()
+        .withData(secretData.asJava)
         .build()
     }
     stagingServerProperties.setProperty(
@@ -67,9 +79,17 @@ private[spark] class ResourceStagingServerLauncher(kubernetesClient: KubernetesC
       stagingServerProperties.setProperty(
         "spark.ssl.kubernetes.resourceStagingServer.keyPassword", password)
     }
-    stagingServerSecret.foreach { _ =>
+    sslOptions.keyStore.foreach { _ =>
       stagingServerProperties.setProperty(
         "spark.ssl.kubernetes.resourceStagingServer.keyStore", KEYSTORE_FILE)
+    }
+    keyAndCertPem.foreach { _ =>
+      stagingServerProperties.setProperty(
+          RESOURCE_STAGING_SERVER_KEY_PEM.key, KEY_PEM_FILE)
+    }
+    keyAndCertPem.foreach { _ =>
+      stagingServerProperties.setProperty(
+          RESOURCE_STAGING_SERVER_CERT_PEM.key, CERT_PEM_FILE)
     }
     val propertiesWriter = new StringWriter()
     stagingServerProperties.store(propertiesWriter, "Resource staging server properties.")
@@ -126,7 +146,7 @@ private[spark] class ResourceStagingServerLauncher(kubernetesClient: KubernetesC
         .editMatchingContainer(new ContainerNameEqualityPredicate("staging-server-container"))
           .addNewVolumeMount()
             .withName("keystore-volume")
-            .withMountPath(KEYSTORE_DIR)
+            .withMountPath(SECRETS_ROOT_DIR)
             .endVolumeMount()
           .endContainer()
         .endSpec()

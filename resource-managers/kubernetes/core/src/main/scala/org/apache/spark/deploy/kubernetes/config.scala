@@ -364,8 +364,13 @@ package object config extends Logging {
   private[spark] val RESOURCE_STAGING_SERVER_SSL_NAMESPACE = "kubernetes.resourceStagingServer"
   private[spark] val RESOURCE_STAGING_SERVER_CERT_PEM =
     ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_SSL_NAMESPACE.serverCertPem")
-      .doc("Certificate PEM file to use when having the Kubernetes dependency server" +
+      .doc("Certificate PEM file to use when having the resource staging server" +
         " listen on TLS.")
+      .stringConf
+      .createOptional
+  private[spark] val RESOURCE_STAGING_SERVER_CLIENT_CERT_PEM =
+    ConfigBuilder(s"spark.ssl.$RESOURCE_STAGING_SERVER_SSL_NAMESPACE.clientCertPem")
+      .doc("Certificate PEM file to use when the client contacts the resource staging server.")
       .stringConf
       .createOptional
 

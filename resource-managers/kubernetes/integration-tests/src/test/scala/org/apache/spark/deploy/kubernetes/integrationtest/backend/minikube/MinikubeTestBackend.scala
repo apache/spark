@@ -42,6 +42,4 @@ private[spark] class MinikubeTestBackend extends IntegrationTestBackend {
   }
 
   override def name(): String = MINIKUBE_TEST_BACKEND
-
-
 }

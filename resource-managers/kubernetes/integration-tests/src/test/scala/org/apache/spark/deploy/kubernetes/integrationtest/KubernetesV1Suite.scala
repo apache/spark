@@ -34,7 +34,7 @@ import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.deploy.kubernetes.integrationtest.backend.IntegrationTestBackend
 import org.apache.spark.deploy.kubernetes.integrationtest.backend.minikube.Minikube
-import org.apache.spark.deploy.kubernetes.integrationtest.constants.{GCE_TEST_BACKEND, MINIKUBE_TEST_BACKEND}
+import org.apache.spark.deploy.kubernetes.integrationtest.constants.MINIKUBE_TEST_BACKEND
 import org.apache.spark.deploy.kubernetes.integrationtest.restapis.SparkRestApiV1
 import org.apache.spark.deploy.kubernetes.submit.v1.{Client, ExternalSuppliedUrisDriverServiceManager}
 import org.apache.spark.status.api.v1.{ApplicationStatus, StageStatus}
@@ -190,16 +190,17 @@ private[spark] class KubernetesV1Suite(testBackend: IntegrationTestBackend)
   test("Enable SSL on the driver submit server") {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
 
-    val (keyStoreFile, trustStoreFile) = SSLUtils.generateKeyStoreTrustStorePair(
+    val keyStoreAndTrustStore = SSLUtils.generateKeyStoreTrustStorePair(
       Minikube.getMinikubeIp,
       "changeit",
       "changeit",
       "changeit")
-    sparkConf.set(KUBERNETES_DRIVER_SUBMIT_SSL_KEYSTORE, s"file://${keyStoreFile.getAbsolutePath}")
+    sparkConf.set(KUBERNETES_DRIVER_SUBMIT_SSL_KEYSTORE,
+        s"file://${keyStoreAndTrustStore.keyStore.getAbsolutePath}")
     sparkConf.set("spark.ssl.kubernetes.driversubmitserver.keyStorePassword", "changeit")
     sparkConf.set("spark.ssl.kubernetes.driversubmitserver.keyPassword", "changeit")
     sparkConf.set(KUBERNETES_DRIVER_SUBMIT_SSL_TRUSTSTORE,
-      s"file://${trustStoreFile.getAbsolutePath}")
+        s"file://${keyStoreAndTrustStore.trustStore.getAbsolutePath}")
     sparkConf.set("spark.ssl.kubernetes.driversubmitserver.trustStorePassword", "changeit")
     sparkConf.set(DRIVER_SUBMIT_SSL_ENABLED, true)
     new Client(
@@ -212,10 +213,12 @@ private[spark] class KubernetesV1Suite(testBackend: IntegrationTestBackend)
   test("Enable SSL on the driver submit server using PEM files") {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
 
-    val (keyPem, certPem) = SSLUtils.generateKeyCertPemPair(Minikube.getMinikubeIp)
-    sparkConf.set(DRIVER_SUBMIT_SSL_KEY_PEM, s"file://${keyPem.getAbsolutePath}")
-    sparkConf.set(DRIVER_SUBMIT_SSL_CLIENT_CERT_PEM, s"file://${certPem.getAbsolutePath}")
-    sparkConf.set(DRIVER_SUBMIT_SSL_SERVER_CERT_PEM, s"file://${certPem.getAbsolutePath}")
+    val keyAndCertPem = SSLUtils.generateKeyCertPemPair(Minikube.getMinikubeIp)
+    sparkConf.set(DRIVER_SUBMIT_SSL_KEY_PEM, s"file://${keyAndCertPem.keyPem.getAbsolutePath}")
+    sparkConf.set(
+        DRIVER_SUBMIT_SSL_CLIENT_CERT_PEM, s"file://${keyAndCertPem.certPem.getAbsolutePath}")
+    sparkConf.set(
+        DRIVER_SUBMIT_SSL_SERVER_CERT_PEM, s"file://${keyAndCertPem.certPem.getAbsolutePath}")
     sparkConf.set(DRIVER_SUBMIT_SSL_ENABLED, true)
     new Client(
       sparkConf = sparkConf,
