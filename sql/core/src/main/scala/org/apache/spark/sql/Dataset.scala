@@ -1188,11 +1188,12 @@ class Dataset[T] private[sql](
   def col(colName: String): Column = colName match {
     case "*" =>
       Column(ResolvedStar(queryExecution.analyzed.output))
-    case ParserUtils.escapedIdentifier(i) if sqlContext.conf.supportQuotedRegexColumnName =>
-      Column(UnresolvedRegex(i, None))
-    case ParserUtils.qualifiedEscapedIdentifier(i, j)
-      if sqlContext.conf.supportQuotedRegexColumnName =>
-      Column(UnresolvedRegex(j, Some(i)))
+    case ParserUtils.escapedIdentifier(columnNameRegex)
+        if sqlContext.conf.supportQuotedRegexColumnName =>
+      Column(UnresolvedRegex(columnNameRegex, None))
+    case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex)
+        if sqlContext.conf.supportQuotedRegexColumnName =>
+      Column(UnresolvedRegex(columnNameRegex, Some(nameParts)))
     case _ =>
       val expr = resolve(colName)
       Column(expr)
