@@ -273,7 +273,9 @@ private[parquet] object ParquetFilters {
     schema: StructType,
     predicate: sources.Filter,
     int96AsTimestamp: Boolean): Option[FilterPredicate] = {
-    val dataTypeOf = getFieldMap(schema, int96AsTimestamp)
+    val nameToType = getFieldMap(schema, int96AsTimestamp)
+
+    def canMakeFilterOn(name: String): Boolean = nameToType.contains(name)
 
     // NOTE:
     //
@@ -281,40 +283,31 @@ private[parquet] object ParquetFilters {
     // which can be casted to `false` implicitly. Please refer to the `eval` method of these
     // operators and the `PruneFilters` rule for details.
 
-    // Hyukjin:
-    // I added [[EqualNullSafe]] with [[org.apache.parquet.filter2.predicate.Operators.Eq]].
-    // So, it performs equality comparison identically when given [[sources.Filter]] is [[EqualTo]].
-    // The reason why I did this is, that the actual Parquet filter checks null-safe equality
-    // comparison.
-    // So I added this and maybe [[EqualTo]] should be changed. It still seems fine though, because
-    // physical planning does not set `NULL` to [[EqualTo]] but changes it to [[IsNull]] and etc.
-    // Probably I missed something and obviously this should be changed.
-
     predicate match {
-      case sources.IsNull(name) if dataTypeOf.contains(name) =>
-        makeEq.lift(dataTypeOf(name)).map(_(name, null))
-      case sources.IsNotNull(name) if dataTypeOf.contains(name) =>
-        makeNotEq.lift(dataTypeOf(name)).map(_(name, null))
+      case sources.IsNull(name) if canMakeFilterOn(name) =>
+        makeEq.lift(nameToType(name)).map(_(name, null))
+      case sources.IsNotNull(name) if canMakeFilterOn(name) =>
+        makeNotEq.lift(nameToType(name)).map(_(name, null))
 
-      case sources.EqualTo(name, value) if dataTypeOf.contains(name) =>
-        makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualTo(name, value)) if dataTypeOf.contains(name) =>
-        makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.EqualTo(name, value) if canMakeFilterOn(name) =>
+        makeEq.lift(nameToType(name)).map(_(name, value))
+      case sources.Not(sources.EqualTo(name, value)) if canMakeFilterOn(name) =>
+        makeNotEq.lift(nameToType(name)).map(_(name, value))
 
-      case sources.EqualNullSafe(name, value) if dataTypeOf.contains(name) =>
-        makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualNullSafe(name, value)) if dataTypeOf.contains(name) =>
-        makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.EqualNullSafe(name, value) if canMakeFilterOn(name) =>
+        makeEq.lift(nameToType(name)).map(_(name, value))
+      case sources.Not(sources.EqualNullSafe(name, value)) if canMakeFilterOn(name) =>
+        makeNotEq.lift(nameToType(name)).map(_(name, value))
 
-      case sources.LessThan(name, value) if dataTypeOf.contains(name) =>
-        makeLt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.LessThanOrEqual(name, value) if dataTypeOf.contains(name) =>
-        makeLtEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.LessThan(name, value) if canMakeFilterOn(name) =>
+        makeLt.lift(nameToType(name)).map(_(name, value))
+      case sources.LessThanOrEqual(name, value) if canMakeFilterOn(name) =>
+        makeLtEq.lift(nameToType(name)).map(_(name, value))
 
-      case sources.GreaterThan(name, value) if dataTypeOf.contains(name) =>
-        makeGt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.GreaterThanOrEqual(name, value) if dataTypeOf.contains(name) =>
-        makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.GreaterThan(name, value) if canMakeFilterOn(name) =>
+        makeGt.lift(nameToType(name)).map(_(name, value))
+      case sources.GreaterThanOrEqual(name, value) if canMakeFilterOn(name) =>
+        makeGtEq.lift(nameToType(name)).map(_(name, value))
 
       case sources.And(lhs, rhs) =>
         // At here, it is not safe to just convert one side if we do not understand the
@@ -340,8 +333,8 @@ private[parquet] object ParquetFilters {
           .map(FilterApi.not)
           .map(LogicalInverseRewriter.rewrite)
 
-      case sources.In(name, values) if dataTypeOf.contains(name) =>
-        makeInSet.lift(dataTypeOf(name)).map(_(name, values.toSet))
+      case sources.In(name, values) if canMakeFilterOn(name) =>
+        makeInSet.lift(nameToType(name)).map(_(name, values.toSet))
 
       case _ => None
     }

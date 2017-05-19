@@ -121,7 +121,7 @@ public class JavaALSExample {
     // $example off$
     userRecs.show();
     movieRecs.show();
-    
+
     spark.stop();
   }
 }
