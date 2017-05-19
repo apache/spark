@@ -29,7 +29,8 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver") {
 
   override def render(request: HttpServletRequest): Seq[Node] = {
-    val driverId = request.getParameter("id")
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
+    val driverId = UIUtils.stripXSS(request.getParameter("id"))
     require(driverId != null && driverId.nonEmpty, "Missing id parameter")
 
     val state = parent.scheduler.getDriverState(driverId)
@@ -101,7 +102,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
       </tr>
       <tr>
         <td>Launch Time</td>
-        <td>{state.startDate}</td>
+        <td>{UIUtils.formatDate(state.startDate)}</td>
       </tr>
       <tr>
         <td>Finish Time</td>
@@ -154,7 +155,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
       <td>Memory</td><td>{driver.mem}</td>
     </tr>
     <tr>
-      <td>Submitted</td><td>{driver.submissionDate}</td>
+      <td>Submitted</td><td>{UIUtils.formatDate(driver.submissionDate)}</td>
     </tr>
     <tr>
       <td>Supervise</td><td>{driver.supervise}</td>

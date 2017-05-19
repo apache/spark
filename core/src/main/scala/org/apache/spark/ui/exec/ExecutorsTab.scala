@@ -62,6 +62,7 @@ private[ui] case class ExecutorTaskSummary(
  * A SparkListener that prepares information to be displayed on the ExecutorsTab
  */
 @DeveloperApi
+@deprecated("This class will be removed in a future release.", "2.2.0")
 class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: SparkConf)
     extends SparkListener {
   val executorToTaskSummary = LinkedHashMap[String, ExecutorTaskSummary]()

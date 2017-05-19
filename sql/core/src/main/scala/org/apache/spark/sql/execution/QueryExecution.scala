@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.util.TimeZone
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -187,7 +186,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
         DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
       case (t: Timestamp, TimestampType) =>
         DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t),
-          TimeZone.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone))
+          DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone))
       case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
       case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
       case (other, tpe) if primitiveTypes.contains(tpe) => other.toString

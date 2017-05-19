@@ -444,6 +444,17 @@ class PlanParserSuite extends PlanTest {
         |      (select id from t0)) as u_1
       """.stripMargin,
       plan.union(plan).union(plan).as("u_1").select('id))
+
+  }
+
+  test("aliased subquery") {
+    assertEqual("select a from (select id as a from t0) tt",
+      table("t0").select('id.as("a")).as("tt").select('a))
+    intercept("select a from (select id as a from t0)", "mismatched input")
+
+    assertEqual("from (select id as a from t0) tt select a",
+      table("t0").select('id.as("a")).as("tt").select('a))
+    intercept("from (select id as a from t0) select a", "extraneous input 'a'")
   }
 
   test("scalar sub-query") {
@@ -468,7 +479,18 @@ class PlanParserSuite extends PlanTest {
   test("table valued function") {
     assertEqual(
       "select * from range(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
+      UnresolvedTableValuedFunction("range", Literal(2) :: Nil, Seq.empty).select(star()))
+  }
+
+  test("SPARK-20311 range(N) as alias") {
+    assertEqual(
+      "SELECT * FROM range(10) AS t",
+      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(10) :: Nil, Seq.empty))
+        .select(star()))
+    assertEqual(
+      "SELECT * FROM range(7) AS t(a)",
+      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(7) :: Nil, "a" :: Nil))
+        .select(star()))
   }
 
   test("inline table") {

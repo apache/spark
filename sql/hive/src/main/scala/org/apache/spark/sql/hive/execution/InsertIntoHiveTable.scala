@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
@@ -97,12 +97,24 @@ case class InsertIntoHiveTable(
     val inputPathUri: URI = inputPath.toUri
     val inputPathName: String = inputPathUri.getPath
     val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
-    val stagingPathName: String =
+    var stagingPathName: String =
       if (inputPathName.indexOf(stagingDir) == -1) {
         new Path(inputPathName, stagingDir).toString
       } else {
         inputPathName.substring(0, inputPathName.indexOf(stagingDir) + stagingDir.length)
       }
+
+    // SPARK-20594: This is a walk-around fix to resolve a Hive bug. Hive requires that the
+    // staging directory needs to avoid being deleted when users set hive.exec.stagingdir
+    // under the table directory.
+    if (FileUtils.isSubDir(new Path(stagingPathName), inputPath, fs) &&
+      !stagingPathName.stripPrefix(inputPathName).stripPrefix(File.separator).startsWith(".")) {
+      logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
+        "with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
+        "directory.")
+      stagingPathName = new Path(inputPathName, ".hive-staging").toString
+    }
+
     val dir: Path =
       fs.makeQualified(
         new Path(stagingPathName + "_" + executionId + "-" + TaskRunner.getTaskRunnerID))
@@ -293,6 +305,27 @@ case class InsertIntoHiveTable(
       if (isDynamic.init.zip(isDynamic.tail).contains((true, false))) {
         throw new AnalysisException(ErrorMsg.PARTITION_DYN_STA_ORDER.getMsg)
       }
+    }
+
+    table.bucketSpec match {
+      case Some(bucketSpec) =>
+        // Writes to bucketed hive tables are allowed only if user does not care about maintaining
+        // table's bucketing ie. both "hive.enforce.bucketing" and "hive.enforce.sorting" are
+        // set to false
+        val enforceBucketingConfig = "hive.enforce.bucketing"
+        val enforceSortingConfig = "hive.enforce.sorting"
+
+        val message = s"Output Hive table ${table.identifier} is bucketed but Spark" +
+          "currently does NOT populate bucketed output which is compatible with Hive."
+
+        if (hadoopConf.get(enforceBucketingConfig, "true").toBoolean ||
+          hadoopConf.get(enforceSortingConfig, "true").toBoolean) {
+          throw new AnalysisException(message)
+        } else {
+          logWarning(message + s" Inserting data anyways since both $enforceBucketingConfig and " +
+            s"$enforceSortingConfig are set to false.")
+        }
+      case _ => // do nothing since table has no bucketing
     }
 
     val committer = FileCommitProtocol.instantiate(

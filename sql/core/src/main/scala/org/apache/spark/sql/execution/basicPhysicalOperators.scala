@@ -331,17 +331,16 @@ case class SampleExec(
 case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   extends LeafExecNode with CodegenSupport {
 
-  def start: Long = range.start
-  def end: Long = range.end
-  def step: Long = range.step
-  def numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
-  def numElements: BigInt = range.numElements
+  val start: Long = range.start
+  val end: Long = range.end
+  val step: Long = range.step
+  val numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
+  val numElements: BigInt = range.numElements
 
   override val output: Seq[Attribute] = range.output
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numGeneratedRows" -> SQLMetrics.createMetric(sparkContext, "number of generated rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override lazy val canonicalized: SparkPlan = {
     RangeExec(range.canonicalized.asInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Range])
@@ -354,7 +353,6 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
   protected override def doProduce(ctx: CodegenContext): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val numGenerated = metricTerm(ctx, "numGeneratedRows")
 
     val initTerm = ctx.freshName("initRange")
     ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")

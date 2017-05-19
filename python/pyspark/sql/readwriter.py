@@ -96,14 +96,18 @@ class DataFrameReader(OptionUtils):
         By specifying the schema here, the underlying data source can skip the schema
         inference step, and thus speed up data loading.
 
-        :param schema: a :class:`pyspark.sql.types.StructType` object
+        :param schema: a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
+                       (For example ``col0 INT, col1 DOUBLE``).
         """
         from pyspark.sql import SparkSession
-        if not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType")
         spark = SparkSession.builder.getOrCreate()
-        jschema = spark._jsparkSession.parseDataType(schema.json())
-        self._jreader = self._jreader.schema(jschema)
+        if isinstance(schema, StructType):
+            jschema = spark._jsparkSession.parseDataType(schema.json())
+            self._jreader = self._jreader.schema(jschema)
+        elif isinstance(schema, basestring):
+            self._jreader = self._jreader.schema(schema)
+        else:
+            raise TypeError("schema should be StructType or string")
         return self
 
     @since(1.5)
@@ -137,7 +141,8 @@ class DataFrameReader(OptionUtils):
 
         :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
-        :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param options: all other string options
 
         >>> df = spark.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
@@ -181,7 +186,8 @@ class DataFrameReader(OptionUtils):
 
         :param path: string represents path to the JSON dataset, or a list of paths,
                      or RDD of Strings storing JSON objects.
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema or
+                       a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
         :param prefersDecimal: infers all floating-point values as a decimal type. If the values
@@ -324,7 +330,8 @@ class DataFrameReader(OptionUtils):
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
         :param path: string, or list of strings, for input path(s).
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param sep: sets the single character as a separator for each field and value.
                     If None is set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
@@ -561,6 +568,63 @@ class DataFrameWriter(OptionUtils):
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
+        return self
+
+    @since(2.3)
+    def bucketBy(self, numBuckets, col, *cols):
+        """Buckets the output by the given columns.If specified,
+        the output is laid out on the file system similar to Hive's bucketing scheme.
+
+        :param numBuckets: the number of buckets to save
+        :param col: a name of a column, or a list of names.
+        :param cols: additional names (optional). If `col` is a list it should be empty.
+
+        .. note:: Applicable for file-based data sources in combination with
+                  :py:meth:`DataFrameWriter.saveAsTable`.
+
+        >>> (df.write.format('parquet')  # doctest: +SKIP
+        ...     .bucketBy(100, 'year', 'month')
+        ...     .mode("overwrite")
+        ...     .saveAsTable('bucketed_table'))
+        """
+        if not isinstance(numBuckets, int):
+            raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
+
+        if isinstance(col, (list, tuple)):
+            if cols:
+                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+
+            col, cols = col[0], col[1:]
+
+        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+            raise TypeError("all names should be `str`")
+
+        self._jwrite = self._jwrite.bucketBy(numBuckets, col, _to_seq(self._spark._sc, cols))
+        return self
+
+    @since(2.3)
+    def sortBy(self, col, *cols):
+        """Sorts the output in each bucket by the given columns on the file system.
+
+        :param col: a name of a column, or a list of names.
+        :param cols: additional names (optional). If `col` is a list it should be empty.
+
+        >>> (df.write.format('parquet')  # doctest: +SKIP
+        ...     .bucketBy(100, 'year', 'month')
+        ...     .sortBy('day')
+        ...     .mode("overwrite")
+        ...     .saveAsTable('sorted_bucketed_table'))
+        """
+        if isinstance(col, (list, tuple)):
+            if cols:
+                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+
+            col, cols = col[0], col[1:]
+
+        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+            raise TypeError("all names should be `str`")
+
+        self._jwrite = self._jwrite.sortBy(col, _to_seq(self._spark._sc, cols))
         return self
 
     @since(1.4)
