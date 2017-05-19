@@ -468,7 +468,16 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       val topics = Range(0, k).map { topicInd =>
         Data(Vectors.dense((topicsDenseMatrix(::, topicInd).toArray)), topicInd)
       }
-      spark.createDataFrame(topics).repartition(1).write.parquet(Loader.dataPath(path))
+
+      val bufferSize = Utils.byteStringAsBytes(
+        spark.conf.get("spark.kryoserializer.buffer.max", "64m"))
+      // We calculate the approximate size of the model
+      // We only calculate the array size, considering an
+      // average string size of 15 bytes, the formula is:
+      // (floatSize * vectorSize + 15) * numWords
+      val approxSize = (4L * topicsMatrix.numRows + 15) * k
+      val nPartitions = ((approxSize / bufferSize) + 1).toInt
+      spark.createDataFrame(topics).repartition(nPartitions).write.parquet(Loader.dataPath(path))
     }
 
     def load(
