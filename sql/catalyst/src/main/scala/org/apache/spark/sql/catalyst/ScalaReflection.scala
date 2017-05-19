@@ -329,7 +329,7 @@ object ScalaReflection extends ScalaReflection {
         }
         UnresolvedMapObjects(mapFunction, getPath, Some(cls))
 
-      case t if t <:< localTypeOf[Map[_, _]] || t <:< localTypeOf[java.util.Map[_, _]] =>
+      case t if t <:< localTypeOf[Map[_, _]] =>
         // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
 
@@ -484,7 +484,7 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(elementType)) = t
         toCatalystArray(inputObject, elementType)
 
-      case t if t <:< localTypeOf[Map[_, _]] || t <:< localTypeOf[java.util.Map[_, _]] =>
+      case t if t <:< localTypeOf[Map[_, _]] =>
         val TypeRef(_, _, Seq(keyType, valueType)) = t
         val keyClsName = getClassNameFromType(keyType)
         val valueClsName = getClassNameFromType(valueType)
@@ -698,7 +698,7 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-      case t if t <:< localTypeOf[Map[_, _]] || t <:< localTypeOf[java.util.Map[_, _]] =>
+      case t if t <:< localTypeOf[Map[_, _]] =>
         val TypeRef(_, _, Seq(keyType, valueType)) = t
         val Schema(valueDataType, valueNullable) = schemaFor(valueType)
         Schema(MapType(schemaFor(keyType).dataType,

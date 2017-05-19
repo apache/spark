@@ -204,10 +204,6 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   /** @since 2.2.0 */
   implicit def newMapEncoder[T <: Map[_, _] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
-  /** @since 2.2.0 */
-  implicit def newJavaMapEncoder[T <: java.util.Map[_, _] : TypeTag]: Encoder[T] =
-    ExpressionEncoder()
-
   // Arrays
 
   /** @since 1.6.1 */
