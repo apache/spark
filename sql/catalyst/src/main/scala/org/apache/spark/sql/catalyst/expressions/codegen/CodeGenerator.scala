@@ -148,22 +148,26 @@ class CodegenContext {
   val mutableState: mutable.ListBuffer[(String, String, String)] =
     mutable.ListBuffer.empty[(String, String, String)]
 
-  var mutableStateCount: Int = 0
-
+  // An array keyed by the tuple of mutable states' types and initialization codes, holds the
+  // current max index of the array
   var mutableStateArrayIdx: mutable.Map[(String, String), Int] =
     mutable.Map.empty[(String, String), Int]
 
+  // An array keyed by the tuple of mutable states' types and initialization codes, holds the name
+  // of the mutableStateArray into which state of the given key will be compacted
   var mutableStateArrayNames: mutable.Map[(String, String), String] =
     mutable.Map.empty[(String, String), String]
 
+  // An array keyed by the tuple of mutable states' types and initialization codes, holds the code
+  // that will initialize the mutableStateArray when initialized in loops
   var mutableStateArrayInitCodes: mutable.Map[(String, String), String] =
     mutable.Map.empty[(String, String), String]
 
   /**
    * Adds an instance of globally-accessible mutable state. Mutable state may either be inlined
    * as a private member variable to the class, or it may be compacted into arrays of the same
-   * type and initialization if the amount of mutable state would grow past 10k, in order to avoid
-   * Constant Pool limit errors for both state declaration and initialization.
+   * type and initialization in order to avoid Constant Pool limit errors for both state declaration
+   * and initialization.
    *
    * We compact state into arrays when we can anticipate variables of the same type and initCode
    * may appear numerous times. Variable names with integer suffixes (as given by the `freshName`
@@ -183,10 +187,17 @@ class CodegenContext {
     variableName: String,
     initCode: String,
     inLine: Boolean = false): String = {
-    if (!inLine && variableName.matches(".*\\d+.*") &&
+    if (!inLine &&
+      // identifies a 'freshname' style variable with a numerical suffix
+      variableName.matches(".*\\d+.*") &&
+      // identifies a simply-assigned object, or a primitive type
       (initCode.matches("(^.*\\s*=\\s*null;$|^$)") || isPrimitiveType(javaType))) {
+      // Create an initialization code agnostic to the actual variable name which we can key by
       val initCodeKey = initCode.replaceAll(variableName, "*VALUE*")
+
       if (mutableStateArrayIdx.contains((javaType, initCodeKey))) {
+        // a mutableStateArray for the given type and initialization has been declared, update the
+        // max index of the array and return the array-based alias for the variable
         val arrayName = mutableStateArrayNames((javaType, initCodeKey))
         val idx = mutableStateArrayIdx((javaType, initCodeKey)) + 1
 
@@ -196,6 +207,9 @@ class CodegenContext {
 
         s"$arrayName[$idx]"
       } else {
+        // no mutableStateArray has been declared yet. Create a new name for the array, and add
+        // entries for keeping track of the new array name, its current index, and initialization
+        // code
         val arrayName = freshName("mutableStateArray")
         val qualifiedInitCode = initCode.replaceAll(variableName, s"$arrayName[i]")
         mutableStateArrayNames += Tuple2(javaType, initCodeKey) -> arrayName
@@ -205,7 +219,7 @@ class CodegenContext {
         s"$arrayName[0]"
       }
     } else {
-      mutableStateCount += 1
+      // non-primitive and non-simply-assigned state is declared inline to the outer class
       mutableState += Tuple3(javaType, variableName, initCode)
 
       variableName
