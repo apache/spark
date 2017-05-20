@@ -401,7 +401,7 @@ test_that("spark.isoreg", {
   expect_equal(predict_result$prediction, c(7.0, 7.0, 6.0, 5.5, 5.0, 4.0, 1.0))
 
   # Test model save/load
-  if (!(is_cran() && is_windows())) {
+  if (not_cran_or_windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-isoreg", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -452,7 +452,7 @@ test_that("spark.survreg", {
                2.390146, 2.891269, 2.891269), tolerance = 1e-4)
 
   # Test model save/load
-  if (!(is_cran() && is_windows())) {
+  if (not_cran_or_windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-survreg", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))

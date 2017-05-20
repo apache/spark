@@ -44,7 +44,7 @@ test_that("spark.gbt", {
   expect_equal(stats$numFeatures, 6)
   expect_equal(length(stats$treeWeights), 20)
 
-  if (!(is_cran() && is_windows())) {
+  if (not_cran_or_windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-gbtRegression", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -78,7 +78,7 @@ test_that("spark.gbt", {
   expect_equal(length(grep("setosa", predictions)), 50)
   expect_equal(length(grep("versicolor", predictions)), 50)
 
-  if (!(is_cran() && is_windows())) {
+  if (not_cran_or_windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-gbtClassification", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -140,7 +140,7 @@ test_that("spark.randomForest", {
   expect_equal(stats$numTrees, 20)
   expect_equal(stats$maxDepth, 5)
 
-  if (!(is_cran() && is_windows())) {
+  if (not_cran_or_windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-randomForestRegression", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -174,7 +174,7 @@ test_that("spark.randomForest", {
   expect_equal(length(grep("setosa", predictions)), 50)
   expect_equal(length(grep("versicolor", predictions)), 50)
 
-  if (!(is_cran() && is_windows())) {
+  if (not_cran_or_windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-randomForestClassification", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
