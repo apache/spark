@@ -704,7 +704,7 @@ case class Expand(
  * We will transform GROUPING SETS into logical plan Aggregate(.., Expand) in Analyzer
  *
  * @param selectedGroupByExprs A sequence of selected GroupBy expressions, all exprs should
- *                     exists in groupByExprs.
+ *                     exist in groupByExprs.
  * @param groupByExprs The Group By expressions candidates.
  * @param child        Child operator
  * @param aggregations The Aggregation expressions, those non selected group by expressions
@@ -798,6 +798,12 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
 }
 
+/**
+ * Aliased subquery.
+ *
+ * @param alias the alias name for this subquery.
+ * @param child the logical plan of this subquery.
+ */
 case class SubqueryAlias(
     alias: String,
     child: LogicalPlan)

@@ -1817,17 +1817,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df, Row(BigDecimal(0.0)) :: Nil)
   }
 
-  test("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
-    val N = 400
-    val rows = Seq(Row.fromSeq(Seq.fill(N)("string")))
-    val schema = StructType(Seq.tabulate(N)(i => StructField(s"_c$i", StringType)))
-    val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
-
-    val filter = (0 until N)
-      .foldLeft(lit(false))((e, index) => e.or(df.col(df.columns(index)) =!= "string"))
-    df.filter(filter).count
-  }
-
   test("SPARK-19893: cannot run set operations with map type") {
     val df = spark.range(1).select(map(lit("key"), $"id").as("m"))
     val e = intercept[AnalysisException](df.intersect(df))
@@ -1855,5 +1844,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .join(df2, df1("x") === df2("x1"), "left_outer")
       .filter($"x1".isNotNull || !$"y".isin("a!"))
       .count
+  }
+
+  test("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
+    val N = 400
+    val rows = Seq(Row.fromSeq(Seq.fill(N)("string")))
+    val schema = StructType(Seq.tabulate(N)(i => StructField(s"_c$i", StringType)))
+    val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
+
+    val filter = (0 until N)
+      .foldLeft(lit(false))((e, index) => e.or(df.col(df.columns(index)) =!= "string"))
+    df.filter(filter).count
   }
 }

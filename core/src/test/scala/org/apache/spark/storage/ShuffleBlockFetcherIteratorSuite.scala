@@ -192,7 +192,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     // Complete the task; then the 2nd block buffer should be exhausted
     verify(blocks(ShuffleBlockId(0, 1, 0)), times(0)).release()
-    taskContext.markTaskCompleted()
+    taskContext.markTaskCompleted(None)
     verify(blocks(ShuffleBlockId(0, 1, 0)), times(1)).release()
 
     // The 3rd block should not be retained because the iterator is already in zombie state

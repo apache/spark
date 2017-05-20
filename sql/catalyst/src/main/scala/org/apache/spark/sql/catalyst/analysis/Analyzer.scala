@@ -1003,18 +1003,32 @@ class Analyzer(
    */
   object ResolveAggAliasInGroupBy extends Rule[LogicalPlan] {
 
+    // This is a strict check though, we put this to apply the rule only if the expression is not
+    // resolvable by child.
+    private def notResolvableByChild(attrName: String, child: LogicalPlan): Boolean = {
+      !child.output.exists(a => resolver(a.name, attrName))
+    }
+
+    private def mayResolveAttrByAggregateExprs(
+        exprs: Seq[Expression], aggs: Seq[NamedExpression], child: LogicalPlan): Seq[Expression] = {
+      exprs.map { _.transform {
+        case u: UnresolvedAttribute if notResolvableByChild(u.name, child) =>
+          aggs.find(ne => resolver(ne.name, u.name)).getOrElse(u)
+      }}
+    }
+
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case agg @ Aggregate(groups, aggs, child)
           if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+            groups.exists(!_.resolved) =>
+        agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
+
+      case gs @ GroupingSets(selectedGroups, groups, child, aggs)
+          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(_.isInstanceOf[UnresolvedAttribute]) =>
-        // This is a strict check though, we put this to apply the rule only in alias expressions
-        def notResolvableByChild(attrName: String): Boolean =
-          !child.output.exists(a => resolver(a.name, attrName))
-        agg.copy(groupingExpressions = groups.map {
-          case u: UnresolvedAttribute if notResolvableByChild(u.name) =>
-            aggs.find(ne => resolver(ne.name, u.name)).getOrElse(u)
-          case e => e
-        })
+        gs.copy(
+          selectedGroupByExprs = selectedGroups.map(mayResolveAttrByAggregateExprs(_, aggs, child)),
+          groupByExprs = mayResolveAttrByAggregateExprs(groups, aggs, child))
     }
   }
 
@@ -1031,7 +1045,7 @@ class Analyzer(
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, child) if child.resolved =>
+      case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
           val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
@@ -1052,7 +1066,7 @@ class Analyzer(
           case ae: AnalysisException => s
         }
 
-      case f @ Filter(cond, child) if child.resolved =>
+      case f @ Filter(cond, child) if !f.resolved && child.resolved =>
         try {
           val newCond = resolveExpressionRecursively(cond, child)
           val requiredAttrs = newCond.references.filter(_.resolved)
