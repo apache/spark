@@ -2084,9 +2084,10 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     If the input column is numeric, we cast it to string and index the string values.
     The indices are in [0, numLabels). By default, this is ordered by label frequencies
     so the most frequent label gets index 0. The ordering behavior is controlled by
-    setting :py:attr:`stringOrderType`.
+    setting :py:attr:`stringOrderType`. Its default value is 'frequencyDesc'.
 
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="error")
+    ...     stringOrderType="frequencyDesc")
     >>> model = stringIndexer.fit(stringIndDf)
     >>> td = model.transform(stringIndDf)
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
