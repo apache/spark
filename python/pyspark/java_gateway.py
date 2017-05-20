@@ -104,6 +104,7 @@ def launch_gateway(conf=None):
         def connect(input_pipe, out_pipe):
             """Connect the input pipe to the output. We can't use os.dup for IPython
             or directly write to them (see https://github.com/ipython/ipython/pull/3072/)."""
+            print("Connecting pipes....")
             for line in iter(input_pipe.readline, b''):
                 print(line, file=out_pipe)
             input_pipe.close()
