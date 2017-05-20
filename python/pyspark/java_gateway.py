@@ -98,6 +98,7 @@ def launch_gateway(conf=None):
         if grab_jvm_output:
             proc_kwargs["stderr"] = PIPE
             proc_kwargs["stdout"] = PIPE
+            proc_kwargs["bufsize"] = 1
 
         proc = Popen(command, **proc_kwargs)
 
