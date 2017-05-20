@@ -993,7 +993,7 @@ object Matrices {
       case sm: BSM[Double] =>
         // There is no isTranspose flag for sparse matrices in Breeze
         val nsm = if (sm.rowIndices.length > sm.activeSize) {
-          // This sparse matrix has trainling zeros.
+          // This sparse matrix has trailing zeros.
           // Remove them by compacting the matrix.
           val csm = sm.copy
           csm.compact()
