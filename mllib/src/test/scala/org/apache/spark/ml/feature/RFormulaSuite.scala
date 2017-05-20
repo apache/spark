@@ -129,7 +129,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(result.collect() === expected.collect())
   }
 
-  test("encodes string terms with string order type") {
+  test("encodes string terms with string indexer order type") {
     val formula = new RFormula().setFormula("id ~ a + b")
     val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "aaz", 5))
       .toDF("id", "a", "b")
@@ -163,7 +163,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     var idx = 0
     for (orderType <- StringIndexer.supportedStringOrderType) {
-      val model = formula.setStringOrderType(orderType).fit(original)
+      val model = formula.setStringIndexerOrderType(orderType).fit(original)
       val result = model.transform(original)
       val resultSchema = model.transformSchema(original.schema)
       assert(result.schema.toString == resultSchema.toString)
@@ -190,7 +190,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "aaz", 5))
       .toDF("id", "a", "b")
     val formula = new RFormula().setFormula("id ~ a + b")
-      .setStringOrderType(StringIndexer.alphabetDesc)
+      .setStringIndexerOrderType(StringIndexer.alphabetDesc)
 
     /*
      Note that the category dropped after encoding is the same between R and Spark

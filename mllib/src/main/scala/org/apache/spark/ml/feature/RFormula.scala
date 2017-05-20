@@ -38,29 +38,35 @@ import org.apache.spark.sql.types._
 private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
 
   /**
-   * Param for how to order labels of string column. The first label after ordering is assigned
-   * an index of 0.
-   * Options are:
-   *   - 'frequencyDesc': descending order by label frequency (most frequent label assigned 0)
-   *   - 'frequencyAsc': ascending order by label frequency (least frequent label assigned 0)
-   *   - 'alphabetDesc': descending alphabetical order
-   *   - 'alphabetAsc': ascending alphabetical order
-   * Default is 'frequencyDesc'.
-   * When the ordering is set to 'alphabetDesc', `RFormula` drops the same category as R
-   * when encoding strings.
+   * Param for how to order categories of a FEATURE string column used by `StringIndexer`.
+   * The last category after ordering is dropped when encoding strings.
+   * The options are explained using an example string: 'b', 'a', 'b', 'a', 'c', 'b'
+   * |
+   * | Option | Category mapped to 0 by StringIndexer |  Category dropped by RFormula
+   * | 'frequencyDesc' | most frequent category ('b') | least frequent category ('c')
+   * | 'frequencyAsc' | least frequent category ('c') | most frequent category ('b')
+   * | 'alphabetDesc' | first alphabetical category ('a') | last alphabetical category ('c')
+   * | 'alphabetAsc' | last alphabetical category ('c') | last alphabetical category ('a')
+   * |
+   * The default value is 'frequencyDesc'. When the ordering is set to 'alphabetDesc', `RFormula`
+   * drops the same category as R when encoding strings.
+   * Note that this ordering option is NOT used for the label column. When the label column is
+   * indexed, it uses the default descending frequency ordering in `StringIndexer`.
    *
    * @group param
    */
   @Since("2.3.0")
-  final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
-    "How to order labels of string column. " +
-    "The first label after ordering is assigned an index of 0. " +
+  final val stringIndexerOrderType: Param[String] = new Param(this, "stringIndexerOrderType",
+    "How to order categories of a FEATURE string column used by StringIndexer. " +
+    "The last category after ordering is dropped when encoding strings. " +
+    "The default value is 'frequencyDesc'. When the ordering is set to 'alphabetDesc', " +
+    "RFormula drops the same category as R when encoding strings." +
     s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
     ParamValidators.inArray(StringIndexer.supportedStringOrderType))
 
   /** @group getParam */
   @Since("2.3.0")
-  def getStringOrderType: String = $(stringOrderType)
+  def getStringIndexerOrderType: String = $(stringIndexerOrderType)
 
   protected def hasLabelCol(schema: StructType): Boolean = {
     schema.map(_.name).contains($(labelCol))
@@ -152,8 +158,8 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
   /** @group setParam */
   @Since("2.3.0")
-  def setStringOrderType(value: String): this.type = set(stringOrderType, value)
-  setDefault(stringOrderType, StringIndexer.frequencyDesc)
+  def setStringIndexerOrderType(value: String): this.type = set(stringIndexerOrderType, value)
+  setDefault(stringIndexerOrderType, StringIndexer.frequencyDesc)
 
   /** Whether the formula specifies fitting an intercept. */
   private[ml] def hasIntercept: Boolean = {
@@ -185,7 +191,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           encoderStages += new StringIndexer()
             .setInputCol(term)
             .setOutputCol(indexCol)
-            .setStringOrderType($(stringOrderType))
+            .setStringOrderType($(stringIndexerOrderType))
           prefixesToRewrite(indexCol + "_") = term + "_"
           (term, indexCol)
         case _ =>
