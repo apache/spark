@@ -112,8 +112,9 @@ private[hive] object IsolatedClientLoader extends Logging {
     val classpath = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
-        Some("http://www.datanucleus.org/downloads/maven2"),
-        ivyPath,
+        SparkSubmitUtils.buildIvySettings(
+          Some("http://www.datanucleus.org/downloads/maven2"),
+          ivyPath),
         exclusions = version.exclusions)
     }
     val allFiles = classpath.split(",").map(new File(_)).toSet
