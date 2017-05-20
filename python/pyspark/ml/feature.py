@@ -2086,7 +2086,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     so the most frequent label gets index 0. The ordering behavior is controlled by
     setting :py:attr:`stringOrderType`. Its default value is 'frequencyDesc'.
 
-    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="error")
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="error",
     ...     stringOrderType="frequencyDesc")
     >>> model = stringIndexer.fit(stringIndDf)
     >>> td = model.transform(stringIndDf)
