@@ -200,9 +200,27 @@ private[spark] object Benchmark {
       Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
     } else if (SystemUtils.IS_OS_LINUX) {
       Try {
+        val arch = SystemUtils.OS_ARCH
+        val cpuinfo = "/proc/cpuinfo"
         val grepPath = Utils.executeAndGetOutput(Seq("which", "grep")).stripLineEnd
-        Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "model name", "/proc/cpuinfo"))
-        .stripLineEnd.replaceFirst("model name[\\s*]:[\\s*]", "")
+        if (arch.startsWith("x86")) {
+          Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "model name", cpuinfo))
+            .stripLineEnd.replaceFirst("model name[\\s*]:[\\s*]", "")
+        } else if (arch.startsWith("ppc")) {
+          val cpu = Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "cpu", cpuinfo))
+            .stripLineEnd.replaceFirst("cpu\\s*:\\s*", "")
+          val clock = Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "clock", cpuinfo))
+            .stripLineEnd.replaceFirst("clock\\s*:\\s*", "")
+          s"$cpu @ $clock"
+        } else if (arch.startsWith("s390")) {
+          val cpu = Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "vendor_id", cpuinfo))
+            .stripLineEnd.replaceFirst("vendor_id\\s*:\\s*", "")
+          val machine = Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "machine", cpuinfo))
+            .stripLineEnd.replaceFirst("processor \\d*: version = \\d*,\\s*", "")
+          s"$cpu, $machine"
+        } else {
+          "Unknown processor"
+        }
       }.getOrElse("Unknown processor")
     } else {
       System.getenv("PROCESSOR_IDENTIFIER")
