@@ -57,7 +57,8 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
   // Indicate if `stop()` is called
   private val stopped = new AtomicBoolean(false)
 
-  private lazy val droppedEvents = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
+  /** A counter for dropped events. It will be reset every time we log it. */
+  private val droppedEventsCounter = new AtomicLong(0L)
 
   /** When `droppedEventsCounter` was logged last time in milliseconds. */
   @volatile private var lastReportTimestamp = 0L
@@ -128,21 +129,21 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
       eventLock.release()
     } else {
       onDropEvent(event)
-      droppedEvents.add(event)
+      droppedEventsCounter.incrementAndGet()
     }
 
-    val droppedEventsCnt = droppedEvents.size()
-    if (droppedEventsCnt > 0) {
-      droppedEvents.synchronized {
-        // Don't log too frequently
-        if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
-          import scala.collection.JavaConverters._
+    val droppedEvents = droppedEventsCounter.get
+    if (droppedEvents > 0) {
+      // Don't log too frequently
+      if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
+        // There may be multiple threads trying to decrease droppedEventsCounter.
+        // Use "compareAndSet" to make sure only one thread can win.
+        // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail and
+        // then that thread will update it.
+        if (droppedEventsCounter.compareAndSet(droppedEvents, 0)) {
           val prevLastReportTimestamp = lastReportTimestamp
-          logTrace(s"The dropped events (incomplete) since" +
-            s" ${new java.util.Date(prevLastReportTimestamp)}: " +
-            s"${droppedEvents.asScala.toArray.mkString(",")}")
-          lastReportTimestamp = System.currentTimeMillis()
-          droppedEvents.clear()
+          logWarning(s"Dropped $droppedEvents SparkListenerEvents since " +
+            new java.util.Date(prevLastReportTimestamp))
         }
       }
     }
@@ -209,10 +210,11 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
   def onDropEvent(event: SparkListenerEvent): Unit = {
     if (logDroppedEvent.compareAndSet(false, true)) {
       // Only log the following message once to avoid duplicated annoying logs.
-      logError(s"Dropping SparkListenerEvent because no remaining room in event queue. " +
+      logError("Dropping SparkListenerEvent because no remaining room in event queue. "  +
         "This likely means one of the SparkListeners is too slow and cannot keep up with " +
         "the rate at which tasks are being started by the scheduler.")
     }
+    logTrace(s"Dropping event $event")
   }
 }
 
