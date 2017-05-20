@@ -58,7 +58,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
     val prefix = "spark.metrics.conf."
     conf.getAll.foreach {
       case (k, v) if k.startsWith(prefix) =>
-        properties.setProperty(k.substring(prefix.length()), v)
+        properties.setProperty(k.substring(prefix.length()).trim(), v.trim())
       case _ =>
     }
 
@@ -78,7 +78,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
       val defaultSubProperties = perInstanceSubProperties(DEFAULT_PREFIX).asScala
       for ((instance, prop) <- perInstanceSubProperties if (instance != DEFAULT_PREFIX);
            (k, v) <- defaultSubProperties if (prop.get(k) == null)) {
-        prop.put(k, v)
+        prop.put(k.trim(), v.trim())
       }
     }
   }
