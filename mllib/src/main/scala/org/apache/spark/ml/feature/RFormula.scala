@@ -41,13 +41,16 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
    * Param for how to order categories of a FEATURE string column used by `StringIndexer`.
    * The last category after ordering is dropped when encoding strings.
    * The options are explained using an example string: 'b', 'a', 'b', 'a', 'c', 'b'
-   * |
-   * | Option | Category mapped to 0 by StringIndexer |  Category dropped by RFormula
-   * | 'frequencyDesc' | most frequent category ('b') | least frequent category ('c')
-   * | 'frequencyAsc' | least frequent category ('c') | most frequent category ('b')
-   * | 'alphabetDesc' | first alphabetical category ('a') | last alphabetical category ('c')
-   * | 'alphabetAsc' | last alphabetical category ('c') | last alphabetical category ('a')
-   * |
+   * {{{
+   * +-----------------+---------------------------------------+---------------------------------+
+   * |      Option     | Category mapped to 0 by StringIndexer |  Category dropped by RFormula   |
+   * +-----------------+---------------------------------------+---------------------------------+
+   * | 'frequencyDesc' | most frequent category ('b')          | least frequent category ('c')   |
+   * | 'frequencyAsc'  | least frequent category ('c')         | most frequent category ('b')    |
+   * | 'alphabetDesc'  | first alphabetical category ('a')     | last alphabetical category ('c')|
+   * | 'alphabetAsc'   | last alphabetical category ('c')      | last alphabetical category ('a')|
+   * +-----------------+---------------------------------------+---------------------------------+
+   * }}}
    * The default value is 'frequencyDesc'. When the ordering is set to 'alphabetDesc', `RFormula`
    * drops the same category as R when encoding strings.
    * Note that this ordering option is NOT used for the label column. When the label column is
