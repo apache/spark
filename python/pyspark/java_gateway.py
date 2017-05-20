@@ -49,6 +49,8 @@ def launch_gateway(conf=None):
     redirect_shells = ["ZMQInteractiveShell", "StringIO"]
     grab_jvm_output = (sys.stdout != sys.__stdout__ and
                        sys.stdout.__class__.__name__ in redirect_shells)
+    if grab_jvm_output:
+        print("Grabbing JVM output cause magic.....")
 
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
