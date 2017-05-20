@@ -188,6 +188,10 @@ class DataTypeTests(unittest.TestCase):
         row = Row()
         self.assertEqual(len(row), 0)
 
+    def test_struct_field_type_name(self):
+        struct_field = StructField()
+        self.assertRaises(typeError('StructField does not have typename. You can use self.dataType.simpleString() instead.'), struct_field.typeName)
+
 
 class SQLTests(ReusedPySparkTestCase):
 
