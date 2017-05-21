@@ -1233,7 +1233,7 @@ case class Length(child: Expression) extends UnaryExpression with ImplicitCastIn
   extended = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
-       9
+       72
   """)
 case class BitLength(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def dataType: DataType = IntegerType
