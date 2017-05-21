@@ -1285,35 +1285,27 @@ case class Chr(child: Expression) extends UnaryExpression with ImplicitCastInput
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(LongType)
 
-  protected override def nullSafeEval(value: Any): Any = {
-    val longVal = value.asInstanceOf[Long]
-    val shortVal = if (longVal > 255) (longVal % 256).toShort else longVal.toShort
-    val stringVal = if (shortVal == 0) {
-      String.valueOf('\u0000')
-    } else if (shortVal < 0) {
-      ""
+  protected override def nullSafeEval(lon: Any): Any = {
+    val longVal = lon.asInstanceOf[Long]
+    if (longVal < 0) {
+      UTF8String.EMPTY_UTF8
+    } else if ((longVal & 0xFF) == 0) {
+      UTF8String.fromString(Character.MIN_VALUE.toString)
     } else {
-      shortVal.toChar.toString
+      UTF8String.fromString((longVal & 0xFF).toChar.toString)
     }
-    UTF8String.fromString(stringVal)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, lon => {
+    nullSafeCodeGen(ctx, ev, lon => {
       s"""
-        long longVal = (long)${lon};
-        short shortVal;
-        if (longVal > 255) {
-          shortVal = (short)(longVal % 256);
+        if ($lon < 0) {
+          ${ev.value} = UTF8String.EMPTY_UTF8;
+        } else if (($lon & 0xFF) == 0) {
+          ${ev.value} = UTF8String.fromString(String.valueOf(Character.MIN_VALUE));
         } else {
-          (short)longVal;
-        }
-        if (shortVal == 0) {
-          ${ev.value} = String.valueOf('\u0000');
-        } else if (shortVal < 0) {
-          ${ev.value} = "";
-        } else {
-          ${ev.value} = (short)shortVal;
+          char c = (char)($lon & 0xFF);
+          ${ev.value} = UTF8String.fromString(String.valueOf(c));
         }
       """
     })

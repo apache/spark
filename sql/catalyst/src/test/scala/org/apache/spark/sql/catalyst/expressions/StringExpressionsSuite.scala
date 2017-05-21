@@ -263,6 +263,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Ascii(Literal.create(null, StringType)), null, create_row("abdef"))
   }
 
+  test("string for ascii") {
+    val a = 'a.long.at(0)
+    checkEvaluation(Chr(Literal(48L)), "0", create_row("abdef"))
+    checkEvaluation(Chr(a), "a", create_row(97L))
+    checkEvaluation(Chr(a), "a", create_row(97L + 256L))
+    checkEvaluation(Chr(a), "", create_row(-9L))
+    checkEvaluation(Chr(a), Character.MIN_VALUE.toString, create_row(0L))
+    checkEvaluation(Chr(a), Character.MIN_VALUE.toString, create_row(256L))
+    checkEvaluation(Chr(a), null, create_row(null))
+    checkEvaluation(Chr(a), 149.toChar.toString, create_row(149L))
+    checkEvaluation(Chr(Literal.create(null, LongType)), null, create_row("abdef"))
+  }
+
   test("base64/unbase64 for string") {
     val a = 'a.string.at(0)
     val b = 'b.binary.at(0)
