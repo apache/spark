@@ -99,6 +99,7 @@ def launch_gateway(conf=None):
             proc_kwargs["stderr"] = PIPE
             proc_kwargs["stdout"] = PIPE
             proc_kwargs["bufsize"] = 1
+            proc_kwargs["close_fds"] = True
 
         proc = Popen(command, **proc_kwargs)
 
@@ -108,6 +109,7 @@ def launch_gateway(conf=None):
             print("Connecting pipes....")
             for line in iter(input_pipe.readline, b''):
                 print(line, file=out_pipe)
+            print("Pipe finished...")
             input_pipe.close()
 
         if grab_jvm_output:
