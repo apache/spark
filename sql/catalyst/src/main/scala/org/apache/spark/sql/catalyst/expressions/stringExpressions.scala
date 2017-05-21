@@ -340,6 +340,42 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   }
 }
 
+/**
+ * Replace all occurrences with string.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str, sear[, rep]) - Replaces all occurrences of `sear` with `rep`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('ABCabc', 'abc', 'DEF');
+       ABCDEF
+  """)
+// scalastyle:on line.size.limit
+case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExpr: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes {
+
+  def this(srcExpr: Expression, searchExpr: Expression) = {
+    this(srcExpr, searchExpr, Literal(""))
+  }
+
+  override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
+    srcEval.asInstanceOf[UTF8String].replace(
+      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (src, search, replace) => {
+      s"""${ev.value} = $src.replace($search, $replace);"""
+    })
+  }
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
+  override def children: Seq[Expression] = srcExpr :: searchExpr :: replaceExpr :: Nil
+  override def prettyName: String = "replace"
+}
+
 object StringTranslate {
 
   def buildDict(matchingString: UTF8String, replaceString: UTF8String)
