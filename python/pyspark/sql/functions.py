@@ -1731,11 +1731,11 @@ def posexplode(col):
 def explode_outer(col):
     """Returns a new row for each element in the given array or map.
     Unlike explode, if the array/map is null or empty then null is produced.
-    
+
     >>> df = spark.createDataFrame(
-    ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)], 
+    ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
     ...     ("id", "an_array", "a_map")
-    ... )   
+    ... )
     >>> df.select("id", "an_array", explode_outer("a_map")).show()
     +---+----------+----+-----+
     | id|  an_array| key|value|
@@ -1744,7 +1744,7 @@ def explode_outer(col):
     |  2|        []|null| null|
     |  3|      null|null| null|
     +---+----------+----+-----+
-    
+
     >>> df.select("id", "a_map", explode_outer("an_array")).show()
     +---+-------------+----+
     | id|        a_map| col|
@@ -1764,11 +1764,11 @@ def explode_outer(col):
 def posexplode_outer(col):
     """Returns a new row for each element with position in the given array or map.
     Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
-    
+
     >>> df = spark.createDataFrame(
-    ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)], 
+    ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
     ...     ("id", "an_array", "a_map")
-    ... )   
+    ... )
     >>> df.select("id", "an_array", posexplode_outer("a_map")).show()
     +---+----------+----+----+-----+
     | id|  an_array| pos| key|value|
