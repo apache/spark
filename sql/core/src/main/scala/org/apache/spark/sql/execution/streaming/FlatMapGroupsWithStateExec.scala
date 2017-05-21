@@ -215,7 +215,7 @@ case class FlatMapGroupsWithStateExec(
       val keyObj = getKeyObj(keyRow)  // convert key to objects
       val valueObjIter = valueRowIter.map(getValueObj.apply) // convert value rows to objects
       val stateObjOption = getStateObj(prevStateRowOption)
-      val keyedState = new GroupStateImpl(
+      val keyedState = GroupStateImpl.createForStreaming(
         stateObjOption,
         batchTimestampMs.getOrElse(NO_TIMESTAMP),
         eventTimeWatermark.getOrElse(NO_TIMESTAMP),
