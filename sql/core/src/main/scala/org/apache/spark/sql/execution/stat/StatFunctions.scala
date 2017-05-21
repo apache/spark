@@ -72,8 +72,6 @@ object StatFunctions extends Logging {
         " is not supported.")
       Column(Cast(Column(colName).expr, DoubleType))
     }
-    val emptySummaries = Array.fill(cols.size)(
-      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
 
     // Note that it works more or less by accident as `rdd.aggregate` is not a pure function:
     // this function returns the same array as given in the input (because `aggregate` reuses
@@ -95,7 +93,17 @@ object StatFunctions extends Logging {
         sum2: Array[QuantileSummaries]): Array[QuantileSummaries] = {
       sum1.zip(sum2).map { case (s1, s2) => s1.compress().merge(s2.compress()) }
     }
-    val summaries = df.select(columns: _*).rdd.aggregate(emptySummaries)(apply, merge)
+
+    val summaries = df.select(columns: _*)
+      .rdd
+      .mapPartitions({ data =>
+          val partitionSummary = Array.fill(cols.size)(
+            new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
+
+          data.foreach(row => apply(partitionSummary, row))
+          Iterator(partitionSummary)
+        }, preservesPartitioning = true)
+      .reduce(merge)
 
     summaries.map { summary => probabilities.flatMap(summary.query) }
   }
