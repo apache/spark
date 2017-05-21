@@ -59,7 +59,7 @@ Project [concat(cast(id#xL as string), cast(id#xL as string), cast(id#xL as stri
 -- !query 4
 select replace('abc', 'b', '123')
 -- !query 4 schema
-struct<replace(abc, b, 123):string>
+struct<replace(a, b, c):string>
 -- !query 4 output
 a123c
 
@@ -67,6 +67,6 @@ a123c
 -- !query 5
 select replace('abc', 'b')
 -- !query 5 schema
-struct<replace(abc, b):string>
+struct<replace(a, b):string>
 -- !query 5 output
 ac
