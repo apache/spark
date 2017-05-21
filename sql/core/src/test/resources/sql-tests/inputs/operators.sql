@@ -80,3 +80,8 @@ select 1 > 0.00001;
 
 -- mod
 select mod(7, 2), mod(7, 0), mod(0, 2), mod(7, null), mod(null, 2), mod(null, null);
+
+-- length
+select BIT_LENGTH('abc');
+select CHARACTER_LENGTH('abc');
+select OCTET_LENGTH('abc');
