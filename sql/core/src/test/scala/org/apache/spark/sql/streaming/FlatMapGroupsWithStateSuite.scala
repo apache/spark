@@ -73,14 +73,15 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       assert(state.hasRemoved === shouldBeRemoved)
     }
 
+    // === Tests for state in streaming queries ===
     // Updating empty state
-    state = new GroupStateImpl[String](None)
+    state = GroupStateImpl.createForStreaming(None, 1, 1, NoTimeout, hasTimedOut = false)
     testState(None)
     state.update("")
     testState(Some(""), shouldBeUpdated = true)
 
     // Updating exiting state
-    state = new GroupStateImpl[String](Some("2"))
+    state = GroupStateImpl.createForStreaming(Some("2"), 1, 1, NoTimeout, hasTimedOut = false)
     testState(Some("2"))
     state.update("3")
     testState(Some("3"), shouldBeUpdated = true)
@@ -99,25 +100,34 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   }
 
   test("GroupState - setTimeout**** with NoTimeout") {
-    for (initState <- Seq(None, Some(5))) {
-      // for different initial state
-      implicit val state = new GroupStateImpl(initState, 1000, 1000, NoTimeout, hasTimedOut = false)
-      testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
-      testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+    for (initValue <- Seq(None, Some(5))) {
+      val states = Seq(
+        GroupStateImpl.createForStreaming(initValue, 1000, 1000, NoTimeout, hasTimedOut = false),
+        GroupStateImpl.createForBatch(NoTimeout)
+      )
+      for (state <- states) {
+        // for streaming queries
+        testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+        testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+
+        // for batch queries
+        testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+        testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+      }
     }
   }
 
   test("GroupState - setTimeout**** with ProcessingTimeTimeout") {
-    implicit var state: GroupStateImpl[Int] = null
-
-    state = new GroupStateImpl[Int](None, 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false)
+    // for streaming queries
+    var state: GroupStateImpl[Int] = GroupStateImpl.createForStreaming(
+      None, 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false)
     assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
     state.setTimeoutDuration(500)
-    assert(state.getTimeoutTimestamp === 1500)    // can be set without initializing state
+    assert(state.getTimeoutTimestamp === 1500) // can be set without initializing state
     testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
 
     state.update(5)
-    assert(state.getTimeoutTimestamp === 1500)    // does not change
+    assert(state.getTimeoutTimestamp === 1500) // does not change
     state.setTimeoutDuration(1000)
     assert(state.getTimeoutTimestamp === 2000)
     state.setTimeoutDuration("2 second")
@@ -125,22 +135,38 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
 
     state.remove()
-    assert(state.getTimeoutTimestamp === 3000)    // does not change
-    state.setTimeoutDuration(500)                 // can still be set
+    assert(state.getTimeoutTimestamp === 3000) // does not change
+    state.setTimeoutDuration(500) // can still be set
     assert(state.getTimeoutTimestamp === 1500)
+    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+
+    // for batch queries
+    state = GroupStateImpl.createForBatch(ProcessingTimeTimeout).asInstanceOf[GroupStateImpl[Int]]
+    assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
+    state.setTimeoutDuration(500)
+    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+
+    state.update(5)
+    state.setTimeoutDuration(1000)
+    state.setTimeoutDuration("2 second")
+    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
+
+    state.remove()
+    state.setTimeoutDuration(500)
     testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
   }
 
   test("GroupState - setTimeout**** with EventTimeTimeout") {
-    implicit val state = new GroupStateImpl[Int](
-      None, 1000, 1000, EventTimeTimeout, hasTimedOut = false)
+    var state: GroupStateImpl[Int] = GroupStateImpl.createForStreaming(
+      None, 1000, 1000, EventTimeTimeout, false)
+
     assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
     testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
     state.setTimeoutTimestamp(5000)
-    assert(state.getTimeoutTimestamp === 5000)    // can be set without initializing state
+    assert(state.getTimeoutTimestamp === 5000) // can be set without initializing state
 
     state.update(5)
-    assert(state.getTimeoutTimestamp === 5000)    // does not change
+    assert(state.getTimeoutTimestamp === 5000) // does not change
     state.setTimeoutTimestamp(10000)
     assert(state.getTimeoutTimestamp === 10000)
     state.setTimeoutTimestamp(new Date(20000))
@@ -150,7 +176,22 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     state.remove()
     assert(state.getTimeoutTimestamp === 20000)
     state.setTimeoutTimestamp(5000)
-    assert(state.getTimeoutTimestamp === 5000)    // can be set after removing state
+    assert(state.getTimeoutTimestamp === 5000) // can be set after removing state
+    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+
+    // for batch queries
+    state = GroupStateImpl.createForBatch(EventTimeTimeout).asInstanceOf[GroupStateImpl[Int]]
+    assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
+    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+    state.setTimeoutTimestamp(5000)
+
+    state.update(5)
+    state.setTimeoutTimestamp(10000)
+    state.setTimeoutTimestamp(new Date(20000))
+    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+
+    state.remove()
+    state.setTimeoutTimestamp(5000)
     testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
   }
 
@@ -165,7 +206,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
     }
 
-    state = new GroupStateImpl(Some(5), 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false)
+    state = GroupStateImpl.createForStreaming(
+      Some(5), 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false)
     testIllegalTimeout {
       state.setTimeoutDuration(-1000)
     }
@@ -182,7 +224,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       state.setTimeoutDuration("1 month -1 day")
     }
 
-    state = new GroupStateImpl(Some(5), 1000, 1000, EventTimeTimeout, hasTimedOut = false)
+    state = GroupStateImpl.createForStreaming(
+      Some(5), 1000, 1000, EventTimeTimeout, hasTimedOut = false)
     testIllegalTimeout {
       state.setTimeoutTimestamp(-10000)
     }
@@ -211,23 +254,32 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
   test("GroupState - hasTimedOut") {
     for (timeoutConf <- Seq(NoTimeout, ProcessingTimeTimeout, EventTimeTimeout)) {
+      // for streaming queries
       for (initState <- Seq(None, Some(5))) {
-        val state1 = new GroupStateImpl(initState, 1000, 1000, timeoutConf, hasTimedOut = false)
+        val state1 = GroupStateImpl.createForStreaming(
+          initState, 1000, 1000, timeoutConf, hasTimedOut = false)
         assert(state1.hasTimedOut === false)
-        val state2 = new GroupStateImpl(initState, 1000, 1000, timeoutConf, hasTimedOut = true)
+
+        val state2 = GroupStateImpl.createForStreaming(
+          initState, 1000, 1000, timeoutConf, hasTimedOut = true)
         assert(state2.hasTimedOut === true)
       }
+
+      // for batch queries
+      assert(GroupStateImpl.createForBatch(timeoutConf).hasTimedOut === false)
     }
   }
 
   test("GroupState - primitive type") {
-    var intState = new GroupStateImpl[Int](None)
+    var intState = GroupStateImpl.createForStreaming[Int](
+      None, 1000, 1000, NoTimeout, hasTimedOut = false)
     intercept[NoSuchElementException] {
       intState.get
     }
     assert(intState.getOption === None)
 
-    intState = new GroupStateImpl[Int](Some(10))
+    intState = GroupStateImpl.createForStreaming[Int](
+      Some(10), 1000, 1000, NoTimeout, hasTimedOut = false)
     assert(intState.get == 10)
     intState.update(0)
     assert(intState.get == 0)
@@ -242,7 +294,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   val currentBatchWatermark = 1000
   val beforeTimeoutThreshold = 999
   val afterTimeoutThreshold = 1001
-
 
   // Tests for StateStoreUpdater.updateStateForKeysWithData() when timeout = NoTimeout
   for (priorState <- Seq(None, Some(0))) {
@@ -748,15 +799,21 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   }
 
   test("mapGroupsWithState - batch") {
-    val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
+    // Test the following
+    // - no initial state
+    // - timeouts operations work, does not throw any error [SPARK-20792]
+    // - works with primitive state type
+    val stateFunc = (key: String, values: Iterator[String], state: GroupState[Int]) => {
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
+      state.setTimeoutTimestamp(0, "1 hour")
+      state.update(10)
       (key, values.size)
     }
 
     checkAnswer(
       spark.createDataset(Seq("a", "a", "b"))
         .groupByKey(x => x)
-        .mapGroupsWithState(stateFunc)
+        .mapGroupsWithState(EventTimeTimeout)(stateFunc)
         .toDF,
       spark.createDataset(Seq(("a", 2), ("b", 1))).toDF)
   }
