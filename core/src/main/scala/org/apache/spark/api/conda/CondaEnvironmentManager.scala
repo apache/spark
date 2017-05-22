@@ -19,6 +19,7 @@ package org.apache.spark.api.conda
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.nio.file.attribute.PosixFilePermission
 
 import scala.collection.JavaConverters._
 import scala.sys.process.BasicIO
@@ -29,6 +30,7 @@ import scala.sys.process.ProcessLogger
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
+import com.google.common.collect.ImmutableSet
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.Json4sScalaModule
 import org.json4s.jackson.JsonMethods
@@ -46,6 +48,8 @@ final class CondaEnvironmentManager(condaBinaryPath: String,
                                     packageDirs: Seq[String] = Nil) extends Logging {
 
   require(verbosity >= 0 && verbosity <= 3, "Verbosity must be between 0 and 3 inclusively")
+
+  CondaEnvironmentManager.ensureExecutable(condaBinaryPath)
 
   lazy val defaultInfo: Map[String, JValue] = {
     logInfo("Retrieving the conda installation's info")
@@ -175,7 +179,19 @@ final class CondaEnvironmentManager(condaBinaryPath: String,
   }
 }
 
-object CondaEnvironmentManager {
+object CondaEnvironmentManager extends Logging {
+  def ensureExecutable(filePath: String): Unit = {
+    val path = Paths.get(filePath)
+    if (!Files.isExecutable(path)) {
+      logInfo(s"Attempting to make file '$filePath' executable")
+      val currentPerms = Files.getPosixFilePermissions(path).asScala
+      val newPerms = ImmutableSet.copyOf(
+        (currentPerms.iterator ++ Iterator(PosixFilePermission.OWNER_EXECUTE)).asJava)
+      Files.setPosixFilePermissions(path, newPerms)
+      require(Files.isExecutable(path), s"File '$filePath' still not executable")
+    }
+  }
+
   def isConfigured(sparkConf: SparkConf): Boolean = {
     sparkConf.contains(CONDA_BINARY_PATH)
   }
