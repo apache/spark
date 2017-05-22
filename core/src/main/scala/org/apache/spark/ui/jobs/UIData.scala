@@ -62,6 +62,7 @@ private[spark] object UIData {
     var numTasks: Int = 0,
     var numActiveTasks: Int = 0,
     var numCompletedTasks: Int = 0,
+    var completedIndices: OpenHashSet[(Int, Int)] = new OpenHashSet[(Int, Int)](),
     var numSkippedTasks: Int = 0,
     var numFailedTasks: Int = 0,
     var reasonToNumKilled: Map[String, Int] = Map.empty,
