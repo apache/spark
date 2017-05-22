@@ -44,6 +44,27 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
   private final long bodyLength;
   private long totalBytesTransferred;
 
+  @Override
+  public FileRegion touch() {
+    return this;
+  }
+
+  @Override
+  public FileRegion touch(Object hint) {
+    return this;
+  }
+
+  @Override
+  public FileRegion retain() {
+    return this;
+  }
+
+  @Override
+  public FileRegion retain(int increment) {
+    return this;
+  }
+
+
   /**
    * When the write buffer size is larger than this limit, I/O will be done in chunks of this size.
    * The size should not be too large as it will waste underlying memory copy. e.g. If network
@@ -92,6 +113,11 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
 
   @Override
   public long transfered() {
+    return transferred();
+  }
+
+  @Override
+  public long transferred() {
     return totalBytesTransferred;
   }
 

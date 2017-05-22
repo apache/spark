@@ -187,6 +187,26 @@ public class TransportCipher {
       this.cos = cos;
       this.byteEncChannel = ch;
     }
+	
+    @Override
+    public FileRegion touch() {
+      return this;
+    }
+
+    @Override
+    public FileRegion touch(Object hint) {
+      return this;
+    }
+
+    @Override
+    public FileRegion retain() {
+      return this;
+    }
+
+    @Override
+    public FileRegion retain(int increment) {
+      return this;
+    }
 
     @Override
     public long count() {
@@ -196,6 +216,11 @@ public class TransportCipher {
     @Override
     public long position() {
       return 0;
+    }
+
+    @Override
+    public long transferred() {
+      return transferred;      
     }
 
     @Override
