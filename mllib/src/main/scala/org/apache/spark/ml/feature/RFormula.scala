@@ -51,8 +51,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
    * +-----------------+---------------------------------------+----------------------------------+
    * | 'frequencyDesc' | most frequent category ('b')          | least frequent category ('c')    |
    * | 'frequencyAsc'  | least frequent category ('c')         | most frequent category ('b')     |
-   * | 'alphabetDesc'  | first alphabetical category ('a')     | last alphabetical category ('c') |
-   * | 'alphabetAsc'   | last alphabetical category ('c')      | first alphabetical category ('a')|
+   * | 'alphabetDesc'  | last alphabetical category ('c')      | first alphabetical category ('a')|
+   * | 'alphabetAsc'   | first alphabetical category ('a')     | last alphabetical category ('c') |
    * +-----------------+---------------------------------------+----------------------------------+
    * }}}
    * Note that this ordering option is NOT used for the label column. When the label column is
