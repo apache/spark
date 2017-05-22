@@ -127,8 +127,8 @@ private[spark] class CompressedMapStatus(
 
 /**
  * A [[MapStatus]] implementation that stores the accurate size of huge blocks, which are larger
- * than both spark.shuffle.accurateBlockThreshold. It stores the average size of other non-empty
- * blocks, plus a bitmap for tracking which blocks are empty.
+ * than spark.shuffle.accurateBlockThreshold. It stores the average size of other non-empty blocks,
+ * plus a bitmap for tracking which blocks are empty.
  *
  * @param loc location where the task is being executed
  * @param numNonEmptyBlocks the number of non-empty blocks
@@ -211,8 +211,8 @@ private[spark] object HighlyCompressedMapStatus {
       val size = uncompressedSizes(i)
       if (size > 0) {
         numNonEmptyBlocks += 1
-        // Remove the huge blocks from the calculation for average size and have accurate size for
-        // smaller blocks.
+        // Huge blocks are not included in the calculation for average size, thus size for smaller
+        // blocks is more accurate.
         if (size < threshold) {
           totalSize += size
         } else {
