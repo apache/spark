@@ -1142,7 +1142,7 @@ object functions {
 
   /**
    * Generate a random column with independent and identically distributed (i.i.d.) samples
-   * from U[0.0, 1.0].
+   * from U[0.0, 1.0).
    *
    * @note This is indeterministic when data partitions are not fixed.
    *
@@ -1153,7 +1153,7 @@ object functions {
 
   /**
    * Generate a random column with independent and identically distributed (i.i.d.) samples
-   * from U[0.0, 1.0].
+   * from U[0.0, 1.0).
    *
    * @group normal_funcs
    * @since 1.4.0
