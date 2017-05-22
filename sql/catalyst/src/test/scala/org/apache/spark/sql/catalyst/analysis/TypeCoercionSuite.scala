@@ -353,10 +353,9 @@ class TypeCoercionSuite extends PlanTest {
     widenTest(DoubleType, DoubleType, Some(DoubleType))
 
     // Integral mixed with floating point.
-    widenTest(IntegerType, FloatType, Some(FloatType))
+    widenTest(IntegerType, FloatType, Some(DoubleType))
     widenTest(IntegerType, DoubleType, Some(DoubleType))
-    widenTest(IntegerType, DoubleType, Some(DoubleType))
-    widenTest(LongType, FloatType, Some(FloatType))
+    widenTest(LongType, FloatType, Some(DoubleType))
     widenTest(LongType, DoubleType, Some(DoubleType))
 
     // No up-casting for fixed-precision decimal (this is handled by arithmetic rules)
@@ -552,9 +551,9 @@ class TypeCoercionSuite extends PlanTest {
         :: Literal.create(2.0, FloatType)
         :: Literal("b")
         :: Nil),
-      CreateMap(Cast(Literal(1), FloatType)
+      CreateMap(Cast(Literal(1), DoubleType)
         :: Literal("a")
-        :: Cast(Literal.create(2.0, FloatType), FloatType)
+        :: Cast(Literal.create(2.0, FloatType), DoubleType)
         :: Literal("b")
         :: Nil))
     ruleTest(TypeCoercion.FunctionArgumentConversion,
@@ -675,6 +674,28 @@ class TypeCoercionSuite extends PlanTest {
 
   test("type coercion for If") {
     val rule = TypeCoercion.IfCoercion
+    val intLit = Literal.create(123, IntegerType)
+    val longLit = Literal.create(1234567890, LongType)
+    val trueLit = Literal.create(true, BooleanType)
+    val floatLit = Literal.create(1.0f, FloatType)
+    val doubleLit = Literal.create(1.0, DoubleType)
+    val decimalLit = Literal(new java.math.BigDecimal("10000000000000000000"))
+    val decimalLit2 = Literal(new java.math.BigDecimal("100000000000000.1234567890123"))
+    ruleTest(rule,
+      If(trueLit, decimalLit2, decimalLit),
+      If(trueLit, Cast(decimalLit2, DecimalType(33, 13)), Cast(decimalLit, DecimalType(33, 13))))
+
+    ruleTest(rule,
+      If(trueLit, intLit, floatLit),
+      If(trueLit, Cast(intLit, DoubleType), Cast(floatLit, DoubleType)))
+
+    ruleTest(rule,
+      If(trueLit, longLit, doubleLit),
+      If(trueLit, Cast(longLit, DoubleType), doubleLit))
+
+    ruleTest(rule,
+      If(trueLit, floatLit, longLit),
+      If(trueLit, Cast(floatLit, DoubleType), Cast(longLit, DoubleType)))
 
     ruleTest(rule,
       If(Literal(true), Literal(1), Literal(1L)),

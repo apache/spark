@@ -89,7 +89,14 @@ object TypeCoercion {
     case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
       Some(t1)
 
+    case (_: IntegerType, _: FloatType) | (_: FloatType, _: IntegerType) =>
+      Some(DoubleType)
+    // This situation can only do our best
+    case (_: FloatType, _: LongType) | (_: LongType, _: FloatType) =>
+      Some(DoubleType)
+
     // Promote numeric types to the highest of the two
+    // loss of precision when widening long and double
     case (t1: NumericType, t2: NumericType)
         if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
       val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
