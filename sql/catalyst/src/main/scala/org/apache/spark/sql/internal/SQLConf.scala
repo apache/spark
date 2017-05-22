@@ -303,7 +303,7 @@ object SQLConf {
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
       .doc("When true, enable metastore partition management for file source tables as well. " +
-           "This includes both datasource and converted Hive tables. When partition managment " +
+           "This includes both datasource and converted Hive tables. When partition management " +
            "is enabled, datasource tables store partition in the Hive metastore, and use the " +
            "metastore to prune partitions during query planning.")
       .booleanConf
