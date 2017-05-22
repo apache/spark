@@ -326,14 +326,12 @@ struct<CEIL(CAST(0 AS DOUBLE)):bigint>
 0
 
 
-
 -- !query 39
 select ceiling(1)
 -- !query 39 schema
 struct<CEIL(CAST(1 AS DOUBLE)):bigint>
 -- !query 39 output
 1
-
 
 
 -- !query 40
