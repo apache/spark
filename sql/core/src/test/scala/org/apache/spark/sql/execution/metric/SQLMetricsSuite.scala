@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.{AccumulatorContext, JsonProtocol}
+import org.apache.spark.util.{AccumulatorContext, JsonProtocol, Utils}
 
 class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
@@ -88,6 +88,55 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       // Since we cannot track all jobs, the metric values could be wrong and we should not check
       // them.
       logWarning("Due to a race condition, we miss some jobs and cannot verify the metric values")
+    }
+  }
+
+  /**
+   * Run the given function and return latest execution metrics.
+   *
+   * @param func the given function to run.
+   */
+  private def getLatestExecutionId(func: () => Unit): Long = {
+    val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
+    // Run the given function to trigger query execution.
+    func()
+    sparkContext.listenerBus.waitUntilEmpty(10000)
+    val executionIds =
+      spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)
+    assert(executionIds.size === 1)
+    executionIds.head
+  }
+
+  /**
+   * Get execution metrics for the given execution id and verify metrics values.
+   *
+   * @param executionId the given execution id.
+   * @param expectedValues expected metrics values. If `None` is given for a metric, only verify
+   *                       its existence.
+   */
+  private def verifyWriteDataMetrics(executionId: Long, expectedValues: Seq[Option[Int]]): Unit = {
+    val executionData = spark.sharedState.listener.getExecution(executionId).get
+    val writeDataNode = executionData.physicalPlanGraph.nodes.filter { node =>
+      node.name == "WriteDataFileOut"
+    }.head
+
+    val metricsNames = Seq(
+      "number of written files",
+      "number of dynamic part",
+      "bytes of written files",
+      "number of output rows",
+      "writing data out time (ms)")
+
+    val metrics =
+      spark.sharedState.listener.getExecutionMetrics(executionId)
+
+    metricsNames.zip(expectedValues).foreach { case (metricsName, expectedValue) =>
+      val sqlMetric = writeDataNode.metrics.find(_.name == metricsName).get
+      val accumulatorId = sqlMetric.accumulatorId
+      val metricValue = metrics(accumulatorId)
+      expectedValue.foreach { expected =>
+        assert(metricValue.toInt == expected)
+      }
     }
   }
 
@@ -285,6 +334,65 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
           0L -> ("CartesianProduct", Map("number of output rows" -> 12L)))
         )
       }
+    }
+  }
+
+  test("WriteDataFileOutExec metrics") {
+    withTable("writeToTable") {
+      val executionId1 = getLatestExecutionId { () =>
+        Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("writeToTable")
+      }
+      // written 1 file, 1 row, 0 dynamic partition.
+      val expectedValues1 = Seq(Some(1), Some(0), None, Some(1), None)
+      verifyWriteDataMetrics(executionId1, expectedValues1)
+
+      val executionId2 = getLatestExecutionId { () =>
+        Seq((3, 4), (5, 6), (7, 8)).toDF("i", "j").repartition(1)
+          .write.insertInto("writeToTable")
+      }
+      // written 1 file, 3 rows, 0 dynamic partition.
+      val expectedValues2 = Seq(Some(1), Some(0), None, Some(3), None)
+      verifyWriteDataMetrics(executionId2, expectedValues2)
+
+      val executionId3 = getLatestExecutionId { () =>
+        Seq((9, 10), (11, 12)).toDF("i", "j").repartition(2)
+          .write.insertInto("writeToTable")
+      }
+      // written 2 files, 2 rows, 0 dynamic partition.
+      val expectedValues3 = Seq(Some(2), Some(0), None, Some(2), None)
+      verifyWriteDataMetrics(executionId3, expectedValues3)
+    }
+  }
+
+  test("WriteDataFileOutExec metrics: dynamic partition") {
+    withTempDir { f =>
+      val df =
+        spark.range(start = 0, end = 4, step = 1, numPartitions = 1).selectExpr("id", "id id1")
+      val executionId1 = getLatestExecutionId { () =>
+        df
+          .write
+          .partitionBy("id")
+          .option("maxRecordsPerFile", 1)
+          .mode("overwrite")
+          .parquet(f.getAbsolutePath)
+      }
+      assert(Utils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
+      // written 4 files, 4 rows, 4 dynamic partitions.
+      val expectedValues1 = Seq(Some(4), Some(4), None, Some(4), None)
+      verifyWriteDataMetrics(executionId1, expectedValues1)
+
+      val executionId2 = getLatestExecutionId { () =>
+        df.union(df).repartition(2, $"id")
+          .write
+          .partitionBy("id")
+          .option("maxRecordsPerFile", 2)
+          .mode("overwrite")
+          .parquet(f.getAbsolutePath)
+      }
+      assert(Utils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
+      // written 4 files, 8 rows, 4 dynamic partitions.
+      val expectedValues2 = Seq(Some(4), Some(4), None, Some(8), None)
+      verifyWriteDataMetrics(executionId2, expectedValues2)
     }
   }
 

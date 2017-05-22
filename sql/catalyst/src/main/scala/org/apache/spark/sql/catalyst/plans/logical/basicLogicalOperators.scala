@@ -912,3 +912,8 @@ case class Deduplicate(
 
   override def output: Seq[Attribute] = child.output
 }
+
+/** A logical plan for writing out data file. */
+case class WriteDataFileOut(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
