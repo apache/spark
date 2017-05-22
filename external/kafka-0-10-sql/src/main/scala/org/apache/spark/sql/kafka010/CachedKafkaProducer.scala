@@ -18,12 +18,15 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.concurrent.{ConcurrentMap, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
+import com.google.common.cache._
+import org.apache.kafka.clients.producer.KafkaProducer
+import scala.collection.JavaConverters._
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
-
-import org.apache.kafka.clients.producer.KafkaProducer
+import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 
@@ -31,21 +34,42 @@ private[kafka010] object CachedKafkaProducer extends Logging {
 
   private type Producer = KafkaProducer[Array[Byte], Array[Byte]]
 
-  @GuardedBy("this")
-  private val cacheMap = new mutable.HashMap[String, Producer]()
+  private val cacheExpireTimeout: Long = System.getProperty("spark.kafka.guava.cache.timeout",
+    "10").toLong
+
+  private val noneReturningLoader = new CacheLoader[String, Option[Producer]] {
+    override def load(key: String): Option[Producer] = {
+      None
+    }
+  }
+
+  private val removalListener = new RemovalListener[String, Option[Producer]]() {
+    override def onRemoval(notification: RemovalNotification[String, Option[Producer]]): Unit = {
+      val uid: String = notification.getKey
+      val producer = notification.getValue
+      log.debug(s"Evicting kafka producer $producer uid:$uid, due to ${notification.getCause}")
+      producer.foreach(x => close(uid, x))
+    }
+  }
+
+  private val guavaCache: Cache[String, Option[Producer]] = CacheBuilder.newBuilder()
+    .recordStats()
+    .expireAfterAccess(cacheExpireTimeout, TimeUnit.MINUTES)
+    .removalListener(removalListener)
+    .build[String, Option[Producer]](noneReturningLoader)
 
   private def createKafkaProducer(
     producerConfiguration: ju.Map[String, Object]): Producer = {
     val uid = getUniqueId(producerConfiguration)
     val kafkaProducer: Producer = new Producer(producerConfiguration)
-    cacheMap.put(uid.toString, kafkaProducer)
+    guavaCache.put(uid.toString, Some(kafkaProducer))
     log.debug(s"Created a new instance of KafkaProducer for $producerConfiguration.")
     kafkaProducer
   }
 
   private def getUniqueId(kafkaParams: ju.Map[String, Object]): String = {
     val uid = kafkaParams.get(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId)
-    assert(uid != null, s"KafkaParams($kafkaParams) not canonicalized")
+    assert(uid != null, s"KafkaParams($kafkaParams) not canonicalized.")
     uid.toString
   }
 
@@ -62,30 +86,39 @@ private[kafka010] object CachedKafkaProducer extends Logging {
       kafkaParams
     }
     val uid = getUniqueId(params)
-    cacheMap.getOrElse(uid.toString, createKafkaProducer(params))
+    Option(guavaCache.getIfPresent(uid)).flatten.getOrElse(createKafkaProducer(params))
   }
 
-  private[kafka010] def close(kafkaParams: ju.Map[String, Object]): Unit = synchronized {
+  /** For explicitly closing kafka producer */
+  private[kafka010] def close(kafkaParams: ju.Map[String, Object]): Unit = {
     val params = if (!CanonicalizeKafkaParams.isCanonicalized(kafkaParams)) {
       CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
     } else kafkaParams
     val uid = getUniqueId(params)
 
-    val producer: Option[Producer] = cacheMap.remove(uid)
-    if (producer.isDefined) {
-      log.info(s"Closing the KafkaProducer with config: $params")
-      CanonicalizeKafkaParams.remove(kafkaParams)
-      producer.foreach(_.close())
-    } else {
-      log.warn(s"No KafkaProducer found in cache for $kafkaParams.")
+    guavaCache.invalidate(uid)
+  }
+
+  /** Auto close on cache evict */
+  private def close(uid: String, producer: Producer): Unit = {
+    try {
+      val outcome = CanonicalizeKafkaParams.remove(
+        new ju.HashMap[String, Object](
+          Map(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId -> uid).asJava))
+      logDebug(s"Removed kafka params from cache: $outcome.")
+      logInfo(s"Closing the KafkaProducer with uid $uid.")
+      producer.close()
+    } catch {
+      case NonFatal(e) => log.warn("Error while closing kafka producer.", e)
     }
   }
 
   // Intended for testing purpose only.
   private def clear(): Unit = {
-    cacheMap.foreach(x => x._2.close())
-    cacheMap.clear()
+    guavaCache.invalidateAll()
   }
+
+  private def getAsMap: ConcurrentMap[String, Option[Producer]] = guavaCache.asMap()
 }
 
 /**
@@ -95,8 +128,6 @@ private[kafka010] object CachedKafkaProducer extends Logging {
  */
 private[kafka010] object CanonicalizeKafkaParams extends Logging {
 
-  import scala.collection.JavaConverters._
-
   @GuardedBy("this")
   private val registryMap = mutable.HashMap[String, String]()
 
@@ -105,7 +136,7 @@ private[kafka010] object CanonicalizeKafkaParams extends Logging {
 
   private def generateRandomUUID(kafkaParams: String): String = {
     val uuid = ju.UUID.randomUUID().toString
-    logDebug(s"Generating a new unique id:$uuid for kafka params: $kafkaParams")
+    logDebug(s"Generating a new unique id: $uuid for kafka params: $kafkaParams")
     registryMap.put(kafkaParams, uuid)
     uuid
   }
@@ -119,7 +150,7 @@ private[kafka010] object CanonicalizeKafkaParams extends Logging {
     if (isCanonicalized(kafkaParams)) {
       logWarning(s"A unique id,$sparkKafkaParamsUniqueId ->" +
         s" ${kafkaParams.get(sparkKafkaParamsUniqueId)}" +
-        s" already exists in kafka params, returning Kafka Params:$kafkaParams as is.")
+        s" already exists in kafka params, returning Kafka Params: $kafkaParams as is.")
      kafkaParams
     } else {
       val sortedMap = SortedMap.empty[String, Object] ++ kafkaParams.asScala
@@ -142,5 +173,4 @@ private[kafka010] object CanonicalizeKafkaParams extends Logging {
   private[kafka010] def clear(): Unit = {
     registryMap.clear()
   }
-
 }

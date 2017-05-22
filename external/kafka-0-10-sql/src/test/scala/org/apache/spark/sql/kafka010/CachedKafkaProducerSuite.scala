@@ -18,8 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-
-import scala.collection.mutable
+import java.util.concurrent.ConcurrentMap
 
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.common.serialization.ByteArraySerializer
@@ -50,7 +49,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams2)
     assert(producer == producer2)
 
-    val cacheMap = PrivateMethod[mutable.HashMap[Int, KP]]('cacheMap)
+    val cacheMap = PrivateMethod[ConcurrentMap[String, Option[KP]]]('getAsMap)
     val map = CachedKafkaProducer.invokePrivate(cacheMap())
     assert(map.size == 1)
   }
@@ -70,7 +69,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     // With updated conf, a new producer instance should be created.
     assert(producer != producer2)
 
-    val cacheMap = PrivateMethod[mutable.HashMap[Int, KP]]('cacheMap)
+    val cacheMap = PrivateMethod[ConcurrentMap[String, Option[KP]]]('getAsMap)
     val map = CachedKafkaProducer.invokePrivate(cacheMap())
     assert(map.size == 2)
 
