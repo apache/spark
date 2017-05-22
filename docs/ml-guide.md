@@ -71,21 +71,24 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 The list below highlights some of the new features and enhancements added to MLlib in the `2.2`
 release of Spark:
 
-* `ALS` methods for _top-k_ recommendations for all users or items, matching the functionality
- in `mllib` ([SPARK-19535](https://issues.apache.org/jira/browse/SPARK-19535)). Performance
- was also improved for both `ml` and `mllib`
+* [`ALS`](ml-collaborative-filtering.html) methods for _top-k_ recommendations for all
+ users or items, matching the functionality in `mllib`
+ ([SPARK-19535](https://issues.apache.org/jira/browse/SPARK-19535)).
+ Performance was also improved for both `ml` and `mllib`
  ([SPARK-11968](https://issues.apache.org/jira/browse/SPARK-11968) and
  [SPARK-20587](https://issues.apache.org/jira/browse/SPARK-20587))
-* `Correlation` and `ChiSquareTest` stats functions for `DataFrames`
+* [`Correlation`](ml-statistics.html#correlation) and
+ [`ChiSquareTest`](ml-statistics.html#hypothesis-testing) stats functions for `DataFrames`
  ([SPARK-19636](https://issues.apache.org/jira/browse/SPARK-19636) and
  [SPARK-19635](https://issues.apache.org/jira/browse/SPARK-19635))
-* `FPGrowth` algorithm for frequent pattern mining
+* [`FPGrowth`](ml-frequent-pattern-mining.html#fp-growth) algorithm for frequent pattern mining
  ([SPARK-14503](https://issues.apache.org/jira/browse/SPARK-14503))
 * `GLM` now supports the full `Tweedie` family
  ([SPARK-18929](https://issues.apache.org/jira/browse/SPARK-18929))
-* `Imputer` feature transformer to impute missing values in a dataset
+* [`Imputer`](ml-features.html#imputer) feature transformer to impute missing values in a dataset
  ([SPARK-13568](https://issues.apache.org/jira/browse/SPARK-13568))
-* `LinearSVC` for linear Support Vector Machine classification
+* [`LinearSVC`](ml-classification-regression.html#linear-support-vector-machine)
+ for linear Support Vector Machine classification
  ([SPARK-14709](https://issues.apache.org/jira/browse/SPARK-14709))
 * Logistic regression now supports constraints on the coefficients during training
  ([SPARK-20047](https://issues.apache.org/jira/browse/SPARK-20047))
