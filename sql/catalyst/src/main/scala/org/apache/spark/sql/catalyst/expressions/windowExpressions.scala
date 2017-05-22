@@ -77,7 +77,6 @@ case class WindowSpecDefinition(
       frameSpecification.isInstanceOf[SpecifiedWindowFrame]
 
   override def nullable: Boolean = true
-  override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException
 
   override def sql: String = {
