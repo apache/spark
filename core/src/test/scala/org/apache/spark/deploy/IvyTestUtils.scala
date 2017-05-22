@@ -250,11 +250,15 @@ private[deploy] object IvyTestUtils {
         attr.put(Name.MANIFEST_VERSION, "1.0")
         attr.put(new Name("Spark-HasRPackage"), "true")
         mani
-      } else null
+      } else {
+        null
+      }
     }
     val jarStream = if (manifest != null) {
       new JarOutputStream(jarFileStream, manifest)
-    } else new JarOutputStream(jarFileStream)
+    } else {
+      new JarOutputStream(jarFileStream)
+    }
 
     for (file <- files) {
       val jarEntry = new JarEntry(file._1)
