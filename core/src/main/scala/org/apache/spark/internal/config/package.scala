@@ -244,8 +244,8 @@ package object config {
     ConfigBuilder("spark.redaction.regex")
       .doc("Regex to decide which Spark configuration properties and environment variables in " +
         "driver and executor environments contain sensitive information. When this regex matches " +
-        "a property, its value is redacted from the environment UI and various logs like YARN " +
-        "and event logs.")
+        "a property key or value, the value is redacted from the environment UI and various logs " +
+        "like YARN and event logs.")
       .regexConf
       .createWithDefault("(?i)secret|password".r)
 
@@ -271,5 +271,20 @@ package object config {
     ConfigBuilder("spark.network.crypto.enabled")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val CHECKPOINT_COMPRESS =
+    ConfigBuilder("spark.checkpoint.compress")
+      .doc("Whether to compress RDD checkpoints. Generally a good idea. Compression will use " +
+        "spark.io.compression.codec.")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SHUFFLE_ACCURATE_BLOCK_THRESHOLD =
+    ConfigBuilder("spark.shuffle.accurateBlockThreshold")
+      .doc("When we compress the size of shuffle blocks in HighlyCompressedMapStatus, we will " +
+        "record the size accurately if it's above this config. This helps to prevent OOM by " +
+        "avoiding underestimating shuffle block size when fetch shuffle blocks.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(100 * 1024 * 1024)
 
 }

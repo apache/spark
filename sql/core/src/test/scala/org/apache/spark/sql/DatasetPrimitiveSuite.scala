@@ -339,6 +339,11 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
       LHMapClass(LHMap(1 -> 2)) -> LHMap("test" -> MapClass(Map(3 -> 4))))
   }
 
+  test("nested sequences") {
+    checkDataset(Seq(Seq(Seq(1))).toDS(), Seq(Seq(1)))
+    checkDataset(Seq(List(Queue(1))).toDS(), List(Queue(1)))
+  }
+
   test("package objects") {
     import packageobject._
     checkDataset(Seq(PackageClass(1)).toDS(), PackageClass(1))

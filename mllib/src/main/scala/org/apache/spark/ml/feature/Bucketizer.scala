@@ -114,9 +114,9 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
     val bucketizer: UserDefinedFunction = udf { (feature: Double) =>
       Bucketizer.binarySearchForBuckets($(splits), feature, keepInvalid)
-    }
+    }.withName("bucketizer")
 
-    val newCol = bucketizer(filteredDataset($(inputCol)))
+    val newCol = bucketizer(filteredDataset($(inputCol)).cast(DoubleType))
     val newField = prepOutputField(filteredDataset.schema)
     filteredDataset.withColumn($(outputCol), newCol, newField.metadata)
   }
@@ -130,7 +130,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(inputCol))
     SchemaUtils.appendColumn(schema, prepOutputField(schema))
   }
 

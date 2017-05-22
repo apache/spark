@@ -83,7 +83,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * @param join  when true, each output row is implicitly joined with the input tuple that produced
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
- *              given `generator` is empty. `outer` has no effect when `join` is false.
+ *              given `generator` is empty.
  * @param qualifier Qualifier for the attributes of generator(UDTF)
  * @param generatorOutput The output schema of the Generator.
  * @param child Children logical plan node
@@ -410,17 +410,20 @@ case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) exten
  *                  would have Map('a' -> Some('1'), 'b' -> None).
  * @param query the logical plan representing data to write to.
  * @param overwrite overwrite existing table or partitions.
- * @param ifNotExists If true, only write if the table or partition does not exist.
+ * @param ifPartitionNotExists If true, only write if the partition does not exist.
+ *                             Only valid for static partitions.
  */
 case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifNotExists: Boolean)
+    ifPartitionNotExists: Boolean)
   extends LogicalPlan {
-  assert(overwrite || !ifNotExists)
-  assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
+  // IF NOT EXISTS is only valid in INSERT OVERWRITE
+  assert(overwrite || !ifPartitionNotExists)
+  // IF NOT EXISTS is only valid in static partitions
+  assert(partition.values.forall(_.nonEmpty) || !ifPartitionNotExists)
 
   // We don't want `table` in children as sometimes we don't want to transform it.
   override def children: Seq[LogicalPlan] = query :: Nil
@@ -704,7 +707,7 @@ case class Expand(
  * We will transform GROUPING SETS into logical plan Aggregate(.., Expand) in Analyzer
  *
  * @param selectedGroupByExprs A sequence of selected GroupBy expressions, all exprs should
- *                     exists in groupByExprs.
+ *                     exist in groupByExprs.
  * @param groupByExprs The Group By expressions candidates.
  * @param child        Child operator
  * @param aggregations The Aggregation expressions, those non selected group by expressions
@@ -798,6 +801,12 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
 }
 
+/**
+ * Aliased subquery.
+ *
+ * @param alias the alias name for this subquery.
+ * @param child the logical plan of this subquery.
+ */
 case class SubqueryAlias(
     alias: String,
     child: LogicalPlan)

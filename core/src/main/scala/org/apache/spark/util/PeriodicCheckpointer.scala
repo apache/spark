@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.impl
+package org.apache.spark.util
 
 import scala.collection.mutable
 
@@ -58,7 +58,7 @@ import org.apache.spark.storage.StorageLevel
  * @param sc  SparkContext for the Datasets given to this checkpointer
  * @tparam T  Dataset type, such as RDD[Double]
  */
-private[mllib] abstract class PeriodicCheckpointer[T](
+private[spark] abstract class PeriodicCheckpointer[T](
     val checkpointInterval: Int,
     val sc: SparkContext) extends Logging {
 
@@ -126,6 +126,16 @@ private[mllib] abstract class PeriodicCheckpointer[T](
 
   /** Get list of checkpoint files for this given Dataset */
   protected def getCheckpointFiles(data: T): Iterable[String]
+
+  /**
+   * Call this to unpersist the Dataset.
+   */
+  def unpersistDataSet(): Unit = {
+    while (persistedQueue.nonEmpty) {
+      val dataToUnpersist = persistedQueue.dequeue()
+      unpersist(dataToUnpersist)
+    }
+  }
 
   /**
    * Call this at the end to delete any remaining checkpoint files.

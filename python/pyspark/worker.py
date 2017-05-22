@@ -87,22 +87,19 @@ def read_single_udf(pickleSer, infile):
 
 def read_udfs(pickleSer, infile):
     num_udfs = read_int(infile)
-    if num_udfs == 1:
-        # fast path for single UDF
-        _, udf = read_single_udf(pickleSer, infile)
-        mapper = lambda a: udf(*a)
-    else:
-        udfs = {}
-        call_udf = []
-        for i in range(num_udfs):
-            arg_offsets, udf = read_single_udf(pickleSer, infile)
-            udfs['f%d' % i] = udf
-            args = ["a[%d]" % o for o in arg_offsets]
-            call_udf.append("f%d(%s)" % (i, ", ".join(args)))
-        # Create function like this:
-        #   lambda a: (f0(a0), f1(a1, a2), f2(a3))
-        mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
-        mapper = eval(mapper_str, udfs)
+    udfs = {}
+    call_udf = []
+    for i in range(num_udfs):
+        arg_offsets, udf = read_single_udf(pickleSer, infile)
+        udfs['f%d' % i] = udf
+        args = ["a[%d]" % o for o in arg_offsets]
+        call_udf.append("f%d(%s)" % (i, ", ".join(args)))
+    # Create function like this:
+    #   lambda a: (f0(a0), f1(a1, a2), f2(a3))
+    # In the special case of a single UDF this will return a single result rather
+    # than a tuple of results; this is the format that the JVM side expects.
+    mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
+    mapper = eval(mapper_str, udfs)
 
     func = lambda _, it: map(mapper, it)
     ser = BatchedSerializer(PickleSerializer(), 100)

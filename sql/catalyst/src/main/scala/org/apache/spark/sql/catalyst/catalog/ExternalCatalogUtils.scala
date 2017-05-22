@@ -155,7 +155,7 @@ object ExternalCatalogUtils {
         })
 
       inputPartitions.filter { p =>
-        boundPredicate(p.toRow(partitionSchema, defaultTimeZoneId))
+        boundPredicate.eval(p.toRow(partitionSchema, defaultTimeZoneId))
       }
     }
   }
