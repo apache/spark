@@ -96,11 +96,12 @@ case class AnalyzeColumnCommand(
       attributesToAnalyze.map(ColumnStat.statExprs(_, ndvMaxErr))
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
-    val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation)).head()
+    val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation))
+      .queryExecution.executedPlan.executeTake(1).head
 
     val rowCount = statsRow.getLong(0)
     val columnStats = attributesToAnalyze.zipWithIndex.map { case (attr, i) =>
-      (attr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1), attr))
+      (attr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1, 6), attr))
     }.toMap
     (rowCount, columnStats)
   }

@@ -179,9 +179,9 @@ class Dataset[T] private[sql](
     // to happen right away to let these side effects take place eagerly.
     queryExecution.analyzed match {
       case c: Command =>
-        LocalRelation(c.output, queryExecution.executedPlan.executeCollect())
+        LocalRelation(c.output, withAction("command", queryExecution)(_.executeCollect()))
       case u @ Union(children) if children.forall(_.isInstanceOf[Command]) =>
-        LocalRelation(u.output, queryExecution.executedPlan.executeCollect())
+        LocalRelation(u.output, withAction("command", queryExecution)(_.executeCollect()))
       case _ =>
         queryExecution.analyzed
     }
@@ -2450,6 +2450,11 @@ class Dataset[T] private[sql](
    */
   def take(n: Int): Array[T] = head(n)
 
+  // An internal version of `take`, which won't set execution id and trigger listeners.
+  private[sql] def takeInternal(n: Int): Array[T] = {
+    queryExecution.executedPlan.executeTake(1).map(boundEnc.fromRow)
+  }
+
   /**
    * Returns the first `n` rows in the Dataset as a list.
    *
@@ -2513,6 +2518,11 @@ class Dataset[T] private[sql](
    */
   def count(): Long = withAction("count", groupBy().count().queryExecution) { plan =>
     plan.executeCollect().head.getLong(0)
+  }
+
+  // An internal version of `count`, which won't set execution id and trigger listeners.
+  private[sql] def countInternal(): Long = {
+    groupBy().count().queryExecution.executedPlan.executeCollect().head.getLong(0)
   }
 
   /**
@@ -2744,7 +2754,7 @@ class Dataset[T] private[sql](
     createTempViewCommand(viewName, replace = false, global = true)
   }
 
-  private def createTempViewCommand(
+  private[sql] def createTempViewCommand(
       viewName: String,
       replace: Boolean,
       global: Boolean): CreateViewCommand = {
@@ -2937,17 +2947,17 @@ class Dataset[T] private[sql](
   }
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
-  @inline private def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
+  @inline private def withPlan(logicalPlan: LogicalPlan): DataFrame = {
     Dataset.ofRows(sparkSession, logicalPlan)
   }
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */
-  @inline private def withTypedPlan[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
+  @inline private def withTypedPlan[U : Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
     Dataset(sparkSession, logicalPlan)
   }
 
   /** A convenient function to wrap a set based logical plan and produce a Dataset. */
-  @inline private def withSetOperator[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
+  @inline private def withSetOperator[U : Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
     if (classTag.runtimeClass.isAssignableFrom(classOf[Row])) {
       // Set operators widen types (change the schema), so we cannot reuse the row encoder.
       Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
