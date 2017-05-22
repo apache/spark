@@ -38,7 +38,7 @@ package org.apache.spark.util.collection;
 import java.util.Comparator;
 
 /**
- * A port of the Android TimSort class, which utilizes a "stable, adaptive, iterative mergesort."
+ * A part of the Android TimSort class, which utilizes a "stable, adaptive, iterative mergesort."
  * See the method comment on sort() for more details.
  *
  * This has been kept in Java with the original style in order to match very closely with the
