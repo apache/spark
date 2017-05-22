@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
+import org.apache.spark.deploy.kubernetes.submit.{LoggingPodStatusWatcher, LoggingPodStatusWatcherImpl}
 import org.apache.spark.deploy.rest.kubernetes.v2.ResourceStagingServerSslOptionsProviderImpl
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
@@ -48,9 +49,11 @@ private[spark] class Client(
     appArgs: Array[String],
     sparkJars: Seq[String],
     sparkFiles: Seq[String],
+    waitForAppCompletion: Boolean,
     kubernetesClientProvider: SubmissionKubernetesClientProvider,
     initContainerComponentsProvider: DriverInitContainerComponentsProvider,
-    kubernetesCredentialsMounterProvider: DriverPodKubernetesCredentialsMounterProvider)
+    kubernetesCredentialsMounterProvider: DriverPodKubernetesCredentialsMounterProvider,
+    loggingPodStatusWatcher: LoggingPodStatusWatcher)
     extends Logging {
 
   private val kubernetesDriverPodName = sparkConf.get(KUBERNETES_DRIVER_POD_NAME)
@@ -186,27 +189,40 @@ private[spark] class Client(
           .endContainer()
         .endSpec()
         .build()
-      val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
-      try {
-        val driverOwnedResources = Seq(initContainerConfigMap) ++
-          maybeSubmittedDependenciesSecret.toSeq ++
-          credentialsSecret.toSeq
-        val driverPodOwnerReference = new OwnerReferenceBuilder()
-          .withName(createdDriverPod.getMetadata.getName)
-          .withApiVersion(createdDriverPod.getApiVersion)
-          .withUid(createdDriverPod.getMetadata.getUid)
-          .withKind(createdDriverPod.getKind)
-          .withController(true)
-          .build()
-        driverOwnedResources.foreach { resource =>
-          val originalMetadata = resource.getMetadata
-          originalMetadata.setOwnerReferences(Collections.singletonList(driverPodOwnerReference))
+      Utils.tryWithResource(
+          kubernetesClient
+              .pods()
+              .withName(resolvedDriverPod.getMetadata.getName)
+              .watch(loggingPodStatusWatcher)) { _ =>
+        val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
+        try {
+          val driverOwnedResources = Seq(initContainerConfigMap) ++
+            maybeSubmittedDependenciesSecret.toSeq ++
+            credentialsSecret.toSeq
+          val driverPodOwnerReference = new OwnerReferenceBuilder()
+            .withName(createdDriverPod.getMetadata.getName)
+            .withApiVersion(createdDriverPod.getApiVersion)
+            .withUid(createdDriverPod.getMetadata.getUid)
+            .withKind(createdDriverPod.getKind)
+            .withController(true)
+            .build()
+          driverOwnedResources.foreach { resource =>
+            val originalMetadata = resource.getMetadata
+            originalMetadata.setOwnerReferences(Collections.singletonList(driverPodOwnerReference))
+          }
+          kubernetesClient.resourceList(driverOwnedResources: _*).createOrReplace()
+        } catch {
+          case e: Throwable =>
+            kubernetesClient.pods().delete(createdDriverPod)
+            throw e
         }
-        kubernetesClient.resourceList(driverOwnedResources: _*).createOrReplace()
-      } catch {
-        case e: Throwable =>
-          kubernetesClient.pods().delete(createdDriverPod)
-          throw e
+        if (waitForAppCompletion) {
+          logInfo(s"Waiting for application $kubernetesAppId to finish...")
+          loggingPodStatusWatcher.awaitCompletion()
+          logInfo(s"Application $kubernetesAppId finished.")
+        } else {
+          logInfo(s"Deployed Spark application $kubernetesAppId into Kubernetes.")
+        }
       }
     }
   }
@@ -274,6 +290,9 @@ private[spark] object Client {
     val kubernetesClientProvider = new SubmissionKubernetesClientProviderImpl(sparkConf)
     val kubernetesCredentialsMounterProvider =
         new DriverPodKubernetesCredentialsMounterProviderImpl(sparkConf, kubernetesAppId)
+    val waitForAppCompletion = sparkConf.get(WAIT_FOR_APP_COMPLETION)
+    val loggingInterval = Option(sparkConf.get(REPORT_INTERVAL)).filter( _ => waitForAppCompletion)
+    val loggingPodStatusWatcher = new LoggingPodStatusWatcherImpl(kubernetesAppId, loggingInterval)
     new Client(
       appName,
       kubernetesAppId,
@@ -282,8 +301,10 @@ private[spark] object Client {
       appArgs,
       sparkJars,
       sparkFiles,
+      waitForAppCompletion,
       kubernetesClientProvider,
       initContainerComponentsProvider,
-      kubernetesCredentialsMounterProvider).run()
+      kubernetesCredentialsMounterProvider,
+      loggingPodStatusWatcher).run()
   }
 }

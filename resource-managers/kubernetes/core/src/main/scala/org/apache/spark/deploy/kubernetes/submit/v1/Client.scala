@@ -33,7 +33,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.kubernetes.{CompressionUtils, KubernetesCredentials}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.kubernetes.submit.{DriverPodKubernetesCredentialsProvider, KubernetesFileUtils}
+import org.apache.spark.deploy.kubernetes.submit.{DriverPodKubernetesCredentialsProvider, KubernetesFileUtils, LoggingPodStatusWatcherImpl}
 import org.apache.spark.deploy.rest.kubernetes.v1.{AppResource, ContainerAppResource, HttpClientUtil, KubernetesCreateSubmissionRequest, KubernetesSparkRestApi, RemoteAppResource, UploadedAppResource}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ShutdownHookManager, Utils}
@@ -83,7 +83,9 @@ private[spark] class Client(
       MEMORY_OVERHEAD_MIN))
   private val driverContainerMemoryWithOverhead = driverContainerMemoryMb + memoryOverheadMb
 
-  private val waitForAppCompletion: Boolean = sparkConf.get(WAIT_FOR_APP_COMPLETION)
+  private val waitForAppCompletion = sparkConf.get(WAIT_FOR_APP_COMPLETION)
+  private val loggingInterval = Some(sparkConf.get(REPORT_INTERVAL))
+    .filter( _ => waitForAppCompletion)
 
   private val secretBase64String = {
     val secretBytes = new Array[Byte](128)
@@ -147,10 +149,8 @@ private[spark] class Client(
       driverServiceManager.start(kubernetesClient, kubernetesAppId, sparkConf)
       // start outer watch for status logging of driver pod
       // only enable interval logging if in waitForAppCompletion mode
-      val loggingInterval = if (waitForAppCompletion) sparkConf.get(REPORT_INTERVAL) else 0
-      val driverPodCompletedLatch = new CountDownLatch(1)
-      val loggingWatch = new LoggingPodStatusWatcher(driverPodCompletedLatch, kubernetesAppId,
-        loggingInterval)
+      val loggingWatch = new LoggingPodStatusWatcherImpl(
+        kubernetesAppId, loggingInterval)
       Utils.tryWithResource(kubernetesClient
           .pods()
           .withName(kubernetesDriverPodName)
@@ -230,7 +230,7 @@ private[spark] class Client(
         // wait if configured to do so
         if (waitForAppCompletion) {
           logInfo(s"Waiting for application $kubernetesAppId to finish...")
-          driverPodCompletedLatch.await()
+          loggingWatch.awaitCompletion()
           logInfo(s"Application $kubernetesAppId finished.")
         } else {
           logInfo(s"Application $kubernetesAppId successfully launched.")
