@@ -19,7 +19,7 @@ package org.apache.spark.deploy.kubernetes.submit.v2
 import java.io.File
 
 import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, DoneablePod, HasMetadata, Pod, PodBuilder, PodList, Secret, SecretBuilder}
-import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.{MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
 import org.hamcrest.{BaseMatcher, Description}
 import org.mockito.{AdditionalAnswers, ArgumentCaptor, Mock, MockitoAnnotations}
@@ -35,6 +35,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.kubernetes.SparkPodInitContainerBootstrap
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
+import org.apache.spark.deploy.kubernetes.submit.LoggingPodStatusWatcher
 
 class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   private val JARS_RESOURCE = SubmittedResourceIdAndSecret("jarsId", "jarsSecret")
@@ -59,13 +60,13 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   private val SPARK_JARS = Seq(
       "hdfs://localhost:9000/app/jars/jar1.jar", "file:///app/jars/jar2.jar")
   private val RESOLVED_SPARK_JARS = Seq(
-    "hdfs://localhost:9000/app/jars/jar1.jar", "file:///var/data/spark-jars/jar2.jar")
+      "hdfs://localhost:9000/app/jars/jar1.jar", "file:///var/data/spark-jars/jar2.jar")
   private val RESOLVED_SPARK_REMOTE_AND_LOCAL_JARS = Seq(
-    "/var/data/spark-jars/jar1.jar", "/var/data/spark-jars/jar2.jar")
+      "/var/data/spark-jars/jar1.jar", "/var/data/spark-jars/jar2.jar")
   private val SPARK_FILES = Seq(
-    "hdfs://localhost:9000/app/files/file1.txt", "file:///app/files/file2.txt")
+      "hdfs://localhost:9000/app/files/file1.txt", "file:///app/files/file2.txt")
   private val RESOLVED_SPARK_FILES = Seq(
-    "hdfs://localhost:9000/app/files/file1.txt", "file:///var/data/spark-files/file2.txt")
+      "hdfs://localhost:9000/app/files/file1.txt", "file:///var/data/spark-files/file2.txt")
   private val INIT_CONTAINER_SECRET = new SecretBuilder()
     .withNewMetadata()
       .withName(INIT_CONTAINER_SECRET_NAME)
@@ -140,6 +141,12 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   private var credentialsMounterProvider: DriverPodKubernetesCredentialsMounterProvider = _
   @Mock
   private var credentialsMounter: DriverPodKubernetesCredentialsMounter = _
+  @Mock
+  private var loggingPodStatusWatcher: LoggingPodStatusWatcher = _
+  @Mock
+  private var namedPodResource: PodResource[Pod, DoneablePod] = _
+  @Mock
+  private var watch: Watch = _
 
   before {
     MockitoAnnotations.initMocks(this)
@@ -177,6 +184,8 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
           .build()
       }
     })
+    when(podOps.withName(APP_ID)).thenReturn(namedPodResource)
+    when(namedPodResource.watch(loggingPodStatusWatcher)).thenReturn(watch)
     when(containerLocalizedFilesResolver.resolveSubmittedAndRemoteSparkJars())
         .thenReturn(RESOLVED_SPARK_REMOTE_AND_LOCAL_JARS)
     when(containerLocalizedFilesResolver.resolveSubmittedSparkJars())
@@ -278,6 +287,25 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
     })
   }
 
+  test("Waiting for completion should await completion on the status watcher.") {
+    expectationsForNoMountedCredentials()
+    expectationsForNoDependencyUploader()
+    new Client(
+      APP_NAME,
+      APP_ID,
+      MAIN_CLASS,
+      SPARK_CONF,
+      APP_ARGS,
+      SPARK_JARS,
+      SPARK_FILES,
+      true,
+      kubernetesClientProvider,
+      initContainerComponentsProvider,
+      credentialsMounterProvider,
+      loggingPodStatusWatcher).run()
+    verify(loggingPodStatusWatcher).awaitCompletion()
+  }
+
   private def expectationsForNoDependencyUploader(): Unit = {
     when(initContainerComponentsProvider
       .provideInitContainerSubmittedDependencyUploader(ALL_EXPECTED_LABELS))
@@ -353,9 +381,11 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
       APP_ARGS,
       SPARK_JARS,
       SPARK_FILES,
+      false,
       kubernetesClientProvider,
       initContainerComponentsProvider,
-      credentialsMounterProvider).run()
+      credentialsMounterProvider,
+      loggingPodStatusWatcher).run()
     val podMatcher = new BaseMatcher[Pod] {
       override def matches(o: scala.Any): Boolean = {
         o match {
