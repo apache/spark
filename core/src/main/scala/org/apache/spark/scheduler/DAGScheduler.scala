@@ -1276,10 +1276,24 @@ class DAGScheduler(
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 
+        def invalidateLostFilesAndExecutor(): Unit = {
+          // Mark the map whose fetch failed as broken in the map stage
+          if (mapId != -1) {
+            mapStage.removeOutputLoc(mapId, bmAddress)
+            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+          }
+
+          // TODO: mark the executor as failed only if there were lots of fetch failures on it
+          if (bmAddress != null) {
+            handleExecutorLost(bmAddress.executorId, filesLost = true, Some(task.epoch))
+          }
+        }
+
         if (failedStage.latestInfo.attemptId != task.stageAttemptId) {
           logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
             s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
             s"(attempt ID ${failedStage.latestInfo.attemptId}) running")
+          invalidateLostFilesAndExecutor()
         } else {
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
           // multiple tasks running concurrently on different executors). In that case, it is
@@ -1335,16 +1349,7 @@ class DAGScheduler(
               )
             }
           }
-          // Mark the map whose fetch failed as broken in the map stage
-          if (mapId != -1) {
-            mapStage.removeOutputLoc(mapId, bmAddress)
-            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
-          }
-
-          // TODO: mark the executor as failed only if there were lots of fetch failures on it
-          if (bmAddress != null) {
-            handleExecutorLost(bmAddress.executorId, filesLost = true, Some(task.epoch))
-          }
+          invalidateLostFilesAndExecutor()
         }
 
       case commitDenied: TaskCommitDenied =>
