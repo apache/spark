@@ -197,7 +197,7 @@ public final class LZ4BlockInputStream extends FilterInputStream {
         readFully(buffer, originalLen);
         break;
       case COMPRESSION_METHOD_LZ4:
-        if (compressedBuffer.length < originalLen) {
+        if (compressedBuffer.length < compressedLen) {
           compressedBuffer = new byte[Math.max(compressedLen, compressedBuffer.length * 3 / 2)];
         }
         readFully(compressedBuffer, compressedLen);
