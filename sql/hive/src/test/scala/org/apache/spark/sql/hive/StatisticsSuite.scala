@@ -222,7 +222,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       tabName: String,
       analyzedBySpark: Boolean = true,
       analyzedByHive: Boolean = true): Unit = {
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
     sql(
       s"""
          |CREATE TABLE $tabName (key STRING, value STRING)
@@ -277,7 +276,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       // ALTER TABLE SET TBLPROPERTIES invalidates some contents of Hive specific statistics
       // This is triggered by the Hive alterTable API
-      val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
       val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $tabName")
 
       val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
@@ -303,7 +301,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         assert(fetchedStats1 == fetchedStats2)
 
         // ALTER TABLE RENAME does not affect the contents of Hive specific statistics
-        val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
         val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $newName")
 
         val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
@@ -328,7 +325,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
         assert(fetchedStats1 == fetchedStats2)
 
-        val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
         val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $tabName")
 
         val totalSize = extractStatsPropValues(describeResult, "totalSize")
@@ -356,7 +352,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
         assert(fetchedStats1 == fetchedStats2)
 
-        val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
         val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $tabName")
 
         val totalSize = extractStatsPropValues(describeResult, "totalSize")
@@ -467,7 +462,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql(s"analyze table $tableName compute STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
 
       // Validate statistics
-      val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
       val table = hiveClient.getTable("default", tableName)
 
       val props = table.properties.filterKeys(_.startsWith("spark.sql.statistics.colStats"))

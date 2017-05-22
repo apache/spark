@@ -436,10 +436,7 @@ private[hive] class HiveClientImpl(
 
       val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
       val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
-      lazy val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_)) match {
-        case Some(c) if c >= 0 => Some(c)
-        case _ => None
-      }
+      val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_)).filter(_ >= 0)
       // TODO: check if this estimate is valid for tables after partition pruning.
       // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
       // relatively cheap if parameters for the table are populated into the metastore.
