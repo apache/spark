@@ -35,7 +35,6 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 final class DataStreamReader private[sql](sparkSession: SparkSession) extends Logging {
   /**

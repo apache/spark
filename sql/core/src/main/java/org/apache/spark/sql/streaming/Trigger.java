@@ -21,17 +21,14 @@ import java.util.concurrent.TimeUnit;
 
 import scala.concurrent.duration.Duration;
 
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
 
 /**
- * :: Experimental ::
  * Policy used to indicate how often results should be produced by a [[StreamingQuery]].
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 public class Trigger {
 
