@@ -34,11 +34,11 @@ class CanonicalizeKafkaParamsSuite extends SharedSQLContext with PrivateMethodTe
     kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
     kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
-    val kp2 = CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
+    val canonicalKp = CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
     val kafkaParams2 = new ju.HashMap[String, Object](kafkaParams)
-    val kp3 = CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams2)
-    val uid1 = kp2.get(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId).toString
-    val uid2 = kp3.get(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId).toString
+    val canonicalKp2 = CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams2)
+    val uid1 = canonicalKp.get(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId).toString
+    val uid2 = canonicalKp2.get(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId).toString
     assert(uid1 == uid2)
   }
 
@@ -50,12 +50,12 @@ class CanonicalizeKafkaParamsSuite extends SharedSQLContext with PrivateMethodTe
     kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
     kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
-    val kp2 = CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
+    val canonicalKp = CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
     val kafkaParams2 = new ju.HashMap[String, Object](kafkaParams)
     kafkaParams2.put("acks", "1")
-    val kp3 = CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams2)
-    val uid1 = kp2.get(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId).toString
-    val uid2 = kp3.get(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId).toString
+    val canonicalKp2 = CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams2)
+    val uid1 = canonicalKp.get(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId).toString
+    val uid2 = canonicalKp2.get(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId).toString
     assert(uid1 != uid2)
   }
 }

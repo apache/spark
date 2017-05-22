@@ -36,7 +36,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
 
   private def createKafkaProducer(
     producerConfiguration: ju.Map[String, Object]): Producer = {
-    val uid = producerConfiguration.get(CanonicalizeKafkaParams.sparkKafkaParamsUniqueId)
+    val uid = getUniqueId(producerConfiguration)
     val kafkaProducer: Producer = new Producer(producerConfiguration)
     cacheMap.put(uid.toString, kafkaProducer)
     log.debug(s"Created a new instance of KafkaProducer for $producerConfiguration.")
@@ -58,7 +58,9 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     kafkaParams: ju.Map[String, Object]): Producer = synchronized {
     val params = if (!CanonicalizeKafkaParams.isCanonicalized(kafkaParams)) {
       CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
-    } else kafkaParams
+    } else {
+      kafkaParams
+    }
     val uid = getUniqueId(params)
     cacheMap.getOrElse(uid.toString, createKafkaProducer(params))
   }
@@ -71,7 +73,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
 
     val producer: Option[Producer] = cacheMap.remove(uid)
     if (producer.isDefined) {
-      log.info(s"Closing the KafkaProducer with config: $kafkaParams")
+      log.info(s"Closing the KafkaProducer with config: $params")
       CanonicalizeKafkaParams.remove(kafkaParams)
       producer.foreach(_.close())
     } else {
@@ -109,11 +111,7 @@ private[kafka010] object CanonicalizeKafkaParams extends Logging {
   }
 
   private[kafka010] def isCanonicalized(kafkaParams: ju.Map[String, Object]): Boolean = {
-    if (kafkaParams.get(sparkKafkaParamsUniqueId) != null) {
-      true
-    } else {
-      false
-    }
+    kafkaParams.get(sparkKafkaParamsUniqueId) != null
   }
 
   private[kafka010] def computeUniqueCanonicalForm(

@@ -687,13 +687,12 @@ class StreamExecution(
 
   /** Stops streaming sink safely. */
   private def stopSink(): Unit = {
-      try {
-        sink.stop()
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Failed to stop streaming sink: $sink. Resources may have leaked.", e)
-      }
-
+    try {
+      sink.stop()
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Failed to stop streaming sink: $sink. Resources may have leaked.", e)
+    }
   }
 
   /**
