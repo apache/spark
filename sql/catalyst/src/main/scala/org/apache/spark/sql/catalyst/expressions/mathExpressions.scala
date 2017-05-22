@@ -232,9 +232,10 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, DecimalType))
+    Seq(TypeCollection(LongType, DoubleType, DecimalType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case LongType => input.asInstanceOf[Long]
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].ceil
   }
@@ -347,9 +348,10 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, DecimalType))
+    Seq(TypeCollection(LongType, DoubleType, DecimalType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case LongType => input.asInstanceOf[Long]
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].floor
   }
