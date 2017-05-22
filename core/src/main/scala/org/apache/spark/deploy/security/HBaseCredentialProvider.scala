@@ -19,22 +19,21 @@ package org.apache.spark.deploy.security
 
 import scala.reflect.runtime.universe
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
-
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[security] class HBaseCredentialProvider extends HadoopDelegationTokenProvider with Logging {
+private[security] class HBaseCredentialProvider
+  extends HadoopDelegationTokenProvider with Logging {
 
   override def serviceName: String = "hbase"
 
   override def obtainCredentials(
       hadoopConf: Configuration,
-      hadoopAccessManager: HadoopAccessManager,
       creds: Credentials): Option[Long] = {
     try {
       val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)

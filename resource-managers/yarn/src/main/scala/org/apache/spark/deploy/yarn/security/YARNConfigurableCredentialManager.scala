@@ -19,14 +19,20 @@ package org.apache.spark.deploy.yarn.security
 
 import java.util.ServiceLoader
 
+import com.google.common.annotations.VisibleForTesting
+
 import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
-
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.security.ConfigurableCredentialManager
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
+import org.apache.spark.internal.config._
+import org.apache.spark.deploy.yarn.config._
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.Master
 
 /**
  * This class exists for backwards compatibility.  It loads services registered under the
@@ -34,35 +40,22 @@ import org.apache.spark.util.Utils
  */
 private[yarn] class YARNConfigurableCredentialManager(
     sparkConf: SparkConf,
-    hadoopConf: Configuration)
-    extends ConfigurableCredentialManager(
-      sparkConf,
-      hadoopConf,
-      new YARNHadoopAccessManager(hadoopConf, sparkConf)) {
+    hadoopConf: Configuration,
+    fileSystems: Set[FileSystem]) extends Logging {
 
+  private val configurableCredentialManager =
+    new ConfigurableCredentialManager(sparkConf, hadoopConf, fileSystems)
+
+  // public for testing
   val deprecatedCredentialProviders = getDeprecatedCredentialProviders
 
-  def getDeprecatedCredentialProviders:
-    Map[String, ServiceCredentialProvider] = {
-    val deprecatedProviders = loadDeprecatedCredentialProviders
+  def obtainYARNCredentials(
+    hadoopConf: Configuration,
+    creds: Credentials): Long = {
 
-    deprecatedProviders.
-      filter(p => isServiceEnabled(p.serviceName))
-      .map(p => (p.serviceName, p))
-      .toMap
-  }
-
-  def loadDeprecatedCredentialProviders:
-    List[ServiceCredentialProvider] = {
-    ServiceLoader.load(
-      classOf[ServiceCredentialProvider],
-      Utils.getContextOrSparkClassLoader)
-      .asScala
-      .toList
-  }
-
-  override def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Long = {
-    val superInterval = super.obtainCredentials(hadoopConf, creds)
+    val superInterval = configurableCredentialManager.obtainCredentials(
+      hadoopConf,
+      creds)
 
     deprecatedCredentialProviders.values.flatMap { provider =>
       if (provider.credentialsRequired(hadoopConf)) {
@@ -73,5 +66,25 @@ private[yarn] class YARNConfigurableCredentialManager(
         None
       }
     }.foldLeft(superInterval)(math.min)
+  }
+
+
+  private def getDeprecatedCredentialProviders:
+    Map[String, ServiceCredentialProvider] = {
+    val deprecatedProviders = loadDeprecatedCredentialProviders
+
+    deprecatedProviders.
+      filter(p => configurableCredentialManager.isServiceEnabled(p.serviceName))
+      .map(p => (p.serviceName, p))
+      .toMap
+  }
+
+  private def loadDeprecatedCredentialProviders:
+    List[ServiceCredentialProvider] = {
+    ServiceLoader.load(
+      classOf[ServiceCredentialProvider],
+      Utils.getContextOrSparkClassLoader)
+      .asScala
+      .toList
   }
 }

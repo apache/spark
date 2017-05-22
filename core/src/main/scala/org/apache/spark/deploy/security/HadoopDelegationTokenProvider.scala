@@ -18,8 +18,8 @@
 package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.InterfaceStability
 
@@ -38,20 +38,16 @@ private[spark] trait HadoopDelegationTokenProvider {
    * Returns true if credentials are required for this service. By default, it is based on whether
    * Hadoop security is enabled.
    */
-  def credentialsRequired(hadoopConf: Configuration): Boolean = {
-    UserGroupInformation.isSecurityEnabled
-  }
+  def credentialsRequired(hadoopConf: Configuration): Boolean
 
   /**
    * Obtain credentials for this service and get the time of the next renewal.
    * @param hadoopConf Configuration of current Hadoop Compatible system.
-   * @param hadoopAccessManager HadoopAccessManager
    * @param creds Credentials to add tokens and security keys to.
    * @return If this Credential is renewable and can be renewed, return the time of the next
    *         renewal, otherwise None should be returned.
    */
   def obtainCredentials(
     hadoopConf: Configuration,
-    hadoopAccessManager: HadoopAccessManager,
     creds: Credentials): Option[Long]
 }

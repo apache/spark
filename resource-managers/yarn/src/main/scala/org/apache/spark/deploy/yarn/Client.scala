@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, URI, UnknownHostException}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.{Locale, Properties, UUID}
@@ -27,13 +27,13 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
-
 import com.google.common.base.Objects
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.io.DataOutputBuffer
+import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
@@ -45,9 +45,9 @@ import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.ConfigurableCredentialManager
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.YARNConfigurableCredentialManager
 import org.apache.spark.internal.Logging
@@ -121,7 +121,10 @@ private[spark] class Client(
   private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
-  private val credentialManager = new YARNConfigurableCredentialManager(sparkConf, hadoopConf)
+  private val credentialManager = new YARNConfigurableCredentialManager(
+    sparkConf,
+    hadoopConf,
+    YarnSparkHadoopUtil.get.yarnHadoopFSsToAccess(sparkConf, hadoopConf))
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
@@ -368,7 +371,9 @@ private[spark] class Client(
     val fs = destDir.getFileSystem(hadoopConf)
 
     // Merge credentials obtained from registered providers
-    val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(hadoopConf, credentials)
+    val nearestTimeOfNextRenewal = credentialManager.obtainYARNCredentials(
+      hadoopConf,
+      credentials)
 
     if (credentials != null) {
       // Add credentials to current user's UGI, so that following operations don't need to use the

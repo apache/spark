@@ -22,17 +22,16 @@ import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 import scala.collection.mutable.{HashMap, ListBuffer}
-
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.{JobConf, Master}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.security.CredentialUpdater
@@ -40,6 +39,8 @@ import org.apache.spark.deploy.yarn.security.YARNConfigurableCredentialManager
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
+import org.apache.spark.deploy.yarn.config._
+import org.apache.hadoop.fs.Path
 
 /**
  * Contains util methods to interact with Hadoop from spark.
@@ -89,7 +90,10 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   private[spark] override def startCredentialUpdater(sparkConf: SparkConf): Unit = {
     val hadoopConf = newConfiguration(sparkConf)
-    val credentialManager = new YARNConfigurableCredentialManager(sparkConf, hadoopConf)
+    val credentialManager = new YARNConfigurableCredentialManager(
+      sparkConf,
+      hadoopConf,
+      YarnSparkHadoopUtil.get.yarnHadoopFSsToAccess(sparkConf, hadoopConf))
     credentialUpdater = new CredentialUpdater(sparkConf, hadoopConf, credentialManager)
     credentialUpdater.start()
   }
@@ -104,6 +108,21 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   private[spark] def getContainerId: ContainerId = {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
     ConverterUtils.toContainerId(containerIdString)
+  }
+
+  /** The filesystems for which YARN should fetch delegation tokens. */
+  private[spark] def yarnHadoopFSsToAccess(
+    sparkConf: SparkConf,
+    hadoopConf: Configuration): Set[FileSystem] = {
+    val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
+      .map(new Path(_).getFileSystem(hadoopConf))
+      .toSet
+
+    val stagingFS = sparkConf.get(STAGING_DIR)
+      .map(new Path(_).getFileSystem(hadoopConf))
+      .getOrElse(FileSystem.get(hadoopConf))
+
+    filesystemsToAccess + stagingFS
   }
 }
 

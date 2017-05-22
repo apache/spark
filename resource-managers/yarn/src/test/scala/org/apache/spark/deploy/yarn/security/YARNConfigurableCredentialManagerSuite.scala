@@ -21,8 +21,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.Token
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.scalatest.{BeforeAndAfter, Matchers}
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class YARNConfigurableCredentialManagerSuite
@@ -34,12 +34,17 @@ class YARNConfigurableCredentialManagerSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
 
+    System.setProperty("SPARK_YARN_MODE", "true")
+
     sparkConf = new SparkConf()
     hadoopConf = new Configuration()
   }
 
   test("Correctly loads deprecated credential providers") {
-    credentialManager = new YARNConfigurableCredentialManager(sparkConf, hadoopConf)
+    credentialManager = new YARNConfigurableCredentialManager(
+      sparkConf,
+      hadoopConf,
+      YarnSparkHadoopUtil.get.yarnHadoopFSsToAccess(sparkConf, hadoopConf))
 
     credentialManager.deprecatedCredentialProviders.get("yarn-test") should not be (None)
   }
@@ -53,5 +58,5 @@ class YARNTestCredentialProvider extends ServiceCredentialProvider {
   override def obtainCredentials(
     hadoopConf: Configuration,
     sparkConf: SparkConf,
-    creds: Credentials): Option[Long] = Some(0)
+    creds: Credentials): Option[Long] = None
 }

@@ -26,7 +26,6 @@ import org.apache.spark.SparkConf
  * A credential provider for a service. User must implement this if they need to access a
  * secure service from Spark.
  */
-@deprecated("Use org.apache.spark.deploy.security.ServiceCredentialProvider", "2.3.0")
 trait ServiceCredentialProvider {
 
   /**

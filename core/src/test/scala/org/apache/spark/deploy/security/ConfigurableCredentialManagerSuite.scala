@@ -18,11 +18,12 @@
 package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.Token
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.scalatest.{BeforeAndAfter, Matchers}
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
@@ -38,7 +39,10 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
   }
 
   test("Correctly load default credential providers") {
-    credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
+    credentialManager = new ConfigurableCredentialManager(
+      sparkConf,
+      hadoopConf,
+      hadoopFSsToAccess(hadoopConf))
 
     credentialManager.getServiceCredentialProvider("hadoopfs") should not be (None)
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
@@ -48,7 +52,10 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
   test("disable hive credential provider") {
     sparkConf.set("spark.security.credentials.hive.enabled", "false")
-    credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
+    credentialManager = new ConfigurableCredentialManager(
+      sparkConf,
+      hadoopConf,
+      hadoopFSsToAccess(hadoopConf))
 
     credentialManager.getServiceCredentialProvider("hadoopfs") should not be (None)
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
@@ -58,7 +65,10 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
   test("using deprecated configurations") {
     sparkConf.set("spark.yarn.security.tokens.hadoopfs.enabled", "false")
     sparkConf.set("spark.yarn.security.credentials.hive.enabled", "false")
-    credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
+    credentialManager = new ConfigurableCredentialManager(
+      sparkConf,
+      hadoopConf,
+      hadoopFSsToAccess(hadoopConf))
 
     credentialManager.getServiceCredentialProvider("hadoopfs") should be (None)
     credentialManager.getServiceCredentialProvider("hive") should be (None)
@@ -66,11 +76,16 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
   }
 
   test("verify no credentials are obtained") {
-    credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
+    credentialManager = new ConfigurableCredentialManager(
+      sparkConf,
+      hadoopConf,
+      hadoopFSsToAccess(hadoopConf))
     val creds = new Credentials()
 
     // Tokens cannot be obtained from HDFS, Hive, HBase in unit tests.
-    credentialManager.obtainCredentials(hadoopConf, creds)
+    credentialManager.obtainCredentials(
+      hadoopConf,
+      creds)
     val tokens = creds.getAllTokens
     tokens.size() should be (0)
   }
@@ -85,7 +100,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     val credentials = new Credentials()
     hiveCredentialProvider.obtainCredentials(
       hadoopConf,
-      new DefaultHadoopAccessManager(hadoopConf),
       credentials)
 
     credentials.getAllTokens.size() should be (0)
@@ -99,9 +113,12 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     val creds = new Credentials()
     hbaseTokenProvider.obtainCredentials(
       hadoopConf,
-      new DefaultHadoopAccessManager(hadoopConf),
       creds)
 
     creds.getAllTokens.size should be (0)
+  }
+
+  private[spark] def hadoopFSsToAccess(hadoopConf: Configuration): Set[FileSystem] = {
+    Set(FileSystem.get(hadoopConf))
   }
 }

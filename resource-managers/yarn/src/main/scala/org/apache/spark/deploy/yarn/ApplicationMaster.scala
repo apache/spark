@@ -247,7 +247,11 @@ private[spark] class ApplicationMaster(
       if (sparkConf.contains(CREDENTIALS_FILE_PATH.key)) {
         // If a principal and keytab have been set, use that to create new credentials for executors
         // periodically
-        val credentialManager = new YARNConfigurableCredentialManager(sparkConf, yarnConf)
+        val credentialManager = new YARNConfigurableCredentialManager(
+          sparkConf,
+          yarnConf,
+          YarnSparkHadoopUtil.get.yarnHadoopFSsToAccess(sparkConf, yarnConf))
+
         val credentialRenewer = new AMCredentialRenewer(sparkConf, yarnConf, credentialManager)
         credentialRenewer.scheduleLoginFromKeytab()
       }
