@@ -187,6 +187,8 @@ private[spark] class SecurityManager(
     val ioEncryptionKey: Option[Array[Byte]] = None)
   extends Logging with SecretKeyHolder {
 
+  def this(sparkConf: SparkConf) {this(sparkConf, None)}
+
   import SecurityManager._
 
   // allow all users/groups to have view/modify permissions
