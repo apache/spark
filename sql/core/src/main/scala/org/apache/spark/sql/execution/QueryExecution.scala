@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util.UUID
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -43,6 +44,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
+  val runId: UUID = UUID.randomUUID
 
   def assertAnalyzed(): Unit = {
     // Analyzer is invoked outside the try block to avoid calling it again from within the
@@ -89,8 +91,22 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
 
   /** Internal version of the RDD. Avoids copies and has no schema */
-  lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
+  lazy val toRdd: RDD[InternalRow] = executePlan()
 
+  private def executePlan(): RDD[InternalRow] = {
+    sparkSession.sparkContext.setJobGroup(runId.toString, getDescriptionString,
+      interruptOnCancel = true)
+    try {
+      executedPlan.execute()
+    } catch {
+      case e: Exception =>
+        sparkSession.sparkContext.cancelJobGroup(runId.toString)
+        throw e
+    }
+  }
+  private def getDescriptionString: String = {
+    s"QueryExecution(id=${runId.toString})"
+  }
   /**
    * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
    * row format conversions as needed.
