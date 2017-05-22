@@ -1175,6 +1175,7 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
         self.assertEqual([], rdd.pipe('grep 4').collect())
 
+    @unittest.skipIf(sys.version_info < (3, 2), "concurent.futures")
     def test_async_actions(self):
         data = [x for x in range(10)]
         rdd = self.sc.parallelize(data)
