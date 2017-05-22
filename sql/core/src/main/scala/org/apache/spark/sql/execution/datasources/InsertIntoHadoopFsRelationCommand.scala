@@ -49,7 +49,7 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex])
-  extends RunnableCommand {
+  extends InsertTableCommand {
 
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
