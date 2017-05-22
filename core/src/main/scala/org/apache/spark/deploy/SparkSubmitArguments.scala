@@ -27,6 +27,7 @@ import java.util.jar.JarFile
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
+import scala.util.Try
 
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
@@ -252,6 +253,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     }
     if (mainClass == null && SparkSubmit.isUserJar(primaryResource)) {
       SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
+    }
+    if (totalExecutorCores != null && Try(totalExecutorCores.toInt).getOrElse(-1) <= 0) {
+      SparkSubmit.printErrorAndExit("Total executor cores must be a positive number")
     }
     if (pyFiles != null && !isPython) {
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
