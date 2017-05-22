@@ -2370,7 +2370,7 @@ class RDD(object):
     def collectAsync(self):
         """
         .. note:: Experimental
-        
+
         Returns a `concurrent.futures.Future` for retrieving all elements of this RDD.
 
         >>> rdd = sc.parallelize(range(10))  # doctest: +SKIP
@@ -2384,7 +2384,7 @@ class RDD(object):
         return executor.submit(self.collect)
 
     def countAsync(self):
-        """       
+        """
         .. note:: Experimental
 
         >>> rdd = sc.parallelize(range(10))  # doctest: +SKIP
@@ -2398,8 +2398,8 @@ class RDD(object):
     def foreachAsync(self, f):
         """
         .. note:: Experimental
-        
-        Asynchronously applies a function f to all elements of this RDD 
+
+        Asynchronously applies a function f to all elements of this RDD
         and returns a `concurrent.futures.Future` of this action.
 
         >>> def g(x): print(x)               # doctest: +SKIP
@@ -2407,7 +2407,7 @@ class RDD(object):
         >>> f = rdd.foreachAsync(g)          # doctest: +SKIP
         >>> f.result() is None               # doctest: +SKIP
         True
-        
+
         .. versionadded:: 2.3.0
         """
         executor = self.ctx._get_executor()
@@ -2416,13 +2416,13 @@ class RDD(object):
     def foreachPartitionAsync(self, f):
         """
         .. note:: Experimental
-        
-        Asynchronously applies a function f to each partition of this RDD 
-        and returns a `concurrent.futures.Future` of this action.       
-        
+
+        Asynchronously applies a function f to each partition of this RDD
+        and returns a `concurrent.futures.Future` of this action.
+
         >>> def g(xs):                       # doctest: +SKIP
         ...     for x in xs:
-        ...         print(x)               
+        ...         print(x)
         >>> rdd = sc.parallelize(range(10))  # doctest: +SKIP
         >>> f = rdd.foreachPartitionAsync(g) # doctest: +SKIP
         >>> f.result() is None               # doctest: +SKIP
@@ -2434,15 +2434,15 @@ class RDD(object):
     def takeAsync(self, num):
         """
         .. note:: Experimental
-        
-        Returns a `concurrent.futures.Future` for retrieving 
+
+        Returns a `concurrent.futures.Future` for retrieving
         the first num elements of the RDD.
-        
+
         >>> rdd = sc.parallelize(range(10))  # doctest: +SKIP
         >>> f = rdd.takeAsync(3)             # doctest: +SKIP
         >>> f.result() is None               # doctest: +SKIP
         [0, 1, 2]
-        
+
         .. versionadded:: 2.3.0
         """
         executor = self.ctx._get_executor()

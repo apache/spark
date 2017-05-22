@@ -1012,7 +1012,7 @@ class SparkContext(object):
         return conf
 
     def _get_executor(self):
-        """ Return existing thread pool executor 
+        """ Return existing thread pool executor
         or create a new one.
         """
         # This would fail anyway, but
