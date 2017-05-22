@@ -112,10 +112,10 @@ setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formu
             new("LinearSVCModel", jobj = jobj)
           })
 
-#  Predicted values based on a linear SVM model.
+#  Predicted values based on a LinearSVCModel model
 
 #' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns the predicted values based on a linear SVM model.
+#' @return \code{predict} returns the predicted values based on a LinearSVCModel.
 #' @rdname spark.svmLinear
 #' @aliases predict,LinearSVCModel,SparkDataFrame-method
 #' @export
@@ -125,9 +125,9 @@ setMethod("predict", signature(object = "LinearSVCModel"),
             predict_internal(object, newData)
           })
 
-#  Get the summary of a linear SVM model.
+#  Get the summary of a LinearSVCModel
 
-#' @param object a linear SVM model fitted by \code{spark.svmLinear}.
+#' @param object a LinearSVCModel fitted by \code{spark.svmLinear}.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list includes \code{coefficients} (coefficients of the fitted model),
 #'         \code{numClasses} (number of classes), \code{numFeatures} (number of features).
@@ -148,7 +148,7 @@ setMethod("summary", signature(object = "LinearSVCModel"),
             list(coefficients = coefficients, numClasses = numClasses, numFeatures = numFeatures)
           })
 
-#  Save fitted linear SVM model to the input path.
+#  Save fitted LinearSVCModel to the input path
 
 #' @param path The directory where the model is saved.
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
