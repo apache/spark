@@ -2224,6 +2224,10 @@ private[spark] object Utils extends Logging {
         userPort(startPort, offset)
       }
       try {
+        if (tryPort > 0) {
+          // Try to bind the port to avoid a noisy Jetty warning on failure.
+          new ServerSocket(tryPort).close()
+        }
         val (service, port) = startService(tryPort)
         logInfo(s"Successfully started service$serviceString on port $port.")
         return (service, port)
