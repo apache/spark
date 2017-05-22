@@ -215,18 +215,16 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("formula w/o intercept, we should output reference category when encoding string terms") {
     val formula = new RFormula().setFormula("id ~ a + b + c - 1")
-    val original = sqlContext.createDataFrame(
-      Seq((1, "foo", "zq", 4), (2, "bar", "zz", 4), (3, "bar", "zz", 5), (4, "baz", "zz", 5))
-    ).toDF("id", "a", "b", "c")
+    val original = Seq((1, "foo", "zq", 4), (2, "bar", "zz", 4), (3, "bar", "zz", 5),
+      (4, "baz", "zz", 5)).toDF("id", "a", "b", "c")
     val model = formula.fit(original)
     val result = model.transform(original)
     val resultSchema = model.transformSchema(original.schema)
-    val expected = sqlContext.createDataFrame(
-      Seq(
-        (1, "foo", "zq", 4, Vectors.sparse(5, Array(1, 4), Array(1.0, 4.0)), 1.0),
-        (2, "bar", "zz", 4, Vectors.dense(1.0, 0.0, 0.0, 1.0, 4.0), 2.0),
-        (3, "bar", "zz", 5, Vectors.dense(1.0, 0.0, 0.0, 1.0, 5.0), 3.0),
-        (4, "baz", "zz", 5, Vectors.dense(0.0, 0.0, 1.0, 1.0, 5.0), 4.0))
+    val expected = Seq(
+      (1, "foo", "zq", 4, Vectors.sparse(5, Array(1, 4), Array(1.0, 4.0)), 1.0),
+      (2, "bar", "zz", 4, Vectors.dense(1.0, 0.0, 0.0, 1.0, 4.0), 2.0),
+      (3, "bar", "zz", 5, Vectors.dense(1.0, 0.0, 0.0, 1.0, 5.0), 3.0),
+      (4, "baz", "zz", 5, Vectors.dense(0.0, 0.0, 1.0, 1.0, 5.0), 4.0)
     ).toDF("id", "a", "b", "c", "features", "label")
     assert(result.schema.toString == resultSchema.toString)
     assert(result.collect() === expected.collect())
