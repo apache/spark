@@ -59,3 +59,17 @@ select cot(1);
 select cot(null);
 select cot(0);
 select cot(-1);
+
+-- ceil and ceiling
+select ceiling(0);
+select ceiling(1);
+select ceil(1234567890123456);
+select ceil(12345678901234567);
+select ceiling(1234567890123456);
+select ceiling(12345678901234567);
+
+-- floor
+select floor(0);
+select floor(1);
+select floor(1234567890123456);
+select floor(12345678901234567);
