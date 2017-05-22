@@ -414,11 +414,11 @@ case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) exten
  *                             Only valid for static partitions.
  */
 case class InsertIntoTable(
-                            table: LogicalPlan,
-                            partition: Map[String, Option[String]],
-                            query: LogicalPlan,
-                            overwrite: Boolean,
-                            ifPartitionNotExists: Boolean)
+    table: LogicalPlan,
+    partition: Map[String, Option[String]],
+    query: LogicalPlan,
+    overwrite: Boolean,
+    ifPartitionNotExists: Boolean)
   extends LogicalPlan {
   // IF NOT EXISTS is only valid in INSERT OVERWRITE
   assert(overwrite || !ifPartitionNotExists)
