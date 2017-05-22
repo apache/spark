@@ -195,7 +195,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
       InsertIntoHadoopFsRelationCommand(
         outputPath,
         staticPartitions,
-        i.ifStaticPartitionNotExists,
+        i.ifPartitionNotExists,
         partitionSchema,
         t.bucketSpec,
         t.fileFormat,

@@ -37,13 +37,13 @@ import org.apache.spark.sql.execution.command._
  *                         overwrites: when the spec is empty, all partitions are overwritten.
  *                         When it covers a prefix of the partition keys, only partitions matching
  *                         the prefix are overwritten.
- * @param ifStaticPartitionNotExists If true, only write if the partition does not exist.
- *                                   Only valid for static partitions.
+ * @param ifPartitionNotExists If true, only write if the partition does not exist.
+ *                             Only valid for static partitions.
  */
 case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
     staticPartitions: TablePartitionSpec,
-    ifStaticPartitionNotExists: Boolean,
+    ifPartitionNotExists: Boolean,
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
@@ -105,7 +105,7 @@ case class InsertIntoHadoopFsRelationCommand(
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        if (ifStaticPartitionNotExists && matchingPartitions.nonEmpty) {
+        if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
           false
         } else {
           deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)

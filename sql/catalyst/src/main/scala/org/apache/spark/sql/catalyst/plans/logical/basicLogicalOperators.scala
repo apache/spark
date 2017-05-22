@@ -410,20 +410,20 @@ case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) exten
  *                  would have Map('a' -> Some('1'), 'b' -> None).
  * @param query the logical plan representing data to write to.
  * @param overwrite overwrite existing table or partitions.
- * @param ifStaticPartitionNotExists If true, only write if the partition does not exist.
- *                                   Only valid for static partitions.
+ * @param ifPartitionNotExists If true, only write if the partition does not exist.
+ *                             Only valid for static partitions.
  */
 case class InsertIntoTable(
-    table: LogicalPlan,
-    partition: Map[String, Option[String]],
-    query: LogicalPlan,
-    overwrite: Boolean,
-    ifStaticPartitionNotExists: Boolean)
+                            table: LogicalPlan,
+                            partition: Map[String, Option[String]],
+                            query: LogicalPlan,
+                            overwrite: Boolean,
+                            ifPartitionNotExists: Boolean)
   extends LogicalPlan {
   // IF NOT EXISTS is only valid in INSERT OVERWRITE
-  assert(overwrite || !ifStaticPartitionNotExists)
+  assert(overwrite || !ifPartitionNotExists)
   // IF NOT EXISTS is only valid in static partitions
-  assert(partition.values.forall(_.nonEmpty) || !ifStaticPartitionNotExists)
+  assert(partition.values.forall(_.nonEmpty) || !ifPartitionNotExists)
 
   // We don't want `table` in children as sometimes we don't want to transform it.
   override def children: Seq[LogicalPlan] = query :: Nil
