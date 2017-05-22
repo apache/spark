@@ -54,7 +54,7 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  * @param obj object to broadcast
  * @param id A unique identifier for the broadcast variable.
  */
-private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
+private[spark] class TorrentBroadcast[T: ClassTag](@transient val obj: T, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
   /**
