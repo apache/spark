@@ -133,37 +133,9 @@ class MapStatusSuite extends SparkFunSuite {
     assert(!success)
   }
 
-  test("When SHUFFLE_ACCURATE_BLOCK_THRESHOLD is 0, blocks which are bigger than " +
-    "SHUFFLE_ACCURATE_BLOCK_THRESHOLD_BY_TIMES_AVERAGE * averageSize should not be " +
+  test("Blocks which are bigger than SHUFFLE_ACCURATE_BLOCK_THRESHOLD should not be " +
     "underestimated.") {
-    val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.key, "0")
-      .set(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD_BY_TIMES_AVERAGE.key, "2")
-    val env = mock(classOf[SparkEnv])
-    doReturn(conf).when(env).conf
-    SparkEnv.set(env)
-    // Value of element in sizes is equal to the corresponding index when index >= 1000.
-    val sizes = Array.concat(Array.fill[Long](1000)(1L), (1000L to 2000L).toArray)
-    val status1 = MapStatus(BlockManagerId("exec-0", "host-0", 100), sizes)
-    val arrayStream = new ByteArrayOutputStream(102400)
-    val objectOutputStream = new ObjectOutputStream(arrayStream)
-    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
-    objectOutputStream.writeObject(status1)
-    objectOutputStream.flush()
-    val array = arrayStream.toByteArray
-    val objectInput = new ObjectInputStream(new ByteArrayInputStream(array))
-    val status2 = objectInput.readObject().asInstanceOf[HighlyCompressedMapStatus]
-    val avg = sizes.sum / 2001
-    ((2 * avg + 1) to 2000).foreach {
-      case part =>
-        assert(status2.getSizeForBlock(part.toInt) >= sizes(part.toInt))
-    }
-  }
-
-  test("When SHUFFLE_ACCURATE_BLOCK_THRESHOLD_BY_TIMES_AVERAGE is 0, blocks which are bigger than" +
-    " SHUFFLE_ACCURATE_BLOCK_THRESHOLD should not be underestimated.")
-  {
     val conf = new SparkConf().set(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.key, "1000")
-      .set(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD_BY_TIMES_AVERAGE.key, "0")
     val env = mock(classOf[SparkEnv])
     doReturn(conf).when(env).conf
     SparkEnv.set(env)
