@@ -430,6 +430,7 @@ case class DataSource(
       InsertIntoHadoopFsRelationCommand(
         outputPath = outputPath,
         staticPartitions = Map.empty,
+        ifPartitionNotExists = false,
         partitionColumns = partitionAttributes,
         bucketSpec = bucketSpec,
         fileFormat = format,
