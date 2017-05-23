@@ -35,4 +35,4 @@ ENV SPARK_HOME /opt/spark
 
 WORKDIR /opt/spark
 
-ENTRYPOINT [ "bin/spark-class", "org.apache.spark.deploy.rest.kubernetes.ResourceStagingServer" ]
+ENTRYPOINT [ "bin/spark-class", "org.apache.spark.deploy.rest.kubernetes.KubernetesSparkDependencyDownloadInitContainer" ]

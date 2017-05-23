@@ -20,7 +20,6 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion}
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.kubernetes.submit.v1.NodePortUrisDriverServiceManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
@@ -212,77 +211,6 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
-  private[spark] val KUBERNETES_DRIVER_SUBMIT_TIMEOUT =
-    ConfigBuilder("spark.kubernetes.driverSubmissionTimeout")
-      .doc("Time to wait for the driver process to start running before aborting its execution.")
-      .timeConf(TimeUnit.SECONDS)
-      .createWithDefault(60L)
-
-  private[spark] val KUBERNETES_DRIVER_SUBMIT_SSL_KEYSTORE =
-    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.keyStore")
-      .doc("KeyStore file for the driver submission server listening on SSL. Can be pre-mounted" +
-        " on the driver container or uploaded from the submitting client.")
-      .stringConf
-      .createOptional
-
-  private[spark] val KUBERNETES_DRIVER_SUBMIT_SSL_TRUSTSTORE =
-    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.trustStore")
-      .doc("TrustStore containing certificates for communicating to the driver submission server" +
-        " over SSL.")
-      .stringConf
-      .createOptional
-
-  private[spark] val DRIVER_SUBMIT_SSL_ENABLED =
-    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.enabled")
-      .doc("Whether or not to use SSL when sending the application dependencies to the driver pod.")
-      .booleanConf
-      .createWithDefault(false)
-
-  private[spark] val DRIVER_SUBMIT_SSL_KEY_PEM =
-    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.keyPem")
-      .doc("Key PEM file that the driver submission server will use when setting up TLS" +
-        " connections. Can be pre-mounted on the driver pod's disk or uploaded from the" +
-        " submitting client's machine.")
-      .stringConf
-      .createOptional
-
-  private[spark] val DRIVER_SUBMIT_SSL_SERVER_CERT_PEM =
-    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.serverCertPem")
-      .doc("Certificate PEM file that is associated with the key PEM file" +
-        " the submission server uses to set up TLS connections. Can be pre-mounted" +
-        " on the driver pod's disk or uploaded from the submitting client's machine.")
-      .stringConf
-      .createOptional
-
-  private[spark] val DRIVER_SUBMIT_SSL_CLIENT_CERT_PEM =
-    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.clientCertPem")
-      .doc("Certificate pem file that the submission client uses to connect to the submission" +
-        " server over TLS. This should often be the same as the server certificate, but can be" +
-        " different if the submission client will contact the driver through a proxy instead of" +
-        " the driver service directly.")
-      .stringConf
-      .createOptional
-
-  private[spark] val KUBERNETES_DRIVER_SERVICE_NAME =
-    ConfigBuilder("spark.kubernetes.driver.service.name")
-        .doc("Kubernetes service that exposes the driver pod for external access.")
-        .internal()
-        .stringConf
-        .createOptional
-
-  private[spark] val KUBERNETES_DRIVER_SUBMIT_SERVER_MEMORY =
-    ConfigBuilder("spark.kubernetes.driver.submissionServerMemory")
-      .doc("The amount of memory to allocate for the driver submission server.")
-      .bytesConf(ByteUnit.MiB)
-      .createWithDefaultString("256m")
-
-  private[spark] val EXPOSE_KUBERNETES_DRIVER_SERVICE_UI_PORT =
-    ConfigBuilder("spark.kubernetes.driver.service.exposeUiPort")
-      .doc("Whether to expose the driver Web UI port as a service NodePort. Turned off by default" +
-        " because NodePort is a limited resource. Use alternatives if possible.")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val KUBERNETES_DRIVER_POD_NAME =
     ConfigBuilder("spark.kubernetes.driver.pod.name")
       .doc("Name of the driver pod.")
@@ -327,13 +255,6 @@ package object config extends Logging {
       .longConf
       .createWithDefault(1)
 
-  private[spark] val DRIVER_SERVICE_MANAGER_TYPE =
-    ConfigBuilder("spark.kubernetes.driver.serviceManagerType")
-      .doc("A tag indicating which class to use for creating the Kubernetes service and" +
-        " determining its URI for the submission client.")
-      .stringConf
-      .createWithDefault(NodePortUrisDriverServiceManager.TYPE)
-
   private[spark] val WAIT_FOR_APP_COMPLETION =
     ConfigBuilder("spark.kubernetes.submission.waitAppCompletion")
       .doc("In cluster mode, whether to wait for the application to finish before exiting the" +
@@ -347,8 +268,7 @@ package object config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1s")
 
-  // Spark dependency server for submission v2
-
+  // Spark resource staging server.
   private[spark] val RESOURCE_STAGING_SERVER_PORT =
     ConfigBuilder("spark.kubernetes.resourceStagingServer.port")
       .doc("Port for the Kubernetes resource staging server to listen on.")
@@ -451,7 +371,7 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
-  // Driver and Init-Container parameters for submission v2
+  // Driver and Init-Container parameters
   private[spark] val RESOURCE_STAGING_SERVER_URI =
     ConfigBuilder("spark.kubernetes.resourceStagingServer.uri")
       .doc("Base URI for the Spark resource staging server.")

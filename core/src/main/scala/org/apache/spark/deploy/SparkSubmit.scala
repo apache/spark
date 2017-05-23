@@ -619,7 +619,7 @@ object SparkSubmit {
     }
 
     if (isKubernetesCluster) {
-      childMainClass = "org.apache.spark.deploy.kubernetes.submit.v1.Client"
+      childMainClass = "org.apache.spark.deploy.kubernetes.submit.Client"
       childArgs += args.primaryResource
       childArgs += args.mainClass
       childArgs ++= args.childArgs
