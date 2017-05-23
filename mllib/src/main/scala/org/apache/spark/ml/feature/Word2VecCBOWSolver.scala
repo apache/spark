@@ -324,9 +324,9 @@ object Word2VecCBOWSolver extends Logging {
       val b = window - random.nextInt(window) // (window - a) in original code
       // pick b words around the current word index
       val start = math.max(0, i - b) // c in original code, floor ar 0
-      val end = math.min(sentence.length, i + b + 1) // cap at sentence length
+      val end = math.min(reducedSentence.length, i + b + 1) // cap at sentence length
       // make sure current word is not a part of the context
-      val contextIds = sentence.view.zipWithIndex.slice(start, end)
+      val contextIds = reducedSentence.view.zipWithIndex.slice(start, end)
         .filter{case (_, pos) => pos != i}.map(_._1)
       (contextIds.toArray, word)
     }
