@@ -361,7 +361,6 @@ class StreamExecution(
 
       try {
         stopSources()
-        stopSink()
         state.set(TERMINATED)
         currentStatus = status.copy(isTriggerActive = false, isDataAvailable = false)
 
@@ -682,16 +681,6 @@ class StreamExecution(
         case NonFatal(e) =>
           logWarning(s"Failed to stop streaming source: $source. Resources may have leaked.", e)
       }
-    }
-  }
-
-  /** Stops streaming sink safely. */
-  private def stopSink(): Unit = {
-    try {
-      sink.stop()
-    } catch {
-      case NonFatal(e) =>
-        logWarning(s"Failed to stop streaming sink: $sink. Resources may have leaked.", e)
     }
   }
 

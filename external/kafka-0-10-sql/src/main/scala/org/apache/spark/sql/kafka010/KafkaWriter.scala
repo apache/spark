@@ -94,10 +94,4 @@ private[kafka010] object KafkaWriter extends Logging {
       }
     }
   }
-
-  def close(sc: SparkContext, kafkaParams: ju.Map[String, Object]): Unit = {
-    sc.parallelize(1 to 10000).foreachPartition { iter =>
-      CachedKafkaProducer.close(kafkaParams)
-    }
-  }
 }

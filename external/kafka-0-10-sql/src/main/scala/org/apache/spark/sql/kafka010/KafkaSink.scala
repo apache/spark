@@ -40,8 +40,4 @@ private[kafka010] class KafkaSink(
       latestBatchId = batchId
     }
   }
-
-  override def stop(): Unit = {
-    KafkaWriter.close(sqlContext.sparkContext, executorKafkaParams)
-  }
 }
