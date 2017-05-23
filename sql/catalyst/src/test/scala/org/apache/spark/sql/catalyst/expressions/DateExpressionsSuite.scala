@@ -60,6 +60,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
     checkEvaluation(DayOfYear(Literal.create(null, DateType)), null)
+    checkEvaluation(DayOfYear(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 288)
+    checkEvaluation(DayOfYear(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime))), 277)
     checkConsistencyBetweenInterpretedAndCodegen(DayOfYear, DateType)
   }
 
@@ -80,6 +82,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+    checkEvaluation(Year(Literal(new Date(sdf.parse("1582-01-01 13:10:15").getTime))), 1582)
+    checkEvaluation(Year(Literal(new Date(sdf.parse("1581-12-31 13:10:15").getTime))), 1581)
     checkConsistencyBetweenInterpretedAndCodegen(Year, DateType)
   }
 
@@ -100,6 +104,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+    checkEvaluation(Quarter(Literal(new Date(sdf.parse("1582-10-01 13:10:15").getTime))), 4)
+    checkEvaluation(Quarter(Literal(new Date(sdf.parse("1582-09-30 13:10:15").getTime))), 3)
     checkConsistencyBetweenInterpretedAndCodegen(Quarter, DateType)
   }
 
@@ -109,6 +115,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Month(Cast(Literal(sdfDate.format(d)), DateType)), 4)
     checkEvaluation(Month(Cast(Literal(ts), DateType)), 11)
 
+    checkEvaluation(Month(Literal(new Date(sdf.parse("1582-04-28 13:10:15").getTime))), 4)
+    checkEvaluation(Month(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime))), 10)
+    checkEvaluation(Month(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 10)
     (2003 to 2004).foreach { y =>
       (0 to 3).foreach { m =>
         (0 to 2 * 24).foreach { i =>
@@ -130,6 +139,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(DayOfMonth(Cast(Literal(sdfDate.format(d)), DateType)), 8)
     checkEvaluation(DayOfMonth(Cast(Literal(ts), DateType)), 8)
 
+    checkEvaluation(DayOfMonth(Literal(new Date(sdf.parse("1582-04-28 13:10:15").getTime))), 28)
+    checkEvaluation(DayOfMonth(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 15)
+    checkEvaluation(DayOfMonth(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime))), 4)
     (1999 to 2000).foreach { y =>
       val c = Calendar.getInstance()
       c.set(y, 0, 1, 0, 0, 0)
@@ -163,6 +175,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WeekOfYear(Cast(Literal(sdfDate.format(d)), DateType)), 15)
     checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType)), 45)
     checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType)), 18)
+    checkEvaluation(WeekOfYear(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 40)
+    checkEvaluation(WeekOfYear(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime))), 40)
     checkConsistencyBetweenInterpretedAndCodegen(WeekOfYear, DateType)
   }
 
