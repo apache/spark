@@ -68,6 +68,11 @@ case class Statistics(
       s"isBroadcastable=$isBroadcastable"
     ).filter(_.nonEmpty).mkString(", ")
   }
+
+  /** Must be called when computing stats for a join operator to reset hints. */
+  def resetHintsForJoin(): Statistics = copy(
+    isBroadcastable = false
+  )
 }
 
 
