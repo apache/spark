@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Rand
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, NoCollapseHint}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class CollapseProjectSuite extends PlanTest {
@@ -113,6 +113,16 @@ class CollapseProjectSuite extends PlanTest {
     val query = testRelation
       .groupBy('a)('a, Rand(10).as('rand))
       .select(('rand + 1).as('rand1), ('rand + 2).as('rand2))
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("do not collapse projects with onceOnly expressions") {
+    val query = NoCollapseHint(testRelation.select(('a * 10).as('a_times_10)))
+      .select(('a_times_10 + 1).as('a_times_10_plus_1), ('a_times_10 + 2).as('a_times_10_plus_2))
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = query.analyze

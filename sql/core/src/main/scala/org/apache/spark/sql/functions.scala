@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
+import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, NoCollapseHint}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.internal.SQLConf
@@ -1020,6 +1020,22 @@ object functions {
    */
   def broadcast[T](df: Dataset[T]): Dataset[T] = {
     Dataset[T](df.sparkSession, BroadcastHint(df.logicalPlan))(df.exprEnc)
+  }
+
+  /**
+   * Marks a DataFrame as non-collapsible.
+   *
+   * For example:
+   * {{{
+    *  df1 = no_collapse(df.select((df.col("qty") * lit(10).alias("c1")))
+   *   df2 = df1.select(col("c1") + lit(1)), col("c1") + lit(2)))
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 2.2.0
+   */
+  def no_collapse[T](df: Dataset[T]): Dataset[T] = {
+    Dataset[T](df.sparkSession, NoCollapseHint(df.logicalPlan))(df.exprEnc)
   }
 
   /**

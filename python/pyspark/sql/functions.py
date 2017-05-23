@@ -460,6 +460,14 @@ def nanvl(col1, col2):
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
 
 
+@since(2.2)
+def no_collapse(df):
+    """Marks a DataFrame as non-collapsible."""
+
+    sc = SparkContext._active_spark_context
+    return DataFrame(sc._jvm.functions.no_collapse(df._jdf), df.sql_ctx)
+
+
 @since(1.4)
 def rand(seed=None):
     """Generates a random column with independent and identically distributed (i.i.d.) samples
