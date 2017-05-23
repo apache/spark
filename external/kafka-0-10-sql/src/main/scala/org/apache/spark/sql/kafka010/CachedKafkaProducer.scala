@@ -77,8 +77,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
    * exist, a new KafkaProducer will be created. KafkaProducer is thread safe, it is best to keep
    * one instance per specified kafkaParams.
    */
-  private[kafka010] def getOrCreate(
-    kafkaParams: ju.Map[String, Object]): Producer = synchronized {
+  private[kafka010] def getOrCreate(kafkaParams: ju.Map[String, Object]): Producer = synchronized {
     val params = if (!CanonicalizeKafkaParams.isCanonicalized(kafkaParams)) {
       CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
     } else {
@@ -147,7 +146,7 @@ private[kafka010] object CanonicalizeKafkaParams extends Logging {
   private[kafka010] def computeUniqueCanonicalForm(
     kafkaParams: ju.Map[String, Object]): ju.Map[String, Object] = synchronized {
     if (isCanonicalized(kafkaParams)) {
-      logWarning(s"A unique id,$sparkKafkaParamsUniqueId ->" +
+      logWarning(s"A unique id, $sparkKafkaParamsUniqueId ->" +
         s" ${kafkaParams.get(sparkKafkaParamsUniqueId)}" +
         s" already exists in kafka params, returning Kafka Params: $kafkaParams as is.")
      kafkaParams
