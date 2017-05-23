@@ -430,7 +430,7 @@ We use `svm` in package `e1071` as an example. We use all default settings excep
 costs <- exp(seq(from = log(1), to = log(1000), length.out = 5))
 train <- function(cost) {
   stopifnot(requireNamespace("e1071", quietly = TRUE))
-  model <- e1071::svm(Species ~ ., data = iris, cost = cost)
+  model <- e1071::svm(Species ~ Sepal.Length + Sepal.Width + Petal.Length + Petal.Width, data = iris, cost = cost)
   summary(model)
 }
 ```
@@ -567,7 +567,7 @@ for binary classification.
 t <- as.data.frame(Titanic)
 training <- createDataFrame(t)
 # fit a Linear SVM classifier model
-model <- spark.svmLinear(training,  Survived ~ ., regParam = 0.01, maxIter = 10)
+model <- spark.svmLinear(training,  Survived ~ Class + Sex + Age + Freq, regParam = 0.01, maxIter = 10)
 summary(model)
 ```
 
@@ -590,7 +590,7 @@ Binomial logistic regression
 ```{r}
 t <- as.data.frame(Titanic)
 training <- createDataFrame(t)
-model <- spark.logit(training, Survived ~ ., regParam = 0.04741301)
+model <- spark.logit(training, Survived ~ Class + Sex + Age + Freq, regParam = 0.04741301)
 summary(model)
 ```
 
@@ -604,7 +604,7 @@ Multinomial logistic regression against three classes
 t <- as.data.frame(Titanic)
 training <- createDataFrame(t)
 # Note in this case, Spark infers it is multinomial logistic regression, so family = "multinomial" is optional.
-model <- spark.logit(training, Class ~ ., regParam = 0.07815179)
+model <- spark.logit(training, Class ~ Sex + Age + Freq + Survived, regParam = 0.07815179)
 summary(model)
 ```
 
@@ -787,9 +787,10 @@ We use the `longley` dataset to train a decision tree and make predictions:
 
 ```{r, warning=FALSE}
 df <- createDataFrame(longley)
-dtModel <- spark.decisionTree(df, Employed ~ ., type = "regression", maxDepth = 2)
+dtModel <- spark.decisionTree(df, Employed ~ Unemployed + Population, type = "regression", maxDepth = 2)
 summary(dtModel)
 predictions <- predict(dtModel, df)
+```
 
 #### Gradient-Boosted Trees
 
@@ -800,7 +801,7 @@ We use the `longley` dataset to train a gradient-boosted tree and make predictio
 
 ```{r, warning=FALSE}
 df <- createDataFrame(longley)
-gbtModel <- spark.gbt(df, Employed ~ ., type = "regression", maxDepth = 2, maxIter = 2)
+gbtModel <- spark.gbt(df, Employed ~ Unemployed + Population, type = "regression", maxDepth = 2, maxIter = 2)
 summary(gbtModel)
 predictions <- predict(gbtModel, df)
 ```
@@ -814,7 +815,7 @@ In the following example, we use the `longley` dataset to train a random forest 
 
 ```{r, warning=FALSE}
 df <- createDataFrame(longley)
-rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 2, numTrees = 2)
+rfModel <- spark.randomForest(df, Employed ~ Unemployed + Population, type = "regression", maxDepth = 2, numTrees = 2)
 summary(rfModel)
 predictions <- predict(rfModel, df)
 ```
