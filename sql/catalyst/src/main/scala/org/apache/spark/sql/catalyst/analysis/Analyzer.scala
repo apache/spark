@@ -593,7 +593,23 @@ class Analyzer(
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
       case u: UnresolvedRelation if !isRunningDirectlyOnFiles(u.tableIdentifier) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
-        val relation = lookupTableFromCatalog(u, defaultDatabase)
+        val foundRelation = lookupTableFromCatalog(u, defaultDatabase)
+
+        // If alias names assigned, add `Project` with the aliases
+        val relation = if (u.outputNames.nonEmpty) {
+          val outputAttrs = foundRelation.output
+          // Checks if the number of the aliases is equal to expected one
+          if (u.outputNames.size != outputAttrs.size) {
+            u.failAnalysis(s"expected ${outputAttrs.size} columns but found " +
+              s"${u.outputNames.size} columns in alias names")
+          }
+          val aliases = outputAttrs.zip(u.outputNames).map {
+            case (attr, name) => Alias(attr, name)()
+          }
+          Project(aliases, foundRelation)
+        } else {
+          foundRelation
+        }
         resolveRelation(relation)
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View

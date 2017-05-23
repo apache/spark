@@ -36,8 +36,17 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
+ * We could add alias names for columns in a relation:
+ * {{{
+ *   // Assign alias names
+ *   SELECT col1, col2 FROM testData AS t(col1, col2);
+ * }}}
  */
-case class UnresolvedRelation(tableIdentifier: TableIdentifier) extends LeafNode {
+case class UnresolvedRelation(
+    tableIdentifier: TableIdentifier,
+    outputNames: Seq[String] = Seq.empty)
+  extends LeafNode {
+
   /** Returns a `.` separated name for this relation. */
   def tableName: String = tableIdentifier.unquotedString
 
