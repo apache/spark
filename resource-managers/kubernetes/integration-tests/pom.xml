@@ -30,9 +30,6 @@
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Kubernetes Integration Tests</name>
-  <properties>
-    <sbt.project.name>kubernetes-integration-tests</sbt.project.name>
-  </properties>
 
   <dependencies>
     <dependency>
