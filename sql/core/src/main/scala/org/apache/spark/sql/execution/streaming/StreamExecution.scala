@@ -595,7 +595,6 @@ class StreamExecution(
 
   /**
    * Processes any data available between `availableOffsets` and `committedOffsets`.
-   *
    * @param sparkSessionToRunBatch Isolated [[SparkSession]] to run this batch with.
    */
   private def runBatch(sparkSessionToRunBatch: SparkSession): Unit = {
