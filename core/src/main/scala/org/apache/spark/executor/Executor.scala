@@ -26,6 +26,8 @@ import java.util.Properties
 import java.util.concurrent._
 import javax.annotation.concurrent.GuardedBy
 
+import org.apache.spark.executor.CommitDeniedException
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.control.NonFatal
@@ -338,6 +340,9 @@ private[spark] class Executor(
             metricsSystem = env.metricsSystem)
           threwException = false
           res
+        } catch {
+          case _: CommitDeniedException =>
+            throw new TaskKilledException("commit denied")
         } finally {
           val releasedLocks = env.blockManager.releaseAllLocksForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
