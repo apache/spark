@@ -492,7 +492,8 @@ class TreeNodeSuite extends SparkFunSuite {
         "tracksPartitionsInCatalog" -> false,
         "properties" -> JNull,
         "unsupportedFeatures" -> List.empty[String],
-        "schemaPreservesCase" -> JBool(true)))
+        "schemaPreservesCase" -> JBool(true),
+        "ignoredProperties" -> JNull))
 
     // For unknown case class, returns JNull.
     val bigValue = new Array[Int](10000)

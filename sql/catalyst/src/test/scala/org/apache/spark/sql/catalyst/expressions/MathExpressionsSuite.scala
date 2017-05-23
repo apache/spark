@@ -219,6 +219,12 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Tan, DoubleType)
   }
 
+  test("cot") {
+    def f: (Double) => Double = (x: Double) => 1 / math.tan(x)
+    testUnary(Cot, f)
+    checkConsistencyBetweenInterpretedAndCodegen(Cot, DoubleType)
+  }
+
   test("atan") {
     testUnary(Atan, math.atan)
     checkConsistencyBetweenInterpretedAndCodegen(Atan, DoubleType)
