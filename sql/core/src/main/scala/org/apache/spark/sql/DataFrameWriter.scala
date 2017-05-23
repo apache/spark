@@ -286,7 +286,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         partition = Map.empty[String, Option[String]],
         query = df.queryExecution.analyzed,
         overwrite = mode == SaveMode.Overwrite,
-        ifNotExists = false)
+        ifPartitionNotExists = false)
     }
   }
 

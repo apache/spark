@@ -232,9 +232,10 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, DecimalType))
+    Seq(TypeCollection(LongType, DoubleType, DecimalType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case LongType => input.asInstanceOf[Long]
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].ceil
   }
@@ -347,9 +348,10 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, DecimalType))
+    Seq(TypeCollection(LongType, DoubleType, DecimalType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case LongType => input.asInstanceOf[Long]
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].floor
   }
@@ -542,6 +544,20 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
        0.0
   """)
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the cotangent of `expr`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1);
+       0.6420926159343306
+  """)
+case class Cot(child: Expression)
+  extends UnaryMathExpression((x: Double) => 1 / math.tan(x), "COT") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.tan($c);")
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the hyperbolic tangent of `expr`.",
