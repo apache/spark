@@ -1119,21 +1119,24 @@ abstract class RDD[T: ClassTag](
   /**
    * Aggregates the elements of this RDD in a multi-level tree pattern.
    *
+   * This variant with a function generating the zero, provide for efficiently
+   * running on big aggregation structure like large dense vectors
+   *
    * @param depth suggested depth of the tree (default: 2)
    * @see [[org.apache.spark.rdd.RDD#aggregate]]
    */
-  def treeAggregate[U: ClassTag](zeroValue: U)(
+  def treeAggregateWithZeroGenerator[U: ClassTag](zeroValueGenerator: () => U)(
       seqOp: (U, T) => U,
       combOp: (U, U) => U,
       depth: Int = 2): U = withScope {
     require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
     if (partitions.length == 0) {
-      Utils.clone(zeroValue, context.env.closureSerializer.newInstance())
+      Utils.clone(zeroValueGenerator(), context.env.closureSerializer.newInstance())
     } else {
       val cleanSeqOp = context.clean(seqOp)
       val cleanCombOp = context.clean(combOp)
       val aggregatePartition =
-        (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
+        (it: Iterator[T]) => it.aggregate(zeroValueGenerator())(cleanSeqOp, cleanCombOp)
       var partiallyAggregated = mapPartitions(it => Iterator(aggregatePartition(it)))
       var numPartitions = partiallyAggregated.partitions.length
       val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
@@ -1151,6 +1154,18 @@ abstract class RDD[T: ClassTag](
       partiallyAggregated.reduce(cleanCombOp)
     }
   }
+
+  /**
+   * Aggregates the elements of this RDD in a multi-level tree pattern.
+   *
+   * @param depth suggested depth of the tree (default: 2)
+   * @see [[org.apache.spark.rdd.RDD#aggregate]]
+   */
+  def treeAggregate[U: ClassTag](zeroValue: U)(
+    seqOp: (U, T) => U,
+    combOp: (U, U) => U,
+    depth: Int = 2): U =
+    treeAggregateWithZeroGenerator(() => zeroValue)(seqOp, combOp, depth)
 
   /**
    * Return the number of elements in the RDD.
