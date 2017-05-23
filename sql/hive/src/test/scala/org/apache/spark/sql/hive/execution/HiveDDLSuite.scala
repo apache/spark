@@ -1199,11 +1199,6 @@ class HiveDDLSuite
       "last_modified_by",
       "last_modified_time",
       "Owner:",
-      "COLUMN_STATS_ACCURATE",
-      "numFiles",
-      "numRows",
-      "rawDataSize",
-      "totalSize",
       "totalNumberFiles",
       "maxFileSize",
       "minFileSize"

@@ -1506,6 +1506,11 @@ setGeneric("spark.mlp", function(data, formula, ...) { standardGeneric("spark.ml
 #' @export
 setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("spark.naiveBayes") })
 
+#' @rdname spark.decisionTree
+#' @export
+setGeneric("spark.decisionTree",
+           function(data, formula, ...) { standardGeneric("spark.decisionTree") })
+
 #' @rdname spark.randomForest
 #' @export
 setGeneric("spark.randomForest",
