@@ -503,6 +503,8 @@ SparkR supports the following machine learning models and algorithms.
 
 #### Tree - Classification and Regression
 
+* Decision Tree
+
 * Gradient-Boosted Trees (GBT)
 
 * Random Forest
@@ -775,6 +777,19 @@ For example, when the input is $3.2$, the two closest feature values are $3.0$ a
 newDF <- createDataFrame(data.frame(x = c(1.5, 3.2)))
 head(predict(isoregModel, newDF))
 ```
+
+#### Decision Tree
+
+`spark.decisionTree` fits a [decision tree](https://en.wikipedia.org/wiki/Decision_tree_learning) classification or regression model on a `SparkDataFrame`.
+Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
+
+We use the `longley` dataset to train a decision tree and make predictions:
+
+```{r, warning=FALSE}
+df <- createDataFrame(longley)
+dtModel <- spark.decisionTree(df, Employed ~ ., type = "regression", maxDepth = 2)
+summary(dtModel)
+predictions <- predict(dtModel, df)
 
 #### Gradient-Boosted Trees
 
