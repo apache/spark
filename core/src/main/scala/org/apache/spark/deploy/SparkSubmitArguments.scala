@@ -214,7 +214,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         case _ =>
           SparkSubmit.printErrorAndExit(
             s"Cannot load main class from JAR $primaryResource with URI $uriScheme. " +
-              "Please specify a class through --class.")
+             "Please specify a class through --class.")
       }
     }
 
@@ -638,8 +638,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       // Get the output and discard any unnecessary lines from it.
       Source.fromString(new String(out.toByteArray(), StandardCharsets.UTF_8)).getLines
         .filter { line =>
-        !line.startsWith("log4j") && !line.startsWith("usage")
-      }
+         !line.startsWith("log4j") && !line.startsWith("usage")
+       }
         .mkString("\n")
     } finally {
       System.setSecurityManager(currentSm)
