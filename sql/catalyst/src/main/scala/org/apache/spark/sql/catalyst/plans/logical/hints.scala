@@ -36,8 +36,8 @@ case class UnresolvedHint(name: String, parameters: Seq[String], child: LogicalP
  * A resolved hint node. The analyzer should convert all [[UnresolvedHint]] into [[ResolvedHint]].
  */
 case class ResolvedHint(
-    isBroadcastable: Option[Boolean] = None,
-    child: LogicalPlan)
+    child: LogicalPlan,
+    isBroadcastable: Option[Boolean] = None)
   extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output

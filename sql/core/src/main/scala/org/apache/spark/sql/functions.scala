@@ -1020,7 +1020,7 @@ object functions {
    */
   def broadcast[T](df: Dataset[T]): Dataset[T] = {
     Dataset[T](df.sparkSession,
-      ResolvedHint(isBroadcastable = Option(true), df.logicalPlan))(df.exprEnc)
+      ResolvedHint(df.logicalPlan, isBroadcastable = Option(true)))(df.exprEnc)
   }
 
   /**
