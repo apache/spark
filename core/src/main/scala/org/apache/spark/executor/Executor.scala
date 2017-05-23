@@ -425,6 +425,7 @@ private[spark] class Executor(
           }
         }
 
+        setTaskFinishedAndClearInterruptStatus()
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
       } catch {
