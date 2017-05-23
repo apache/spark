@@ -17,18 +17,13 @@
 package org.apache.spark.deploy.kubernetes.integrationtest
 
 import java.util.UUID
-import javax.net.ssl.X509TrustManager
-
-import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
-import io.fabric8.kubernetes.client.internal.SSLUtils
 import org.scalatest.concurrent.Eventually
+import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.config._
-import org.apache.spark.deploy.rest.kubernetes.v1.HttpClientUtil
 
 private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesClient) {
 
@@ -72,27 +67,5 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
       .set("spark.ui.enabled", "true")
       .set("spark.testing", "false")
       .set(WAIT_FOR_APP_COMPLETION, false)
-  }
-
-  def getService[T: ClassTag](
-    serviceName: String,
-    namespace: String,
-    servicePortName: String,
-    servicePath: String = ""): T = synchronized {
-    val kubernetesMaster = s"${defaultClient.getMasterUrl}"
-
-    val url = s"${
-      Array[String](
-        s"${kubernetesClient.getMasterUrl}",
-        "api", "v1", "proxy",
-        "namespaces", namespace,
-        "services", serviceName).mkString("/")
-    }" +
-      s":$servicePortName$servicePath"
-    val userHome = System.getProperty("user.home")
-    val kubernetesConf = kubernetesClient.getConfiguration
-    val sslContext = SSLUtils.sslContext(kubernetesConf)
-    val trustManager = SSLUtils.trustManagers(kubernetesConf)(0).asInstanceOf[X509TrustManager]
-    HttpClientUtil.createClient[T](Set(url), 5, sslContext.getSocketFactory, trustManager)
   }
 }

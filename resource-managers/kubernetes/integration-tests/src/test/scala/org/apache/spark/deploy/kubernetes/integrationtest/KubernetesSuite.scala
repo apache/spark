@@ -17,31 +17,257 @@
 package org.apache.spark.deploy.kubernetes.integrationtest
 
 import java.nio.file.Paths
+import java.util.UUID
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
-import org.scalatest.Suite
-import org.scalatest.concurrent.PatienceConfiguration
+import io.fabric8.kubernetes.client.internal.readiness.Readiness
+import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
+import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.deploy.kubernetes.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
+import org.apache.spark.{SparkConf, SparkFunSuite, SSLOptions}
+import org.apache.spark.deploy.kubernetes.SSLUtils
+import org.apache.spark.deploy.kubernetes.config._
+import org.apache.spark.deploy.kubernetes.integrationtest.backend.IntegrationTestBackendFactory
+import org.apache.spark.deploy.kubernetes.integrationtest.backend.minikube.Minikube
+import org.apache.spark.deploy.kubernetes.integrationtest.constants.MINIKUBE_TEST_BACKEND
+import org.apache.spark.deploy.kubernetes.submit.{Client, KeyAndCertPem}
+import org.apache.spark.launcher.SparkLauncher
 
-private[spark] class KubernetesSuite extends SparkFunSuite {
-  private val testBackend: IntegrationTestBackend = IntegrationTestBackendFactory.getTestBackend()
+private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
+  import KubernetesSuite._
+  private val testBackend = IntegrationTestBackendFactory.getTestBackend()
+
+  private val APP_LOCATOR_LABEL = UUID.randomUUID().toString.replaceAll("-", "")
+  private var kubernetesTestComponents: KubernetesTestComponents = _
+  private var sparkConf: SparkConf = _
+  private var resourceStagingServerLauncher: ResourceStagingServerLauncher = _
+  private var staticAssetServerLauncher: StaticAssetServerLauncher = _
 
   override def beforeAll(): Unit = {
     testBackend.initialize()
+    kubernetesTestComponents = new KubernetesTestComponents(testBackend.getKubernetesClient)
+    resourceStagingServerLauncher = new ResourceStagingServerLauncher(
+      kubernetesTestComponents.kubernetesClient.inNamespace(kubernetesTestComponents.namespace))
+    staticAssetServerLauncher = new StaticAssetServerLauncher(
+      kubernetesTestComponents.kubernetesClient.inNamespace(kubernetesTestComponents.namespace))
   }
 
   override def afterAll(): Unit = {
     testBackend.cleanUp()
   }
 
-  override def nestedSuites: scala.collection.immutable.IndexedSeq[Suite] = {
-      Vector(
-        new KubernetesV1Suite(testBackend),
-        new KubernetesV2Suite(testBackend))
+  before {
+    sparkConf = kubernetesTestComponents.newSparkConf()
+      .set(INIT_CONTAINER_DOCKER_IMAGE, s"spark-init:latest")
+      .set(DRIVER_DOCKER_IMAGE, s"spark-driver:latest")
+      .set(KUBERNETES_DRIVER_LABELS, s"spark-app-locator=$APP_LOCATOR_LABEL")
+    kubernetesTestComponents.createNamespace()
+  }
+
+  after {
+    kubernetesTestComponents.deleteNamespace()
+  }
+
+  test("Simple submission test with the resource staging server.") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+
+    launchStagingServer(SSLOptions(), None)
+    runSparkPiAndVerifyCompletion(SUBMITTER_LOCAL_MAIN_APP_RESOURCE)
+  }
+
+  test("Enable SSL on the resource staging server") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+
+    val keyStoreAndTrustStore = SSLUtils.generateKeyStoreTrustStorePair(
+      ipAddress = Minikube.getMinikubeIp,
+      keyStorePassword = "keyStore",
+      keyPassword = "key",
+      trustStorePassword = "trustStore")
+    sparkConf.set(RESOURCE_STAGING_SERVER_SSL_ENABLED, true)
+      .set("spark.ssl.kubernetes.resourceStagingServer.keyStore",
+          keyStoreAndTrustStore.keyStore.getAbsolutePath)
+      .set("spark.ssl.kubernetes.resourceStagingServer.trustStore",
+          keyStoreAndTrustStore.trustStore.getAbsolutePath)
+      .set("spark.ssl.kubernetes.resourceStagingServer.keyStorePassword", "keyStore")
+      .set("spark.ssl.kubernetes.resourceStagingServer.keyPassword", "key")
+      .set("spark.ssl.kubernetes.resourceStagingServer.trustStorePassword", "trustStore")
+    launchStagingServer(SSLOptions(
+      enabled = true,
+      keyStore = Some(keyStoreAndTrustStore.keyStore),
+      trustStore = Some(keyStoreAndTrustStore.trustStore),
+      keyStorePassword = Some("keyStore"),
+      keyPassword = Some("key"),
+      trustStorePassword = Some("trustStore")),
+      None)
+    runSparkPiAndVerifyCompletion(SUBMITTER_LOCAL_MAIN_APP_RESOURCE)
+  }
+
+  test("Use container-local resources without the resource staging server") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+
+    sparkConf.setJars(Seq(CONTAINER_LOCAL_HELPER_JAR_PATH))
+    runSparkPiAndVerifyCompletion(CONTAINER_LOCAL_MAIN_APP_RESOURCE)
+  }
+
+  test("Dynamic executor scaling basic test") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+
+    launchStagingServer(SSLOptions(), None)
+    createShuffleServiceDaemonSet()
+
+    sparkConf.setJars(Seq(CONTAINER_LOCAL_HELPER_JAR_PATH))
+    sparkConf.set("spark.dynamicAllocation.enabled", "true")
+    sparkConf.set("spark.shuffle.service.enabled", "true")
+    sparkConf.set("spark.kubernetes.shuffle.labels", "app=spark-shuffle-service")
+    sparkConf.set("spark.kubernetes.shuffle.namespace", kubernetesTestComponents.namespace)
+    sparkConf.set("spark.app.name", "group-by-test")
+    runSparkGroupByTestAndVerifyCompletion(SUBMITTER_LOCAL_MAIN_APP_RESOURCE)
+  }
+
+  test("Use remote resources without the resource staging server.") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+    val assetServerUri = staticAssetServerLauncher.launchStaticAssetServer()
+    sparkConf.setJars(Seq(
+      s"$assetServerUri/${EXAMPLES_JAR_FILE.getName}",
+      s"$assetServerUri/${HELPER_JAR_FILE.getName}"
+    ))
+    runSparkPiAndVerifyCompletion(SparkLauncher.NO_RESOURCE)
+  }
+
+  test("Mix remote resources with submitted ones.") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+    launchStagingServer(SSLOptions(), None)
+    val assetServerUri = staticAssetServerLauncher.launchStaticAssetServer()
+    sparkConf.setJars(Seq(
+      SUBMITTER_LOCAL_MAIN_APP_RESOURCE, s"$assetServerUri/${HELPER_JAR_FILE.getName}"
+    ))
+    runSparkPiAndVerifyCompletion(SparkLauncher.NO_RESOURCE)
+  }
+
+  test("Use key and certificate PEM files for TLS.") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+    val keyAndCertificate = SSLUtils.generateKeyCertPemPair(Minikube.getMinikubeIp)
+    launchStagingServer(
+        SSLOptions(enabled = true),
+        Some(keyAndCertificate))
+    sparkConf.set(RESOURCE_STAGING_SERVER_SSL_ENABLED, true)
+        .set(
+            RESOURCE_STAGING_SERVER_CLIENT_CERT_PEM.key, keyAndCertificate.certPem.getAbsolutePath)
+    runSparkPiAndVerifyCompletion(SUBMITTER_LOCAL_MAIN_APP_RESOURCE)
+  }
+
+  test("Use client key and client cert file when requesting executors") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+    sparkConf.setJars(Seq(
+        CONTAINER_LOCAL_MAIN_APP_RESOURCE,
+        CONTAINER_LOCAL_HELPER_JAR_PATH))
+    sparkConf.set(KUBERNETES_DRIVER_CLIENT_KEY_FILE,
+        kubernetesTestComponents.clientConfig.getClientKeyFile)
+    sparkConf.set(KUBERNETES_DRIVER_CLIENT_CERT_FILE,
+        kubernetesTestComponents.clientConfig.getClientCertFile)
+    sparkConf.set(KUBERNETES_DRIVER_CA_CERT_FILE,
+        kubernetesTestComponents.clientConfig.getCaCertFile)
+    runSparkPiAndVerifyCompletion(SparkLauncher.NO_RESOURCE)
+  }
+
+  private def launchStagingServer(
+      resourceStagingServerSslOptions: SSLOptions, keyAndCertPem: Option[KeyAndCertPem]): Unit = {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+
+    val resourceStagingServerPort = resourceStagingServerLauncher.launchStagingServer(
+      resourceStagingServerSslOptions, keyAndCertPem)
+    val resourceStagingServerUriScheme = if (resourceStagingServerSslOptions.enabled) {
+      "https"
+    } else {
+      "http"
+    }
+    sparkConf.set(RESOURCE_STAGING_SERVER_URI,
+      s"$resourceStagingServerUriScheme://" +
+        s"${Minikube.getMinikubeIp}:$resourceStagingServerPort")
+  }
+
+  private def runSparkPiAndVerifyCompletion(appResource: String): Unit = {
+    Client.run(sparkConf, appResource, SPARK_PI_MAIN_CLASS, Array.empty[String])
+    val driverPod = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .withLabel("spark-app-locator", APP_LOCATOR_LABEL)
+      .list()
+      .getItems
+      .get(0)
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      assert(kubernetesTestComponents.kubernetesClient
+        .pods()
+        .withName(driverPod.getMetadata.getName)
+        .getLog
+        .contains("Pi is roughly 3"), "The application did not compute the value of pi.")
+    }
+  }
+
+  private def runSparkGroupByTestAndVerifyCompletion(appResource: String): Unit = {
+    Client.run(
+      sparkConf = sparkConf,
+      appArgs = Array.empty[String],
+      mainClass = GROUP_BY_MAIN_CLASS,
+      mainAppResource = appResource)
+    val driverPod = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .withLabel("spark-app-locator", APP_LOCATOR_LABEL)
+      .list()
+      .getItems
+      .get(0)
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      assert(kubernetesTestComponents.kubernetesClient
+        .pods()
+        .withName(driverPod.getMetadata.getName)
+        .getLog
+        .contains("The Result is"), "The application did not complete.")
+    }
+  }
+
+  private def createShuffleServiceDaemonSet(): Unit = {
+    val ds = kubernetesTestComponents.kubernetesClient.extensions().daemonSets()
+      .createNew()
+        .withNewMetadata()
+        .withName("shuffle")
+      .endMetadata()
+      .withNewSpec()
+        .withNewTemplate()
+          .withNewMetadata()
+            .withLabels(Map("app" -> "spark-shuffle-service").asJava)
+          .endMetadata()
+          .withNewSpec()
+            .addNewVolume()
+              .withName("shuffle-dir")
+              .withNewHostPath()
+                .withPath("/tmp")
+              .endHostPath()
+            .endVolume()
+            .addNewContainer()
+              .withName("shuffle")
+              .withImage("spark-shuffle:latest")
+              .withImagePullPolicy("IfNotPresent")
+              .addNewVolumeMount()
+                .withName("shuffle-dir")
+                .withMountPath("/tmp")
+              .endVolumeMount()
+            .endContainer()
+          .endSpec()
+        .endTemplate()
+      .endSpec()
+      .done()
+
+    // wait for daemonset to become available.
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      val pods = kubernetesTestComponents.kubernetesClient.pods()
+        .withLabel("app", "spark-shuffle-service").list().getItems
+
+      if (pods.size() == 0 || !Readiness.isReady(pods.get(0))) {
+        throw ShuffleNotReadyException
+      }
+    }
   }
 }
 
@@ -70,5 +296,5 @@ private[spark] object KubernetesSuite {
   val GROUP_BY_MAIN_CLASS = "org.apache.spark.deploy.kubernetes" +
     ".integrationtest.jobs.GroupByTest"
 
-  case class ShuffleNotReadyException() extends Exception
+  case object ShuffleNotReadyException extends Exception
 }

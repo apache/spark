@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SSLOptions
 import org.apache.spark.deploy.kubernetes.config._
-import org.apache.spark.deploy.kubernetes.submit.v2.{ContainerNameEqualityPredicate, KeyAndCertPem}
+import org.apache.spark.deploy.kubernetes.submit.{ContainerNameEqualityPredicate, KeyAndCertPem}
 import org.apache.spark.util.Utils
 
 /**

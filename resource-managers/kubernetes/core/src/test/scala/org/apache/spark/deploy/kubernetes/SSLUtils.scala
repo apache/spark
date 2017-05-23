@@ -30,7 +30,7 @@ import org.bouncycastle.cert.jcajce.{JcaX509CertificateConverter, JcaX509v3Certi
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 
-import org.apache.spark.deploy.kubernetes.submit.v2.{KeyAndCertPem, KeyStoreAndTrustStore}
+import org.apache.spark.deploy.kubernetes.submit.{KeyAndCertPem, KeyStoreAndTrustStore}
 import org.apache.spark.util.Utils
 
 private[spark] object SSLUtils {

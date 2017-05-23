@@ -16,49 +16,23 @@
  */
 package org.apache.spark.deploy.kubernetes
 
-import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream, InputStream, OutputStream}
+import java.io.{File, FileInputStream, FileOutputStream, InputStream, OutputStream}
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import com.google.common.io.Files
-import org.apache.commons.codec.binary.Base64
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveInputStream, TarArchiveOutputStream}
 import org.apache.commons.compress.utils.CharsetNames
 import org.apache.commons.io.IOUtils
 import scala.collection.mutable
 
-import org.apache.spark.deploy.rest.kubernetes.v1.TarGzippedData
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.{ByteBufferOutputStream, Utils}
+import org.apache.spark.util.Utils
 
 private[spark] object CompressionUtils extends Logging {
   // Defaults from TarArchiveOutputStream
   private val BLOCK_SIZE = 10240
   private val RECORD_SIZE = 512
   private val ENCODING = CharsetNames.UTF_8
-
-  /**
-   * Compresses all of the given paths into a gzipped-tar archive, returning the compressed data in
-   * memory as an instance of {@link TarGzippedData}. The files are taken without consideration to
-   * their original folder structure, and are added to the tar archive in a flat hierarchy.
-   * Directories are not allowed, and duplicate file names are de-duplicated by appending a numeric
-   * suffix to the file name, before the file extension. For example, if paths a/b.txt and b/b.txt
-   * were provided, then the files added to the tar archive would be b.txt and b-1.txt.
-   * @param paths A list of file paths to be archived
-   * @return An in-memory representation of the compressed data.
-   */
-  def createTarGzip(paths: Iterable[String]): TarGzippedData = {
-    val compressedBytesStream = Utils.tryWithResource(new ByteBufferOutputStream()) { raw =>
-      writeTarGzipToStream(raw, paths)
-      raw
-    }
-    val compressedAsBase64 = Base64.encodeBase64String(compressedBytesStream.toByteBuffer.array)
-    TarGzippedData(
-      dataBase64 = compressedAsBase64,
-      blockSize = BLOCK_SIZE,
-      recordSize = RECORD_SIZE,
-      encoding = ENCODING
-    )
-  }
 
   def writeTarGzipToStream(outputStream: OutputStream, paths: Iterable[String]): Unit = {
     Utils.tryWithResource(new GZIPOutputStream(outputStream)) { gzipping =>
@@ -98,50 +72,14 @@ private[spark] object CompressionUtils extends Logging {
     }
   }
 
-  /**
-   * Decompresses the provided tar archive to a directory.
-   * @param compressedData In-memory representation of the compressed data, ideally created via
-   *                       {@link createTarGzip}.
-   * @param rootOutputDir  Directory to write the output files to. All files from the tarball
-   *                       are written here in a flat hierarchy.
-   * @return List of file paths for each file that was unpacked from the archive.
-   */
-  def unpackAndWriteCompressedFiles(
-      compressedData: TarGzippedData,
-      rootOutputDir: File): Seq[String] = {
-    val compressedBytes = Base64.decodeBase64(compressedData.dataBase64)
-    if (!rootOutputDir.exists) {
-      if (!rootOutputDir.mkdirs) {
-        throw new IllegalStateException(s"Failed to create output directory for unpacking" +
-          s" files at ${rootOutputDir.getAbsolutePath}")
-      }
-    } else if (rootOutputDir.isFile) {
-      throw new IllegalArgumentException(s"Root dir for writing decompressed files: " +
-         s"${rootOutputDir.getAbsolutePath} exists and is not a directory.")
-    }
-    Utils.tryWithResource(new ByteArrayInputStream(compressedBytes)) { compressedBytesStream =>
-      unpackTarStreamToDirectory(
-        compressedBytesStream,
-        rootOutputDir,
-        compressedData.blockSize,
-        compressedData.recordSize,
-        compressedData.encoding)
-    }
-  }
-
-  def unpackTarStreamToDirectory(
-      inputStream: InputStream,
-      outputDir: File,
-      blockSize: Int = BLOCK_SIZE,
-      recordSize: Int = RECORD_SIZE,
-      encoding: String = ENCODING): Seq[String] = {
+  def unpackTarStreamToDirectory(inputStream: InputStream, outputDir: File): Seq[String] = {
     val paths = mutable.Buffer.empty[String]
     Utils.tryWithResource(new GZIPInputStream(inputStream)) { gzipped =>
       Utils.tryWithResource(new TarArchiveInputStream(
           gzipped,
-          blockSize,
-          recordSize,
-          encoding)) { tarInputStream =>
+          BLOCK_SIZE,
+          RECORD_SIZE,
+          ENCODING)) { tarInputStream =>
         var nextTarEntry = tarInputStream.getNextTarEntry
         while (nextTarEntry != null) {
           val outputFile = new File(outputDir, nextTarEntry.getName)
