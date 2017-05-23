@@ -576,7 +576,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         versionSpark.sql("CREATE TABLE tbl AS SELECT 1 AS a")
         assert(versionSpark.table("tbl").collect().toSeq == Seq(Row(1)))
         val tableMeta = versionSpark.sessionState.catalog.getTableMetadata(TableIdentifier("tbl"))
-        val totalSize = tableMeta.properties.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+        val totalSize = tableMeta.stats.map(_.sizeInBytes)
         // Except 0.12, all the following versions will fill the Hive-generated statistics
         if (version == "0.12") {
           assert(totalSize.isEmpty)
