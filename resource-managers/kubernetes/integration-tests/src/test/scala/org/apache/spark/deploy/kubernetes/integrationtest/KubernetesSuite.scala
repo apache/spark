@@ -16,6 +16,7 @@
  */
 package org.apache.spark.deploy.kubernetes.integrationtest
 
+import java.io.File
 import java.nio.file.Paths
 import java.util.UUID
 
@@ -35,11 +36,11 @@ import org.apache.spark.deploy.kubernetes.integrationtest.backend.minikube.Minik
 import org.apache.spark.deploy.kubernetes.integrationtest.constants.MINIKUBE_TEST_BACKEND
 import org.apache.spark.deploy.kubernetes.submit.{Client, KeyAndCertPem}
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.util.Utils
 
 private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   import KubernetesSuite._
   private val testBackend = IntegrationTestBackendFactory.getTestBackend()
-
   private val APP_LOCATOR_LABEL = UUID.randomUUID().toString.replaceAll("-", "")
   private var kubernetesTestComponents: KubernetesTestComponents = _
   private var sparkConf: SparkConf = _
@@ -124,7 +125,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     sparkConf.set("spark.kubernetes.shuffle.labels", "app=spark-shuffle-service")
     sparkConf.set("spark.kubernetes.shuffle.namespace", kubernetesTestComponents.namespace)
     sparkConf.set("spark.app.name", "group-by-test")
-    runSparkGroupByTestAndVerifyCompletion(SUBMITTER_LOCAL_MAIN_APP_RESOURCE)
+    runSparkApplicationAndVerifyCompletion(
+        SUBMITTER_LOCAL_MAIN_APP_RESOURCE,
+        GROUP_BY_MAIN_CLASS,
+        "The Result is",
+        Array.empty[String])
   }
 
   test("Use remote resources without the resource staging server.") {
@@ -173,6 +178,20 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     runSparkPiAndVerifyCompletion(SparkLauncher.NO_RESOURCE)
   }
 
+  test("Added files should be placed in the driver's working directory.") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+    val testExistenceFileTempDir = Utils.createTempDir(namePrefix = "test-existence-file-temp-dir")
+    val testExistenceFile = new File(testExistenceFileTempDir, "input.txt")
+    Files.write(TEST_EXISTENCE_FILE_CONTENTS, testExistenceFile, Charsets.UTF_8)
+    launchStagingServer(SSLOptions(), None)
+    sparkConf.set("spark.files", testExistenceFile.getAbsolutePath)
+    runSparkApplicationAndVerifyCompletion(
+        SUBMITTER_LOCAL_MAIN_APP_RESOURCE,
+        FILE_EXISTENCE_MAIN_CLASS,
+        s"File found at /opt/spark/${testExistenceFile.getName} with correct contents.",
+        Array(testExistenceFile.getName, TEST_EXISTENCE_FILE_CONTENTS))
+  }
+
   private def launchStagingServer(
       resourceStagingServerSslOptions: SSLOptions, keyAndCertPem: Option[KeyAndCertPem]): Unit = {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
@@ -190,27 +209,19 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   private def runSparkPiAndVerifyCompletion(appResource: String): Unit = {
-    Client.run(sparkConf, appResource, SPARK_PI_MAIN_CLASS, Array.empty[String])
-    val driverPod = kubernetesTestComponents.kubernetesClient
-      .pods()
-      .withLabel("spark-app-locator", APP_LOCATOR_LABEL)
-      .list()
-      .getItems
-      .get(0)
-    Eventually.eventually(TIMEOUT, INTERVAL) {
-      assert(kubernetesTestComponents.kubernetesClient
-        .pods()
-        .withName(driverPod.getMetadata.getName)
-        .getLog
-        .contains("Pi is roughly 3"), "The application did not compute the value of pi.")
-    }
+    runSparkApplicationAndVerifyCompletion(
+        appResource, SPARK_PI_MAIN_CLASS, "Pi is roughly 3", Array.empty[String])
   }
 
-  private def runSparkGroupByTestAndVerifyCompletion(appResource: String): Unit = {
+  private def runSparkApplicationAndVerifyCompletion(
+      appResource: String,
+      mainClass: String,
+      expectedLogOnCompletion: String,
+      appArgs: Array[String]): Unit = {
     Client.run(
       sparkConf = sparkConf,
-      appArgs = Array.empty[String],
-      mainClass = GROUP_BY_MAIN_CLASS,
+      appArgs = appArgs,
+      mainClass = mainClass,
       mainAppResource = appResource)
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
@@ -223,7 +234,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
         .pods()
         .withName(driverPod.getMetadata.getName)
         .getLog
-        .contains("The Result is"), "The application did not complete.")
+        .contains(expectedLogOnCompletion), "The application did not complete.")
     }
   }
 
@@ -285,8 +296,6 @@ private[spark] object KubernetesSuite {
   val CONTAINER_LOCAL_HELPER_JAR_PATH = s"local:///opt/spark/examples/" +
     s"integration-tests-jars/${HELPER_JAR_FILE.getName}"
 
-  val TEST_EXISTENCE_FILE = Paths.get("test-data", "input.txt").toFile
-  val TEST_EXISTENCE_FILE_CONTENTS = Files.toString(TEST_EXISTENCE_FILE, Charsets.UTF_8)
   val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
   val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
   val SPARK_PI_MAIN_CLASS = "org.apache.spark.deploy.kubernetes" +
@@ -295,6 +304,7 @@ private[spark] object KubernetesSuite {
     ".integrationtest.jobs.FileExistenceTest"
   val GROUP_BY_MAIN_CLASS = "org.apache.spark.deploy.kubernetes" +
     ".integrationtest.jobs.GroupByTest"
+  val TEST_EXISTENCE_FILE_CONTENTS = "contents"
 
   case object ShuffleNotReadyException extends Exception
 }

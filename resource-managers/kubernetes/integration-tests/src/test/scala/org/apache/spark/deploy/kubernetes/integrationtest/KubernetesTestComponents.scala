@@ -63,7 +63,7 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
       .set("spark.executor.memory", "500m")
       .set("spark.executor.cores", "1")
       .set("spark.executors.instances", "1")
-      .set("spark.app.name", "spark-pi")
+      .set("spark.app.name", "spark-test-app")
       .set("spark.ui.enabled", "true")
       .set("spark.testing", "false")
       .set(WAIT_FOR_APP_COMPLETION, false)
