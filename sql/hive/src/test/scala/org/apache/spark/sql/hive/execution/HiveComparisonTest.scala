@@ -192,12 +192,7 @@ abstract class HiveComparisonTest
     "last_modified_by",
     "last_modified_time",
     "Owner:",
-    "COLUMN_STATS_ACCURATE",
     // The following are hive specific schema parameters which we do not need to match exactly.
-    "numFiles",
-    "numRows",
-    "rawDataSize",
-    "totalSize",
     "totalNumberFiles",
     "maxFileSize",
     "minFileSize"
