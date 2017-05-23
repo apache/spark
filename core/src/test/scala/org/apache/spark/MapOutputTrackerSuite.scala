@@ -30,11 +30,6 @@ import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
 
 class MapOutputTrackerSuite extends SparkFunSuite {
 
-  private val conf = new SparkConf
-  val env = mock(classOf[SparkEnv])
-  doReturn(conf).when(env).conf
-  SparkEnv.set(env)
-
   private def newTrackerMaster(sparkConf: SparkConf = conf) = {
     val broadcastManager = new BroadcastManager(true, sparkConf,
       new SecurityManager(sparkConf))

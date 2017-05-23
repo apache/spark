@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, IOException}
+import java.io.{InputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 import javax.annotation.concurrent.GuardedBy
@@ -27,7 +27,6 @@ import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.shuffle.FetchFailedException
@@ -55,8 +54,6 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
  * @param maxReqsInFlight max number of remote requests to fetch blocks at any given point.
  * @param maxReqSizeShuffleToMem max size (in bytes) of a request that can be shuffled to memory.
  * @param detectCorrupt whether to detect any corruption in fetched blocks.
- * @param tmm [[TaskMemoryManager]] used in [[MemoryConsumer]] for acquiring memory.
- * @param memMode [[MemoryMode]] acquire memory from whether off heap or on heap.
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(
@@ -68,11 +65,7 @@ final class ShuffleBlockFetcherIterator(
     maxBytesInFlight: Long,
     maxReqsInFlight: Int,
     maxReqSizeShuffleToMem: Long,
-    detectCorrupt: Boolean,
-    tmm: TaskMemoryManager,
-    memMode: MemoryMode = MemoryMode.OFF_HEAP)
-  extends MemoryConsumer(tmm, tmm.pageSizeBytes(), memMode)
-  with Iterator[(BlockId, InputStream)] with Logging {
+    detectCorrupt: Boolean) extends Iterator[(BlockId, InputStream)] with Logging {
 
   import ShuffleBlockFetcherIterator._
 
@@ -137,12 +130,6 @@ final class ShuffleBlockFetcherIterator(
   @GuardedBy("this")
   private[this] var isZombie = false
 
-  /**
-   * Used to store the blocks which are shuffled to memory. A block will be removed from here
-   * after released.
-   */
-  private[this] val blocksShuffleToMemPendingFree = mutable.Set[String]()
-
   initialize()
 
   // Decrements the buffer reference count.
@@ -151,10 +138,6 @@ final class ShuffleBlockFetcherIterator(
     // Release the current buffer if necessary
     if (currentResult != null) {
       currentResult.buf.release()
-      if (blocksShuffleToMemPendingFree.contains(currentResult.blockId.toString)) {
-        freeMemory(currentResult.size)
-        blocksShuffleToMemPendingFree -= currentResult.blockId.toString
-      }
     }
     currentResult = null
   }
@@ -172,16 +155,12 @@ final class ShuffleBlockFetcherIterator(
     while (iter.hasNext) {
       val result = iter.next()
       result match {
-        case SuccessFetchResult(bId, address, size, buf, _) =>
+        case SuccessFetchResult(bId, address, _, buf, _) =>
           if (address != blockManager.blockManagerId) {
             shuffleMetrics.incRemoteBytesRead(buf.size)
             shuffleMetrics.incRemoteBlocksFetched(1)
           }
           buf.release()
-          if (blocksShuffleToMemPendingFree.contains(bId.toString)) {
-            freeMemory(size)
-            blocksShuffleToMemPendingFree -= bId.toString
-          }
         case _ =>
       }
     }
@@ -223,25 +202,22 @@ final class ShuffleBlockFetcherIterator(
       }
     }
 
-    // Shuffle remote blocks to disk when the request is too large or local memory shortage.
+    // Shuffle remote blocks to disk when the request is too large.
     val fetchToDisk = if (req.size > maxReqSizeShuffleToMem) {
       true
     } else {
-      val acquired = acquireMemory(req.size)
-      if (acquired < req.size) {
-        freeMemory(acquired)
-        true
-      } else {
-        false
-      }
+      false
     }
 
     if (fetchToDisk) {
+      val shuffleFiles = blockIds.map(bId => blockManager.diskBlockManager
+          .getFile(s"${context.taskAttemptId()}-remote-$bId")).toArray
+      // Register with a task completion callback to ensure that they're guaranteed to be deleted
+      // after the task finishes. This is another layer of defensiveness against disk file leaks.
+      context.addTaskCompletionListener(_ => shuffleFiles.foreach(_.delete()))
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener,
-        blockIds.map(bId => blockManager.diskBlockManager.getFile(s"remote-$bId")).toArray)
+        blockFetchingListener, shuffleFiles)
     } else {
-      blocksShuffleToMemPendingFree ++= blockIds
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
         blockFetchingListener, null)
     }
@@ -438,6 +414,7 @@ final class ShuffleBlockFetcherIterator(
       // Send fetch requests up to maxBytesInFlight
       fetchUpToMaxBytes()
     }
+
     currentResult = result.asInstanceOf[SuccessFetchResult]
     (currentResult.blockId, new BufferReleasingInputStream(input, this))
   }
@@ -461,8 +438,6 @@ final class ShuffleBlockFetcherIterator(
           "Failed to get block " + blockId + ", which is not a shuffle block", e)
     }
   }
-
-  override def spill(size: Long, trigger: MemoryConsumer): Long = 0
 }
 
 /**
