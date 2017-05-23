@@ -1076,7 +1076,8 @@ class TrainingSummaryTest(SparkSessionTestCase):
         pValues = s.pValues
         self.assertTrue(isinstance(pValues, list) and isinstance(pValues[0], float))
         # test evaluation (with training dataset) produces a summary with same values
-        # one check is enough to verify a summary is returned, Scala version runs full test
+        # one check is enough to verify a summary is returned
+        # The child class LinearRegressionTrainingSummary runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.explainedVariance, s.explainedVariance)
 
@@ -1113,7 +1114,8 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.nullDeviance, float))
         self.assertTrue(isinstance(s.dispersion, float))
         # test evaluation (with training dataset) produces a summary with same values
-        # one check is enough to verify a summary is returned, Scala version runs full test
+        # one check is enough to verify a summary is returned
+        # The child class GeneralizedLinearRegressionTrainingSummary runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.deviance, s.deviance)
 
