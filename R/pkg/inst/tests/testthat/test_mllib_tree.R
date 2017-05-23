@@ -44,21 +44,23 @@ test_that("spark.gbt", {
   expect_equal(stats$numFeatures, 6)
   expect_equal(length(stats$treeWeights), 20)
 
-  modelPath <- tempfile(pattern = "spark-gbtRegression", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  stats2 <- summary(model2)
-  expect_equal(stats$formula, stats2$formula)
-  expect_equal(stats$numFeatures, stats2$numFeatures)
-  expect_equal(stats$features, stats2$features)
-  expect_equal(stats$featureImportances, stats2$featureImportances)
-  expect_equal(stats$maxDepth, stats2$maxDepth)
-  expect_equal(stats$numTrees, stats2$numTrees)
-  expect_equal(stats$treeWeights, stats2$treeWeights)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-gbtRegression", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    expect_equal(stats$formula, stats2$formula)
+    expect_equal(stats$numFeatures, stats2$numFeatures)
+    expect_equal(stats$features, stats2$features)
+    expect_equal(stats$featureImportances, stats2$featureImportances)
+    expect_equal(stats$maxDepth, stats2$maxDepth)
+    expect_equal(stats$numTrees, stats2$numTrees)
+    expect_equal(stats$treeWeights, stats2$treeWeights)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   # classification
   # label must be binary - GBTClassifier currently only supports binary classification.
@@ -76,17 +78,19 @@ test_that("spark.gbt", {
   expect_equal(length(grep("setosa", predictions)), 50)
   expect_equal(length(grep("versicolor", predictions)), 50)
 
-  modelPath <- tempfile(pattern = "spark-gbtClassification", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  stats2 <- summary(model2)
-  expect_equal(stats$depth, stats2$depth)
-  expect_equal(stats$numNodes, stats2$numNodes)
-  expect_equal(stats$numClasses, stats2$numClasses)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-gbtClassification", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    expect_equal(stats$depth, stats2$depth)
+    expect_equal(stats$numNodes, stats2$numNodes)
+    expect_equal(stats$numClasses, stats2$numClasses)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   iris2$NumericSpecies <- ifelse(iris2$Species == "setosa", 0, 1)
   df <- suppressWarnings(createDataFrame(iris2))
@@ -136,21 +140,23 @@ test_that("spark.randomForest", {
   expect_equal(stats$numTrees, 20)
   expect_equal(stats$maxDepth, 5)
 
-  modelPath <- tempfile(pattern = "spark-randomForestRegression", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  stats2 <- summary(model2)
-  expect_equal(stats$formula, stats2$formula)
-  expect_equal(stats$numFeatures, stats2$numFeatures)
-  expect_equal(stats$features, stats2$features)
-  expect_equal(stats$featureImportances, stats2$featureImportances)
-  expect_equal(stats$numTrees, stats2$numTrees)
-  expect_equal(stats$maxDepth, stats2$maxDepth)
-  expect_equal(stats$treeWeights, stats2$treeWeights)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-randomForestRegression", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    expect_equal(stats$formula, stats2$formula)
+    expect_equal(stats$numFeatures, stats2$numFeatures)
+    expect_equal(stats$features, stats2$features)
+    expect_equal(stats$featureImportances, stats2$featureImportances)
+    expect_equal(stats$numTrees, stats2$numTrees)
+    expect_equal(stats$maxDepth, stats2$maxDepth)
+    expect_equal(stats$treeWeights, stats2$treeWeights)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   # classification
   data <- suppressWarnings(createDataFrame(iris))
@@ -168,17 +174,19 @@ test_that("spark.randomForest", {
   expect_equal(length(grep("setosa", predictions)), 50)
   expect_equal(length(grep("versicolor", predictions)), 50)
 
-  modelPath <- tempfile(pattern = "spark-randomForestClassification", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  stats2 <- summary(model2)
-  expect_equal(stats$depth, stats2$depth)
-  expect_equal(stats$numNodes, stats2$numNodes)
-  expect_equal(stats$numClasses, stats2$numClasses)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-randomForestClassification", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    expect_equal(stats$depth, stats2$depth)
+    expect_equal(stats$numNodes, stats2$numNodes)
+    expect_equal(stats$numClasses, stats2$numClasses)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   # Test numeric response variable
   labelToIndex <- function(species) {
