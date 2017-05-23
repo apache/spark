@@ -232,7 +232,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     runCommand(df.sparkSession, "save") {
       SaveIntoDataSourceCommand(
-        query = df.logicalPlan,
+        query = df.queryExecution.analyzed,
         provider = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
         options = extraOptions.toMap,
@@ -284,7 +284,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
-        query = df.logicalPlan,
+        query = df.queryExecution.analyzed,
         overwrite = mode == SaveMode.Overwrite,
         ifNotExists = false)
     }
@@ -370,7 +370,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case (true, SaveMode.Overwrite) =>
         // Get all input data source or hive relations of the query.
-        val srcRelations = df.logicalPlan.collect {
+        val srcRelations = df.queryExecution.analyzed.collect {
           case LogicalRelation(src: BaseRelation, _, _) => src
           case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta) =>
             relation.tableMeta.identifier
@@ -417,7 +417,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       partitionColumnNames = partitioningColumns.getOrElse(Nil),
       bucketSpec = getBucketSpec)
 
-    runCommand(df.sparkSession, "saveAsTable")(CreateTable(tableDesc, mode, Some(df.logicalPlan)))
+    runCommand(df.sparkSession, "saveAsTable")(CreateTable(tableDesc, mode,
+      Some(df.queryExecution.analyzed)))
   }
 
   /**

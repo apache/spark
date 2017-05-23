@@ -1743,7 +1743,7 @@ class Dataset[T] private[sql](
   def union(other: Dataset[T]): Dataset[T] = withSetOperator {
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(EliminateBarriers(logicalPlan), EliminateBarriers(other.logicalPlan)))
+    CombineUnions(Union(queryExecution.analyzed, other.queryExecution.analyzed))
       .mapChildren(AnalysisBarrier)
   }
 
@@ -2764,7 +2764,7 @@ class Dataset[T] private[sql](
       comment = None,
       properties = Map.empty,
       originalText = None,
-      child = logicalPlan,
+      child = queryExecution.analyzed,
       allowExisting = false,
       replace = replace,
       viewType = viewType)
