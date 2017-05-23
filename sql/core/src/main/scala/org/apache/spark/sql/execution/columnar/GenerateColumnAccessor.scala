@@ -21,6 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodeGenerator, UnsafeRowWriter}
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 import org.apache.spark.sql.types._
 
 /**
@@ -62,12 +63,16 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalR
 /**
  * Generates bytecode for a [[ColumnarIterator]] for columnar cache.
  */
-object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
+class GenerateColumnAccessor(useColumnarBatch: Boolean)
+    extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
 
   protected def canonicalize(in: Seq[DataType]): Seq[DataType] = in
   protected def bind(in: Seq[DataType], inputSchema: Seq[Attribute]): Seq[DataType] = in
 
   protected def create(columnTypes: Seq[DataType]): ColumnarIterator = {
+    if (useColumnarBatch) {
+      throw new UnsupportedOperationException("Not supported yet. Another PR will implement")
+    }
     val ctx = newCodeGenContext()
     val numFields = columnTypes.size
     val (initializeAccessors, extractors) = columnTypes.zipWithIndex.map { case (dt, index) =>
@@ -205,9 +210,9 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
             return false;
           }
 
-          ${classOf[CachedBatch].getName} batch = (${classOf[CachedBatch].getName}) input.next();
+          ${classOf[CachedBatchBytes].getName} batch = (${classOf[CachedBatchBytes].getName}) input.next();
           currentRow = 0;
-          numRowsInBatch = batch.numRows();
+          numRowsInBatch = batch.getNumRows();
           for (int i = 0; i < columnIndexes.length; i ++) {
             buffers[i] = batch.buffers()[columnIndexes[i]];
           }
