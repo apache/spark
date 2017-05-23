@@ -447,7 +447,7 @@ package object config extends Logging {
         " spark-submit, this directory must be empty and will be mounted as an empty directory" +
         " volume on the driver and executor pod.")
       .stringConf
-      .createWithDefault("/var/spark-data/spark-submitted-jars")
+      .createWithDefault("/var/spark-data/spark-jars")
 
   private[spark] val INIT_CONTAINER_FILES_DOWNLOAD_LOCATION =
     ConfigBuilder("spark.kubernetes.mountdependencies.filesDownloadDir")
@@ -455,7 +455,7 @@ package object config extends Logging {
         " spark-submit, this directory must be empty and will be mounted as an empty directory" +
         " volume on the driver and executor pods.")
       .stringConf
-      .createWithDefault("/var/spark-data/spark-submitted-files")
+      .createWithDefault("/var/spark-data/spark-files")
 
   private[spark] val INIT_CONTAINER_MOUNT_TIMEOUT =
     ConfigBuilder("spark.kubernetes.mountdependencies.mountTimeout")

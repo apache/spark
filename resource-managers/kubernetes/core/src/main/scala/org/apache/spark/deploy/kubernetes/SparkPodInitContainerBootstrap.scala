@@ -93,6 +93,10 @@ private[spark] class SparkPodInitContainerBootstrapImpl(
           .endVolume()
         .editMatchingContainer(new ContainerNameEqualityPredicate(mainContainerName))
           .addToVolumeMounts(sharedVolumeMounts: _*)
+          .addNewEnv()
+            .withName(ENV_MOUNTED_FILES_DIR)
+            .withValue(filesDownloadPath)
+            .endEnv()
           .endContainer()
         .endSpec()
     resourceStagingServerSecretPlugin.map { plugin =>

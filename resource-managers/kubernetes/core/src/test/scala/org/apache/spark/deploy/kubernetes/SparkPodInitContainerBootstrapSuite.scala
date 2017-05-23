@@ -111,6 +111,16 @@ class SparkPodInitContainerBootstrapSuite extends SparkFunSuite with BeforeAndAf
     })
   }
 
+  test("Files download path is set as environment variable") {
+    val bootstrappedPod = bootstrapPodWithoutSubmittedDependencies()
+    val containers = bootstrappedPod.getSpec.getContainers.asScala
+    val maybeMainContainer = containers.find(_.getName === MAIN_CONTAINER_NAME)
+    assert(maybeMainContainer.exists { mainContainer =>
+      mainContainer.getEnv.asScala.exists(envVar =>
+        envVar.getName == ENV_MOUNTED_FILES_DIR && envVar.getValue == FILES_DOWNLOAD_PATH)
+    })
+  }
+
   test("Running with submitted dependencies modifies the init container with the plugin.") {
     val bootstrappedPod = bootstrapPodWithSubmittedDependencies()
     val podAnnotations = bootstrappedPod.getMetadata.getAnnotations.asScala

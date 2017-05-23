@@ -92,6 +92,7 @@ package object constants {
   private[spark] val ENV_DRIVER_MAIN_CLASS = "SPARK_DRIVER_CLASS"
   private[spark] val ENV_DRIVER_ARGS = "SPARK_DRIVER_ARGS"
   private[spark] val ENV_DRIVER_JAVA_OPTS = "SPARK_DRIVER_JAVA_OPTS"
+  private[spark] val ENV_MOUNTED_FILES_DIR = "SPARK_MOUNTED_FILES_DIR"
 
   // Annotation keys
   private[spark] val ANNOTATION_PROVIDE_EXTERNAL_URI =

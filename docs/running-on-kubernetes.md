@@ -559,6 +559,22 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.mountdependencies.jarsDownloadDir</code></td>
+  <td><code>/var/spark-data/spark-jars</code></td>
+  <td>
+    Location to download jars to in the driver and executors. This will be mounted as an empty directory volume
+    into the driver and executor containers.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.mountdependencies.filesDownloadDir</code></td>
+  <td><code>/var/spark-data/spark-files</code></td>
+  <td>
+    Location to download files to in the driver and executors. This will be mounted as an empty directory volume
+    into the driver and executor containers.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.report.interval</code></td>
   <td><code>1s</code></td>
   <td>
