@@ -214,7 +214,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         case _ =>
           SparkSubmit.printErrorAndExit(
             s"Cannot load main class from JAR $primaryResource with URI $uriScheme. " +
-            "Please specify a class through --class.")
+              "Please specify a class through --class.")
       }
     }
 
@@ -255,10 +255,12 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (mainClass == null && SparkSubmit.isUserJar(primaryResource)) {
       SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
     }
-    if (driverMemory != null && Try(JavaUtils.byteStringAsBytes(driverMemory)).getOrElse(-1L) <= 0) {
+    if (driverMemory != null
+        && Try(JavaUtils.byteStringAsBytes(driverMemory)).getOrElse(-1L) <= 0) {
       SparkSubmit.printErrorAndExit("Driver Memory must be a positive number")
     }
-    if (executorMemory != null && Try(JavaUtils.byteStringAsBytes(executorMemory)).getOrElse(-1L) <= 0) {
+    if (executorMemory != null
+        && Try(JavaUtils.byteStringAsBytes(executorMemory)).getOrElse(-1L) <= 0) {
       SparkSubmit.printErrorAndExit("Executor Memory cores must be a positive number")
     }
     if (executorCores != null && Try(executorCores.toInt).getOrElse(-1) <= 0) {
@@ -638,8 +640,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       // Get the output and discard any unnecessary lines from it.
       Source.fromString(new String(out.toByteArray(), StandardCharsets.UTF_8)).getLines
         .filter { line =>
-          !line.startsWith("log4j") && !line.startsWith("usage")
-        }
+        !line.startsWith("log4j") && !line.startsWith("usage")
+      }
         .mkString("\n")
     } finally {
       System.setSecurityManager(currentSm)
