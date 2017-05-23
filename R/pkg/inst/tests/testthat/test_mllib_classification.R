@@ -38,9 +38,8 @@ test_that("spark.svmLinear", {
   expect_true(class(summary$coefficients[, 1]) == "numeric")
 
   coefs <- summary$coefficients[, "Estimate"]
-  expected_coefs <- c(-0.1563083, -0.460648, 0.2276626, 1.055085)
+  expected_coefs <- c(-0.06004978, -0.1563083, -0.460648, 0.2276626, 1.055085)
   expect_true(all(abs(coefs - expected_coefs) < 0.1))
-  expect_equal(summary$intercept, -0.06004978, tolerance = 1e-2)
 
   # Test prediction with string label
   prediction <- predict(model, training)
