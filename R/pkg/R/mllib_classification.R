@@ -49,7 +49,7 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' Linear SVM Model
 #'
 #' Fits a linear SVM model against a SparkDataFrame, similar to svm in e1071 package.
-#' Currently only supports binary classification model with linear kernal.
+#' Currently only supports binary classification model with linear kernel.
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
 #' @param data SparkDataFrame for training.
