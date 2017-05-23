@@ -89,13 +89,13 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * Default: 1.0.
    * @group param
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   final val miniBatchFraction = new DoubleParam(this, "miniBatchFraction", "The fraction of the" +
     " data to update clustering centers per iteration. Must be in (0, 1].",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
   /** @group getParam */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def getMiniBatchFraction: Double = $(miniBatchFraction)
 
   /**
@@ -316,7 +316,7 @@ class KMeans @Since("1.5.0") (
   def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setMiniBatchFraction(value: Double): this.type = set(miniBatchFraction, value)
 
   @Since("2.0.0")

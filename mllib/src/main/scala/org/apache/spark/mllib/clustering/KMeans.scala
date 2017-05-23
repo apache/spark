@@ -157,7 +157,6 @@ class KMeans private (
   /**
    * The fraction of data to be used for each EM iteration.
    */
-  @Since("2.2.0")
   private[spark] def getMiniBatchFraction: Double = miniBatchFraction
 
   /**
@@ -165,7 +164,6 @@ class KMeans private (
    * Set fraction of data to be used for each EM iteration.
    * Default 1.0
    */
-  @Since("2.2.0")
   private[spark] def setMiniBatchFraction(fraction: Double): this.type = {
     require(fraction > 0 && fraction <= 1.0,
       s"Fraction for mini-batch EM must be in range (0, 1] but got ${fraction}")
