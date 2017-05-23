@@ -73,3 +73,9 @@ select floor(0);
 select floor(1);
 select floor(1234567890123456);
 select floor(12345678901234567);
+
+--  / and *
+select (5 / 2) * 2;
+select (12345678901234567890 / 123) * 123;
+select (5 / 0) * 2;
+select (5 / null) * 2;
