@@ -281,6 +281,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val withWindow = withOrder.optionalMap(windows)(withWindows)
 
     // LIMIT
+    // - LIMIT ALL is the same as omitting the LIMIT clause
     withWindow.optional(limit) {
       Limit(typedVisit(limit), withWindow)
     }
@@ -1010,6 +1011,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Add(left, right)
       case SqlBaseParser.MINUS =>
         Subtract(left, right)
+      case SqlBaseParser.CONCAT_PIPE =>
+        Concat(left :: right :: Nil)
       case SqlBaseParser.AMPERSAND =>
         BitwiseAnd(left, right)
       case SqlBaseParser.HAT =>
