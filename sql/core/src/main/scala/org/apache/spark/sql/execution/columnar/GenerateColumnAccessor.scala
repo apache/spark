@@ -157,6 +157,7 @@ class GenerateColumnAccessor(useColumnarBatch: Boolean)
          (0 to groupedAccessorsLength - 1).map { i => s"extractors$i();" }.mkString("\n"))
       }
 
+    val cachedBatchBytesCls = classOf[CachedBatchBytes].getName
     val codeBody = s"""
       import java.nio.ByteBuffer;
       import java.nio.ByteOrder;
@@ -210,7 +211,7 @@ class GenerateColumnAccessor(useColumnarBatch: Boolean)
             return false;
           }
 
-          ${classOf[CachedBatchBytes].getName} batch = (${classOf[CachedBatchBytes].getName}) input.next();
+          $cachedBatchBytesCls batch = ($cachedBatchBytesCls) input.next();
           currentRow = 0;
           numRowsInBatch = batch.getNumRows();
           for (int i = 0; i < columnIndexes.length; i ++) {
