@@ -51,4 +51,10 @@ public class ChildThreadAppHandle extends AbstractSparkAppHandle {
   void setChildThread(Thread childThread) {
     this.childThread = childThread;
   }
+
+  protected void waitFor() throws InterruptedException {
+    if(this.childThread.isAlive()) {
+      this.childThread.wait();
+    }
+  }
 }

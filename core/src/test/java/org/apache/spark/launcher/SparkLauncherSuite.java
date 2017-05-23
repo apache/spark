@@ -203,7 +203,8 @@ public class SparkLauncherSuite {
       .addAppArgs("thread");
     final SparkAppHandle app = launcher.startApplication();
     sleep(3000);
-    assertEquals(false, app.getState().isFinal());
+    AbstractSparkAppHandle handle = (AbstractSparkAppHandle)app;
+    handle.waitFor();
   }
 
   public static class SparkLauncherTestApp {

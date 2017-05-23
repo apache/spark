@@ -30,7 +30,7 @@ class ChildProcAppHandle extends AbstractSparkAppHandle {
 
   private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
 
-  private Process childProc;
+  protected Process childProc;
 
   ChildProcAppHandle(String secret, LauncherServer server) {
     super(server, secret);
@@ -58,5 +58,7 @@ class ChildProcAppHandle extends AbstractSparkAppHandle {
       SparkLauncher.REDIRECTOR_FACTORY);
   }
 
-
+  protected void waitFor() throws InterruptedException {
+    this.childProc.waitFor();
+  }
 }
