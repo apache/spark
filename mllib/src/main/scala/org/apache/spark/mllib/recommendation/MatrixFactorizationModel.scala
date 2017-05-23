@@ -153,6 +153,35 @@ class MatrixFactorizationModel @Since("0.8.0") (
   }
 
   /**
+   * Recommends similar products
+   *
+   * @param user the user to find similar users for
+   * @param num how many products to return. The number returned may be less than this.
+   * @return [[Rating]] objects, each of which contains the given user ID, a user ID, and a
+   *  "score" in the rating field. Each represents one recommended user, and they are sorted
+   *  by score, decreasing. The first returned is the one predicted to be most similar
+   *  user to the specified user ID. The score is an opaque value that indicates how strongly
+   *  recommended the user is.
+   */
+  def recommendSimilariUsers(user: Int, num: Int): Array[Rating] =
+    recommend(userFeatures.lookup(user).head, userFeatures, num)
+      .map(t => Rating(user, t._1, t._2))
+
+  /**
+   * Recommends similar products
+   *
+   * @param product the product to find similar products for
+   * @param num how many products to return. The number returned may be less than this.
+   * @return [[Rating]] objects, each of which contains the given product ID, a product ID, and a
+   *  "score" in the rating field. Each represents one recommended product, and they are sorted
+   *  by score, decreasing. The first returned is the one predicted to be most similar
+   *  product to the specified product ID. The score is an opaque value that indicates how strongly
+   *  recommended the product is.
+   */
+  def recommendSimilariProducts(product: Int, num: Int): Array[Rating] =
+    recommend(productFeatures.lookup(product).head, productFeatures, num)
+      .map(t => Rating(product, t._1, t._2))
+  /**
    * Recommends products to a user.
    *
    * @param user the user to recommend products to

@@ -173,6 +173,17 @@ public class JavaALSSuite extends SharedSparkSession {
       .run(data.rdd());
     validateRecommendations(model.recommendProducts(1, 10), 10);
     validateRecommendations(model.recommendUsers(1, 20), 20);
+    validateSimilarRecommendations(model.recommendSimilariProducts(1, 10), 10,1);
+    validateSimilarRecommendations(model.recommendSimilariUsers(1,10),10,1);
+  }
+
+  private static void validateSimilarRecommendations(Rating[] recommendations, int howMany, int id) {
+    Assert.assertEquals(howMany, recommendations.length);
+    for (int i = 1; i < recommendations.length; i++) {
+      Assert.assertFalse(recommendations[i].product() != id);
+      Assert.assertTrue(recommendations[i-1].rating() >= recommendations[i].rating());
+    }
+    Assert.assertTrue(recommendations[0].rating() > 0.7);
   }
 
   private static void validateRecommendations(Rating[] recommendations, int howMany) {
