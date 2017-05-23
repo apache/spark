@@ -212,7 +212,7 @@ final class Word2Vec @Since("1.4.0") (
 
   /** @group setParam */
   @Since("2.2.0")
-  val solvers = Set("sg-hs", "cbow-ns")
+  val solvers = Set("sg-hs", "sg-ns", "cbow-ns")
   def setSolver(value: String): this.type = {
     require(solvers.contains(value),
       s"Solver $value was not supported. Supported options: ${solvers.mkString(", ")}")
@@ -247,8 +247,10 @@ final class Word2Vec @Since("1.4.0") (
           .setWindowSize($(windowSize))
           .setMaxSentenceLength($(maxSentenceLength))
           .fit(input)
+      } else if (getSolver == "sg-ns") {
+        Word2VecCBOWSolver.fit(this, skipGramMode = true, input)
       } else {
-        Word2VecCBOWSolver.fitCBOW(this, input)
+        Word2VecCBOWSolver.fit(this, skipGramMode = false, input)
       }
     copyValues(new Word2VecModel(uid, wordVectors).setParent(this))
   }

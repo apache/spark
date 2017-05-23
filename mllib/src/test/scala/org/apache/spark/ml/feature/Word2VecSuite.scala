@@ -76,6 +76,50 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     }
   }
 
+  test("Word2Vec-SkipGram-NegativeSampling") {
+
+    val spark = this.spark
+    import spark.implicits._
+
+    val sentence = "a b " * 100 + "a c " * 10
+    val numOfWords = sentence.split(" ").size
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+
+    val codes = Map(
+      "a" -> Array(0.2554479241371155, -0.7374975085258484, 0.501385509967804),
+      "b" -> Array(-0.12191832810640335, -0.09346947073936462, 1.6055092811584473),
+      "c" -> Array(-0.3807409405708313, -0.004864220507442951, 0.7893226146697998)
+    )
+
+    val expected = doc.map { sentence =>
+      Vectors.dense(sentence.map(codes.apply).reduce((word1, word2) =>
+        word1.zip(word2).map { case (v1, v2) => v1 + v2 }
+      ).map(_ / numOfWords))
+    }
+
+    val docDF = doc.zip(expected).toDF("text", "expected")
+
+    val w2v = new Word2Vec()
+      .setSolver("cbow-ns")
+      .setNegativeSamples(2)
+      .setMaxUnigramTableSize(10000)
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSolver("sg-ns")
+      .setSeed(42L)
+    val model = w2v.fit(docDF)
+
+    MLTestingUtils.checkCopyAndUids(w2v, model)
+
+    // These expectations are just magic values, characterizing the current
+    // behavior.  The test needs to be updated to be more general, see SPARK-11502
+    model.transform(docDF).select("result", "expected").collect().foreach {
+      case Row(vector1: Vector, vector2: Vector) =>
+        assert(vector1 ~== vector2 absTol 1E-5, "Transformed vector is different with expected.")
+    }
+  }
+
   test("Word2Vec-CBOW") {
 
     val spark = this.spark
@@ -160,6 +204,42 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     }
   }
 
+  test("getVectors-SkipGram-NegativeSampling") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val sentence = "a b " * 100 + "a c " * 10
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+
+    val codes = Map(
+      "a" -> Array(0.2554479241371155, -0.7374975085258484, 0.501385509967804),
+      "b" -> Array(-0.12191832810640335, -0.09346947073936462, 1.6055092811584473),
+      "c" -> Array(-0.3807409405708313, -0.004864220507442951, 0.7893226146697998)
+    )
+    val expectedVectors = codes.toSeq.sortBy(_._1).map { case (w, v) => Vectors.dense(v) }
+
+    val docDF = doc.zip(doc).toDF("text", "alsotext")
+
+    val model = new Word2Vec()
+      .setSolver("sg-ns")
+      .setMaxUnigramTableSize(10000)
+      .setNegativeSamples(2)
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .fit(docDF)
+
+    val realVectors = model.getVectors.sort("word").select("vector").rdd.map {
+      case Row(v: Vector) => v
+    }.collect()
+
+    realVectors.zip(expectedVectors).foreach {
+      case (real, expected) =>
+        assert(real ~== expected absTol 1E-5, "Actual vector is different from expected.")
+    }
+  }
+
   test("getVectors-CBOW") {
     val spark = this.spark
     import spark.implicits._
@@ -213,6 +293,43 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .fit(docDF)
 
     val expected = Map(("b", 0.2608488929093532), ("c", -0.8271274846926078))
+    val findSynonymsResult = model.findSynonyms("a", 2).rdd.map {
+      case Row(w: String, sim: Double) => (w, sim)
+    }.collectAsMap()
+
+    expected.foreach {
+      case (expectedSynonym, expectedSimilarity) =>
+        assert(findSynonymsResult.contains(expectedSynonym))
+        assert(expectedSimilarity ~== findSynonymsResult.get(expectedSynonym).get absTol 1E-5)
+    }
+
+    val findSynonymsArrayResult = model.findSynonymsArray("a", 2).toMap
+    findSynonymsResult.foreach {
+      case (expectedSynonym, expectedSimilarity) =>
+        assert(findSynonymsArrayResult.contains(expectedSynonym))
+        assert(expectedSimilarity ~== findSynonymsArrayResult.get(expectedSynonym).get absTol 1E-5)
+    }
+  }
+
+  test("findSynonyms-SkipGram-NegativeSampling") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val sentence = "a b " * 100 + "a c " * 10
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+    val docDF = doc.zip(doc).toDF("text", "alsotext")
+
+    val model = new Word2Vec()
+      .setSolver("sg-ns")
+      .setMaxUnigramTableSize(10000)
+      .setNegativeSamples(2)
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .fit(docDF)
+
+    val expected = Map(("b", 0.5632874965667725), ("c", 0.37158143520355225))
     val findSynonymsResult = model.findSynonyms("a", 2).rdd.map {
       case Row(w: String, sim: Double) => (w, sim)
     }.collectAsMap()
@@ -305,6 +422,49 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(math.abs(similarity(5) - similarityLarger(5) / similarity(5)) > 1E-5)
   }
 
+  test("window size - SkipGram-NegativeSampling") {
+
+    val spark = this.spark
+    import spark.implicits._
+
+    val sentence = "a q s t q s t b b b s t m s t m q " * 100 + "a c " * 10
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+    val docDF = doc.zip(doc).toDF("text", "alsotext")
+
+    val model = new Word2Vec()
+      .setSolver("sg-ns")
+      .setMaxUnigramTableSize(10000)
+      .setNegativeSamples(5)
+      .setVectorSize(3)
+      .setWindowSize(2)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .fit(docDF)
+
+    val (synonyms, similarity) = model.findSynonyms("a", 6).rdd.map {
+      case Row(w: String, sim: Double) => (w, sim)
+    }.collect().unzip
+
+    // Increase the window size
+    val biggerModel = new Word2Vec()
+      .setSolver("sg-ns")
+      .setMaxUnigramTableSize(10000)
+      .setNegativeSamples(5)
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .setWindowSize(10)
+      .fit(docDF)
+
+    val (synonymsLarger, similarityLarger) = model.findSynonyms("a", 6).rdd.map {
+      case Row(w: String, sim: Double) => (w, sim)
+    }.collect().unzip
+    // The similarity score should be very different with the larger window
+    assert(math.abs(similarity(5) - similarityLarger(5) / similarity(5)) > 1E-5)
+  }
+
   test("window size - CBOW") {
 
     val spark = this.spark
@@ -348,6 +508,49 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(math.abs(similarity(5) - similarityLarger(5) / similarity(5)) > 1E-5)
   }
 
+  test("negative sampling - SkipGram - Negative Sampling") {
+
+    val spark = this.spark
+    import spark.implicits._
+
+    val sentence = "a q s t q s t b b b s t m s t m q " * 100 + "a c " * 10
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+    val docDF = doc.zip(doc).toDF("text", "alsotext")
+
+    val model = new Word2Vec()
+      .setSolver("sg-ns")
+      .setMaxUnigramTableSize(10000)
+      .setNegativeSamples(2)
+      .setVectorSize(3)
+      .setWindowSize(2)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .fit(docDF)
+
+    val (synonyms, similarity) = model.findSynonyms("a", 6).rdd.map {
+      case Row(w: String, sim: Double) => (w, sim)
+    }.collect().unzip
+
+    // Increase the window size
+    val biggerModel = new Word2Vec()
+      .setSolver("sg-ns")
+      .setMaxUnigramTableSize(10000)
+      .setNegativeSamples(5)
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .setWindowSize(2)
+      .fit(docDF)
+
+    val (synonymsLarger, similarityLarger) = model.findSynonyms("a", 6).rdd.map {
+      case Row(w: String, sim: Double) => (w, sim)
+    }.collect().unzip
+    // The similarity score should be very different with the higher negative sampling
+    assert(math.abs(similarity(5) - similarityLarger(5) / similarity(5)) > 1E-5)
+  }
+
   test("negative sampling - CBOW") {
 
     val spark = this.spark
@@ -382,6 +585,50 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setOutputCol("result")
       .setSeed(42L)
       .setWindowSize(2)
+      .fit(docDF)
+
+    val (synonymsLarger, similarityLarger) = model.findSynonyms("a", 6).rdd.map {
+      case Row(w: String, sim: Double) => (w, sim)
+    }.collect().unzip
+    // The similarity score should be very different with the higher negative sampling
+    assert(math.abs(similarity(5) - similarityLarger(5) / similarity(5)) > 1E-5)
+  }
+
+  test("sub sampling - SkipGram-NegativeSampling") {
+
+    val spark = this.spark
+    import spark.implicits._
+
+    val sentence = "a q s t q s t b b b s t m s t m q " * 100 + "a c " * 10
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+    val docDF = doc.zip(doc).toDF("text", "alsotext")
+
+    val model = new Word2Vec()
+      .setSolver("sg-ns")
+      .setMaxUnigramTableSize(10000)
+      .setNegativeSamples(2)
+      .setVectorSize(3)
+      .setWindowSize(2)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .fit(docDF)
+
+    val (synonyms, similarity) = model.findSynonyms("a", 6).rdd.map {
+      case Row(w: String, sim: Double) => (w, sim)
+    }.collect().unzip
+
+    // Set sub sampling
+    val biggerModel = new Word2Vec()
+      .setSolver("sg-ns")
+      .setMaxUnigramTableSize(10000)
+      .setNegativeSamples(2)
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .setWindowSize(2)
+      .setSample(0.01)
       .fit(docDF)
 
     val (synonymsLarger, similarityLarger) = model.findSynonyms("a", 6).rdd.map {
@@ -431,7 +678,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val (synonymsLarger, similarityLarger) = model.findSynonyms("a", 6).rdd.map {
       case Row(w: String, sim: Double) => (w, sim)
     }.collect().unzip
-    // The similarity score should be very different with the higher negative sampling
+    // The similarity score should be very different with the subsampling
     assert(math.abs(similarity(5) - similarityLarger(5) / similarity(5)) > 1E-5)
   }
 

@@ -53,8 +53,9 @@ object Word2VecCBOWSolver extends Logging {
    * @param input A RDD of strings. Each string would be considered a sentence.
    * @return Estimated word2vec model
    */
-  def fitCBOW[S <: Iterable[String]](
+  def fit[S <: Iterable[String]](
       word2Vec: Word2Vec,
+      skipGramMode: Boolean,
       input: RDD[S]): feature.Word2VecModel = {
 
     val negativeSamples = word2Vec.getNegativeSamples
@@ -108,7 +109,13 @@ object Word2VecCBOWSolver extends Logging {
         val random = new XORShiftRandom(seed ^ ((i_ + 1) << 16) ^ ((-iteration - 1) << 8))
         val contextWordPairs = iter.flatMap { s =>
           val doSample = sample > Double.MinPositiveValue
-          generateContextWordPairs(s, windowSize, doSample, sampleTableBroadcast.value, random)
+          generateContextWordPairs(
+            s,
+            windowSize,
+            doSample,
+            sampleTableBroadcast.value,
+            skipGramMode,
+            random)
         }
 
         val groupedBatches = contextWordPairs.grouped(batchSize)
@@ -303,13 +310,14 @@ object Word2VecCBOWSolver extends Logging {
       window: Int,
       doSample: Boolean,
       samplingTable: Array[Float],
+      sgns: Boolean,
       random: XORShiftRandom): Iterator[(Array[Int], Int)] = {
     val reducedSentence = if (doSample) {
       sentence.filter(i => samplingTable(i) > random.nextFloat)
     } else {
       sentence
     }
-    reducedSentence.iterator.zipWithIndex.map { case (word, i) =>
+    val contextWordPairs = reducedSentence.iterator.zipWithIndex.map { case (word, i) =>
       val b = window - random.nextInt(window) // (window - a) in original code
       // pick b words around the current word index
       val start = math.max(0, i - b) // c in original code, floor ar 0
@@ -318,6 +326,17 @@ object Word2VecCBOWSolver extends Logging {
       val contextIds = reducedSentence.view.zipWithIndex.slice(start, end)
         .filter{case (_, pos) => pos != i}.map(_._1)
       (contextIds.toArray, word)
+    }
+    if(sgns) {
+      // this appears a little counter-intuitive when compared with the theoretical
+      // description of skip-gram, but this just changes the order in which
+      // (word, context) pairs are used to estimate the model. The word2vec c code
+      // implements skip-gram this way as well.
+      contextWordPairs.flatMap { case (contextIds, word) =>
+        contextIds.map(id => (Array.fill(1)(id), word))
+      }
+    } else {
+      contextWordPairs
     }
   }
 
