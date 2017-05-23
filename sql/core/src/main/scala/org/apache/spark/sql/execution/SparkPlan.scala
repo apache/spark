@@ -72,24 +72,24 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Return all metadata that describes more details of this SparkPlan.
+   * Returns all metadata that describes more details of this SparkPlan.
    */
   def metadata: Map[String, String] = Map.empty
 
   /**
-   * Return all metrics containing metrics of this SparkPlan.
+   * Returns all metrics containing metrics of this SparkPlan.
    */
   def metrics: Map[String, SQLMetric] = Map.empty
 
   /**
-   * Reset all the metrics.
+   * Resets all the metrics.
    */
   def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
   }
 
   /**
-   * Return a LongSQLMetric according to the name.
+   * Returns a [[SQLMetric]] according to the name.
    */
   def longMetric(name: String): SQLMetric = metrics(name)
 

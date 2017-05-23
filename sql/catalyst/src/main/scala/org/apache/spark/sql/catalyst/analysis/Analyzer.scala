@@ -85,8 +85,7 @@ object AnalysisContext {
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
- * [[UnresolvedRelation]]s into fully typed objects using information in a
- * [[SessionCatalog]] and a [[FunctionRegistry]].
+ * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
 class Analyzer(
     catalog: SessionCatalog,
@@ -1882,7 +1881,7 @@ class Analyzer(
      * `[Sum(_w0) OVER (PARTITION BY _w1 ORDER BY _w2)]` and the second returned value will be
      * [col1, col2 + col3 as _w0, col4 as _w1, col5 as _w2].
      *
-     * @return (seq of expressions containing at lease one window expressions,
+     * @return (seq of expressions containing at least one window expression,
      *          seq of non-window expressions)
      */
     private def extract(
