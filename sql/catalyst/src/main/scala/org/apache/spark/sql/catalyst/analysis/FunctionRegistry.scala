@@ -234,6 +234,7 @@ object FunctionRegistry {
     expression[StringToMap]("str_to_map"),
     expression[Sqrt]("sqrt"),
     expression[Tan]("tan"),
+    expression[Cot]("cot"),
     expression[Tanh]("tanh"),
 
     expression[Add]("+"),

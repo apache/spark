@@ -22,7 +22,7 @@ struct<>
 SELECT *
 FROM   (SELECT * FROM t1
         UNION ALL
-        SELECT * FROM t1)
+        SELECT * FROM t1) T
 -- !query 2 schema
 struct<c1:int,c2:string>
 -- !query 2 output
@@ -38,7 +38,7 @@ FROM   (SELECT * FROM t1
         UNION ALL
         SELECT * FROM t2
         UNION ALL
-        SELECT * FROM t2)
+        SELECT * FROM t2) T
 -- !query 3 schema
 struct<c1:decimal(11,1),c2:string>
 -- !query 3 output

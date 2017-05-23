@@ -215,7 +215,7 @@ case class FlatMapGroupsWithStateExec(
       val keyObj = getKeyObj(keyRow)  // convert key to objects
       val valueObjIter = valueRowIter.map(getValueObj.apply) // convert value rows to objects
       val stateObjOption = getStateObj(prevStateRowOption)
-      val keyedState = new GroupStateImpl(
+      val keyedState = GroupStateImpl.createForStreaming(
         stateObjOption,
         batchTimestampMs.getOrElse(NO_TIMESTAMP),
         eventTimeWatermark.getOrElse(NO_TIMESTAMP),
@@ -230,6 +230,20 @@ case class FlatMapGroupsWithStateExec(
 
       // When the iterator is consumed, then write changes to state
       def onIteratorCompletion: Unit = {
+
+        val currentTimeoutTimestamp = keyedState.getTimeoutTimestamp
+        // If the state has not yet been set but timeout has been set, then
+        // we have to generate a row to save the timeout. However, attempting serialize
+        // null using case class encoder throws -
+        //    java.lang.NullPointerException: Null value appeared in non-nullable field:
+        //    If the schema is inferred from a Scala tuple / case class, or a Java bean, please
+        //    try to use scala.Option[_] or other nullable types.
+        if (!keyedState.exists && currentTimeoutTimestamp != NO_TIMESTAMP) {
+          throw new IllegalStateException(
+            "Cannot set timeout when state is not defined, that is, state has not been" +
+              "initialized or has been removed")
+        }
+
         if (keyedState.hasRemoved) {
           store.remove(keyRow)
           numUpdatedStateRows += 1
@@ -239,7 +253,6 @@ case class FlatMapGroupsWithStateExec(
             case Some(row) => getTimeoutTimestamp(row)
             case None => NO_TIMESTAMP
           }
-          val currentTimeoutTimestamp = keyedState.getTimeoutTimestamp
           val stateRowToWrite = if (keyedState.hasUpdated) {
             getStateRow(keyedState.get)
           } else {
