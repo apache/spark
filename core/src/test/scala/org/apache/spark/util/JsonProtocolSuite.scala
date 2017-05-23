@@ -82,6 +82,13 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
+    val executorMetrics = {
+      val execMetrics = new ExecutorMetrics
+      execMetrics.setHostname("host-1")
+      execMetrics.setPort(Some(80))
+      execMetrics.setTransportMetrics(TransportMetrics(0L, 10, 10))
+      execMetrics
+    }
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorBlacklistedTime, "exec1", 22)
     val executorUnblacklisted =
       SparkListenerExecutorUnblacklisted(executorUnblacklistedTime, "exec1")
@@ -94,7 +101,8 @@ class JsonProtocolSuite extends SparkFunSuite {
         makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
           .accumulators().map(AccumulatorSuite.makeInfo)
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
-      SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)))
+      SparkListenerExecutorMetricsUpdate(
+        "exec3", Seq((1L, 2, 3, accumUpdates)), Some(executorMetrics))
     }
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
@@ -432,6 +440,25 @@ class JsonProtocolSuite extends SparkFunSuite {
     testAccumValue(Some("anything"), 123, JString("123"))
   }
 
+  test("ExecutorMetrics backward compatibility") {
+    // ExecutorMetrics is newly added
+    val accumUpdates =
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
+        .accumulators().map(AccumulatorSuite.makeInfo)
+        .zipWithIndex.map { case (a, i) => a.copy(id = i) }
+    val executorMetricsUpdate = SparkListenerExecutorMetricsUpdate(
+      "exec3", Seq((1L, 2, 3, accumUpdates)), Some(new ExecutorMetrics))
+    assert(executorMetricsUpdate.executorMetrics.get != null)
+    assert(executorMetricsUpdate.executorMetrics.get.transportMetrics != null)
+    val newJson = JsonProtocol.executorMetricsUpdateToJson(executorMetricsUpdate)
+    val oldJson = newJson.removeField { case (field, _) => field == "Executor Metrics Updated"}
+    val newMetrics = JsonProtocol.executorMetricsUpdateFromJson(oldJson)
+    assert(newMetrics.executorMetrics.get.hostname === "")
+    assert(newMetrics.executorMetrics.get.port === None)
+    assert(newMetrics.executorMetrics.get.transportMetrics.onHeapSize === 0L)
+    assert(newMetrics.executorMetrics.get.transportMetrics.offHeapSize === 0L)
+    assert(newMetrics.executorMetrics.get.transportMetrics.timeStamp != 0L)
+  }
 }
 
 
@@ -1794,6 +1821,15 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |{
       |  "Event": "SparkListenerExecutorMetricsUpdate",
       |  "Executor ID": "exec3",
+      |  "Executor Metrics Updated": {
+      |    "Executor Hostname": "host-1",
+      |    "Executor Port": 80,
+      |    "TransportMetrics": {
+      |      "TimeStamp": 0,
+      |      "OnHeapSize": 10,
+      |      "OffHeapSize": 10
+      |    }
+      |  },
       |  "Metrics Updated": [
       |    {
       |      "Task ID": 1,
