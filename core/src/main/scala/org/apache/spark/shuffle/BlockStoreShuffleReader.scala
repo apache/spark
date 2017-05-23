@@ -19,8 +19,6 @@ package org.apache.spark.shuffle
 
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.memory.MemoryMode
-import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator

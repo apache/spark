@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{InputStream, IOException}
+import java.io.{File, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 import javax.annotation.concurrent.GuardedBy
@@ -130,6 +130,12 @@ final class ShuffleBlockFetcherIterator(
   @GuardedBy("this")
   private[this] var isZombie = false
 
+  /**
+   * A set to store the files used for shuffling remote huge blocks. Files in this set will be
+   * deleted when cleanup. This is another layer of defensiveness against disk file leaks.
+   */
+  val shuffleFilesSet = mutable.HashSet[File]()
+
   initialize()
 
   // Decrements the buffer reference count.
@@ -164,6 +170,7 @@ final class ShuffleBlockFetcherIterator(
         case _ =>
       }
     }
+    shuffleFilesSet.foreach(_.delete())
   }
 
   private[this] def sendRequest(req: FetchRequest) {
@@ -212,9 +219,7 @@ final class ShuffleBlockFetcherIterator(
     if (fetchToDisk) {
       val shuffleFiles = blockIds.map(bId => blockManager.diskBlockManager
           .getFile(s"${context.taskAttemptId()}-remote-$bId")).toArray
-      // Register with a task completion callback to ensure that they're guaranteed to be deleted
-      // after the task finishes. This is another layer of defensiveness against disk file leaks.
-      context.addTaskCompletionListener(_ => shuffleFiles.foreach(_.delete()))
+      shuffleFilesSet ++= shuffleFiles
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
         blockFetchingListener, shuffleFiles)
     } else {
