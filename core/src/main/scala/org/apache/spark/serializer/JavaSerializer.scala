@@ -137,7 +137,7 @@ private[spark] class JavaSerializerInstance(
  */
 @DeveloperApi
 class JavaSerializer(conf: SparkConf) extends Serializer with Externalizable {
-  private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 100)
+  private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 10)
   private var extraDebugInfo = conf.getBoolean("spark.serializer.extraDebugInfo", true)
 
   protected def this() = this(new SparkConf())  // For deserialization only
