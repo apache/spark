@@ -26,6 +26,22 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 class ParquetFileFormatSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
+  test("Number of threads doesn't grow extremely after parquet file reading") {
+    withTempDir { dir =>
+      val file = dir.toString + "/file"
+      spark.range(1).toDF("a").coalesce(1).write.parquet(file)
+      spark.read.parquet(file)
+      val numThreadBefore = Thread.activeCount
+      (1 to 100).map { _ =>
+        spark.read.parquet(file)
+      }
+      val numThreadAfter = Thread.activeCount
+      // Hard to test a correct thread number,
+      // but it shouldn't increase more than a reasonable number.
+      assert(numThreadAfter - numThreadBefore < 20)
+    }
+  }
+
   test("read parquet footers in parallel") {
     def testReadFooters(ignoreCorruptFiles: Boolean): Unit = {
       withTempDir { dir =>
