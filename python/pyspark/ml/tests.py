@@ -1066,6 +1066,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(s.r2, 1.0, 2)
         self.assertTrue(isinstance(s.residuals, DataFrame))
         self.assertEqual(s.numInstances, 2)
+        self.assertEqual(s.degreesOfFreedom, 1)
         devResiduals = s.devianceResiduals
         self.assertTrue(isinstance(devResiduals, list) and isinstance(devResiduals[0], float))
         coefStdErr = s.coefficientStandardErrors
@@ -1093,6 +1094,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.numIterations, 1)  # this should default to a single iteration of WLS
         self.assertTrue(isinstance(s.predictions, DataFrame))
         self.assertEqual(s.predictionCol, "prediction")
+        self.assertEqual(s.numInstances, 2)
         self.assertTrue(isinstance(s.residuals(), DataFrame))
         self.assertTrue(isinstance(s.residuals("pearson"), DataFrame))
         coefStdErr = s.coefficientStandardErrors
