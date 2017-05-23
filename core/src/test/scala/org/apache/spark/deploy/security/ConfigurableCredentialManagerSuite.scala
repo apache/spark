@@ -19,14 +19,12 @@ package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.Credentials
-import org.apache.hadoop.security.token.Token
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.Matchers
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
+class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers {
   private var credentialManager: ConfigurableCredentialManager = null
   private var sparkConf: SparkConf = null
   private var hadoopConf: Configuration = null

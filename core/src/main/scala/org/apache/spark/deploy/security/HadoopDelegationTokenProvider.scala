@@ -18,10 +18,7 @@
 package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.spark.SparkConf
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.hadoop.security.Credentials
 
 /**
  * Hadoop delegation token provider.

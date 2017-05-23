@@ -17,16 +17,12 @@
 
 package org.apache.spark.deploy.security
 
-import java.util.ServiceLoader
-
-import scala.collection.JavaConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
+
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
 
 /**
  * A ConfigurableCredentialManager to manage all the registered credential providers and offer

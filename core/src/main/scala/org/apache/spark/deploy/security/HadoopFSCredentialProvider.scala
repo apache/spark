@@ -18,15 +18,17 @@
 package org.apache.spark.deploy.security
 
 import scala.collection.JavaConverters._
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
-import org.apache.spark.{SparkConf, SparkException}
+
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 
-import scala.util.Try
 
 private[deploy] class HadoopFSCredentialProvider(fileSystems: Set[FileSystem])
     extends HadoopDelegationTokenProvider with Logging {
