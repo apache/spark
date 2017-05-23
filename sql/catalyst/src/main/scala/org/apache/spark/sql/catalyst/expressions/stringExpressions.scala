@@ -1199,15 +1199,17 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 }
 
 /**
- * A function that return the length of the given string or binary expression.
+ * A function that return the char length of the given string or binary expression.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the length of `expr` or number of bytes in binary data.",
+  usage = "_FUNC_(expr) - Returns the character length of `expr` or number of bytes in binary data.",
   extended = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
        9
   """)
+// scalastyle:on line.size.limit
 case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
