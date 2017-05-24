@@ -171,17 +171,8 @@ public class OneForOneBlockFetcher {
     @Override
     public void onComplete(String streamId) throws IOException {
       channel.close();
-      ManagedBuffer buffer = new FileSegmentManagedBuffer(
-        transportConf, targetFile, 0, targetFile.length()) {
-        @Override
-        public ManagedBuffer release() {
-          ManagedBuffer ret = super.release();
-          if (!targetFile.delete()) {
-            logger.info("Failed to cleanup " + targetFile.getAbsolutePath());
-          }
-          return ret;
-        }
-      };
+      ManagedBuffer buffer = new FileSegmentManagedBuffer(transportConf, targetFile, 0,
+        targetFile.length());
       listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
     }
 

@@ -132,7 +132,7 @@ final class ShuffleBlockFetcherIterator(
 
   /**
    * A set to store the files used for shuffling remote huge blocks. Files in this set will be
-   * deleted when cleanup. This is another layer of defensiveness against disk file leaks.
+   * deleted when cleanup. This is a layer of defensiveness against disk file leaks.
    */
   val shuffleFilesSet = mutable.HashSet[File]()
 
@@ -170,7 +170,11 @@ final class ShuffleBlockFetcherIterator(
         case _ =>
       }
     }
-    shuffleFilesSet.foreach(_.delete())
+    shuffleFilesSet.foreach { file =>
+      if (!file.delete()) {
+        logInfo("Failed to cleanup " + file.getAbsolutePath());
+      }
+    }
   }
 
   private[this] def sendRequest(req: FetchRequest) {
