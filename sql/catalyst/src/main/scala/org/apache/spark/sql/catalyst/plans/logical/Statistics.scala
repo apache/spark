@@ -46,13 +46,13 @@ import org.apache.spark.util.Utils
  *                    defaults to the product of children's `sizeInBytes`.
  * @param rowCount Estimated number of rows.
  * @param attributeStats Statistics for Attributes.
- * @param isBroadcastable If true, output is small enough to be used in a broadcast join.
+ * @param hints Query hints.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
     attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil),
-    isBroadcastable: Boolean = false) {
+    hints: HintInfo = HintInfo()) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
 
@@ -65,14 +65,9 @@ case class Statistics(
       } else {
         ""
       },
-      s"isBroadcastable=$isBroadcastable"
+      s"hints=$hints"
     ).filter(_.nonEmpty).mkString(", ")
   }
-
-  /** Must be called when computing stats for a join operator to reset hints. */
-  def resetHintsForJoin(): Statistics = copy(
-    isBroadcastable = false
-  )
 }
 
 
