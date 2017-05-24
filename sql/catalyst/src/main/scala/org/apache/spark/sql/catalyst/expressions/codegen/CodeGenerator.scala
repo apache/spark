@@ -303,7 +303,7 @@ class CodegenContext {
    */
   private[sql] def initNestedClasses(): String = {
     // Nested, private sub-classes have no mutable state (though they do reference the outer class'
-    // mutable state), so we declare and initialize them inline ot the OuterClass
+    // mutable state), so we declare and initialize them inline to the OuterClass.
     classes.map {
       case (className, classInstance) =>
         if (className.equals("OuterClass")) {
@@ -315,7 +315,7 @@ class CodegenContext {
   }
 
   /**
-   * Declares all functions that should be inlined to the `OuterClass`
+   * Declares all functions that should be inlined to the `OuterClass`.
    */
   private[sql] def declareAddedFunctions(): String = {
     classFunctions("OuterClass").mkString("\n")
