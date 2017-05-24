@@ -278,7 +278,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     when(corruptStream.read(any(), any(), any())).thenThrow(new IOException("corrupt"))
     val corruptBuffer = mock(classOf[ManagedBuffer])
     when(corruptBuffer.createInputStream()).thenReturn(corruptStream)
-    val corruptLocalBuffer = new FileSegmentManagedBuffer(null, new File("a"), 0, 100)
+    val corruptLocalBuffer = new FileSegmentManagedBuffer(true, 1024, new File("a"), 0, 100)
 
     val transfer = mock(classOf[BlockTransferService])
     when(transfer.fetchBlocks(any(), any(), any(), any(), any())).thenAnswer(new Answer[Unit] {

@@ -37,13 +37,24 @@ import org.apache.spark.network.util.TransportConf;
  * A {@link ManagedBuffer} backed by a segment in a file.
  */
 public final class FileSegmentManagedBuffer extends ManagedBuffer {
-  private final TransportConf conf;
+  private final boolean lazyFileDescriptor;
+  private final int memoryMapBytes;
   private final File file;
   private final long offset;
   private final long length;
 
   public FileSegmentManagedBuffer(TransportConf conf, File file, long offset, long length) {
-    this.conf = conf;
+    this(conf.lazyFileDescriptor(), conf.memoryMapBytes(), file, offset, length);
+  }
+
+  public FileSegmentManagedBuffer(
+      boolean lazyFileDescriptor,
+      int memoryMapBytes,
+      File file,
+      long offset,
+      long length) {
+    this.lazyFileDescriptor = lazyFileDescriptor;
+    this.memoryMapBytes = memoryMapBytes;
     this.file = file;
     this.offset = offset;
     this.length = length;
@@ -60,7 +71,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     try {
       channel = new RandomAccessFile(file, "r").getChannel();
       // Just copy the buffer if it's sufficiently small, as memory mapping has a high overhead.
-      if (length < conf.memoryMapBytes()) {
+      if (length < memoryMapBytes) {
         ByteBuffer buf = ByteBuffer.allocate((int) length);
         channel.position(offset);
         while (buf.remaining() != 0) {
@@ -129,7 +140,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
 
   @Override
   public Object convertToNetty() throws IOException {
-    if (conf.lazyFileDescriptor()) {
+    if (lazyFileDescriptor) {
       return new DefaultFileRegion(file, offset, length);
     } else {
       FileChannel fileChannel = new FileInputStream(file).getChannel();

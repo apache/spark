@@ -78,7 +78,8 @@ public class ExternalShuffleBlockResolver {
   // Single-threaded Java executor used to perform expensive recursive directory deletion.
   private final Executor directoryCleaner;
 
-  private final TransportConf conf;
+  private final boolean lazyFileDescriptor;
+  private final int memoryMapBytes;
 
   @VisibleForTesting
   final File registeredExecutorFile;
@@ -102,7 +103,8 @@ public class ExternalShuffleBlockResolver {
       TransportConf conf,
       File registeredExecutorFile,
       Executor directoryCleaner) throws IOException {
-    this.conf = conf;
+    this.lazyFileDescriptor = conf.lazyFileDescriptor();
+    this.memoryMapBytes = conf.memoryMapBytes();
     this.registeredExecutorFile = registeredExecutorFile;
     int indexCacheEntries = conf.getInt("spark.shuffle.service.index.cache.entries", 1024);
     CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
@@ -240,7 +242,8 @@ public class ExternalShuffleBlockResolver {
       ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFile);
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(reduceId);
       return new FileSegmentManagedBuffer(
-        conf,
+        lazyFileDescriptor,
+        memoryMapBytes,
         getFile(executor.localDirs, executor.subDirsPerLocalDir,
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         shuffleIndexRecord.getOffset(),

@@ -50,6 +50,8 @@ private[spark] class IndexShuffleBlockResolver(
   private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
+  private val lazyFileDescriptor = transportConf.lazyFileDescriptor()
+  private val memoryMapBytes = transportConf.memoryMapBytes()
 
   def getDataFile(shuffleId: Int, mapId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
@@ -202,7 +204,8 @@ private[spark] class IndexShuffleBlockResolver(
       val offset = in.readLong()
       val nextOffset = in.readLong()
       new FileSegmentManagedBuffer(
-        transportConf,
+        lazyFileDescriptor,
+        memoryMapBytes,
         getDataFile(blockId.shuffleId, blockId.mapId),
         offset,
         nextOffset - offset)
