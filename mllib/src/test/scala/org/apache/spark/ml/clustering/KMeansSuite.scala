@@ -50,6 +50,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
     assert(kmeans.getInitSteps === 2)
     assert(kmeans.getTol === 1e-4)
+    assert(kmeans.getMiniBatchFraction === 1.0)
     val model = kmeans.setMaxIter(1).fit(dataset)
 
     MLTestingUtils.checkCopyAndUids(kmeans, model)
@@ -68,6 +69,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       .setInitSteps(3)
       .setSeed(123)
       .setTol(1e-3)
+      .setMiniBatchFraction(0.5)
 
     assert(kmeans.getK === 9)
     assert(kmeans.getFeaturesCol === "test_feature")
@@ -77,6 +79,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getInitSteps === 3)
     assert(kmeans.getSeed === 123)
     assert(kmeans.getTol === 1e-3)
+    assert(kmeans.getMiniBatchFraction === 0.5)
   }
 
   test("parameters validation") {
@@ -88,6 +91,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     }
     intercept[IllegalArgumentException] {
       new KMeans().setInitSteps(0)
+    }
+    intercept[IllegalArgumentException] {
+      new KMeans().setMiniBatchFraction(0)
     }
   }
 
