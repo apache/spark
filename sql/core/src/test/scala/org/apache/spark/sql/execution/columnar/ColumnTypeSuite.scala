@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
@@ -143,5 +143,19 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     assertResult(LARGE_DECIMAL(19, 0)) {
       ColumnType(DecimalType(19, 0))
     }
+  }
+
+  test("show type name in type mismatch error") {
+    val invalidType = new DataType {
+        override def defaultSize: Int = 1
+        override private[spark] def asNullable: DataType = null
+        override def typeName: String = "invalid type name"
+    }
+
+    val message = intercept[java.lang.Exception] {
+      ColumnType(invalidType)
+    }.getMessage
+
+    assert(message.contains("Unsupported type: invalid type name"))
   }
 }
