@@ -196,29 +196,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("WeekOfYearISO8601") {
-    checkEvaluation(WeekOfYearISO8601(Literal.create(null, DateType)), null)
-    checkEvaluation(WeekOfYearISO8601(Literal(d)), 15)
-    checkEvaluation(WeekOfYearISO8601(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 15)
-    checkEvaluation(WeekOfYearISO8601(Cast(Literal(ts), DateType, gmtId)), 45)
-    checkEvaluation(WeekOfYearISO8601(Cast(Literal("2017-01-01"), DateType, gmtId)), 52)
-    checkEvaluation(WeekOfYearISO8601(Cast(Literal("2011-05-06"), DateType, gmtId)), 18)
-    checkEvaluation(
-      WeekOfYearISO8601(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 40)
-    checkEvaluation(
-      WeekOfYearISO8601(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime))), 40)
-    checkConsistencyBetweenInterpretedAndCodegen(WeekOfYearISO8601, DateType)
-  }
-
   test("WeekOfYear") {
-    checkEvaluation(WeekOfYear(Literal.create(null, DateType)), null)
-    checkEvaluation(WeekOfYear(Literal(d)), 15)
-    checkEvaluation(WeekOfYear(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 15)
-    checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType, gmtId)), 45)
-    checkEvaluation(WeekOfYear(Cast(Literal("2017-01-01"), DateType, gmtId)), 1)
-    checkEvaluation(WeekOfYear(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 40)
-    checkEvaluation(WeekOfYear(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime))), 40)
-    checkConsistencyBetweenInterpretedAndCodegen(WeekOfYear, DateType)
+    checkEvaluation(WeekOfYear(Literal.create(null, DateType), Literal("iso")), null)
+    checkEvaluation(WeekOfYear(Literal(d), Literal(false)), 15)
+    checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType, gmtId), Literal("iso")), 45)
+    checkEvaluation(
+      WeekOfYear(Cast(Literal(sdfDate.format(d)), DateType, gmtId), Literal("iso")), 15)
+    checkEvaluation(
+      WeekOfYear(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime)), Literal("iso")), 40)
+    checkEvaluation(
+      WeekOfYear(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime)), Literal("iso")), 40)
+
+    checkEvaluation(
+      WeekOfYear(Cast(Literal("2017-01-01"), DateType, gmtId), Literal("iso")), 52)
+    checkEvaluation(
+      WeekOfYear(Cast(Literal("2017-01-01"), DateType, gmtId), Literal("gregorian")), 1)
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => WeekOfYear(child, Literal(true)), DateType)
+
   }
 
   test("DateFormat") {

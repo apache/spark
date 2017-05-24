@@ -358,7 +358,6 @@ object FunctionRegistry {
     expression[TruncDate]("trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
     expression[WeekOfYear]("weekofyear"),
-    expression[WeekOfYearISO8601]("weekofyear_iso8601"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
 

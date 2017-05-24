@@ -404,24 +404,38 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the week of the year of the given date according to the ISO 8601 standard",
+  usage = "_FUNC_(date[, format]) - Returns the week of the year of the given date. Defaults to ISO 8601 standard, but can be gregorian specific",
   extended = """
     Examples:
       > SELECT _FUNC_('2008-02-20');
        8
+      > SELECT _FUNC_('2017-01-01', 'gregorian');
+       1
+      > SELECT _FUNC_('2017-01-01', 'iso');
+       52
+      > SELECT _FUNC_('2017-01-01');
+       52
   """)
 // scalastyle:on line.size.limit
-case class WeekOfYearISO8601(child: Expression) extends
+case class WeekOfYear(child: Expression, format: Expression) extends
   UnaryExpression with ImplicitCastInputTypes {
+
+  def this(child: Expression) = {
+    this(child, Literal("iso"))
+  }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
 
   override def dataType: DataType = IntegerType
 
+  @transient private lazy val minimalDays = {
+    if ("gregorian".equalsIgnoreCase(format.toString)) 1 else 4
+  }
+
   @transient private lazy val c = {
     val c = Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
     c.setFirstDayOfWeek(Calendar.MONDAY)
-    c.setMinimalDaysInFirstWeek(4)
+    c.setMinimalDaysInFirstWeek(minimalDays)
     c
   }
 
@@ -439,51 +453,7 @@ case class WeekOfYearISO8601(child: Expression) extends
         s"""
           $c = $cal.getInstance($dtu.getTimeZone("UTC"));
           $c.setFirstDayOfWeek($cal.MONDAY);
-          $c.setMinimalDaysInFirstWeek(4);
-         """)
-      s"""
-        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
-        ${ev.value} = $c.get($cal.WEEK_OF_YEAR);
-      """
-    })
-  }
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the week of the year of the given date, where the first day of the year is always in week 1",
-  extended = """
-    Examples:
-      > SELECT _FUNC_('2017-01-01');
-       1
-             """)
-// scalastyle:on line.size.limit
-case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  @transient private lazy val c = {
-    val c = Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
-    c.setMinimalDaysInFirstWeek(1)
-    c
-  }
-
-  override protected def nullSafeEval(date: Any): Any = {
-    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    c.get(Calendar.WEEK_OF_YEAR)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, time => {
-      val cal = classOf[Calendar].getName
-      val c = ctx.freshName("cal")
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      ctx.addMutableState(cal, c,
-        s"""
-          $c = $cal.getInstance($dtu.getTimeZone("UTC"));
-          $c.setMinimalDaysInFirstWeek(1);
+          $c.setMinimalDaysInFirstWeek($minimalDays);
          """)
       s"""
         $c.setTimeInMillis($time * 1000L * 3600L * 24L);
