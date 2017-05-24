@@ -479,7 +479,8 @@ object ParquetFileFormat extends Logging {
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean): Seq[Footer] = {
     val parFiles = partFiles.par
-    parFiles.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
+    val pool = new ForkJoinPool(8)
+    parFiles.tasksupport = new ForkJoinTaskSupport(pool)
     parFiles.flatMap { currentFile =>
       try {
         // Skips row group information since we only need the schema.
@@ -495,6 +496,8 @@ object ParquetFileFormat extends Logging {
         } else {
           throw new IOException(s"Could not read footer for file: $currentFile", e)
         }
+      } finally {
+        pool.shutdown()
       }
     }.seq
   }
