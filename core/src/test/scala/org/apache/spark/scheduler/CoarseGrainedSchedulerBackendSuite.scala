@@ -17,11 +17,37 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
+import java.io.{IOException, NotSerializableException, ObjectInputStream, ObjectOutputStream}
+
+import org.apache.spark._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{RpcUtils, SerializableBuffer}
 
-class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext {
+class NotSerializablePartitionRDD(
+    sc: SparkContext,
+    numPartitions: Int) extends RDD[(Int, Int)](sc, Nil) with Serializable {
 
+  override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
+    throw new RuntimeException("should not be reached")
+
+  override def getPartitions: Array[Partition] = (0 until numPartitions).map(i => new Partition {
+    override def index: Int = i
+
+    @throws(classOf[IOException])
+    private def writeObject(out: ObjectOutputStream): Unit = {
+      throw new NotSerializableException()
+    }
+
+    @throws(classOf[IOException])
+    private def readObject(in: ObjectInputStream): Unit = {}
+  }).toArray
+
+  override def getPreferredLocations(partition: Partition): Seq[String] = Nil
+
+  override def toString: String = "DAGSchedulerSuiteRDD " + id
+}
+
+class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext {
   test("serialized task larger than max RPC message size") {
     val conf = new SparkConf
     conf.set("spark.rpc.message.maxSize", "1")
@@ -38,4 +64,19 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(smaller.size === 4)
   }
 
+  test("Scheduler aborts stages that have unserializable partition") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[2, 1, 1024]")
+      .setAppName("test")
+      .set("spark.dynamicAllocation.testing", "true")
+    sc = new SparkContext(conf)
+    val myRDD = new NotSerializablePartitionRDD(sc, 2)
+    val e = intercept[SparkException] {
+      myRDD.count()
+    }
+    assert(e.getMessage.contains("Failed to serialize task"))
+    assertResult(10) {
+      sc.parallelize(1 to 10).count()
+    }
+  }
 }

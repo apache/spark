@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.io.{IOException, NotSerializableException, ObjectInputStream, ObjectOutputStream}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -513,6 +514,32 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     submit(unserializableRdd, Array(0))
     assert(failure.getMessage.startsWith(
       "Job aborted due to stage failure: Task not serializable:"))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.failedStages.contains(0))
+    assert(sparkListener.failedStages.size === 1)
+    assertDataStructuresEmpty()
+  }
+
+  test("unserializable partitioner") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new Partitioner {
+      override def numPartitions = 1
+
+      override def getPartition(key: Any) = 1
+
+      @throws(classOf[IOException])
+      private def writeObject(out: ObjectOutputStream): Unit = {
+        throw new NotSerializableException()
+      }
+
+      @throws(classOf[IOException])
+      private def readObject(in: ObjectInputStream): Unit = {}
+    })
+
+    // Submit a map stage by itself
+    submitMapStage(shuffleDep)
+    assert(failure.getMessage.startsWith(
+      "Job aborted due to stage failure: Task not serializable"))
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.failedStages.contains(0))
     assert(sparkListener.failedStages.size === 1)

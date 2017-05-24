@@ -1003,6 +1003,11 @@ class DAGScheduler(
           JavaUtils.bufferToArray(closureSerializer.serialize((stage.rdd, stage.func): AnyRef))
       }
 
+      if (taskBinaryBytes.length > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024) {
+        logWarning(s"Stage ${stage.id} contains a task of very large size " +
+          s"(${taskBinaryBytes.length / 1024} KB). The maximum recommended task size is " +
+          s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+      }
       taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
       // In the case of a failure during serialization, abort the stage.
