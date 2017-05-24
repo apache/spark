@@ -90,4 +90,7 @@ private[scheduler]
 case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable])
   extends DAGSchedulerEvent
 
+private[scheduler]
+case class TasksAborted(stageId: Int, tasks: Seq[Task[_]]) extends DAGSchedulerEvent
+
 private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent

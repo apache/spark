@@ -36,11 +36,17 @@ import org.apache.spark.util.{AccumulatorV2, ManualClock}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
+  val abortedPartitions = new mutable.HashSet[Int]
 
   override def taskStarted(task: Task[_], taskInfo: TaskInfo) {
     taskScheduler.startedTasks += taskInfo.index
   }
 
+  override def tasksAborted(stageId: Int, tasks: Seq[Task[_]]): Unit = {
+    for (task <- tasks) {
+      abortedPartitions += task.partitionId
+    }
+  }
   override def taskEnded(
       task: Task[_],
       reason: TaskEndReason,
@@ -415,6 +421,92 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
         assert(sched.taskSetsFailed.contains(taskSet.id))
       }
     }
+  }
+
+  test("pending tasks should be aborted after first fetch failure") {
+    val rescheduleDelay = 300L
+    val conf = new SparkConf().
+      set("spark.scheduler.executorTaskBlacklistTime", rescheduleDelay.toString).
+      // don't wait to jump locality levels in this test
+      set("spark.locality.wait", "0")
+
+    sc = new SparkContext("local", "test", conf)
+    // two executors on same host, one on different.
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
+      ("exec1.1", "host1"), ("exec2", "host2"))
+    // affinity to exec1 on host1 - which we will fail.
+    val taskSet = FakeTask.createTaskSet(4)
+    val clock = new ManualClock
+    clock.advance(1)
+    val manager = new TaskSetManager(sched, taskSet, 4, None, clock)
+
+    val offerResult1 = manager.resourceOffer("exec1", "host1", ANY)
+    assert(offerResult1.isDefined, "Expect resource offer to return a task")
+
+    assert(offerResult1.get.index === 0)
+    assert(offerResult1.get.executorId === "exec1")
+
+    val offerResult2 = manager.resourceOffer("exec2", "host2", ANY)
+    assert(offerResult2.isDefined, "Expect resource offer to return a task")
+
+    assert(offerResult2.get.index === 1)
+    assert(offerResult2.get.executorId === "exec2")
+    // At this point, we have 2 tasks running and 2 pending. First fetch failure should
+    // abort all the pending tasks but the running tasks should not be aborted.
+    manager.handleFailedTask(offerResult1.get.taskId, TaskState.FINISHED,
+      FetchFailed(BlockManagerId("exec-host2", "host2", 12345), 0, 0, 0, "ignored"))
+    val dagScheduler = sched.dagScheduler.asInstanceOf[FakeDAGScheduler]
+    assert(dagScheduler.abortedPartitions.size === 2)
+
+    dagScheduler.abortedPartitions.clear()
+    // Second fetch failure should not notify the DagScheduler of the aborted tasks.
+
+    manager.handleFailedTask(offerResult1.get.taskId, TaskState.FINISHED,
+      FetchFailed(BlockManagerId("exec-host2", "host2", 12345), 0, 0, 0, "ignored"))
+    assert(dagScheduler.abortedPartitions.size === 0)
+  }
+
+  test("Failed tasks should be aborted in zombie mode") {
+    val rescheduleDelay = 300L
+    val conf = new SparkConf().
+      set("spark.scheduler.executorTaskBlacklistTime", rescheduleDelay.toString).
+      // don't wait to jump locality levels in this test
+      set("spark.locality.wait", "0")
+
+    sc = new SparkContext("local", "test", conf)
+    // two executors on same host, one on different.
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
+      ("exec1.1", "host1"), ("exec2", "host2"))
+    // affinity to exec1 on host1 - which we will fail.
+    val taskSet = FakeTask.createTaskSet(4)
+    val clock = new ManualClock
+    clock.advance(1)
+    val manager = new TaskSetManager(sched, taskSet, 4, None, clock)
+
+    val offerResult1 = manager.resourceOffer("exec1", "host1", ANY)
+    assert(offerResult1.isDefined, "Expect resource offer to return a task")
+
+    assert(offerResult1.get.index === 0)
+    assert(offerResult1.get.executorId === "exec1")
+
+    val offerResult2 = manager.resourceOffer("exec2", "host2", ANY)
+    assert(offerResult2.isDefined, "Expect resource offer to return a task")
+
+    assert(offerResult2.get.index === 1)
+    assert(offerResult2.get.executorId === "exec2")
+    // At this point, we have 2 tasks running and 2 pending. First fetch failure should
+    // abort all the pending tasks but the running tasks should not be aborted.
+    manager.handleFailedTask(offerResult1.get.taskId, TaskState.FINISHED,
+      FetchFailed(BlockManagerId("exec-host2", "host2", 12345), 0, 0, 0, "ignored"))
+    val dagScheduler = sched.dagScheduler.asInstanceOf[FakeDAGScheduler]
+    assert(dagScheduler.abortedPartitions.size === 2)
+
+    dagScheduler.abortedPartitions.clear()
+
+    val exceptionFailure = new ExceptionFailure(new SparkException("fondue?"), Seq.empty)
+    manager.handleFailedTask(offerResult1.get.taskId, TaskState.FINISHED, exceptionFailure)
+
+    assert(dagScheduler.abortedPartitions.size === 1)
   }
 
   test("executors should be blacklisted after task failure, in spite of locality preferences") {

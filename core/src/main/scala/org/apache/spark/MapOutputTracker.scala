@@ -292,6 +292,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
   protected val mapStatuses = new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
   private val cachedSerializedStatuses = new ConcurrentHashMap[Int, Array[Byte]]().asScala
 
+  // HashMap for storing the epoch for the mapStatuses on the driver. This will be used to
+  // detect and ignore any bogus fetch failures
+  private val epochForMapStatus = new ConcurrentHashMap[Int, Array[Long]]().asScala
   private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
 
   // Kept in sync with cachedSerializedStatuses explicitly
@@ -370,6 +373,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
     if (mapStatuses.put(shuffleId, new Array[MapStatus](numMaps)).isDefined) {
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
+    epochForMapStatus.put(shuffleId, new Array[Long](numMaps))
     // add in advance
     shuffleIdLocks.putIfAbsent(shuffleId, new Object())
   }
@@ -378,6 +382,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
     val array = mapStatuses(shuffleId)
     array.synchronized {
       array(mapId) = status
+      val epochs = epochForMapStatus(shuffleId)
+      epochs(mapId) = epoch
     }
   }
 
@@ -416,6 +422,18 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
   /** Check if the given shuffle is being tracked */
   def containsShuffle(shuffleId: Int): Boolean = {
     cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
+  }
+
+  /** Get the epoch for map output for a shuffle, if it is available */
+  def getEpochForMapOutput(shuffleId: Int, mapId: Int): Option[Long] = {
+    if (mapId < 0) {
+      return None
+    }
+    for {
+      mapStatus <- mapStatuses.get(shuffleId).flatMap { mapStatusArray =>
+        Option(mapStatusArray(mapId))
+      }
+    } yield epochForMapStatus(shuffleId)(mapId)
   }
 
   /**

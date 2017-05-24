@@ -109,8 +109,8 @@ private[spark] class TaskSetManager(
   // the zombie state once at least one attempt of each task has completed successfully, or if the
   // task set is aborted (for example, because it was killed).  TaskSetManagers remain in the zombie
   // state until all tasks have finished running; we keep TaskSetManagers that are in the zombie
-  // state in order to continue to track and account for the running tasks.
-  // TODO: We should kill any running task attempts when the task set manager becomes a zombie.
+  // state in order to continue to track and account for the running tasks. The tasks running in the
+  // zombie TaskSetManagers are not rerun by the DagScheduler unless they fail.
   private[scheduler] var isZombie = false
 
   // Set of pending tasks for each executor. These collections are actually
@@ -768,12 +768,29 @@ private[spark] class TaskSetManager(
       s" executor ${info.executorId}): ${reason.toErrorString}"
     val failureException: Option[Throwable] = reason match {
       case fetchFailed: FetchFailed =>
+        if (!isZombie) {
+          // Only for the first occurrence of the fetch failure, get the list
+          // of all non-running and non-successful tasks and notify the
+          // DagScheduler of their abortion so that they can be rescheduled in retry
+          // of the stage. Note that this does not include the fetch failed tasks,
+          // because that is separately handled by the DagScheduler.
+          val abortedTasks = new ArrayBuffer[Task[_]]
+          for (i <- 0 until numTasks) {
+            if (i != index && !successful(i) && copiesRunning(i) == 0) {
+              abortedTasks += taskSet.tasks(i)
+            }
+          }
+          if (!abortedTasks.isEmpty) {
+            sched.dagScheduler.tasksAborted(abortedTasks(0).stageId, abortedTasks)
+          }
+          isZombie = true
+        }
+
         logWarning(failureReason)
         if (!successful(index)) {
           successful(index) = true
           tasksSuccessful += 1
         }
-        isZombie = true
         None
 
       case ef: ExceptionFailure =>
@@ -825,6 +842,14 @@ private[spark] class TaskSetManager(
     }
 
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
+
+    if (reason != Success && !reason.isInstanceOf[FetchFailed] && isZombie) {
+      // If the TaskSetManager is in zombie mode, we should inform the DAGScheduler to abort
+      // the task in case of failure so that the DagScheduler can rerun it in the retry of
+      // the stage. Please note that we exclude fetch failed tasks, because they are handled
+      // by the DAGScheduler separately.
+      sched.dagScheduler.tasksAborted(tasks(index).stageId, Array(tasks(index)))
+    }
 
     if (successful(index)) {
       logInfo(s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, but the task will not" +
