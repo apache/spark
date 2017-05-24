@@ -404,6 +404,18 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(tp._paramMap, copied_no_extra)
         self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
 
+    def test_logistic_regression_check_thresholds(self):
+        self.assertIsInstance(
+            LogisticRegression(threshold=0.5, thresholds=[0.5, 0.5]),
+            LogisticRegression
+        )
+
+        self.assertRaisesRegexp(
+            ValueError,
+            "Logistic Regression getThreshold found inconsistent.*$",
+            LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
+        )
+
 
 class EvaluatorTests(SparkSessionTestCase):
 
@@ -806,18 +818,6 @@ class PersistenceTest(SparkSessionTestCase):
             rmtree(path)
         except OSError:
             pass
-
-    def logistic_regression_check_thresholds(self):
-        self.assertIsInstance(
-            LogisticRegression(threshold=0.5, thresholds=[0.5, 0.5]),
-            LogisticRegressionModel
-        )
-
-        self.assertRaisesRegexp(
-            ValueError,
-            "Logistic Regression getThreshold found inconsistent.*$",
-            LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
-        )
 
     def _compare_params(self, m1, m2, param):
         """
