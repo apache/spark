@@ -90,7 +90,7 @@ class CacheManager extends Logging {
       query: Dataset[_],
       tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
-    val planToCache = query.logicalPlan
+    val planToCache = query.queryExecution.analyzed
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
@@ -110,7 +110,7 @@ class CacheManager extends Logging {
    * Un-cache all the cache entries that refer to the given plan.
    */
   def uncacheQuery(query: Dataset[_], blocking: Boolean = true): Unit = writeLock {
-    uncacheQuery(query.sparkSession, query.logicalPlan, blocking)
+    uncacheQuery(query.sparkSession, query.queryExecution.analyzed, blocking)
   }
 
   /**
@@ -159,7 +159,7 @@ class CacheManager extends Logging {
 
   /** Optionally returns cached data for the given [[Dataset]] */
   def lookupCachedData(query: Dataset[_]): Option[CachedData] = readLock {
-    lookupCachedData(query.logicalPlan)
+    lookupCachedData(query.queryExecution.analyzed)
   }
 
   /** Optionally returns cached data for the given [[LogicalPlan]]. */

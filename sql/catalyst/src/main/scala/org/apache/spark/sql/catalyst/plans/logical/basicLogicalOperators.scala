@@ -923,10 +923,4 @@ case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
   override def analyzed: Boolean = true
   override def isStreaming: Boolean = child.isStreaming
   override lazy val canonicalized: LogicalPlan = child.canonicalized
-
-  override def find(f: LogicalPlan => Boolean): Option[LogicalPlan] = if (f(this)) {
-    Some(this)
-  } else {
-    child.find(f)
-  }
 }
