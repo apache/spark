@@ -319,7 +319,7 @@ class CodegenContext {
    */
   private[sql] def declareAddedFunctions(): String = {
     classFunctions("OuterClass").map {
-      case (funcName, funcCode) => funcCode
+      case (_, funcCode) => funcCode
     }.mkString("\n")
   }
 
@@ -333,8 +333,7 @@ class CodegenContext {
           ""
         } else {
           val code = functions.map {
-            case (_, funcCode) =>
-              s"$funcCode"
+            case (_, funcCode) => funcCode
           }.mkString("\n")
 
           s"""
@@ -737,7 +736,7 @@ class CodegenContext {
   /**
    * Splits the generated code of expressions into multiple functions, because function has
    * 64kb code size limit in JVM. If the class the function is to be inlined to would grow beyond
-   * 1600kb, a private, netsted sub-class is declared, and the function is inlined to it, because
+   * 1600kb, a private, nested sub-class is declared, and the function is inlined to it, because
    * classes have a constant pool limit of 65,536 named values.
    *
    * @param row the variable name of row that is used by expressions
@@ -870,6 +869,17 @@ class CodegenContext {
       val isNull = s"${fnName}IsNull"
       val value = s"${fnName}Value"
 
+      // Generate the code for this expression tree and wrap it in a function.
+      val eval = expr.genCode(this)
+      val fn =
+        s"""
+           |private void $fnName(InternalRow $INPUT_ROW) {
+           |  ${eval.code.trim}
+           |  $isNull = ${eval.isNull};
+           |  $value = ${eval.value};
+           |}
+           """.stripMargin
+
       // Add a state and a mapping of the common subexpressions that are associate with this
       // state. Adding this expression to subExprEliminationExprMap means it will call `fn`
       // when it is code generated. This decision should be a cost based one.
@@ -886,17 +896,6 @@ class CodegenContext {
       addMutableState("boolean", isNull, s"$isNull = false;")
       addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
-
-      // Generate the code for this expression tree and wrap it in a function.
-      val eval = expr.genCode(this)
-      val fn =
-        s"""
-           |private void $fnName(InternalRow $INPUT_ROW) {
-           |  ${eval.code.trim}
-           |  $isNull = ${eval.isNull};
-           |  $value = ${eval.value};
-           |}
-           """.stripMargin
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
       val state = SubExprEliminationState(isNull, value)
