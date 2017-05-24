@@ -113,7 +113,7 @@ of the most common options to set are:
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.app.name</code></td>
-  <td>(none)</td>
+  <td>(random)</td>
   <td>
     The name of your application. This will appear in the UI and in log data.
   </td>
