@@ -65,6 +65,11 @@ class FiltersSuite extends SparkFunSuite with Logging {
     (Literal("") === a("varchar", StringType)) :: Nil,
     "")
 
+  filterTest("SPARK-19912 String literals should be escaped for Hive metastore partition pruning",
+    (a("stringcol", StringType) === Literal("p1\" and q=\"q1")) ::
+      (Literal("p2\" and q=\"q2") === a("stringcol", StringType)) :: Nil,
+    """stringcol = 'p1" and q="q1' and 'p2" and q="q2' = stringcol""")
+
   private def filterTest(name: String, filters: Seq[Expression], result: String) = {
     test(name) {
       val converted = shim.convertFilters(testTable, filters)

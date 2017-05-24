@@ -237,7 +237,7 @@ class LocalLDAModel private[spark] (
     vocabSize)
 
   /**
-   * Java-friendly version of [[logLikelihood]]
+   * Java-friendly version of `logLikelihood`
    */
   @Since("1.5.0")
   def logLikelihood(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
@@ -245,7 +245,7 @@ class LocalLDAModel private[spark] (
   }
 
   /**
-   * Calculate an upper bound bound on perplexity.  (Lower is better.)
+   * Calculate an upper bound on perplexity.  (Lower is better.)
    * See Equation (16) in original Online LDA paper.
    *
    * @param documents test corpus to use for calculating perplexity
@@ -259,7 +259,9 @@ class LocalLDAModel private[spark] (
     -logLikelihood(documents) / corpusTokenCount
   }
 
-  /** Java-friendly version of [[logPerplexity]] */
+  /**
+   * Java-friendly version of `logPerplexity`
+   */
   @Since("1.5.0")
   def logPerplexity(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
     logPerplexity(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
@@ -312,7 +314,7 @@ class LocalLDAModel private[spark] (
           docBound += count * LDAUtils.logSumExp(Elogthetad + localElogbeta(idx, ::).t)
         }
         // E[log p(theta | alpha) - log q(theta | gamma)]
-        docBound += sum((brzAlpha - gammad) :* Elogthetad)
+        docBound += sum((brzAlpha - gammad) *:* Elogthetad)
         docBound += sum(lgamma(gammad) - lgamma(brzAlpha))
         docBound += lgamma(sum(brzAlpha)) - lgamma(sum(gammad))
 
@@ -322,7 +324,7 @@ class LocalLDAModel private[spark] (
     // Bound component for prob(topic-term distributions):
     //   E[log p(beta | eta) - log q(beta | lambda)]
     val sumEta = eta * vocabSize
-    val topicsPart = sum((eta - lambda) :* Elogbeta) +
+    val topicsPart = sum((eta - lambda) *:* Elogbeta) +
       sum(lgamma(lambda) - lgamma(eta)) +
       sum(lgamma(sumEta) - lgamma(sum(lambda(::, breeze.linalg.*))))
 
@@ -365,7 +367,9 @@ class LocalLDAModel private[spark] (
     }
   }
 
-  /** Get a method usable as a UDF for [[topicDistributions()]] */
+  /**
+   * Get a method usable as a UDF for `topicDistributions()`
+   */
   private[spark] def getTopicDistributionMethod(sc: SparkContext): Vector => Vector = {
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
     val expElogbetaBc = sc.broadcast(expElogbeta)
@@ -414,7 +418,7 @@ class LocalLDAModel private[spark] (
   }
 
   /**
-   * Java-friendly version of [[topicDistributions]]
+   * Java-friendly version of `topicDistributions`
    */
   @Since("1.4.1")
   def topicDistributions(
@@ -717,7 +721,7 @@ class DistributedLDAModel private[clustering] (
       val N_wj = edgeContext.attr
       val smoothed_N_wk: TopicCounts = edgeContext.dstAttr + (eta - 1.0)
       val smoothed_N_kj: TopicCounts = edgeContext.srcAttr + (alpha - 1.0)
-      val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
+      val phi_wk: TopicCounts = smoothed_N_wk /:/ smoothed_N_k
       val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
       val tokenLogLikelihood = N_wj * math.log(phi_wk.dot(theta_kj))
       edgeContext.sendToDst(tokenLogLikelihood)
@@ -744,13 +748,13 @@ class DistributedLDAModel private[clustering] (
         if (isTermVertex(vertex)) {
           val N_wk = vertex._2
           val smoothed_N_wk: TopicCounts = N_wk + (eta - 1.0)
-          val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
-          (eta - 1.0) * sum(phi_wk.map(math.log))
+          val phi_wk: TopicCounts = smoothed_N_wk /:/ smoothed_N_k
+          sumPrior + (eta - 1.0) * sum(phi_wk.map(math.log))
         } else {
           val N_kj = vertex._2
           val smoothed_N_kj: TopicCounts = N_kj + (alpha - 1.0)
           val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
-          (alpha - 1.0) * sum(theta_kj.map(math.log))
+          sumPrior + (alpha - 1.0) * sum(theta_kj.map(math.log))
         }
     }
     graph.vertices.aggregate(0.0)(seqOp, _ + _)
@@ -784,20 +788,14 @@ class DistributedLDAModel private[clustering] (
   @Since("1.5.0")
   def topTopicsPerDocument(k: Int): RDD[(Long, Array[Int], Array[Double])] = {
     graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
-      // TODO: Remove work-around for the breeze bug.
-      // https://github.com/scalanlp/breeze/issues/561
-      val topIndices = if (k == topicCounts.length) {
-        Seq.range(0, k)
-      } else {
-        argtopk(topicCounts, k)
-      }
+      val topIndices = argtopk(topicCounts, k)
       val sumCounts = sum(topicCounts)
       val weights = if (sumCounts != 0) {
-        topicCounts(topIndices) / sumCounts
+        topicCounts(topIndices).toArray.map(_ / sumCounts)
       } else {
-        topicCounts(topIndices)
+        topicCounts(topIndices).toArray
       }
-      (docID.toLong, topIndices.toArray, weights.toArray)
+      (docID.toLong, topIndices.toArray, weights)
     }
   }
 

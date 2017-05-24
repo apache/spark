@@ -227,12 +227,9 @@ public class JavaSparkSQLExample {
     // Encoders for most common types are provided in class Encoders
     Encoder<Integer> integerEncoder = Encoders.INT();
     Dataset<Integer> primitiveDS = spark.createDataset(Arrays.asList(1, 2, 3), integerEncoder);
-    Dataset<Integer> transformedDS = primitiveDS.map(new MapFunction<Integer, Integer>() {
-      @Override
-      public Integer call(Integer value) throws Exception {
-        return value + 1;
-      }
-    }, integerEncoder);
+    Dataset<Integer> transformedDS = primitiveDS.map(
+        (MapFunction<Integer, Integer>) value -> value + 1,
+        integerEncoder);
     transformedDS.collect(); // Returns [2, 3, 4]
 
     // DataFrames can be converted to a Dataset by providing a class. Mapping based on name
@@ -255,15 +252,12 @@ public class JavaSparkSQLExample {
     JavaRDD<Person> peopleRDD = spark.read()
       .textFile("examples/src/main/resources/people.txt")
       .javaRDD()
-      .map(new Function<String, Person>() {
-        @Override
-        public Person call(String line) throws Exception {
-          String[] parts = line.split(",");
-          Person person = new Person();
-          person.setName(parts[0]);
-          person.setAge(Integer.parseInt(parts[1].trim()));
-          return person;
-        }
+      .map(line -> {
+        String[] parts = line.split(",");
+        Person person = new Person();
+        person.setName(parts[0]);
+        person.setAge(Integer.parseInt(parts[1].trim()));
+        return person;
       });
 
     // Apply a schema to an RDD of JavaBeans to get a DataFrame
@@ -276,12 +270,9 @@ public class JavaSparkSQLExample {
 
     // The columns of a row in the result can be accessed by field index
     Encoder<String> stringEncoder = Encoders.STRING();
-    Dataset<String> teenagerNamesByIndexDF = teenagersDF.map(new MapFunction<Row, String>() {
-      @Override
-      public String call(Row row) throws Exception {
-        return "Name: " + row.getString(0);
-      }
-    }, stringEncoder);
+    Dataset<String> teenagerNamesByIndexDF = teenagersDF.map(
+        (MapFunction<Row, String>) row -> "Name: " + row.getString(0),
+        stringEncoder);
     teenagerNamesByIndexDF.show();
     // +------------+
     // |       value|
@@ -290,12 +281,9 @@ public class JavaSparkSQLExample {
     // +------------+
 
     // or by field name
-    Dataset<String> teenagerNamesByFieldDF = teenagersDF.map(new MapFunction<Row, String>() {
-      @Override
-      public String call(Row row) throws Exception {
-        return "Name: " + row.<String>getAs("name");
-      }
-    }, stringEncoder);
+    Dataset<String> teenagerNamesByFieldDF = teenagersDF.map(
+        (MapFunction<Row, String>) row -> "Name: " + row.<String>getAs("name"),
+        stringEncoder);
     teenagerNamesByFieldDF.show();
     // +------------+
     // |       value|
@@ -324,12 +312,9 @@ public class JavaSparkSQLExample {
     StructType schema = DataTypes.createStructType(fields);
 
     // Convert records of the RDD (people) to Rows
-    JavaRDD<Row> rowRDD = peopleRDD.map(new Function<String, Row>() {
-      @Override
-      public Row call(String record) throws Exception {
-        String[] attributes = record.split(",");
-        return RowFactory.create(attributes[0], attributes[1].trim());
-      }
+    JavaRDD<Row> rowRDD = peopleRDD.map((Function<String, Row>) record -> {
+      String[] attributes = record.split(",");
+      return RowFactory.create(attributes[0], attributes[1].trim());
     });
 
     // Apply the schema to the RDD
@@ -343,12 +328,9 @@ public class JavaSparkSQLExample {
 
     // The results of SQL queries are DataFrames and support all the normal RDD operations
     // The columns of a row in the result can be accessed by field index or by field name
-    Dataset<String> namesDS = results.map(new MapFunction<Row, String>() {
-      @Override
-      public String call(Row row) throws Exception {
-        return "Name: " + row.getString(0);
-      }
-    }, Encoders.STRING());
+    Dataset<String> namesDS = results.map(
+        (MapFunction<Row, String>) row -> "Name: " + row.getString(0),
+        Encoders.STRING());
     namesDS.show();
     // +-------------+
     // |        value|

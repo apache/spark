@@ -68,7 +68,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
       link: String,
       statCache: Map[URI, FileStatus],
       appMasterOnly: Boolean = false): Unit = {
-    val destStatus = fs.getFileStatus(destPath)
+    val destStatus = statCache.getOrElse(destPath.toUri(), fs.getFileStatus(destPath))
     val amJarRsrc = Records.newRecord(classOf[LocalResource])
     amJarRsrc.setType(resourceType)
     val visibility = getVisibility(conf, destPath.toUri(), statCache)

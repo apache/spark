@@ -17,18 +17,22 @@
 
 package org.apache.spark.sql.test
 
+import scala.concurrent.duration._
+
 import org.scalatest.BeforeAndAfterEach
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.sql.{SparkSession, SQLContext}
 
-
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
-trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
+trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach with Eventually {
 
-  protected val sparkConf = new SparkConf()
+  protected def sparkConf = {
+    new SparkConf().set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
+  }
 
   /**
    * The [[TestSparkSession]] to use for all tests in this suite.
@@ -49,8 +53,7 @@ trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   protected def createSparkSession: TestSparkSession = {
-    new TestSparkSession(
-      sparkConf.set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName))
+    new TestSparkSession(sparkConf)
   }
 
   /**
@@ -69,13 +72,11 @@ trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
    * Stop the underlying [[org.apache.spark.SparkContext]], if any.
    */
   protected override def afterAll(): Unit = {
-    try {
-      if (_spark != null) {
-        _spark.stop()
-        _spark = null
-      }
-    } finally {
-      super.afterAll()
+    super.afterAll()
+    if (_spark != null) {
+      _spark.sessionState.catalog.reset()
+      _spark.stop()
+      _spark = null
     }
   }
 
@@ -86,6 +87,10 @@ trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
 
   protected override def afterEach(): Unit = {
     super.afterEach()
-    DebugFilesystem.assertNoOpenStreams()
+    // files can be closed from other threads, so wait a bit
+    // normally this doesn't take more than 1s
+    eventually(timeout(10.seconds)) {
+      DebugFilesystem.assertNoOpenStreams()
+    }
   }
 }

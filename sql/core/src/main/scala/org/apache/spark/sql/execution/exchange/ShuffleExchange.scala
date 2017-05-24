@@ -46,7 +46,7 @@ case class ShuffleExchange(
   override def nodeName: String = {
     val extraInfo = coordinator match {
       case Some(exchangeCoordinator) =>
-        s"(coordinator id: ${System.identityHashCode(coordinator)})"
+        s"(coordinator id: ${System.identityHashCode(exchangeCoordinator)})"
       case None => ""
     }
 

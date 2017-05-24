@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, ForeachWriter}
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
 
@@ -32,6 +36,7 @@ import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, Memory
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private val df = ds.toDF()
@@ -42,6 +47,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *                            written to the sink
    *   - `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
    *                              to the sink every time these is some updates
+   *   - `OutputMode.Update()`: only the rows that were updated in the streaming DataFrame/Dataset
+   *                            will be written to the sink every time there are some updates. If
+   *                            the query doesn't contain aggregations, it will be equivalent to
+   *                            `OutputMode.Append()` mode.
    *
    * @since 2.0.0
    */
@@ -56,19 +65,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *                 the sink
    *   - `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
    *                 every time these is some updates
-   *
+   *   - `update`:   only the rows that were updated in the streaming DataFrame/Dataset will
+   *                 be written to the sink every time there are some updates. If the query doesn't
+   *                 contain aggregations, it will be equivalent to `append` mode.
    * @since 2.0.0
    */
   def outputMode(outputMode: String): DataStreamWriter[T] = {
-    this.outputMode = outputMode.toLowerCase match {
-      case "append" =>
-        OutputMode.Append
-      case "complete" =>
-        OutputMode.Complete
-      case _ =>
-        throw new IllegalArgumentException(s"Unknown output mode $outputMode. " +
-          "Accepted output modes are 'append' and 'complete'")
-    }
+    this.outputMode = InternalOutputModes(outputMode)
     this
   }
 
@@ -99,7 +102,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this
   }
 
-
   /**
    * Specifies the name of the [[StreamingQuery]] that can be started with `start()`.
    * This name must be unique among all the currently active queries in the associated SQLContext.
@@ -112,7 +114,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Specifies the underlying output data source. Built-in options include "parquet" for now.
+   * Specifies the underlying output data source.
    *
    * @since 2.0.0
    */
@@ -134,9 +136,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * predicates on the partitioned columns. In order for partitioning to work well, the number
    * of distinct values in each column should typically be less than tens of thousands.
    *
-   * This was initially applicable for Parquet but in 1.5+ covers JSON, text, ORC and avro as well.
-   *
-   * @since 1.4.0
+   * @since 2.0.0
    */
   @scala.annotation.varargs
   def partitionBy(colNames: String*): DataStreamWriter[T] = {
@@ -146,6 +146,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Adds an output option for the underlying data source.
+   *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
@@ -178,6 +184,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
+   *
    * @since 2.0.0
    */
   def options(options: scala.collection.Map[String, String]): DataStreamWriter[T] = {
@@ -187,6 +199,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Adds output options for the underlying data source.
+   *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
@@ -214,16 +232,20 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   def start(): StreamingQuery = {
+    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
+      throw new AnalysisException("Hive data source can only be used with tables, you can not " +
+        "write files of Hive data source directly.")
+    }
+
     if (source == "memory") {
       assertNotPartitioned("memory")
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
       }
-
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
       val chkpointLoc = extraOptions.get("checkpointLocation")
-      val recoverFromChkpoint = chkpointLoc.isDefined && outputMode == OutputMode.Complete()
+      val recoverFromChkpoint = outputMode == OutputMode.Complete()
       val query = df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         chkpointLoc,
@@ -273,7 +295,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Starts the execution of the streaming query, which will continually send results to the given
-   * `ForeachWriter` as as new data arrives. The `ForeachWriter` can be used to send the data
+   * `ForeachWriter` as new data arrives. The `ForeachWriter` can be used to send the data
    * generated by the `DataFrame`/`Dataset` to an external system.
    *
    * Scala example:
@@ -357,7 +379,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private var outputMode: OutputMode = OutputMode.Append
 
-  private var trigger: Trigger = ProcessingTime(0L)
+  private var trigger: Trigger = Trigger.ProcessingTime(0L)
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 

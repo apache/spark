@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import com.google.common.collect.ConcurrentHashMultiset
+import com.google.common.collect.{ConcurrentHashMultiset, ImmutableMultiset}
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -340,7 +340,7 @@ private[storage] class BlockInfoManager extends Logging {
     val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
 
     val readLocks = synchronized {
-      readLocksByTask.remove(taskAttemptId).get
+      readLocksByTask.remove(taskAttemptId).getOrElse(ImmutableMultiset.of[BlockId]())
     }
     val writeLocks = synchronized {
       writeLocksByTask.remove(taskAttemptId).getOrElse(Seq.empty)
@@ -369,6 +369,12 @@ private[storage] class BlockInfoManager extends Logging {
       notifyAll()
     }
     blocksWithReleasedLocks
+  }
+
+  /** Returns the number of locks held by the given task.  Used only for testing. */
+  private[storage] def getTaskLockCount(taskAttemptId: TaskAttemptId): Int = {
+    readLocksByTask.get(taskAttemptId).map(_.size()).getOrElse(0) +
+      writeLocksByTask.get(taskAttemptId).map(_.size).getOrElse(0)
   }
 
   /**

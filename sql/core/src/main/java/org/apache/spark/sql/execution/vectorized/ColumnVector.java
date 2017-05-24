@@ -180,7 +180,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public boolean getBoolean(int ordinal) {
-      throw new UnsupportedOperationException();
+      return data.getBoolean(offset + ordinal);
     }
 
     @Override
@@ -188,7 +188,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public short getShort(int ordinal) {
-      throw new UnsupportedOperationException();
+      return data.getShort(offset + ordinal);
     }
 
     @Override
@@ -199,7 +199,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public float getFloat(int ordinal) {
-      throw new UnsupportedOperationException();
+      return data.getFloat(offset + ordinal);
     }
 
     @Override
@@ -246,6 +246,12 @@ public abstract class ColumnVector implements AutoCloseable {
     public Object get(int ordinal, DataType dataType) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
+
+    @Override
+    public void setNullAt(int ordinal) { throw new UnsupportedOperationException(); }
   }
 
   /**
@@ -792,6 +798,14 @@ public abstract class ColumnVector implements AutoCloseable {
     int result = elementsAppended;
     putFloats(elementsAppended, count, v);
     elementsAppended += count;
+    return result;
+  }
+
+  public final int appendFloats(int length, float[] src, int offset) {
+    reserve(elementsAppended + length);
+    int result = elementsAppended;
+    putFloats(elementsAppended, length, src, offset);
+    elementsAppended += length;
     return result;
   }
 

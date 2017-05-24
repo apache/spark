@@ -32,7 +32,7 @@ class CombiningLimitsSuite extends PlanTest {
       Batch("Combine Limit", FixedPoint(10),
         CombineLimits) ::
       Batch("Constant Folding", FixedPoint(10),
-        NullPropagation,
+        NullPropagation(conf),
         ConstantFolding,
         BooleanSimplification,
         SimplifyConditionals) :: Nil

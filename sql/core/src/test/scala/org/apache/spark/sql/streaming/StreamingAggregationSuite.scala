@@ -17,25 +17,26 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.InternalOutputModes._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.streaming.OutputMode._
+import org.apache.spark.sql.streaming.util.StreamManualClock
 
 object FailureSinglton {
   var firstTime = true
 }
 
-class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
+class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     super.afterAll()
@@ -65,6 +66,22 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       // By default we run in new tuple mode.
       AddData(inputData, 4, 4, 4, 4),
       CheckLastBatch((4, 4))
+    )
+  }
+
+  test("count distinct") {
+    val inputData = MemoryStream[(Int, Seq[Int])]
+
+    val aggregated =
+      inputData.toDF()
+        .select($"*", explode($"_2") as 'value)
+        .groupBy($"_1")
+        .agg(size(collect_set($"value")))
+        .as[(Int, Int)]
+
+    testStream(aggregated, Update)(
+      AddData(inputData, (1, Seq(1, 2))),
+      CheckLastBatch((1, 2))
     )
   }
 
@@ -104,7 +121,7 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       testStream(aggregated, Append)()
     }
     Seq("append", "not supported").foreach { m =>
-      assert(e.getMessage.toLowerCase.contains(m.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -272,11 +289,13 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
+        q.batchCommitLog.purge(3)
         // advance by a minute i.e., 90 seconds total
         clock.advance(60 * 1000L)
         true
       },
       StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
+      // The commit log blown, causing the last batch to re-run
       CheckLastBatch((20L, 1), (85L, 1)),
       AssertOnQuery { q =>
         clock.getTimeMillis() == 90000L
@@ -322,11 +341,13 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
+        q.batchCommitLog.purge(3)
         // advance by 60 days i.e., 90 days total
         clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
         true
       },
       StartStream(ProcessingTime("10 day"), triggerClock = clock),
+      // Commit log blown, causing a re-run of the last batch
       CheckLastBatch((20L, 1), (85L, 1)),
 
       // advance clock to 100 days, should retain keys >= 90

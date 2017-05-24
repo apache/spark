@@ -10,8 +10,6 @@ package org.apache.spark.repl
 import scala.tools.nsc._
 import scala.tools.nsc.interpreter._
 
-import scala.reflect.internal.util.Position
-import scala.util.control.Exception.ignoring
 import scala.tools.nsc.util.stackTraceString
 
 import org.apache.spark.SPARK_VERSION

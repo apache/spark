@@ -25,7 +25,6 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
-import org.apache.spark.api.java.function.{ Function0 => JFunction0 }
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.StreamingContext
@@ -48,7 +47,7 @@ object KafkaUtils extends Logging {
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-   * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
    *   see [[LocationStrategies]] for more details.
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
@@ -80,14 +79,12 @@ object KafkaUtils extends Logging {
    * Java constructor for a batch-oriented interface for consuming from Kafka.
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
-   * @param keyClass Class of the keys in the Kafka records
-   * @param valueClass Class of the values in the Kafka records
    * @param kafkaParams Kafka
    * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-   * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
    *   see [[LocationStrategies]] for more details.
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
@@ -110,9 +107,9 @@ object KafkaUtils extends Logging {
    * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
    *  of messages
    * per second that each '''partition''' will accept.
-   * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
    *   see [[LocationStrategies]] for more details.
-   * @param consumerStrategy In most cases, pass in ConsumerStrategies.subscribe,
+   * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
    *   see [[ConsumerStrategies]] for more details
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
@@ -131,9 +128,9 @@ object KafkaUtils extends Logging {
    * :: Experimental ::
    * Scala constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
-   * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
    *   see [[LocationStrategies]] for more details.
-   * @param consumerStrategy In most cases, pass in ConsumerStrategies.subscribe,
+   * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
    *   see [[ConsumerStrategies]] for more details.
    * @param perPartitionConfig configuration of settings such as max rate on a per-partition basis.
    *   see [[PerPartitionConfig]] for more details.
@@ -154,11 +151,9 @@ object KafkaUtils extends Logging {
    * :: Experimental ::
    * Java constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
-   * @param keyClass Class of the keys in the Kafka records
-   * @param valueClass Class of the values in the Kafka records
-   * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
    *   see [[LocationStrategies]] for more details.
-   * @param consumerStrategy In most cases, pass in ConsumerStrategies.subscribe,
+   * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
    *   see [[ConsumerStrategies]] for more details
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
@@ -178,11 +173,9 @@ object KafkaUtils extends Logging {
    * :: Experimental ::
    * Java constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
-   * @param keyClass Class of the keys in the Kafka records
-   * @param valueClass Class of the values in the Kafka records
-   * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
    *   see [[LocationStrategies]] for more details.
-   * @param consumerStrategy In most cases, pass in ConsumerStrategies.subscribe,
+   * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
    *   see [[ConsumerStrategies]] for more details
    * @param perPartitionConfig configuration of settings such as max rate on a per-partition basis.
    *   see [[PerPartitionConfig]] for more details.

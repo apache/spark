@@ -243,7 +243,7 @@ private[spark] object AccumulatorSuite {
   import InternalAccumulator._
 
   /**
-   * Create a long accumulator and register it to [[AccumulatorContext]].
+   * Create a long accumulator and register it to `AccumulatorContext`.
    */
   def createLongAccum(
       name: String,
@@ -258,7 +258,7 @@ private[spark] object AccumulatorSuite {
   }
 
   /**
-   * Make an [[AccumulableInfo]] out of an [[Accumulable]] with the intent to use the
+   * Make an `AccumulableInfo` out of an [[Accumulable]] with the intent to use the
    * info as an accumulator update.
    */
   def makeInfo(a: AccumulatorV2[_, _]): AccumulableInfo = a.toInfo(Some(a.value), None)

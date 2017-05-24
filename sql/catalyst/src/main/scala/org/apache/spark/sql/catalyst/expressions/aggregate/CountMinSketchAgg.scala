@@ -90,7 +90,7 @@ case class CountMinSketchAgg(
     CountMinSketch.create(eps, confidence, seed)
   }
 
-  override def update(buffer: CountMinSketch, input: InternalRow): Unit = {
+  override def update(buffer: CountMinSketch, input: InternalRow): CountMinSketch = {
     val value = child.eval(input)
     // Ignore empty rows
     if (value != null) {
@@ -101,10 +101,12 @@ case class CountMinSketchAgg(
         case _ => buffer.add(value)
       }
     }
+    buffer
   }
 
-  override def merge(buffer: CountMinSketch, input: CountMinSketch): Unit = {
+  override def merge(buffer: CountMinSketch, input: CountMinSketch): CountMinSketch = {
     buffer.mergeInPlace(input)
+    buffer
   }
 
   override def eval(buffer: CountMinSketch): Any = serialize(buffer)

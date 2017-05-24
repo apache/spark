@@ -13,8 +13,7 @@ and Spark Streaming for stream processing.
 ## Online Documentation
 
 You can find the latest Spark documentation, including a programming
-guide, on the [project web page](http://spark.apache.org/documentation.html)
-and [project wiki](https://cwiki.apache.org/confluence/display/SPARK).
+guide, on the [project web page](http://spark.apache.org/documentation.html).
 This README file only contains basic setup instructions.
 
 ## Building Spark
@@ -98,7 +97,7 @@ building for particular Hive and Hive Thriftserver distributions.
 Please refer to the [Configuration Guide](http://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.
 
-## Contributing
+## Contributing
 
 Please review the [Contribution to Spark guide](http://spark.apache.org/contributing.html)
 for information on how to get started contributing to the project.

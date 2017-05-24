@@ -17,10 +17,9 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.{Arrays, List => JList}
+import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.CommonConfigurationKeysPublic
-import org.apache.hadoop.net.DNSToSwitchMapping
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -36,24 +35,16 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.ManualClock
 
-class MockResolver extends DNSToSwitchMapping {
+class MockResolver extends SparkRackResolver {
 
-  override def resolve(names: JList[String]): JList[String] = {
-    if (names.size > 0 && names.get(0) == "host3") Arrays.asList("/rack2")
-    else Arrays.asList("/rack1")
+  override def resolve(conf: Configuration, hostName: String): String = {
+    if (hostName == "host3") "/rack2" else "/rack1"
   }
 
-  override def reloadCachedMappings() {}
-
-  def reloadCachedMappings(names: JList[String]) {}
 }
 
 class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
   val conf = new YarnConfiguration()
-  conf.setClass(
-    CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
-    classOf[MockResolver], classOf[DNSToSwitchMapping])
-
   val sparkConf = new SparkConf()
   sparkConf.set("spark.driver.host", "localhost")
   sparkConf.set("spark.driver.port", "4040")
@@ -90,7 +81,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     override def equals(other: Any): Boolean = false
   }
 
-  def createAllocator(maxExecutors: Int = 5): YarnAllocator = {
+  def createAllocator(
+      maxExecutors: Int = 5,
+      rmClient: AMRMClient[ContainerRequest] = rmClient): YarnAllocator = {
     val args = Array(
       "--jar", "somejar.jar",
       "--class", "SomeClass")
@@ -107,7 +100,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       rmClient,
       appAttemptId,
       new SecurityManager(sparkConf),
-      Map())
+      Map(),
+      new MockResolver())
   }
 
   def createContainer(host: String): Container = {
@@ -202,7 +196,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumExecutorsRunning should be (0)
     handler.getPendingAllocate.size should be (4)
 
-    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map.empty)
+    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map.empty, Set.empty)
     handler.updateResourceRequests()
     handler.getPendingAllocate.size should be (3)
 
@@ -213,7 +207,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
     handler.allocatedHostToContainersMap.get("host1").get should contain (container.getId)
 
-    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map.empty)
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map.empty, Set.empty)
     handler.updateResourceRequests()
     handler.getPendingAllocate.size should be (1)
   }
@@ -224,7 +218,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumExecutorsRunning should be (0)
     handler.getPendingAllocate.size should be (4)
 
-    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map.empty)
+    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map.empty, Set.empty)
     handler.updateResourceRequests()
     handler.getPendingAllocate.size should be (3)
 
@@ -234,7 +228,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     handler.getNumExecutorsRunning should be (2)
 
-    handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map.empty)
+    handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map.empty, Set.empty)
     handler.updateResourceRequests()
     handler.getPendingAllocate.size should be (0)
     handler.getNumExecutorsRunning should be (2)
@@ -250,7 +244,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val container2 = createContainer("host2")
     handler.handleAllocatedContainers(Array(container1, container2))
 
-    handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map.empty)
+    handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map.empty, Set.empty)
     handler.executorIdToContainer.keys.foreach { id => handler.killExecutor(id ) }
 
     val statuses = Seq(container1, container2).map { c =>
@@ -272,7 +266,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val container2 = createContainer("host2")
     handler.handleAllocatedContainers(Array(container1, container2))
 
-    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map())
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map(), Set.empty)
 
     val statuses = Seq(container1, container2).map { c =>
       ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Failed", -1)
@@ -284,6 +278,21 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getPendingAllocate.size should be (2)
     handler.getNumExecutorsFailed should be (2)
     handler.getNumUnexpectedContainerRelease should be (2)
+  }
+
+  test("blacklisted nodes reflected in amClient requests") {
+    // Internally we track the set of blacklisted nodes, but yarn wants us to send *changes*
+    // to the blacklist.  This makes sure we are sending the right updates.
+    val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+    val handler = createAllocator(4, mockAmClient)
+    handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map(), Set("hostA"))
+    verify(mockAmClient).updateBlacklist(Seq("hostA").asJava, Seq[String]().asJava)
+
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map(), Set("hostA", "hostB"))
+    verify(mockAmClient).updateBlacklist(Seq("hostB").asJava, Seq[String]().asJava)
+
+    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set())
+    verify(mockAmClient).updateBlacklist(Seq[String]().asJava, Seq("hostA", "hostB").asJava)
   }
 
   test("memory exceeded diagnostic regexes") {

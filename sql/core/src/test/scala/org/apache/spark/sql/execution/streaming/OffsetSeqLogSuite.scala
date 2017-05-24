@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.io.File
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
@@ -28,15 +30,40 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
   case class StringOffset(override val json: String) extends Offset
 
   test("OffsetSeqMetadata - deserialization") {
-    assert(OffsetSeqMetadata(0, 0) === OffsetSeqMetadata("""{}"""))
-    assert(OffsetSeqMetadata(1, 0) === OffsetSeqMetadata("""{"batchWatermarkMs":1}"""))
-    assert(OffsetSeqMetadata(0, 2) === OffsetSeqMetadata("""{"batchTimestampMs":2}"""))
-    assert(
-      OffsetSeqMetadata(1, 2) ===
-        OffsetSeqMetadata("""{"batchWatermarkMs":1,"batchTimestampMs":2}"""))
+    val key = SQLConf.SHUFFLE_PARTITIONS.key
+
+    def getConfWith(shufflePartitions: Int): Map[String, String] = {
+      Map(key -> shufflePartitions.toString)
+    }
+
+    // None set
+    assert(OffsetSeqMetadata(0, 0, Map.empty) === OffsetSeqMetadata("""{}"""))
+
+    // One set
+    assert(OffsetSeqMetadata(1, 0, Map.empty) === OffsetSeqMetadata("""{"batchWatermarkMs":1}"""))
+    assert(OffsetSeqMetadata(0, 2, Map.empty) === OffsetSeqMetadata("""{"batchTimestampMs":2}"""))
+    assert(OffsetSeqMetadata(0, 0, getConfWith(shufflePartitions = 2)) ===
+      OffsetSeqMetadata(s"""{"conf": {"$key":2}}"""))
+
+    // Two set
+    assert(OffsetSeqMetadata(1, 2, Map.empty) ===
+      OffsetSeqMetadata("""{"batchWatermarkMs":1,"batchTimestampMs":2}"""))
+    assert(OffsetSeqMetadata(1, 0, getConfWith(shufflePartitions = 3)) ===
+      OffsetSeqMetadata(s"""{"batchWatermarkMs":1,"conf": {"$key":3}}"""))
+    assert(OffsetSeqMetadata(0, 2, getConfWith(shufflePartitions = 3)) ===
+      OffsetSeqMetadata(s"""{"batchTimestampMs":2,"conf": {"$key":3}}"""))
+
+    // All set
+    assert(OffsetSeqMetadata(1, 2, getConfWith(shufflePartitions = 3)) ===
+      OffsetSeqMetadata(s"""{"batchWatermarkMs":1,"batchTimestampMs":2,"conf": {"$key":3}}"""))
+
+    // Drop unknown fields
+    assert(OffsetSeqMetadata(1, 2, getConfWith(shufflePartitions = 3)) ===
+      OffsetSeqMetadata(
+        s"""{"batchWatermarkMs":1,"batchTimestampMs":2,"conf": {"$key":3}},"unknown":1"""))
   }
 
-  testWithUninterruptibleThread("OffsetSeqLog - serialization - deserialization") {
+  test("OffsetSeqLog - serialization - deserialization") {
     withTempDir { temp =>
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
       val metadataLog = new OffsetSeqLog(spark, dir.getAbsolutePath)
@@ -70,11 +97,27 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
+  test("deserialization log written by future version") {
+    withTempDir { dir =>
+      stringToFile(new File(dir, "0"), "v99999")
+      val log = new OffsetSeqLog(spark, dir.getCanonicalPath)
+      val e = intercept[IllegalStateException] {
+        log.get(0)
+      }
+      Seq(
+        s"maximum supported log version is v${OffsetSeqLog.VERSION}, but encountered v99999",
+        "produced by a newer version of Spark and cannot be read by this version"
+      ).foreach { message =>
+        assert(e.getMessage.contains(message))
+      }
+    }
+  }
+
   test("read Spark 2.1.0 log format") {
     val (batchId, offsetSeq) = readFromResource("offset-log-version-2.1.0")
     assert(batchId === 0)
     assert(offsetSeq.offsets === Seq(
-      Some(SerializedOffset("0")),
+      Some(SerializedOffset("""{"logOffset":345}""")),
       Some(SerializedOffset("""{"topic-0":{"0":1}}"""))
     ))
     assert(offsetSeq.metadata === Some(OffsetSeqMetadata(0L, 1480981499528L)))

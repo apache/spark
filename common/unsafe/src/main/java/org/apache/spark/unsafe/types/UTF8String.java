@@ -147,7 +147,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     buffer.position(pos + numBytes);
   }
 
-  public void writeTo(OutputStream out) throws IOException {
+  /**
+   * Returns a {@link ByteBuffer} wrapping the base object if it is a byte array
+   * or a copy of the data if the base object is not a byte array.
+   *
+   * Unlike getBytes this will not create a copy the array if this is a slice.
+   */
+  @Nonnull
+  public ByteBuffer getByteBuffer() {
     if (base instanceof byte[] && offset >= BYTE_ARRAY_OFFSET) {
       final byte[] bytes = (byte[]) base;
 
@@ -160,10 +167,18 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         throw new ArrayIndexOutOfBoundsException();
       }
 
-      out.write(bytes, (int) arrayOffset, numBytes);
+      return ByteBuffer.wrap(bytes, (int) arrayOffset, numBytes);
     } else {
-      out.write(getBytes());
+      return ByteBuffer.wrap(getBytes());
     }
+  }
+
+  public void writeTo(OutputStream out) throws IOException {
+    final ByteBuffer bb = this.getByteBuffer();
+    assert(bb.hasArray());
+
+    // similar to Utils.writeByteBuffer but without the spark-core dependency
+    out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining());
   }
 
   /**
@@ -833,6 +848,225 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
     }
     return fromString(sb.toString());
+  }
+
+  /**
+   * Wrapper over `long` to allow result of parsing long from string to be accessed via reference.
+   * This is done solely for better performance and is not expected to be used by end users.
+   */
+  public static class LongWrapper {
+    public long value = 0;
+  }
+
+  /**
+   * Wrapper over `int` to allow result of parsing integer from string to be accessed via reference.
+   * This is done solely for better performance and is not expected to be used by end users.
+   *
+   * {@link LongWrapper} could have been used here but using `int` directly save the extra cost of
+   * conversion from `long` to `int`
+   */
+  public static class IntWrapper {
+    public int value = 0;
+  }
+
+  /**
+   * Parses this UTF8String to long.
+   *
+   * Note that, in this method we accumulate the result in negative format, and convert it to
+   * positive format at the end, if this string is not started with '-'. This is because min value
+   * is bigger than max value in digits, e.g. Long.MAX_VALUE is '9223372036854775807' and
+   * Long.MIN_VALUE is '-9223372036854775808'.
+   *
+   * This code is mostly copied from LazyLong.parseLong in Hive.
+   *
+   * @param toLongResult If a valid `long` was parsed from this UTF8String, then its value would
+   *                     be set in `toLongResult`
+   * @return true if the parsing was successful else false
+   */
+  public boolean toLong(LongWrapper toLongResult) {
+    if (numBytes == 0) {
+      return false;
+    }
+
+    byte b = getByte(0);
+    final boolean negative = b == '-';
+    int offset = 0;
+    if (negative || b == '+') {
+      offset++;
+      if (numBytes == 1) {
+        return false;
+      }
+    }
+
+    final byte separator = '.';
+    final int radix = 10;
+    final long stopValue = Long.MIN_VALUE / radix;
+    long result = 0;
+
+    while (offset < numBytes) {
+      b = getByte(offset);
+      offset++;
+      if (b == separator) {
+        // We allow decimals and will return a truncated integral in that case.
+        // Therefore we won't throw an exception here (checking the fractional
+        // part happens below.)
+        break;
+      }
+
+      int digit;
+      if (b >= '0' && b <= '9') {
+        digit = b - '0';
+      } else {
+        return false;
+      }
+
+      // We are going to process the new digit and accumulate the result. However, before doing
+      // this, if the result is already smaller than the stopValue(Long.MIN_VALUE / radix), then
+      // result * 10 will definitely be smaller than minValue, and we can stop.
+      if (result < stopValue) {
+        return false;
+      }
+
+      result = result * radix - digit;
+      // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE / radix), we
+      // can just use `result > 0` to check overflow. If result overflows, we should stop.
+      if (result > 0) {
+        return false;
+      }
+    }
+
+    // This is the case when we've encountered a decimal separator. The fractional
+    // part will not change the number, but we will verify that the fractional part
+    // is well formed.
+    while (offset < numBytes) {
+      byte currentByte = getByte(offset);
+      if (currentByte < '0' || currentByte > '9') {
+        return false;
+      }
+      offset++;
+    }
+
+    if (!negative) {
+      result = -result;
+      if (result < 0) {
+        return false;
+      }
+    }
+
+    toLongResult.value = result;
+    return true;
+  }
+
+  /**
+   * Parses this UTF8String to int.
+   *
+   * Note that, in this method we accumulate the result in negative format, and convert it to
+   * positive format at the end, if this string is not started with '-'. This is because min value
+   * is bigger than max value in digits, e.g. Integer.MAX_VALUE is '2147483647' and
+   * Integer.MIN_VALUE is '-2147483648'.
+   *
+   * This code is mostly copied from LazyInt.parseInt in Hive.
+   *
+   * Note that, this method is almost same as `toLong`, but we leave it duplicated for performance
+   * reasons, like Hive does.
+   *
+   * @param intWrapper If a valid `int` was parsed from this UTF8String, then its value would
+   *                    be set in `intWrapper`
+   * @return true if the parsing was successful else false
+   */
+  public boolean toInt(IntWrapper intWrapper) {
+    if (numBytes == 0) {
+      return false;
+    }
+
+    byte b = getByte(0);
+    final boolean negative = b == '-';
+    int offset = 0;
+    if (negative || b == '+') {
+      offset++;
+      if (numBytes == 1) {
+        return false;
+      }
+    }
+
+    final byte separator = '.';
+    final int radix = 10;
+    final int stopValue = Integer.MIN_VALUE / radix;
+    int result = 0;
+
+    while (offset < numBytes) {
+      b = getByte(offset);
+      offset++;
+      if (b == separator) {
+        // We allow decimals and will return a truncated integral in that case.
+        // Therefore we won't throw an exception here (checking the fractional
+        // part happens below.)
+        break;
+      }
+
+      int digit;
+      if (b >= '0' && b <= '9') {
+        digit = b - '0';
+      } else {
+        return false;
+      }
+
+      // We are going to process the new digit and accumulate the result. However, before doing
+      // this, if the result is already smaller than the stopValue(Integer.MIN_VALUE / radix), then
+      // result * 10 will definitely be smaller than minValue, and we can stop
+      if (result < stopValue) {
+        return false;
+      }
+
+      result = result * radix - digit;
+      // Since the previous result is less than or equal to stopValue(Integer.MIN_VALUE / radix),
+      // we can just use `result > 0` to check overflow. If result overflows, we should stop
+      if (result > 0) {
+        return false;
+      }
+    }
+
+    // This is the case when we've encountered a decimal separator. The fractional
+    // part will not change the number, but we will verify that the fractional part
+    // is well formed.
+    while (offset < numBytes) {
+      byte currentByte = getByte(offset);
+      if (currentByte < '0' || currentByte > '9') {
+        return false;
+      }
+      offset++;
+    }
+
+    if (!negative) {
+      result = -result;
+      if (result < 0) {
+        return false;
+      }
+    }
+    intWrapper.value = result;
+    return true;
+  }
+
+  public boolean toShort(IntWrapper intWrapper) {
+    if (toInt(intWrapper)) {
+      int intValue = intWrapper.value;
+      short result = (short) intValue;
+      if (result == intValue) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public boolean toByte(IntWrapper intWrapper) {
+    if (toInt(intWrapper)) {
+      int intValue = intWrapper.value;
+      byte result = (byte) intValue;
+      if (result == intValue) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @Override

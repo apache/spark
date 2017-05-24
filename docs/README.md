@@ -69,4 +69,5 @@ may take some time as it generates all of the scaladoc.  The jekyll plugin also 
 PySpark docs using [Sphinx](http://sphinx-doc.org/).
 
 NOTE: To skip the step of building and copying over the Scala, Python, R API docs, run `SKIP_API=1
-jekyll`.
+jekyll`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, and `SKIP_RDOC=1` can be used to skip a single
+step of the corresponding language.

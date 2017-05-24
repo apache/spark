@@ -670,9 +670,9 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     var offset: Long = Platform.LONG_ARRAY_OFFSET
     val end = len * 8L + Platform.LONG_ARRAY_OFFSET
     while (offset < end) {
-      val size = Math.min(buffer.length, (end - offset).toInt)
+      val size = Math.min(buffer.length, end - offset)
       Platform.copyMemory(arr, offset, buffer, Platform.BYTE_ARRAY_OFFSET, size)
-      writeBuffer(buffer, 0, size)
+      writeBuffer(buffer, 0, size.toInt)
       offset += size
     }
   }
@@ -710,8 +710,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     var offset: Long = Platform.LONG_ARRAY_OFFSET
     val end = length * 8L + Platform.LONG_ARRAY_OFFSET
     while (offset < end) {
-      val size = Math.min(buffer.length, (end - offset).toInt)
-      readBuffer(buffer, 0, size)
+      val size = Math.min(buffer.length, end - offset)
+      readBuffer(buffer, 0, size.toInt)
       Platform.copyMemory(buffer, Platform.BYTE_ARRAY_OFFSET, array, offset, size)
       offset += size
     }
@@ -829,15 +829,10 @@ private[execution] case class HashedRelationBroadcastMode(key: Seq[Expression])
   extends BroadcastMode {
 
   override def transform(rows: Array[InternalRow]): HashedRelation = {
-    HashedRelation(rows.iterator, canonicalizedKey, rows.length)
+    HashedRelation(rows.iterator, canonicalized.key, rows.length)
   }
 
-  private lazy val canonicalizedKey: Seq[Expression] = {
-    key.map { e => e.canonicalized }
-  }
-
-  override def compatibleWith(other: BroadcastMode): Boolean = other match {
-    case m: HashedRelationBroadcastMode => canonicalizedKey == m.canonicalizedKey
-    case _ => false
+  override lazy val canonicalized: HashedRelationBroadcastMode = {
+    this.copy(key = key.map(_.canonicalized))
   }
 }

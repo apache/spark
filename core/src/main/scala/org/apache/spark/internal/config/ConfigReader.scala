@@ -18,7 +18,6 @@
 package org.apache.spark.internal.config
 
 import java.util.{Map => JMap}
-import java.util.regex.Pattern
 
 import scala.collection.mutable.HashMap
 import scala.util.matching.Regex

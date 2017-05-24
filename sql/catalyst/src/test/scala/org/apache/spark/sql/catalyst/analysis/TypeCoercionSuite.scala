@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -53,18 +54,48 @@ class TypeCoercionSuite extends PlanTest {
   // | NullType             | ByteType | ShortType | IntegerType | LongType | DoubleType | FloatType | Dec(10, 2) | BinaryType | BooleanType | StringType | DateType | TimestampType | ArrayType  | MapType  | StructType  | NullType | CalendarIntervalType | DecimalType(38, 18) | DoubleType  | IntegerType  |
   // | CalendarIntervalType | X        | X         | X           | X        | X          | X         | X          | X          | X           | X          | X        | X             | X          | X        | X           | X        | CalendarIntervalType | X                   | X           | X            |
   // +----------------------+----------+-----------+-------------+----------+------------+-----------+------------+------------+-------------+------------+----------+---------------+------------+----------+-------------+----------+----------------------+---------------------+-------------+--------------+
-  // Note: ArrayType*, MapType*, StructType* are castable only when the internal child types also match; otherwise, not castable
+  // Note: MapType*, StructType* are castable only when the internal child types also match; otherwise, not castable.
+  // Note: ArrayType* is castable when the element type is castable according to the table.
   // scalastyle:on line.size.limit
 
   private def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
-    val got = TypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
-    assert(got.map(_.dataType) == Option(expected),
+    // Check default value
+    val castDefault = TypeCoercion.ImplicitTypeCasts.implicitCast(default(from), to)
+    assert(DataType.equalsIgnoreCompatibleNullability(
+      castDefault.map(_.dataType).getOrElse(null), expected),
+      s"Failed to cast $from to $to")
+
+    // Check null value
+    val castNull = TypeCoercion.ImplicitTypeCasts.implicitCast(createNull(from), to)
+    assert(DataType.equalsIgnoreCaseAndNullability(
+      castNull.map(_.dataType).getOrElse(null), expected),
       s"Failed to cast $from to $to")
   }
 
   private def shouldNotCast(from: DataType, to: AbstractDataType): Unit = {
-    val got = TypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
-    assert(got.isEmpty, s"Should not be able to cast $from to $to, but got $got")
+    // Check default value
+    val castDefault = TypeCoercion.ImplicitTypeCasts.implicitCast(default(from), to)
+    assert(castDefault.isEmpty, s"Should not be able to cast $from to $to, but got $castDefault")
+
+    // Check null value
+    val castNull = TypeCoercion.ImplicitTypeCasts.implicitCast(createNull(from), to)
+    assert(castNull.isEmpty, s"Should not be able to cast $from to $to, but got $castNull")
+  }
+
+  private def default(dataType: DataType): Expression = dataType match {
+    case ArrayType(internalType: DataType, _) =>
+      CreateArray(Seq(Literal.default(internalType)))
+    case MapType(keyDataType: DataType, valueDataType: DataType, _) =>
+      CreateMap(Seq(Literal.default(keyDataType), Literal.default(valueDataType)))
+    case _ => Literal.default(dataType)
+  }
+
+  private def createNull(dataType: DataType): Expression = dataType match {
+    case ArrayType(internalType: DataType, _) =>
+      CreateArray(Seq(Literal.create(null, internalType)))
+    case MapType(keyDataType: DataType, valueDataType: DataType, _) =>
+      CreateMap(Seq(Literal.create(null, keyDataType), Literal.create(null, valueDataType)))
+    case _ => Literal.create(null, dataType)
   }
 
   val integralTypes: Seq[DataType] =
@@ -94,6 +125,20 @@ class TypeCoercionSuite extends PlanTest {
     nonCastableTypes.foreach { tpe =>
       shouldNotCast(checkedType, tpe)
     }
+  }
+
+  private def checkWidenType(
+      widenFunc: (DataType, DataType) => Option[DataType],
+      t1: DataType,
+      t2: DataType,
+      expected: Option[DataType]): Unit = {
+    var found = widenFunc(t1, t2)
+    assert(found == expected,
+      s"Expected $expected as wider common type for $t1 and $t2, found $found")
+    // Test both directions to make sure the widening is symmetric.
+    found = widenFunc(t2, t1)
+    assert(found == expected,
+      s"Expected $expected as wider common type for $t2 and $t1, found $found")
   }
 
   test("implicit type cast - ByteType") {
@@ -196,7 +241,13 @@ class TypeCoercionSuite extends PlanTest {
 
   test("implicit type cast - ArrayType(StringType)") {
     val checkedType = ArrayType(StringType)
-    checkTypeCasting(checkedType, castableTypes = Seq(checkedType))
+    val nonCastableTypes =
+      complexTypes ++ Seq(BooleanType, NullType, CalendarIntervalType)
+    checkTypeCasting(checkedType,
+      castableTypes = allTypes.filterNot(nonCastableTypes.contains).map(ArrayType(_)))
+    nonCastableTypes.map(ArrayType(_)).foreach(shouldNotCast(checkedType, _))
+    shouldNotCast(ArrayType(DoubleType, containsNull = false),
+      ArrayType(LongType, containsNull = false))
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
@@ -273,15 +324,8 @@ class TypeCoercionSuite extends PlanTest {
   }
 
   test("tightest common bound for types") {
-    def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
-      var found = TypeCoercion.findTightestCommonTypeOfTwo(t1, t2)
-      assert(found == tightestCommon,
-        s"Expected $tightestCommon as tightest common type for $t1 and $t2, found $found")
-      // Test both directions to make sure the widening is symmetric.
-      found = TypeCoercion.findTightestCommonTypeOfTwo(t2, t1)
-      assert(found == tightestCommon,
-        s"Expected $tightestCommon as tightest common type for $t2 and $t1, found $found")
-    }
+    def widenTest(t1: DataType, t2: DataType, expected: Option[DataType]): Unit =
+      checkWidenType(TypeCoercion.findTightestCommonType, t1, t2, expected)
 
     // Null
     widenTest(NullType, NullType, Some(NullType))
@@ -320,7 +364,6 @@ class TypeCoercionSuite extends PlanTest {
     widenTest(DecimalType(2, 1), DoubleType, None)
     widenTest(DecimalType(2, 1), IntegerType, None)
     widenTest(DoubleType, DecimalType(2, 1), None)
-    widenTest(IntegerType, DecimalType(2, 1), None)
 
     // StringType
     widenTest(NullType, StringType, Some(StringType))
@@ -342,6 +385,60 @@ class TypeCoercionSuite extends PlanTest {
     widenTest(NullType, StructType(Seq()), Some(StructType(Seq())))
     widenTest(StringType, MapType(IntegerType, StringType, true), None)
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
+  }
+
+  test("wider common type for decimal and array") {
+    def widenTestWithStringPromotion(
+        t1: DataType,
+        t2: DataType,
+        expected: Option[DataType]): Unit = {
+      checkWidenType(TypeCoercion.findWiderTypeForTwo, t1, t2, expected)
+    }
+
+    def widenTestWithoutStringPromotion(
+        t1: DataType,
+        t2: DataType,
+        expected: Option[DataType]): Unit = {
+      checkWidenType(TypeCoercion.findWiderTypeWithoutStringPromotionForTwo, t1, t2, expected)
+    }
+
+    // Decimal
+    widenTestWithStringPromotion(
+      DecimalType(2, 1), DecimalType(3, 2), Some(DecimalType(3, 2)))
+    widenTestWithStringPromotion(
+      DecimalType(2, 1), DoubleType, Some(DoubleType))
+    widenTestWithStringPromotion(
+      DecimalType(2, 1), IntegerType, Some(DecimalType(11, 1)))
+    widenTestWithStringPromotion(
+      DecimalType(2, 1), LongType, Some(DecimalType(21, 1)))
+
+    // ArrayType
+    widenTestWithStringPromotion(
+      ArrayType(ShortType, containsNull = true),
+      ArrayType(DoubleType, containsNull = false),
+      Some(ArrayType(DoubleType, containsNull = true)))
+    widenTestWithStringPromotion(
+      ArrayType(TimestampType, containsNull = false),
+      ArrayType(StringType, containsNull = true),
+      Some(ArrayType(StringType, containsNull = true)))
+    widenTestWithStringPromotion(
+      ArrayType(ArrayType(IntegerType), containsNull = false),
+      ArrayType(ArrayType(LongType), containsNull = false),
+      Some(ArrayType(ArrayType(LongType), containsNull = false)))
+
+    // Without string promotion
+    widenTestWithoutStringPromotion(IntegerType, StringType, None)
+    widenTestWithoutStringPromotion(StringType, TimestampType, None)
+    widenTestWithoutStringPromotion(ArrayType(LongType), ArrayType(StringType), None)
+    widenTestWithoutStringPromotion(ArrayType(StringType), ArrayType(TimestampType), None)
+
+    // String promotion
+    widenTestWithStringPromotion(IntegerType, StringType, Some(StringType))
+    widenTestWithStringPromotion(StringType, TimestampType, Some(StringType))
+    widenTestWithStringPromotion(
+      ArrayType(LongType), ArrayType(StringType), Some(ArrayType(StringType)))
+    widenTestWithStringPromotion(
+      ArrayType(StringType), ArrayType(TimestampType), Some(ArrayType(StringType)))
   }
 
   private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
@@ -560,14 +657,20 @@ class TypeCoercionSuite extends PlanTest {
 
   test("nanvl casts") {
     ruleTest(TypeCoercion.FunctionArgumentConversion,
-      NaNvl(Literal.create(1.0, FloatType), Literal.create(1.0, DoubleType)),
-      NaNvl(Cast(Literal.create(1.0, FloatType), DoubleType), Literal.create(1.0, DoubleType)))
+      NaNvl(Literal.create(1.0f, FloatType), Literal.create(1.0, DoubleType)),
+      NaNvl(Cast(Literal.create(1.0f, FloatType), DoubleType), Literal.create(1.0, DoubleType)))
     ruleTest(TypeCoercion.FunctionArgumentConversion,
-      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, FloatType)),
-      NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(1.0, FloatType), DoubleType)))
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0f, FloatType)),
+      NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(1.0f, FloatType), DoubleType)))
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)),
       NaNvl(Literal.create(1.0, DoubleType), Literal.create(1.0, DoubleType)))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0f, FloatType), Literal.create(null, NullType)),
+      NaNvl(Literal.create(1.0f, FloatType), Cast(Literal.create(null, NullType), FloatType)))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      NaNvl(Literal.create(1.0, DoubleType), Literal.create(null, NullType)),
+      NaNvl(Literal.create(1.0, DoubleType), Cast(Literal.create(null, NullType), DoubleType)))
   }
 
   test("type coercion for If") {
@@ -685,6 +788,12 @@ class TypeCoercionSuite extends PlanTest {
     }
   }
 
+  private val timeZoneResolver = ResolveTimeZone(new SQLConf)
+
+  private def widenSetOperationTypes(plan: LogicalPlan): LogicalPlan = {
+    timeZoneResolver(TypeCoercion.WidenSetOperationTypes(plan))
+  }
+
   test("WidenSetOperationTypes for except and intersect") {
     val firstTable = LocalRelation(
       AttributeReference("i", IntegerType)(),
@@ -697,11 +806,10 @@ class TypeCoercionSuite extends PlanTest {
       AttributeReference("f", FloatType)(),
       AttributeReference("l", LongType)())
 
-    val wt = TypeCoercion.WidenSetOperationTypes
     val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
-    val r1 = wt(Except(firstTable, secondTable)).asInstanceOf[Except]
-    val r2 = wt(Intersect(firstTable, secondTable)).asInstanceOf[Intersect]
+    val r1 = widenSetOperationTypes(Except(firstTable, secondTable)).asInstanceOf[Except]
+    val r2 = widenSetOperationTypes(Intersect(firstTable, secondTable)).asInstanceOf[Intersect]
     checkOutput(r1.left, expectedTypes)
     checkOutput(r1.right, expectedTypes)
     checkOutput(r2.left, expectedTypes)
@@ -736,10 +844,9 @@ class TypeCoercionSuite extends PlanTest {
       AttributeReference("p", ByteType)(),
       AttributeReference("q", DoubleType)())
 
-    val wt = TypeCoercion.WidenSetOperationTypes
     val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
 
-    val unionRelation = wt(
+    val unionRelation = widenSetOperationTypes(
       Union(firstTable :: secondTable :: thirdTable :: forthTable :: Nil)).asInstanceOf[Union]
     assert(unionRelation.children.length == 4)
     checkOutput(unionRelation.children.head, expectedTypes)
@@ -760,17 +867,15 @@ class TypeCoercionSuite extends PlanTest {
       }
     }
 
-    val dp = TypeCoercion.WidenSetOperationTypes
-
     val left1 = LocalRelation(
       AttributeReference("l", DecimalType(10, 8))())
     val right1 = LocalRelation(
       AttributeReference("r", DecimalType(5, 5))())
     val expectedType1 = Seq(DecimalType(10, 8))
 
-    val r1 = dp(Union(left1, right1)).asInstanceOf[Union]
-    val r2 = dp(Except(left1, right1)).asInstanceOf[Except]
-    val r3 = dp(Intersect(left1, right1)).asInstanceOf[Intersect]
+    val r1 = widenSetOperationTypes(Union(left1, right1)).asInstanceOf[Union]
+    val r2 = widenSetOperationTypes(Except(left1, right1)).asInstanceOf[Except]
+    val r3 = widenSetOperationTypes(Intersect(left1, right1)).asInstanceOf[Intersect]
 
     checkOutput(r1.children.head, expectedType1)
     checkOutput(r1.children.last, expectedType1)
@@ -789,17 +894,17 @@ class TypeCoercionSuite extends PlanTest {
       val plan2 = LocalRelation(
         AttributeReference("r", rType)())
 
-      val r1 = dp(Union(plan1, plan2)).asInstanceOf[Union]
-      val r2 = dp(Except(plan1, plan2)).asInstanceOf[Except]
-      val r3 = dp(Intersect(plan1, plan2)).asInstanceOf[Intersect]
+      val r1 = widenSetOperationTypes(Union(plan1, plan2)).asInstanceOf[Union]
+      val r2 = widenSetOperationTypes(Except(plan1, plan2)).asInstanceOf[Except]
+      val r3 = widenSetOperationTypes(Intersect(plan1, plan2)).asInstanceOf[Intersect]
 
       checkOutput(r1.children.last, Seq(expectedType))
       checkOutput(r2.right, Seq(expectedType))
       checkOutput(r3.right, Seq(expectedType))
 
-      val r4 = dp(Union(plan2, plan1)).asInstanceOf[Union]
-      val r5 = dp(Except(plan2, plan1)).asInstanceOf[Except]
-      val r6 = dp(Intersect(plan2, plan1)).asInstanceOf[Intersect]
+      val r4 = widenSetOperationTypes(Union(plan2, plan1)).asInstanceOf[Union]
+      val r5 = widenSetOperationTypes(Except(plan2, plan1)).asInstanceOf[Except]
+      val r6 = widenSetOperationTypes(Intersect(plan2, plan1)).asInstanceOf[Intersect]
 
       checkOutput(r4.children.last, Seq(expectedType))
       checkOutput(r5.left, Seq(expectedType))
@@ -880,6 +985,18 @@ class TypeCoercionSuite extends PlanTest {
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
+  }
+
+  test("binary comparison with string promotion") {
+    ruleTest(PromoteStrings,
+      GreaterThan(Literal("123"), Literal(1)),
+      GreaterThan(Cast(Literal("123"), IntegerType), Literal(1)))
+    ruleTest(PromoteStrings,
+      LessThan(Literal(true), Literal("123")),
+      LessThan(Literal(true), Cast(Literal("123"), BooleanType)))
+    ruleTest(PromoteStrings,
+      EqualTo(Literal(Array(1, 2)), Literal("123")),
+      EqualTo(Literal(Array(1, 2)), Literal("123")))
   }
 }
 
