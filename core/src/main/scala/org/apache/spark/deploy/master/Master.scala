@@ -783,10 +783,6 @@ private[deploy] class Master(
       exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }
-    val failedApps = apps.find(p => p.driver.address.host == worker.endpoint.address.host)
-    for (app <- failedApps) {
-      finishApplication(app)
-    }
     for (driver <- worker.drivers.values) {
       if (driver.desc.supervise) {
         logInfo(s"Re-launching ${driver.id}")
