@@ -734,9 +734,7 @@ public class UTF8StringSuite {
     assertEquals(fromString(""), fromString("ooo...oooo").trim(fromString("o.")));
     assertEquals(fromString("b"), fromString("%^b[]@").trim(fromString("][@^%")));
 
-
     assertEquals(EMPTY_UTF8, fromString("  ").trim(fromString(" ")));
-
 
     assertEquals(fromString("数据砖头"), fromString("  数据砖头 ").trim());
     assertEquals(fromString("数"), fromString("a数b").trim(fromString("ab")));
