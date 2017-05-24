@@ -410,7 +410,7 @@ class ParamTests(PySparkTestCase):
             LogisticRegression
         )
 
-        self.assertRaisesRegex(
+        self.assertRaisesRegexp(
             ValueError,
             "Logistic Regression getThreshold found inconsistent.*$",
             LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
