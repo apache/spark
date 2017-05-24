@@ -38,7 +38,7 @@ import org.apache.spark.storage.StorageLevel
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
 private[ml] trait DecisionTreeParams extends PredictorParams
-  with HasCheckpointInterval with HasSeed {
+  with HasCheckpointInterval with HasSeed with HasIntermediateStorageLevel{
 
   /**
    * Maximum depth of the tree (>= 0).
@@ -184,22 +184,6 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    */
   @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
-
-  /**
-   * Param for StorageLevel for intermediate datasets. Pass in a string representation of
-   * `StorageLevel`. Cannot be "NONE".
-   * Default: "MEMORY_AND_DISK".
-   *
-   * @group expertParam
-   */
-  val intermediateStorageLevel = new Param[String](this, "intermediateStorageLevel",
-    "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
-    (s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE")
-
-  setDefault(intermediateStorageLevel -> "MEMORY_AND_DISK")
-
-  /** @group expertGetParam */
-  def getIntermediateStorageLevel: String = $(intermediateStorageLevel)
 
   /** @group expertSetParam */
   @Since("2.3.0")
