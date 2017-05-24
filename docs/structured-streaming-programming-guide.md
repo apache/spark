@@ -1,6 +1,6 @@
 ---
 layout: global
-displayTitle: Structured Streaming Programming Guide [Experimental]
+displayTitle: Structured Streaming Programming Guide
 title: Structured Streaming Programming Guide
 ---
 
