@@ -1436,7 +1436,7 @@ class DataFrame(object):
         # Verify we were not passed in mixed type generics."
         if not any(all_of_type(rep_dict.keys())
                    and (all_of_type(rep_dict.values())
-                        or rep_dict.values().count(None) == len(rep_dict))
+                        or list(rep_dict.values()).count(None) == len(rep_dict))
                    for all_of_type in [all_of_bool, all_of_str, all_of_numeric]):
             raise ValueError("Mixed type replacements are not supported")
 
