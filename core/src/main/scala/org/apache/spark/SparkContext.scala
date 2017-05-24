@@ -375,8 +375,9 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.master")) {
       throw new SparkException("A master URL must be set in your configuration")
     }
+
     if (!_conf.contains("spark.app.name")) {
-      throw new SparkException("An application name must be set in your configuration")
+      _conf.setAppName("SPARK-" + UUID.randomUUID().toString)
     }
 
     // log out spark.app.name in the Spark driver logs
