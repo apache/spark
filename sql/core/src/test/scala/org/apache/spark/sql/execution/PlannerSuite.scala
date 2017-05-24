@@ -168,21 +168,21 @@ class PlannerSuite extends SharedSQLContext {
     val query = testData.select('key, 'value).sort('key).limit(2)
     val planned = query.queryExecution.executedPlan
     assert(planned.isInstanceOf[execution.TakeOrderedAndProjectExec])
-    assert(planned.output === testData.select('key, 'value).logicalPlan.output)
+    assert(planned.output === testData.select('key, 'value).queryExecution.analyzed.output)
   }
 
   test("terminal limit -> project -> sort should use TakeOrderedAndProject") {
     val query = testData.select('key, 'value).sort('key).select('value, 'key).limit(2)
     val planned = query.queryExecution.executedPlan
     assert(planned.isInstanceOf[execution.TakeOrderedAndProjectExec])
-    assert(planned.output === testData.select('value, 'key).logicalPlan.output)
+    assert(planned.output === testData.select('value, 'key).queryExecution.analyzed.output)
   }
 
   test("terminal limits that are not handled by TakeOrderedAndProject should use CollectLimit") {
     val query = testData.select('value).limit(2)
     val planned = query.queryExecution.sparkPlan
     assert(planned.isInstanceOf[CollectLimitExec])
-    assert(planned.output === testData.select('value).logicalPlan.output)
+    assert(planned.output === testData.select('value).queryExecution.analyzed.output)
   }
 
   test("TakeOrderedAndProject can appear in the middle of plans") {

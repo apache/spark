@@ -253,7 +253,7 @@ object QueryTest {
       df: DataFrame,
       expectedAnswer: Seq[Row],
       checkToRDD: Boolean = true): Option[String] = {
-    val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
+    val isSorted = df.queryExecution.analyzed.collect { case s: logical.Sort => s }.nonEmpty
     if (checkToRDD) {
       df.rdd.count()  // Also attempt to deserialize as an RDD [SPARK-15791]
     }

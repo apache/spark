@@ -58,21 +58,22 @@ class RelationalGroupedDataset protected[sql](
     }
 
     val aliasedAgg = aggregates.map(alias)
+    val logicalPlan = df.queryExecution.analyzed
 
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
+          df.sparkSession, Aggregate(groupingExprs, aliasedAgg, logicalPlan))
       case RelationalGroupedDataset.RollupType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
+          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, logicalPlan))
       case RelationalGroupedDataset.CubeType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
+          df.sparkSession, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, logicalPlan))
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         Dataset.ofRows(
-          df.sparkSession, Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan))
+          df.sparkSession, Pivot(aliasedGrps, pivotCol, values, aggExprs, logicalPlan))
     }
   }
 
@@ -223,7 +224,7 @@ class RelationalGroupedDataset protected[sql](
   def agg(expr: Column, exprs: Column*): DataFrame = {
     toDF((expr +: exprs).map {
       case typed: TypedColumn[_, _] =>
-        typed.withInputType(df.exprEnc, df.logicalPlan.output).expr
+        typed.withInputType(df.exprEnc, df.queryExecution.analyzed.output).expr
       case c => c.expr
     })
   }
@@ -428,8 +429,8 @@ class RelationalGroupedDataset protected[sql](
           df.exprEnc.deserializer,
           df.exprEnc.schema,
           groupingAttributes,
-          df.logicalPlan.output,
-          df.logicalPlan))
+          df.queryExecution.analyzed.output,
+          df.queryExecution.analyzed))
   }
 }
 

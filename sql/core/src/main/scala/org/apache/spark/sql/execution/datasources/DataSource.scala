@@ -412,7 +412,7 @@ case class DataSource(
     // not need to have the query as child, to avoid to analyze an optimized query,
     // because InsertIntoHadoopFsRelationCommand will be optimized first.
     val partitionAttributes = partitionColumns.map { name =>
-      val plan = data.logicalPlan
+      val plan = data.queryExecution.analyzed
       plan.resolve(name :: Nil, data.sparkSession.sessionState.analyzer.resolver).getOrElse {
         throw new AnalysisException(
           s"Unable to resolve $name given [${plan.output.map(_.name).mkString(", ")}]")
@@ -424,8 +424,8 @@ case class DataSource(
       }.head
     }
     // For partitioned relation r, r.schema's column ordering can be different from the column
-    // ordering of data.logicalPlan (partition columns are all moved after data column).  This
-    // will be adjusted within InsertIntoHadoopFsRelation.
+    // ordering of data.queryExecution.analyzed (partition columns are all moved after data column).
+    // This will be adjusted within InsertIntoHadoopFsRelation.
     val plan =
       InsertIntoHadoopFsRelationCommand(
         outputPath = outputPath,
@@ -435,7 +435,7 @@ case class DataSource(
         bucketSpec = bucketSpec,
         fileFormat = format,
         options = options,
-        query = data.logicalPlan,
+        query = data.queryExecution.analyzed,
         mode = mode,
         catalogTable = catalogTable,
         fileIndex = fileIndex)

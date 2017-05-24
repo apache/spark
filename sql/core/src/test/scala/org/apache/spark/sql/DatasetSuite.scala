@@ -1043,10 +1043,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       val ds = spark.range(10).repartition('id % 2).filter('id > 5).orderBy('id.desc)
       val cp = ds.checkpoint(eager)
 
-      val logicalRDD = cp.logicalPlan match {
+      val logicalRDD = cp.queryExecution.analyzed match {
         case plan: LogicalRDD => plan
         case _ =>
-          val treeString = cp.logicalPlan.treeString(verbose = true)
+          val treeString = cp.queryExecution.analyzed.treeString(verbose = true)
           fail(s"Expecting a LogicalRDD, but got\n$treeString")
       }
 
@@ -1118,7 +1118,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // instead of Int for avoiding possible overflow.
     val ds = (0 to 10000).map( i =>
       (i, Seq((i, Seq((i, "This is really not that long of a string")))))).toDS()
-    val sizeInBytes = ds.logicalPlan.stats(sqlConf).sizeInBytes
+    val sizeInBytes = ds.queryExecution.analyzed.stats(sqlConf).sizeInBytes
     // sizeInBytes is 2404280404, before the fix, it overflows to a negative number
     assert(sizeInBytes > 0)
   }

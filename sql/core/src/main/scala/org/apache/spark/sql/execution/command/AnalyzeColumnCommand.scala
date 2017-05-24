@@ -70,7 +70,7 @@ case class AnalyzeColumnCommand(
       tableIdent: TableIdentifier,
       columnNames: Seq[String]): (Long, Map[String, ColumnStat]) = {
 
-    val relation = sparkSession.table(tableIdent).logicalPlan
+    val relation = sparkSession.table(tableIdent).queryExecution.analyzed
     // Resolve the column names and dedup using AttributeSet
     val resolver = sparkSession.sessionState.conf.resolver
     val attributesToAnalyze = columnNames.map { col =>

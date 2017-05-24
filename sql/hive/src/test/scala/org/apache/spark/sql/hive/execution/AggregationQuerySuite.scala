@@ -1020,7 +1020,7 @@ class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySu
             // Create a new df to make sure its physical operator picks up
             // spark.sql.TungstenAggregate.testFallbackStartsAt.
             // todo: remove it?
-            val newActual = Dataset.ofRows(spark, actual.logicalPlan)
+            val newActual = Dataset.ofRows(spark, actual.queryExecution.analyzed)
 
             QueryTest.checkAnswer(newActual, expectedAnswer) match {
               case Some(errorMessage) =>

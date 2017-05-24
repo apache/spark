@@ -359,7 +359,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * need to care about case sensitivity afterwards.
    */
   private def normalize(columnName: String, columnType: String): String = {
-    val validColumnNames = df.logicalPlan.output.map(_.name)
+    val validColumnNames = df.queryExecution.analyzed.output.map(_.name)
     validColumnNames.find(df.sparkSession.sessionState.analyzer.resolver(_, columnName))
       .getOrElse(throw new AnalysisException(s"$columnType column $columnName not found in " +
         s"existing columns (${validColumnNames.mkString(", ")})"))

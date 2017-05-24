@@ -174,7 +174,7 @@ class Dataset[T] private[sql](
     this(sqlContext.sparkSession, logicalPlan, encoder)
   }
 
-  @transient private[sql] val logicalPlan: LogicalPlan = {
+  @transient private val logicalPlan: LogicalPlan = {
     // For various commands (like DDL) and queries with side effects, we force query execution
     // to happen right away to let these side effects take place eagerly.
     val analyzed = queryExecution.analyzed match {
