@@ -236,11 +236,11 @@ class CodegenContext {
   private val classSize: mutable.Map[String, Int] =
     mutable.Map[String, Int](("OuterClass", 0))
 
-  // A map holding all functions and their names that will be inlined to a given class.
-  private val classFunctions: mutable.Map[String, mutable.Map[String, String]] =
-    mutable.Map(("OuterClass", mutable.Map.empty[String, String]))
+  // A map holding lists of functions belonging to their class.
+  private val classFunctions: mutable.Map[String, mutable.ListBuffer[String]] =
+    mutable.Map(("OuterClass", mutable.ListBuffer.empty[String]))
 
-  // Returns the sie of the most recently added class.
+  // Returns the size of the most recently added class.
   private def currClassSize(): Int = classSize(classes.head._1)
 
   // Returns the class name and instance name for the most recently added class.
@@ -250,7 +250,7 @@ class CodegenContext {
   private def addClass(className: String, classInstance: String): Unit = {
     classes.prepend(Tuple2(className, classInstance))
     classSize += className -> 0
-    classFunctions += className -> mutable.Map.empty[String, String]
+    classFunctions += className -> mutable.ListBuffer.empty[String]
   }
 
   /**
@@ -282,12 +282,12 @@ class CodegenContext {
 
       className -> classInstance
     } else {
-      currClass
+      currClass()
     }
     val name = classInfo._1
 
     classSize.update(name, classSize(name) + funcCode.length)
-    classFunctions.update(name, classFunctions(name) += funcName -> funcCode)
+    classFunctions.update(name, classFunctions(name) += funcCode)
 
     if (name.equals("OuterClass")) {
       funcName
@@ -318,9 +318,7 @@ class CodegenContext {
    * Declares all functions that should be inlined to the `OuterClass`
    */
   private[sql] def declareAddedFunctions(): String = {
-    classFunctions("OuterClass").map {
-      case (_, funcCode) => funcCode
-    }.mkString("\n")
+    classFunctions("OuterClass").mkString("\n")
   }
 
   /**
@@ -332,9 +330,7 @@ class CodegenContext {
         if (className.equals("OuterClass")) {
           ""
         } else {
-          val code = functions.map {
-            case (_, funcCode) => funcCode
-          }.mkString("\n")
+          val code = functions.mkString("\n")
 
           s"""
              |private class $className {
