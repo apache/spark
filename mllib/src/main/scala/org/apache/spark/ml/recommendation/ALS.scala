@@ -129,7 +129,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
  * Common params for ALS.
  */
 private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter with HasRegParam
-  with HasPredictionCol with HasCheckpointInterval with HasSeed {
+  with HasPredictionCol with HasCheckpointInterval with HasSeed with HasIntermediateStorageLevel{
 
   /**
    * Param for rank of the matrix factorization (positive).
@@ -204,20 +204,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
 
   /** @group getParam */
   def getNonnegative: Boolean = $(nonnegative)
-
-  /**
-   * Param for StorageLevel for intermediate datasets. Pass in a string representation of
-   * `StorageLevel`. Cannot be "NONE".
-   * Default: "MEMORY_AND_DISK".
-   *
-   * @group expertParam
-   */
-  val intermediateStorageLevel = new Param[String](this, "intermediateStorageLevel",
-    "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
-    (s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE")
-
-  /** @group expertGetParam */
-  def getIntermediateStorageLevel: String = $(intermediateStorageLevel)
 
   /**
    * Param for StorageLevel for ALS model factors. Pass in a string representation of
