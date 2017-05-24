@@ -174,7 +174,7 @@ private[spark] class BlockManager(
   // standard BlockTransferService to directly connect to other Executors.
   private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
     val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
-    new ExternalShuffleClient(transConf, securityManager, securityManager.isAuthenticationEnabled())
+    new ExternalShuffleClient(transConf, securityManager, securityManager.isAuthenticationEnabled(), registrationTimeout)
   } else {
     blockTransferService
   }
@@ -182,6 +182,10 @@ private[spark] class BlockManager(
   // Max number of failures before this block manager refreshes the block locations from the driver
   private val maxFailuresBeforeLocationRefresh =
     conf.getInt("spark.block.failures.beforeLocationRefresh", 5)
+  private val registrationTimeout =
+    conf.getInt("spark.shuffle.registration.timeout", 5000)
+  private val registrationMaxAttempts =
+    conf.getInt("spark.shuffle.registration.maxAttempts", 3)
 
   private val slaveEndpoint = rpcEnv.setupEndpoint(
     "BlockManagerEndpoint" + BlockManager.ID_GENERATOR.next,
@@ -254,7 +258,7 @@ private[spark] class BlockManager(
       diskBlockManager.subDirsPerLocalDir,
       shuffleManager.getClass.getName)
 
-    val MAX_ATTEMPTS = 3
+    val MAX_ATTEMPTS = registrationMaxAttempts
     val SLEEP_TIME_SECS = 5
 
     for (i <- 1 to MAX_ATTEMPTS) {
