@@ -182,9 +182,6 @@ public class OneForOneBlockFetcher {
       // On receipt of a failure, fail every block from chunkIndex onwards.
       String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
       failRemainingBlocks(remainingBlockIds, cause);
-      if (!targetFile.delete()) {
-        logger.info("Failed to cleanup " + targetFile.getAbsolutePath());
-      }
     }
   }
 }

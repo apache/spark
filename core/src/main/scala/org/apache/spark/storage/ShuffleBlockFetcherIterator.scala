@@ -172,7 +172,7 @@ final class ShuffleBlockFetcherIterator(
     }
     shuffleFilesSet.foreach { file =>
       if (!file.delete()) {
-        logInfo("Failed to cleanup " + file.getAbsolutePath());
+        logInfo("Failed to cleanup shuffle fetch temp file " + file.getAbsolutePath());
       }
     }
   }
@@ -214,15 +214,11 @@ final class ShuffleBlockFetcherIterator(
     }
 
     // Shuffle remote blocks to disk when the request is too large.
-    val fetchToDisk = if (req.size > maxReqSizeShuffleToMem) {
-      true
-    } else {
-      false
-    }
-
-    if (fetchToDisk) {
-      val shuffleFiles = blockIds.map(bId => blockManager.diskBlockManager
-          .getFile(s"${context.taskAttemptId()}-remote-$bId")).toArray
+    // TODO: Encryption and compression should be considered.
+    if (req.size > maxReqSizeShuffleToMem) {
+      val shuffleFiles = blockIds.map {
+        bId => blockManager.diskBlockManager.createTempLocalBlock()._2
+      }.toArray
       shuffleFilesSet ++= shuffleFiles
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
         blockFetchingListener, shuffleFiles)

@@ -291,6 +291,6 @@ package object config {
     ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")
       .doc("The blocks of a shuffle request will be fetched to disk when size of the request is " +
         "above this threshold. This is to avoid a giant request takes too much memory.")
-      .longConf
-      .createWithDefault(200 * 1024 * 1024)
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("200m")
 }
