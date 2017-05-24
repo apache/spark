@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.{File, InputStream, IOException}
+import java.util.UUID
 import java.util.concurrent.Semaphore
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -132,6 +133,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       verify(mockBuf, times(1)).release()
       verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
     }
+
     // 3 local blocks, and 2 remote blocks
     // (but from the same block manager so one call to fetchBlocks)
     verify(blockManager, times(3)).getBlockData(any())
@@ -418,7 +420,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     doReturn(localBmId).when(blockManager).blockManagerId
 
     val diskBlockManager = mock(classOf[DiskBlockManager])
-    doReturn(new File("shuffle-read-file")).when(diskBlockManager).getFile(any(classOf[String]))
+    doReturn{
+      var blockId = new TempLocalBlockId(UUID.randomUUID())
+      (blockId, new File(blockId.name))
+    }.when(diskBlockManager).createTempLocalBlock()
     doReturn(diskBlockManager).when(blockManager).diskBlockManager
 
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)

@@ -65,7 +65,8 @@ final class ShuffleBlockFetcherIterator(
     maxBytesInFlight: Long,
     maxReqsInFlight: Int,
     maxReqSizeShuffleToMem: Long,
-    detectCorrupt: Boolean) extends Iterator[(BlockId, InputStream)] with Logging {
+    detectCorrupt: Boolean)
+  extends Iterator[(BlockId, InputStream)] with Logging {
 
   import ShuffleBlockFetcherIterator._
 
@@ -161,7 +162,7 @@ final class ShuffleBlockFetcherIterator(
     while (iter.hasNext) {
       val result = iter.next()
       result match {
-        case SuccessFetchResult(bId, address, _, buf, _) =>
+        case SuccessFetchResult(_, address, _, buf, _) =>
           if (address != blockManager.blockManagerId) {
             shuffleMetrics.incRemoteBytesRead(buf.size)
             shuffleMetrics.incRemoteBlocksFetched(1)

@@ -36,7 +36,7 @@ import org.apache.spark.network.util.TransportConf;
 /**
  * A {@link ManagedBuffer} backed by a segment in a file.
  */
-public class FileSegmentManagedBuffer extends ManagedBuffer {
+public final class FileSegmentManagedBuffer extends ManagedBuffer {
   private final TransportConf conf;
   private final File file;
   private final long offset;
