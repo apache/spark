@@ -718,16 +718,12 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Release a lock on the given block.
-   */
-  def releaseLock(blockId: BlockId): Unit = releaseLock(blockId, taskAttemptId = None)
-
-  /**
    * Release a lock on the given block with explicit TID.
-   * This method should be used in case we can't get the correct TID from TaskContext, for example,
-   * the input iterator of a cached RDD iterates to the end in a child thread.
+   * The param `taskAttemptId` should be passed in case we can't get the correct TID from
+   * TaskContext, for example, the input iterator of a cached RDD iterates to the end in a child
+   * thread.
    */
-  def releaseLock(blockId: BlockId, taskAttemptId: Option[Long]): Unit = {
+  def releaseLock(blockId: BlockId, taskAttemptId: Option[Long] = None): Unit = {
     blockInfoManager.unlock(blockId, taskAttemptId)
   }
 
