@@ -281,22 +281,27 @@ private[storage] class BlockInfoManager extends Logging {
 
   /**
    * Release a lock on the given block.
+   * In case a TaskContext is not propagated properly to all child threads for the task, we fail to
+   * get the TID from TaskContext, so we have to explicitly pass the TID value to release the lock.
+   *
+   * See SPARK-18406 for more discussion of this issue.
    */
-  def unlock(blockId: BlockId): Unit = synchronized {
-    logTrace(s"Task $currentTaskAttemptId releasing lock for $blockId")
+  def unlock(blockId: BlockId, taskAttemptId: Option[TaskAttemptId] = None): Unit = synchronized {
+    val taskId = taskAttemptId.getOrElse(currentTaskAttemptId)
+    logTrace(s"Task $taskId releasing lock for $blockId")
     val info = get(blockId).getOrElse {
       throw new IllegalStateException(s"Block $blockId not found")
     }
     if (info.writerTask != BlockInfo.NO_WRITER) {
       info.writerTask = BlockInfo.NO_WRITER
-      writeLocksByTask.removeBinding(currentTaskAttemptId, blockId)
+      writeLocksByTask.removeBinding(taskId, blockId)
     } else {
       assert(info.readerCount > 0, s"Block $blockId is not locked for reading")
       info.readerCount -= 1
-      val countsForTask = readLocksByTask(currentTaskAttemptId)
+      val countsForTask = readLocksByTask(taskId)
       val newPinCountForTask: Int = countsForTask.remove(blockId, 1) - 1
       assert(newPinCountForTask >= 0,
-        s"Task $currentTaskAttemptId release lock on block $blockId more times than it acquired it")
+        s"Task $taskId release lock on block $blockId more times than it acquired it")
     }
     notifyAll()
   }
