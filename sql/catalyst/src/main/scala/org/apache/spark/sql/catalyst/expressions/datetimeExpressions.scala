@@ -455,7 +455,7 @@ case class WeekOfYearISO8601(child: Expression) extends
   extended = """
     Examples:
       > SELECT _FUNC_('2017-01-01');
-       8
+       1
              """)
 // scalastyle:on line.size.limit
 case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
