@@ -35,15 +35,31 @@ case class UnresolvedHint(name: String, parameters: Seq[String], child: LogicalP
 /**
  * A resolved hint node. The analyzer should convert all [[UnresolvedHint]] into [[ResolvedHint]].
  */
-case class ResolvedHint(
-    child: LogicalPlan,
-    isBroadcastable: Option[Boolean] = None)
+case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
   extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 
   override def computeStats(conf: SQLConf): Statistics = {
     val stats = child.stats(conf)
-    isBroadcastable.map(x => stats.copy(isBroadcastable = x)).getOrElse(stats)
+    stats.copy(hints = hints)
+  }
+}
+
+
+case class HintInfo(
+    isBroadcastable: Option[Boolean] = None) {
+
+  /** Must be called when computing stats for a join operator to reset hints. */
+  def resetForJoin(): HintInfo = copy(
+    isBroadcastable = None
+  )
+
+  override def toString: String = {
+    if (productIterator.forall(_.asInstanceOf[Option[_]].isEmpty)) {
+      "none"
+    } else {
+      isBroadcastable.map(x => s"isBroadcastable=$x").getOrElse("")
+    }
   }
 }
