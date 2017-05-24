@@ -180,7 +180,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
   }
 
-
   test("TaskSet with no preferences") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))

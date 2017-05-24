@@ -2277,6 +2277,43 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       (Success, 1)))
   }
 
+  test("Tasks should be in descending order by input size from ShuffledRDD.") {
+    val partitioner = new HashPartitioner(2)
+    val rddA = new MyRDD(sc, 2, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, partitioner)
+    val shuffleIdA = shuffleDepA.shuffleId
+
+    val rddB = new MyRDD(sc, 2, Nil)
+    val shuffleDepB = new ShuffleDependency(rddB, partitioner)
+    val shuffleIdB = shuffleDepB.shuffleId
+
+    val rddC = new MyRDD(sc, 2, List(shuffleDepA, shuffleDepB), tracker = mapOutputTracker)
+    submit(rddC, Array(0, 1))
+
+    def compressAndDecompress(sizes: Array[Long]): Array[Long] = {
+      sizes.map(size => MapStatus.decompressSize(MapStatus.compressSize(size)))
+    }
+    assert(taskSets(0).stageId === 0 && taskSets(0).stageAttemptId === 0)
+    complete(taskSets(0), Seq(
+      (Success, MapStatus(makeBlockManagerId("hostA"), compressAndDecompress(Array(10, 1000)))),
+      (Success, MapStatus(makeBlockManagerId("hostA"), compressAndDecompress(Array(100, 10000))))))
+    assert(taskSets(1).stageId === 1 && taskSets(1).stageAttemptId === 0)
+    complete(taskSets(1), Seq(
+      (Success, MapStatus(makeBlockManagerId("hostB"), compressAndDecompress(Array(20, 2000)))),
+      (Success, MapStatus(makeBlockManagerId("hostB"), compressAndDecompress(Array(200, 20000))))))
+
+    assert(taskSets(2).stageId === 2 && taskSets(2).stageAttemptId === 0)
+
+    // Tasks input size from shuffled RDD should be correct
+    assert(scheduler.inputSizeFromShuffledRDD(rddC, 0) ===
+      compressAndDecompress(Array(10, 100, 20, 200)).sum)
+    assert(scheduler.inputSizeFromShuffledRDD(rddC, 1) ===
+      compressAndDecompress(Array(1000, 10000, 2000, 20000)).sum)
+
+    // Tasks should be in descending order by input size from ShuffledRDD.
+    assert(taskSets(2).tasks(0).partitionId === 1 && taskSets(2).tasks(1).partitionId === 0)
+  }
+
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
