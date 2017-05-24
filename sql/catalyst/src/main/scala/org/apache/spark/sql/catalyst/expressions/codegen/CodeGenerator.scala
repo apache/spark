@@ -230,15 +230,15 @@ class CodegenContext {
    * sub-classes.
    */
   private val classes: mutable.ListBuffer[(String, String)] =
-    mutable.ListBuffer[(String, String)](("OuterClass", null))
+    mutable.ListBuffer[(String, String)]("OuterClass" -> null)
 
   // A map holding the current size in bytes of each class to be generated.
   private val classSize: mutable.Map[String, Int] =
-    mutable.Map[String, Int](("OuterClass", 0))
+    mutable.Map[String, Int]("OuterClass" -> 0)
 
   // A map holding lists of functions belonging to their class.
   private val classFunctions: mutable.Map[String, mutable.ListBuffer[String]] =
-    mutable.Map(("OuterClass", mutable.ListBuffer.empty[String]))
+    mutable.Map("OuterClass" -> mutable.ListBuffer.empty[String])
 
   // Returns the size of the most recently added class.
   private def currClassSize(): Int = classSize(classes.head._1)
@@ -273,7 +273,7 @@ class CodegenContext {
     // threshold of 1600k bytes to determine when a function should be inlined to a private, nested
     // sub-class.
     val classInfo = if (inlineToOuterClass) {
-      ("OuterClass", "")
+      "OuterClass" -> ""
     } else if (currClassSize > 1600000) {
       val className = freshName("NestedClass")
       val classInstance = freshName("nestedClassInstance")
