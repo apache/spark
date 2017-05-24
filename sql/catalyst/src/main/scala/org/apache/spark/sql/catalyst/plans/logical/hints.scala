@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
  * should be removed This node will be eliminated post analysis.
  * A pair of (name, parameters).
  */
-case class UnresolvedHint(name: String, parameters: Seq[String], child: LogicalPlan)
+case class UnresolvedHint(name: String, parameters: Seq[Any], child: LogicalPlan)
   extends UnaryNode {
 
   override lazy val resolved: Boolean = false

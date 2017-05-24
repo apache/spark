@@ -407,7 +407,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         val withWindow = withDistinct.optionalMap(windows)(withWindows)
 
         // Hint
-        hint.asScala.foldRight(withWindow)(withHints)
+        hints.asScala.foldRight(withWindow)(withHints)
     }
   }
 
@@ -538,8 +538,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   private def withHints(
       ctx: HintContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    val stmt = ctx.hintStatement
-    UnresolvedHint(stmt.hintName.getText, stmt.parameters.asScala.map(expression), query)
+    var plan = query
+    ctx.hintStatements.asScala.foreach { case stmt =>
+      plan = UnresolvedHint(stmt.hintName.getText, stmt.parameters.asScala.map(expression), plan)
+    }
+    plan
   }
 
   /**

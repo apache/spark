@@ -532,34 +532,35 @@ class PlanParserSuite extends PlanTest {
 
     comparePlans(
       parsePlan("SELECT /*+ BROADCASTJOIN(u) */ * FROM t"),
-      UnresolvedHint("BROADCASTJOIN", Seq("u"), table("t").select(star())))
+      UnresolvedHint("BROADCASTJOIN", Seq($"u"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(u) */ * FROM t"),
-      UnresolvedHint("MAPJOIN", Seq("u"), table("t").select(star())))
+      UnresolvedHint("MAPJOIN", Seq($"u"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ STREAMTABLE(a,b,c) */ * FROM t"),
-      UnresolvedHint("STREAMTABLE", Seq("a", "b", "c"), table("t").select(star())))
+      UnresolvedHint("STREAMTABLE", Seq($"a", $"b", $"c"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ INDEX(t, emp_job_ix) */ * FROM t"),
-      UnresolvedHint("INDEX", Seq("t", "emp_job_ix"), table("t").select(star())))
+      UnresolvedHint("INDEX", Seq($"t", $"emp_job_ix"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(`default.t`) */ * from `default.t`"),
-      UnresolvedHint("MAPJOIN", Seq("default.t"), table("default.t").select(star())))
+      UnresolvedHint("MAPJOIN", Seq(UnresolvedAttribute.quoted("default.t")),
+        table("default.t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a"),
-      UnresolvedHint("MAPJOIN", Seq("t"),
+      UnresolvedHint("MAPJOIN", Seq($"t"),
         table("t").where(Literal(true)).groupBy('a)('a)).orderBy('a.asc))
   }
 
   test("SPARK-20854: select hint syntax with expressions") {
     comparePlans(
       parsePlan("SELECT /*+ HINT1(a, array(1, 2, 3)) */ * from t"),
-      Hint("HINT1", Seq($"a",
+      UnresolvedHint("HINT1", Seq($"a",
         UnresolvedFunction("array", Literal(1) :: Literal(2) :: Literal(3) :: Nil, false)),
         table("t").select(star())
       )
@@ -567,7 +568,7 @@ class PlanParserSuite extends PlanTest {
 
     comparePlans(
       parsePlan("SELECT /*+ HINT1(a, array(1, 2, 3)) */ * from t"),
-      Hint("HINT1", Seq($"a",
+      UnresolvedHint("HINT1", Seq($"a",
         UnresolvedFunction("array", Literal(1) :: Literal(2) :: Literal(3) :: Nil, false)),
         table("t").select(star())
       )
@@ -575,15 +576,38 @@ class PlanParserSuite extends PlanTest {
 
     comparePlans(
       parsePlan("SELECT /*+ HINT1(a, 5, 'a', b) */ * from t"),
-      Hint("HINT1", Seq($"a", Literal(5), Literal("a"), $"b"),
+      UnresolvedHint("HINT1", Seq($"a", Literal(5), Literal("a"), $"b"),
         table("t").select(star())
       )
     )
 
     comparePlans(
       parsePlan("SELECT /*+ HINT1('a', (b, c), (1, 2)) */ * from t"),
-      Hint("HINT1", Seq(Literal("a"), Literal(5), Literal("a"), $"b"),
+      UnresolvedHint("HINT1",
+        Seq(Literal("a"),
+          CreateStruct($"b" :: $"c" :: Nil),
+          CreateStruct(Literal(1) :: Literal(2) :: Nil)),
         table("t").select(star())
+      )
+    )
+  }
+
+  test("SPARK-20854: multiple hints") {
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, 1), hint2(b, 2) */ * from t"),
+      UnresolvedHint("hint2", Seq($"b", Literal(2)),
+        UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+        table("t").select(star())
+        )
+      )
+    )
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, 1) */ /*+ hint2(b, 2) */ * from t"),
+      UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+        UnresolvedHint("hint2", Seq($"b", Literal(2)),
+          table("t").select(star())
+        )
       )
     )
   }

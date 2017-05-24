@@ -1173,7 +1173,7 @@ class Dataset[T] private[sql](
    * @since 2.2.0
    */
   @scala.annotation.varargs
-  def hint(name: String, parameters: String*): Dataset[T] = withTypedPlan {
+  def hint(name: String, parameters: Any*): Dataset[T] = withTypedPlan {
     UnresolvedHint(name, parameters, logicalPlan)
   }
 
