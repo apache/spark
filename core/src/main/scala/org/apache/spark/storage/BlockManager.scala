@@ -502,7 +502,6 @@ private[spark] class BlockManager(
         val level = info.level
         logDebug(s"Level for block $blockId is $level")
         val taskAttemptId = Option(TaskContext.get()).map(_.taskAttemptId())
-          .getOrElse(BlockInfo.NON_TASK_WRITER)
         if (level.useMemory && memoryStore.contains(blockId)) {
           val iter: Iterator[Any] = if (level.deserialized) {
             memoryStore.getValues(blockId).get
@@ -510,8 +509,11 @@ private[spark] class BlockManager(
             serializerManager.dataDeserializeStream(
               blockId, memoryStore.getBytes(blockId).get.toInputStream())(info.classTag)
           }
+          // We need to capture the current taskId in case the iterator completion is triggered
+          // from a different thread which does not have TaskContext set; see SPARK-18406 for
+          // discussion.
           val ci = CompletionIterator[Any, Iterator[Any]](iter, {
-            releaseLock(blockId, Some(taskAttemptId))
+            releaseLock(blockId, taskAttemptId)
           })
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
         } else if (level.useDisk && diskStore.contains(blockId)) {
@@ -530,7 +532,7 @@ private[spark] class BlockManager(
             }
           }
           val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, {
-            releaseLockAndDispose(blockId, diskData, Some(taskAttemptId))
+            releaseLockAndDispose(blockId, diskData, taskAttemptId)
           })
           Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
         } else {
