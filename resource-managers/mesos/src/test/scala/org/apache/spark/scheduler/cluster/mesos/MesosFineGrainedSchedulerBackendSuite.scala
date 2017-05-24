@@ -79,43 +79,6 @@ class MesosFineGrainedSchedulerBackendSuite
     backend.start()
   }
 
-  test("mesos supports checkpointing") {
-    val conf = new SparkConf
-    conf.set("spark.mesos.checkpoint", "true")
-    conf.set("spark.mesos.failoverTimeout", "10")
-    conf.set("spark.mesos.driver.webui.url", "http://webui")
-
-    val sc = mock[SparkContext]
-    when(sc.conf).thenReturn(conf)
-    when(sc.sparkUser).thenReturn("sparkUser1")
-    when(sc.appName).thenReturn("appName1")
-
-    val taskScheduler = mock[TaskSchedulerImpl]
-    val driver = mock[SchedulerDriver]
-    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
-
-    val backend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master") {
-      override protected def createSchedulerDriver(
-        masterUrl: String,
-        scheduler: Scheduler,
-        sparkUser: String,
-        appName: String,
-        conf: SparkConf,
-        webuiUrl: Option[String] = None,
-        checkpoint: Option[Boolean] = None,
-        failoverTimeout: Option[Double] = None,
-        frameworkId: Option[String] = None): SchedulerDriver = {
-        markRegistered()
-        assert(checkpoint.contains(true))
-        assert(failoverTimeout.contains(10.0))
-        driver
-      }
-    }
-
-    backend.start()
-
-  }
-
   test("Use configured mesosExecutor.cores for ExecutorInfo") {
     val mesosExecutorCores = 3
     val conf = new SparkConf

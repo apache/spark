@@ -142,9 +142,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   test("mesos supports checkpointing") {
 
     val checkpoint = true
-    val failoverTimeout = 10
     setBackend(Map("spark.mesos.checkpoint" -> checkpoint.toString,
-      "spark.mesos.failoverTimeout" -> failoverTimeout.toString,
       "spark.mesos.driver.webui.url" -> "http://webui"))
 
     val taskScheduler = mock[TaskSchedulerImpl]
@@ -167,7 +165,6 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
         frameworkId: Option[String] = None): SchedulerDriver = {
         markRegistered()
         assert(checkpoint.contains(true))
-        assert(failoverTimeout.contains(10.0))
         driver
       }
     }
