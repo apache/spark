@@ -301,8 +301,6 @@ private[spark] trait SparkListenerInterface {
  * :: DeveloperApi ::
  * A default implementation for `SparkListenerInterface` that has no-op implementations for
  * all callbacks.
- *
- * Note that this is an internal interface which might change in different Spark releases.
  */
 @DeveloperApi
 abstract class SparkListener extends SparkListenerInterface {
