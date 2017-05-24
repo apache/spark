@@ -807,10 +807,10 @@ class PersistenceTest(SparkSessionTestCase):
         except OSError:
             pass
 
-    def logistic_regression_check_thresholds(self):
+    def test_logistic_regression_check_thresholds(self):
         self.assertIsInstance(
             LogisticRegression(threshold=0.5, thresholds=[0.5, 0.5]),
-            LogisticRegressionModel
+            LogisticRegression
         )
 
         self.assertRaisesRegexp(
