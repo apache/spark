@@ -234,7 +234,7 @@ trait ProgressReporter extends Logging {
     // 3. For each source, we sum the metrics of the associated execution plan leaves.
     //
     val logicalPlanLeafToSource = newData.flatMap { case (source, df) =>
-      df.logicalPlan.collectLeaves().map { leaf => leaf -> source }
+      df.queryExecution.analyzed.collectLeaves().map { leaf => leaf -> source }
     }
     val allLogicalPlanLeaves = lastExecution.logical.collectLeaves() // includes non-streaming
     val allExecPlanLeaves = lastExecution.executedPlan.collectLeaves()
