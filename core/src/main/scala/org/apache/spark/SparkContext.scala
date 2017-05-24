@@ -75,6 +75,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  private val randomAppName = UUID.randomUUID().toString
+
   // If true, log warnings instead of throwing exceptions when multiple SparkContexts are active
   private val allowMultipleContexts: Boolean =
     config.getBoolean("spark.driver.allowMultipleContexts", false)
@@ -376,7 +378,7 @@ class SparkContext(config: SparkConf) extends Logging {
       throw new SparkException("A master URL must be set in your configuration")
     }
     if (!_conf.contains("spark.app.name")) {
-      throw new SparkException("An application name must be set in your configuration")
+      _conf.setAppName(randomAppName)
     }
 
     // log out spark.app.name in the Spark driver logs
