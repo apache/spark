@@ -36,7 +36,7 @@ private[kafka010] object CachedKafkaProducer extends Logging {
   private type Producer = KafkaProducer[Array[Byte], Array[Byte]]
 
   private val cacheExpireTimeout: Long =
-    System.getProperty("spark.kafka.guava.cache.timeout", "10").toLong
+    System.getProperty("spark.kafka.guava.cache.timeout.minutes", "10").toLong
 
   private val removalListener = new RemovalListener[String, Producer]() {
     override def onRemoval(notification: RemovalNotification[String, Producer]): Unit = {
