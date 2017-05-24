@@ -28,6 +28,7 @@ import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ShutdownHookManager
 
@@ -35,8 +36,8 @@ private[kafka010] object CachedKafkaProducer extends Logging {
 
   private type Producer = KafkaProducer[Array[Byte], Array[Byte]]
 
-  private val cacheExpireTimeout: Long =
-    System.getProperty("spark.kafka.guava.cache.timeout.minutes", "10").toLong
+  private lazy val cacheExpireTimeout: Long =
+    SparkEnv.get.conf.getTimeAsMs("spark.kafka.producer.cache.timeout", "10m")
 
   private val removalListener = new RemovalListener[String, Producer]() {
     override def onRemoval(notification: RemovalNotification[String, Producer]): Unit = {
@@ -47,9 +48,8 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     }
   }
 
-  private val guavaCache: Cache[String, Producer] = CacheBuilder.newBuilder()
-    .recordStats()
-    .expireAfterAccess(cacheExpireTimeout, TimeUnit.MINUTES)
+  private lazy val guavaCache: Cache[String, Producer] = CacheBuilder.newBuilder()
+    .expireAfterAccess(cacheExpireTimeout, TimeUnit.MILLISECONDS)
     .removalListener(removalListener)
     .build[String, Producer]()
 

@@ -20,11 +20,10 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import org.apache.kafka.common.serialization.ByteArraySerializer
-import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.sql.test.SharedSQLContext
 
-class CanonicalizeKafkaParamsSuite extends SharedSQLContext with PrivateMethodTester {
+class CanonicalizeKafkaParamsSuite extends SharedSQLContext {
 
   test("Same unique id is returned for same set of kafka parameters") {
     CanonicalizeKafkaParams.clear()
