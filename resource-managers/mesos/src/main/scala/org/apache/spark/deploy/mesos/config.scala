@@ -56,4 +56,9 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val CHECKPOINT =
+    ConfigBuilder("spark.mesos.checkpoint")
+      .booleanConf
+      .createOptional
+
 }

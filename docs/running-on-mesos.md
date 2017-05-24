@@ -520,7 +520,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.checkpoint</code></td>
   <td>false</td>
   <td>
-    If set, agents running tasks started by this framework will write the framework pid, executor pids and status updates to disk. 
+    If set to true, the agents that are running the spark-executors will write framework pids (Spark), executor pids and status updates to disk. 
     If the agent exits (e.g., due to a crash or as part of upgrading Mesos), this checkpointed data allows the restarted agent to 
     reconnect to executors that were started by the old instance of the agent. Enabling checkpointing improves fault tolerance,
     at the cost of a (usually small) increase in disk I/O.

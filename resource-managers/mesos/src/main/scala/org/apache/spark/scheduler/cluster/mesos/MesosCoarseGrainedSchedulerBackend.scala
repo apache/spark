@@ -28,6 +28,7 @@ import scala.concurrent.Future
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcEndpointAddress
@@ -158,7 +159,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       sc.appName,
       sc.conf,
       sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.webUrl)),
-      sc.conf.getOption("spark.mesos.checkpoint").map(_.toBoolean),
+      sc.conf.get(CHECKPOINT),
       None,
       sc.conf.getOption("spark.mesos.driver.frameworkId")
     )
