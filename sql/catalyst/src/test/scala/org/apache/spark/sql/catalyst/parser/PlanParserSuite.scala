@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedGenerator, UnresolvedInlineTable, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -518,19 +518,13 @@ class PlanParserSuite extends PlanTest {
     val m = intercept[ParseException] {
       parsePlan("SELECT /*+ HINT() */ * FROM t")
     }.getMessage
-    assert(m.contains("no viable alternative at input"))
-
-    // Hive compatibility: No database.
-    val m2 = intercept[ParseException] {
-      parsePlan("SELECT /*+ MAPJOIN(default.t) */ * from default.t")
-    }.getMessage
-    assert(m2.contains("mismatched input '.' expecting {')', ','}"))
+    assert(m.contains("mismatched input"))
 
     // Disallow space as the delimiter.
     val m3 = intercept[ParseException] {
       parsePlan("SELECT /*+ INDEX(a b c) */ * from default.t")
     }.getMessage
-    assert(m3.contains("mismatched input 'b' expecting {')', ','}"))
+    assert(m3.contains("mismatched input 'b' expecting"))
 
     comparePlans(
       parsePlan("SELECT /*+ HINT */ * FROM t"),
@@ -538,26 +532,59 @@ class PlanParserSuite extends PlanTest {
 
     comparePlans(
       parsePlan("SELECT /*+ BROADCASTJOIN(u) */ * FROM t"),
-      Hint("BROADCASTJOIN", Seq("u"), table("t").select(star())))
+      Hint("BROADCASTJOIN", Seq($"u"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(u) */ * FROM t"),
-      Hint("MAPJOIN", Seq("u"), table("t").select(star())))
+      Hint("MAPJOIN", Seq($"u"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ STREAMTABLE(a,b,c) */ * FROM t"),
-      Hint("STREAMTABLE", Seq("a", "b", "c"), table("t").select(star())))
+      Hint("STREAMTABLE", Seq($"a", $"b", $"c"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ INDEX(t, emp_job_ix) */ * FROM t"),
-      Hint("INDEX", Seq("t", "emp_job_ix"), table("t").select(star())))
+      Hint("INDEX", Seq($"t", $"emp_job_ix"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(`default.t`) */ * from `default.t`"),
-      Hint("MAPJOIN", Seq("default.t"), table("default.t").select(star())))
+      Hint("MAPJOIN", Seq(UnresolvedAttribute.quoted("default.t")),
+        table("default.t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a"),
-      Hint("MAPJOIN", Seq("t"), table("t").where(Literal(true)).groupBy('a)('a)).orderBy('a.asc))
+      Hint("MAPJOIN", Seq($"t"), table("t").where(Literal(true)).groupBy('a)('a)).orderBy('a.asc))
+  }
+
+  test("SPARK-20854: select hint syntax with expressions") {
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, array(1, 2, 3)) */ * from t"),
+      Hint("HINT1", Seq($"a",
+        UnresolvedFunction("array", Literal(1) :: Literal(2) :: Literal(3) :: Nil, false)),
+        table("t").select(star())
+      )
+    )
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, array(1, 2, 3)) */ * from t"),
+      Hint("HINT1", Seq($"a",
+        UnresolvedFunction("array", Literal(1) :: Literal(2) :: Literal(3) :: Nil, false)),
+        table("t").select(star())
+      )
+    )
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, 5, 'a', b) */ * from t"),
+      Hint("HINT1", Seq($"a", Literal(5), Literal("a"), $"b"),
+        table("t").select(star())
+      )
+    )
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1('a', (b, c), (1, 2)) */ * from t"),
+      Hint("HINT1", Seq(Literal("a"), Literal(5), Literal("a"), $"b"),
+        table("t").select(star())
+      )
+    )
   }
 }

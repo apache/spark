@@ -371,7 +371,7 @@ querySpecification
        (RECORDREADER recordReader=STRING)?
        fromClause?
        (WHERE where=booleanExpression)?)
-    | ((kind=SELECT hint? setQuantifier? namedExpressionSeq fromClause?
+    | ((kind=SELECT hint* setQuantifier? namedExpressionSeq fromClause?
        | fromClause (kind=SELECT setQuantifier? namedExpressionSeq)?)
        lateralView*
        (WHERE where=booleanExpression)?
@@ -386,7 +386,7 @@ hint
 
 hintStatement
     : hintName=identifier
-    | hintName=identifier '(' parameters+=identifier (',' parameters+=identifier)* ')'
+    | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
     ;
 
 fromClause
