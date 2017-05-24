@@ -21,6 +21,7 @@ import java.util.Date
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.language.postfixOps
@@ -497,6 +498,105 @@ class MasterSuite extends SparkFunSuite
 
     eventually(timeout(10.seconds)) {
       assert(receivedMasterAddress === RpcAddress("localhost2", 10000))
+    }
+  }
+
+  test("SPARK-19900: there should be a corresponding driver for the app after relaunching driver") {
+    val conf = new SparkConf().set("spark.worker.timeout", "1")
+    val master = makeMaster(conf)
+    master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
+    eventually(timeout(10.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.status === RecoveryState.ALIVE, "Master is not alive")
+    }
+
+    val app = DeployTestUtils.createAppDesc()
+    var appId = ""
+    val driverEnv1 = RpcEnv.create("driver1", "localhost", 22344, conf, new SecurityManager(conf))
+    val fakeDriver1 = driverEnv1.setupEndpoint("driver", new RpcEndpoint {
+      override val rpcEnv: RpcEnv = driverEnv1
+      override def receive: PartialFunction[Any, Unit] = {
+        case RegisteredApplication(id, _) => appId = id
+      }
+    })
+    val drivers = new HashMap[String, String]
+    val workerEnv1 = RpcEnv.create("worker1", "localhost", 12344, conf, new SecurityManager(conf))
+    val fakeWorker1 = workerEnv1.setupEndpoint("worker", new RpcEndpoint {
+      override val rpcEnv: RpcEnv = workerEnv1
+      override def receive: PartialFunction[Any, Unit] = {
+        case RegisteredWorker(masterRef, _, _) =>
+          masterRef.send(WorkerLatestState("1", Nil, drivers.keys.toSeq))
+        case LaunchDriver(id, desc) =>
+          drivers(id) = id
+          master.self.send(RegisterApplication(app, fakeDriver1))
+        case KillDriver(driverId) =>
+          master.self.send(DriverStateChanged(driverId, DriverState.KILLED, None))
+          drivers.remove(driverId)
+      }
+    })
+    val worker1 = RegisterWorker(
+      "1",
+      "localhost",
+      9999,
+      fakeWorker1,
+      10,
+      1024,
+      "http://localhost:8080",
+      RpcAddress("localhost2", 10000))
+    master.self.send(worker1)
+    val driver = DeployTestUtils.createDriverDesc().copy(supervise = true)
+    master.self.askSync[SubmitDriverResponse](RequestSubmitDriver(driver))
+
+    eventually(timeout(10.seconds)) {
+      assert(!appId.isEmpty)
+    }
+
+    eventually(timeout(10.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.workers(0).state == WorkerState.DEAD)
+    }
+
+    val driverEnv2 = RpcEnv.create("driver2", "localhost", 22345, conf, new SecurityManager(conf))
+    val fakeDriver2 = driverEnv2.setupEndpoint("driver", new RpcEndpoint {
+      override val rpcEnv: RpcEnv = driverEnv2
+      override def receive: PartialFunction[Any, Unit] = {
+        case RegisteredApplication(id, _) => appId = id
+      }
+    })
+    val workerEnv2 = RpcEnv.create("worker2", "localhost", 12345, conf, new SecurityManager(conf))
+    val fakeWorker2 = workerEnv2.setupEndpoint("worker2", new RpcEndpoint {
+      override val rpcEnv: RpcEnv = workerEnv2
+      override def receive: PartialFunction[Any, Unit] = {
+        case LaunchDriver(_, _) =>
+          master.self.send(RegisterApplication(app, fakeDriver2))
+      }
+    })
+
+    appId = ""
+    master.self.send(RegisterWorker(
+      "2",
+      "localhost",
+      9998,
+      fakeWorker2,
+      10,
+      1024,
+      "http://localhost:8081",
+      RpcAddress("localhost2", 10001)))
+    eventually(timeout(10.seconds)) {
+      assert(!appId.isEmpty)
+    }
+
+    master.self.send(worker1)
+    eventually(timeout(10.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+
+      val worker = masterState.workers.filter(w => w.id == "1")
+      assert(worker.length == 1)
+      // make sure the `DriverStateChanged` arrives at Master.
+      assert(worker(0).drivers.isEmpty)
+      assert(masterState.activeDrivers.length == 1)
+      assert(masterState.activeDrivers(0).state == DriverState.RUNNING)
+      assert(masterState.activeApps.length == 1)
     }
   }
 }
