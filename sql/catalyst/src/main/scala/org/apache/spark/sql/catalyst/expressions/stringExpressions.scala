@@ -1278,7 +1278,7 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
     Examples:
       > SELECT _FUNC_(65);
        A
-             """)
+  """)
 // scalastyle:on line.size.limit
 case class Chr(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
