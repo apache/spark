@@ -28,7 +28,6 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, JaninoRuntimeException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
@@ -261,6 +260,10 @@ class CodegenContext {
    *
    * @param funcName the class-unqualified name of the function
    * @param funcCode the body of the function
+   * @param inlineToOuterClass whether the given code must be inlined to the `OuterClass`. This
+   *                           can be necessary when a function is declared outside of the context
+   *                           it is eventually referenced and a returned qualified function name
+   *                           cannot otherwise be accessed.
    * @return the name of the function, qualified by class if it will be inlined to a private,
    *         nested sub-class
    */
@@ -287,7 +290,7 @@ class CodegenContext {
     val name = classInfo._1
 
     classSize.update(name, classSize(name) + funcCode.length)
-    classFunctions.update(name, classFunctions(name) += funcCode)
+    classFunctions(name).append(funcCode)
 
     if (name.equals("OuterClass")) {
       funcName
