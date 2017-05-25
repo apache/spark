@@ -508,24 +508,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     expectedState = Some(5),                                  // state should change
     expectedTimeoutTimestamp = 5000)                          // timestamp should change
 
-  test("StateStoreUpdater - rows are cloned before writing to StateStore") {
-    // function for running count
-    val func = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
-      state.update(state.getOption.getOrElse(0) + values.size)
-      Iterator.empty
-    }
-    val store = newStateStore()
-    val plan = newFlatMapGroupsWithStateExec(func)
-    val updater = new plan.StateStoreUpdater(store)
-    val data = Seq(1, 1, 2)
-    val returnIter = updater.updateStateForKeysWithData(data.iterator.map(intToRow))
-    returnIter.size // consume the iterator to force store updates
-    val storeData = store.iterator.map { case UnsafeRowTuple(k, v) =>
-      (rowToInt(k), rowToInt(v))
-    }.toSet
-    assert(storeData === Set((1, 2), (2, 1)))
-  }
-
   test("flatMapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count if state is defined, otherwise does not return anything
@@ -1089,7 +1071,9 @@ object FlatMapGroupsWithStateSuite {
     }
 
     override def get(key: UnsafeRow): UnsafeRow = map.get(key)
-    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = { map.put(key, newValue) }
+    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = {
+      map.put(key.copy(), newValue.copy())
+    }
     override def remove(key: UnsafeRow): Unit = { map.remove(key) }
     override def commit(): Long = version + 1
     override def abort(): Unit = { }

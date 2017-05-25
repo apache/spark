@@ -358,7 +358,7 @@ case class StreamingDeduplicateExec(
         val row = r.asInstanceOf[UnsafeRow]
         val key = getKey(row)
         val value = store.get(key)
-        if (value != null) {
+        if (value == null) {
           store.put(key, StreamingDeduplicateExec.EMPTY_ROW)
           numUpdatedStateRows += 1
           numOutputRows += 1
