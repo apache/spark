@@ -179,7 +179,8 @@ private[spark] class BlockManager(
   // standard BlockTransferService to directly connect to other Executors.
   private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
     val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
-    new ExternalShuffleClient(transConf, securityManager, securityManager.isAuthenticationEnabled(), registrationTimeout)
+    new ExternalShuffleClient(transConf, securityManager,
+      securityManager.isAuthenticationEnabled(), registrationTimeout)
   } else {
     blockTransferService
   }
