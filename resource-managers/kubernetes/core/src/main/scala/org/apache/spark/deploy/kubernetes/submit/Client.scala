@@ -119,6 +119,7 @@ private[spark] class Client(
           .addToAnnotations(parsedCustomAnnotations.asJava)
           .endMetadata()
         .withNewSpec()
+          .withRestartPolicy("Never")
           .addToContainers(driverContainer)
           .endSpec()
 
