@@ -48,7 +48,7 @@ public class ExternalShuffleClient extends ShuffleClient {
   private final TransportConf conf;
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
-  private final int registrationTimeoutMilli;
+  private final long registrationTimeoutMilli;
 
   protected TransportClientFactory clientFactory;
   protected String appId;
@@ -61,7 +61,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
       boolean authEnabled,
-      int registrationTimeoutMilli) {
+      long registrationTimeoutMilli) {
     this.conf = conf;
     this.secretKeyHolder = secretKeyHolder;
     this.authEnabled = authEnabled;

@@ -170,6 +170,11 @@ private[spark] class BlockManager(
   // service, or just our own Executor's BlockManager.
   private[spark] var shuffleServerId: BlockManagerId = _
 
+  private val registrationTimeout =
+    conf.getTimeAsMs("spark.shuffle.registration.timeout", "5s")
+  private val registrationMaxAttempts =
+    conf.getInt("spark.shuffle.registration.maxAttempts", 3)
+
   // Client to read other executors' shuffle files. This is either an external service, or just the
   // standard BlockTransferService to directly connect to other Executors.
   private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
@@ -182,10 +187,6 @@ private[spark] class BlockManager(
   // Max number of failures before this block manager refreshes the block locations from the driver
   private val maxFailuresBeforeLocationRefresh =
     conf.getInt("spark.block.failures.beforeLocationRefresh", 5)
-  private val registrationTimeout =
-    conf.getInt("spark.shuffle.registration.timeout", 5000)
-  private val registrationMaxAttempts =
-    conf.getInt("spark.shuffle.registration.maxAttempts", 3)
 
   private val slaveEndpoint = rpcEnv.setupEndpoint(
     "BlockManagerEndpoint" + BlockManager.ID_GENERATOR.next,
