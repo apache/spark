@@ -19,7 +19,7 @@ package org.apache.spark
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.Matchers.{any, isA}
+import org.mockito.Matchers.any
 import org.mockito.Mockito._
 
 import org.apache.spark.broadcast.BroadcastManager

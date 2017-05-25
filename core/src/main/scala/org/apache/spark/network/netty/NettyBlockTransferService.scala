@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.netty
 
+import java.io.File
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
@@ -88,13 +89,15 @@ private[spark] class NettyBlockTransferService(
       port: Int,
       execId: String,
       blockIds: Array[String],
-      listener: BlockFetchingListener): Unit = {
+      listener: BlockFetchingListener,
+      shuffleFiles: Array[File]): Unit = {
     logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
-          new OneForOneBlockFetcher(client, appId, execId, blockIds.toArray, listener).start()
+          new OneForOneBlockFetcher(client, appId, execId, blockIds.toArray, listener,
+            transportConf, shuffleFiles).start()
         }
       }
 
