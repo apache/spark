@@ -300,7 +300,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         return
       }
 
-      if (numExecutors() >= executorLimit) {
+      if (numExecutors >= executorLimit) {
         logDebug("Executor limit reached. numExecutors: " + numExecutors() +
           " executorLimit: " + executorLimit)
         offers.asScala.map(_.getId).foreach(d.declineOffer)
@@ -410,30 +410,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         val offerId = offer.getId.getValue
         val resources = remainingResources(offerId)
 
-        var createTask = canLaunchTask(slaveId, resources)
-        if (hostToLocalTaskCount.nonEmpty) {
-          // Locality information is available
-          if (numExecutors() < executorLimit) {
-            if (!launchingExecutors) {
-              launchingExecutors = true
-              localityWaitStartTime = System.currentTimeMillis()
-            }
-            val currentHosts = slaves.values.filter(_.taskIDs.nonEmpty).map(_.hostname).toSet
-            val allDesiredHosts = hostToLocalTaskCount.keys.toSet
-            val remainingHosts = allDesiredHosts -- currentHosts
-            if (!(remainingHosts contains offer.getHostname) &&
-              (System.currentTimeMillis() - localityWaitStartTime <= localityWait)) {
-              logDebug("Skipping host and waiting for locality. host: " + offer.getHostname)
-              createTask = false
-            }
-          } else {
-            logDebug("no more executors needed: executorLimit: " + executorLimit)
-            launchingExecutors = false
-            createTask = false
-          }
-        }
-
-        if (createTask) {
+        if (canLaunchTask(slaveId, offer.getHostname, resources)) {
           // Create a task
           launchTasks = true
           val taskId = newMesosTaskId()
@@ -519,7 +496,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpuResourcesToUse ++ memResourcesToUse ++ portResourcesToUse ++ gpuResourcesToUse)
   }
 
-  private def canLaunchTask(slaveId: String, resources: JList[Resource]): Boolean = {
+  private def canLaunchTask(slaveId: String, offerHostname: String,
+                            resources: JList[Resource]): Boolean = {
     val offerMem = getResource(resources, "mem")
     val offerCPUs = getResource(resources, "cpus").toInt
     val cpus = executorCores(offerCPUs)
@@ -531,15 +509,35 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus <= offerCPUs &&
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
-      numExecutors() < executorLimit &&
+      numExecutors < executorLimit &&
       slaves.get(slaveId).map(_.taskFailures).getOrElse(0) < MAX_SLAVE_FAILURES &&
-      meetsPortRequirements
+      meetsPortRequirements &&
+      satisfiesLocality(offerHostname)
   }
 
   private def executorCores(offerCPUs: Int): Int = {
     executorCoresOption.getOrElse(
       math.min(offerCPUs, maxCores - totalCoresAcquired)
     )
+  }
+
+  private def satisfiesLocality(offerHostname: String): Boolean = {
+    if (hostToLocalTaskCount.nonEmpty) {
+      // Locality information is available
+      if (!launchingExecutors) {
+        launchingExecutors = true
+        localityWaitStartTime = System.currentTimeMillis()
+      }
+      val currentHosts = slaves.values.filter(_.taskIDs.nonEmpty).map(_.hostname).toSet
+      val allDesiredHosts = hostToLocalTaskCount.keys.toSet
+      val remainingHosts = allDesiredHosts -- currentHosts
+      if (!(remainingHosts contains offerHostname) &&
+        (System.currentTimeMillis() - localityWaitStartTime <= localityWait)) {
+        logDebug("Skipping host and waiting for locality. host: " + offerHostname)
+        return false
+      }
+    }
+    true
   }
 
   override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus) {
