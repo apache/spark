@@ -51,7 +51,7 @@ class HasSupport(Params):
 
 class HasNumPartitions(Params):
     """
-    Mixin for param support.
+    Mixin for param numPartitions: Number of partitions (at least 1) used by parallel FP-growth.
     """
 
     numPartitions = Param(
