@@ -195,9 +195,9 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     val leftSize = left.stats(conf).sizeInBytes
     val rightSize = right.stats(conf).sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    val isBroadcastable = left.stats(conf).isBroadcastable || right.stats(conf).isBroadcastable
-
-    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = isBroadcastable)
+    Statistics(
+      sizeInBytes = sizeInBytes,
+      hints = left.stats(conf).hints.resetForJoin())
   }
 }
 
@@ -364,7 +364,8 @@ case class Join(
       case _ =>
         // Make sure we don't propagate isBroadcastable in other joins, because
         // they could explode the size.
-        super.computeStats(conf).copy(isBroadcastable = false)
+        val stats = super.computeStats(conf)
+        stats.copy(hints = stats.hints.resetForJoin())
     }
 
     if (conf.cboEnabled) {
@@ -373,26 +374,6 @@ case class Join(
       simpleEstimation
     }
   }
-}
-
-/**
- * A hint for the optimizer that we should broadcast the `child` if used in a join operator.
- */
-case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-
-  // set isBroadcastable to true so the child will be broadcasted
-  override def computeStats(conf: SQLConf): Statistics =
-    child.stats(conf).copy(isBroadcastable = true)
-}
-
-/**
- * A general hint for the child. This node will be eliminated post analysis.
- * A pair of (name, parameters).
- */
-case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) extends UnaryNode {
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = child.output
 }
 
 /**
@@ -580,7 +561,7 @@ case class Aggregate(
         Statistics(
           sizeInBytes = EstimationUtils.getOutputSize(output, outputRowCount = 1),
           rowCount = Some(1),
-          isBroadcastable = child.stats(conf).isBroadcastable)
+          hints = child.stats(conf).hints)
       } else {
         super.computeStats(conf)
       }
@@ -769,7 +750,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
     Statistics(
       sizeInBytes = EstimationUtils.getOutputSize(output, rowCount, childStats.attributeStats),
       rowCount = Some(rowCount),
-      isBroadcastable = childStats.isBroadcastable)
+      hints = childStats.hints)
   }
 }
 
@@ -790,7 +771,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
       Statistics(
         sizeInBytes = 1,
         rowCount = Some(0),
-        isBroadcastable = childStats.isBroadcastable)
+        hints = childStats.hints)
     } else {
       // The output row count of LocalLimit should be the sum of row counts from each partition.
       // However, since the number of partitions is not available here, we just use statistics of
@@ -847,7 +828,7 @@ case class Sample(
     }
     val sampledRowCount = childStats.rowCount.map(c => EstimationUtils.ceil(BigDecimal(c) * ratio))
     // Don't propagate column stats, because we don't know the distribution after a sample operation
-    Statistics(sizeInBytes, sampledRowCount, isBroadcastable = childStats.isBroadcastable)
+    Statistics(sizeInBytes, sampledRowCount, hints = childStats.hints)
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
