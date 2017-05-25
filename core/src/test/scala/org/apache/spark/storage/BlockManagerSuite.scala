@@ -40,7 +40,7 @@ import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.NettyBlockTransferService
-import org.apache.spark.network.shuffle.BlockFetchingListener
+import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockPreparingListener}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
@@ -1309,6 +1309,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         classTag: ClassTag[_]): Future[Unit] = {
       import scala.concurrent.ExecutionContext.Implicits.global
       Future {}
+    }
+
+    override def prepareBlocks(
+        host: String,
+        port: Int,
+        execId: String,
+        prepareBlockIds: Array[String],
+        releaseBlocks: Array[String],
+        listener: BlockPreparingListener): Unit = {
+      listener.onBlockPrepareSuccess()
     }
 
     override def fetchBlockSync(
