@@ -73,7 +73,7 @@ if __name__ == "__main__":
         Y = matrix[:, 0]    # point labels (first column of input file)
         X = matrix[:, 1:]   # point coordinates
         # For each point (x, y), compute gradient function, then sum these up
-        return ((1.0 / (1.0 + np.exp(-Y * X.dot(w))) - 1.0) * Y * X.T).sum(1)
+        return ((1.0 / (1.0 + np.exp(-X.dot(w))) - Y) * X.T).sum(1)
 
     def add(x, y):
         x += y
