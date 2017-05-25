@@ -161,13 +161,16 @@ case class WindowExec(
   {
     type FrameKey = (String, FrameType, Option[Int], Option[Int])
     type ExpressionBuffer = mutable.Buffer[Expression]
-    val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
+    type WindowExpressionBuffer = mutable.Buffer[WindowExpression]
+    val framedFunctions = mutable.Map.empty[FrameKey, (WindowExpressionBuffer, ExpressionBuffer)]
 
     // Add a function and its function to the map for a given frame.
-    def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
+    def collect(
+      tpe: String, fr: SpecifiedWindowFrame, e: WindowExpression, fn: Expression): Unit =
+    {
       val key = (tpe, fr.frameType, FrameBoundary(fr.frameStart), FrameBoundary(fr.frameEnd))
       val (es, fns) = framedFunctions.getOrElseUpdate(
-        key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
+        key, (ArrayBuffer.empty[WindowExpression], ArrayBuffer.empty[Expression]))
       es += e
       fns += fn
     }
