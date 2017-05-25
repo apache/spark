@@ -26,6 +26,7 @@ import scala.math.max
 import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.TaskState.TaskState
@@ -963,7 +964,7 @@ private[spark] class TaskSetManager(
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
-    val defaultWait = conf.get("spark.locality.wait", "3s")
+    val defaultWait = conf.get(config.LOCALITY_WAIT)
     val localityWaitKey = level match {
       case TaskLocality.PROCESS_LOCAL => "spark.locality.wait.process"
       case TaskLocality.NODE_LOCAL => "spark.locality.wait.node"
@@ -972,7 +973,7 @@ private[spark] class TaskSetManager(
     }
 
     if (localityWaitKey != null) {
-      conf.getTimeAsMs(localityWaitKey, defaultWait)
+      conf.getTimeAsMs(localityWaitKey, defaultWait.toString)
     } else {
       0L
     }
