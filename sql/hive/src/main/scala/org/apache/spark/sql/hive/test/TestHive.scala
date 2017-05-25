@@ -34,8 +34,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -456,7 +456,17 @@ private[hive] class TestHiveSparkSession(
       logDebug(s"Loading test table $name")
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
-      createCmds.foreach(_())
+
+      // test tables are loaded lazily, so they may be loaded in the middle a query execution which
+      // has already set the execution id.
+      if (sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY) == null) {
+        // We don't actually have a `QueryExecution` here, use a fake one instead.
+        SQLExecution.withNewExecutionId(this, new QueryExecution(this, OneRowRelation)) {
+          createCmds.foreach(_())
+        }
+      } else {
+        createCmds.foreach(_())
+      }
 
       if (cacheTables) {
         new SQLContext(self).cacheTable(name)
