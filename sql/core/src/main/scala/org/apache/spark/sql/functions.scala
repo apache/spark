@@ -3077,18 +3077,18 @@ object functions {
   }
 
   /**
-    * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-    * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
-    * string.
-    *
-    * @param e a string column containing JSON data.
-    * @param schema the schema to use when parsing the json string as a json string. In Spark 2.1,
-    *               the user-provided schema has to be in JSON format. Since Spark 2.2, the DDL
-    *               format is also supported for the schema.
-    *
-    * @group collection_funcs
-    * @since 2.3.0
-    */
+   * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
+   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
+   * string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string as a json string. In Spark 2.1,
+   *               the user-provided schema has to be in JSON format. Since Spark 2.2, the DDL
+   *               format is also supported for the schema.
+   *
+   * @group collection_funcs
+   * @since 2.3.0
+   */
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
     val dataType = try {
       DataType.fromJson(schema)
