@@ -72,12 +72,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Returns all metadata that describes more details of this SparkPlan.
+   * @return Metadata that describes more details of this SparkPlan.
    */
   def metadata: Map[String, String] = Map.empty
 
   /**
-   * Returns all metrics containing metrics of this SparkPlan.
+   * @return All metrics containing metrics of this SparkPlan.
    */
   def metrics: Map[String, SQLMetric] = Map.empty
 
@@ -89,7 +89,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Returns a [[SQLMetric]] according to the name.
+   * @return [[SQLMetric]] for the `name`.
    */
   def longMetric(name: String): SQLMetric = metrics(name)
 
@@ -128,7 +128,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Execute a query after preparing the query and adding query plan information to created RDDs
+   * Executes a query after preparing the query and adding query plan information to created RDDs
    * for visualization.
    */
   protected final def executeQuery[T](query: => T): T = {
@@ -176,7 +176,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private var prepared = false
 
   /**
-   * Prepare a SparkPlan for execution. It's idempotent.
+   * Prepares this SparkPlan for execution. It's idempotent.
    */
   final def prepare(): Unit = {
     // doPrepare() may depend on it's children, we should call prepare() on all the children first.
@@ -195,22 +195,24 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * `execute` of SparkPlan. This is helpful if we want to set up some state before executing the
    * query, e.g., `BroadcastHashJoin` uses it to broadcast asynchronously.
    *
-   * Note: the prepare method has already walked down the tree, so the implementation doesn't need
-   * to call children's prepare methods.
+   * @note `prepare` method has already walked down the tree, so the implementation doesn't have
+   * to call children's `prepare` methods.
    *
    * This will only be called once, protected by `this`.
    */
   protected def doPrepare(): Unit = {}
 
   /**
+   * Produces the result of the query as an `RDD[InternalRow]`
+   *
    * Overridden by concrete implementations of SparkPlan.
-   * Produces the result of the query as an RDD[InternalRow]
    */
   protected def doExecute(): RDD[InternalRow]
 
   /**
-   * Overridden by concrete implementations of SparkPlan.
    * Produces the result of the query as a broadcast variable.
+   *
+   * Overridden by concrete implementations of SparkPlan.
    */
   protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
     throw new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
@@ -245,7 +247,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Decode the byte arrays back to UnsafeRows and put them into buffer.
+   * Decodes the byte arrays back to UnsafeRows and put them into buffer.
    */
   private def decodeUnsafeRows(bytes: Array[Byte]): Iterator[InternalRow] = {
     val nFields = schema.length
@@ -284,7 +286,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Runs this query returning the result as an iterator of InternalRow.
    *
-   * Note: this will trigger multiple jobs (one for each partition).
+   * @note Triggers multiple jobs (one for each partition).
    */
   def executeToIterator(): Iterator[InternalRow] = {
     getByteArrayRdd().toLocalIterator.flatMap(decodeUnsafeRows)
@@ -301,7 +303,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Runs this query returning the first `n` rows as an array.
    *
-   * This is modeled after RDD.take but never runs any job locally on the driver.
+   * This is modeled after `RDD.take` but never runs any job locally on the driver.
    */
   def executeTake(n: Int): Array[InternalRow] = {
     if (n == 0) {

@@ -36,10 +36,10 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
- * [[Dataset#cube cube]] or [[Dataset#rollup rollup]] (and also [[pivot]]).
+ * [[Dataset#cube cube]] or [[Dataset#rollup rollup]] (and also `pivot`).
  *
- * The main method is the [[agg]] function, which has multiple variants. This class also contains
- * some first-order statistics such as [[mean]], [[sum]] for convenience.
+ * The main method is the `agg` function, which has multiple variants. This class also contains
+ * some first-order statistics such as `mean`, `sum` for convenience.
  *
  * @note This class was named `GroupedData` in Spark 1.x.
  *
